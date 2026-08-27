@@ -418,8 +418,21 @@ fn is_compact(bounds: Rectangle, font: f32) -> bool {
     bounds.size.w > 0.0 && bounds.size.w <= max && bounds.size.h <= max
 }
 
-/// The keycap rect for `text` within the target `b`, per `style`.
-fn keycap_rect(b: Rectangle, font: f32, style: &HintStyle, text: &str, viewport: Size) -> Rectangle {
+/// The keycap rect for `text` within the target `b`, per `style`, **and the rect the cap is
+/// allowed to live in** — what [`fit_into_view`] clamps against.
+///
+/// For every in-target placement the permitted rect is `b` itself. For a **compact** target the
+/// cap is placed *outside* `b` on purpose (a caption under the icon, flipped above near the bottom
+/// edge), so its permitted rect is `b` grown by the caption band above and below. The branch that
+/// chose the placement is the one that knows where the cap may sit — [`fit_into_view`] must not
+/// re-derive it from `b` alone, or it drags the caption back onto the icon it captions.
+fn keycap_rect(
+    b: Rectangle,
+    font: f32,
+    style: &HintStyle,
+    text: &str,
+    viewport: Size,
+) -> (Rectangle, Rectangle) {
     let Size { w, h } = keycap_size(hint_font(font, style, b), text);
     // **A target too small to cover goes beside it, not over it.** Centred just below, so the
     // icon stays fully visible with its letter as a caption; flipped above when below would
@@ -432,7 +445,16 @@ fn keycap_rect(b: Rectangle, font: f32, style: &HintStyle, text: &str, viewport:
         } else {
             b.loc.y - h - HINT_ADJACENT_GAP
         };
-        return Rectangle::new(Point::new(x, y + style.offset_y), Size::new(w, h));
+        let cap = Rectangle::new(Point::new(x, y + style.offset_y), Size::new(w, h));
+        // The permitted area: the target plus a caption band a full cap tall above and below it,
+        // unioned with the cap itself so an `offset_y` nudge is never clamped away. `fit_into_view`
+        // keeps the cap within *this*, not within `b` — the beside-placement stands.
+        let px = b.loc.x.min(cap.loc.x);
+        let py = (b.loc.y - h - HINT_ADJACENT_GAP).min(cap.loc.y);
+        let pright = (b.loc.x + b.size.w).max(cap.loc.x + w);
+        let pbottom = (b.loc.y + b.size.h + HINT_ADJACENT_GAP + h).max(cap.loc.y + h);
+        let permitted = Rectangle::new(Point::new(px, py), Size::new(pright - px, pbottom - py));
+        return (cap, permitted);
     }
     let (x, y) = match style.placement {
         HintPlacement::TopCenter => (b.loc.x + (b.size.w - w) / 2.0, b.loc.y + TOP_INSET),
@@ -452,35 +474,12 @@ fn keycap_rect(b: Rectangle, font: f32, style: &HintStyle, text: &str, viewport:
             (b.loc.x + LEFT_INSET, b.loc.y + (band - h) / 2.0)
         }
     };
-    Rectangle::new(Point::new(x, y + style.offset_y), Size::new(w, h))
+    (
+        Rectangle::new(Point::new(x, y + style.offset_y), Size::new(w, h)),
+        b,
+    )
 }
 
-/// **Draw `c`'s hint letter, if it is carrying one.** Called by
-/// [`paint_child`](crate::component::paint_child) for *every* widget, right after the widget has
-/// painted itself — which is what lets any widget be pickable without being wrapped in a
-/// [`KeyHint`] (F003/P082/T431).
-///
-/// The two rules that were learned the hard way, and are the reason this is one function rather
-/// than something each widget does:
-///
-/// - **The viewport is the PAINT context's**, not `Base::viewport`. The latter is written per
-///   *tree* by the layout pass, so inside a pane header it is the header's own box — a few dozen
-///   pixels tall. Reading it there made every compact cap "not fit below", flip above, and get
-///   clipped by the pane frame (Antonio, driving, 2026-08-14).
-/// - **The cap is nudged, never cut.** A row half past a sidebar's fold is still a target — you can
-///   see it, so you can aim at it — and its letter is drawn **whole** so it stays readable (Antonio,
-///   2026-08-23: *"a half visible pane row should have the letter to peek"*). Clipping it would make
-///   it unreadable, so instead it is moved inside the visible part of its own row —
-///   [`fit_into_view`] — and dropped when that part is too small to hold it. What stops a cap for a
-///   row nobody can see at all is **candidacy**, one level up: [`hint::collect`](crate::hint) drops
-///   a target outside its clipping ancestors, so the letter is never handed out.
-/// - **Into the OVERLAY band**, so nothing painted after this widget covers its letter. Drawing it
-///   inline puts the cap at this widget's position in the paint order and every sibling drawn later
-///   sits on top: a top-bar button's letter disappeared under the sidebar frame beside it, and a
-///   card's under the next card (same session). `with_overlay` keeps the cap in **this widget's
-///   own scene**, nested exactly as deep as the widget is — the property the whole fix rests on,
-///   since a plugin's overlay-nested picker then lands above its own content with nothing
-///   host-side to teach.
 /// **Keep the cap inside the part of its row you can actually see.**
 ///
 /// A row half past a sidebar's fold keeps its letter — you can see it, so you can aim at it — but
@@ -489,21 +488,26 @@ fn keycap_rect(b: Rectangle, font: f32, style: &HintStyle, text: &str, viewport:
 /// *"letter should not overlap the parent DockView"*). The renderer cannot stop it: the cap is drawn
 /// into the overlay band, which starts unclipped so a dropdown can escape a scroll region.
 ///
-/// So it is nudged — never cut — into `bounds ∩ clip`, **the visible part of its own row**, not
-/// merely into the clip: pushing it anywhere in the viewport would park it over the row above,
-/// beside that row's own letter, naming something it does not name.
+/// So it is nudged — never cut — into `permitted ∩ clip`, **the visible part of the area its
+/// placement is allowed to use**, not merely into the clip: pushing it anywhere in the viewport
+/// would park it over the row above, beside that row's own letter, naming something it does not
+/// name.
+///
+/// `permitted` comes from [`keycap_rect`], which knows which placement branch it took: the target
+/// box for an in-target cap, the target plus its caption band for a compact target whose cap sits
+/// beside it. Clamping against `bounds` alone would undo that beside-placement.
 ///
 /// `None` when the visible sliver is too small to hold the cap. There is nowhere honest to put it
 /// then, so nothing is drawn.
 fn fit_into_view(
     cap: Rectangle,
-    bounds: Rectangle,
+    permitted: Rectangle,
     clip: Option<Rectangle>,
 ) -> Option<Rectangle> {
     let Some(clip) = clip else {
         return Some(cap);
     };
-    let room = bounds.intersection(clip)?;
+    let room = permitted.intersection(clip)?;
     if room.size.w < cap.size.w || room.size.h < cap.size.h {
         return None;
     }
@@ -518,6 +522,36 @@ fn fit_into_view(
     Some(Rectangle::new(Point::new(x, y), cap.size))
 }
 
+/// **Draw `c`'s hint letter, if it is carrying one.** Called by
+/// [`paint_child`](crate::component::paint_child) for *every* widget, right after the widget has
+/// painted itself — which is what lets any widget be pickable without being wrapped in a
+/// [`KeyHint`] (F003/P082/T431).
+///
+/// The rules that were learned the hard way, and are the reason this is one function rather than
+/// something each widget does:
+///
+/// - **The viewport is the PAINT context's**, not `Base::viewport`. The latter is written per
+///   *tree* by the layout pass, so inside a pane header it is the header's own box — a few dozen
+///   pixels tall. Reading it there made every compact cap "not fit below", flip above, and get
+///   clipped by the pane frame (Antonio, driving, 2026-08-14).
+/// - **The cap is nudged, never cut.** A row half past a sidebar's fold is still a target — you can
+///   see it, so you can aim at it — and its letter is drawn **whole** so it stays readable (Antonio,
+///   2026-08-23: *"a half visible pane row should have the letter to peek"*). Clipping it would make
+///   it unreadable, so instead it is moved inside the visible part of its own row —
+///   [`fit_into_view`] — and dropped when that part is too small to hold it. What stops a cap for a
+///   row nobody can see at all is **candidacy**, one level up: [`hint::collect`](crate::hint) drops
+///   a target outside its clipping ancestors, so the letter is never handed out.
+/// - **The placement says where the cap may live, not the target box.** [`keycap_rect`] returns the
+///   permitted rect beside the cap, because a compact target's cap is placed *outside* it on
+///   purpose. Re-deriving that from the bounds is what dragged every icon's caption back on top of
+///   the icon (F003/P082/T479).
+/// - **Into the OVERLAY band**, so nothing painted after this widget covers its letter. Drawing it
+///   inline puts the cap at this widget's position in the paint order and every sibling drawn later
+///   sits on top: a top-bar button's letter disappeared under the sidebar frame beside it, and a
+///   card's under the next card (same session). `with_overlay` keeps the cap in **this widget's
+///   own scene**, nested exactly as deep as the widget is — the property the whole fix rests on,
+///   since a plugin's overlay-nested picker then lands above its own content with nothing
+///   host-side to teach.
 pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
     let base = c.base();
     if !base.visible.get_untracked() {
@@ -530,8 +564,8 @@ pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
         return;
     }
     let style = base.hint_style;
-    let cap = keycap_rect(base.bounds, base.font, &style, &text, cx.viewport());
-    let Some(cap) = fit_into_view(cap, base.bounds, cx.clip()) else {
+    let (cap, permitted) = keycap_rect(base.bounds, base.font, &style, &text, cx.viewport());
+    let Some(cap) = fit_into_view(cap, permitted, cx.clip()) else {
         return;
     };
     let font = hint_font(base.font, &style, base.bounds);
@@ -569,7 +603,7 @@ impl Parent for KeyHint {}
 mod tests {
     use super::keycap_size;
 
-    use super::fit_into_view;
+    use super::{HintStyle, fit_into_view, keycap_rect};
     use heca_core::layout::{Point, Rectangle, Size};
 
     fn rect(x: f64, y: f64, w: f64, h: f64) -> Rectangle {
@@ -616,6 +650,54 @@ mod tests {
         let clip = rect(0.0, 0.0, 200.0, 400.0);
         let cap = rect(174.0, 402.0, 20.0, 20.0);
         assert_eq!(fit_into_view(cap, row, Some(clip)), None);
+    }
+
+    /// **A small icon's caption stays beside it, never on it** (F003/P082/T479).
+    ///
+    /// A target too small to cover has its letter placed *below* it on purpose, so the icon stays
+    /// visible. The clamp used to pull that cap back into the button's own 25px box — dragging the
+    /// caption onto the icon it captions, 474 times in one session — because it re-derived the
+    /// permitted area from the target alone. The placement now says where the cap may live, and
+    /// for a compact target that includes the caption band beside it.
+    ///
+    /// Measured numbers, from the trace on the real defect: a 26x25 top-bar button inside a
+    /// sidebar's clip.
+    #[test]
+    fn a_compact_target_keeps_its_caption_below_itself() {
+        let font = 13.0;
+        let button = rect(526.0, 48.0, 26.0, 25.0);
+        let clip = rect(316.0, 40.0, 320.0, 728.0);
+        let viewport = Size::new(1400.0, 768.0);
+
+        let (cap, permitted) = keycap_rect(button, font, &HintStyle::default(), "w", viewport);
+        assert!(
+            cap.loc.y >= button.loc.y + button.size.h,
+            "placed below the icon it captions: {cap:?}",
+        );
+
+        let fitted = fit_into_view(cap, permitted, Some(clip)).expect("the caption band holds it");
+        assert_eq!(fitted, cap, "and the clamp leaves it beside the icon, not on it");
+    }
+
+    /// **…and flips above only when below would fall off the viewport.**
+    ///
+    /// The other half of the same rule: the caption band is above *and* below, so a button near
+    /// the bottom edge captions itself from above and the clamp leaves that alone too.
+    #[test]
+    fn a_compact_target_with_no_room_below_captions_itself_from_above() {
+        let font = 13.0;
+        let button = rect(526.0, 48.0, 26.0, 25.0);
+        let clip = rect(316.0, 0.0, 320.0, 728.0);
+        let viewport = Size::new(1400.0, 80.0); // nothing fits under the button
+
+        let (cap, permitted) = keycap_rect(button, font, &HintStyle::default(), "w", viewport);
+        assert!(
+            cap.loc.y + cap.size.h <= button.loc.y,
+            "flipped above the icon: {cap:?}",
+        );
+
+        let fitted = fit_into_view(cap, permitted, Some(clip)).expect("the caption band holds it");
+        assert_eq!(fitted, cap, "and the clamp leaves it there");
     }
 
     #[test]
