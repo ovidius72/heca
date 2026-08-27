@@ -52,5 +52,11 @@
     }
   ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-07-13T15:29:44.427Z"
+  "updatedAt": "2026-07-13T15:29:44.427Z",
+  "sessionInfo": [
+    {
+      "sessionId": "01f86c94-7f92-4e8a-b8bd-b845e9032ae7",
+      "createdAt": "2026-08-26T15:43:03.976Z"
+    }
+  ]
 }

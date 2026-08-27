@@ -5,7 +5,7 @@
   "priority": 0,
   "name": "Improvements",
   "description": "Quality-of-life improvements track, separate from the full Notification System feature. Small, focused enhancements that surface app feedback to the user: notifications for blocked keybindings (policy) and config-reload outcomes. Each improvement is self-contained and ships a visible user-facing signal.\n\nScope starts with a Notification phase (toast surface + two hooks). May grow with other improvement slices over time. Kept distinct from the planned Notification System feature (fc19894f, 9 phases) which is the full notification architecture — Improvements delivers lightweight, immediate feedback first.",
-  "descriptionUpdatedAt": "2026-07-09T13:08:19.438Z",
+  "descriptionUpdatedAt": "",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -22,5 +22,6 @@
   "dependsOn": [],
   "statusLog": [],
   "createdAt": "2026-07-09T13:08:19.438Z",
-  "updatedAt": "2026-07-09T13:15:09.863Z"
+  "updatedAt": "2026-07-09T13:15:09.863Z",
+  "sessionInfo": []
 }

@@ -381,7 +381,7 @@ NotificationAction {
 
 - Do not store `Box<dyn Fn()>`.
 - Do not mutate `AppState` from toast callbacks.
-- Do not add multiple actions in v1; `ToastSpec` supports one inline action.
+- ⚠️ **SUPERSEDED (F003/P096/T487, 2026-08-26).** This said *"do not add multiple actions in v1; `ToastSpec` supports one inline action"* — that was a **widget limitation written into the domain**, and the widget no longer has it. `ToastSpec` now carries `actions: Vec<ToastAction>` where `ToastAction { key, label, variant }`, and the stack reports `on_action(id, key)` so the host knows which one was pressed. `AppNotification.action: Option<NotificationAction>` should become a `Vec` to match.
 
 #### Validation
 
@@ -495,8 +495,10 @@ pub fn to_toast_spec(n: &AppNotification) -> ToastSpec {
         spec = spec.body(body.clone());
     }
 
-    if let Some(action) = &n.action {
-        spec = spec.action(action.label.clone());
+    // One ToastAction per NotificationAction, keyed by the action's own name — that key is what
+    // comes back from `on_action(id, key)`, so the host maps it straight to the Intent to run.
+    for action in &n.actions {
+        spec = spec.action(action.name.clone(), action.label.clone());
     }
 
     spec
@@ -899,7 +901,7 @@ let notification_signal = signal(Vec::<ToastSpec>::new());
 signals.notification_toasts = Some(notification_signal);
 
 let toast_stack = ToastStack::new(notification_signal)
-    .corner(ToastCorner::TopRight)
+    .position(ToastPosition::TopRight)
     .on_dismiss(/* send AppEvent */)
     .on_action(/* send AppEvent */);
 ```
@@ -1895,116 +1897,60 @@ Validate toast notification requirements.
 
 ---
 
-# Feature F10 — Keyboard Hint Integration for Toast Actions
+# Feature F10 — Keyboard reachability for toast actions
 
-## Feature Description
+## Status — ⚠️ SUPERSEDED (F003/P096, 2026-08-26). Nothing here is left to build.
 
-Make toast action/dismiss affordances compatible with the future global `prefix+/` hint system.
+This feature was written against a world where the app **registered** hint targets by hand, and
+every task in it followed from that: extend `ToastSpec` with `action_hint`/`dismiss_hint` fields,
+paint keycaps over the action/dismiss rects with `paint_keycap`, connect hint activation to
+bespoke notification `AppEvent` variants.
 
-## Status
+**All of that mechanism has been deleted.** `HintTargetRegistry`, `HintTargets`, `HintTargetId`,
+`Base::hint_target` and `named_press` are gone (⭐⭐ RULE ZERO — a registry, an id or a
+crate-private type IS the bug), and they are gone on `main`, not just on a branch.
 
-Deferred until the WIP branch that adds global `HintKey` support lands.
+## What replaced it
 
-## Dependencies
+**Being pickable is not opt-in.** Any widget you can act on is offered a `prefix+/` letter with
+nothing declared, and picking it does what clicking it does. A toast's action is a real `Button`
+and its × is a real `IconButton`, so both are pick targets the moment the card is on screen. There
+are no hint fields to add, no keycaps to paint, and no activation to wire — the framework collects
+the declarations out of the laid-out tree and runs the one you type.
 
-- Future global `prefix+/` hint collection/activation branch.
-- Existing `KeyHint` widget and `paint_keycap` helper.
+## Its real prerequisite, which is now met
 
-## References
+The picker walks the **laid-out tree**. Until F003/P096/T486 the stack kept its cards *outside*
+that tree, in a private list it positioned and routed by hand — so nothing inside a stacked card
+could ever be lettered, and no amount of work in this feature could have fixed it. The cards are
+real children now, so this feature's goal is a property of the design rather than work.
 
-- `heca-grid-ui/src/widgets/key_hint.rs`
-- existing heca chrome usage of `KeyHint` for pane/column/workspace pick flows.
-- `docs/widgets.md` § `KeyHint`.
+## What survives, as a verification note — NOT a task
 
----
+**Every toast action must be reachable by keyboard.** That holds when **both** halves are true, and
+neither alone is enough:
 
-## Phase F10.P1 — Toast Hint Presentation
+1. the stack's cards are real children (done, F003/P096/T486); and
+2. the stack is mounted as a **visible layer** — the four hint walks iterate
+   `state.layers.visible_front_to_back()`, so a stack mounted outside the layer registry would be
+   invisible to the picker again.
 
-### Task F10.P1.T1 — Extend `ToastSpec` with hint fields
+Check it where the stack is mounted, not here.
 
-#### Description
+## The × keeps its letter
 
-Add optional hint labels for action/dismiss.
+Considered and rejected (2026-08-26): opting the × out of the picker to save letters. It is the
+**only** keyboard route to dismissing a *specific* toast — the bound actions are dismiss-last and
+dismiss-all, and `NotificationDismissOne { id }` needs an id the keyboard cannot otherwise name.
+The visible cap (`MAX_VISIBLE_NOTIFICATIONS = 4`) already bounds the cost at roughly 8 letters of
+52.
 
-#### Example
+## Optional, and additive — a scoped picker
 
-```rust
-pub struct ToastSpec {
-    // existing fields...
-    pub action_hint: Option<String>,
-    pub dismiss_hint: Option<String>,
-}
-```
-
-#### Target Files
-
-- `heca-grid-ui/src/widgets/toast.rs`
-- `heca-grid-ui/src/widgets/toast_stack.rs` if spec construction helpers live there.
-
-#### Avoid
-
-- Do not implement before global hint mode requirements are known.
-- Do not hardcode hint letters in `Toast`.
-
----
-
-### Task F10.P1.T2 — Paint keycaps over toast action/dismiss rects
-
-#### Description
-
-`Toast` currently draws action/dismiss internally. Use `paint_keycap` on the known rects.
-
-#### Example
-
-```rust
-if let Some(hint) = &self.spec.action_hint {
-    paint_keycap(cx, action_rect, hint, font, None);
-}
-```
-
-#### Avoid
-
-- Do not wrap internal action with `KeyHint` unless Toast is refactored into child widgets.
-- Do not change toast layout in a way that breaks existing click hit testing.
-
----
-
-## Phase F10.P2 — Hint Activation
-
-### Task F10.P2.T1 — Connect hint activation to notification events
-
-#### Description
-
-When global hint mode assigns a key to a toast affordance, pressing the key should emit the same event as click.
-
-#### Mapping
-
-- action hint → `AppEvent::NotificationAction { id }`
-- dismiss hint → `AppEvent::NotificationDismiss { id }`
-
-#### Avoid
-
-- Do not bypass event bridge.
-- Do not execute notification action directly from hint mode.
-
----
-
-### Task F10.P2.T2 — Preserve keyboard-first contract
-
-#### Description
-
-Every toast action must be reachable by keyboard once hint mode exists.
-
-#### Rule
-
-If a toast has an action button, it must expose either:
-
-- a global hint activation; or
-- a registered action/keybinding path elsewhere.
-
-#### Avoid
-
-- Do not ship mouse-only toast actions after hint branch lands.
+A notification-scoped picker may be added **in addition to** the global `prefix+/`, never instead
+of it: a `KeyHintGroup` over the stack, opened by a registered action with a keybinding (**not** a
+`[[keys.surface]]` entry — surface keys act on the *focused* surface, and this layer never holds
+the keyboard). That is a convenience, not a fix; the global picker already reaches everything.
 
 ---
 

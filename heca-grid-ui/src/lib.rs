@@ -60,7 +60,7 @@ pub use action::{Action, SignalData};
 pub use builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
-    Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, collect_damage,
+    Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, collect_damage, needs_layout,
     deliver, dispatch, overlay_occluded_at, paint_child,
     install_frame_request, request_frame,
 };
@@ -80,7 +80,7 @@ pub use hint::{
 pub use nav::{collect_keys, identity_of, key_at};
 pub use effects::{Attention, Eased, Flash};
 pub use animation::{
-    Animate, Animation, AnimationFrame, Fade, Presence, Sequence, Zoom, ZoomFade, smoothstep,
+    Animate, Animation, AnimationFrame, Fade, Presence, Sequence, Slide, SlideFrom, Zoom, ZoomFade, smoothstep,
 };
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
@@ -97,14 +97,14 @@ pub use widgets::{
     ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame, DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, KeyHintGroup, Label,
     LabelSide, MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, PaneFrame, Panel, ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
-    StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility, KeyCap, KeycapVariant, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
+    StatusDot, Surface, Tabs, Tag, Toast, ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility, KeyCap, KeycapVariant, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
 };
 
 /// Common imports for building UIs.
 pub mod prelude {
     pub use crate::action::{Action, SignalData};
     pub use crate::animation::{
-        Animate, Animation, AnimationFrame, Fade, Sequence, Zoom, ZoomFade,
+        Animate, Animation, AnimationFrame, Fade, Sequence, Slide, SlideFrom, Zoom, ZoomFade,
     };
     pub use crate::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
     pub use crate::color::Color;
@@ -127,6 +127,6 @@ pub mod prelude {
         ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, ContextMenu, Dialog, DockFrame, DotStatus, Ellipsis, Flex, FocusScope, Gauge,
         Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, KeyHintGroup, Label,
         LabelSide, MarkerGroup, MenuEntry, MenuItem, NfGlyph, NfIcon, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
-        StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
+        StatusDot, Surface, Tabs, Tag, Toast, ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
     };
 }

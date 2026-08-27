@@ -101,7 +101,7 @@ pub use scroll_bar::ScrollBar;
 pub use scroll_region::{RevealAlign, ScrollAxes, ScrollInfo, ScrollRegion};
 pub use tabs::Tabs;
 pub use tag::Tag;
-pub use toast::{Toast, ToastCorner, ToastPosition, ToastSeverity, ToastSpec, ToastStack};
+pub use toast::{Toast, ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack};
 pub use toggle::Toggle;
 pub use tooltip::{Tooltip, TooltipSide};
 pub use visibility::Visibility;

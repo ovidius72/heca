@@ -500,9 +500,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // renderer limitation to fix later).
     let toasts = signal(Vec::<ToastSpec>::new());
     let toast_stack = ToastStack::new(toasts)
-        .corner(ToastCorner::TopRight)
+        .position(ToastPosition::TopRight)
         .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)))
-        .on_action(|id| println!("[showcase] toast {id} action"));
+        .on_action(|id, key| println!("[showcase] toast {id} action {key}"));
 
     // An **animated surface** (F003/P082/T459): the same `Overlay` every layer is, declaring how
     // it arrives and leaves in one builder — which is the whole capability. Opening zooms it in
@@ -1000,6 +1000,20 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .action(Button::outline("Retry").on_click(click("toast-retry")))
                         .action(Button::ghost("Details").on_click(click("toast-details")))
                         .on_dismiss(click("toast-dismiss")),
+                )
+                // A COMPOSED body: the slot takes any component, not just a line of text — so a
+                // notification can carry structure. Neither Label names a colour; the body slot
+                // is painted under the theme's muted token and the card publishes its severity.
+                .child(
+                    Toast::warning("Build finished with warnings")
+                        .body(
+                            Flex::column()
+                                .gap(2.0)
+                                .child(Label::new("3 warnings in heca-grid-ui"))
+                                .child(Label::new("cargo check exited 0").font_scale(0.85)),
+                        )
+                        .action(Button::new("Open log").on_click(click("toast-log")))
+                        .action(Button::ghost("Ignore").on_click(click("toast-ignore"))),
                 )
                 // A clickable card with no body — the inline "notification row" case.
                 .child(Toast::info("New message from GRID-7").on_click(click("toast-open"))),
@@ -2713,6 +2727,14 @@ impl GpuState {
         // Recompute layout ONLY when an input changed it (resize / font / content
         // event) — never on pure-animation frames. The full per-frame taffy
         // relayout was the bulk of the render() CPU.
+        // **A widget that changed the shape of its own tree asks for a layout pass.** Damage is
+        // about pixels; this is about position — a stacked toast that finished leaving is gone
+        // from the tree, and the cards below it are still laid out around the hole. Asked BEFORE
+        // the layout block so the pass runs on this frame, not the next input event.
+        if heca_grid_ui::needs_layout(&self.ui) | heca_grid_ui::needs_layout(&self.overlays) {
+            self.layout_dirty = true;
+        }
+
         if self.layout_dirty {
             // The root ScrollRegion IS the window; the page inside it lays out at
             // natural size and the region scrolls/clips it (T009 — replaces the old
@@ -3105,16 +3127,34 @@ impl ApplicationHandler for App {
                             use std::io::Write;
                             let _ = std::io::stdout().flush();
                         }
-                        // `t` pushes a new toast onto the host-owned list; the
-                        // ToastStack slides it in, and × dismisses (removes the id).
+                        // `t` pushes a new toast onto the host-owned list; the ToastStack slides
+                        // it in and × dismisses (removes the id). Each push rotates the severity
+                        // AND the action's button variant, because **the developer raising a
+                        // notification chooses how its action reads** — the stack builds what the
+                        // spec says and picks no face of its own (F003/P096/T486).
                         GridKey::Char('t') if state.focus.focused().is_none() => {
                             state.toasts.update(|v| {
                                 let id = v.iter().map(|s| s.id).max().unwrap_or(0) + 1;
+                                let (severity, variant, how) = match id % 4 {
+                                    1 => (ToastSeverity::Info, ButtonVariant::Primary, "primary"),
+                                    2 => (ToastSeverity::Success, ButtonVariant::Secondary, "secondary"),
+                                    3 => (ToastSeverity::Warning, ButtonVariant::Outline, "outline"),
+                                    _ => (ToastSeverity::Danger, ButtonVariant::Ghost, "ghost"),
+                                };
                                 v.push(
                                     ToastSpec::new(id, format!("Event #{id}"))
-                                        .severity(ToastSeverity::Info)
-                                        .body("Pushed with the `t` key")
-                                        .action("View"),
+                                        .severity(severity)
+                                        .body(format!("Its action is a {how} button"))
+                                        .action_with(
+                                            ToastAction::new("view", "View").variant(variant),
+                                        )
+                                        // Every other push carries a SECOND action, so the row
+                                        // that wraps and the per-action variant are both visible:
+                                        // "one action" was a widget limit, not a real rule.
+                                        .action_with(
+                                            ToastAction::new("dismiss", "Not now")
+                                                .variant(ButtonVariant::Ghost),
+                                        ),
                                 );
                             });
                             state.window.request_redraw();

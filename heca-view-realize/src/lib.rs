@@ -646,6 +646,8 @@ fn realize_kind(
             if let Some(glyph) = glyph_prop(node) {
                 toast = toast.icon(glyph);
             }
+            // `body_text` is applied first and a described `body` child overwrites the same slot
+            // below, so children win without the arm having to look ahead.
             if let Some(body) = node.props.get("body_text").and_then(PropValue::as_text) {
                 toast = toast.body_text(body);
             }
@@ -661,19 +663,41 @@ fn realize_kind(
                 toast = toast.position(position);
             }
             toast = with_props(toast, node, theme);
-            // The inline action is a **labelled button**, not arbitrary content — so it is a prop
-            // (`action_text`) plus an `action` intent, not a slot. A slot would have promised
-            // composition the widget doesn't offer.
-            if let Some(label) = node.props.get("action_text").and_then(PropValue::as_text)
+
+            // ── Slots ────────────────────────────────────────────────────────────────────────
+            // `body` is the **default** slot, so an unslotted child is the body; `actions` are the
+            // controls under it, one per child. F003/P076/T284 recorded "no slots, deliberately"
+            // because the card hand-drew itself and could not hold arbitrary content — that reason
+            // died with F003/P082/T481, and this reverses it (F003/P096/T488).
+            //
+            // A described action is an **ordinary described `Button`** carrying its own `press`
+            // intent, which is what makes it a `prefix+/` target with nothing hint-related written:
+            // being pickable is not opt-in.
+            let mut described_actions = false;
+            for child in &node.children {
+                let realized = realize(child, theme, emit, forms);
+                match slot_of(child) {
+                    Some("actions") => {
+                        described_actions = true;
+                        toast = toast.action_boxed(realized);
+                    }
+                    Some("body") | None => toast = toast.body_boxed(realized),
+                    other => {
+                        warn_unknown_slot(node, child, other, &["body", "actions"]);
+                        toast = toast.body_boxed(realized);
+                    }
+                }
+            }
+
+            // **Children win over the text sugar**, the way a `Button`'s children win over its
+            // `text`/`icon`: one content model, two spellings, never two paint paths. The text
+            // props stay because they are the plain-data path a `ToastSpec` uses.
+            if !described_actions
+                && let Some(label) = node.props.get("action_text").and_then(PropValue::as_text)
                 && let Some(carrier) = intent_carrier(node, "action")
             {
                 let emit = emit.clone();
-                // The arm builds the control, so every described toast's action looks the same —
-                // and it is a real `Button`, which means `prefix+/` letters it with nothing
-                // declared (F003/P096/T483).
-                toast = toast.action(
-                    Button::outline(label).on_click(move || emit(carrier.clone())),
-                );
+                toast = toast.action(Button::new(label).on_click(move || emit(carrier.clone())));
             }
             if let Some(carrier) = intent_carrier(node, "press") {
                 let emit = emit.clone();
@@ -2690,13 +2714,7 @@ mod tests {
         );
     }
 
-    /// `Toast` takes no slots: its inline action is a **labelled button**, not arbitrary content,
-    /// so it is a prop (`action_text`) + an `action` intent. A slot would have promised a
-    /// composition the widget does not offer.
-    ///
-    /// The card's own content **is** children — the leading icon, the text column and the × are
-    /// laid out by the engine (F003/P082/T481) — so "no slots" is now the statement that a
-    /// described child is not adopted into that composition, not that the card has no children.
+    /// The card's props and its three intents still work — the plain-data path a `ToastSpec` uses.
     #[test]
     fn toast_node_realizes_its_props_and_three_intents() {
         use std::cell::RefCell;
@@ -2714,17 +2732,7 @@ mod tests {
             .on("dismiss", Intent::new("close_toast"));
 
         let toast = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
-        let with_child = realize(
-            &node.clone().child(ViewNode::new(WidgetKind::Label).text("smuggled")),
-            &Theme::default(),
-            &emit,
-            &mut FormBindings::default(),
-        );
-        assert_eq!(
-            with_child.base().children.len(),
-            toast.base().children.len(),
-            "the Toast composes its own card — a described child is not adopted into it",
-        );
+        assert_eq!(toast.base().children.len(), 3, "icon, text column, dismiss");
 
         // An unknown severity degrades to the widget's default rather than erroring.
         let bogus = ViewNode::new(WidgetKind::Toast)
@@ -2732,6 +2740,130 @@ mod tests {
             .prop("severity", PropValue::Text("catastrophic".into()));
         assert_eq!(severity_prop(&bogus), heca_grid_ui::ToastSeverity::Info);
         assert_eq!(severity_prop(&node), heca_grid_ui::ToastSeverity::Danger);
+    }
+
+    /// The card's text column: `[title, body, actions]`.
+    fn toast_column(toast: &dyn Component) -> &[Box<dyn Component>] {
+        &toast.base().children[1].base().children
+    }
+
+    /// **A described toast has slots again** — `body` (the default) and `actions`.
+    ///
+    /// F003/P076/T284 recorded "no slots, deliberately" because the card hand-drew itself and could
+    /// not hold arbitrary content. That reason died with F003/P082/T481, and this is the reversal
+    /// (F003/P096/T488). An unslotted child is the body, so the common case needs no slot name.
+    #[test]
+    fn a_described_toast_takes_a_body_and_several_actions() {
+        use heca_core::layout::Point;
+        use heca_grid_ui::Event;
+        use std::cell::RefCell;
+
+        let fired: Rc<RefCell<Vec<Intent>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = fired.clone();
+        let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+
+        let node = ViewNode::new(WidgetKind::Toast)
+            .text("Build failed")
+            // No slot named: the body is the DEFAULT slot.
+            .child(ViewNode::new(WidgetKind::Label).text("3 errors"))
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("Retry")
+                    .prop("slot", PropValue::Text("actions".into()))
+                    .on_press(Intent::new("rebuild")),
+            )
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("View log")
+                    .prop("slot", PropValue::Text("actions".into()))
+                    .on_press(Intent::new("open_log")),
+            );
+
+        let toast = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let column = toast_column(toast.as_ref());
+        assert_eq!(
+            column[1].text_summary().as_deref(),
+            Some("3 errors"),
+            "an unslotted child is the body",
+        );
+        let actions = &column[2].base().children;
+        assert_eq!(actions.len(), 2, "two described actions, two controls");
+
+        // Each action fires its OWN intent — a described action is an ordinary described Button,
+        // so a real click on it is the whole of the wiring.
+        for (i, want) in ["rebuild", "open_log"].iter().enumerate() {
+            fired.borrow_mut().clear();
+            let mut a = realize(
+                &node.children[i + 1],
+                &Theme::default(),
+                &emit,
+                &mut FormBindings::default(),
+            );
+            heca_grid_ui::LayoutEngine::new()
+                .base_font(14.0)
+                .compute(a.as_mut(), heca_core::layout::Size::new(200.0, 60.0));
+            let b = a.base().bounds;
+            let at = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+            heca_grid_ui::dispatch(
+                a.as_mut(),
+                &Event::pointer_pressed(at, heca_grid_ui::PointerButton::Left),
+            );
+            heca_grid_ui::dispatch(
+                a.as_mut(),
+                &Event::pointer_released(at, heca_grid_ui::PointerButton::Left),
+            );
+            assert_eq!(
+                fired.borrow().first().map(|i| i.action.as_str()),
+                Some(*want),
+                "action {i} fired the wrong intent",
+            );
+        }
+    }
+
+    /// **Children win over the text sugar** — one content model, two spellings, the way a
+    /// `Button`'s children win over its `text`/`icon`.
+    #[test]
+    fn a_described_toasts_children_win_over_its_text_props() {
+        let node = ViewNode::new(WidgetKind::Toast)
+            .text("Build failed")
+            .prop("body_text", PropValue::Text("the sugar body".into()))
+            .prop("action_text", PropValue::Text("SUGAR".into()))
+            .on("action", Intent::new("rebuild"))
+            .child(ViewNode::new(WidgetKind::Label).text("the composed body"))
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("Composed")
+                    .prop("slot", PropValue::Text("actions".into()))
+                    .on_press(Intent::new("composed")),
+            );
+
+        let toast = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let column = toast_column(toast.as_ref());
+        assert_eq!(
+            column[1].text_summary().as_deref(),
+            Some("the composed body"),
+            "the text sugar overwrote a composed body",
+        );
+        let actions = &column[2].base().children;
+        assert_eq!(actions.len(), 1, "action_text built a second control beside the composed one");
+        assert_eq!(actions[0].text_summary().as_deref(), Some("Composed"));
+    }
+
+    /// **An unknown slot name is logged and falls back to the body** — `realize` is total for
+    /// untrusted input, so a plugin's typo costs it a misplaced child, never a panic.
+    #[test]
+    fn a_described_toasts_unknown_slot_falls_back_to_the_body() {
+        let node = ViewNode::new(WidgetKind::Toast).text("t").child(
+            ViewNode::new(WidgetKind::Label)
+                .text("typo")
+                .prop("slot", PropValue::Text("bodyy".into())),
+        );
+        let toast = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        assert_eq!(
+            toast_column(toast.as_ref())[1].text_summary().as_deref(),
+            Some("typo"),
+            "an unknown slot should fall back to the body, not vanish",
+        );
     }
 
     // ── Vocabulary coverage (the guard that keeps this from rotting) ──

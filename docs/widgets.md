@@ -811,7 +811,7 @@ The string is **opaque to the library** — nothing here parses it — and must 
 >
 > ```rust
 > for pane in panes {
->     Row::new().key(pane.id).on_press(Intent::new("focus_pane").arg("pane_id", pane.id))
+>     Row::new().key(pane.id).on_press(Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane.id as i64)))
 > }
 > ```
 >
@@ -851,6 +851,40 @@ A widget that must keep its size still says so — an explicit `min_width`, or `
 and both rules leave it alone. Inside a **viewport** (anything that clips its children) neither
 applies: there, exceeding the box is the feature, and the floor is what keeps a 600px column 600px
 wide in a 100px scroll region.
+
+#### Two things a container publishes to what it holds — content colour, and control tone
+
+A container cannot style its children: they arrive as `impl Component`, so it does not know their
+types, and the `Theme` is only reachable at paint. So instead of assigning, it **publishes one
+value per frame and the children pull it**. There are two such channels, and they are deliberately
+separate:
+
+| | publishes | who pulls it | resolves as |
+|---|---|---|---|
+| **content colour** | `PaintCx::with_content_color(c, …)` | bare text and glyphs — an unstyled `Label`, an `Icon` | own explicit colour → published colour → a theme token (usually `foreground`) |
+| **control tone** | `PaintCx::with_control_tone(c, …)` | **controls**, for their own chrome — a `Button`, an `IconButton` | own `.tone(..)` → published tone → `theme.accent` |
+
+**Why not one channel.** Content colour is what a glyph is *painted in*; a control's tone is the
+hue it derives a whole state machine from — its border, its hover sweep, its press flash, its focus
+ring. Six widgets already publish a content colour today, and widening that one channel to also
+mean "and re-tint every control inside me" would have changed all six at once. A separate channel
+is retro-compatible **by construction**: nothing publishes a tone unless it says so.
+
+The case it was built for is a [`Toast`](#toast): a danger card wants its buttons in the danger
+hue, without the caller passing a colour to each one and without the card painting their faces
+itself. The card publishes its severity; the controls tone themselves; each keeps its own hover,
+press and focus ring, because they are real controls rather than something the card drew.
+
+```rust
+// A container publishing both: its content reads in `tone`, and controls inside it take it too.
+cx.with_control_tone(tone, |cx| {
+    cx.with_content_color(tone, |cx| paint_child(&self.base.children[ICON], cx));
+    // …a Button in here resolves its chrome hue as: own tone → this → theme.accent
+});
+```
+
+A control with an intrinsic semantic hue ignores both — a `Destructive` button stays danger-toned
+inside a success card, the same way `Badge::danger` keeps its colour inside a tinted parent.
 
 **`Style.visual` — appearance.** `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
 A description may **never** set these: it carries semantic intent (a variant, a `size`, a colour
@@ -1087,6 +1121,8 @@ stay DRY):
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
 | `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. Re-entrant: an overlay painted **inside** another overlay's paint (a `Select` in a `Dialog` body) records a **deeper segment**, and `Scene::overlay_segments()` yields segments depth-ordered — the nested panel composites above everything its parent draws, including what the parent paints *after* it. |
 | `.with_content_color(color, \|cx\| …)` | Paint the closure's subtree with `color` as the **inherited content color** — `color` inheritance in the CSS sense. A control that *composes* its content (`Button`, `Item`) cannot set its children's colors (they are `impl Component`, so it doesn't know their types, and the `Theme` is only reachable in `paint`), so it publishes one state-derived value per frame and the children pull it. Because the control repaints while its hover eases, **the content animates with no per-child wiring**. |
+| `.with_control_tone(color, \|cx\| …)` | The **chrome** counterpart of the line above: publish a hue that **controls** inside the closure derive their own chrome from — border, hover sweep, press flash, focus ring. A [`Button`](#button)/[`IconButton`](#iconbutton) resolves own `.tone(..)` → this → `theme.accent`. Separate from content colour on purpose: six widgets publish a content colour already, and widening that one channel to also re-tint every control would have changed all six at once. **Nothing publishes a tone by default**, so it is retro-compatible by construction. See [the two channels](#two-things-a-container-publishes-to-what-it-holds--content-colour-and-control-tone). |
+| `.control_tone() -> Option<Color>` | The inherited control tone, if a parent published one. A control with an intrinsic semantic hue (a `Destructive` button) ignores it. |
 | `.content_color() -> Option<Color>` | The inherited content color, if a parent published one. Widgets that render bare text/glyphs resolve: **own explicit color → this → a theme token** (usually `foreground`). A widget with an intrinsic semantic color (`Badge::danger`) ignores it. |
 | `.with_translate(dx, dy, \|cx\| …)` | Paint the closure's subtree **translated** — the same components, drawn somewhere else. Deliberately narrow: a component is laid out in exactly one place, and its bounds are the contract for drawing *and* hit-testing alike. But a control occasionally has to render content it owns but does not hold — a [`Select`](#select) shows the chosen option in its trigger while that option is away in the open list. Nothing can be in two places, so the trigger draws a second **image** of it. What is drawn this way is **not interactive** (no bounds of its own ⇒ not hit-tested, focusable or hoverable); the control's own bounds are the click target. Never use it to *move* a widget — that is `shift_subtree` + `on_layout`, which keeps bounds honest. |
 
@@ -1094,6 +1130,39 @@ stay DRY):
 (clip is currently a renderer no-op — embeddable scroll regions wait on it), `Custom`. `Scene`:
 `new()`, `push`, `clear`, `len`, `is_empty`, `iter`, plus the overlay layer
 (`begin_overlay`/`end_overlay`, `base_layer`/`overlay_layer`).
+
+### Asking the host to lay the tree out again — `needs_layout`
+
+**A repaint cannot fix a structural change.** When a widget adds or removes children between
+frames — reconciling a host-owned list, revealing a subtree — the widgets *around* it are still
+laid out around the shape the tree used to have. Marking it dirty repaints the same wrong
+positions.
+
+So a widget says so, and the host runs the pass:
+
+```rust
+// In the widget, wherever children change outside the layout pass:
+self.base.children.remove(i);
+self.base.mark_needs_layout();
+
+// In the host's frame, BEFORE it decides whether to lay out:
+if heca_grid_ui::needs_layout(&root) {
+    layout_dirty = true;
+}
+```
+
+`needs_layout(root)` walks the tree, clears the flags as it reads them, and answers a **bool** —
+there is nothing to union, because layout is a whole-tree pass. It is the layout twin of the damage
+walk, and a host calls it the same way, once a frame.
+
+**Keep the two apart.** They cost different things: a repaint is per-frame and cheap, a layout pass
+re-measures the whole tree. A widget that only changed colour must call `mark_needs_paint` and
+nothing else.
+
+> The case that asked for it: a [`ToastStack`](#toaststack) drops a dismissed card only once its
+> exit has **played**, which is several frames after the click. Nothing re-laid-out at that moment,
+> so the cards below kept their old positions — and the gap where the card had been simply sat
+> there until an unrelated click happened to trigger a layout.
 
 ### `Flash`
 
@@ -1123,14 +1192,15 @@ Overlay::new().panel(body).animation(Animation::of(MyWhirl::new())) // …or one
 
 | | |
 |---|---|
-| `Animation` | The vocabulary: `None` (the default — a cut) · `Fade` · `Zoom` · `ZoomFade` · `Custom`, built with **`Animation::of(impl Animate)`**. Tuners: `.from(scale)` (how far away it starts — below `1.0` grows in from smaller, above it pulls back from larger) and `.seconds(s)`; a built-in with no such dimension, and a `Custom` one, are returned unchanged. The variants are also the **names a description writes** (`"zoom_fade"`) — one builder, both authors |
+| `Animation` | The vocabulary: `None` (the default — a cut) · `Fade` · `Zoom` · `Slide` · `ZoomFade` · `Custom`, built with **`Animation::of(impl Animate)`**. Tuners: `.from(scale)` (how far away it starts — below `1.0` grows in from smaller, above it pulls back from larger) and `.seconds(s)`; a built-in with no such dimension, and a `Custom` one, are returned unchanged. The variants are also the **names a description writes** (`"zoom_fade"`, `"slide"`) — one builder, both authors |
 | `Animate` | The **trait**, and the extension point: `enter()` / `leave()` begin an arrival and an exit · `cancel()` settles fully present · `tick(dt) -> bool` advances it · `is_leaving() -> bool` says whether the surface may be taken away yet · `frame() -> AnimationFrame` is what to draw · `duration() -> f32` (default `0.0`) is how long one gesture takes |
 | `AnimationFrame` | `{ opacity, scale, offset }` — the whole vocabulary a surface's presentation needs, plus `IDENTITY`, `over(other)` (compose: multiply, and add the offsets) and `apply(cx, origin, f)`, **the one place a frame becomes a picture** |
 | `Presence` | Whether a surface is up, plus the **`Option<Box<dyn Animate>>`** carrying it — `enter()` / `leave()` (which own the two rules below), `follow(open)` for a signal-driven surface, `assume_open(open)` (adopt without playing — a surface born open, or one carried across a rebuild), `is_open()`, `is_animated()`, `is_leaving()`, `tick(dt)`, `frame()`. **No animation is an absence, not a null object**: nothing is ever mid-gesture, so nothing waits for it |
 
 The parts behind the names are public too — `Fade` (`new()` both ways, `out()` for a cut in and a
-dissolve out, `.seconds`), `Zoom` (`.from`, `.seconds`), `Sequence::new(lead, follow).lag(share)`
-and `ZoomFade` — but reach for them only to build a gesture the vocabulary does not have. `Sequence`
+dissolve out, `.seconds`), `Zoom` (`.from`, `.seconds`), `Slide` (`.from(SlideFrom)` for the edge,
+`.distance(px)`, `.seconds`), `Sequence::new(lead, follow).lag(share)` and `ZoomFade` — but reach
+for them only to build a gesture the vocabulary does not have. `Sequence`
 is where "the dissolve **rides** the movement, lagging by a *share* of it" lives: a share, never a
 second duration, so tuning the lead keeps the sequencing.
 
@@ -1141,7 +1211,7 @@ it (a re-open mid-exit made the map snap back to full opacity and start leaving 
 free.
 
 **Writing one is a single new file.** `heca-grid-ui/src/animation/` is one file per animation
-(`fade.rs`, `zoom.rs`, `sequence.rs`, `zoom_fade.rs`, and `vocabulary.rs` for the names). A **third party** adds nothing
+(`fade.rs`, `zoom.rs`, `slide.rs`, `sequence.rs`, `zoom_fade.rs`, and `vocabulary.rs` for the names). A **third party** adds nothing
 anywhere: they implement `Animate` in their own crate and pass `Animation::of(..)`. A built-in
 shipped *by this library* is a new file plus one arm in `Animation` — the name is the only thing
 written down. Either way nothing in the painter, the widgets or any host changes:
@@ -2964,13 +3034,35 @@ component (not overlay-drawn), so it is equally usable **inline** — e.g. a not
 sidebar. Severity maps to theme tokens, never literals.
 
 - **Construct**: `Toast::new(title)` (= info) or `Toast::{info,success,warning,danger}(title)`.
-- **Builders**: `.severity(ToastSeverity)`, `.icon(Glyph)` / `.no_icon()`, `.body(text)`,
-  `.action(label, on_click)`, `.dismissible(bool)` (default `true`).
-- **Callbacks** (the host removes the toast / runs the effect): `.on_dismiss(f)` (×),
-  `.on_action(f)` (via `.action(..)`), `.on_click(f)` (whole card — also makes it focusable;
-  Enter/Space activates).
-- **Signals**: `.title_signal() -> Signal<String>` — the title child owns the text; set the signal
-  to retitle a live card.
+- **Look**: `.severity(ToastSeverity)` (default `Info` — sets the hue *and* the default leading
+  glyph), `.icon(Glyph)` to override that glyph / `.no_icon()` to drop it, `.dismissible(bool)`
+  (default `true` — the × affordance).
+- **Content is slots, and each takes any component**:
+  - `.body(impl Component)` — the column under the title. `.body_boxed(Box<dyn Component>)` is the
+    same slot for an already-realized subtree (the host-mapper seam, as
+    [`Dialog::body_boxed`](#dialog) is). `.body_text(text)` is **sugar** that builds the small
+    ellipsised `Label` you would have built — one code path, not two.
+  - `.action(impl Component)` — **repeatable**; call it again for a second action and they sit in a
+    row that **wraps** when the card is too narrow. `.action_boxed(..)` is the realized-subtree
+    form. The caller says *what* the action is; the card says where it sits and what hue it takes.
+- **Placement**: `.position(ToastPosition)` — `TopRight`/`TopLeft`/`TopCenter`/`BottomRight`/
+  `BottomLeft`/`BottomCenter`, resolved to **auto margins**, never pixels, so it lands correctly in
+  a container of any size. Unset, it sits wherever its parent puts it. The same vocabulary places a
+  [`ToastStack`](#toaststack).
+- **How it arrives and leaves**: `.animation(Animation)`, `.opened(bool)`, and the verbs
+  `open()` / `hide()` / `toggle()`. **A card slides in by default** — that is what a notification
+  does, it arrives from the edge it lives on rather than materialising in place — and any other
+  gesture is one builder away (`Animation::Fade`, `Animation::of(mine)`, `Animation::None` for a
+  cut). A card stays laid out while it *leaves*, which is what the exit plays over; once it has
+  gone it takes no space at all.
+- **Callbacks** (the host removes the toast / runs the effect): `.on_dismiss(f)` — the ×;
+  `.on_click(f)` — the whole card, which also makes it focusable so Enter/Space activate it. There
+  is **no `on_action`**: an action is a real control you passed in, so its own `on_click` is its
+  callback.
+- **Accessors**: `.title_signal() -> Signal<String>`, `.open_signal() -> Signal<bool>`,
+  `.is_showing() -> bool` (true **including while leaving**, which is when it is still drawn and no
+  longer interactive).
+> The title child owns the text, so setting `title_signal` retitles a live card with no rebuild.
 
 **Its content is children, and the engine places them.** The card paints only its own chrome — the
 tinted surface, the bracket frame, the action's face, the press flash, the focus ring — while the
@@ -2990,9 +3082,21 @@ column cannot consult the width the card was actually given. What follows from t
 **Native:**
 
 ```rust
+// Sugar — one line of body text, one action.
 Toast::danger("Connection lost")
-    .body("Reconnecting to the grid…")
-    .action("Retry", || retry())
+    .body_text("Reconnecting to the grid…")
+    .action(Button::outline("Retry").on_click(|| retry()))
+    .on_dismiss(|| dismiss(id));
+
+// Composed — the body is anything, and actions repeat. Neither Button carries a colour:
+// the card publishes its severity as a control tone and they take it.
+Toast::danger("Build failed")
+    .body(Flex::column().gap_spacing(Spacing::Xs)
+        .child(Label::new("3 errors in heca-grid-ui"))
+        .child(Label::new("cargo check exited 1").font_scale(0.85)))
+    .action(Button::new("Retry").on_click(|| rebuild()))
+    .action(Button::ghost("View log").on_click(|| open_log()))
+    .animation(Animation::Fade)        // it slides in unless you say otherwise
     .on_dismiss(|| dismiss(id));
 ```
 
@@ -3014,9 +3118,40 @@ ViewNode::new(WidgetKind::Toast)
 - **Props**: `text` (title), `severity` (`Text` — an unknown name degrades to `info`), `icon`
   (Glyph name), `body`, `action_text`, `dismissible` (Bool).
 - **Events**: `press` (the whole card), `dismiss` (the ×), `action` (the inline button — only wired
-  when `action_text` is set).
-- **No slots.** The inline action is a *labelled button*, not arbitrary content, so it is a prop plus
-  an intent. A slot would have promised a composition the widget does not offer.
+  when `action_text` is set **and** no `actions` child was given).
+- **Slots**: **`body`** — the **default** slot, so an unslotted child is the body — and
+  **`actions`**, one control per child. A described action is an ordinary described
+  [`Button`](#button) carrying its own `press` intent, which is what makes it a `prefix+/` target
+  with nothing hint-related written: being pickable is not opt-in. An unknown slot name is
+  debug-logged and falls back to the body, never an error.
+- **Precedence: children win** over `body_text` / `action_text`, the way a `Button`'s children win
+  over its `text`/`icon`. One content model, two spellings — the text props remain because they are
+  the plain-data path a [`ToastSpec`](#toaststack) uses.
+
+> The catalog said **"no slots, deliberately"** until F003/P096/T488. The reason was the widget's
+> own limitation — it hand-drew its card and could not hold arbitrary content — and that limitation
+> is gone. Do not restore the old rule.
+
+**Declarative, composed** — a rich body and two actions, each firing its own intent:
+
+```rust
+ViewNode::new(WidgetKind::Toast)
+    .text("Build failed")
+    .prop("severity", ViewSeverity::Danger.into())
+    // No slot named: the body is the DEFAULT slot.
+    .child(ViewNode::new(WidgetKind::VStack)
+        .child(ViewNode::new(WidgetKind::Label).text("3 errors in heca-grid-ui"))
+        .child(ViewNode::new(WidgetKind::Label).text("cargo check exited 1")))
+    .child(ViewNode::new(WidgetKind::Button)
+        .text("Retry")
+        .prop("slot", PropValue::Text("actions".into()))
+        .on_press(Intent::new("rebuild")))
+    .child(ViewNode::new(WidgetKind::Button)
+        .text("View log")
+        .prop("variant", PropValue::Variant(ViewVariant::Ghost))
+        .prop("slot", PropValue::Text("actions".into()))
+        .on_press(Intent::new("open_log")));
+```
 
 > **A declarative `Toast` is for INLINE use** — a notification row inside a panel. It is **not** how
 > you fire an app notification: the host owns the queue and lifecycle through
@@ -4485,24 +4620,59 @@ like "right-click opens the page menu" skips points a toast covers while staying
 
 **A card occludes hover too.** A pointer *move* over a card is consumed, so controls behind it stop
 lighting up while a toast is over them; moves between and outside the cards still fall through, and
-a button next to the stack keeps hovering as it always did (F003/P082/T481).
+a button next to the stack keeps hovering as it always did.
 
-⚠️ **Known gap** — the stack keeps its cards outside the component tree (they live in its own
-reconciled list, and it routes input to them by hand), so the framework's hover pass never reaches
-*inside* a card here: a stacked toast's action face and × do not light under the pointer, though an
-inline `Toast` in an ordinary tree does. The fix is to make the cards real children; it is not done.
+**The cards are real children, and the engine lays them out.** The stack is a viewport-sized box
+whose `justify`/`align` come from its corner, with its gap between the cards and its margin as
+padding — it measures, positions, hit-tests and routes nothing. That is what makes a notification's
+action **reachable by keyboard at all**: the picker walks the laid-out tree, so a card kept beside
+it in a private list could never be lettered, and hover never reached inside one (the framework
+marks hover along the hit-test target's ancestor chain, and a hand-delivered move marks nothing).
 
-- **Construct**: `ToastStack::new(items: Signal<Vec<ToastSpec>>)`; `.corner(ToastCorner)`,
+**A corner means the window's corner.** A host mounts its layers however it likes — a column of
+viewport-sized siblings gives each one a *share* of the height — so the stack anchors the finished
+group against the viewport the layout pass stamped on it, in `on_layout`. The arrangement is still
+entirely the engine's; only which corner meets which corner is left.
+
+- **Construct**: `ToastStack::new(items: Signal<Vec<ToastSpec>>)`; `.position(ToastPosition)`,
   `.gap(px)`, `.margin(px)`.
-- **Intents**: `.on_dismiss(|id| …)` (× clicked), `.on_action(|id| …)` (inline action clicked).
-- **`ToastSpec`**: `ToastSpec::new(id, title).severity(..).icon(..)?.body(..)?.action(label)?.dismissible(bool)` — plain data the host owns.
+- **Intents**: `.on_dismiss(|id| …)` (× clicked), `.on_action(|id, key| …)` (an action clicked —
+  `key` is that action's own name, because a card may offer several and "which card" alone would
+  not say what to do).
+- **`ToastSpec`**: `ToastSpec::new(id, title).severity(..).icon(..)?.body(..)?.action(key, label)*.dismissible(bool)`
+  — plain data the host owns, with **no closures**: an action is a `key` the host maps back, which
+  is the only form that also survives an RPC call or a plugin.
+- **Several actions, each a real control.** `actions: Vec<ToastAction>` where
+  `ToastAction { key, label, variant }`. `.action(key, label)` appends one in the default variant;
+  `.action_with(ToastAction::new(..).variant(..))` is the full form and the sugar builds it, so
+  there is one path and not two. A notification that can be retried *and* inspected needs two, and
+  "one action" was a widget limit rather than a real rule.
+- **The stack never chooses how an action looks.** The variant rides on each `ToastAction` (default
+  `Primary`), so a card can carry a primary "Retry" beside a ghost "Dismiss". One face hardcoded in
+  the widget is wrong for somebody every time.
+- **One position vocabulary for the card and the stack.** [`ToastPosition`](#toast) places both —
+  `TopRight`/`TopLeft`/`TopCenter`/`BottomRight`/`BottomLeft`/`BottomCenter` — so "top right" means
+  the same thing said either way. It replaced a separate four-member `ToastCorner`, which said the
+  same thing in a second spelling and could not express the centres.
+- **A dropped card leaves before it goes.** Remove its id and the stack plays that card's exit,
+  keeping it in place until the gesture has finished — so a notification is never cut off
+  mid-dismissal.
 
 ```rust
 let toasts = signal(Vec::<ToastSpec>::new());            // the app's render list
 let stack = ToastStack::new(toasts)
-    .corner(ToastCorner::TopRight)
-    .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)));
-// app pushes:  toasts.update(|v| v.push(ToastSpec::new(1, "Saved").severity(ToastSeverity::Success)));
+    .position(ToastPosition::TopRight)
+    .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)))
+    .on_action(move |id, key| run(id, key));             // `key` says WHICH action
+
+// The app pushes plain data — two actions, each with its own face:
+toasts.update(|v| v.push(
+    ToastSpec::new(1, "Build failed")
+        .severity(ToastSeverity::Danger)
+        .body("3 errors in heca-grid-ui")
+        .action("rebuild", "Retry")
+        .action_with(ToastAction::new("open_log", "View log").variant(ButtonVariant::Ghost)),
+));
 ```
 
 > Same host wiring as `Dialog` (route pointer to the overlay first). Auto-dismiss/timers live in the
@@ -4803,6 +4973,34 @@ ViewNode::new(WidgetKind::VStack)
   (`VStack::new().gap(8).child(…)`) is `plugin-task-ui-2`; until then use `ViewNode::new(kind)`.
 - **Extending the vocabulary is host-side** (never a plugin): add a `WidgetKind` variant + a
   `realize` arm + the widget's showcase demo + its entry here. Plugins compose from existing kinds.
+
+#### Arguments — what an `Intent` may carry
+
+An argument is added with `.arg(name, PropValue)`, and the value is an **explicit `PropValue`**
+rather than anything convertible. That is deliberate: an argument crosses to RPC and to a WASM
+plugin as data, so what it *is* should be readable at the call site instead of inferred from
+whatever numeric type happened to be in scope.
+
+```rust
+Intent::new("focus_pane").arg("pane_id", PropValue::Int(7));
+Intent::new("rename").arg("name", PropValue::Text("scratch".into()));
+Intent::new("expand").arg("open", PropValue::Bool(true));
+```
+
+⚠️ **Integers are `i64`, and most ids here are `u64`.** `PropValue::Int` is an `i64`, because that
+is what JSON and the RPC wire carry. A pane id, a notification id and `ToastSpec::id` are all
+`u64`, and there is deliberately **no `From<u64>`** — the conversion is lossy above `i64::MAX`, and
+a silently wrapped id would arrive as a *negative* number that nothing could diagnose from the UI.
+So cast at the call site, where the choice is visible:
+
+```rust
+Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane_id as i64));
+```
+
+An intent may carry anything `PropValue` holds — `Bool`, `Int`, `Float`, `Text`, a colour or glyph
+**name**, a `List`, or a `Map` for a named group of values. It may **never** carry a closure or a
+widget: an intent is the one form behaviour takes when it has to survive being sent by RPC, named
+in a keybinding, or raised by a plugin.
 
 ### The other half of an `Intent` — the action it names
 

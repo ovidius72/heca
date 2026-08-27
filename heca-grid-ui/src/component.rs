@@ -112,6 +112,39 @@ pub fn overlay_occluded_at(root: &dyn Component, pos: Point) -> bool {
         .any(|c| overlay_occluded_at(c.as_ref(), pos))
 }
 
+/// **Does any widget in this tree need laying out again?** Clears the flags as it walks.
+///
+/// The layout twin of [`collect_damage`], and the host calls it the same way — once a frame,
+/// before deciding whether to run [`LayoutEngine::compute`](crate::LayoutEngine::compute). It
+/// answers a question a repaint cannot: a widget that changed the *shape* of the tree has moved
+/// its siblings, and only a layout pass can put them right.
+///
+/// Unlike damage there is nothing to union — layout is a whole-tree pass, so the answer is a bool.
+/// Hidden subtrees are **not** skipped: a subtree that just became hidden is exactly the case that
+/// needs the pass, and its stale bounds are what the pass is about to fix.
+///
+/// ```ignore
+/// // In the host's frame, beside the existing damage call:
+/// if heca_grid_ui::needs_layout(&ui) {
+///     self.layout_dirty = true;
+/// }
+/// ```
+pub fn needs_layout(root: &dyn Component) -> bool {
+    fn walk(c: &dyn Component, found: &mut bool) {
+        let b = c.base();
+        if b.needs_layout() {
+            b.clear_needs_layout();
+            *found = true;
+        }
+        for child in &b.children {
+            walk(child.as_ref(), found);
+        }
+    }
+    let mut found = false;
+    walk(root, &mut found);
+    found
+}
+
 /// State shared by every component. Concrete widgets embed this.
 pub struct Base {
     /// Layout + visual style.
@@ -339,7 +372,18 @@ pub struct Base {
     /// changed and cleared once it's repainted. Starts `true` (everything paints
     /// on the first frame). The renderer repaints only widgets whose flag is set,
     /// and unions their bounds into the frame's damage region.
-    needs_paint: Cell<bool>}
+    needs_paint: Cell<bool>,
+    /// **Relayout flag: this widget's TREE changed, not just its pixels.**
+    ///
+    /// A widget that adds or removes children between frames — one that reconciles a host-owned
+    /// list, like [`ToastStack`](crate::widgets::ToastStack) — has changed the shape of the tree,
+    /// and a repaint cannot fix that: the siblings around it are still laid out where they were.
+    /// The host reads this through [`needs_layout`] and re-runs the layout pass.
+    ///
+    /// It is separate from [`needs_paint`](Base::needs_paint) because they cost different things:
+    /// a repaint is per-frame and cheap, a layout pass walks and re-measures the whole tree. A
+    /// widget that merely changed colour must not trigger one.
+    needs_layout: Cell<bool>}
 
 impl Base {
     /// A new base with default style and an empty child list.
@@ -375,6 +419,8 @@ impl Base {
             actions: Vec::new(),
             mounted: Cell::new(false),
             needs_paint: Cell::new(true),
+            // A fresh widget is laid out by the pass that mounts it; it has nothing to re-request.
+            needs_layout: Cell::new(false),
         }
     }
 
@@ -404,6 +450,34 @@ impl Base {
     /// Clear the repaint flag — the renderer calls this once the widget is painted.
     pub fn clear_needs_paint(&self) {
         self.needs_paint.set(false);
+    }
+
+    /// **Say that this widget's tree changed and must be laid out again.**
+    ///
+    /// Call it when you add or remove children outside the layout pass — reconciling a host-owned
+    /// list, revealing a subtree, growing a row. A repaint is not enough: the widget's siblings are
+    /// still laid out around the shape the tree used to have.
+    ///
+    /// It also requests a frame, so a host that is otherwise idle wakes up to run the pass.
+    ///
+    /// **Why this exists.** A stacked notification removes its card only once the card's exit has
+    /// played — several frames after the click that dismissed it. Nothing re-laid-out at that
+    /// moment, so the cards below it kept their old positions until some unrelated click happened
+    /// to trigger a layout, and the gap where the card had been simply sat there
+    /// (Antonio, driving the showcase, F003/P096).
+    pub fn mark_needs_layout(&self) {
+        self.needs_layout.set(true);
+        request_frame();
+    }
+
+    /// Whether this widget's tree changed and wants a layout pass.
+    pub fn needs_layout(&self) -> bool {
+        self.needs_layout.get()
+    }
+
+    /// Clear the relayout flag — [`needs_layout`] does this as it walks.
+    pub fn clear_needs_layout(&self) {
+        self.needs_layout.set(false);
     }
 
     /// The widget's size-variant **padding/dimension** multiplier — what widgets

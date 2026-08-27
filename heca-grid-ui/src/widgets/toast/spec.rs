@@ -1,31 +1,55 @@
-//! [`ToastCorner`] and [`ToastSpec`] — the plain data a host hands the
-//! [`ToastStack`](super::ToastStack): where the stack sits, and what it should show.
+//! [`ToastAction`] and [`ToastSpec`] — the plain data a host hands the
+//! [`ToastStack`](super::ToastStack).
 //!
 //! No callbacks and no widgets: a spec is a value the app can keep in its own list, compare,
 //! de-duplicate and time out. The stack turns each one into a [`Toast`](super::Toast) and reports
-//! interactions back by **id**, so the host never holds a widget handle.
+//! interactions back by **id** and by the pressed action's **key**, so the host never holds a
+//! widget handle and never a closure.
 
-use crate::widgets::{Glyph, ToastSeverity};
+use crate::widgets::{ButtonVariant, Glyph, ToastSeverity};
 
-/// Which viewport corner the stack anchors to (and the direction it grows).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ToastCorner {
-    #[default]
-    TopRight,
-    TopLeft,
-    BottomRight,
-    BottomLeft,
+/// One action offered on a notification — **plain data, never a closure.**
+///
+/// The `key` is what comes back when it is pressed ([`ToastStack::on_action`]), so it is the
+/// caller's own name for the act (an action id, a `WmAction` name); the widget never parses it.
+/// That is what lets the same declaration be answered by a click, by a `prefix+/` pick, and by an
+/// RPC call, none of which could carry a `Box<dyn Fn()>`.
+///
+/// **The variant lives here, per action**, because a card with two actions rarely wants them to
+/// read the same: "Retry" is primary and "Dismiss" is a ghost. The stack builds what the spec
+/// says and picks no face of its own.
+///
+/// ```ignore
+/// ToastSpec::new(1, "Build failed")
+///     .action("rebuild", "Retry")
+///     .action_with(ToastAction::new("open_log", "View log").variant(ButtonVariant::Ghost));
+/// ```
+///
+/// [`ToastStack::on_action`]: super::ToastStack::on_action
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToastAction {
+    /// The caller's name for this act — reported back when it is pressed.
+    pub key: String,
+    /// What the control reads.
+    pub label: String,
+    /// How it reads at rest. Default [`ButtonVariant::Primary`].
+    pub variant: ButtonVariant,
 }
 
-#[heca_grid_ui_macros::props]
-impl ToastCorner {
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
-    pub(crate) fn is_right(self) -> bool {
-        matches!(self, ToastCorner::TopRight | ToastCorner::BottomRight)
+impl ToastAction {
+    /// An action named `key`, labelled `label`, in the default variant.
+    pub fn new(key: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            key: key.into(),
+            label: label.into(),
+            variant: ButtonVariant::default(),
+        }
     }
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
-    pub(crate) fn is_top(self) -> bool {
-        matches!(self, ToastCorner::TopRight | ToastCorner::TopLeft)
+
+    /// How this one reads at rest — primary, secondary, ghost, and the rest of the vocabulary.
+    pub fn variant(mut self, variant: ButtonVariant) -> Self {
+        self.variant = variant;
+        self
     }
 }
 
@@ -40,8 +64,13 @@ pub struct ToastSpec {
     pub icon: Option<Glyph>,
     pub title: String,
     pub body: Option<String>,
-    /// Inline action button label, if any.
-    pub action: Option<String>,
+    /// **Every action this notification offers**, in the order they are shown. Empty means the
+    /// card has no action row at all — and it then costs no space, because an unfilled slot leaves
+    /// the layout rather than sitting empty.
+    ///
+    /// It is a `Vec` because a notification that can be retried *and* inspected needs two, and
+    /// "one action" was a widget limitation written into the data rather than a real rule.
+    pub actions: Vec<ToastAction>,
     /// Whether the × dismiss affordance is shown.
     pub dismissible: bool,
 }
@@ -55,7 +84,7 @@ impl ToastSpec {
             icon: None,
             title: title.into(),
             body: None,
-            action: None,
+            actions: Vec::new(),
             dismissible: true,
         }
     }
@@ -74,15 +103,26 @@ impl ToastSpec {
         self.body = Some(b.into());
         self
     }
-    #[heca_grid_ui_macros::prop]
-    pub fn action(mut self, label: impl Into<String>) -> Self {
-        self.action = Some(label.into());
+
+    /// **Append an action**, named `key` and labelled `label`, in the default variant.
+    ///
+    /// Sugar over [`action_with`](ToastSpec::action_with): it builds the very [`ToastAction`] you
+    /// would have built, so there is one path and not two. Call it again for a second action.
+    #[heca_grid_ui_macros::host_only("a list of composed values — a description uses `children`")]
+    pub fn action(self, key: impl Into<String>, label: impl Into<String>) -> Self {
+        self.action_with(ToastAction::new(key, label))
+    }
+
+    /// [`action`](ToastSpec::action) for a fully specified one — the form that carries a variant.
+    #[heca_grid_ui_macros::host_only("a list of composed values — a description uses `children`")]
+    pub fn action_with(mut self, action: ToastAction) -> Self {
+        self.actions.push(action);
         self
     }
+
     #[heca_grid_ui_macros::prop]
     pub fn dismissible(mut self, on: bool) -> Self {
         self.dismissible = on;
         self
     }
 }
-

@@ -1,6 +1,6 @@
 //! [`Animation`] — the animation a caller *names*, and the one door a description uses too.
 
-use super::{Animate, Fade, Zoom, ZoomFade};
+use super::{Animate, Fade, Slide, Zoom, ZoomFade};
 
 /// **How a surface arrives and leaves — named, in one word.**
 ///
@@ -39,6 +39,9 @@ pub enum Animation {
     Fade,
     /// Growing in from smaller, shrinking away again.
     Zoom,
+    /// Travelling in from an edge, and back out to it — the notification gesture. Tune the edge
+    /// and the distance through [`Slide`]'s own builders and [`of`](Animation::of).
+    Slide,
     /// Pulling back into view, and on the way out the dissolve rides the shrink — the exposé's
     /// gesture. See [`ZoomFade`].
     ZoomFade,
@@ -73,6 +76,7 @@ impl Animation {
         match self {
             Self::Fade => Self::of(Fade::new().seconds(seconds)),
             Self::Zoom => Self::of(Zoom::new().seconds(seconds)),
+            Self::Slide => Self::of(Slide::new().seconds(seconds)),
             other => other,
         }
     }
@@ -86,6 +90,7 @@ impl Animation {
             Self::None => Option::None,
             Self::Fade => Some(Box::new(Fade::new())),
             Self::Zoom => Some(Box::new(Zoom::new())),
+            Self::Slide => Some(Box::new(Slide::new())),
             Self::ZoomFade => Some(Box::new(ZoomFade::new())),
             Self::Custom(animation) => Some(animation),
         }
@@ -98,6 +103,7 @@ impl std::fmt::Debug for Animation {
             Self::None => "None",
             Self::Fade => "Fade",
             Self::Zoom => "Zoom",
+            Self::Slide => "Slide",
             Self::ZoomFade => "ZoomFade",
             Self::Custom(_) => "Custom",
         })
@@ -108,13 +114,14 @@ impl std::fmt::Debug for Animation {
 /// is exactly why this is derived from the variants rather than written out: the vocabulary cannot
 /// fall behind the type, and the one entry that cannot travel as data is skipped by construction.
 impl crate::PropName for Animation {
-    const VARIANT_NAMES: &'static [&'static str] = &["none", "fade", "zoom", "zoom_fade"];
+    const VARIANT_NAMES: &'static [&'static str] = &["none", "fade", "zoom", "slide", "zoom_fade"];
 
     fn from_prop_name(name: &str) -> Option<Self> {
         match name {
             "none" => Some(Self::None),
             "fade" => Some(Self::Fade),
             "zoom" => Some(Self::Zoom),
+            "slide" => Some(Self::Slide),
             "zoom_fade" => Some(Self::ZoomFade),
             _ => None,
         }
@@ -130,7 +137,7 @@ mod tests {
     /// One word gets the gesture; the tuners refine it without a composition at the call site.
     #[test]
     fn a_named_animation_builds_the_gesture_it_says() {
-        for named in [Animation::Fade, Animation::Zoom, Animation::ZoomFade] {
+        for named in [Animation::Fade, Animation::Zoom, Animation::Slide, Animation::ZoomFade] {
             let label = format!("{named:?}");
             let mut a = named.build().expect("a named gesture");
             a.leave();
@@ -154,6 +161,7 @@ mod tests {
     fn the_variants_are_the_vocabulary_a_description_writes() {
         assert!(matches!(Animation::from_prop_name("zoom_fade"), Some(Animation::ZoomFade)));
         assert!(matches!(Animation::from_prop_name("fade"), Some(Animation::Fade)));
+        assert!(matches!(Animation::from_prop_name("slide"), Some(Animation::Slide)));
         assert!(Animation::from_prop_name("whirl").is_none(), "unknown ⇒ the default");
         assert!(
             !Animation::VARIANT_NAMES.contains(&"custom"),

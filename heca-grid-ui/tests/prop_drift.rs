@@ -31,6 +31,7 @@ const NO_SURFACE_REQUIRED: &[(&str, &str)] = &[
     ("Grid", "track templates are List-valued and handled by the Grid arm"),
     ("Spinner", "no configurable properties"),
     ("ToastSpec", "a value describing a toast, not a widget; the Toast built from it carries the properties"),
+    ("ToastAction", "one entry in a ToastSpec's list, not a widget. A DESCRIBED toast declares its actions as children (an ordinary described Button per action), so the description path never meets this type"),
     ("ActiveMarker", "an enum, not a widget"),
     ("GridCell", "a value describing one cell, and everything it carries is a live host signal — a selection light and a hover — which static data cannot supply"),
     ("PaneFrame", "an enum, not a widget"),

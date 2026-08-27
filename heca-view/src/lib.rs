@@ -723,6 +723,38 @@ impl Intent {
     }
 
     /// Add an argument.
+    ///
+    /// The value is an explicit [`PropValue`] rather than an `impl Into<PropValue>`, deliberately:
+    /// an argument crosses to RPC and to a WASM plugin as data, so what it *is* should be visible
+    /// at the call site rather than inferred from whatever integer type happened to be in scope.
+    ///
+    /// ```
+    /// # use heca_view::{Intent, PropValue};
+    /// Intent::new("focus_pane").arg("pane_id", PropValue::Int(7));
+    /// Intent::new("rename").arg("name", PropValue::Text("scratch".into()));
+    /// Intent::new("expand").arg("open", PropValue::Bool(true));
+    /// ```
+    ///
+    /// # Integers are `i64` — and pane ids are `u64`
+    ///
+    /// [`PropValue::Int`] is an `i64`, because that is what JSON and the RPC wire carry. Most ids in
+    /// this codebase (`ToastSpec::id`, a pane id, a notification id) are **`u64`**, and there is
+    /// deliberately **no `From<u64>`**: the conversion is lossy above `i64::MAX`, and a silently
+    /// wrapped id would arrive as a negative number that nothing could diagnose from the UI. Cast at
+    /// the call site, where the choice is visible:
+    ///
+    /// ```
+    /// # use heca_view::{Intent, PropValue};
+    /// # let pane_id: u64 = 7;
+    /// Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane_id as i64));
+    /// ```
+    ///
+    /// # What may go in one
+    ///
+    /// Anything [`PropValue`] can hold — `Bool`, `Int`, `Float`, `Text`, a colour or glyph **name**,
+    /// a `List`, or a `Map` for a named group of values. It may **not** hold a closure or a widget:
+    /// an intent is the one form behaviour takes when it has to survive being sent by RPC, named in
+    /// a keybinding, or raised by a plugin. That is the whole reason it exists — see [`Intent`].
     pub fn arg(mut self, key: impl Into<String>, value: PropValue) -> Self {
         self.args.insert(key.into(), value);
         self

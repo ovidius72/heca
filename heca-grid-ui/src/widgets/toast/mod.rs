@@ -32,16 +32,16 @@ mod stack;
 
 pub use position::ToastPosition;
 pub use severity::ToastSeverity;
-pub use spec::{ToastCorner, ToastSpec};
+pub use spec::{ToastAction, ToastSpec};
 pub use stack::ToastStack;
 
 use crate::builders::{LayoutExt, Parent};
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
-use crate::animation::Presence;
+use crate::animation::{Animation, Presence};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::TextAlign;
-use crate::style::{Align, Direction, Length};
+use crate::style::{Align, Direction, Length, WidgetSize};
 use crate::widgets::{Ellipsis, Flex, Glyph, Icon, IconButton, Label};
 use std::rc::Rc;
 
@@ -158,6 +158,11 @@ impl Toast {
             // `.opened(false)` and then `open()`.
             presence: {
                 let mut p = Presence::new();
+                // **A notification slides in by default**, because that is what a notification
+                // does: it arrives from the edge it lives on rather than materialising in place.
+                // Any other gesture is one builder away — `animation(Animation::Fade)`,
+                // `Animation::of(mine)` — and `Animation::None` is the cut.
+                p.set_animation(Animation::Slide.build());
                 p.assume_open(true);
                 p
             },
@@ -266,7 +271,15 @@ impl Toast {
                     .align_self(Align::Start)
                     // And when the card is too narrow for them all, they take a second line
                     // rather than being squeezed to ellipses or laid out past the edge.
-                    .wrap(true),
+                    .wrap(true)
+                    // **One more gap above the actions than between the text lines.** The title and
+                    // the body are one block of prose; the buttons are a different kind of thing,
+                    // and sharing the prose spacing read as a third line of text.
+                    .margin_top(Length::Px(GAP))
+                    // **A notification's actions are compact controls.** Declared on the row, not on
+                    // the button, because the size variant cascades: a caller who sizes their own
+                    // button still wins, which is what keeps the choice theirs.
+                    .size(WidgetSize::Small),
             );
         }
         self.column_mut()[ACTION].base_mut().children.push(action);

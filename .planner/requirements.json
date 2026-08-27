@@ -11,7 +11,13 @@
         "99d19246-1ba9-4720-9895-e70c66acf144"
       ],
       "createdAt": "2026-07-13T15:30:51.379Z",
-      "updatedAt": "2026-07-13T15:30:51.379Z"
+      "updatedAt": "2026-07-13T15:30:51.379Z",
+      "sessionInfo": [
+        {
+          "sessionId": "01f86c94-7f92-4e8a-b8bd-b845e9032ae7",
+          "createdAt": "2026-08-26T15:43:03.976Z"
+        }
+      ]
     },
     {
       "id": "4f66a18a-8805-4dd1-a9d6-63f5c51e9be3",
@@ -21,7 +27,8 @@
       "macroTasks": [],
       "linkedPhaseIds": [],
       "createdAt": "2026-07-13T15:31:52.527Z",
-      "updatedAt": "2026-07-13T15:31:52.527Z"
+      "updatedAt": "2026-07-13T15:31:52.527Z",
+      "sessionInfo": []
     },
     {
       "id": "31551e80-42a5-4e36-ac31-a71594de2545",
@@ -33,7 +40,13 @@
         "8f760a9b-3ce8-4932-8286-67d742397f2e"
       ],
       "createdAt": "2026-07-13T15:33:25.808Z",
-      "updatedAt": "2026-07-13T15:33:25.808Z"
+      "updatedAt": "2026-07-13T15:33:25.808Z",
+      "sessionInfo": [
+        {
+          "sessionId": "01f86c94-7f92-4e8a-b8bd-b845e9032ae7",
+          "createdAt": "2026-08-26T15:43:03.976Z"
+        }
+      ]
     },
     {
       "id": "2458a02c-31e2-4b09-9bdb-fe1e56d9d68e",
@@ -45,7 +58,8 @@
         "3bdc254b-4b5c-4f74-a783-8de4ae1628fa"
       ],
       "createdAt": "2026-07-13T15:33:50.370Z",
-      "updatedAt": "2026-07-13T15:33:50.370Z"
+      "updatedAt": "2026-07-13T15:33:50.370Z",
+      "sessionInfo": []
     },
     {
       "id": "7340431a-5569-4383-ab54-978c2b2b338f",
@@ -55,7 +69,8 @@
       "macroTasks": [],
       "linkedPhaseIds": [],
       "createdAt": "2026-07-13T15:33:58.204Z",
-      "updatedAt": "2026-07-13T15:33:58.204Z"
+      "updatedAt": "2026-07-13T15:33:58.204Z",
+      "sessionInfo": []
     },
     {
       "id": "de43129f-eb37-4e1a-bd7f-2ba52c5a9c99",
@@ -68,7 +83,8 @@
         "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09"
       ],
       "createdAt": "2026-07-13T15:34:04.707Z",
-      "updatedAt": "2026-07-13T15:34:04.707Z"
+      "updatedAt": "2026-07-13T15:34:04.707Z",
+      "sessionInfo": []
     }
   ]
 }
