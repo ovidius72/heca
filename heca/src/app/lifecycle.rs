@@ -130,6 +130,14 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // animates for free, with no per-layer wiring.
     chrome_animating |= state.layers.tick(dt);
 
+    // Auto-dismiss notifications past their deadline — F009/T202. `expire_due` only touches the
+    // store's own `Signal<Vec<ToastSpec>>` (F009/T208); it is not part of `chrome_runtime_changed`,
+    // which tracks the chrome_tree's signature, a tree the toast layer is never part of.
+    let notifications_expired = state.notifications.expire_due(Instant::now());
+    if notifications_expired {
+        state.needs_redraw = true;
+    }
+
     let backend_poll = poll_backends(state);
     let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
     if backend_poll.bell_any {
@@ -167,6 +175,10 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             Instant::now() + crate::chrome::FRAME_INTERVAL,
         ));
+    } else if let Some(next_expiry) = state.notifications.next_expiry() {
+        // No busy-loop (F009/T202's contract): wake exactly once, at the next auto-dismiss
+        // deadline, rather than polling every frame while a sticky-free toast is up.
+        event_loop.set_control_flow(ControlFlow::WaitUntil(next_expiry));
     } else {
         event_loop.set_control_flow(ControlFlow::Wait);
     }

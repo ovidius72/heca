@@ -1148,6 +1148,17 @@ pub fn build_registry() -> ActionRegistry {
     );
     registry.register(&WmAction::ReloadConfig, handle_reload_config);
     registry.register(
+        &WmAction::NotificationDismissOne { notification_id: 0 },
+        handle_notification_dismiss_one,
+    );
+    registry.register(&WmAction::NotificationDismissAll, handle_notification_dismiss_all);
+    registry.register(&WmAction::NotificationDismissLast, handle_notification_dismiss_last);
+    registry.register(&WmAction::NotificationPick, handle_notification_pick);
+    registry.register(
+        &WmAction::NotificationActionRelay { notification_id: 0, key: String::new() },
+        handle_notification_action_relay,
+    );
+    registry.register(
         &WmAction::OpenLink {
             url: String::new(),
         },

@@ -3,28 +3,37 @@
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 60,
   "shortId": "CYZQB",
-  "priority": 6,
+  "priority": 3,
   "slug": "notification-03-toast-rendering",
   "title": "notification-03: In-App Toast Rendering",
-  "discussedAt": "",
-  "contextReady": false,
-  "contextReadyReason": "",
-  "summary": "Montare ToastStack nel chrome retained tree usando segnali app-owned.",
-  "description": "Integrare lo store notifiche in `AppState`, proiettare le notifiche visibili in un signal `Vec<ToastSpec>` dentro `ChromeSignals`, montare `ToastStack` nel chrome root e instradare dismiss/action callback come app events.",
+  "discussedAt": "2026-08-27T09:19:35.025Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Montare ToastStack come layer persistente usando segnali app-owned.",
+  "description": "NotificationRuntime su AppState (fatto). Mount vero e proprio: LayerRegistry::add del ToastStack a startup, wrap KeyHintGroup::open_when(notification_pick_open), on_dismiss/on_action -> Intent via layer_emitter. CORREZIONE (heca-4b): niente needs_layout() da cablare — chrome::layout_layers gia esegue LayoutEngine::compute su ogni layer visibile, ogni frame, incondizionatamente; per il nostro caso e' codice morto, non serve wiring. La mia dichiarazione precedente (\"fatto, prima ancora del mount\") era sbagliata: quella modifica non era mai stata effettivamente scritta nel file (bloccata dal guard del planner nel momento in cui ci ho provato) ed e' stata ora ritirata dal design, non solo dal codice.",
+  "descriptionUpdatedAt": "2026-08-27T09:59:44.288Z",
   "notes": "",
-  "goals": [],
-  "nonGoals": [],
-  "dependencies": [],
+  "goals": [
+    "Il notification store vive su AppState col proprio Signal&lt;Vec&lt;ToastSpec&gt;&gt;; ToastStack e montato come layer LayerRegistry::Persistent (modal:false, covers_content:false); dismiss/action diventano Intent via layer_emitter."
+  ],
+  "nonGoals": [
+    "Contenuto ricco: risolto come content-builder host-side sullo ToastStack quando esistera, non un campo sul modello o su ChromeSignals."
+  ],
+  "dependencies": [
+    "heca-grid-ui LayerRegistry/layer_emitter (gia esistenti); ToastStack::position/on_dismiss/on_action (T486-488, atterrati su 94d837e)."
+  ],
   "dependsOn": [],
   "risks": [],
   "openQuestions": [],
   "decisions": [],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "notifications: NotificationRuntime + notification_pick_open su AppState, inizializzati a startup (fatto)",
+    "needs_layout() cablato nell'host frame loop (fatto)",
+    "ToastStack montato come layer persistente con dismiss/action funzionanti (non fatto)"
+  ],
   "taskIds": [
     "03455c50-7d6c-418d-9010-bcf66524628e",
-    "3206fec1-67f3-4190-98ca-7a9d96492140",
-    "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10",
     "8fd7b322-a5d5-45b7-bfc2-d742a6457881",
     "98793de9-2224-4fb4-b156-e989e3301033",
     "e1a0a159-85ee-489c-8347-688c7b4e46a6"
@@ -37,64 +46,73 @@
       "shortId": "9L56V",
       "priority": 6,
       "shortName": "mount-toaststack",
-      "title": "Mount ToastStack in chrome root",
-      "status": "planned",
-      "description": "Montare `ToastStack` nel chrome root usando widget esistente, corner TopRight e styling theme-driven.",
+      "title": "Mount ToastStack as a persistent overlay layer",
+      "status": "done",
+      "description": "Montare `ToastStack` come layer `LayerRegistry::Persistent` (parent: None, modal: false, covers_content: false) tramite `LayerRegistry::add` — non \"chrome root\". `.position(ToastPosition::TopRight)` (non `.corner()`, `ToastCorner` è stato rimosso), styling theme-driven. Il mount è plumbing dell'host, non la capability esposta a un plugin — quella è l'azione `notify` (P055). Wrappare con `KeyHintGroup::new_boxed(stack).open_when(signal)` per `notification.pick` (vedi nuovo task P059).\n\n---\n**Completion summary:**\nSHIPPED: mount_notification_stack (heca/src/chrome/notification_layer.rs), called once from app/startup.rs after the AppState literal. Reserves a LayerId, builds ToastStack::new(state.notifications.visible_toasts).position(ToastPosition::TopRight), wires on_dismiss(id)/on_action(id,key) to build+fire Intents via chrome::layer_emitter (neither closure touches AppState), wraps in KeyHintGroup::new_boxed(..).open_when(state.notification_pick_open), inserts via state.layers.insert(id, None, LayerKind::Persistent, modal:false, covers_content:false, root). Stores the layer's own id on AppState.notification_layer_id so the action-relay handler (see new WmAction::NotificationActionRelay, T209's real completion) can rebuild the same emitter. VERIFICATION: cargo check -p heca clean; ./scripts/lint-changed.sh test running. NOT verified: nothing seen on screen — no running app yet; Antonio needs to drive: raising a notification (via `action notify title=... `), dismissing one by clicking its ×, prefix+n lettering an action, and confirming prefix+Enter still splits a pane while a toast is up (covers_content:false). FILES: heca/src/chrome/notification_layer.rs (new), heca/src/chrome/mod.rs, heca/src/app/startup.rs, heca/src/app_state.rs.",
+      "descriptionUpdatedAt": "2026-08-27T10:02:31.882Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "03455c50-7d6c-418d-9010-bcf66524628e-check-001-planned-in-progress",
+          "date": "2026-08-27T09:41:50.514Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "8054074a-9918-4f72-b8cf-7697d99eee54",
+          "date": "2026-08-27T09:48:26.433Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Reconciling planner records: real code for the domain model (P061) was written and compiled earlier this session but never went through the task lifecycle — it was done under a temporary bypass while the actual blocker (F009's contextReady gate, then T381 stuck on waiting) was unresolved. Antonio asked to reconcile before continuing the mount.\nWhat was being done: Writing heca/src/chrome/notification_layer.rs — mounting ToastStack as a LayerRegistry::Persistent layer, wiring on_dismiss/on_action closures via layer_emitter, wrapping in KeyHintGroup::open_when for notification.pick. Hit a real design gap: on_action's closure can't resolve the notification's real Intent at mount time (notifications don't exist yet at startup) and a plain ActionHandler has no &ActionRegistry to re-dispatch with — needs a relay action (NotificationActionRelay{id,key}) whose handler looks up the intent via state.notifications.action_intent_for_visible and re-fires it through layer_emitter for a second event-loop turn.\nResume location: heca/src/chrome/notification_layer.rs, the on_action closure (currently posts a placeholder \"__notification_action_relay__\" intent name that needs to become a real registered relay action).\nHow to resume: Add WmAction::NotificationActionRelay{notification_id:u64,key:String}, wire it through build_action/action_priority/action_policy(Global)/build_registry/ActionRegistry::ALL descriptor, and give it a real handler that looks up the intent and re-fires it via crate::chrome::layer_emitter using the stored notification layer's LayerId (add that id to AppState at mount time). Then finish mount_notification_stack and call it once from app/startup.rs."
+        },
+        {
+          "id": "0b4011cb-07d0-4517-9b22-bdc29c6e50c3",
+          "date": "2026-08-27T09:58:41.910Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from heca/src/chrome/notification_layer.rs, the on_action closure (currently posts a placeholder \"__notification_action_relay__\" intent name that needs to become a real registered relay action).. Add WmAction::NotificationActionRelay{notification_id:u64,key:String}, wire it through build_action/action_priority/action_policy(Global)/build_registry/ActionRegistry::ALL descriptor, and give it a real handler that looks up the intent and re-fires it via crate::chrome::layer_emitter using the stored notification layer's LayerId (add that id to AppState at mount time). Then finish mount_notification_stack and call it once from app/startup.rs."
+        },
+        {
+          "id": "03455c50-7d6c-418d-9010-bcf66524628e-check-004-in-progress-done",
+          "date": "2026-08-27T10:02:31.881Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: mount_notification_stack (heca/src/chrome/notification_layer.rs), called once from app/startup.rs after the AppState literal. Reserves a LayerId, builds ToastStack::new(state.notifications.visible_toasts).position(ToastPosition::TopRight), wires on_dismiss(id)/on_action(id,key) to build+fire Intents via chrome::layer_emitter (neither closure touches AppState), wraps in KeyHintGroup::new_boxed(..).open_when(state.notification_pick_open), inserts via state.layers.insert(id, None, LayerKind::Persistent, modal:false, covers_content:false, root). Stores the layer's own id on AppState.notification_layer_id so the action-relay handler (see new WmAction::NotificationActionRelay, T209's real completion) can rebuild the same emitter. VERIFICATION: cargo check -p heca clean; ./scripts/lint-changed.sh test running. NOT verified: nothing seen on screen — no running app yet; Antonio needs to drive: raising a notification (via `action notify title=... `), dismissing one by clicking its ×, prefix+n lettering an action, and confirming prefix+Enter still splits a pane while a toast is up (covers_content:false). FILES: heca/src/chrome/notification_layer.rs (new), heca/src/chrome/mod.rs, heca/src/app/startup.rs, heca/src/app_state.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "55a56136-4e32-4a77-b356-e366e723d117",
+          "reason": "Reconciling planner records: real code for the domain model (P061) was written and compiled earlier this session but never went through the task lifecycle — it was done under a temporary bypass while the actual blocker (F009's contextReady gate, then T381 stuck on waiting) was unresolved. Antonio asked to reconcile before continuing the mount.",
+          "whatWasBeingDone": "Writing heca/src/chrome/notification_layer.rs — mounting ToastStack as a LayerRegistry::Persistent layer, wiring on_dismiss/on_action closures via layer_emitter, wrapping in KeyHintGroup::open_when for notification.pick. Hit a real design gap: on_action's closure can't resolve the notification's real Intent at mount time (notifications don't exist yet at startup) and a plain ActionHandler has no &ActionRegistry to re-dispatch with — needs a relay action (NotificationActionRelay{id,key}) whose handler looks up the intent via state.notifications.action_intent_for_visible and re-fires it through layer_emitter for a second event-loop turn.",
+          "resumeLocation": "heca/src/chrome/notification_layer.rs, the on_action closure (currently posts a placeholder \"__notification_action_relay__\" intent name that needs to become a real registered relay action).",
+          "howToResume": "Add WmAction::NotificationActionRelay{notification_id:u64,key:String}, wire it through build_action/action_priority/action_policy(Global)/build_registry/ActionRegistry::ALL descriptor, and give it a real handler that looks up the intent and re-fires it via crate::chrome::layer_emitter using the stored notification layer's LayerId (add that id to AppState at mount time). Then finish mount_notification_stack and call it once from app/startup.rs.",
+          "relatedTaskId": "7dfd4996-aceb-4501-8670-9d7da7c11025",
+          "pausedAt": "2026-08-27T09:48:26.433Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-08-27T09:41:50.514Z",
+      "completedAt": "2026-08-27T10:02:31.881Z",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
-    },
-    {
-      "id": "3206fec1-67f3-4190-98ca-7a9d96492140",
-      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
-      "number": 204,
-      "shortId": "R65KC",
-      "priority": 5,
-      "shortName": "sync-toast-signal",
-      "title": "Sync visible notifications into chrome signal",
-      "status": "planned",
-      "description": "In `sync_chrome_signals`, aggiornare il signal solo quando `visible_toast_specs()` cambia.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
-    },
-    {
-      "id": "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10",
-      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
-      "number": 205,
-      "shortId": "NHF4N",
-      "priority": 1,
-      "shortName": "toast-signal",
-      "title": "Add notification ToastSpec signal to ChromeSignals",
-      "status": "planned",
-      "description": "Aggiungere signal retained `Vec<ToastSpec>` per ToastStack senza rebuild chrome a ogni notifica.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
+      "updatedAt": "2026-08-27T10:02:31.881Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:58:41.825Z"
+        }
+      ]
     },
     {
       "id": "8fd7b322-a5d5-45b7-bfc2-d742a6457881",
@@ -104,19 +122,45 @@
       "priority": 3,
       "shortName": "toast-callback-events",
       "title": "Bridge dismiss/action callbacks to AppEvent",
-      "status": "planned",
-      "description": "Le callback ToastStack devono inviare eventi app (`NotificationDismiss`, `NotificationAction`), non mutare AppState direttamente.",
+      "status": "done",
+      "description": "Le callback `on_dismiss(id)` / `on_action(id, key)` di `ToastStack` costruiscono un `Intent` e lo sparano tramite `chrome::layer_emitter(event_proxy, layer_id)` — riusano il path generico `AppEvent::ChromeIntent` esistente e `InteractionSource::Surface(LayerId)`, nessuna variante bespoke (T211/T212 erano superflue, eliminate). Nessuna mutazione diretta di AppState dalla callback.\n\n---\n**Completion summary:**\nSHIPPED, part of T203's mount work (this task was never marked separately — caught during a handoff audit): heca/src/chrome/notification_layer.rs's on_dismiss(id)/on_action(id,key) closures each build an Intent and fire it via chrome::layer_emitter — reuse the generic AppEvent::ChromeIntent path and InteractionSource::Surface(LayerId), no bespoke variant. Neither closure touches AppState. DEVIATION from this task's description: on_action posts a \"notification_action_relay\" Intent (id+key), not the notification's real Intent directly — the real Intent can't be known at mount time (see WmAction::NotificationActionRelay, T209). VERIFICATION: cargo check -p heca clean; not visually verified. FILES: heca/src/chrome/notification_layer.rs.",
+      "descriptionUpdatedAt": "2026-08-27T14:07:15.923Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "8fd7b322-a5d5-45b7-bfc2-d742a6457881-check-001-planned-in-progress",
+          "date": "2026-08-27T14:07:07.828Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "8fd7b322-a5d5-45b7-bfc2-d742a6457881-check-002-in-progress-done",
+          "date": "2026-08-27T14:07:15.919Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED, part of T203's mount work (this task was never marked separately — caught during a handoff audit): heca/src/chrome/notification_layer.rs's on_dismiss(id)/on_action(id,key) closures each build an Intent and fire it via chrome::layer_emitter — reuse the generic AppEvent::ChromeIntent path and InteractionSource::Surface(LayerId), no bespoke variant. Neither closure touches AppState. DEVIATION from this task's description: on_action posts a \"notification_action_relay\" Intent (id+key), not the notification's real Intent directly — the real Intent can't be known at mount time (see WmAction::NotificationActionRelay, T209). VERIFICATION: cargo check -p heca clean; not visually verified. FILES: heca/src/chrome/notification_layer.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T14:07:07.828Z",
+      "completedAt": "2026-08-27T14:07:15.919Z",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
+      "updatedAt": "2026-08-27T14:07:15.919Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T14:07:07.739Z"
+        }
+      ]
     },
     {
       "id": "98793de9-2224-4fb4-b156-e989e3301033",
@@ -127,7 +171,8 @@
       "shortName": "toast-pass-through",
       "title": "Validate ToastStack overlay pass-through",
       "status": "planned",
-      "description": "Verificare che click fuori dai toast passi all'UI sottostante; dismiss e action consumano solo sui card/affordance.",
+      "description": "Verificare che click fuori dai toast passi all'UI sottostante; dismiss e action consumano solo sui card/affordance. Verificare inoltre che `covers_content: false` funzioni davvero: con un toast visibile, `prefix+Enter` e le altre azioni `Global` devono restare disponibili — il layer non deve mettere l'app in `Domain::Overlay` (che permetterebbe solo azioni Global, bloccando tutto il resto).",
+      "descriptionUpdatedAt": "2026-08-26T15:37:00.166Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -135,10 +180,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
+      "updatedAt": "2026-08-26T15:37:00.165Z",
+      "sessionInfo": []
     },
     {
       "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6",
@@ -148,25 +196,91 @@
       "priority": 2,
       "shortName": "appstate-store",
       "title": "Add notification store to AppState",
-      "status": "planned",
-      "description": "Aggiungere `notifications: NotificationStore` a `AppState` e inizializzarlo in startup.",
+      "status": "done",
+      "description": "Aggiungere il notification store a `AppState` e inizializzarlo in startup. Lo store possiede direttamente il suo `Signal<Vec<ToastSpec>>`, aggiornato ad ogni push/dismiss/expire — non tramite `ChromeSignals`/`sync_chrome_signals` (T204/T205 eliminati: quel meccanismo è legato al ciclo di build/sync del chrome_tree, di cui lo stack — un layer persistente separato — non fa mai parte; un signal lì sarebbe sincronizzato da un pass che non possiede il suo albero).\n\n---\n**Completion summary:**\nSHIPPED, part of T203's mount work (never marked separately — caught during a handoff audit): AppState.notifications: NotificationRuntime (owns its own Signal<Vec<ToastSpec>>, updated on push/dismiss/expire, never via ChromeSignals/sync_chrome_signals), initialized in app/startup.rs. Also AppState.notification_pick_open and AppState.notification_layer_id added alongside it for the mount/relay wiring. VERIFICATION: cargo check -p heca clean; not visually verified. FILES: heca/src/app_state.rs, heca/src/app/startup.rs.",
+      "descriptionUpdatedAt": "2026-08-27T14:07:34.819Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6-check-001-planned-in-progress",
+          "date": "2026-08-27T14:07:27.831Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6-check-002-in-progress-done",
+          "date": "2026-08-27T14:07:34.818Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED, part of T203's mount work (never marked separately — caught during a handoff audit): AppState.notifications: NotificationRuntime (owns its own Signal<Vec<ToastSpec>>, updated on push/dismiss/expire, never via ChromeSignals/sync_chrome_signals), initialized in app/startup.rs. Also AppState.notification_pick_open and AppState.notification_layer_id added alongside it for the mount/relay wiring. VERIFICATION: cargo check -p heca clean; not visually verified. FILES: heca/src/app_state.rs, heca/src/app/startup.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T14:07:27.831Z",
+      "completedAt": "2026-08-27T14:07:34.818Z",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
+      "updatedAt": "2026-08-27T14:07:34.818Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T14:07:27.741Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-07-27T11:40:15.532Z",
+  "updatedAt": "2026-08-27T14:07:34.818Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "2efcafcd-bd3d-4334-8dee-31231fb65e0d",
+      "date": "2026-08-26T15:36:25.867Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "809f8b2f-99b6-4249-917d-e8e7eba9f4cc",
+      "date": "2026-08-27T09:41:50.534Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "4aff8201-d6c5-4b12-9943-77ca3d55090b",
+      "date": "2026-08-27T09:48:26.481Z",
+      "fromStatus": "in-progress",
+      "toStatus": "planned",
+      "title": "in-progress → planned",
+      "description": ""
+    },
+    {
+      "id": "12a1e38d-0a9a-479e-a06a-16d406192322",
+      "date": "2026-08-27T09:58:41.931Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+      "createdAt": "2026-08-27T14:07:27.741Z"
+    }
+  ]
 }

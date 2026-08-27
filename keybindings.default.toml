@@ -143,6 +143,13 @@ swap_down  = "prefix+Ctrl+j"
 # ── System ──
 command_palette = "prefix+p"        # Open command palette (actions)
 reload_config   = "prefix+Shift+r"  # Reload config at runtime
+
+# ── Notifications (F009) ──
+# `notification_dismiss_one` has no default binding — it needs an id, and a keypress cannot
+# supply one; use the toast's own × (mouse, or `prefix+/`) or RPC instead.
+notification_pick          = "prefix+n"        # Scoped picker over visible toast actions/× (in addition to prefix+/, not instead)
+notification_dismiss_last  = "prefix+Shift+n"  # Dismiss the first eligible visible notification
+notification_dismiss_all   = "prefix+Alt+n"    # Dismiss every visible notification
 # NB: `close_overlay` is NOT bound here. Closing an overlay is a **surface** key, and it lives in
 # the `layer` floor further down — see the `[[keys.mode]] name = "layer"` block. Bound globally, its
 # keys are taken from the program running in the pane whether or not an overlay is up: `q` shipped

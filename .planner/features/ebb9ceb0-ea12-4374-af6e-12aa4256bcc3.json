@@ -41,22 +41,8 @@
     "51d44c9f-a378-4c24-80e6-3eaa7369762d"
   ],
   "dependsOn": [],
-  "statusLog": [
-    {
-      "id": "56bdd277-c0fe-419b-b6a2-ac0063354cda",
-      "date": "2026-08-26T11:45:04.086Z",
-      "fromStatus": "planned",
-      "toStatus": "in-progress",
-      "title": "planned → in-progress",
-      "description": ""
-    }
-  ],
+  "statusLog": [],
   "createdAt": "2026-07-01T18:08:37.398Z",
   "updatedAt": "2026-07-13T15:29:44.427Z",
-  "sessionInfo": [
-    {
-      "sessionId": "01f86c94-7f92-4e8a-b8bd-b845e9032ae7",
-      "createdAt": "2026-08-27T09:54:28.651Z"
-    }
-  ]
+  "sessionInfo": []
 }

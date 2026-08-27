@@ -5,7 +5,7 @@
   "priority": 0,
   "name": "🌫️ Compositor Frost",
   "description": "Lavoro sulla pipeline z=0 per fondo frosted/blurred: gradient background, cached blur, integrazione pipeline, tuning visivo e ship review finale. La pipeline base è merged, restano tuning e review finale.",
-  "descriptionUpdatedAt": "",
+  "descriptionUpdatedAt": "2026-07-01T18:08:37.398Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",

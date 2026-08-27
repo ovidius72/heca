@@ -954,6 +954,18 @@ pub struct AppState {
     /// calls `Window::set_cursor` when the icon actually changes (cursor-moved fires
     /// very often). See `mouse::update_cursor`.
     pub current_cursor: winit::window::CursorIcon,
+    /// The notification store + its retained `Signal<Vec<ToastSpec>>` — F009/T208. Owns queueing,
+    /// lifecycle, dedup and the projection the mounted `ToastStack` persistent layer reads.
+    pub notifications: crate::notification::NotificationRuntime,
+    /// Whether the scoped `notification.pick` picker is open. `KeyHintGroup::open_when` on the
+    /// toast layer reads this directly — F009/T492. In addition to global `prefix+/`, not instead.
+    pub notification_pick_open: heca_grid_ui::reactive::Signal<bool>,
+    /// The mounted `ToastStack` layer's id — F009/T203. `None` until `mount_notification_stack`
+    /// runs at startup. Kept so `handle_notification_action_relay` can rebuild the exact same
+    /// `chrome::layer_emitter` the mount used, to re-fire a notification's real `Intent` on the
+    /// event loop's next turn (the widget callback only carries an id + a key, never the intent
+    /// itself — that only exists in the store, looked up at relay time).
+    pub notification_layer_id: Option<crate::chrome::LayerId>,
 }
 
 

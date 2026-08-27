@@ -666,6 +666,32 @@ pub enum WmAction {
 
     // ── Config ──
     ReloadConfig,
+
+    // ── Notifications (F009) ──
+    /// Dismiss one visible notification by id. Mouse (the toast's own × — a
+    /// real, automatically-pickable Button) and RPC only; no default
+    /// keybinding, because a keypress cannot supply an id.
+    NotificationDismissOne {
+        notification_id: u64,
+    },
+    /// Dismiss every currently visible notification.
+    NotificationDismissAll,
+    /// Dismiss the first eligible visible notification in stable toast order.
+    NotificationDismissLast,
+    /// Toggle the scoped `prefix+/`-style picker over the visible toast
+    /// actions/× — in addition to their global pick letters, not instead.
+    NotificationPick,
+    /// Resolve `ToastStack::on_action(id, key)` into the notification's real `Intent` and fire
+    /// it. Exists because a plain `ActionHandler` has no `&ActionRegistry` to dispatch an
+    /// arbitrary Intent with, and the real intent cannot be known at mount time (a notification
+    /// raised after startup is what carries it) — so the widget callback names this relay by an
+    /// id and a key, and the relay's own handler looks the real intent up and re-fires it
+    /// through `chrome::layer_emitter` for the event loop's next turn, landing on the exact same
+    /// `dispatch_intent` path every other Intent takes.
+    NotificationActionRelay {
+        notification_id: u64,
+        key: String,
+    },
 }
 
 /// Return the discriminant of a `WmAction`.
@@ -799,6 +825,9 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "hide_layer" => Some(WmAction::HideLayer { name: None, dock: None }),
         "toggle_layer" => Some(WmAction::ToggleLayer { name: None, dock: None }),
         "reload_config" => Some(WmAction::ReloadConfig),
+        "notification_dismiss_all" => Some(WmAction::NotificationDismissAll),
+        "notification_dismiss_last" => Some(WmAction::NotificationDismissLast),
+        "notification_pick" => Some(WmAction::NotificationPick),
         "clear_search_history" => Some(WmAction::ClearSearchHistory { scope: None }),
         "clear_search_ranking" => Some(WmAction::ClearSearchRanking { scope: None }),
         // Scrollback
@@ -976,6 +1005,13 @@ pub fn build_action(
         }),
         "close_pane_by_id" => Some(WmAction::ClosePaneById {
             pane_id: PaneId(get_u64(args, "pane_id")?),
+        }),
+        "notification_dismiss_one" => Some(WmAction::NotificationDismissOne {
+            notification_id: get_u64(args, "id")?,
+        }),
+        "notification_action_relay" => Some(WmAction::NotificationActionRelay {
+            notification_id: get_u64(args, "id")?,
+            key: get_string(args, "key")?,
         }),
         "rename_target" => Some(WmAction::RenameTarget {
             pane_id: PaneId(get_u64(args, "pane_id")?),
@@ -1280,6 +1316,11 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::SpawnCommand { .. }
         | WmAction::EnterMode { .. }
         | WmAction::ReloadConfig
+        | WmAction::NotificationDismissOne { .. }
+        | WmAction::NotificationDismissAll
+        | WmAction::NotificationDismissLast
+        | WmAction::NotificationPick
+        | WmAction::NotificationActionRelay { .. }
         | WmAction::ClearSearchHistory { .. }
         | WmAction::ClearSearchRanking { .. }
         | WmAction::AddPaneToColumn { .. }
@@ -1692,6 +1733,11 @@ mod tests {
                 focus_after: false,
             },
             WmAction::ReloadConfig,
+            WmAction::NotificationDismissOne { notification_id: 0 },
+            WmAction::NotificationDismissAll,
+            WmAction::NotificationDismissLast,
+            WmAction::NotificationPick,
+            WmAction::NotificationActionRelay { notification_id: 0, key: String::new() },
         ]
     }
 

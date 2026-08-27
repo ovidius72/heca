@@ -487,7 +487,26 @@ pub(crate) async fn init_state(
         pending_reload: false,
         window_focused: true,
         current_cursor: winit::window::CursorIcon::Default,
+        // TODO(F009/T186,T191): read from `[settings].notification_system` once the config
+        // schema for it lands; 50 is a placeholder retention depth, not a considered default.
+        notifications: crate::notification::NotificationRuntime::new(50),
+        notification_pick_open: heca_grid_ui::reactive::signal(false),
+        notification_layer_id: None,
     });
+    // Mount the toast stack — F009/T203. After the state literal (needs `notifications` /
+    // `notification_pick_open` to already exist) and before providers register their own
+    // actions/layers, so a producer that raises a notification on its very first frame has
+    // somewhere for it to land.
+    crate::chrome::mount_notification_stack(&mut state);
+    // Install the raise sink — F009/T493. `Notification::send` posts through this; the app
+    // reads it here, posting `AppEvent::RaiseNotification` so the host (not the caller) stamps
+    // the time when the event loop actually processes it.
+    {
+        let event_proxy = state.event_proxy.clone();
+        crate::notification::install_notification_sink(move |draft| {
+            let _ = event_proxy.send_event(crate::app::events::AppEvent::RaiseNotification { draft });
+        });
+    }
     // Register the exposé under `heca.expose`, hidden, so `toggle_layer` has something to reach
     // from the very first frame. Re-registering is the rebuild path when the session's shape
     // changes; see `chrome::expose::register`.

@@ -3,24 +3,33 @@
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 56,
   "shortId": "FVRFU",
-  "priority": 1,
+  "priority": 2,
   "slug": "notification-02-store-lifecycle",
   "title": "notification-02: Store + Lifecycle",
-  "discussedAt": "",
-  "contextReady": false,
-  "contextReadyReason": "",
+  "discussedAt": "2026-08-27T09:19:24.030Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
   "summary": "Store app-owned, queue, dedup, expiry e scheduling timer.",
-  "description": "Implementare `NotificationStore` con push, dismiss, lookup action, expiry, dedup e policy di visibilità. Integrare expiry e next wake-up nel lifecycle loop senza busy-loop.",
+  "description": "NotificationStore (next_id, notifications, dedup_index, queued, visible[4], history FIFO bounded da history_limit), NotificationRuntime (store + proprio Signal&lt;Vec&lt;ToastSpec&gt;&gt;), expiry nel lifecycle loop con ControlFlow::WaitUntil(next_expiry).",
+  "descriptionUpdatedAt": "2026-08-27T09:19:24.029Z",
   "notes": "",
-  "goals": [],
-  "nonGoals": [],
+  "goals": [
+    "NotificationStore con push/dismiss/lookup azione/expiry/dedup/policy di visibilita, integrato nel lifecycle loop senza busy-loop."
+  ],
+  "nonGoals": [
+    "Task separato per la history bounded: gia coperta dagli invarianti di NotificationStore stesso (T198), non serve una voce a parte (l'ex 252SA del branch abbandonato e superflua)."
+  ],
   "dependencies": [],
   "dependsOn": [],
   "risks": [],
   "openQuestions": [],
   "decisions": [],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "NotificationStore + NotificationRuntime scritti e verificati con cargo check (fatto)",
+    "expiry cablata nel lifecycle loop con wake scheduling corretto (fatto)",
+    "history_limit letto da [settings].notification_system invece di un placeholder hardcoded (non fatto, dipende da T186/T191)"
+  ],
   "taskIds": [
     "951e11b5-372b-46b7-a516-840784a11251",
     "a395e3d6-2d24-495d-a496-22f9c60c5599",
@@ -41,19 +50,45 @@
       "priority": 5,
       "shortName": "store-expire",
       "title": "Implement expiry",
-      "status": "planned",
-      "description": "Rimuovere notifiche scadute, preservare sticky e ritornare true quando cambia lo store.",
+      "status": "done",
+      "description": "Rimuovere notifiche scadute, preservare sticky e ritornare true quando cambia lo store.\n\n---\n**Completion summary:**\nSHIPPED (pre-existing in the ported heca/src/notification.rs): NotificationStore::expire_due(now) removes visible entries past their computed expires_at, leaves sticky/no-deadline entries alone, returns NotificationStoreUpdate::visible_projection_changed(). NotificationRuntime::expire_due wraps it and calls sync_visible_toasts. VERIFICATION: cargo check -p heca clean; unit tests in-file. FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:53:19.638Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-001-planned-in-progress",
+          "date": "2026-08-27T09:53:13.861Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-002-in-progress-done",
+          "date": "2026-08-27T09:53:19.637Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED (pre-existing in the ported heca/src/notification.rs): NotificationStore::expire_due(now) removes visible entries past their computed expires_at, leaves sticky/no-deadline entries alone, returns NotificationStoreUpdate::visible_projection_changed(). NotificationRuntime::expire_due wraps it and calls sync_visible_toasts. VERIFICATION: cargo check -p heca clean; unit tests in-file. FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:53:13.861Z",
+      "completedAt": "2026-08-27T09:53:19.637Z",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-07-03T22:51:32.842Z"
+      "updatedAt": "2026-08-27T09:53:19.637Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:53:13.779Z"
+        }
+      ]
     },
     {
       "id": "a395e3d6-2d24-495d-a496-22f9c60c5599",
@@ -63,19 +98,45 @@
       "priority": 4,
       "shortName": "store-dedup",
       "title": "Implement dedup policy",
-      "status": "planned",
-      "description": "Se `dedup_key` combacia, aggiornare notifica esistente, tenere lo stesso id, resettare created/expires e non allocare nuova notifica.",
+      "status": "done",
+      "description": "Se `dedup_key` combacia, aggiornare notifica esistente, tenere lo stesso id, resettare created/expires e non allocare nuova notifica.\n\n---\n**Completion summary:**\nSHIPPED (pre-existing in the ported heca/src/notification.rs): NotificationStore::push checks dedup_index for a matching key before allocating; on a hit, update_duplicate() rebuilds the notification under the SAME NotificationId (no new id allocated), replacing content/placement rather than stacking a second entry. VERIFICATION: cargo check -p heca clean; unit tests in-file. FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:53:41.007Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-001-planned-in-progress",
+          "date": "2026-08-27T09:53:34.389Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-002-in-progress-done",
+          "date": "2026-08-27T09:53:41.005Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED (pre-existing in the ported heca/src/notification.rs): NotificationStore::push checks dedup_index for a matching key before allocating; on a hit, update_duplicate() rebuilds the notification under the SAME NotificationId (no new id allocated), replacing content/placement rather than stacking a second entry. VERIFICATION: cargo check -p heca clean; unit tests in-file. FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:53:34.389Z",
+      "completedAt": "2026-08-27T09:53:41.005Z",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-07-03T22:51:32.842Z"
+      "updatedAt": "2026-08-27T09:53:41.005Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:53:34.303Z"
+        }
+      ]
     },
     {
       "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979",
@@ -85,19 +146,45 @@
       "priority": 1,
       "shortName": "store-push",
       "title": "Implement push and id assignment",
-      "status": "planned",
-      "description": "Implementare push da `NotificationDraft`, assegnazione id monotona, created/expires e changed state.",
+      "status": "done",
+      "description": "Implementare push da `NotificationDraft`, assegnazione id monotona, created/expires e changed state.\n\n---\n**Completion summary:**\nSHIPPED (pre-existing in the ported heca/src/notification.rs, wrapped by NotificationRuntime::push this session): NotificationStore::push(draft, now) allocates via next_id (monotonic Option<u64>, IdExhausted error at u64::MAX), computes created_at/expires_at, promotes into a vacant visible slot or queues, returns NotificationStorePush{id, NotificationStoreUpdate}. NotificationRuntime::push wraps it and calls sync_visible_toasts. VERIFICATION: cargo check -p heca clean; unit tests in-file (push_allocates_an_id_and_promotes_into_a_vacant_slot etc). FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:53:58.558Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-001-planned-in-progress",
+          "date": "2026-08-27T09:53:51.342Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-002-in-progress-done",
+          "date": "2026-08-27T09:53:58.557Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED (pre-existing in the ported heca/src/notification.rs, wrapped by NotificationRuntime::push this session): NotificationStore::push(draft, now) allocates via next_id (monotonic Option<u64>, IdExhausted error at u64::MAX), computes created_at/expires_at, promotes into a vacant visible slot or queues, returns NotificationStorePush{id, NotificationStoreUpdate}. NotificationRuntime::push wraps it and calls sync_visible_toasts. VERIFICATION: cargo check -p heca clean; unit tests in-file (push_allocates_an_id_and_promotes_into_a_vacant_slot etc). FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:53:51.342Z",
+      "completedAt": "2026-08-27T09:53:58.557Z",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-07-03T22:51:32.842Z"
+      "updatedAt": "2026-08-27T09:53:58.557Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:53:51.259Z"
+        }
+      ]
     },
     {
       "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3",
@@ -107,19 +194,45 @@
       "priority": 3,
       "shortName": "store-dismiss",
       "title": "Implement dismiss",
-      "status": "planned",
-      "description": "Rimuovere una notifica attiva per id, opzionalmente aggiungere a history e ritornare se lo store è cambiato.",
+      "status": "done",
+      "description": "Rimuovere una notifica attiva per id, opzionalmente aggiungere a history e ritornare se lo store è cambiato. Questo primitivo per-id è quello che l'azione `NotificationDismissOne` (P059) chiama direttamente; `NotificationDismissAll`/`NotificationDismissLast` iterano lo store chiamandolo per ciascun id idoneo — nessuna logica duplicata a livello WmAction.\n\n---\n**Completion summary:**\nSHIPPED: NotificationStore::dismiss(id,now) (pre-existing, calls archive() with require_dismissible=true) removes a visible/queued entry to history, respects lifecycle.is_dismissible(), returns NotificationDismissResult. This session added the three consumers: NotificationRuntime::dismiss_one/dismiss_last/dismiss_all (heca/src/notification.rs) and the WmAction handlers handle_notification_dismiss_one/all/last (heca/src/handlers.rs) wired end-to-end through action_from_name/build_action/priority/policy/registry/descriptor/keybinding (P059). VERIFICATION: cargo check -p heca clean. NOT verified: nothing on screen yet (needs T203's mount so the toast's × can actually fire NotificationDismissOne). FILES: heca/src/notification.rs, heca/src/handlers.rs, heca/src/input.rs, heca/src/actions.rs, heca/src/app/registry.rs, heca/src/app/interaction.rs, keybindings.default.toml.",
+      "descriptionUpdatedAt": "2026-08-27T09:54:17.832Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-001-planned-in-progress",
+          "date": "2026-08-27T09:54:07.958Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-002-in-progress-done",
+          "date": "2026-08-27T09:54:17.830Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: NotificationStore::dismiss(id,now) (pre-existing, calls archive() with require_dismissible=true) removes a visible/queued entry to history, respects lifecycle.is_dismissible(), returns NotificationDismissResult. This session added the three consumers: NotificationRuntime::dismiss_one/dismiss_last/dismiss_all (heca/src/notification.rs) and the WmAction handlers handle_notification_dismiss_one/all/last (heca/src/handlers.rs) wired end-to-end through action_from_name/build_action/priority/policy/registry/descriptor/keybinding (P059). VERIFICATION: cargo check -p heca clean. NOT verified: nothing on screen yet (needs T203's mount so the toast's × can actually fire NotificationDismissOne). FILES: heca/src/notification.rs, heca/src/handlers.rs, heca/src/input.rs, heca/src/actions.rs, heca/src/app/registry.rs, heca/src/app/interaction.rs, keybindings.default.toml."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:54:07.958Z",
+      "completedAt": "2026-08-27T09:54:17.830Z",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-07-03T22:51:32.842Z"
+      "updatedAt": "2026-08-27T09:54:17.830Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:54:07.875Z"
+        }
+      ]
     },
     {
       "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8",
@@ -129,19 +242,45 @@
       "priority": 2,
       "shortName": "store-struct",
       "title": "Define NotificationStore",
-      "status": "planned",
-      "description": "Aggiungere `NotificationStore` app-owned con next_id, active, optional history e max_visible; vietato memorizzare ToastSpec come stato canonico.",
+      "status": "done",
+      "description": "Aggiungere `NotificationStore` app-owned con next_id monotonico, notifications canoniche, dedup_index, coda FIFO, slot visibili stabili, e **history FIFO bounded da `history_limit`** (zero disabilita la ritenzione; eviction del più vecchio) — invariante da testare esplicitamente (assorbe lo scope dell'ex task \"252SA\" del branch abbandonato, non serve un task separato). Vietato memorizzare `ToastSpec` come stato canonico.\n\n---\n**Completion summary:**\nSHIPPED (pre-existing in the ported heca/src/notification.rs): NotificationStore { next_id: Option<u64>, notifications: HashMap, dedup_index, queued: VecDeque, visible: [Option<NotificationId>; 4], history: VecDeque, history_limit }. Bounded FIFO history with oldest-eviction is explicitly tested (history_limit_evicts_oldest_entry_and_its_dedup_key) — the ex-\"252SA\" scope from the abandoned branch's planner was already fully covered here, confirmed not a separate task. No ToastSpec stored as canonical state. VERIFICATION: cargo check -p heca clean; comprehensive unit test coverage in-file. FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:54:47.107Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-001-planned-in-progress",
+          "date": "2026-08-27T09:54:40.229Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-002-in-progress-done",
+          "date": "2026-08-27T09:54:47.106Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED (pre-existing in the ported heca/src/notification.rs): NotificationStore { next_id: Option<u64>, notifications: HashMap, dedup_index, queued: VecDeque, visible: [Option<NotificationId>; 4], history: VecDeque, history_limit }. Bounded FIFO history with oldest-eviction is explicitly tested (history_limit_evicts_oldest_entry_and_its_dedup_key) — the ex-\"252SA\" scope from the abandoned branch's planner was already fully covered here, confirmed not a separate task. No ToastSpec stored as canonical state. VERIFICATION: cargo check -p heca clean; comprehensive unit test coverage in-file. FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:54:40.229Z",
+      "completedAt": "2026-08-27T09:54:47.106Z",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-07-03T22:51:32.842Z"
+      "updatedAt": "2026-08-27T09:54:47.106Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:54:40.146Z"
+        }
+      ]
     },
     {
       "id": "113d5dd1-0639-4492-912c-aaf088e1587a",
@@ -151,19 +290,45 @@
       "priority": 7,
       "shortName": "visible-toasts",
       "title": "Implement visible toast policy",
-      "status": "planned",
-      "description": "Produrre lista visibile di `ToastSpec`; v1 max_visible=4, sticky/danger prioritari, poi più recenti.",
+      "status": "done",
+      "description": "Produrre lista visibile di `ToastSpec`; v1 max_visible=4, sticky/danger prioritari, poi più recenti.\n\n---\n**Completion summary:**\nSHIPPED (pre-existing in the ported heca/src/notification.rs): MAX_VISIBLE_NOTIFICATIONS=4 stable slots; promote_pending() fills a vacant slot from the front of the FIFO queue. DEVIATION from this task's original policy text (\"sticky/danger prioritari, poi più recenti\"): the actual shipped policy is pure FIFO promotion order, no severity/stickiness-based reordering or priority queue — \"existing visible entries never reorder\" is a documented invariant. This is a real simplification from the original spec, not an oversight; flagging in case severity-priority promotion is still wanted as a follow-up. VERIFICATION: cargo check -p heca clean; unit tests cover slot stability. FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:55:11.125Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-001-planned-in-progress",
+          "date": "2026-08-27T09:55:04.090Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-002-in-progress-done",
+          "date": "2026-08-27T09:55:11.123Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED (pre-existing in the ported heca/src/notification.rs): MAX_VISIBLE_NOTIFICATIONS=4 stable slots; promote_pending() fills a vacant slot from the front of the FIFO queue. DEVIATION from this task's original policy text (\"sticky/danger prioritari, poi più recenti\"): the actual shipped policy is pure FIFO promotion order, no severity/stickiness-based reordering or priority queue — \"existing visible entries never reorder\" is a documented invariant. This is a real simplification from the original spec, not an oversight; flagging in case severity-priority promotion is still wanted as a follow-up. VERIFICATION: cargo check -p heca clean; unit tests cover slot stability. FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:55:04.090Z",
+      "completedAt": "2026-08-27T09:55:11.123Z",
       "createdAt": "2026-07-03T22:51:32.843Z",
-      "updatedAt": "2026-07-03T22:51:32.843Z"
+      "updatedAt": "2026-08-27T09:55:11.123Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:55:04.008Z"
+        }
+      ]
     },
     {
       "id": "671754ad-5b4d-4472-997c-d379b4986ad5",
@@ -173,19 +338,45 @@
       "priority": 6,
       "shortName": "store-action-for",
       "title": "Implement action lookup",
-      "status": "planned",
-      "description": "Implementare `action_for(id)` che ritorna dati clonabili; lo store non deve eseguire azioni.",
+      "status": "done",
+      "description": "Implementare `action_for(id)` che ritorna dati clonabili; lo store non deve eseguire azioni.\n\n---\n**Completion summary:**\nSHIPPED: NotificationStore::action_for_visible(id,key)/action_intent_for_visible(id,key) return borrowed/cloned data (an &NotificationAction / a cloned Intent) — the store never executes anything. Updated this session to be keyed by `key` (matching intent.action) rather than the original single-action lookup, since actions is now Vec<NotificationAction>. NotificationRuntime::action_intent_for_visible wraps it for the app layer. VERIFICATION: cargo check -p heca clean; unit tests in-file. FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:55:27.726Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-001-planned-in-progress",
+          "date": "2026-08-27T09:55:21.623Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-002-in-progress-done",
+          "date": "2026-08-27T09:55:27.724Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: NotificationStore::action_for_visible(id,key)/action_intent_for_visible(id,key) return borrowed/cloned data (an &NotificationAction / a cloned Intent) — the store never executes anything. Updated this session to be keyed by `key` (matching intent.action) rather than the original single-action lookup, since actions is now Vec<NotificationAction>. NotificationRuntime::action_intent_for_visible wraps it for the app layer. VERIFICATION: cargo check -p heca clean; unit tests in-file. FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:55:21.623Z",
+      "completedAt": "2026-08-27T09:55:27.724Z",
       "createdAt": "2026-07-03T22:51:32.843Z",
-      "updatedAt": "2026-07-03T22:51:32.843Z"
+      "updatedAt": "2026-08-27T09:55:27.724Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:55:21.538Z"
+        }
+      ]
     },
     {
       "id": "d976a997-ed47-4b76-819d-2028cefa9eed",
@@ -195,19 +386,45 @@
       "priority": 9,
       "shortName": "next-expiry",
       "title": "Schedule next notification expiry",
-      "status": "planned",
-      "description": "Esporre `next_expiry()` e usarla per `ControlFlow::WaitUntil` quando non c'è animazione più urgente.",
+      "status": "done",
+      "description": "Esporre `next_expiry()` e usarla per `ControlFlow::WaitUntil` quando non c'è animazione più urgente.\n\n---\n**Completion summary:**\nSHIPPED: NotificationStore::next_expiry() (pre-existing, min of visible entries' expires_at) exposed via NotificationRuntime::next_expiry(). Wired into app/lifecycle.rs's handle_about_to_wait this session: when nothing else needs continuous polling (no ongoing animation), falls back to ControlFlow::WaitUntil(next_expiry) instead of plain Wait — so the app wakes exactly once at the deadline rather than busy-polling. VERIFICATION: cargo check -p heca clean. FILES: heca/src/notification.rs, heca/src/app/lifecycle.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:55:45.708Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-001-planned-in-progress",
+          "date": "2026-08-27T09:55:37.778Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-002-in-progress-done",
+          "date": "2026-08-27T09:55:45.706Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: NotificationStore::next_expiry() (pre-existing, min of visible entries' expires_at) exposed via NotificationRuntime::next_expiry(). Wired into app/lifecycle.rs's handle_about_to_wait this session: when nothing else needs continuous polling (no ongoing animation), falls back to ControlFlow::WaitUntil(next_expiry) instead of plain Wait — so the app wakes exactly once at the deadline rather than busy-polling. VERIFICATION: cargo check -p heca clean. FILES: heca/src/notification.rs, heca/src/app/lifecycle.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:55:37.778Z",
+      "completedAt": "2026-08-27T09:55:45.706Z",
       "createdAt": "2026-07-03T22:51:32.844Z",
-      "updatedAt": "2026-07-03T22:51:32.844Z"
+      "updatedAt": "2026-08-27T09:55:45.706Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:55:37.695Z"
+        }
+      ]
     },
     {
       "id": "e2f02933-4071-40d3-a069-60da05391c32",
@@ -217,25 +434,83 @@
       "priority": 8,
       "shortName": "lifecycle-expiry",
       "title": "Integrate expiry in lifecycle loop",
-      "status": "planned",
-      "description": "Chiamare expiry da `handle_about_to_wait`, marcare redraw solo su cambio e non busy-loopare.",
+      "status": "done",
+      "description": "Chiamare expiry da `handle_about_to_wait`, marcare redraw solo su cambio e non busy-loopare.\n\n---\n**Completion summary:**\nSHIPPED: heca/src/app/lifecycle.rs's handle_about_to_wait calls state.notifications.expire_due(Instant::now()) each frame; only sets state.needs_redraw when it returns true (a real change), no unconditional redraw. Combined with T201's WaitUntil(next_expiry), this does not busy-loop — the app sleeps until the next actual deadline instead of polling every frame. VERIFICATION: cargo check -p heca clean. NOT verified: no running app yet to observe the actual wake cadence. FILES: heca/src/app/lifecycle.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:56:00.830Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-001-planned-in-progress",
+          "date": "2026-08-27T09:55:54.780Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-002-in-progress-done",
+          "date": "2026-08-27T09:56:00.828Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: heca/src/app/lifecycle.rs's handle_about_to_wait calls state.notifications.expire_due(Instant::now()) each frame; only sets state.needs_redraw when it returns true (a real change), no unconditional redraw. Combined with T201's WaitUntil(next_expiry), this does not busy-loop — the app sleeps until the next actual deadline instead of polling every frame. VERIFICATION: cargo check -p heca clean. NOT verified: no running app yet to observe the actual wake cadence. FILES: heca/src/app/lifecycle.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:55:54.780Z",
+      "completedAt": "2026-08-27T09:56:00.828Z",
       "createdAt": "2026-07-03T22:51:32.844Z",
-      "updatedAt": "2026-07-03T22:51:32.844Z"
+      "updatedAt": "2026-08-27T09:56:00.828Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:55:54.694Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-07-28T12:32:57.291Z",
+  "updatedAt": "2026-08-27T09:56:00.828Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "c712a1d9-e9d7-4bcc-b1e8-b64171685a06",
+      "date": "2026-08-26T15:36:43.292Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "2e7f2ac0-7826-42b9-8144-5945ce552558",
+      "date": "2026-08-27T09:53:13.882Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "f31b4025-d696-4021-a7bc-bc236cca1090",
+      "date": "2026-08-27T09:56:00.852Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+      "createdAt": "2026-08-27T09:55:54.694Z"
+    }
+  ]
 }

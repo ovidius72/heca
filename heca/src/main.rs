@@ -8,6 +8,7 @@ mod host;
 mod input;
 mod keymap;
 mod mouse;
+mod notification;
 mod providers;
 mod rpc;
 mod search_state;
@@ -315,6 +316,13 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 &mut self.registry,
                 &mut self.conflicts,
             );
+            // `notify` (F009/T491) is a host action, not a component's, but it takes the same
+            // name-keyed door because `WmAction` — a closed enum — cannot express "any plugin can
+            // raise a notification". Registered here, once, alongside every other declared action.
+            let _ = crate::notification::register_notify_action(
+                &mut self.registry,
+                &mut state.action_catalog,
+            );
             // Then the keys a plugin registered for them. Core components have theirs from the
             // config file already; this is the path for anything that has no entry in it.
             crate::providers::bind_provider_keybindings(
@@ -395,6 +403,13 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             AppEvent::ChromeIntent { source, intent } => {
                 dispatch_intent(state, &self.registry, source, intent);
                 state.mark_full_redraw();
+                state.window.request_redraw();
+            }
+            AppEvent::RaiseNotification { draft } => {
+                // The one place `Instant::now()` is read for a raised notification — the host's
+                // clock, on the event loop's own turn, never the caller's (F009/T493).
+                let _ = state.notifications.push(draft, std::time::Instant::now());
+                state.needs_redraw = true;
                 state.window.request_redraw();
             }
         }

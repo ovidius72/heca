@@ -29,6 +29,13 @@ pub enum AppEvent {
         source: InteractionSource,
         intent: InteractionIntent,
     },
+    /// Posted by `Notification::send` through the host-installed sink (`notification::install_notification_sink`,
+    /// wired at startup) — the one door a producer or plugin author raises a notification
+    /// through. Handled by reading `Instant::now()` here (the host's clock, never the caller's)
+    /// and calling the crate-private `NotificationRuntime::push`.
+    RaiseNotification {
+        draft: crate::notification::NotificationDraft,
+    },
 }
 
 pub(crate) fn handle_window_event(

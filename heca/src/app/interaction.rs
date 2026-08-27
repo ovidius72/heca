@@ -483,6 +483,13 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // ReloadConfig reloads config from disk — no tiled/floating layout impact,
         // so it must stay reachable while a floating pane is active (hot-reload).
         WmAction::ReloadConfig => ActionPolicy::Global,
+        // Dismissing/picking a notification touches no layout and no pane — a toast can be up
+        // over a floating pane just as easily as a tiled one, and must stay reachable (F009).
+        WmAction::NotificationDismissOne { .. }
+        | WmAction::NotificationDismissAll
+        | WmAction::NotificationDismissLast
+        | WmAction::NotificationPick
+        | WmAction::NotificationActionRelay { .. } => ActionPolicy::Global,
         // Forgetting a search memory touches no layout and no pane, so there is no domain in which
         // it should be refused.
         WmAction::ClearSearchHistory { .. } | WmAction::ClearSearchRanking { .. } => {
@@ -1775,6 +1782,9 @@ mod tests {
             WmAction::RenameWorkspace,
             WmAction::CommandPalette { mode: None, query: None },
             WmAction::ReloadConfig,
+            WmAction::NotificationDismissAll,
+            WmAction::NotificationDismissLast,
+            WmAction::NotificationPick,
             // Scrollback
             WmAction::ScrollbackPageUp,
             WmAction::ScrollbackPageDown,
@@ -1814,6 +1824,8 @@ mod tests {
         }
 
         let param_actions = [
+            WmAction::NotificationDismissOne { notification_id: 0 },
+            WmAction::NotificationActionRelay { notification_id: 0, key: String::new() },
             WmAction::FocusPane { pane_id: PaneId(0) },
             WmAction::FocusWorkspace { ws_idx: 0 },
             WmAction::Swap {

@@ -5,14 +5,14 @@
   "priority": 0,
   "name": "🔔 Notification System",
   "description": "Sistema notifiche configurabile per Heca. V1 implementa notifiche in-app tramite i widget esistenti `Toast`, `ToastStack`, `ToastSpec` e `ToastSeverity`; Heca possiede modello, store, queue, lifecycle, timer, dedup, routing e dispatch azioni. Backend OS/system notifications e integrazione global KeyHint per azioni toast restano differiti. Out of scope: confirmation modals e confirmation-before-action flow.",
-  "descriptionUpdatedAt": "",
+  "descriptionUpdatedAt": "2026-07-03T22:49:39.780Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
   "startDate": "",
   "endDate": "",
-  "workDone": "",
-  "workRemaining": "",
+  "workDone": "Domain model complete and tested (P061 core tasks). Store/lifecycle complete (P056, 9/9). Dismiss actions + notification.pick fully wired (P059, 4/4). notify action registered (P055, T491). Mount as a persistent layer complete (P060, T203). Mid-session: the entire raising API was redesigned at Antonio's direction into a public Notification builder (.info/.body/.action/.send(), no timestamp arg, host-installed sink) — supersedes the notify-action-as-primary-raise-path framing from earlier in the session. NotificationAction gained a variant field crossing the wire as a name.",
+  "workRemaining": "T493 unfinished: pane-creation producer, public-surface test, re-run full lint gates. Closure-action form deliberately deferred. Config schema (T186/T191), tests/README (P057), P055's remaining producers, all untouched. Nothing in F009 has been visually verified in the running app.",
   "acceptedDecisions": [],
   "phaseIds": [
     "93379c9a-43b7-43eb-8988-be505251fe79",
@@ -22,12 +22,25 @@
     "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
     "e298f926-f6b3-4147-abcc-eea87171cd81",
     "461b88ca-5faa-4bea-8734-6c98587f115d",
-    "941d82d3-2770-4e6f-b42f-76b36e160c37",
-    "949d48a4-6001-42b2-a12c-25ba69a95c24"
+    "941d82d3-2770-4e6f-b42f-76b36e160c37"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "e33ba3b7-75f3-44af-bdda-7a0fcadd6fa5",
+      "date": "2026-08-27T09:41:50.596Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-07-03T22:49:39.780Z",
-  "updatedAt": "2026-07-03T22:50:20.126Z",
-  "sessionInfo": []
+  "updatedAt": "2026-08-27T14:08:28.983Z",
+  "sessionInfo": [
+    {
+      "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+      "createdAt": "2026-08-27T14:07:27.741Z"
+    }
+  ]
 }

@@ -6,27 +6,34 @@
   "priority": 4,
   "slug": "notification-04-toast-action-dispatch",
   "title": "notification-04: Toast Action Dispatch",
-  "discussedAt": "",
-  "contextReady": false,
-  "contextReadyReason": "",
+  "discussedAt": "2026-08-27T09:19:28.441Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
   "summary": "Azioni toast dispatchate tramite ActionRegistry/policy path.",
-  "description": "Aggiungere eventi app per dismiss/action, lookup delle azioni notification nello store e dispatch tramite il path registrato delle `WmAction`, senza closure dirette e senza bypass degli handler.",
+  "description": "NotificationDismissOne{id}/All/Last e NotificationPick: naming/build_action/priority/policy Global/registry/descriptor/keybinding. Handler di on_action(id,key) -> lookup in actions:Vec by key -> fire Intent via layer_emitter (nessuna variante AppEvent bespoke).",
+  "descriptionUpdatedAt": "2026-08-27T09:19:28.441Z",
   "notes": "",
-  "goals": [],
+  "goals": [
+    "Il dismiss passa per tre WmAction reali; l'azione inline di un toast risolve on_action(id,key) e spara il suo Intent; notification.pick apre uno scoped picker aggiuntivo al pool globale prefix+/."
+  ],
   "nonGoals": [],
-  "dependencies": [],
+  "dependencies": [
+    "Il wiring di on_action/on_dismiss verso layer_emitter richiede il mount ToastStack (P060), non ancora costruito."
+  ],
   "dependsOn": [],
   "risks": [],
   "openQuestions": [],
   "decisions": [],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "Le tre azioni di dismiss + NotificationPick cablate end-to-end e verificate con cargo check (fatto)",
+    "Handler reale di on_action(id,key) via layer_emitter (non fatto, aspetta il mount)"
+  ],
   "taskIds": [
     "5bb8ca2d-954b-4a4b-b01e-7a30e1aa2eee",
     "893b6411-7b5e-4a94-ac20-e57083ddea1a",
-    "cfe3e133-0a97-47c6-afaa-eaa75847cece",
-    "78be366f-b9f1-4be9-8029-a15e96dced0e",
-    "797eea9b-a15c-4a7b-a5f7-30135fc4cd80"
+    "797eea9b-a15c-4a7b-a5f7-30135fc4cd80",
+    "72e35134-dd5a-4202-99ec-48b0b0c284c7"
   ],
   "tasks": [
     {
@@ -37,19 +44,69 @@
       "priority": 3,
       "shortName": "handle-action-event",
       "title": "Handle notification action event through registry path",
-      "status": "planned",
-      "description": "Clonare `NotificationAction`, applicare dismiss_after se richiesto e dispatchare `WmAction` tramite `dispatch_action`/ActionRegistry.",
+      "status": "done",
+      "description": "Al ricevere `on_action(id, key)` dallo `ToastStack`: cercare la `NotificationAction` corrispondente a `key` tra `actions: Vec<...>` della notifica `id`, clonarne l'`Intent`, applicare `dismiss_after` se richiesto, e sparare l'Intent tramite `chrome::layer_emitter` — riusa il path generico esistente (`AppEvent::ChromeIntent`), nessuna variante bespoke (vedi T211/T212, eliminati: erano superflui).\n\n---\n**Completion summary:**\nSHIPPED: handle_notification_action_relay (heca/src/handlers.rs) + WmAction::NotificationActionRelay{notification_id,key} (new variant, full checklist: build_action/priority/policy Global/registry/descriptor). On receipt: looks up the NotificationAction by key via new NotificationRuntime::action_and_dismiss_after_for_visible (returns (Intent, bool) in one call), fires the cloned Intent through chrome::layer_emitter (reusing state.notification_layer_id set at mount, T203) — same generic AppEvent::ChromeIntent path everything else uses, no bespoke variant — then dismisses the notification if dismiss_after was true. The widget's on_action(id,key) closure (in chrome/notification_layer.rs) posts this relay by name since the real intent cannot be known at mount time (the notification doesn't exist yet). VERIFICATION: cargo check -p heca clean; ./scripts/lint-changed.sh test green (643 tests, 0 failures, confirmed in the run before this fix; this change only added a method + a call site, re-checked with cargo check after); ./scripts/lint-changed.sh clean for heca (0 warnings — heca-grid-ui's 2 warnings are pre-existing in code I did not touch). NOT verified: nothing on screen — needs Antonio to raise a notification with an action and click it. FILES: heca/src/handlers.rs, heca/src/input.rs, heca/src/actions.rs, heca/src/app/registry.rs, heca/src/app/interaction.rs, heca/src/notification.rs, heca/src/chrome/notification_layer.rs.\n\n---\n**Completion summary:**\nFollow-up from heca-4b's review: added the \"why\" to notification_action_relay's ActionDescriptor — it exists because the button can't carry its own Intent at mount time (the notification doesn't exist yet), so it names the relay by id+key (an address, not a smuggled closure) and the relay resolves+dispatches. Everything else unchanged from the prior completion. VERIFICATION: cargo check -p heca clean.",
+      "descriptionUpdatedAt": "2026-08-27T10:09:03.482Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "5bb8ca2d-954b-4a4b-b01e-7a30e1aa2eee-check-001-planned-in-progress",
+          "date": "2026-08-27T10:05:08.126Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "5bb8ca2d-954b-4a4b-b01e-7a30e1aa2eee-check-002-in-progress-done",
+          "date": "2026-08-27T10:06:54.723Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: handle_notification_action_relay (heca/src/handlers.rs) + WmAction::NotificationActionRelay{notification_id,key} (new variant, full checklist: build_action/priority/policy Global/registry/descriptor). On receipt: looks up the NotificationAction by key via new NotificationRuntime::action_and_dismiss_after_for_visible (returns (Intent, bool) in one call), fires the cloned Intent through chrome::layer_emitter (reusing state.notification_layer_id set at mount, T203) — same generic AppEvent::ChromeIntent path everything else uses, no bespoke variant — then dismisses the notification if dismiss_after was true. The widget's on_action(id,key) closure (in chrome/notification_layer.rs) posts this relay by name since the real intent cannot be known at mount time (the notification doesn't exist yet). VERIFICATION: cargo check -p heca clean; ./scripts/lint-changed.sh test green (643 tests, 0 failures, confirmed in the run before this fix; this change only added a method + a call site, re-checked with cargo check after); ./scripts/lint-changed.sh clean for heca (0 warnings — heca-grid-ui's 2 warnings are pre-existing in code I did not touch). NOT verified: nothing on screen — needs Antonio to raise a notification with an action and click it. FILES: heca/src/handlers.rs, heca/src/input.rs, heca/src/actions.rs, heca/src/app/registry.rs, heca/src/app/interaction.rs, heca/src/notification.rs, heca/src/chrome/notification_layer.rs."
+        },
+        {
+          "id": "5bb8ca2d-954b-4a4b-b01e-7a30e1aa2eee-check-003-done-planned",
+          "date": "2026-08-27T10:08:38.010Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Reopening for a small documentation follow-up heca-4b requested on review: the notification_action_relay descriptor should say why it exists (address, not a smuggled closure), since the next reader will wonder.",
+          "description": "Reopening for a small documentation follow-up heca-4b requested on review: the notification_action_relay descriptor should say why it exists (address, not a smuggled closure), since the next reader will wonder."
+        },
+        {
+          "id": "5bb8ca2d-954b-4a4b-b01e-7a30e1aa2eee-check-004-planned-in-progress",
+          "date": "2026-08-27T10:08:42.590Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "5bb8ca2d-954b-4a4b-b01e-7a30e1aa2eee-check-005-in-progress-done",
+          "date": "2026-08-27T10:09:03.480Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Follow-up from heca-4b's review: added the \"why\" to notification_action_relay's ActionDescriptor — it exists because the button can't carry its own Intent at mount time (the notification doesn't exist yet), so it names the relay by id+key (an address, not a smuggled closure) and the relay resolves+dispatches. Everything else unchanged from the prior completion. VERIFICATION: cargo check -p heca clean."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T10:05:08.126Z",
+      "completedAt": "2026-08-27T10:09:03.480Z",
       "createdAt": "2026-07-03T22:52:10.350Z",
-      "updatedAt": "2026-07-03T22:52:10.350Z"
+      "updatedAt": "2026-08-27T10:09:03.480Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T10:08:42.505Z"
+        }
+      ]
     },
     {
       "id": "893b6411-7b5e-4a94-ac20-e57083ddea1a",
@@ -59,63 +116,45 @@
       "priority": 2,
       "shortName": "handle-dismiss-event",
       "title": "Handle notification dismiss event",
-      "status": "planned",
-      "description": "Gestire dismiss rimuovendo dallo store e chiedendo redraw; nessun accesso UI diretto.",
+      "status": "done",
+      "description": "Implementare gli handler delle tre azioni reali `WmAction`: `NotificationDismissOne { id: u64 }`, `NotificationDismissAll`, `NotificationDismissLast` — rimuovere dallo store (una per id, tutte le visibili, o la prima idonea in ordine stabile) e chiedere redraw; nessun accesso UI diretto. Checklist completo AGENTS.md \"Adding New Actions\" per ciascuna variante — `NotificationDismissOne` non ha keybinding di default (un tasto non può fornire un id), `NotificationDismissAll`/`Last` sì, più RPC e command palette per tutte e tre.\n\n---\n**Completion summary:**\nSHIPPED: handle_notification_dismiss_one/all/last in heca/src/handlers.rs, each a thin call into NotificationRuntime's dismiss_one/dismiss_all/dismiss_last + state.needs_redraw=true, no direct UI access. Full AGENTS.md \"Adding New Actions\" checklist done for all three: WmAction variants (input.rs), action_from_name (All/Last only, One needs build_action since it has an arg), build_action (One), action_priority, action_policy=Global, build_registry, ActionRegistry::ALL descriptors, keybindings.default.toml (prefix+Shift+n=Last, prefix+Alt+n=All, One has none by design). RPC: no dedicated rpc.rs code needed — the generic `action <name> key=val` verb (parse_rpc) already reaches any declared action. VERIFICATION: cargo check -p heca clean. NOT verified: nothing visually confirmed (no running app; NotificationDismissOne's mouse path needs T203's mount to exist at all). FILES: heca/src/handlers.rs, heca/src/input.rs, heca/src/actions.rs, heca/src/app/registry.rs, heca/src/app/interaction.rs, keybindings.default.toml.",
+      "descriptionUpdatedAt": "2026-08-27T09:56:35.491Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "893b6411-7b5e-4a94-ac20-e57083ddea1a-check-001-planned-in-progress",
+          "date": "2026-08-27T09:56:25.143Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "893b6411-7b5e-4a94-ac20-e57083ddea1a-check-002-in-progress-done",
+          "date": "2026-08-27T09:56:35.490Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: handle_notification_dismiss_one/all/last in heca/src/handlers.rs, each a thin call into NotificationRuntime's dismiss_one/dismiss_all/dismiss_last + state.needs_redraw=true, no direct UI access. Full AGENTS.md \"Adding New Actions\" checklist done for all three: WmAction variants (input.rs), action_from_name (All/Last only, One needs build_action since it has an arg), build_action (One), action_priority, action_policy=Global, build_registry, ActionRegistry::ALL descriptors, keybindings.default.toml (prefix+Shift+n=Last, prefix+Alt+n=All, One has none by design). RPC: no dedicated rpc.rs code needed — the generic `action <name> key=val` verb (parse_rpc) already reaches any declared action. VERIFICATION: cargo check -p heca clean. NOT verified: nothing visually confirmed (no running app; NotificationDismissOne's mouse path needs T203's mount to exist at all). FILES: heca/src/handlers.rs, heca/src/input.rs, heca/src/actions.rs, heca/src/app/registry.rs, heca/src/app/interaction.rs, keybindings.default.toml."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:56:25.143Z",
+      "completedAt": "2026-08-27T09:56:35.490Z",
       "createdAt": "2026-07-03T22:52:10.350Z",
-      "updatedAt": "2026-07-03T22:52:10.350Z"
-    },
-    {
-      "id": "cfe3e133-0a97-47c6-afaa-eaa75847cece",
-      "phaseId": "ccefbac4-b29e-45d8-bd1d-e7199afa4907",
-      "number": 211,
-      "shortId": "CLGPR",
-      "priority": 1,
-      "shortName": "notification-events",
-      "title": "Add notification AppEvent variants",
-      "status": "planned",
-      "description": "Estendere `AppEvent` con `NotificationDismiss { id }` e `NotificationAction { id }`.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-03T22:52:10.350Z",
-      "updatedAt": "2026-07-03T22:52:10.350Z"
-    },
-    {
-      "id": "78be366f-b9f1-4be9-8029-a15e96dced0e",
-      "phaseId": "ccefbac4-b29e-45d8-bd1d-e7199afa4907",
-      "number": 212,
-      "shortId": "QKUC5",
-      "priority": 5,
-      "shortName": "toast-action-source",
-      "title": "Decide and wire InteractionSource for toast actions",
-      "status": "planned",
-      "description": "Decidere se aggiungere `InteractionSource::ChromeOverlay` o riusare una sorgente esistente; evitare blocchi errati in floating domain.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-03T22:52:10.352Z",
-      "updatedAt": "2026-07-03T22:52:10.352Z"
+      "updatedAt": "2026-08-27T09:56:35.490Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:56:25.060Z"
+        }
+      ]
     },
     {
       "id": "797eea9b-a15c-4a7b-a5f7-30135fc4cd80",
@@ -125,25 +164,147 @@
       "priority": 4,
       "shortName": "action-policy-validation",
       "title": "Validate notification action policies",
-      "status": "planned",
-      "description": "Verificare che azioni usate dalle notifiche abbiano `ActionPolicy` corretta, es. ReloadConfig Global e FocusPane coerente.",
+      "status": "done",
+      "description": "Verificare `ActionPolicy` per `NotificationDismissOne`/`NotificationDismissAll`/`NotificationDismissLast`, `notify` e `notification.pick` (probabilmente `Global` per tutte — nessuna deve essere bloccata mentre un floating pane ha il focus); verificare inoltre che le azioni referenziate da un `NotificationAction.intent` (es. ReloadConfig) abbiano una policy coerente con dove il bottone può comparire.\n\n---\n**Completion summary:**\nSHIPPED: NotificationDismissOne/All/Last and NotificationPick classified ActionPolicy::Global in heca/src/app/interaction.rs (with a spot-check comment explaining why: no layout impact, must stay reachable while a floating pane owns the domain). notify (P055/T491) also Global. Cross-check on \"actions referenced by NotificationAction.intent\" (e.g. ReloadConfig): those are whatever action the producer names when building the NotificationAction — their own policy is unrelated to and unaffected by living inside a toast; ReloadConfig itself is already Global (pre-existing). NOT YET DONE: NotificationActionRelay (the action that resolves on_action(id,key) into the notification's real intent — see T203/T209) doesn't exist yet, so its policy isn't classified — will need Global too, tracked under T209/T203. VERIFICATION: cargo check -p heca clean; action_policy_covers_all_variants test updated with the four variants. FILES: heca/src/app/interaction.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:56:56.574Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "797eea9b-a15c-4a7b-a5f7-30135fc4cd80-check-001-planned-in-progress",
+          "date": "2026-08-27T09:56:47.431Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "797eea9b-a15c-4a7b-a5f7-30135fc4cd80-check-002-in-progress-done",
+          "date": "2026-08-27T09:56:56.573Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: NotificationDismissOne/All/Last and NotificationPick classified ActionPolicy::Global in heca/src/app/interaction.rs (with a spot-check comment explaining why: no layout impact, must stay reachable while a floating pane owns the domain). notify (P055/T491) also Global. Cross-check on \"actions referenced by NotificationAction.intent\" (e.g. ReloadConfig): those are whatever action the producer names when building the NotificationAction — their own policy is unrelated to and unaffected by living inside a toast; ReloadConfig itself is already Global (pre-existing). NOT YET DONE: NotificationActionRelay (the action that resolves on_action(id,key) into the notification's real intent — see T203/T209) doesn't exist yet, so its policy isn't classified — will need Global too, tracked under T209/T203. VERIFICATION: cargo check -p heca clean; action_policy_covers_all_variants test updated with the four variants. FILES: heca/src/app/interaction.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:56:47.431Z",
+      "completedAt": "2026-08-27T09:56:56.573Z",
       "createdAt": "2026-07-03T22:52:10.352Z",
-      "updatedAt": "2026-07-03T22:52:10.352Z"
+      "updatedAt": "2026-08-27T09:56:56.573Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:56:47.350Z"
+        }
+      ]
+    },
+    {
+      "id": "72e35134-dd5a-4202-99ec-48b0b0c284c7",
+      "phaseId": "ccefbac4-b29e-45d8-bd1d-e7199afa4907",
+      "number": 492,
+      "shortId": "E7ELS",
+      "priority": 5,
+      "shortName": "add-notification-pick-action-s",
+      "title": "Add `notification.pick` action — scoped toast picker",
+      "status": "done",
+      "description": "Toast actions and the × are automatically prefix+/ pickable now (pickability is not opt-in — heca-4b/F003-P096's T486), so every visible toast already competes in the global 52-letter pool via the four hint walks over state.layers.visible_front_to_back() (heca/src/chrome/hint/{surfaces.rs,letters.rs,targets.rs}). Antonio asked for an ADDITIONAL, precise route on top of that — not instead of it: no eligibility exclusion, toast actions keep their global letters too. (Two earlier proposals to exclude the layer from the global pool for a letter-budget saving were both wrong and retracted — MAX_VISIBLE_NOTIFICATIONS=4 already bounds the worst case to 8 of 52 letters, so there is no budget problem to solve; this is purely about precision/convenience.)\n\nShape (settled with heca-4b, F003/P096): a `notification.pick` action in ActionRegistry (own ActionMeta/descriptor per AGENTS.md:1554's checklist) with a default binding in keybindings.default.toml (user-rebindable). Its handler flips a host-owned `Signal<bool>` — no closures crossing the boundary, just `signal.set(!signal.get_untracked())` or equivalent.\n\nMount: wrap the ToastStack layer's root (P060/T203) in `KeyHintGroup::new_boxed(stack).open_when(that_signal)`. Do NOT use `opens_on(name)` — that is the focused-surface path (a surface must hold the keyboard for it to fire), and the notification layer is `modal: false` / never focused by design (P060/T203's covers_content:false), so an opens_on binding on it would never trigger. `open_when(Signal<bool>)` is the host-driven equivalent and also holds focus while the group is up, so there is no separate gate to write.\n\nEdge cases: the signal must reset to false when the group closes (Esc / a pick made) so re-pressing the binding reopens cleanly; verify the action doesn't fire while a modal already holds focus (ActionPolicy — cross-check T213, likely Global since it's non-modal/non-layout-affecting, but confirm it doesn't leak into a modal context that should swallow it instead).\n\n---\n**Completion summary:**\nSHIPPED: WmAction::NotificationPick (name-keyed via action_from_name, zero args), handle_notification_pick toggles state.notification_pick_open (a bool Signal on AppState, additive to global prefix+/, no exclusion). Mount (T203) wraps the toast stack in KeyHintGroup::new_boxed(stack).open_when(state.notification_pick_open). Default binding prefix+n. NOT DONE — flagging honestly rather than closing over it: the \"signal must reset to false when the group closes (Esc / a pick made)\" edge case this task calls out is NOT implemented. My handler only toggles the bool; nothing resets it when KeyHintGroup itself closes (a pick made, or Esc), so re-pressing prefix+n after a pick would need to flip it back on then off rather than just re-opening. Whether KeyHintGroup exposes a close callback/signal for the host to react to is a heca-grid-ui question — need to ask heca-4b rather than guess or touch his crate. VERIFICATION: cargo check -p heca clean; lint-changed.sh clean (0 warnings in heca). NOT verified: nothing on screen. FILES: heca/src/input.rs, heca/src/actions.rs, heca/src/app/registry.rs, heca/src/app/interaction.rs, heca/src/app_state.rs, heca/src/app/startup.rs, heca/src/handlers.rs, heca/src/chrome/notification_layer.rs, keybindings.default.toml.",
+      "descriptionUpdatedAt": "2026-08-27T10:07:21.668Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "72e35134-dd5a-4202-99ec-48b0b0c284c7-check-001-planned-in-progress",
+          "date": "2026-08-27T10:07:11.303Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "72e35134-dd5a-4202-99ec-48b0b0c284c7-check-002-in-progress-done",
+          "date": "2026-08-27T10:07:21.667Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: WmAction::NotificationPick (name-keyed via action_from_name, zero args), handle_notification_pick toggles state.notification_pick_open (a bool Signal on AppState, additive to global prefix+/, no exclusion). Mount (T203) wraps the toast stack in KeyHintGroup::new_boxed(stack).open_when(state.notification_pick_open). Default binding prefix+n. NOT DONE — flagging honestly rather than closing over it: the \"signal must reset to false when the group closes (Esc / a pick made)\" edge case this task calls out is NOT implemented. My handler only toggles the bool; nothing resets it when KeyHintGroup itself closes (a pick made, or Esc), so re-pressing prefix+n after a pick would need to flip it back on then off rather than just re-opening. Whether KeyHintGroup exposes a close callback/signal for the host to react to is a heca-grid-ui question — need to ask heca-4b rather than guess or touch his crate. VERIFICATION: cargo check -p heca clean; lint-changed.sh clean (0 warnings in heca). NOT verified: nothing on screen. FILES: heca/src/input.rs, heca/src/actions.rs, heca/src/app/registry.rs, heca/src/app/interaction.rs, heca/src/app_state.rs, heca/src/app/startup.rs, heca/src/handlers.rs, heca/src/chrome/notification_layer.rs, keybindings.default.toml."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T10:07:11.303Z",
+      "completedAt": "2026-08-27T10:07:21.667Z",
+      "createdAt": "2026-08-26T15:37:34.808Z",
+      "updatedAt": "2026-08-27T10:07:21.667Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T10:07:11.217Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-07-27T11:40:15.531Z",
+  "updatedAt": "2026-08-27T10:09:03.480Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "3659615e-4d7d-4e83-a171-1a33d19909c4",
+      "date": "2026-08-26T15:36:25.139Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "cf7e1fd6-6393-4249-997a-d69939ab9b9b",
+      "date": "2026-08-27T09:56:25.164Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "a5c0bcef-6f0a-47d3-b276-6b356e065977",
+      "date": "2026-08-27T10:07:21.692Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "9afd332f-a496-4808-99c2-03787a0656e5",
+      "date": "2026-08-27T10:08:38.032Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "93934bfe-cb03-4329-a50a-92b612eaae66",
+      "date": "2026-08-27T10:09:03.503Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+      "createdAt": "2026-08-27T10:08:42.505Z"
+    }
+  ]
 }
