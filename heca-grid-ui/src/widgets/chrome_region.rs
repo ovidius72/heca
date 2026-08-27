@@ -153,7 +153,7 @@ impl ChromeRegion {
     /// axis to the rail when collapsed, fold out of layout when hidden.
     fn sync(&mut self) {
         let mode = self.mode.get_untracked();
-        self.base.style.layout.hidden = mode == RegionMode::Hidden;
+        self.base.set_hidden(mode == RegionMode::Hidden);
         let extent = match mode {
             RegionMode::Expanded => self.expanded_px,
             // The rail extent also stands in while hidden (size is then moot).

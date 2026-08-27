@@ -26,7 +26,7 @@ impl Visibility {
             seen: visible.get_untracked(),
         };
         if let Some(child) = this.base.children.first_mut() {
-            child.base_mut().style.layout.hidden = !this.seen;
+            child.base_mut().set_hidden(!this.seen);
         }
         this
     }
@@ -45,9 +45,9 @@ impl Visibility {
     /// before only because the wrapper was squeezed by a row that had run out of room — the wrong
     /// mechanism producing the right picture (F003/P096/T483).
     fn apply(&mut self, visible: bool) {
-        self.base.style.layout.hidden = !visible;
+        self.base.set_hidden(!visible);
         if let Some(child) = self.base.children.first_mut() {
-            child.base_mut().style.layout.hidden = !visible;
+            child.base_mut().set_hidden(!visible);
         }
     }
 }

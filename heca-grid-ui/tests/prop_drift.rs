@@ -156,3 +156,51 @@ fn every_exception_still_names_a_real_type() {
          future type reusing the name would be excused without anyone deciding that.",
     );
 }
+
+
+/// **Nothing writes `style.layout.hidden` by hand.**
+///
+/// `hidden` is the engine's `display: none`, so flipping it moves every sibling — it is a *layout*
+/// change, and the pass that re-places them has to be asked for. `Base::set_hidden` does both, and
+/// only asks when the value actually changed (so a widget syncing itself inside `remeasure` cannot
+/// request a pass every pass).
+///
+/// Written by hand it is right half the time and silent the other half: a dock's rows ended up
+/// painted on top of each other and a sidebar row stayed collapsed with its content already
+/// arrived, both because the value was correct and nobody had moved anything. Thirteen call sites
+/// carried that copy; this is what stops a fourteenth.
+#[test]
+fn nothing_sets_hidden_without_asking_for_the_layout_it_needs() {
+    let mut offenders = Vec::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut stack = vec![root];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).expect("readable") {
+            let path = entry.expect("entry").path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|e| e != "rs") {
+                continue;
+            }
+            // `style.rs` defines the field; `component.rs` holds the one setter allowed to write it.
+            let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            if name == "style.rs" || name == "component.rs" {
+                continue;
+            }
+            let src = std::fs::read_to_string(&path).expect("utf-8");
+            for (i, line) in src.lines().enumerate() {
+                if line.contains("layout.hidden =") {
+                    offenders.push(format!("{}:{}  {}", path.display(), i + 1, line.trim()));
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "these write `layout.hidden` directly, so they change the layout without asking for the \
+         pass that re-places everything after them. Use `Base::set_hidden(bool)`:\n  {}",
+        offenders.join("\n  "),
+    );
+}

@@ -91,7 +91,7 @@ impl ItemGroup {
         let open = self.expanded.get_untracked();
         self.chevron.set(chevron_for(open).to_string());
         for row in self.base.children.iter_mut().skip(HEADER + 1) {
-            row.base_mut().style.layout.hidden = !open;
+            row.base_mut().set_hidden(!open);
         }
     }
 }

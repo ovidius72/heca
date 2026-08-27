@@ -5370,6 +5370,103 @@ fn hovering_a_stacked_cards_action_lights_it_and_claims_the_move() {
     assert!(matches!(miss, Handled::No), "a move between the cards must fall through");
 }
 
+/// **Pointing at something never scrolls it.** A reveal brings into view what the user cannot see
+/// — the keyboard's case. What the mouse is on is visible by definition, and scrolling it moves it
+/// out from under the pointer that asked: clicking a row in a scrolled region focused it, the
+/// focus asked for a reveal, the region centred it, and the click was spent — only the second one
+/// did what you meant (Antonio, driving the showcase, F003/P096).
+#[test]
+fn a_click_does_not_ask_to_be_scrolled_into_view_but_the_keyboard_does() {
+    use heca_grid_ui::{Component, FocusManager, Label, Parent as _, PointerButton};
+
+    let mut row = heca_grid_ui::Row::new().child(Label::new("pane-1")).on_activate(|| {});
+    row.base_mut().style.layout.width = Length::Px(200.0);
+    LayoutEngine::new().base_font(14.0).compute(&mut row, Size::new(200.0, 40.0));
+    assert!(!row.wants_visible(), "an untouched row asks for nothing");
+
+    // Clicking focuses it — but the mouse is already looking at it.
+    let b = row.base().bounds;
+    let at = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    let mut focus = FocusManager::new();
+    focus.dispatch(&mut row, &Event::pointer_pressed(at, PointerButton::Left));
+    focus.dispatch(&mut row, &Event::pointer_released(at, PointerButton::Left));
+    assert!(row.base().focused.get_untracked(), "the click should still focus it");
+    assert!(
+        !row.wants_visible(),
+        "a clicked row asked to be scrolled into view — the region centres it and eats the click",
+    );
+
+    // Tab is the case a reveal exists for: the cursor can go somewhere you cannot see. This is
+    // the hook `FocusManager::advance` calls — `visible: true` is what "the keyboard did it" means.
+    row.on_focus(true);
+    assert!(row.wants_visible(), "keyboard focus must still bring the row into view");
+}
+
+/// **Collapsing a dock or a group asks for the layout pass that re-places its rows.**
+///
+/// The toggle runs on a CLICK, outside any layout pass, so applying `hidden` moves nothing on its
+/// own — every row keeps the bounds it already had and is painted where it used to be. That is
+/// what put a dock's rows on top of each other, and left nothing on screen when it was reopened,
+/// until an unrelated window resize happened to run a pass (F003/P096).
+#[test]
+fn collapsing_a_dock_or_a_group_asks_for_a_layout() {
+    use heca_grid_ui::{Component, DockFrame, Item, ItemGroup, PointerButton};
+
+    // A dock and a group, each collapsed by the same gesture a user makes: a click on its header.
+    let mut dock = DockFrame::new("PANES").child(Item::new("zsh")).child(Item::new("nvim"));
+    dock.base_mut().style.layout.width = Length::Px(300.0);
+    LayoutEngine::new().base_font(14.0).compute(&mut dock, Size::new(300.0, 400.0));
+    let _ = heca_grid_ui::needs_layout(&dock);
+
+    let header = dock.base().children[0].base().bounds;
+    let at = Point::new(header.loc.x + header.size.w / 2.0, header.loc.y + header.size.h / 2.0);
+    heca_grid_ui::dispatch(&mut dock, &Event::pointer_pressed(at, PointerButton::Left));
+    heca_grid_ui::dispatch(&mut dock, &Event::pointer_released(at, PointerButton::Left));
+    assert!(
+        heca_grid_ui::needs_layout(&dock),
+        "a dock collapsed and nobody asked for a layout — its rows keep their old bounds",
+    );
+
+    let mut group = ItemGroup::new("COLUMN").child(Item::new("a")).child(Item::new("b"));
+    group.base_mut().style.layout.width = Length::Px(300.0);
+    LayoutEngine::new().base_font(14.0).compute(&mut group, Size::new(300.0, 400.0));
+    let _ = heca_grid_ui::needs_layout(&group);
+
+    let header = group.base().children[0].base().bounds;
+    let at = Point::new(header.loc.x + header.size.w / 2.0, header.loc.y + header.size.h / 2.0);
+    heca_grid_ui::dispatch(&mut group, &Event::pointer_pressed(at, PointerButton::Left));
+    heca_grid_ui::dispatch(&mut group, &Event::pointer_released(at, PointerButton::Left));
+    assert!(
+        heca_grid_ui::needs_layout(&group),
+        "a group collapsed and nobody asked for a layout — its rows keep their old bounds",
+    );
+}
+
+/// **Showing or hiding a wrapped child asks for a layout pass**, because `hidden` is the engine's
+/// `display: none` — flipping it moves every sibling, and a repaint alone redraws them all where
+/// they used to be.
+#[test]
+fn revealing_a_hidden_child_asks_for_the_layout_that_moves_its_siblings() {
+    use heca_grid_ui::{Component, Label, Visibility};
+
+    let row = Visibility::new(Label::new("~/projects/heca"), false);
+    let shown = row.visible_signal();
+    let mut page = Flex::column().child(Label::new("zsh")).child(row);
+    LayoutEngine::new().base_font(14.0).compute(&mut page, Size::new(300.0, 200.0));
+    let _ = heca_grid_ui::needs_layout(&page);
+
+    page.tick(1.0 / 60.0);
+    assert!(!heca_grid_ui::needs_layout(&page), "nothing changed, nothing to lay out");
+
+    // The path arrives.
+    shown.set(true);
+    page.tick(1.0 / 60.0);
+    assert!(
+        heca_grid_ui::needs_layout(&page),
+        "a row appeared and nobody asked for a layout — it stays collapsed until something else does",
+    );
+}
+
 /// **A widget that changes the shape of its own tree asks the host to lay it out again.**
 ///
 /// A repaint cannot fix a structural change: the siblings are still laid out around the shape the

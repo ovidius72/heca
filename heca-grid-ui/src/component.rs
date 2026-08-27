@@ -452,6 +452,30 @@ impl Base {
         self.needs_paint.set(false);
     }
 
+    /// **Show or hide this widget — the one way to do it.**
+    ///
+    /// `hidden` is the engine's `display: none`: the widget leaves the layout entirely, and
+    /// everything after it moves. So flipping it is a **layout** change, not a paint one, and this
+    /// asks for the pass that re-places the siblings — which is why nothing should ever write
+    /// `style.layout.hidden` directly. Writing it by hand is how a dock's rows ended up painted on
+    /// top of each other and a sidebar row stayed collapsed with its content already arrived: the
+    /// value was right and nobody had moved anything.
+    ///
+    /// **It only asks when the value actually changes.** That is what makes it safe to call from
+    /// `remeasure`, which runs *inside* the layout pass: re-applying the same state there marks
+    /// nothing, so a widget that syncs itself every pass cannot request one every pass.
+    pub fn set_hidden(&mut self, hidden: bool) {
+        if self.style.layout.hidden != hidden {
+            self.style.layout.hidden = hidden;
+            self.mark_needs_layout();
+        }
+    }
+
+    /// Whether this widget is out of the layout entirely (`display: none`).
+    pub fn is_hidden(&self) -> bool {
+        self.style.layout.hidden
+    }
+
     /// **Say that this widget's tree changed and must be laid out again.**
     ///
     /// Call it when you add or remove children outside the layout pass — reconciling a host-owned
@@ -497,6 +521,22 @@ impl Base {
     /// appears. Every widget gates its ring paint on this single definition
     /// (plus the theme's `show_focus_border` and its own disabled check).
     pub fn shows_focus_ring(&self) -> bool {
+        self.focused_by_keyboard()
+    }
+
+    /// **Did this widget's focus arrive from the keyboard?** — `focused && focus_visible`, CSS
+    /// `:focus-visible` semantics, and the one definition of that question.
+    ///
+    /// Two things read it, for the same reason, and neither should re-derive it:
+    ///
+    /// - [`shows_focus_ring`](Self::shows_focus_ring) — a click focuses without ringing.
+    /// - [`wants_visible`](Component::wants_visible) — **pointing at something never scrolls it.**
+    ///   A reveal exists to bring into view what the user cannot see, which is the keyboard's
+    ///   case; what the mouse is on is visible by definition, and scrolling it moves it out from
+    ///   under the pointer that asked. Clicking a row inside a scrolled region used to focus it,
+    ///   which asked for a reveal, which centred it — so the first click only scrolled and the
+    ///   second one did what you meant.
+    pub fn focused_by_keyboard(&self) -> bool {
         self.focused.get_untracked() && self.focus_visible.get_untracked()
     }
 
@@ -761,7 +801,7 @@ pub trait Component {
     }
 
     fn wants_visible(&self) -> bool {
-        self.base().focused.get_untracked()
+        self.base().focused_by_keyboard()
     }
 
 

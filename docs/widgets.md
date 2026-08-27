@@ -1140,8 +1140,19 @@ positions.
 
 So a widget says so, and the host runs the pass:
 
+**Showing and hiding is the common case, and it has its own setter.** `hidden` is the engine's
+`display: none`, so flipping it moves every sibling — never write `style.layout.hidden` yourself:
+
 ```rust
-// In the widget, wherever children change outside the layout pass:
+self.base.set_hidden(true);        // sets it AND asks, in one call
+```
+
+It asks **only when the value actually changed**, which is what makes it safe to call from
+`remeasure` (that runs *inside* the layout pass, so a widget syncing itself every pass cannot
+request one every pass). A test fails the build if anything writes the field directly.
+
+```rust
+// For a tree that changed some other way — children added or removed:
 self.base.children.remove(i);
 self.base.mark_needs_layout();
 

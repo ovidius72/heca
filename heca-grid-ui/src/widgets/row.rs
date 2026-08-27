@@ -248,7 +248,7 @@ impl Component for Row {
     ///
     /// **Unless the cursor was put here by the mouse** — see [`reveal_when`](Row::reveal_when).
     fn wants_visible(&self) -> bool {
-        let cursor = self.nav.get_untracked() || self.base.focused.get_untracked();
+        let cursor = self.nav.get_untracked() || self.base.focused_by_keyboard();
         cursor && self.reveal.is_none_or(|r| r.get_untracked())
     }
 

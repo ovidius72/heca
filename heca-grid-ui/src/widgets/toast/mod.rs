@@ -76,7 +76,7 @@ const DISMISS: usize = 2;
 /// than a card with one. `hidden` is the engine's `display: none` (F003/P096/T483).
 fn empty_slot() -> Box<dyn Component> {
     let mut slot = Flex::empty();
-    slot.base_mut().style.layout.hidden = true;
+    slot.base_mut().set_hidden(true);
     Box::new(slot)
 }
 
@@ -467,7 +467,7 @@ impl Component for Toast {
     /// collapses rather than leaving a hole where it used to be. It stays laid out while it is
     /// *leaving*, which is what gives the exit something to play over.
     fn remeasure(&mut self) {
-        self.base.style.layout.hidden = !self.is_showing();
+        self.base.set_hidden(!self.is_showing());
     }
 
     /// This surface's arrival and exit — what a host drives, and what it carries across a rebuild.
