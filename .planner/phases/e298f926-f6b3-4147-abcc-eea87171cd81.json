@@ -170,11 +170,20 @@
       "priority": 4,
       "shortName": "toast-pass-through",
       "title": "Validate ToastStack overlay pass-through",
-      "status": "planned",
+      "status": "canceled",
       "description": "⚠️ MISLABELLED — this is MISSING IMPLEMENTATION, not a validation task. Verified 2026-08-27: the toast stack is a LayerKind::Persistent non-modal layer and the app has NO pointer-input pass for ordinary layers (heca/src/chrome/layers_glue.rs runs rebuild/layout/paint only; dispatch_modal_pointer only touches top_modal). The ToastStack receives ZERO pointer events — the × never closes it, action buttons never fire, and hover falls through to the pane beneath because the toast never gets to claim its strip. The ToastStack WIDGET is correct (returns Handled::Yes only for the strip its cards cover; proven in the showcase). The fix is the one-tree input architecture: phase P097(F009), tasks T494 (layer roots become tree children) + T495 (modal becomes a swallowing node). This task's original text below is still the acceptance check once that lands.\n\nORIGINAL: Verificare che click fuori dai toast passi all'UI sottostante; dismiss e action consumano solo sui card/affordance. Verificare inoltre che `covers_content: false` funzioni davvero: con un toast visibile, `prefix+Enter` e le altre azioni `Global` devono restare disponibili — il layer non deve mettere l'app in `Domain::Overlay`.\n\nRESOLUTION: fold this into P097(F009)/T500 (the regression pass) — it becomes the toast section of that checklist. Keep this task as the pointer to that work, or close it as superseded by T494/T495/T500.",
       "descriptionUpdatedAt": "2026-08-27T19:42:06.725Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "98793de9-2224-4fb4-b156-e989e3301033-check-001-planned-canceled",
+          "date": "2026-08-27T20:07:01.525Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Superseded by P097 (One Tree — the input architecture). T207 was mislabelled: its pointer-passthrough half (click outside a toast falls through; × / action consume only on the card) is not a validation task, it is missing implementation — the app has no pointer-input pass for ordinary layers at all. That is P097/T494 (layer roots become tree children) + T495 (modal becomes a swallowing node), with the acceptance check folded into P097/T500's toast section (now carrying T207's criteria in full). T207's other half — a visible toast must not block Global actions / must not put the app in Domain::Overlay — is already implemented and unit-tested (chrome/layers/tests.rs coverage_is_reported_only_while_the_layer_is_visible; app/interaction.rs coverage_still_decides_when_no_surface_holds_the_keyboard) for the toast's exact Persistent/modal:false/covers_content:false shape, so nothing here needs doing. Canceling rather than leaving open so P060 (mount + bridge + state, all done) can close instead of blocking on a whole phase.",
+          "description": "Superseded by P097 (One Tree — the input architecture). T207 was mislabelled: its pointer-passthrough half (click outside a toast falls through; × / action consume only on the card) is not a validation task, it is missing implementation — the app has no pointer-input pass for ordinary layers at all. That is P097/T494 (layer roots become tree children) + T495 (modal becomes a swallowing node), with the acceptance check folded into P097/T500's toast section (now carrying T207's criteria in full). T207's other half — a visible toast must not block Global actions / must not put the app in Domain::Overlay — is already implemented and unit-tested (chrome/layers/tests.rs coverage_is_reported_only_while_the_layer_is_visible; app/interaction.rs coverage_still_decides_when_no_surface_holds_the_keyboard) for the toast's exact Persistent/modal:false/covers_content:false shape, so nothing here needs doing. Canceling rather than leaving open so P060 (mount + bridge + state, all done) can close instead of blocking on a whole phase."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -185,7 +194,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-08-27T19:42:06.724Z",
+      "updatedAt": "2026-08-27T20:07:01.525Z",
       "sessionInfo": []
     },
     {
@@ -238,7 +247,7 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-27T19:42:06.724Z",
+  "updatedAt": "2026-08-27T20:07:01.525Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
@@ -274,6 +283,14 @@
       "fromStatus": "planned",
       "toStatus": "in-progress",
       "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "bcff2a26-c97a-4388-8865-003394095e12",
+      "date": "2026-08-27T20:07:01.549Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ],

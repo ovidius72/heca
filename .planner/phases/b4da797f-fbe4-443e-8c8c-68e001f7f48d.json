@@ -199,8 +199,8 @@
       "shortName": "regression-pass-antonio-drivin",
       "title": "Regression pass — Antonio driving every surface",
       "status": "planned",
-      "description": "GOAL: a structured interactive regression pass over every mouse and hint behaviour on every surface, driven by Antonio, after the plumbing tasks (layer roots, modal, chrome, pane header, terminal viewport, hint) land. This is not optional and green tests do not substitute for it — the pre-change design already failed silently (the toast received no input for an unknown length of time and nothing errored).\n\nCHECKLIST (Antonio drives each; a failure blocks the phase):\n- Toast: x closes it, an action button fires its intent, hovering a toast does NOT highlight the pane beneath, a queued toast promotes on dismiss, prefix+Enter still splits a pane with a toast up.\n- Modal: open the confirm dialog, click a button, Esc, scrim-click, Tab/Shift+Tab between buttons, Ctrl+h/l inside, prefix+/ onto a button, terminal sees no stray click while it is up.\n- Sidebar: MarkerGroup grip hover cue, Row hover, click a row, scroll the sidebar, drag a column, drag the scrollbar thumb and release off it, right-click a row -> context menu.\n- Pane header: each action button clicks + hovers, press the empty band (focuses, no selection), resize a divider under a header band.\n- Terminal (longest): PTY mouse reporting into a TUI (htop/vim mouse), host-grid selection (click-drag, double/triple-click, shift-extend), scrollback wheel, click-to-focus, Ctrl/Cmd+wheel font zoom, edge auto-scroll during a pane drag, interactive-move modifier drag, vim Escape reaches the program.\n- Hints: prefix+/ with sidebar / toast / modal / expose up — correct letter set each time, occluded targets get no letter.\n- Exposé: still opens, cursor moves, cards activate, delete letters work.\n\nOUTPUT: a short pass/fail note per line in the task completion, plus any follow-up tasks filed for failures. ~0.5-1 day of Antonio's time.",
-      "descriptionUpdatedAt": "2026-08-27T19:41:22.856Z",
+      "description": "GOAL: a structured interactive regression pass over every mouse and hint behaviour on every surface, driven by Antonio, after the plumbing tasks (layer roots, modal, chrome, pane header, terminal viewport, hint) land. This is not optional and green tests do not substitute for it — the pre-change design already failed silently (the toast received no input for an unknown length of time and nothing errored).\n\nABSORBS the former P060/T207 \"Validate ToastStack overlay pass-through\" (canceled — its pointer half was never implementation-free, it was this whole phase). The toast section below is T207's acceptance criteria in full.\n\nCHECKLIST (Antonio drives each; a failure blocks the phase):\n- Toast (was T207):\n  - clicking the × closes the toast;\n  - an action button fires its intent (and dismisses if dismiss_after);\n  - clicking OUTSIDE any toast passes through to the UI/pane below — the toast consumes only the strip its cards cover;\n  - hovering a toast does NOT highlight the pane beneath, and pauses/reveals the toast's own affordances;\n  - a queued toast promotes when a visible one is dismissed;\n  - prefix+Enter still splits a pane with a toast up, and other Global actions still route — a visible toast must NEVER put the app in Domain::Overlay. (This last invariant is ALREADY implemented and unit-tested — chrome/layers/tests.rs coverage_is_reported_only_while_the_layer_is_visible and app/interaction.rs coverage_still_decides_when_no_surface_holds_the_keyboard cover the toast's exact Persistent/modal:false/covers_content:false shape. Confirm it still holds after the tree work, don't re-derive it.)\n- Modal: open the confirm dialog, click a button, Esc, scrim-click, Tab/Shift+Tab between buttons, Ctrl+h/l inside, prefix+/ onto a button, terminal sees no stray click while it is up.\n- Sidebar: MarkerGroup grip hover cue, Row hover, click a row, scroll the sidebar, drag a column, drag the scrollbar thumb and release off it, right-click a row -> context menu.\n- Pane header: each action button clicks + hovers, press the empty band (focuses, no selection), resize a divider under a header band.\n- Terminal (longest): PTY mouse reporting into a TUI (htop/vim mouse), host-grid selection (click-drag, double/triple-click, shift-extend), scrollback wheel, click-to-focus, Ctrl/Cmd+wheel font zoom, edge auto-scroll during a pane drag, interactive-move modifier drag, vim Escape reaches the program.\n- Hints: prefix+/ with sidebar / toast / modal / expose up — correct letter set each time, occluded targets get no letter.\n- Exposé: still opens, cursor moves, cards activate, delete letters work.\n\nOUTPUT: a short pass/fail note per line in the task completion, plus any follow-up tasks filed for failures. ~0.5-1 day of Antonio's time.",
+      "descriptionUpdatedAt": "2026-08-27T20:06:51.583Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -213,7 +213,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-27T19:41:22.815Z",
-      "updatedAt": "2026-08-27T19:41:22.815Z",
+      "updatedAt": "2026-08-27T20:06:51.582Z",
       "sessionInfo": []
     },
     {
@@ -270,7 +270,7 @@
     }
   ],
   "createdAt": "2026-08-27T19:38:36.401Z",
-  "updatedAt": "2026-08-27T19:50:19.171Z",
+  "updatedAt": "2026-08-27T20:06:51.582Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
