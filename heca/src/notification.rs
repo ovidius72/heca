@@ -1386,6 +1386,9 @@ pub struct NotificationRuntime {
     /// raise; `App` and `System` both deliver to the in-app toast stack today (the OS
     /// backend that would make `System` distinct is not built). Re-applied on reload.
     mode: heca_config::settings::NotificationSystem,
+    /// Whether the one-time "`system` mode has no OS backend yet" notice has already been
+    /// shown for the current mode. Reset whenever [`set_mode`](Self::set_mode) changes the mode.
+    system_fallback_announced: bool,
 }
 
 impl NotificationRuntime {
@@ -1399,17 +1402,38 @@ impl NotificationRuntime {
             visible_toasts: heca_grid_ui::reactive::signal(Vec::new()),
             auto_dismiss,
             mode,
+            system_fallback_announced: false,
         }
     }
 
     /// Apply a new delivery mode (`prefix+Shift+r` reload path).
     pub(crate) fn set_mode(&mut self, mode: heca_config::settings::NotificationSystem) {
+        if self.mode != mode {
+            self.system_fallback_announced = false;
+        }
         self.mode = mode;
     }
 
     /// Whether notifications are suppressed entirely (`mode = "none"`).
     pub(crate) fn suppressed(&self) -> bool {
         matches!(self.mode, heca_config::settings::NotificationSystem::None)
+    }
+
+    /// The one-time notice that `mode = "system"` has no OS backend yet and is falling back to
+    /// the in-app stack — F009/T222. `Some` the first time it is asked while the mode is
+    /// `System`, `None` after (until the mode changes). `App`/`None` never produce it.
+    pub(crate) fn system_fallback_notice(&mut self) -> Option<NotificationDraft> {
+        if self.mode != heca_config::settings::NotificationSystem::System
+            || self.system_fallback_announced
+        {
+            return None;
+        }
+        self.system_fallback_announced = true;
+        Some(
+            NotificationDraft::new("OS notifications aren't available yet")
+                .body("Showing notifications in-app until the system backend lands.")
+                .dedup_key("notification.system.unavailable"),
+        )
     }
 
     /// Apply a new configured auto-dismiss delay — the `prefix+Shift+r` reload path.
@@ -1647,7 +1671,14 @@ pub(crate) fn raise(state: &mut crate::app_state::AppState, draft: NotificationD
     if state.notifications.suppressed() {
         return;
     }
-    let _ = state.notifications.push(draft, Instant::now());
+    let now = Instant::now();
+    // `mode = "system"` with no OS backend yet (F009/T222) — fall back to the in-app stack and
+    // say so once. Routed like any other in-app notification; when P063 installs the OS sink
+    // this branch stops firing and `raise` hands the draft there instead.
+    if let Some(notice) = state.notifications.system_fallback_notice() {
+        let _ = state.notifications.push(notice, now);
+    }
+    let _ = state.notifications.push(draft, now);
     state.needs_redraw = true;
 }
 
@@ -2363,6 +2394,39 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_visible_actions_intent_is_resolvable_for_the_relay_to_re_dispatch() {
+        // F009/P057/T238: `on_action(id, key)` names the relay action; the relay looks the key
+        // back up here and re-dispatches the *real* Intent through the router (registry/policy
+        // path), never a direct handler. This is the lookup that makes that possible.
+        let now = Instant::now();
+        let mut runtime = test_runtime(4000);
+        let draft = Notification::info("Build failed")
+            .action(
+                NotificationAction::new(
+                    "Open log",
+                    Intent::new("open_pane_log").arg("pane_id", heca_view::PropValue::Int(7)),
+                )
+                .dismiss_after(true),
+            )
+            .draft;
+        let id = runtime.push(draft, now).unwrap().notification_id();
+
+        let (intent, dismiss_after) = runtime
+            .action_and_dismiss_after_for_visible(id, "open_pane_log")
+            .expect("the visible card's action resolves by its intent name");
+        assert_eq!(intent.action, "open_pane_log");
+        assert_eq!(intent.args.get("pane_id"), Some(&heca_view::PropValue::Int(7)));
+        assert!(dismiss_after);
+
+        assert!(
+            runtime
+                .action_and_dismiss_after_for_visible(id, "not_an_action")
+                .is_none(),
+            "an unknown key resolves to nothing, not a panic"
+        );
+    }
+
     // -- configured auto-dismiss + delivery mode ([settings.notification_system]) --
 
     fn test_runtime(auto_ms: u64) -> NotificationRuntime {
@@ -2421,6 +2485,32 @@ mod tests {
         // `system` is reserved and delivers like `app` for now — not suppressed.
         runtime.set_mode(NotificationSystem::System);
         assert!(!runtime.suppressed());
+    }
+
+    #[test]
+    fn system_mode_announces_the_in_app_fallback_exactly_once() {
+        use heca_config::settings::NotificationSystem;
+        let mut runtime = test_runtime(4000);
+
+        // app / none never produce the notice.
+        assert!(runtime.system_fallback_notice().is_none());
+        runtime.set_mode(NotificationSystem::None);
+        assert!(runtime.system_fallback_notice().is_none());
+
+        runtime.set_mode(NotificationSystem::System);
+        let notice = runtime
+            .system_fallback_notice()
+            .expect("first raise under system mode gets the notice");
+        assert_eq!(notice.dedup_key.as_deref(), Some("notification.system.unavailable"));
+        assert!(
+            runtime.system_fallback_notice().is_none(),
+            "and only once per mode"
+        );
+
+        // switching away and back re-arms it.
+        runtime.set_mode(NotificationSystem::App);
+        runtime.set_mode(NotificationSystem::System);
+        assert!(runtime.system_fallback_notice().is_some());
     }
 
     // -- ToastSpec projection (T193) --------------------------------------

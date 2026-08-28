@@ -2282,6 +2282,21 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
 
     let active_ws = state.session.active_workspace_idx;
     let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
+
+    // Build the backend before touching the layout — a spawn that fails (F009/P055/T225)
+    // should not leave an empty pane behind.
+    let backend = match create_command_backend_for_state(state, cols, rows, command) {
+        Ok(backend) => backend,
+        Err(e) => {
+            crate::notification::Notification::danger(format!("Couldn't run '{command}'"))
+                .body(e)
+                .dedup_key(format!("spawn.failed:{command}"))
+                .sticky()
+                .send();
+            return;
+        }
+    };
+
     let next_id = state.session.next_id();
     let mut pane = LayoutPane::new(PaneId(next_id), command.clone());
     pane.close_policy = *close_policy;
@@ -2308,10 +2323,7 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     } else {
         state.session.add_pane(pane, None, true);
     }
-    state.backends.insert_for_pane(
-        PaneId(next_id),
-        create_command_backend_for_state(state, cols, rows, command),
-    );
+    state.backends.insert_for_pane(PaneId(next_id), backend);
     after_layout_change(state);
     announce_pane_created(next_id);
 }

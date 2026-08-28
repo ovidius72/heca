@@ -316,6 +316,35 @@ impl HecaApp {
     }
 }
 
+/// Turn a `prefix+Shift+r` outcome into a toast — F009/P062.
+///
+/// Success: a plain "Configuration reloaded" that auto-dismisses. Failure: a **sticky**
+/// "Config reload failed" carrying the parse error and a **Retry** action; `dismiss_after` on
+/// Retry so clicking it clears the error and the retried reload raises a fresh card rather than
+/// mutating this one in place. Both share `dedup_key` so a fixed-then-reloaded config does not
+/// stack toasts.
+fn notify_reload_outcome(outcome: Result<(), heca_config::loader::ConfigError>) {
+    use crate::notification::{Notification, NotificationAction};
+    match outcome {
+        Ok(()) => {
+            Notification::success("Configuration reloaded")
+                .dedup_key("config-reload")
+                .send();
+        }
+        Err(e) => {
+            Notification::danger("Config reload failed")
+                .body(e.to_string())
+                .dedup_key("config-reload")
+                .action(
+                    NotificationAction::new("Retry", heca_view::Intent::new("reload_config"))
+                        .dismiss_after(true),
+                )
+                .sticky()
+                .send();
+        }
+    }
+}
+
 impl ApplicationHandler<AppEvent> for HecaApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_none() {
@@ -387,32 +416,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             if let Some(state) = self.state.as_mut() {
                 state.pending_reload = false;
             }
-            // Tell the user the outcome — F009/P062. `dedup_key` so a fixed-then-reloaded
-            // config replaces its own failure toast in place rather than stacking.
-            match self.reload_config() {
-                Ok(()) => {
-                    crate::notification::Notification::success("Configuration reloaded")
-                        .dedup_key("config-reload")
-                        .send();
-                }
-                Err(e) => {
-                    crate::notification::Notification::danger("Config reload failed")
-                        .body(e.to_string())
-                        .dedup_key("config-reload")
-                        .action(
-                            // `dismiss_after` so Retry clears the error toast — the reload it
-                            // triggers then raises a *fresh* success (or failure) card rather
-                            // than mutating this one in place.
-                            crate::notification::NotificationAction::new(
-                                "Retry",
-                                heca_view::Intent::new("reload_config"),
-                            )
-                            .dismiss_after(true),
-                        )
-                        .sticky()
-                        .send();
-                }
-            }
+            notify_reload_outcome(self.reload_config());
         }
 
         if let Some(ref mut state) = self.state {
@@ -471,4 +475,59 @@ fn main() {
     event_loop
         .run_app(&mut app)
         .expect("Failed to run event loop");
+}
+
+#[cfg(test)]
+mod reload_notification_tests {
+    use super::notify_reload_outcome;
+    use crate::notification::{install_notification_sink, NotificationDraft, NotificationId};
+    use heca_config::loader::ConfigError;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use std::time::Instant;
+
+    fn capture() -> Rc<RefCell<Vec<NotificationDraft>>> {
+        let captured: Rc<RefCell<Vec<NotificationDraft>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = captured.clone();
+        install_notification_sink(move |d| sink.borrow_mut().push(d));
+        captured
+    }
+
+    #[test]
+    fn a_successful_reload_raises_an_auto_dismissing_confirmation() {
+        let seen = capture();
+        notify_reload_outcome(Ok(()));
+        let drafts = seen.borrow();
+        assert_eq!(drafts.len(), 1);
+        let n = drafts[0]
+            .clone()
+            .build(NotificationId::from_raw(1), Instant::now());
+        assert_eq!(n.title, "Configuration reloaded");
+        assert_eq!(n.severity, crate::notification::NotificationSeverity::Success);
+        assert_eq!(n.dedup_key.as_deref(), Some("config-reload"));
+        assert!(n.actions.is_empty());
+        assert!(n.lifecycle.expires(), "success auto-dismisses");
+    }
+
+    #[test]
+    fn a_failed_reload_raises_a_sticky_danger_with_retry() {
+        let seen = capture();
+        notify_reload_outcome(Err(ConfigError::Invalid {
+            path: "config.toml".into(),
+            message: "expected `=` at line 3".into(),
+        }));
+        let drafts = seen.borrow();
+        assert_eq!(drafts.len(), 1);
+        let n = drafts[0]
+            .clone()
+            .build(NotificationId::from_raw(1), Instant::now());
+        assert_eq!(n.title, "Config reload failed");
+        assert_eq!(n.severity, crate::notification::NotificationSeverity::Error);
+        assert!(n.body.as_deref().unwrap().contains("line 3"));
+        assert_eq!(n.dedup_key.as_deref(), Some("config-reload"));
+        assert!(!n.lifecycle.expires(), "failure is sticky");
+        assert_eq!(n.actions.len(), 1);
+        assert_eq!(n.actions[0].intent.action, "reload_config");
+        assert!(n.actions[0].dismiss_after, "Retry clears the toast");
+    }
 }
