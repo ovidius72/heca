@@ -11,8 +11,8 @@
   "contextReadyReason": "",
   "startDate": "",
   "endDate": "",
-  "workDone": "",
-  "workRemaining": "",
+  "workDone": "F009 near-complete: domain model, store, lifecycle, dispatch, ToastStack mount, the notify action, the public Notification::send() builder + single raise door, [settings.notification_system] config (mode + auto_dismiss_ms), producers (pane-created, pane-exited, spawn-failed, config-reload success/failure with Retry), mode=none suppression, mode=system in-app fallback with a one-time notice, and the full test + README pass. Committed and pushed on feat/notification-system-app @ 8517257.",
+  "workRemaining": "T381 (declined-action producer — design settled, fresh-session build). P063 (OS backend — deferred; routing-sink architecture recorded). T223 (provider/plugin error — deferred, no error channel). None of F009 driven in the running app by Antonio. Two toast-card rendering defects filed on heca-57's side (P096/T504, T505).",
   "acceptedDecisions": [],
   "phaseIds": [
     "93379c9a-43b7-43eb-8988-be505251fe79",
@@ -36,6 +36,6 @@
     }
   ],
   "createdAt": "2026-07-03T22:49:39.780Z",
-  "updatedAt": "2026-07-03T22:50:20.126Z",
+  "updatedAt": "2026-08-28T11:32:59.089Z",
   "sessionInfo": []
 }
