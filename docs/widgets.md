@@ -1125,11 +1125,44 @@ stay DRY):
 | `.control_tone() -> Option<Color>` | The inherited control tone, if a parent published one. A control with an intrinsic semantic hue (a `Destructive` button) ignores it. |
 | `.content_color() -> Option<Color>` | The inherited content color, if a parent published one. Widgets that render bare text/glyphs resolve: **own explicit color → this → a theme token** (usually `foreground`). A widget with an intrinsic semantic color (`Badge::danger`) ignores it. |
 | `.with_translate(dx, dy, \|cx\| …)` | Paint the closure's subtree **translated** — the same components, drawn somewhere else. Deliberately narrow: a component is laid out in exactly one place, and its bounds are the contract for drawing *and* hit-testing alike. But a control occasionally has to render content it owns but does not hold — a [`Select`](#select) shows the chosen option in its trigger while that option is away in the open list. Nothing can be in two places, so the trigger draws a second **image** of it. What is drawn this way is **not interactive** (no bounds of its own ⇒ not hit-tested, focusable or hoverable); the control's own bounds are the click target. Never use it to *move* a widget — that is `shift_subtree` + `on_layout`, which keeps bounds honest. |
+| `.surface(rect, id)` | Place content **something else rasterised** — a terminal, an image, a video, a plugin's own canvas — in `rect`. The widget says where; the host owns the texture. `id` is opaque here: nothing about textures, formats or devices crosses into this crate. See [`Host`](#host--work-only-the-host-can-do). |
+| `.backdrop_blur(rect, radius, alpha)` | **Blur whatever is already drawn behind this widget**, within `rect`. Recorded in scene order, so it blurs what came before it and nothing after. `alpha` fades the blurred copy, so a surface arriving fades its backdrop in with itself. A zero radius or alpha records nothing — a host asked to do no work still pays for a full-screen pass. |
 
-`DrawCommand` variants: `Rect`, `Brackets`, `Text`, `Scanline`, `Gradient`, `PushClip`/`PopClip`
-(clip is currently a renderer no-op — embeddable scroll regions wait on it), `Custom`. `Scene`:
-`new()`, `push`, `clear`, `len`, `is_empty`, `iter`, plus the overlay layer
+`DrawCommand` variants: `Rect`, `Brackets`, `Text`, `Scanline`, `PushClip`/`PopClip`, `Host`.
+`Scene`: `new()`, `push`, `clear`, `len`, `is_empty`, `iter`, plus the overlay layer
 (`begin_overlay`/`end_overlay`, `base_layer`/`overlay_layer`).
+
+#### `Host` — work only the host can do
+
+Some content cannot be expressed as rectangles and text, and must not be forced into them. A
+**terminal** is rasterised into a texture because its cell glyphs are the hottest path in the app —
+drawing them as ordinary commands is rejected. A **frosted backdrop** is the frame so far, blurred,
+which is a pass over what is already drawn rather than a shape.
+
+Neither is a special case in this crate. A widget says *what it wants* and where; the host owns the
+GPU and does it — the same bargain `Text` already makes, where the scene names a role and the
+renderer owns the atlas.
+
+Requests are recorded **in scene order with the clip stack resolved**, so a surface inside a
+`ScrollRegion` clips like anything else, and a backdrop blurs exactly what was drawn before it and
+nothing after. They carry the paint context's opacity like every other command, so a surface inside a
+fading overlay fades with it — and a frost fades in with the surface that asked for it, instead of
+holding the session out of focus and snapping sharp in one frame at the end of the fade.
+
+**Native:**
+
+```rust
+// Place content something else rasterised. `id` is opaque here — no texture,
+// format or device crosses into this crate.
+cx.surface(self.base.bounds, self.surface_id);
+
+// Blur whatever is already behind this widget.
+cx.backdrop_blur(self.base.bounds, theme.colors.overlay_frost_radius, 1.0);
+```
+
+**Declarative:** neither is describable, and deliberately so — a described tree names widgets, and
+both of these are a widget's own paint. A plugin rendering its own content gets a surface id from the
+host and places it with one builder on its own widget; it never names a `DrawCommand`.
 
 ### Asking the host to lay the tree out again — `needs_layout`
 

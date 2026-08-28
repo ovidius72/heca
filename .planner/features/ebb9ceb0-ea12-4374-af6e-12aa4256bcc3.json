@@ -4,8 +4,8 @@
   "shortId": "",
   "priority": 0,
   "name": "🧩 Pluggable Chrome Architecture",
-  "description": "Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.\n\n═══ THE RULE THIS FEATURE SERVES — read before any widget or component work ═══\n\nAntonio, 2026-08-28, named as the project's FIRST RULE: **a DOM-like structure you can place anywhere, where no other developer handles clicks, surfaces or mouse-move — it MUST be internal logic, abstracted.** It applies to every widget and component, present and future.\n\nThe test: `Terminal::new(\"name\")` dropped into a dock, an overlay or a plugin panel still selects text, reports mouse to its PTY, scrolls its scrollback and answers `prefix+/`. If placing a component requires the host to teach it anything, the component is not finished. Written into AGENTS.md § 0d.\n\n═══ ARCHITECTURE DOCS — the authority, kept in the repo, not in planner prose ═══\n\n- **`docs/surface-compositor.md`** — THE one to read. AGENTS.md flags it as **required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface**. Its § 0 now carries the whole surfaces-and-input picture: the two silent failures that motivated it, the three questions every agent asks, what the `Overlay` widget already provides, the record-and-perform seam for GPU content, today-vs-target, the two repeatedly-proposed wrong designs, and the plugin plumbing-vs-capability split.\n- **`docs/input-architecture.md`** — now a REDIRECT STUB. Its content was folded into surface-compositor.md § 0.8–0.10 whole, not summarised. Do not add content there.\n- **`docs/hint-architecture.md`** — the picker and letter model. Correct as it stands.\n- **`docs/widgets.md`** — the widget catalog and recipes.\n- **`docs/overlay-design.md`** — overlay/modal design; its pointer-routing section predates the current code, so verify before trusting it.\n\n⚠️ Overlapping docs are how `covers_content` came to be honoured by the action router and ignored by the hint walk, blanking every letter in the app. That is why the input model was folded into the surface doc rather than left beside it.",
-  "descriptionUpdatedAt": "2026-08-28T10:29:14.886Z",
+  "description": "Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.",
+  "descriptionUpdatedAt": "2026-07-01T18:08:37.398Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -42,8 +42,17 @@
     "b4da797f-fbe4-443e-8c8c-68e001f7f48d"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "d92616e1-731c-41a9-8a7b-7bbcf90002a7",
+      "date": "2026-08-28T10:34:40.233Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-08-28T10:29:14.886Z",
+  "updatedAt": "2026-07-13T15:29:44.427Z",
   "sessionInfo": []
 }

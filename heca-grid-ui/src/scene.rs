@@ -314,6 +314,54 @@ pub enum DrawCommand {
     PushClip(Rectangle),
     /// Pop the most recent clip rectangle.
     PopClip,
+    /// **Work only the host can do, recorded in scene order.** See [`HostDraw`].
+    Host(HostCmd),
+}
+
+/// **A request the drawing pass records and the host performs.**
+///
+/// Some content cannot be expressed as rectangles and text, and must not be forced into them:
+///
+/// - a **terminal** is rasterised into a texture, because its cell glyphs are the hottest path in
+///   the app — drawing them as ordinary commands is rejected;
+/// - a **frosted backdrop** is the frame so far, blurred, which is a pass over what is already
+///   drawn rather than a shape.
+///
+/// Neither is a special case in this crate. A widget says *what it wants* and where; the host owns
+/// the GPU and does it. That keeps this library free of graphics types — the same bargain
+/// [`Text`](DrawCommand::Text) already makes, where the scene names a role and the renderer owns the
+/// atlas.
+///
+/// **Recorded in scene order, with the clip stack resolved**, so a surface inside a scroll region
+/// clips like anything else and a backdrop blurs exactly what was drawn before it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HostDraw {
+    /// **Put the surface `id` here.** The host holds the texture and knows nothing else is needed;
+    /// this crate never sees a texture, a format or a device.
+    ///
+    /// Who allocates the id is the host's business. A plugin rendering its own content places it
+    /// with one builder on its own widget — no host-private type, no registry.
+    Surface {
+        /// Opaque to this crate: the host maps it to whatever it rasterised.
+        id: u64,
+    },
+    /// **Blur whatever has been drawn behind me, here.** `radius` is in logical pixels.
+    Backdrop {
+        radius: f32,
+    },
+}
+
+/// A [`HostDraw`] and the box it applies to.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HostCmd {
+    pub draw: HostDraw,
+    /// Where it goes, in logical pixels, already placed by the paint context.
+    pub rect: Rectangle,
+    /// How strongly it composites, `0.0..=1.0`. Carries the paint context's
+    /// [opacity](crate::PaintCx::with_opacity) like every other command, so a surface inside a
+    /// fading overlay fades with it — and a frost fades in with the surface that asked for it,
+    /// rather than holding the session out of focus and snapping sharp in one frame.
+    pub alpha: f32,
 }
 
 /// A filled/rounded rectangle.

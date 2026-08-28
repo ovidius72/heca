@@ -11,8 +11,8 @@ use crate::drag::{DragItemId, DropSide};
 use crate::hint::DeclaredAction;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{
-    Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, ScanlineCmd, Scene, Shadow, TextAlign,
-    TextCmd, TextStyle,
+    Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, RectCmd, ScanlineCmd, Scene,
+    Shadow, TextAlign, TextCmd, TextStyle,
 };
 use crate::style::Style;
 use crate::theme::Theme;
@@ -1364,6 +1364,16 @@ fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangl
         ..s
     };
     match cmd {
+        DrawCommand::Host(h) => DrawCommand::Host(HostCmd {
+            rect: place(h.rect),
+            // A blur radius is a distance, so it scales with everything else; a surface id and an
+            // alpha are not distances.
+            draw: match h.draw {
+                HostDraw::Backdrop { radius } => HostDraw::Backdrop { radius: radius * k },
+                other => other,
+            },
+            ..h
+        }),
         DrawCommand::Rect(r) => DrawCommand::Rect(RectCmd {
             rect: place(r.rect),
             radius: r.radius * k,
@@ -1399,6 +1409,9 @@ fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangl
 fn fade_command(cmd: DrawCommand, a: f32) -> DrawCommand {
     let dim = |c: Color| c.with_alpha((c.a as f32 * a).round().clamp(0.0, 255.0) as u8);
     match cmd {
+        // Host work composites at its own strength times the context's opacity, so a surface or a
+        // frost inside a fading overlay fades with it.
+        DrawCommand::Host(h) => DrawCommand::Host(HostCmd { alpha: h.alpha * a, ..h }),
         DrawCommand::Rect(r) => DrawCommand::Rect(RectCmd {
             fill: dim(r.fill),
             border: r.border.map(|b| Border { color: dim(b.color), ..b }),
@@ -1724,6 +1737,41 @@ impl<'a> PaintCx<'a> {
     }
 
     /// Queue a rounded rectangle with optional border and glow.
+    /// **Place content something else rasterised** — a terminal, an image, a video, a plugin's own
+    /// canvas — in `rect`.
+    ///
+    /// This widget says where; the host owns the texture and does the drawing. `id` is opaque here:
+    /// nothing about textures, formats or devices crosses into this library. See
+    /// [`HostDraw`](crate::scene::HostDraw).
+    pub fn surface(&mut self, rect: Rectangle, id: u64) {
+        if self.culled(rect) {
+            return;
+        }
+        let rect = self.placed(rect);
+        self.emit(DrawCommand::Host(HostCmd {
+            draw: HostDraw::Surface { id },
+            rect,
+            alpha: 1.0,
+        }));
+    }
+
+    /// **Blur whatever is already drawn behind this widget**, within `rect`.
+    ///
+    /// Recorded in scene order, so it blurs exactly what came before it and nothing of what comes
+    /// after. `alpha` fades the blurred copy — a surface arriving fades its backdrop in with itself,
+    /// rather than holding the session out of focus and snapping sharp in one frame at the end.
+    pub fn backdrop_blur(&mut self, rect: Rectangle, radius: f32, alpha: f32) {
+        if radius <= 0.0 || alpha <= 0.0 || self.culled(rect) {
+            return;
+        }
+        let rect = self.placed(rect);
+        self.emit(DrawCommand::Host(HostCmd {
+            draw: HostDraw::Backdrop { radius },
+            rect,
+            alpha,
+        }));
+    }
+
     pub fn rect(
         &mut self,
         rect: Rectangle,
