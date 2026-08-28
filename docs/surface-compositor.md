@@ -1,14 +1,189 @@
 # Surface compositor & the layered KeyHint model
 
-> **Status:** design spec / target architecture. The universal KeyHint picker
-> (`prefix+/`) is the **first consumer**; painting z-order and input routing can adopt the
-> same tree later. Until this lands, hint visibility is handled by three interim geometric
-> filters (viewport / sidebar-occlusion / pane z-order) in `handle_hint_pick` — this
-> architecture **replaces** them with one uniform rule.
+This document defines how on-screen surfaces are layered, how that layering decides what is
+interactive, and **how input reaches a surface**. It is the contract for adding any **layer,
+surface, overlay, modal or button** — read it before touching one.
 
-This document defines how on-screen surfaces are layered and how that layering decides
-what is interactive (today: which KeyHint keycaps are shown). It is the contract for
-adding new **layers, surfaces, and buttons** — read it before touching any of them.
+It absorbs what was `docs/input-architecture.md`, so there is one description of this rather than
+two. `docs/hint-architecture.md` covers the picker and stays as it is: where it says a pick
+introduces "no second dispatch path", that is about the pick and is correct — it is *pointer* input
+that has sixteen paths, not the picker.
+
+---
+
+## 0. Surfaces and input — read this first
+
+### 0.1 The short version
+
+**Everything on screen should be a node in one tree.** Chrome, panes, overlays, toasts, the exposé, a
+plugin's panel. Nesting is real, ordering is tree position, and one walk delivers input to all of it.
+
+**Today that is half true.** Chrome and panes live in the tree. Overlays live in a separate registry.
+Input only walks the tree, so anything in the registry receives **no pointer events at all**.
+
+### 0.2 Why it matters — two silent failures, two days apart
+
+Both came from one new surface, in two different subsystems, and neither produced an error.
+
+**A toast's close button did nothing.** The notification stack was registered as a layer. Input walks
+the tree; the layer is not in it. So a click on the × found nothing and fell through to the pane
+behind. Hover did the same, which is why hovering a toast highlighted the pane underneath it.
+
+**`prefix+/` lettered only the toast.** The hint walk treated every visible layer's box as something
+that hides what is beneath it. A toast stack fills the viewport — not because it covers the screen,
+but because that is how it *positions* its cards in a corner — so it hid every letter in the app. The
+layer had declared `covers_content: false`. The action router honoured that declaration; the hint
+walk did not.
+
+The shape is the same both times: **rebuild, layout, paint, hints and input are five separate walks
+over the surfaces, each with its own idea of what a surface is, and nothing checks they agree.** A
+new surface must be got right in all five, and gets no error when it is not.
+
+### 0.3 The three questions
+
+**1. "How do I put something on screen?" — Place it in the tree.** It is a child, like any widget.
+
+You will find code that does this instead:
+
+```rust
+let id = state.layers.reserve_id();
+state.layers.insert(id, None, LayerKind::Persistent, false, false, root);
+state.my_layer_id = Some(id);
+```
+
+That is the registry path. It hands ownership away, requires `state` — which a plugin does not have
+and should not — and asks you three questions before you can put a box on screen. **It is being
+removed. Do not add to it.**
+
+**2. "How do I make it receive clicks?" — You don't.** A node in the tree receives pointer events
+from the same capture → target → bubble walk every widget uses (AGENTS.md § 0c). If your component
+is in the tree and not receiving events, that is a bug in the walk, not something to work around.
+
+**Do not write a dispatch function for your surface.** There are 16 already — 8 chrome, 4 pane
+header, 3 pane viewport, 1 modal — and they exist because each new surface added its own. A 17th is
+the defect, not the fix.
+
+**3. "How do I stop clicks reaching what's behind?" — `blocking`, on `Overlay`.** Blocking paints a
+scrim and swallows every pointer event. Non-blocking lets a press *beside* the panel fall through
+while a press *on* it is handled normally — exactly what an ambient surface like a toast needs. A
+property you set, not a mechanism you build.
+
+### 0.4 The `Overlay` widget already does all of it
+
+There are two things called "overlay" here: the **`Overlay` widget** in `heca-grid-ui`, and the
+**layer registry** in the app. The widget already implements everything the registry provides:
+
+| what a surface needs | `Overlay` already has |
+|---|---|
+| fill the viewport, place a panel in it | `Pct(1.0)` fill with real layout, so every descendant gets true bounds |
+| swallow input (modal) | `blocking(true)` — scrim plus swallow |
+| let input fall through | `blocking(false)` — a press beside it reaches the page behind |
+| show and hide | `open` / `hide` / `toggle`, or bind `open_signal` |
+| arrive and leave | `Presence` and the `Animation` trait |
+| hold the keyboard while open | `open` bound to `Base::focused`, so keys arrive down the focus chain |
+| occlusion geometry | `overlay_occludes` — whole viewport when blocking, the panel alone when not |
+| **nest inside another overlay** | already works — a `Select` dropdown in a modal body composites above it |
+
+**So the registry adds exactly one thing: reaching a surface that is not in the chrome tree.** That
+is the whole difference, and `P097(F003)` removes it.
+
+**The toast should have been an `Overlay`** — non-blocking, placed in the tree. Every behaviour it
+needed was already written and tested.
+
+### 0.5 The seam: the drawing pass records, the host performs
+
+Some content cannot be drawn with rectangles and text.
+
+- A **terminal** is rasterised by the GPU into a texture, because its cell glyphs are the hottest
+  path in the app. Drawing them as ordinary scene commands is **rejected** and must not be attempted.
+- A **frosted backdrop** is the frame so far, blurred. That is not a shape; it is a GPU pass over
+  what has already been drawn.
+
+**Neither is a special case in the drawing pass.** A node *records a request* — "my picture belongs
+in this box", "blur what is behind me here" — and the host performs the GPU work afterwards. Decided
+for the terminal, then found to be exactly what the frost needs; two unrelated features needing one
+seam is why it is the right shape.
+
+**The alternative was rejected:** giving the drawing pass a GPU encoder and target. It would hand a
+function that describes *what to draw* a second job — owning GPU pass lifetime — force every caller
+to supply one including the showcase, which has no GPU pass of its own, and drag `wgpu` types across
+a crate boundary a plugin composing a tree must never see.
+
+### 0.6 Today vs after `P097(F003)`
+
+| | today | after |
+|---|---|---|
+| where a surface lives | chrome tree **or** the layer registry | the tree |
+| how nesting is stored | parent links in a flat list, re-derived every frame | child position |
+| who owns a surface's root | the registry | its parent |
+| how input reaches it | 16 per-surface functions; registry surfaces get none | one walk from the root |
+| show / hide by name | a registry lookup | find the node by its identity, flip its `open` signal |
+| what the registry is | a parallel tree, ~900 lines | a phone book: name → node |
+
+### 0.7 If you must add a surface before that lands
+
+Prefer the tree. If you genuinely cannot reach it — check, because the answer is usually that you
+can — use the registry and **be aware your surface receives no pointer events until P097 lands**.
+Say so in a comment where you mount it. Do not work around it by adding a dispatch function.
+
+### 0.8 The target model — four passes, one tree
+
+There is **one retained tree** per window. Everything visible is a node in it: the chrome is a
+subtree, an overlay (a toast stack, a menu, a dialog, a plugin panel) is a positioned node, a modal
+is a node that **swallows** what it does not itself handle, a pane's header is a child of that pane,
+and the terminal viewport is a **leaf whose paint is special** — it still draws through the GPU
+terminal path, but for layout, hit-testing and event delivery it is an ordinary leaf.
+
+Given that tree the host does four things per frame, each **one walk**:
+
+| pass | what it does |
+|---|---|
+| layout | size and place every node |
+| paint | draw every node (the terminal leaf swaps in its GPU path here) |
+| input | deliver each device event: capture down to the target, bubble back up |
+| hints | collect the `prefix+/` letter targets |
+
+`heca-grid-ui` already provides the input walk — `dispatch(node, ev)` in
+`heca-grid-ui/src/component.rs` is DOM-shaped and complete. **The host's job is to own one tree and
+call it once per event**, not to call it once per root and arbitrate between roots itself.
+
+### 0.9 Two designs that get proposed repeatedly, and why both are wrong
+
+Stated so they are not proposed a third time.
+
+**Not: a second dispatcher for "overlay" events.** The tempting local fix, when an overlay receives
+no input, is to add a dispatch function for that kind of overlay beside the one for modals. It does
+not scale — the next ambient surface needs a third, then a fourth. Each is a hand-written enumeration
+of which roots exist and in what order, and **each new surface must be added to every one of them**:
+the hint walk, the visibility check, the letter assignment. A miss is not a compile error; it is a
+surface that is painted and dead to the mouse, with nothing reporting the gap.
+
+**Not: a host-maintained list of surfaces.** The cleaner-looking version collapses those functions
+into one struct — `{ root, rect, z, modal }` — and one dispatch looping a `Vec<Surface>`. The
+duplication goes, but **a list the host maintains** remains: to make a widget receive input, a
+developer must know it has to become a `Surface` and enrol it. That enrolment is a registry, and a
+registry is the signature of a missing API — the thing that should be automatic becomes a rule every
+caller must remember. The framework already walks children automatically. Put the widget **in the
+tree**, where the existing walk finds it.
+
+**What one tree buys.** Adding a surface becomes **adding a child**. No new dispatch function, no new
+match arm, no new hint-walk case. Pointer input, keyboard, hint letters, layout and paint all arrive
+from the traversal every other node already gets. The showcase and the app converge, because neither
+has any bespoke wiring left in which to differ — a widget behaves the same mounted in a demo, in the
+chrome, or in a plugin's overlay.
+
+### 0.10 Plugin overlays — plumbing and capability are different questions
+
+**The plumbing half follows directly.** Once input is a tree walk, a *described* overlay contributed
+by a plugin is just another node: pointer input, keyboard, hint letters, layout and paint, with
+nothing the host has to be taught.
+
+**The capability half is separate and larger.** A plugin can only build an overlay from widgets that
+have a declarative form. Several do not — including `CardGrid`, which the exposé's cursor is built
+on — and some (`ChromeRegion`, `Pane`, `FocusScope`) are host-only by design and never will. Until an
+overlay of the app's own is built purely through the described path, **"a plugin can add an overlay"
+describes the intended architecture, not a demonstrated fact.** Declarative coverage, plus one real
+overlay rebuilt through it, are the proof.
 
 ---
 
@@ -155,16 +330,23 @@ stay. A floating pane behaves identically (it is simply higher-z than the tiled 
 
 ### …a new button
 1. Build it as a normal widget in **some surface's** retained tree.
-2. Give it its action, then register the intent and attach it:
+2. Give it its action and say what a pick does — **one line on the widget itself**:
    ```rust
-   let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
-   let button = IconButton::new(icon).hint_target(hint_id).on_click(/* same intent */);
+   let button = IconButton::new(icon)
+       .on_click(/* the intent */)
+       .on_hint(/* what prefix+/ does to it — usually the same intent */);
    ```
    (Tooltip + shortcut come automatically — see AGENTS.md "Chrome buttons → action,
    tooltip, KeyHint".)
 3. **Do not** set any layer/z on the button. It inherits its layer from the surface it
-   lives in. If it needs `FocusPaneThenAction` (active-targeted, like zoom/float), register
-   that intent instead — same as pane-header buttons.
+   lives in. If it needs `FocusPaneThenAction` (active-targeted, like zoom/float), that is the
+   intent you attach — same as pane-header buttons.
+
+   ⚠️ **`hints.register(...)` and `.hint_target(id)` no longer exist.** `HintTargetRegistry`,
+   `HintTargets`, `HintTargetId`, `Base::hint_target` and `named_press` were deleted under Rule Zero
+   (F004/P084/T399): a plugin could construct none of them. A pick is now one builder on the widget,
+   collected out of the laid-out tree. Nothing is registered, so nothing has to be un-registered when
+   a tree rebuilds. Do not reintroduce any of those names.
 
 That's it. Because the button lives in a surface, the resolver assigns its layer and its
 visibility for free.
@@ -268,12 +450,20 @@ these reads the same structure instead of re-deriving order per feature.
 
 ---
 
-## 9. Dynamic layers — registry, actions, plugins (DRAFT)
+## 9. Dynamic layers — registry, actions, plugins (SHIPPED, then SUPERSEDED)
 
-> **Status: draft for review.** §§1–8 are implemented (hints consume a stack assembled in
-> `active_hint_targets`). This section promotes that hand-assembled stack to a **persistent,
-> registerable layer stack** so layers can be added dynamically — from Rust **and** from
-> plugins — and so overlays/modals are hintable like everything else.
+> ⚠️ **This section describes the layer registry, which is being removed.** It was built and it
+> works, but it turned out to be a **parallel tree implementation** — it stores parent links and
+> re-derives nesting every frame, duplicating what child position gives for free, and every walk over
+> it is a separate implementation free to disagree with the others. That is what produced both
+> failures in § 0.2.
+>
+> **Read § 0 first.** A surface belongs in the tree; `Overlay` already provides everything the
+> registry does except top-level reach (§ 0.4). `P097(F003)` reduces the registry to a name → node
+> lookup.
+>
+> Kept because the app still works this way today and you will meet it in the code. **Do not build
+> anything new on it** — see § 0.7 if you have no choice.
 
 ### The gap this closes
 Two things drive it:

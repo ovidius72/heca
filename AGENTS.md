@@ -285,6 +285,47 @@ not add an intent, a policy arm, a registry or a host-side key match until you h
 cannot do it. Full model: `docs/widgets.md` → "The event model" and "The keyboard — delivery follows
 focus".
 
+### 0d. ⭐ THE FIRST RULE — a component owns its own input
+
+**Put it anywhere. Handle nothing.**
+
+A widget or component handles its own mouse, hover, selection, scrolling and keys **internally**.
+Whoever places it constructs it, puts it in the tree, and writes no routing, no hit-testing, no
+surface registration and no ordering.
+
+```rust
+Overlay::new().blocking(false).child(
+    Pane::new("editor").child(Terminal::new("shell"))
+)
+```
+
+That must work — in a dock, in an overlay, in a plugin's panel — with the terminal still selecting
+text, reporting mouse to its PTY, scrolling its scrollback and answering `prefix+/`. **If placing a
+component requires the host to teach it anything, the component is not finished.**
+
+Every widget and component, present and future. It is not advice.
+
+**The three questions, and they are always the same three:**
+
+1. *"How do I put this on screen?"* → Place it in the tree. Do not register it.
+2. *"How do I make it receive clicks?"* → You don't. The tree walk delivers them.
+3. *"How do I stop clicks reaching what's behind?"* → `blocking(true)` swallows; `blocking(false)`
+   lets presses beside it fall through. A property, not a mechanism you build.
+
+If your answer to any of them involves the host, a registry, an id you keep, or a function added
+beside an existing one — **stop.** You are about to build the second path this project forbids.
+
+⚠️ **THE CODE DOES NOT MATCH THIS YET.** There are two places a thing on screen can live: the
+retained chrome tree, and a separate layer registry that stores parent links and re-derives nesting
+every frame. The input walk reads only the first. That is why a notification toast received no mouse
+events at all, and why `prefix+/` once lettered only the toast and nothing else.
+
+**`P097(F003)` removes it.** Until then, read
+[`docs/surface-compositor.md`](docs/surface-compositor.md) — **required** — before adding any layer,
+surface, overlay, modal, exposé, or a button on a new surface. It says what is true today, what is
+being removed, and which path to use meanwhile. **Do not add a per-surface dispatch function:** there
+are already 16 and they are being deleted.
+
 ### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase
 
 - **Before building ANY UI**, look at what already exists:
