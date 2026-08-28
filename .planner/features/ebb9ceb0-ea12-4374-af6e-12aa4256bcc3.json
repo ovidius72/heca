@@ -41,17 +41,17 @@
     "51d44c9f-a378-4c24-80e6-3eaa7369762d"
   ],
   "dependsOn": [],
-  "statusLog": [],
-  "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-08-27T13:59:40.197Z",
-  "sessionInfo": [
+  "statusLog": [
     {
-      "sessionId": "mcp-process:f2720c67-3db6-4507-82df-f5b669c10418",
-      "createdAt": "2026-08-27T15:02:47.532Z"
-    },
-    {
-      "sessionId": "01f86c94-7f92-4e8a-b8bd-b845e9032ae7",
-      "createdAt": "2026-08-27T09:54:28.651Z"
+      "id": "6a45147a-fad0-44a2-a0e7-2c859b353165",
+      "date": "2026-08-27T20:14:33.194Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
     }
-  ]
+  ],
+  "createdAt": "2026-07-01T18:08:37.398Z",
+  "updatedAt": "2026-07-13T15:29:44.427Z",
+  "sessionInfo": []
 }

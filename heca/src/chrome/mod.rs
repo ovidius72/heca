@@ -1224,12 +1224,14 @@ mod tests {
         let mut tree = WorkspaceTree::new();
         tree.workspaces.push(WorkspaceEntry {
             ws_idx: 0,
+            ws_id: heca_core::layout::WorkspaceId(0),
             name: "ws1".into(),
             custom_name: None,
             collapsed: false,
             state: SidebarItemState::Active,
             columns: vec![ColumnEntry {
                 col_idx: 0,
+                col_id: heca_core::layout::ColumnId(0),
                 collapsed: false,
                 panes: vec![PaneEntry {
                     pane_id: heca_core::layout::PaneId(pane_id),
@@ -1527,6 +1529,7 @@ mod tests {
                 None,
                 true,
                 ColumnWidth::Proportion(0.5),
+                heca_core::layout::ColumnId(10),
             );
             ws.floating_panes
                 .push(heca_core::layout::workspace::FloatingPane {
@@ -1608,6 +1611,7 @@ mod tests {
                 None,
                 true,
                 ColumnWidth::Proportion(0.5),
+                heca_core::layout::ColumnId(10),
             );
         }
 

@@ -528,6 +528,11 @@ mod tests {
         types::{LayoutOptions, SessionId, Size},
     };
 
+    /// **The initial pane draws from the session counter, so its id is never handed out again.**
+    ///
+    /// Asserted as "the counter has moved past it" rather than "by exactly one": creating a pane
+    /// also creates the column holding it, and a column id is allocated from the same counter now
+    /// that it is a real identity rather than a number derived from the column count.
     #[test]
     fn initial_pane_consumes_session_id_counter() {
         let mut session = Session::new(
@@ -540,6 +545,6 @@ mod tests {
         let first = add_initial_pane(&mut session);
         let second = session.next_id();
 
-        assert_eq!(second, first.0 + 1);
+        assert!(second > first.0, "the counter must never reissue {first:?}");
     }
 }

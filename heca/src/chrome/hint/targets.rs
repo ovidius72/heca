@@ -104,6 +104,24 @@ fn pick_source(
     }
 }
 
+/// **What a layer hides from the letters beneath it.**
+///
+/// `covers_content` is the layer's own declaration and the action router already acts on it;
+/// occlusion is the same question asked about letters, so it is answered from the declaration
+/// rather than assumed from the root's box.
+///
+/// An ambient overlay fills the viewport and draws in a corner of it: a toast stack is `Pct(1.0)`
+/// square because it *positions* its cards on screen, not because it covers the screen. Reading its
+/// bounds as an occluder blanked every letter in the app for as long as the stack was mounted —
+/// chrome, panes and all — leaving letters only on the toast itself.
+fn layer_occluders(covers_content: bool, bounds: Rectangle) -> Vec<Rectangle> {
+    if covers_content {
+        vec![bounds]
+    } else {
+        Vec::new()
+    }
+}
+
 /// The candidates the **one visibility rule** leaves — context activation, then geometric occlusion
 /// (`docs/surface-compositor.md` § 3), and nothing about policy.
 ///
@@ -143,10 +161,18 @@ fn visible_hint_targets(
     //    and `resolve_hint_layers` stops there — which is what suppresses the chrome and the panes
     //    beneath an exposé.
     for layer in state.layers.visible_front_to_back() {
-        let bounds = layer.root().base().bounds;
+        // **A layer hides what it says it hides.** `covers_content` is the declaration the action
+        // router already acts on, and occlusion is the same question asked about letters, so it is
+        // read here rather than assumed from the root's box.
+        //
+        // An ambient overlay fills the viewport and draws in a corner of it: a toast stack is
+        // `Pct(1.0)` square because it *positions* its cards on screen, not because it covers the
+        // screen. Taking its bounds as an occluder blanked every letter in the app for as long as
+        // the stack was mounted — chrome, panes and all — leaving letters only on the toast.
+        let occluders = layer_occluders(layer.covers_content, layer.root().base().bounds);
         layers.push(HintLayer {
             targets: hints_of(&HintSurface::Layer(layer.id), layer.root()),
-            occluders: vec![bounds],
+            occluders,
             modal: layer.modal,
         });
     }
@@ -237,4 +263,35 @@ fn hints_of(
         .into_iter()
         .map(|(path, bounds)| (HintTarget::new(surface, root, path), bounds))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::layer_occluders;
+    use heca_core::layout::{Point, Rectangle, Size};
+
+    fn viewport() -> Rectangle {
+        Rectangle::new(Point::new(0.0, 0.0), Size::new(1412.0, 800.0))
+    }
+
+    /// **An ambient overlay hides nothing** (F009 toast stack, found 2026-08-27).
+    ///
+    /// A toast stack sizes itself to the whole viewport because that is how it *positions* its
+    /// cards — top-right, bottom-left. It covers a corner and declares `covers_content: false`.
+    /// Taking its root box as an occluder suppressed every letter in the app for as long as the
+    /// stack was mounted, so `prefix+/` lettered the toast and nothing else — no chrome, no panes.
+    #[test]
+    fn a_layer_that_does_not_cover_content_occludes_nothing() {
+        assert!(
+            layer_occluders(false, viewport()).is_empty(),
+            "a viewport-sized ambient overlay must not hide the letters beneath it",
+        );
+    }
+
+    /// The other half: a layer that *does* claim the content still hides what is under it, which is
+    /// what suppresses chrome and pane letters beneath an exposé or a modal.
+    #[test]
+    fn a_layer_that_covers_content_occludes_its_own_box() {
+        assert_eq!(layer_occluders(true, viewport()), vec![viewport()]);
+    }
 }

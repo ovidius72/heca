@@ -87,8 +87,17 @@ impl std::str::FromStr for RegionId {
 /// focused pane (`active_pane`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SidebarSelection {
-    Workspace { ws_idx: usize },
-    Column { ws_idx: usize, col_idx: usize },
+    /// `ws_idx` says where it sits and moves when a neighbour is inserted; `ws_id` is what it *is*,
+    /// and is what a key is built from. Both, because an action still acts on a position.
+    Workspace {
+        ws_idx: usize,
+        ws_id: heca_core::layout::WorkspaceId,
+    },
+    Column {
+        ws_idx: usize,
+        col_idx: usize,
+        col_id: heca_core::layout::ColumnId,
+    },
     Pane { pane_id: PaneId },
     FloatingPane { pane_id: PaneId, ws_idx: usize },
 }

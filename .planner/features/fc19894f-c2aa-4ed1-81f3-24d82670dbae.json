@@ -11,8 +11,8 @@
   "contextReadyReason": "",
   "startDate": "",
   "endDate": "",
-  "workDone": "Notification domain model, store, lifecycle, dispatch, ToastStack mount, the name-keyed notify action, the public Notification::send() builder + single raise door, a first real producer (pane creation, with a Focus action), and the [settings.notification_system] auto_dismiss_ms config knob. All code-complete and green.",
-  "workRemaining": "Antonio's drive-through of everything raised so far. The toast's mouse interaction (×, action buttons, hover) is blocked on P097 (One Tree — the input architecture), a new phase: the app has no pointer-input pass for ordinary layers. Then the per-severity lifetime decision (T503), the closure action form, config-reload producers (P062), tests/README (P057), the remaining P055 producers, and the deferred OS backend (P063).",
+  "workDone": "",
+  "workRemaining": "",
   "acceptedDecisions": [],
   "phaseIds": [
     "93379c9a-43b7-43eb-8988-be505251fe79",
@@ -26,17 +26,8 @@
     "b4da797f-fbe4-443e-8c8c-68e001f7f48d"
   ],
   "dependsOn": [],
-  "statusLog": [
-    {
-      "id": "a94ca1a1-b795-4daa-81cb-5e8a331e370c",
-      "date": "2026-08-27T19:42:06.814Z",
-      "fromStatus": "planned",
-      "toStatus": "in-progress",
-      "title": "planned → in-progress",
-      "description": ""
-    }
-  ],
+  "statusLog": [],
   "createdAt": "2026-07-03T22:49:39.780Z",
-  "updatedAt": "2026-08-27T19:44:50.728Z",
+  "updatedAt": "2026-07-03T22:50:20.126Z",
   "sessionInfo": []
 }

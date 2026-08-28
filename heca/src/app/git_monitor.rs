@@ -381,6 +381,7 @@ mod tests {
             None,
             true,
             ColumnWidth::Proportion(0.5),
+            heca_core::layout::ColumnId(id.0),
         );
         session
     }

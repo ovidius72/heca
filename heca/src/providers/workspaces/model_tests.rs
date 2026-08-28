@@ -281,7 +281,7 @@ fn test_toggle_expand_clamps_cursor() {
         .iter()
         .enumerate()
         .rposition(|(_, i)| {
-            matches!(i, WorkspaceRow::Workspace { ws_idx } if *ws_idx == 0)
+            matches!(i, WorkspaceRow::Workspace { ws_idx, .. } if *ws_idx == 0)
                 || matches!(i, WorkspaceRow::Column { ws_idx, .. } if *ws_idx == 0)
                 || matches!(i, WorkspaceRow::Pane { pane_id } if pane_id.0 <= 4)
         })
@@ -320,7 +320,7 @@ fn test_column_expand_collapse() {
 
     // Collapse the column.
     tree.toggle_expand(&chrome.workspaces);
-    if let WorkspaceRow::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
+    if let WorkspaceRow::Column { ws_idx, col_idx: c, .. } = tree.flat_items[tree.cursor] {
         assert!(
             tree.workspaces[ws_idx].columns[c].collapsed,
             "column should be collapsed"
@@ -329,7 +329,7 @@ fn test_column_expand_collapse() {
 
     // Expand it back.
     tree.toggle_expand(&chrome.workspaces);
-    if let WorkspaceRow::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
+    if let WorkspaceRow::Column { ws_idx, col_idx: c, .. } = tree.flat_items[tree.cursor] {
         assert!(
             !tree.workspaces[ws_idx].columns[c].collapsed,
             "column should be expanded"
@@ -355,7 +355,7 @@ fn test_collapse_workspace_moves_cursor_to_workspace_row() {
 
     assert!(matches!(
         tree.current_item(),
-        Some(WorkspaceRow::Workspace { ws_idx }) if *ws_idx == 0
+        Some(WorkspaceRow::Workspace { ws_idx, .. }) if *ws_idx == 0
     ));
 }
 
@@ -374,7 +374,7 @@ fn test_collapse_column_moves_cursor_to_column_row() {
         .flat_items
         .iter()
         .find_map(|item| match item {
-            WorkspaceRow::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
+            WorkspaceRow::Column { ws_idx, col_idx, .. } => Some((*ws_idx, *col_idx)),
             _ => None,
         })
         .expect("should have a column row");
@@ -387,6 +387,7 @@ fn test_collapse_column_moves_cursor_to_column_row() {
         Some(WorkspaceRow::Column {
             ws_idx: item_ws,
             col_idx: item_col,
+            ..
         }) if *item_ws == ws_idx && *item_col == col_idx
     ));
 }
@@ -409,14 +410,14 @@ fn test_toggle_workspace_collapsed_by_index_updates_cursor() {
     assert!(tree.workspaces[0].collapsed);
     assert!(matches!(
         tree.current_item(),
-        Some(WorkspaceRow::Workspace { ws_idx }) if *ws_idx == 0
+        Some(WorkspaceRow::Workspace { ws_idx, .. }) if *ws_idx == 0
     ));
 
     toggle_ws(&mut tree, &chrome, 0);
     assert!(!tree.workspaces[0].collapsed);
     assert!(matches!(
         tree.current_item(),
-        Some(WorkspaceRow::Workspace { ws_idx }) if *ws_idx == 0
+        Some(WorkspaceRow::Workspace { ws_idx, .. }) if *ws_idx == 0
     ));
 }
 
@@ -435,7 +436,7 @@ fn test_toggle_column_collapsed_by_index_updates_cursor() {
         .flat_items
         .iter()
         .find_map(|item| match item {
-            WorkspaceRow::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
+            WorkspaceRow::Column { ws_idx, col_idx, .. } => Some((*ws_idx, *col_idx)),
             _ => None,
         })
         .expect("should have a column row");
@@ -448,6 +449,7 @@ fn test_toggle_column_collapsed_by_index_updates_cursor() {
         Some(WorkspaceRow::Column {
             ws_idx: item_ws,
             col_idx: item_col,
+            ..
         }) if *item_ws == ws_idx && *item_col == col_idx
     ));
 
@@ -458,6 +460,7 @@ fn test_toggle_column_collapsed_by_index_updates_cursor() {
         Some(WorkspaceRow::Column {
             ws_idx: item_ws,
             col_idx: item_col,
+            ..
         }) if *item_ws == ws_idx && *item_col == col_idx
     ));
 }
@@ -610,4 +613,50 @@ fn no_selection_is_not_a_request_to_move() {
     let before = tree.cursor;
     tree.apply_nav_selection(None);
     assert_eq!(tree.cursor, before);
+}
+
+/// **A row keeps its name when a column is inserted before it** — the whole point of keying rows
+/// by identity rather than position (F003/P082/T458).
+///
+/// Keys used to be built from enumerated positions (`ws:<idx>`, `col:<ws>:<idx>`), so splitting
+/// inserted a column and renamed every row after it — for rows that had not moved and had not
+/// changed. Everything kept on that name reset at once: the keyboard cursor, the right-click
+/// target, the drag identity and the remembered hint letter.
+#[test]
+fn a_row_keeps_its_key_when_a_column_is_inserted_before_it() {
+    let mut session = Session::new(
+        SessionId(1),
+        Size::new(1280.0, 800.0),
+        1.0,
+        heca_core::layout::types::LayoutOptions::default(),
+    );
+    for i in 1..=2u64 {
+        session.add_pane(LayoutPane::new(PaneId(i), format!("Pane{i}")), None, true);
+    }
+
+    let key_of_last = |session: &Session| {
+        let mut tree = WorkspaceTree::new();
+        tree.sync_from_session(session, None, None, &[]);
+        let ws = &tree.workspaces[0];
+        let last = ws.columns.last().expect("a column");
+        (
+            super::workspace_key(ws.ws_id),
+            super::column_key(last.col_id),
+        )
+    };
+
+    let before = key_of_last(&session);
+
+    // Split: a new column arrives *in front of* the last one, so every position after it shifts.
+    session.add_pane(LayoutPane::new(PaneId(9), "Pane9"), None, true);
+    if let Some(ws) = session.active_workspace_mut() {
+        let inserted = ws.scrolling.columns.pop().expect("the new column");
+        ws.scrolling.columns.insert(0, inserted);
+    }
+
+    let after = key_of_last(&session);
+    assert_eq!(
+        after, before,
+        "the row did not move, so its name must not change",
+    );
 }

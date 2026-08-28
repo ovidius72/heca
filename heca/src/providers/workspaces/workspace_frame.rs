@@ -35,6 +35,8 @@ impl WorkspaceFrame<'_> {
         let ws = self.workspace;
         let theme = seams.theme;
         let ws_idx = ws.ws_idx;
+        // Its identity, for keys; `ws_idx` stays for the actions, which act on a position.
+        let ws_id = ws.ws_id;
         let pane_count =
             ws.columns.iter().map(|c| c.panes.len()).sum::<usize>() + ws.floating_panes.len();
         // A workspace is "active" iff it hosts the active pane.
@@ -78,7 +80,7 @@ impl WorkspaceFrame<'_> {
         // landed on — reads exactly that. The workspace header pushed its key into the signal list
         // and never told the widget, so the hit-test found nothing there: right-clicking a pane or
         // a column opened its menu, a workspace opened none (Antonio, 2026-08-05).
-        dock = dock.key(workspace_key(ws_idx));
+        dock = dock.key(workspace_key(ws_id));
         // The workspace row's own menu, declared like the other two. The bug in the comment above
         // is the reason this phase exists: a menu resolved from a *position* needs a declaration
         // nobody remembers to write, and this one is the declaration itself.
@@ -104,7 +106,7 @@ impl WorkspaceFrame<'_> {
         reg.signals.ws_previous.push((ws_idx, dock.previous_state()));
         reg.signals.row_nav.push((
             seams.mount.to_string(),
-            workspace_key(ws_idx),
+            workspace_key(ws_id),
             dock.nav_state(),
         ));
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
@@ -137,7 +139,7 @@ impl WorkspaceFrame<'_> {
             // and the dock keeps the keyboard, exactly as it does on a pane row.
             .on_hint(crate::chrome::picks(
                 seams.mount,
-                row_hint(workspace_key(ws_idx)),
+                row_hint(workspace_key(ws_id)),
                 seams.emit,
             ))
             .color(theme.colors.warning)
@@ -174,8 +176,8 @@ mod tests {
 
         let declared = testing::declared_keys(&frame);
         for expected in [
-            workspace_key(0),
-            super::super::column_key(0, 0),
+            workspace_key(heca_core::layout::WorkspaceId(0)),
+            super::super::column_key(heca_core::layout::ColumnId(0)),
             super::super::pane_key(PaneId(1)),
             super::super::pane_key(PaneId(9)),
         ] {

@@ -80,6 +80,7 @@ pub(crate) fn tree() -> WorkspaceTree {
     let mut tree = WorkspaceTree::new();
     tree.workspaces.push(WorkspaceEntry {
         ws_idx: 0,
+        ws_id: heca_core::layout::WorkspaceId(0),
         name: "ws1".into(),
         custom_name: None,
         collapsed: false,
@@ -94,6 +95,7 @@ pub(crate) fn tree() -> WorkspaceTree {
 pub(crate) fn column() -> ColumnEntry {
     ColumnEntry {
         col_idx: 0,
+        col_id: heca_core::layout::ColumnId(0),
         collapsed: false,
         panes: vec![pane(PaneId(1), "pane1")],
     }

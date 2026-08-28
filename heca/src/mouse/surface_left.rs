@@ -91,7 +91,13 @@ pub(crate) fn accept_drop(
                 // workspace — the only way to reach an *empty* workspace (which has no pane
                 // card to aim at). Columns can't be empty, so they need no pane-drop target.
                 crate::chrome::ChromeDragItem::Workspace { ws } => {
-                    Some((crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx: ws }, side))
+                    // A drop target is resolved live from a hit test, so the identity is looked up
+                    // here rather than carried by the drag item.
+                    let ws_id = state.session.workspaces.get(ws).map(|w| w.id)?;
+                    Some((
+                        crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx: ws, ws_id },
+                        side,
+                    ))
                 }
                 crate::chrome::ChromeDragItem::Column { .. } => None,
             });
@@ -236,7 +242,7 @@ fn place_pane_at_sidebar_target(
             }
             state.focused_pane = Some(target_pid);
         }
-        crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx } => {
+        crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx, .. } => {
             let new_col_id = ColumnId(state.session.next_id());
             if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                 // Dropping a pane on a workspace makes a NEW column at the end (appending
@@ -253,7 +259,7 @@ fn place_pane_at_sidebar_target(
                 );
             }
         }
-        crate::providers::workspaces::WorkspaceRow::Column { ws_idx, col_idx } => {
+        crate::providers::workspaces::WorkspaceRow::Column { ws_idx, col_idx, .. } => {
             let new_col_id = ColumnId(state.session.next_id());
             if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                 let target_col = col_idx.min(ws.scrolling.columns.len().saturating_sub(1));
@@ -386,13 +392,16 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
                     state.focused_pane = Some(target_pid);
                 }
                 ChromeDragItem::Workspace { ws: ws_idx } => {
+                    let width = state
+                        .session
+                        .options
+                        .default_column_width
+                        .unwrap_or(ColumnWidth::Proportion(0.85));
+                    // Allocated before the workspace is borrowed; dropping onto a workspace always
+                    // lands the pane in a column of its own.
+                    let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
                     if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-                        let width = state
-                            .session
-                            .options
-                            .default_column_width
-                            .unwrap_or(ColumnWidth::Proportion(0.85));
-                        ws.add_pane(pane, None, true, width);
+                        ws.add_pane(pane, None, true, width, new_column_id);
                     }
                 }
                 ChromeDragItem::Column { ws: ws_idx, col: col_idx } => {

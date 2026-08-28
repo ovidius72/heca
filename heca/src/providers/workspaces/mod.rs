@@ -476,7 +476,7 @@ impl WorkspacesContainerProvider {
                     cx.dispatch("unfocus_dock", PropMap::new());
                 }
             }
-            WorkspaceRow::Workspace { ws_idx } => {
+            WorkspaceRow::Workspace { ws_idx, .. } => {
                 let collapsed = {
                     let state = cx.state();
                     let ws = state.workspaces();
@@ -521,7 +521,7 @@ impl WorkspacesContainerProvider {
         let state = cx.state();
         let tree = state.workspaces().tree();
         match tree.current_item()? {
-            WorkspaceRow::Workspace { ws_idx }
+            WorkspaceRow::Workspace { ws_idx, .. }
             | WorkspaceRow::Column { ws_idx, .. }
             | WorkspaceRow::FloatingPane { ws_idx, .. } => Some(*ws_idx),
             WorkspaceRow::Pane { pane_id } => tree.locate_pane(*pane_id).map(|(ws, _)| ws),
@@ -534,7 +534,7 @@ impl WorkspacesContainerProvider {
         let state = cx.state();
         let tree = state.workspaces().tree();
         match tree.current_item()? {
-            WorkspaceRow::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
+            WorkspaceRow::Column { ws_idx, col_idx, .. } => Some((*ws_idx, *col_idx)),
             WorkspaceRow::Pane { pane_id } => tree.locate_pane(*pane_id),
             WorkspaceRow::Workspace { .. } | WorkspaceRow::FloatingPane { .. } => None,
         }
@@ -594,10 +594,10 @@ impl WorkspacesContainerProvider {
             | (RowVerb::Rename, Some(WorkspaceRow::FloatingPane { pane_id, .. })) => {
                 ("rename_pane_by_id", "pane_id", pane_id.0 as i64)
             }
-            (RowVerb::Delete, Some(WorkspaceRow::Workspace { ws_idx })) => {
+            (RowVerb::Delete, Some(WorkspaceRow::Workspace { ws_idx, .. })) => {
                 ("delete_workspace", "ws_idx", ws_idx as i64)
             }
-            (RowVerb::Rename, Some(WorkspaceRow::Workspace { ws_idx })) => {
+            (RowVerb::Rename, Some(WorkspaceRow::Workspace { ws_idx, .. })) => {
                 ("rename_workspace_by_idx", "ws_idx", ws_idx as i64)
             }
             (_, Some(WorkspaceRow::Column { .. })) | (_, None) => return Handled::No,
@@ -704,15 +704,20 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
 /// reads the pane's own identity rather than spelling a second copy (F011/P094/T451).
 pub(crate) use crate::chrome::pane_key;
 
-/// `ws:<idx>` — a workspace header.
-pub(crate) fn workspace_key(ws_idx: usize) -> String {
-    format!("ws:{ws_idx}")
+/// `ws:<id>` — a workspace header.
+///
+/// **Its identity, never its position.** A key is what the keyboard cursor, a right-click, a drag
+/// and a remembered hint letter are all kept on, so it has to survive the thing moving. These were
+/// built from indices, so inserting a workspace or a column renamed every row after it and each of
+/// those four silently reset — for rows that had not moved and had not changed.
+pub(crate) fn workspace_key(ws_id: heca_core::layout::WorkspaceId) -> String {
+    format!("ws:{}", ws_id.0)
 }
 
-/// `col:<ws>:<idx>` — a column group. Positional because a column has no id of its own; it is
-/// re-derived on rebuild like every other column reference in the app.
-pub(crate) fn column_key(ws_idx: usize, col_idx: usize) -> String {
-    format!("col:{ws_idx}:{col_idx}")
+/// `col:<id>` — a column group. No workspace prefix: a [`ColumnId`](heca_core::layout::ColumnId) is
+/// allocated from the session's counter, so it is unique across the whole session on its own.
+pub(crate) fn column_key(col_id: heca_core::layout::ColumnId) -> String {
+    format!("col:{}", col_id.0)
 }
 
 // ── What each row kind does when you press it (F003/P086/T365) ──
@@ -762,8 +767,8 @@ pub(crate) fn selection_key(selection: crate::chrome::SidebarSelection) -> Strin
     use crate::chrome::SidebarSelection as S;
     match selection {
         S::Pane { pane_id } | S::FloatingPane { pane_id, .. } => pane_key(pane_id),
-        S::Column { ws_idx, col_idx } => column_key(ws_idx, col_idx),
-        S::Workspace { ws_idx } => workspace_key(ws_idx),
+        S::Column { col_id, .. } => column_key(col_id),
+        S::Workspace { ws_id, .. } => workspace_key(ws_id),
     }
 }
 
@@ -944,8 +949,8 @@ mod tests {
 
         let declared = testing::declared_keys(&root);
         for expected in [
-            workspace_key(0),
-            column_key(0, 0),
+            workspace_key(heca_core::layout::WorkspaceId(0)),
+            column_key(heca_core::layout::ColumnId(0)),
             pane_key(PaneId(1)),
         ] {
             assert!(
@@ -961,12 +966,14 @@ mod tests {
         let mut tree = WorkspaceTree::new();
         tree.workspaces.push(WorkspaceEntry {
             ws_idx: 0,
+            ws_id: heca_core::layout::WorkspaceId(0),
             name: "ws1".into(),
             custom_name: None,
             collapsed: false,
             state: SidebarItemState::Active,
             columns: vec![ColumnEntry {
                 col_idx: 0,
+                col_id: heca_core::layout::ColumnId(0),
                 collapsed: false,
                 panes: vec![PaneEntry {
                     pane_id: PaneId(1),
@@ -1591,12 +1598,14 @@ mod tests {
         // told apart by its content, so only a declared key can tell it apart at all.
         let twins = |ws_idx: usize| WorkspaceEntry {
             ws_idx,
+            ws_id: heca_core::layout::WorkspaceId(ws_idx as u64),
             name: format!("ws{ws_idx}"),
             custom_name: None,
             collapsed: false,
             state: SidebarItemState::None,
             columns: vec![ColumnEntry {
                 col_idx: 0,
+                col_id: heca_core::layout::ColumnId(0),
                 panes: vec![pane(PaneId(1), "zsh"), pane(PaneId(2), "zsh")],
                 collapsed: false,
             }],

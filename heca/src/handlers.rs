@@ -378,8 +378,10 @@ pub fn handle_move_pane_left(state: &mut AppState, action: &WmAction) {
     if let WmAction::MovePaneLeft { pane_id: Some(id) } = action {
         focus_pane_by_id(state, *id);
     }
+    // Allocated before the workspace is borrowed; spent only if the move creates a column.
+    let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
     if let Some(ws) = state.session.active_workspace_mut() {
-        ws.scrolling.move_active_pane_left();
+        ws.scrolling.move_active_pane_left(new_column_id);
     }
     after_layout_change(state);
 }
@@ -388,8 +390,9 @@ pub fn handle_move_pane_right(state: &mut AppState, action: &WmAction) {
     if let WmAction::MovePaneRight { pane_id: Some(id) } = action {
         focus_pane_by_id(state, *id);
     }
+    let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
     if let Some(ws) = state.session.active_workspace_mut() {
-        ws.scrolling.move_active_pane_right();
+        ws.scrolling.move_active_pane_right(new_column_id);
     }
     after_layout_change(state);
 }
@@ -694,6 +697,9 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
         None => return,
     };
     let is_flt = pane_is_floating(&state.session, pane_id);
+    // Allocated before the workspace is borrowed; spent only if unfloating has to rebuild the
+    // column this pane came from. A derived id could collide with a column that still exists.
+    let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
 
     if let Some(ws) = state.session.active_workspace_mut() {
         let wa = ws.scrolling.working_area;
@@ -719,7 +725,7 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                         ws.scrolling.add_column(
                             None,
                             Column::new(
-                                ColumnId(pane_id.0),
+                                new_column_id,
                                 float.pane,
                                 chrome::default_column_width(),
                             ),
@@ -730,7 +736,7 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                     ws.scrolling.add_column(
                         None,
                         Column::new(
-                            ColumnId(pane_id.0),
+                            new_column_id,
                             float.pane,
                             chrome::default_column_width(),
                         ),

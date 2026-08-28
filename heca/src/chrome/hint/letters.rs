@@ -74,14 +74,14 @@ fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> V
         out.extend(
             cands
                 .iter()
-                .map(|(ch, ws)| (Offer::ByKey(workspace_key(*ws)), *ch)),
+                .map(|(ch, _ws_idx, ws_id)| (Offer::ByKey(workspace_key(*ws_id)), *ch)),
         );
     }
     if let Some(cands) = mode.col_candidates() {
         out.extend(
             cands
                 .iter()
-                .map(|(ch, ws, col)| (Offer::ByKey(column_key(*ws, *col)), *ch)),
+                .map(|(ch, _ws_idx, _col_idx, col_id)| (Offer::ByKey(column_key(*col_id)), *ch)),
         );
     }
     // A dock names itself with `scope_key` rather than `key` — a container's identity, not a

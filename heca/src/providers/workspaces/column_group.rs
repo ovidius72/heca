@@ -41,7 +41,7 @@ impl ColumnGroup<'_> {
         let mut col = MarkerGroup::new()
             .active(active)
             .gap(3.0)
-            .key(column_key(ws_idx, column.col_idx))
+            .key(column_key(column.col_id))
             .context_menu({
                 let menu = crate::chrome::context_menu::menu_from_items(
                     "Column",
@@ -69,7 +69,7 @@ impl ColumnGroup<'_> {
         reg.signals.col_active.push((pane_ids, col.state()));
         reg.signals.row_nav.push((
             seams.mount.to_string(),
-            column_key(ws_idx, column.col_idx),
+            column_key(column.col_id),
             col.nav_state(),
         ));
         // Wrap the column in the universal `KeyHint` so a "move pane → column" pick can stamp this
@@ -107,7 +107,7 @@ mod tests {
 
         let declared = testing::declared_keys(&group);
         assert!(
-            declared.contains(&column_key(0, 0)),
+            declared.contains(&column_key(heca_core::layout::ColumnId(0))),
             "the column names itself: {declared:?}",
         );
         assert!(

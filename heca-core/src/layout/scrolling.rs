@@ -666,7 +666,7 @@ impl ScrollingSpace {
     /// Move the active pane to the previous column (left).
     /// If at first column and source has >1 pane, creates a new column to the left.
     /// If at first column and source has 1 pane, does nothing.
-    pub fn move_active_pane_left(&mut self) -> bool {
+    pub fn move_active_pane_left(&mut self, new_column_id: ColumnId) -> bool {
         if self.active_column_idx == 0 {
             // First column — create new column to the left if source has > 1 pane
             let source_has_multiple = self
@@ -677,7 +677,7 @@ impl ScrollingSpace {
             if !source_has_multiple {
                 return false;
             }
-            return self.move_active_pane_to_new_column(Direction::Left);
+            return self.move_active_pane_to_new_column(Direction::Left, new_column_id);
         }
         let target_col = self.active_column_idx - 1;
         self.move_active_pane_to_column(target_col)
@@ -686,7 +686,7 @@ impl ScrollingSpace {
     /// Move the active pane to the next column (right).
     /// If at last column and source has >1 pane, creates a new column to the right.
     /// If at last column and source has 1 pane, does nothing.
-    pub fn move_active_pane_right(&mut self) -> bool {
+    pub fn move_active_pane_right(&mut self, new_column_id: ColumnId) -> bool {
         if self.active_column_idx + 1 >= self.columns.len() {
             // Last column — create new column to the right if source has > 1 pane
             let source_has_multiple = self
@@ -697,7 +697,7 @@ impl ScrollingSpace {
             if !source_has_multiple {
                 return false;
             }
-            return self.move_active_pane_to_new_column(Direction::Right);
+            return self.move_active_pane_to_new_column(Direction::Right, new_column_id);
         }
         let target_col = self.active_column_idx + 1;
         self.move_active_pane_to_column(target_col)
@@ -782,7 +782,7 @@ impl ScrollingSpace {
 
     /// Create a new column to the left or right of the current column
     /// with the active pane moved into it.
-    fn move_active_pane_to_new_column(&mut self, dir: Direction) -> bool {
+    fn move_active_pane_to_new_column(&mut self, dir: Direction, new_column_id: ColumnId) -> bool {
         let source_col = self.active_column_idx;
         let pane_idx = self.columns[source_col].active_pane_idx;
 
@@ -800,7 +800,7 @@ impl ScrollingSpace {
             return false;
         };
 
-        let new_col = Column::new(ColumnId(pane.id.0), pane, ColumnWidth::Proportion(0.5));
+        let new_col = Column::new(new_column_id, pane, ColumnWidth::Proportion(0.5));
 
         let insert_idx = match dir {
             Direction::Left => source_col,

@@ -94,14 +94,17 @@ pub enum InputMode {
     /// universal `KeyHint` over its sidebar dock); the next keypress moves `target`
     /// (the active column or pane, captured on entry) into that workspace.
     WorkspacePick {
-        candidates: Vec<(char, usize)>,
+        /// `(letter, ws_idx, ws_id)` — the position the action acts on, and the identity the
+        /// letter is offered against.
+        candidates: Vec<(char, usize, heca_core::layout::WorkspaceId)>,
         target: WorkspacePickTarget,
     },
     /// Move-to-column letter pick: each column (across all workspaces) is assigned a
     /// letter (shown as a `KeyHint` over its sidebar column); the next keypress moves
     /// the active pane into that `(ws_idx, col_idx)` column (stacking with its panes).
     ColumnPick {
-        candidates: Vec<(char, usize, usize)>,
+        /// `(letter, ws_idx, col_idx, col_id)` — see [`InputMode::WorkspacePick`].
+        candidates: Vec<(char, usize, usize, heca_core::layout::ColumnId)>,
         pane_id: PaneId,
     },
     /// Follow-link letter pick: each visible terminal hyperlink across **all
@@ -226,7 +229,7 @@ impl InputMode {
     }
 
     /// Workspace pick candidates (letter → `ws_idx`) while a `WorkspacePick` is active.
-    pub fn ws_candidates(&self) -> Option<&[(char, usize)]> {
+    pub fn ws_candidates(&self) -> Option<&[(char, usize, heca_core::layout::WorkspaceId)]> {
         match self {
             InputMode::WorkspacePick { candidates, .. } => Some(candidates),
             _ => None,
@@ -234,7 +237,9 @@ impl InputMode {
     }
 
     /// Column pick candidates (letter → `(ws_idx, col_idx)`) while a `ColumnPick` is active.
-    pub fn col_candidates(&self) -> Option<&[(char, usize, usize)]> {
+    pub fn col_candidates(
+        &self,
+    ) -> Option<&[(char, usize, usize, heca_core::layout::ColumnId)]> {
         match self {
             InputMode::ColumnPick { candidates, .. } => Some(candidates),
             _ => None,
