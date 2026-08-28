@@ -10,8 +10,8 @@
   "contextReady": true,
   "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
   "summary": "Backend OS notifications, differito.",
-  "description": "SystemNotificationBackend trait, spike notify-rust su Linux/macOS/Windows, fallback su fallimento del backend di sistema.",
-  "descriptionUpdatedAt": "2026-08-27T09:19:48.548Z",
+  "description": "DEFERRED. OS/desktop notification backend.\n\nARCHITECTURE (decided by Antonio 2026-08-28, see P055(F009)/T222): the OS backend is a ROUTING SINK behind Notification::send(), NOT a component / widget / layer. An OS notification has no bounds, no parent, no input — it is not in heca's tree. The caller always types Notification::info(\"…\").send(); [settings.notification_system] mode = \"system\" routes the accepted draft to the OS sink instead of the in-app ToastStack. Routing lives in ONE place — notification::raise (heca/src/notification.rs), which already reads the mode. The OS sink is host-installed once at startup via the install_notification_sink pattern (thread-local, absent in headless tests), exactly like the in-app path.\n\nWORK:\n- SystemNotificationBackend trait: send(draft) → Result; the host installs an impl at startup.\n- The System arm in notification::raise: mode == System && sink installed → hand the draft to the OS sink; else fall back to the in-app store (+ the one-time \"not available yet\" notice — that half is T222).\n- Spike notify-rust (or the platform crates) on Linux (libnotify/D-Bus), macOS (UNUserNotificationCenter / NSUserNotification), Windows (toast).\n- Fallback on OS-backend failure: drop to the in-app toast, do not lose the notification.\n- Action buttons: an OS notification's buttons map to the same NotificationAction intents; a click routes back through the same relay path. Scope per-OS during the spikes.\n\nNOT in scope: any component, widget, layer, or tree node. This phase adds a sink and its install point, nothing visual inside heca's own window.",
+  "descriptionUpdatedAt": "2026-08-28T10:40:26.458Z",
   "notes": "",
   "goals": [
     "Backend desktop notification via un trait dedicato, dietro il config mode \"system\" — solo dopo che il backend in-app e stabile."
@@ -172,7 +172,7 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.127Z",
-  "updatedAt": "2026-08-27T09:42:12.350Z",
+  "updatedAt": "2026-08-28T10:40:26.458Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

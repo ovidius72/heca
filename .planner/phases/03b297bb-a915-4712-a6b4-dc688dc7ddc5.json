@@ -157,8 +157,8 @@
       "shortName": "system-mode-v1",
       "title": "Define v1 behavior for system notification mode",
       "status": "planned",
-      "description": "Decidere e implementare comportamento deterministico per `notification_system = \"system\"` prima del backend OS; raccomandato fallback in-app con warning una tantum.",
-      "descriptionUpdatedAt": "2026-07-03T22:52:52.635Z",
+      "description": "DECIDED (Antonio, 2026-08-28): the OS-notification backend is a ROUTING SINK behind Notification::send(), NOT a component.\n\nTHE MODEL:\n- Notification::send() stays the only door. A producer never knows or cares where a notification surfaces — it types Notification::info(\"…\").send() and nothing else.\n- Where it surfaces is a host routing decision, invisible to the caller, driven by [settings.notification_system] mode:\n  - \"app\"    → the in-app ToastStack (today's path via notification::raise → NotificationRuntime::push).\n  - \"system\" → the OS backend (P063): macOS Notification Center, Linux libnotify, Windows toast. An OS notification has no bounds, no parent, no input — it is NOT a widget in heca's tree, which is exactly why it is a sink and not a component. Antonio's \"place it anywhere and it handles itself\" rule does not apply to it.\n  - \"none\"   → dropped (already implemented — suppressed()).\n- The routing happens in ONE place: notification::raise (heca/src/notification.rs), which already reads the mode. Today: App and System both fall through to the in-app store. P063 adds the System arm — raise() hands the accepted draft to an installed OS sink instead of / in addition to the store.\n- The OS sink is installed the same way the in-app sink is (install_notification_sink pattern) — host-installed once at startup, absent in a headless test.\n\nv1 BEHAVIOUR FOR \"system\" BEFORE P063 LANDS (this task):\n- mode = \"system\" falls back to the in-app toast (App behaviour) — already the case.\n- ADD a one-time info notification on the first raise under mode=\"system\" while no OS sink is installed: \"OS notifications aren't available yet — showing in-app.\" dedup_key \"notification.system.unavailable\" so it appears once, not per notification. This is the only code T222 itself ships; the rest is the P063 phase.\n\nCONSEQUENCES for P063: it builds the OS sink + its install point + the raise() System arm + per-OS spikes. It does NOT build a component, a widget, a layer, or anything in the tree. Update the P063 phase description to this model.\n\nCONSEQUENCE for T381: declined_actions lives in this same [settings.notification_system] table and assumes this routing model — build T381 after this is recorded (done) or alongside P063.",
+      "descriptionUpdatedAt": "2026-08-28T10:40:12.969Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -171,7 +171,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z",
+      "updatedAt": "2026-08-28T10:40:12.968Z",
       "sessionInfo": []
     },
     {
@@ -397,7 +397,7 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-08-28T10:34:39.446Z",
+  "updatedAt": "2026-08-28T10:40:12.968Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
