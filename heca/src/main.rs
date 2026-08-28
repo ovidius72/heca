@@ -156,17 +156,23 @@ impl HecaApp {
         }
     }
 
-    fn reload_config(&mut self) {
-        if let Some(ref mut state) = self.state {
-            // Try to load the config file. On error, keep the current working
-            // config and report the problem — a bad config must not silently
-            // overwrite the user's working settings.
+    /// Reload `config.toml` at runtime (`prefix+Shift+r`).
+    ///
+    /// Returns `Err` with the parse/load error when the file is bad — the working config is kept
+    /// untouched (a bad config must never overwrite settings that work). The caller turns the
+    /// result into a notification (F009/P062). The stderr lines stay for a terminal user watching
+    /// the process.
+    fn reload_config(&mut self) -> Result<(), heca_config::loader::ConfigError> {
+        let Some(state) = self.state.as_mut() else {
+            return Ok(());
+        };
+        {
             let new_config = match heca_config::loader::AppConfig::try_load() {
                 Ok(cfg) => cfg,
                 Err(e) => {
                     eprintln!("[heca] reload failed: {e}");
                     eprintln!("[heca] fix config.toml and press prefix+Shift+r to retry");
-                    return;
+                    return Err(e);
                 }
             };
             self.app_config = new_config;
@@ -302,6 +308,7 @@ impl HecaApp {
             // reloaded config takes effect immediately instead of on the next input.
             state.window.request_redraw();
         }
+        Ok(())
     }
 
     async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> Box<AppState> {
@@ -380,7 +387,32 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             if let Some(state) = self.state.as_mut() {
                 state.pending_reload = false;
             }
-            self.reload_config();
+            // Tell the user the outcome — F009/P062. `dedup_key` so a fixed-then-reloaded
+            // config replaces its own failure toast in place rather than stacking.
+            match self.reload_config() {
+                Ok(()) => {
+                    crate::notification::Notification::success("Configuration reloaded")
+                        .dedup_key("config-reload")
+                        .send();
+                }
+                Err(e) => {
+                    crate::notification::Notification::danger("Config reload failed")
+                        .body(e.to_string())
+                        .dedup_key("config-reload")
+                        .action(
+                            // `dismiss_after` so Retry clears the error toast — the reload it
+                            // triggers then raises a *fresh* success (or failure) card rather
+                            // than mutating this one in place.
+                            crate::notification::NotificationAction::new(
+                                "Retry",
+                                heca_view::Intent::new("reload_config"),
+                            )
+                            .dismiss_after(true),
+                        )
+                        .sticky()
+                        .send();
+                }
+            }
         }
 
         if let Some(ref mut state) = self.state {

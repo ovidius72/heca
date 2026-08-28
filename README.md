@@ -534,7 +534,7 @@ configurable under `[appearance.terminal] show_scrollbar`):
 | Command | Default Binding | Description |
 |---------|----------------|-------------|
 | Command palette | `p` | Open command palette |
-| Reload config | `Shift+R` | Reload config.toml at runtime |
+| Reload config | `Shift+R` | Reload config.toml at runtime — a toast confirms success, or reports the parse error with a **Retry** button (the working config is kept on failure; the error also prints to stderr) |
 
 #### The command palette
 
