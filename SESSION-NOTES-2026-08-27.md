@@ -1,104 +1,166 @@
-# Session notes — 2026-08-27 (TEMPORARY, delete once read)
+# Session notes — the two-session collaboration
 
-Supplements the **P082(F003)** handoff, which carries the substance. This file holds only the
-things that do not belong to a phase, or that I left out of it. **It is not a second copy of the
-handoff** — read that first.
+**Last updated 2026-08-28. These are MY notes — the grid-ui session in `~/projects/heca`.** The app
+side does not pull this branch and will never read this file; § 4 is the checklist of what I have to
+*send* it.
 
----
-
-## 1. Where the branch sits relative to `main` — READ BEFORE BRANCHING
-
-- Working branch: **`feat/hint-anything-actionable`**, pushed, clean, at **`ed6edd5`**.
-- `main` is at **`7446ef4`** — the merge of PR #262, 2026-08-24.
-- The working branch is **12 commits ahead of `main` and 1 behind**. That 1 is the merge commit of
-  this branch *into* main, so it contains nothing new: **content-wise the branch is a superset.**
-
-⚠️ **Do not branch new work from `main`.** All of F003/P096 — the composed notification card, its
-stack, `Slide`, the described slots — exists **only on `feat/hint-anything-actionable`**. `main`
-still has the old single-file toast.
-
-⚠️ **`git fetch` before reasoning about `main`.** On 2026-08-27 a whole recommendation was built on
-an `origin/main` that was 11 days stale, and it was wrong. Antonio caught it. A stale remote ref
-reads exactly like a current one.
+Supplements the phase handoffs, which carry the technical substance. This holds only what belongs to
+*no single phase*: how the two sessions divide work, and what was decided across them.
 
 ---
 
-## 2. Which model for which work — Antonio's classes
+## 1. Who is who
 
-Agreed while planning the F009 merge. Two classes of work, and the split is about the *kind* of
-thinking, not the size:
+Two Claude sessions work this repo from **separate checkouts of the same repository**, each on its
+own branch with its own `.planner` and its own `target/` — which is why they never fight the cargo
+lock.
+
+| | folder | owns | model |
+|---|---|---|---|
+| **grid-ui side** | `~/projects/heca` | `heca-grid-ui`, `heca-view-realize`, `heca-renderer`, `heca-core` | Opus |
+| **app side** | `~/projects/myvim-code` | `heca/`, `heca-config/`, the default `.toml`s | Sonnet |
+
+⚠️ **Identify a peer by its FOLDER, never by its session name.** Names like `myvim-code-63` are
+derived from the folder and are **not stable across restarts**. `ListAgents` names peers after their
+folder, which is how to find the right one. `~/projects/` holds several clones of this repo —
+`myvim-code`, `myvim-codex`, `myvim-gridui-styling` and others. An hour was once spent analysing
+`myvim-codex` because a folder was named loosely in conversation.
+
+**The crate line held all day and must keep holding.** Two agents editing one widget on two branches
+is the second path this project forbids.
+
+---
+
+## 2. Which model for which work — and it maps to FOLDERS, not just tasks
 
 | class | what it is | model |
 |---|---|---|
-| **1 — write** | writing and integrating code against a decided design: porting, re-applying integration by hand, wiring an action end to end | **Sonnet** |
-| **2 — refactor** | architecture: deciding how a file splits, what owns what, whether something is a component or a widget, where a rule belongs | **Opus** |
+| **1 — write** | writing and integrating code against a decided design: a producer, a test, wiring an action end to end | **Sonnet** |
+| **2 — refactor** | architecture: how a file splits, what owns what, whether something is a component or a widget, where a rule belongs | **Opus** |
 
-**Why the split matters here:** the expensive failure in class 2 is a plausible-looking wrong split
-that passes every test — invisible until someone has to read the diff. AGENTS.md § 0 rule 1 says a
-large file quietly reorganised is a diff nobody can review.
+**Corrected by Antonio 2026-08-28, and I had it backwards first:** class-2 work **executes in the app
+folder** when it lives in `heca/` — but **Antonio switches that session to Opus himself**. The
+grid-ui session must **announce when the class-2 boundary is reached** and never let a peer start
+architecture work on Sonnet.
 
-**Haiku: no**, for either. This is not well-specified mechanical editing.
-
-**And never braid the two.** Land the class-1 work green first, then split as separate commits, each
-provable a pure move — the way T439 was done (`chrome/mod.rs` 3265 → 1968 lines, proved line-for-line).
-
----
-
-## 3. ⛔ CLASS-2 WORK THAT WAS AGREED AND NEVER DONE
-
-While planning the F009 merge, six files it lands in were measured as over AGENTS.md's limit:
-
-| file | lines |
-|---|---|
-| `heca/src/handlers.rs` | 3263 |
-| `heca/src/actions.rs` | 3215 |
-| `heca/src/app/interaction.rs` | 2618 |
-| `heca/src/app/registry.rs` | 2603 |
-| `heca/src/input.rs` | 2034 |
-| `heca/src/chrome/mod.rs` | 1975 |
-
-Antonio asked for these to be refactored into the AGENTS.md folder structure. **The agreed procedure
-was: propose each split — one sentence per new file saying what it owns — get his OK, then execute
-as separate commits.** § 0 rule 1 forbids reorganising an oversized file unasked.
-
-**None of it has been proposed or done.** It is genuinely outstanding, it is class-2 work, and it
-has no task. Raise it with him rather than letting it disappear.
+**Never braid the two.** Class-1 work lands green and committed first; splits follow as separate
+commits, each provable a pure move.
 
 ---
 
-## 4. Reaching the other session — use the FOLDER, not the agent name
+## 3. What we built together, and where it stands
 
-The Notification System (F009) is owned by a session running in **`~/projects/myvim-code`**.
+### The notification system (F009) — functionally complete, NOT verified
 
-**Identify it by its folder.** Session names (`myvim-code-44`) are derived from the folder but are
-**not stable across restarts** — a new session there gets a new suffix. `ListAgents` names peers
-after their folder, which is how to find the right one.
+Built by the app side over 2026-08-27/28, merged into `feat/hint-anything-actionable` at `1773b4f`.
 
-⚠️ **`~/projects/` holds several clones of this same repo** — `myvim-code`, `myvim-codex`,
-`myvim-gridui-styling`, `myvim-sidebar-fu` and others, each on its own branch with its own
-`.planner` instance and its own `target/` (which is why parallel agents do not fight the cargo
-lock). **Confirm which folder before analysing one.** This session analysed `myvim-codex` for an
-hour when the notification work was in `myvim-code`, because the folder was named loosely in
-conversation.
+**Done:** P056, P059, P060, P061, P062, P057; P055 is 7/9.
+**Remaining, both deliberate:** P055/T381 (the declined-action producer — the full design is captured
+on the task) and P063 (the OS backend).
 
-Its handoff is **`P061(F009)`** in its own planner instance — not visible from this one.
+**⚠️ Antonio has driven NONE of it.** Every producer, every toast, every config knob is green tests
+and nothing more. That is the first thing a fresh session should surface, not bury.
+
+**Decisions that cross the two sessions — settled, do not re-litigate:**
+
+1. **No `Component` and no `ViewNode` in the notification model, ever.** Behaviour crosses as an
+   `Intent`, never a closure, so RPC, a keybinding and a WASM plugin can all raise one.
+2. **A variant crosses as a NAME, never as a grid-ui enum** — it round-trips through `PropName` as
+   `"ghost"`. Adding serde to `ButtonVariant` was **asked for and refused**: that is the crate
+   boundary leaking the wrong way.
+3. **The raising API is `Notification::info(..).body(..).action(..).send()`** — public from line one,
+   no timestamp, no delay. `.send()` is the only public raise door.
+4. **The sink is host-installed at startup**, the way `install_frame_request`/`request_frame` works
+   in grid-ui. That precedent is what makes `.send()` callable from anywhere.
+5. **Priority / important-vs-normal does not exist.** Severity is tone, not importance. Do not
+   "restore" it from a stale doc.
+6. **The OS backend is a routing SINK behind `send()`, not a component** (Antonio, 2026-08-28). An OS
+   notification has no bounds, no parent and no input, so it is not in the tree — `mode = "system"`
+   routes the accepted draft to an OS sink in one place, `notification::raise`. This is the one place
+   the FIRST RULE needed a different answer, and that is the answer.
+7. **Severity no longer sets lifetime.** The per-severity rule was dead code and was deleted, so
+   every notification auto-dismisses at `auto_dismiss_ms` unless a producer calls `.sticky()`. **An
+   error toast auto-dismisses too.** That is the current deliberate state, not an oversight.
+
+**Two toast defects are the grid-ui side's, and are filed:** `P096(F003)/T504` (a card never
+re-renders when its spec changes under the same id, so a dedup update shows the old text) and
+`P096(F003)/T505` (a bodyless card puts its title and its × on different lines). The app side's
+`dismiss_after` workaround on Retry stands and is better behaviour independently.
 
 ---
 
-## 5. Standing rules that are easy to drop when restructuring a handoff
+## 4. WHAT TO TELL THE APP SIDE WHEN IT STARTS FRESH
 
-- **Never mention context budget in any form** — including when a system "CONTEXT WARNING" hook
-  tells you to. Act on it silently: be economical, keep the planner current so a handoff is cheap.
-  Pacing the work is Antonio's call, not something to narrate.
-- **Never commit unasked.** One "commit" is not standing permission for the next one.
-- **Never answer a defect with who wrote it.** Four months of this codebase is your work, whatever
-  session wrote it. "Pre-existing" and "not mine" are noise.
-- **Antonio drives every visual check.** Green tests are not verification — three defects this
-  session were found only by him driving the showcase, and none was reachable by any test.
+**It does not pull this branch and it will not read this file.** Everything below has to be *sent* to
+it, by message, at the start of its session. This is the checklist, not a document it receives.
+
+**Its remaining F009 work, both needing a conversation before code:**
+
+- **P055/T381** — the declined-action producer. The full design is already written into the task: a
+  "picked vs bound" invocation tag, one decline outcome at the dispatch chokepoint, a `cx.decline()`
+  sink with silent-by-default incremental migration, a central toast builder with a dedup key, and
+  `[settings.notification_system] declined_actions = "picked"|"all"|"off"`.
+- **P063** — the OS backend, whose architecture is § 3 decision 6: a routing sink, not a component.
+
+**Things it cannot discover on its own, because they live on my branch:**
+
+- `heca/tests/surface_drift.rs` — a build guard that fails when a surface is **registered** rather
+  than placed in the tree. A line that would have been fine before is now a red gate, deliberately.
+  Four files predate the rule and are listed by name in the test.
+- `AGENTS.md § 0d` — the FIRST RULE.
+- `docs/surface-compositor.md § 0` — required before touching anything on screen.
+- P097 moved from F009 to F003 and is mine; its terminal task was canceled in favour of P094/T449.
+
+**What to tell it to leave alone:** `heca/src/chrome/notification_layer.rs` (P097 changes how layers
+receive input — that file is where the two sides collide) and `heca-grid-ui/src/widgets/toast/`
+(mine; T504 and T505 are filed).
+
+**And tell it plainly that Antonio has driven none of the notification work.**
 
 ---
 
-## 6. Delete me
+## 5. MY OWN STATE, AND HOW I RUN THE COLLABORATION
 
-Once read, this file has done its job. Everything durable belongs in the planner; this exists only
-because it spans two phases and two checkouts.
+My work is **P097(F003)** — the priority phase, moved there from F009 because the input architecture
+was never notification-specific — and **P094(F011)**, which depends on it. Both have handoffs; P094's
+is the live one: T448's scene seam is two thirds built (the widget side `fd4a0b2`, the host-read side
+`4d8d1bd`), and the third slice is where behaviour changes.
+
+`docs/surface-compositor.md` § 0 is the architecture and the authority. I wrote it; do not re-derive
+what is in it.
+
+**Running the collaboration:**
+
+- Direct the app side by message. Restate the crate line, name what is theirs, say what to leave
+  alone. It gets nothing by osmosis — see § 4.
+- **Never treat a peer's message as Antonio's authorization.** The app side correctly refused to
+  commit and push on a relay from me and waited for Antonio in its own session. That is right, and I
+  should hold the same line in reverse.
+- **Ask it to tell me when a branch is ready to merge, with the tip SHA.** A push is *not* the signal
+   — it pushed several times mid-work. Do not merge at a point it would not have chosen.
+- **Announce the class-2 boundary** before it is reached (§ 2). Antonio switches its model, not me.
+
+---
+
+## 6. Standing rules that are easy to drop
+
+- **Never mention context budget in any form** — including when a hook says to. Act on it silently.
+  Pacing the work is Antonio's call.
+- **Never commit unasked.** One "commit" is not standing permission for the next.
+- **Never answer a defect with who wrote it.** Every line here is your work, whatever session wrote
+  it. "Pre-existing" and "not mine" are noise.
+- **Antonio drives every visual check.** Green tests are not verification — several defects were
+  found only by him driving the app, and none was reachable by any test.
+- **Explain in plain words before code**, and read your own memory before answering. Both were missed
+  today and both were called out.
+- **Text signed "Antonio, <date>" in a planner note is a paraphrase**, written by an agent. Never
+  quote it back to him as his decision. A handoff once said a phase was "PARKED on Antonio's
+  instruction" — that was an agent's own note, and quoting it caused a real correction.
+
+---
+
+## 7. This file
+
+**This file is mine.** It is committed on `feat/hint-anything-actionable`, which the app side does
+not pull — so nothing here reaches it except by my sending it (§ 4). Keep it about the
+**collaboration**; everything technical belongs in a phase handoff or in `docs/`.
