@@ -2324,6 +2324,45 @@ mod tests {
         assert_eq!(runtime.next_expiry(), None, "a sticky notification never expires");
     }
 
+    #[test]
+    fn retry_dismisses_the_failure_toast_then_a_deduped_success_comes_back_fresh() {
+        // The reload-config flow (heca/src/main.rs): the Retry action has `dismiss_after`, so
+        // clicking it archives the sticky failure toast; the reload it triggers then raises a
+        // success with the SAME dedup key, which re-promotes to a fresh visible card rather
+        // than mutating the archived one in place.
+        use heca_grid_ui::reactive::SignalGet;
+        let now = Instant::now();
+        let mut runtime = test_runtime(4000);
+
+        let fail = Notification::danger("Config reload failed")
+            .body("bad line 3")
+            .dedup_key("config-reload")
+            .sticky()
+            .draft;
+        let fail_id = runtime.push(fail, now).unwrap().notification_id();
+        assert_eq!(runtime.visible_toasts.get_untracked().len(), 1);
+        assert_eq!(runtime.next_expiry(), None, "sticky failure does not expire");
+
+        // Retry's `dismiss_after`.
+        runtime.dismiss_one(fail_id, now);
+        assert!(runtime.visible_toasts.get_untracked().is_empty(), "Retry cleared it");
+
+        // The reload succeeded — success with the same dedup key.
+        let ok = Notification::success("Configuration reloaded")
+            .dedup_key("config-reload")
+            .draft;
+        runtime.push(ok, now).unwrap();
+        let v = runtime.visible_toasts.get_untracked();
+        assert_eq!(v.len(), 1, "a fresh success card is visible");
+        assert_eq!(v[0].title, "Configuration reloaded");
+        assert_eq!(v[0].severity, heca_grid_ui::widgets::ToastSeverity::Success);
+        assert_eq!(
+            runtime.next_expiry(),
+            Some(now + std::time::Duration::from_millis(4000)),
+            "and it auto-dismisses"
+        );
+    }
+
     // -- configured auto-dismiss + delivery mode ([settings.notification_system]) --
 
     fn test_runtime(auto_ms: u64) -> NotificationRuntime {

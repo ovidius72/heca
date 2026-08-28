@@ -399,10 +399,16 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                     crate::notification::Notification::danger("Config reload failed")
                         .body(e.to_string())
                         .dedup_key("config-reload")
-                        .action(crate::notification::NotificationAction::new(
-                            "Retry",
-                            heca_view::Intent::new("reload_config"),
-                        ))
+                        .action(
+                            // `dismiss_after` so Retry clears the error toast — the reload it
+                            // triggers then raises a *fresh* success (or failure) card rather
+                            // than mutating this one in place.
+                            crate::notification::NotificationAction::new(
+                                "Retry",
+                                heca_view::Intent::new("reload_config"),
+                            )
+                            .dismiss_after(true),
+                        )
                         .sticky()
                         .send();
                 }
