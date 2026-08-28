@@ -44,11 +44,20 @@
       "priority": 5,
       "shortName": "reload-notification-mode",
       "title": "Ensure runtime reload applies notification_system",
-      "status": "planned",
-      "description": "`prefix+Shift+r` deve aggiornare `notification_system` runtime senza restart e senza cache divergenti.",
-      "descriptionUpdatedAt": "2026-07-03T22:52:28.341Z",
+      "status": "done",
+      "description": "`prefix+Shift+r` deve aggiornare `notification_system` runtime senza restart e senza cache divergenti.\n\n---\n**Completion summary:**\nSHIPPED earlier this session (commit bfabbb7), verified still in place after the P062 reload_config refactor:\n- reload_config (heca/src/main.rs) calls state.notifications.set_auto_dismiss(Duration::from_millis(settings.notification_system.auto_dismiss_ms)) and set_mode(settings.notification_system.mode) on every prefix+Shift+r.\n- set_auto_dismiss / set_mode are pub(crate) on NotificationRuntime; auto_dismiss applies to notifications raised afterwards, mode gates raise() (mode=\"none\" → suppressed()).\n- Test set_auto_dismiss_affects_only_notifications_raised_afterwards + mode_none_suppresses_and_mode_change_is_live cover the live behaviour.\n\nVERIFICATION: ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh exit 0; heca notification tests 64/64. Not driven by Antonio.\nFILES: heca/src/main.rs, heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-28T07:24:03.647Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "0ad2a1aa-f353-47ff-83e5-65fc45cd02c9-check-001-planned-done",
+          "date": "2026-08-28T07:24:03.646Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SHIPPED earlier this session (commit bfabbb7), verified still in place after the P062 reload_config refactor:\n- reload_config (heca/src/main.rs) calls state.notifications.set_auto_dismiss(Duration::from_millis(settings.notification_system.auto_dismiss_ms)) and set_mode(settings.notification_system.mode) on every prefix+Shift+r.\n- set_auto_dismiss / set_mode are pub(crate) on NotificationRuntime; auto_dismiss applies to notifications raised afterwards, mode gates raise() (mode=\"none\" → suppressed()).\n- Test set_auto_dismiss_affects_only_notifications_raised_afterwards + mode_none_suppresses_and_mode_change_is_live cover the live behaviour.\n\nVERIFICATION: ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh exit 0; heca notification tests 64/64. Not driven by Antonio.\nFILES: heca/src/main.rs, heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -56,10 +65,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-28T07:24:03.646Z",
+      "completedAt": "2026-08-28T07:24:03.646Z",
       "createdAt": "2026-07-03T22:52:28.341Z",
-      "updatedAt": "2026-07-03T22:52:28.341Z",
+      "updatedAt": "2026-08-28T07:24:03.646Z",
       "sessionInfo": []
     },
     {
@@ -70,11 +79,20 @@
       "priority": 3,
       "shortName": "reload-result",
       "title": "Refactor reload_config to return Result",
-      "status": "planned",
-      "description": "Rendere `HecaApp::reload_config` result-aware senza perdere la safe behavior: su failure mantenere config corrente e non nascondere errori.",
-      "descriptionUpdatedAt": "2026-07-03T22:52:28.341Z",
+      "status": "done",
+      "description": "Rendere `HecaApp::reload_config` result-aware senza perdere la safe behavior: su failure mantenere config corrente e non nascondere errori.\n\n---\n**Completion summary:**\nSHIPPED: HecaApp::reload_config (heca/src/main.rs) now returns Result<(), heca_config::loader::ConfigError> instead of () — Err carries the parse/load error; Ok(()) on the happy path. The failure arm still early-returns before touching self.app_config (the working config is preserved on a bad file — unchanged behaviour) and keeps its two eprintln! lines (T218). The `if let Some(ref mut state) = self.state` wrapper became `let Some(state) = self.state.as_mut() else { return Ok(()); }` + a plain block (body indentation kept, to hold the diff to the signature and the error path). Caller in about_to_wait matches on the result (see T216/T217).\n\nVERIFICATION: ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh exit 0; heca + heca-config clippy-clean. Not driven by Antonio.\nFILES: heca/src/main.rs.",
+      "descriptionUpdatedAt": "2026-08-28T07:23:37.235Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "2578fea2-2f40-4c58-b39e-6efda6534a1f-check-001-planned-done",
+          "date": "2026-08-28T07:23:37.234Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SHIPPED: HecaApp::reload_config (heca/src/main.rs) now returns Result<(), heca_config::loader::ConfigError> instead of () — Err carries the parse/load error; Ok(()) on the happy path. The failure arm still early-returns before touching self.app_config (the working config is preserved on a bad file — unchanged behaviour) and keeps its two eprintln! lines (T218). The `if let Some(ref mut state) = self.state` wrapper became `let Some(state) = self.state.as_mut() else { return Ok(()); }` + a plain block (body indentation kept, to hold the diff to the signature and the error path). Caller in about_to_wait matches on the result (see T216/T217).\n\nVERIFICATION: ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh exit 0; heca + heca-config clippy-clean. Not driven by Antonio.\nFILES: heca/src/main.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -82,10 +100,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-28T07:23:37.234Z",
+      "completedAt": "2026-08-28T07:23:37.234Z",
       "createdAt": "2026-07-03T22:52:28.341Z",
-      "updatedAt": "2026-07-03T22:52:28.341Z",
+      "updatedAt": "2026-08-28T07:23:37.234Z",
       "sessionInfo": []
     },
     {
@@ -96,11 +114,20 @@
       "priority": 1,
       "shortName": "reload-success-toast",
       "title": "Emit reload success notification",
-      "status": "planned",
-      "description": "Dopo reload riuscito, emettere success toast auto-dismiss con dedup `config.reload.success`.",
-      "descriptionUpdatedAt": "2026-07-03T22:52:28.341Z",
+      "status": "done",
+      "description": "Dopo reload riuscito, emettere success toast auto-dismiss con dedup `config.reload.success`.\n\n---\n**Completion summary:**\nSHIPPED: on a successful reload, about_to_wait (heca/src/main.rs) raises `Notification::success(\"Configuration reloaded\").dedup_key(\"config-reload\").send()`. Auto-dismisses at [settings.notification_system] auto_dismiss_ms. The dedup_key is shared with the failure toast (T217) so a fixed-then-reloaded config replaces its own error toast in place (update_duplicate recomputes expires_at from the new draft, so the replacement success toast starts its own auto-dismiss timer).\n\nVERIFICATION: compiles; both lint gates exit 0. Not visually verified — Antonio drives: press prefix+Shift+r on a good config, see the toast, watch it auto-dismiss.\nFILES: heca/src/main.rs.",
+      "descriptionUpdatedAt": "2026-08-28T07:23:42.815Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "3d4fb332-e3f1-40a9-ab42-55b10cd53b14-check-001-planned-done",
+          "date": "2026-08-28T07:23:42.813Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SHIPPED: on a successful reload, about_to_wait (heca/src/main.rs) raises `Notification::success(\"Configuration reloaded\").dedup_key(\"config-reload\").send()`. Auto-dismisses at [settings.notification_system] auto_dismiss_ms. The dedup_key is shared with the failure toast (T217) so a fixed-then-reloaded config replaces its own error toast in place (update_duplicate recomputes expires_at from the new draft, so the replacement success toast starts its own auto-dismiss timer).\n\nVERIFICATION: compiles; both lint gates exit 0. Not visually verified — Antonio drives: press prefix+Shift+r on a good config, see the toast, watch it auto-dismiss.\nFILES: heca/src/main.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -108,10 +135,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-28T07:23:42.813Z",
+      "completedAt": "2026-08-28T07:23:42.813Z",
       "createdAt": "2026-07-03T22:52:28.341Z",
-      "updatedAt": "2026-07-03T22:52:28.341Z",
+      "updatedAt": "2026-08-28T07:23:42.813Z",
       "sessionInfo": []
     },
     {
@@ -122,11 +149,20 @@
       "priority": 2,
       "shortName": "reload-failure-toast",
       "title": "Emit reload failure notification with Retry action",
-      "status": "planned",
-      "description": "Su failure, emettere sticky danger toast con body errore, dedup `config.reload.failed` e azione Retry → `WmAction::ReloadConfig`.",
-      "descriptionUpdatedAt": "2026-07-03T22:52:28.341Z",
+      "status": "done",
+      "description": "Su failure, emettere sticky danger toast con body errore, dedup `config.reload.failed` e azione Retry → `WmAction::ReloadConfig`.\n\n---\n**Completion summary:**\nSHIPPED: on a failed reload, about_to_wait raises:\n`Notification::danger(\"Config reload failed\").body(e.to_string()).dedup_key(\"config-reload\").action(NotificationAction::new(\"Retry\", Intent::new(\"reload_config\"))).sticky().send()`\n- .sticky() — a broken config needs the user to act, so it does NOT auto-dismiss (opt-in per T503's rule; needed a new `Notification::sticky()` builder method — added, delegates to NotificationDraft::sticky(), test notification_sticky_opts_out_of_auto_dismiss_and_survives_the_runtime_rewrite proves next_expiry() stays None after the runtime's with_auto_duration rewrite).\n- Retry action: `reload_config` is an existing catalogued Global action (heca/src/actions.rs:1429, WmAction::ReloadConfig), so the button re-runs it via handle_reload_config → pending_reload → next about_to_wait retries and re-notifies.\n- body carries e.to_string() — ConfigError implements Display (already used by the eprintln!).\n- dedup_key \"config-reload\": a repeated failed reload updates the toast in place; a subsequent success replaces it.\n\nVERIFICATION: compiles; both lint gates exit 0; notification tests 64/64. Not visually verified — Antonio drives: break config.toml, prefix+Shift+r, see the sticky error toast with the parse message + Retry, fix it, click Retry, watch it flip to the success toast.\nFILES: heca/src/main.rs, heca/src/notification.rs (Notification::sticky()).\nDECISION: reload-failure notification is sticky; every other notification auto-dismisses (T503).",
+      "descriptionUpdatedAt": "2026-08-28T07:23:52.297Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "b0b0c8f3-452c-4247-9e7f-09f38260d8b7-check-001-planned-done",
+          "date": "2026-08-28T07:23:52.296Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SHIPPED: on a failed reload, about_to_wait raises:\n`Notification::danger(\"Config reload failed\").body(e.to_string()).dedup_key(\"config-reload\").action(NotificationAction::new(\"Retry\", Intent::new(\"reload_config\"))).sticky().send()`\n- .sticky() — a broken config needs the user to act, so it does NOT auto-dismiss (opt-in per T503's rule; needed a new `Notification::sticky()` builder method — added, delegates to NotificationDraft::sticky(), test notification_sticky_opts_out_of_auto_dismiss_and_survives_the_runtime_rewrite proves next_expiry() stays None after the runtime's with_auto_duration rewrite).\n- Retry action: `reload_config` is an existing catalogued Global action (heca/src/actions.rs:1429, WmAction::ReloadConfig), so the button re-runs it via handle_reload_config → pending_reload → next about_to_wait retries and re-notifies.\n- body carries e.to_string() — ConfigError implements Display (already used by the eprintln!).\n- dedup_key \"config-reload\": a repeated failed reload updates the toast in place; a subsequent success replaces it.\n\nVERIFICATION: compiles; both lint gates exit 0; notification tests 64/64. Not visually verified — Antonio drives: break config.toml, prefix+Shift+r, see the sticky error toast with the parse message + Retry, fix it, click Retry, watch it flip to the success toast.\nFILES: heca/src/main.rs, heca/src/notification.rs (Notification::sticky()).\nDECISION: reload-failure notification is sticky; every other notification auto-dismisses (T503)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -134,10 +170,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-28T07:23:52.296Z",
+      "completedAt": "2026-08-28T07:23:52.296Z",
       "createdAt": "2026-07-03T22:52:28.341Z",
-      "updatedAt": "2026-07-03T22:52:28.341Z",
+      "updatedAt": "2026-08-28T07:23:52.296Z",
       "sessionInfo": []
     },
     {
@@ -148,11 +184,20 @@
       "priority": 4,
       "shortName": "reload-stderr",
       "title": "Preserve stderr reload logs",
-      "status": "planned",
-      "description": "Mantenere `eprintln!`/log esistenti per debug e terminal visibility; toast è feedback user-facing, non replacement dei log.",
-      "descriptionUpdatedAt": "2026-07-03T22:52:28.341Z",
+      "status": "done",
+      "description": "Mantenere `eprintln!`/log esistenti per debug e terminal visibility; toast è feedback user-facing, non replacement dei log.\n\n---\n**Completion summary:**\nSHIPPED (no change needed beyond keeping them): reload_config's two stderr lines on the failure path are retained —\n  eprintln!(\"[heca] reload failed: {e}\");\n  eprintln!(\"[heca] fix config.toml and press prefix+Shift+r to retry\");\nThey fire alongside the new danger notification (T217), so a user watching the process in a terminal still sees the parse error even if they miss the toast. The success path prints nothing (unchanged).\n\nVERIFICATION: present in heca/src/main.rs reload_config; both lint gates exit 0.\nFILES: heca/src/main.rs.",
+      "descriptionUpdatedAt": "2026-08-28T07:23:56.786Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "f024c6cc-af06-4908-97d8-acccd9c67c2b-check-001-planned-done",
+          "date": "2026-08-28T07:23:56.785Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SHIPPED (no change needed beyond keeping them): reload_config's two stderr lines on the failure path are retained —\n  eprintln!(\"[heca] reload failed: {e}\");\n  eprintln!(\"[heca] fix config.toml and press prefix+Shift+r to retry\");\nThey fire alongside the new danger notification (T217), so a user watching the process in a terminal still sees the parse error even if they miss the toast. The success path prints nothing (unchanged).\n\nVERIFICATION: present in heca/src/main.rs reload_config; both lint gates exit 0.\nFILES: heca/src/main.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -160,19 +205,36 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-28T07:23:56.785Z",
+      "completedAt": "2026-08-28T07:23:56.785Z",
       "createdAt": "2026-07-03T22:52:28.341Z",
-      "updatedAt": "2026-07-03T22:52:28.341Z",
+      "updatedAt": "2026-08-28T07:23:56.785Z",
       "sessionInfo": []
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-27T09:42:11.464Z",
+  "updatedAt": "2026-08-28T07:24:03.646Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "de885fe0-11fa-4bde-9cb1-299a6a7140a1",
+      "date": "2026-08-28T07:23:37.262Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "3490291f-ee5c-435c-bad2-a4d4e625c3e4",
+      "date": "2026-08-28T07:24:03.670Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
   "sessionInfo": []
 }

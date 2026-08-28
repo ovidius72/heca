@@ -1701,6 +1701,14 @@ impl Notification {
         self
     }
 
+    /// Stay until dismissed — no auto-dismiss timer. The opt-in for a notification that must
+    /// persist (an error to acknowledge, a long-running status); everything else auto-dismisses
+    /// after `[settings.notification_system] auto_dismiss_ms`.
+    pub fn sticky(mut self) -> Self {
+        self.draft = self.draft.sticky();
+        self
+    }
+
     /// Append an inline action. Callable more than once, in order — matches `actions: Vec<..>`.
     pub fn action(mut self, action: NotificationAction) -> Self {
         self.draft = self.draft.action(action);
@@ -2302,6 +2310,18 @@ mod tests {
         // dropped, never a panic. This is what lets a producer call `Notification::send`
         // unconditionally.
         Notification::info("no sink here").send();
+    }
+
+    #[test]
+    fn notification_sticky_opts_out_of_auto_dismiss_and_survives_the_runtime_rewrite() {
+        let now = Instant::now();
+        let mut runtime = test_runtime(4000);
+        let draft = Notification::danger("Config reload failed")
+            .body("expected `=` at line 3")
+            .sticky()
+            .draft;
+        runtime.push(draft, now).unwrap();
+        assert_eq!(runtime.next_expiry(), None, "a sticky notification never expires");
     }
 
     // -- configured auto-dismiss + delivery mode ([settings.notification_system]) --
