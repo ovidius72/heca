@@ -952,6 +952,33 @@ action not listed uses its own declared default. Changes apply on
 > for the pane you work in; **Delete** stays for a column or workspace, which
 > destroys everything inside it.
 
+### Notifications
+
+heca shows short **toast notifications** in the top-right corner — a pane was
+created, a process exited, the config reloaded, a command could not be run.
+
+```toml
+[settings.notification_system]
+mode = "app"          # "app" (in-app toast stack) | "system" (OS notifications —
+                      # reserved, falls back to "app" until that backend exists) |
+                      # "none" (no notifications at all — stderr logs are unaffected)
+auto_dismiss_ms = 4000 # how long a toast stays before dismissing itself
+```
+
+- **Severity is tone, not importance.** `info` / `success` / `warning` / `danger`
+  change the accent colour; they do **not** change how long a toast stays. Every
+  toast auto-dismisses after `auto_dismiss_ms` unless the code that raised it
+  marked it sticky (a config-reload failure is sticky — you fix it and press
+  **Retry**).
+- **Interacting:** `prefix+/` puts pick letters on the visible toasts' buttons and
+  their × ; `prefix+n` dismisses. (Clicking a toast is a work in progress.)
+- **Raising one** — from a keybinding, a script, or a plugin — is the `notify`
+  action: `notify title="Build finished" body="3 warnings" severity=success`.
+  Rust code in the app uses `Notification::info("…").body("…").send()`.
+- What produces a toast today: a new pane, a pane whose process exited while the
+  pane stays open, `prefix+Shift+r` (success or the parse error), and a command
+  that fails to spawn.
+
 ### Fonts
 
 Fonts are **system-local, not theme-portable** — a color theme that shipped a

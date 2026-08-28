@@ -2363,6 +2363,39 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_visible_actions_intent_is_resolvable_for_the_relay_to_re_dispatch() {
+        // F009/P057/T238: `on_action(id, key)` names the relay action; the relay looks the key
+        // back up here and re-dispatches the *real* Intent through the router (registry/policy
+        // path), never a direct handler. This is the lookup that makes that possible.
+        let now = Instant::now();
+        let mut runtime = test_runtime(4000);
+        let draft = Notification::info("Build failed")
+            .action(
+                NotificationAction::new(
+                    "Open log",
+                    Intent::new("open_pane_log").arg("pane_id", heca_view::PropValue::Int(7)),
+                )
+                .dismiss_after(true),
+            )
+            .draft;
+        let id = runtime.push(draft, now).unwrap().notification_id();
+
+        let (intent, dismiss_after) = runtime
+            .action_and_dismiss_after_for_visible(id, "open_pane_log")
+            .expect("the visible card's action resolves by its intent name");
+        assert_eq!(intent.action, "open_pane_log");
+        assert_eq!(intent.args.get("pane_id"), Some(&heca_view::PropValue::Int(7)));
+        assert!(dismiss_after);
+
+        assert!(
+            runtime
+                .action_and_dismiss_after_for_visible(id, "not_an_action")
+                .is_none(),
+            "an unknown key resolves to nothing, not a panic"
+        );
+    }
+
     // -- configured auto-dismiss + delivery mode ([settings.notification_system]) --
 
     fn test_runtime(auto_ms: u64) -> NotificationRuntime {
