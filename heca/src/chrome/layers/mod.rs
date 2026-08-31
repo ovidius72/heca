@@ -265,43 +265,55 @@ impl LayerRegistry {
             .is_some_and(heca_grid_ui::animation::Presence::is_leaving)
     }
 
-    /// **Advance every visible layer by one frame**, and retire the ones whose exit has finished.
-    /// Returns `true` while anything is still moving, which is what keeps frames coming — an
-    /// animation nobody ticks is a frozen surface.
+    /// **Which surfaces are mid-exit** — captured *before* the tree is ticked.
     ///
-    /// The layers' own trees are ticked **here** rather than by the caller, because the two are one
-    /// question: a surface's exit plays inside its tree, and the frame it finishes is the frame the
-    /// layer goes. Ticking them apart meant the registry could not see the transition it has to act
-    /// on. Widgets inside a layer — a modal button's tooltip reveal, a press flash — advance in the
-    /// same pass, so a new layer animates with no per-layer wiring.
-    pub(crate) fn tick(&mut self, window: &mut heca_grid_ui::widgets::Flex, dt: f32) -> bool {
-        let mut fading = false;
-        let ids: Vec<LayerId> = self.layers.iter().filter(|l| l.visible).map(|l| l.id).collect();
-        for id in ids {
-            let was_leaving = self.is_leaving(window, id);
-            if let Some(node) = crate::chrome::surface_node_mut(window, id)
-                && node.tick(dt)
-            {
-                fading = true;
-            }
-            let Some(l) = self.layers.iter_mut().find(|l| l.id == id) else {
+    /// Half of [`retire_finished_exits`](Self::retire_finished_exits), and separate from it for the
+    /// reason the pair exists at all: the surfaces are children of the window root now, so **the
+    /// tree ticks them**, once, in the same walk as everything else. The registry no longer
+    /// advances anything — it only has to notice the frame an exit *finished*, and that means
+    /// looking either side of a tick it does not own.
+    pub(crate) fn leaving_before_tick(&self, window: &heca_grid_ui::widgets::Flex) -> Vec<LayerId> {
+        self.layers
+            .iter()
+            .filter(|l| l.visible && self.is_leaving(window, l.id))
+            .map(|l| l.id)
+            .collect()
+    }
+
+    /// **Retire the surfaces whose exit finished during this frame's tick**, and report whether the
+    /// picture changed.
+    ///
+    /// Pass the ids [`leaving_before_tick`](Self::leaving_before_tick) returned *before*
+    /// `window_root.tick`. A surface that was leaving then and is not leaving now has just finished
+    /// its exit: it stops being visible, and one more frame is requested so its absence is painted.
+    ///
+    /// ⚠️ **This used to tick the trees itself, and that was the bug** (Antonio, driving,
+    /// 2026-08-31). Once the surfaces became children of the window root they were advanced twice a
+    /// frame — once by the tree's walk, once here — and the registry read `was_leaving` *after* the
+    /// tree's tick had already consumed the transition. So on the frame an exit finished it saw
+    /// "was not leaving", never retired the surface, and never asked for the frame that paints it
+    /// gone: the exposé stuck at a tenth opacity until some other input forced a repaint, stayed
+    /// modal, and swallowed `ctrl+h/j/k/l` for ever after. **The tree ticks. This only reconciles.**
+    pub(crate) fn retire_finished_exits(
+        &mut self,
+        window: &mut heca_grid_ui::widgets::Flex,
+        was_leaving: &[LayerId],
+    ) -> bool {
+        let mut changed = false;
+        for id in was_leaving {
+            if self.is_leaving(window, *id) {
                 continue;
-            };
+            }
             // **The frame the whole exit finishes is the frame the surface goes** — and the surface
             // answers for *every* part of its gesture, so nothing retires it while a shrink is
             // still playing under a dissolve that has already ended.
-            let still_leaving = crate::chrome::surface_node(window, id)
-                .and_then(|n| n.presence())
-                .is_some_and(heca_grid_ui::animation::Presence::is_leaving);
-            if was_leaving && !still_leaving {
+            if let Some(l) = self.layers.iter_mut().find(|l| l.id == *id) {
                 l.visible = false;
-                // **And ask for one more frame, to paint its absence.** Both effects have just
-                // reported themselves done, so without this nothing requests another frame — and
-                // the last frame actually drawn was the one before, still faintly visible. The map
-                // stayed on the glass at about a tenth opacity until some other input forced a
-                // repaint (Antonio, driving, 2026-08-19). Going away is a change like any other:
-                // whatever makes it needs the frame that shows it.
-                fading = true;
+                // **And ask for one more frame, to paint its absence.** Without it nothing requests
+                // another, and the last frame drawn is the one before — still faintly visible. The
+                // map stayed on the glass at about a tenth opacity until some other input forced a
+                // repaint (Antonio, driving, 2026-08-19).
+                changed = true;
             }
         }
         // A layer whose removal was waiting on its exit leaves for good now — and that, too, is a
@@ -317,9 +329,9 @@ impl LayerRegistry {
                 crate::chrome::remove_surface(window, &crate::chrome::surface_slot(*id));
             }
             self.layers.retain(|l| !gone.contains(&l.id));
-            fading = true;
+            changed = true;
         }
-        fading
+        changed
     }
 
     /// **The id [`add_named`](Self::add_named) will register `name` under** — the existing layer's

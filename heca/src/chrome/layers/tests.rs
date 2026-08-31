@@ -4,6 +4,23 @@ use super::*;
 use heca_grid_ui::animation::Animation;
 use heca_grid_ui::widgets::{Flex, Overlay};
 
+/// **One frame, in the order `handle_about_to_wait` runs it.**
+///
+/// Snapshot who is leaving, let the **tree** tick (the surfaces are its children), then let the
+/// registry retire whatever finished. Written as a helper rather than a registry method because
+/// that is the real shape: the registry does not advance anything any more.
+///
+/// The order is the test. When the registry ticked the trees *as well as* the tree ticking them,
+/// every surface advanced twice a frame and the finishing transition was consumed before the
+/// registry looked — the exposé stuck mid-fade and stayed modal (Antonio, driving, 2026-08-31).
+/// A test that called `reg.tick` alone could not see that, because it never ran the tree's walk.
+fn frame(reg: &mut LayerRegistry, window: &mut heca_grid_ui::widgets::Flex, dt: f32) -> bool {
+    let leaving = reg.leaving_before_tick(window);
+    let ticked = window.tick(dt);
+    let retired = reg.retire_finished_exits(window, &leaving);
+    ticked || retired
+}
+
 /// A layer whose surface declares nothing: it appears and goes between two frames.
 fn empty_root() -> Box<dyn Component> {
     Box::new(Flex::row())
@@ -56,7 +73,7 @@ fn re_showing_a_leaving_layer_does_not_cancel_its_exit() {
     reg.show(&mut window, id);
 
     reg.hide(&mut window, id);
-    reg.tick(&mut window, 0.1);
+    frame(&mut reg, &mut window, 0.1);
     let mid = reg.opacity(&window, id);
     assert!(mid < 1.0, "it is on its way out: {mid}");
 
@@ -83,32 +100,35 @@ fn removing_a_fading_layer_waits_for_the_fade() {
         &mut window,
     );
     reg.show(&mut window, id);
-    while reg.tick(&mut window, 0.05) {} // let the arrival play, as a few frames would
+    while frame(&mut reg, &mut window, 0.05) {} // let the arrival play, as a few frames would
 
     reg.remove(&mut window, id);
     assert!(reg.any_visible(), "it is on its way out, not gone");
-    assert!(reg.tick(&mut window, 0.05), "still dissolving");
+    assert!(frame(&mut reg, &mut window, 0.05), "still dissolving");
     assert!(
         reg.opacity(&window, id) < 1.0,
         "and visibly on its way: {}",
         reg.opacity(&window, id)
     );
     while reg.opacity(&window, id) > 0.05 {
-        assert!(reg.tick(&mut window, 0.05), "still dissolving");
+        assert!(frame(&mut reg, &mut window, 0.05), "still dissolving");
     }
 
     // **The tick that finishes the exit still asks for a frame** — the one that paints the
     // absence. Both effects report themselves done here, so without it nothing requests
     // another frame and the last frame actually drawn is the one before, still faintly there:
     // the map stayed on the glass at about a tenth opacity until some other input forced a
-    // repaint (Antonio, driving, 2026-08-19). This assertion used to read `!reg.tick(&mut window, ..)`,
+    // repaint (Antonio, driving, 2026-08-19). This assertion used to read `!frame(&mut reg, &mut window, ..)`,
     // which is that bug written down.
     assert!(
-        reg.tick(&mut window, 0.05),
+        frame(&mut reg, &mut window, 0.05),
         "one more frame, to paint it gone"
     );
     assert!(!reg.any_visible(), "the layer is gone for good");
-    assert!(!reg.tick(&mut window, 0.05), "and now it asks for nothing");
+    assert!(
+        !frame(&mut reg, &mut window, 0.05),
+        "and now it asks for nothing"
+    );
 }
 
 /// **A dissolving layer stops being in charge the moment it is dismissed**, even though it is
@@ -509,7 +529,7 @@ fn re_showing_a_visible_layer_does_not_restart_its_zoom() {
     );
 
     // Let it finish, the way a few frames would.
-    while reg.tick(&mut window, 0.05) {}
+    while frame(&mut reg, &mut window, 0.05) {}
     assert_eq!(scale_of(&window, id), 1.0, "settled at life size");
 
     // The session changes: the layer is rebuilt — a **fresh tree**, which on its own would
@@ -532,7 +552,10 @@ fn re_showing_a_visible_layer_does_not_restart_its_zoom() {
         1.0,
         "a rebuild must not replay the arrival"
     );
-    assert!(!reg.tick(&mut window, 0.05), "and nothing is animating");
+    assert!(
+        !frame(&mut reg, &mut window, 0.05),
+        "and nothing is animating"
+    );
 }
 
 /// **Showing a layer puts its surface on screen** — the whole chain, because every link in it
@@ -578,7 +601,7 @@ fn showing_a_layer_puts_its_surface_on_screen() {
 
     reg.hide(&mut window, id);
     assert!(painted(&window, id), "…and keeps drawing while it leaves");
-    while reg.tick(&mut window, 0.05) {}
+    while frame(&mut reg, &mut window, 0.05) {}
     assert!(!reg.any_visible(), "…until the gesture has played out");
 }
 
@@ -606,8 +629,8 @@ fn a_rebuild_part_way_through_an_arrival_carries_it_on() {
         &mut window,
     );
     reg.show(&mut window, id);
-    reg.tick(&mut window, 0.05);
-    reg.tick(&mut window, 0.05);
+    frame(&mut reg, &mut window, 0.05);
+    frame(&mut reg, &mut window, 0.05);
     let mid = scale_of(&window, id);
     assert!(mid > 1.0 && mid < 1.3, "part way in: {mid}");
 
@@ -628,7 +651,7 @@ fn a_rebuild_part_way_through_an_arrival_carries_it_on() {
         mid,
         "the arrival carried on from where it was"
     );
-    assert!(reg.tick(&mut window, 0.05), "…and is still going");
+    assert!(frame(&mut reg, &mut window, 0.05), "…and is still going");
     assert!(
         scale_of(&window, rebuilt) < mid,
         "…toward life size, not back to the start"

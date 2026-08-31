@@ -108,6 +108,10 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
 
     state.session.advance_animations();
     let dt = crate::chrome::FRAME_INTERVAL.as_secs_f32();
+    // **Which surfaces are mid-exit, before anything advances.** The tick below is the one that
+    // advances them — they are children of this tree — so the registry has to look either side of
+    // it to catch the frame an exit finishes. Reading it afterwards misses that frame entirely.
+    let leaving_before = state.layers.leaving_before_tick(&state.window_root);
     let mut chrome_animating = state.window_root.tick(dt);
     // Tick the retained pane-info-bar headers too, so their action buttons' press
     // flash / hover animation and tooltip reveal advance (and a redraw is requested
@@ -119,12 +123,14 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         chrome_animating |= widgets.badge.tick(dt);
         chrome_animating |= widgets.scrollbar.tick(dt);
     }
-    // Every dynamically-registered layer (overlay dialogs, plugin panels, the exposé) advances in
-    // one pass inside the registry: the widgets in a layer's tree — a modal button's tooltip
-    // reveal, a press flash — and the surface's own arrival or exit are the same frame, and the
-    // registry has to see the frame an exit *finishes* to retire the layer on it. A new layer
-    // animates for free, with no per-layer wiring.
-    chrome_animating |= state.layers.tick(&mut state.window_root, dt);
+    // Every surface — an overlay dialog, a plugin panel, the exposé — advanced in the walk above,
+    // because it is a child of that tree. All that is left is to **retire the ones whose exit just
+    // finished**, which is the registry's bookkeeping and not an animation pass: a surface that was
+    // leaving before the tick and is not leaving now has finished, and its absence needs one more
+    // frame to be painted.
+    chrome_animating |= state
+        .layers
+        .retire_finished_exits(&mut state.window_root, &leaving_before);
 
     // Auto-dismiss notifications past their deadline — F009/T202. `expire_due` only touches the
     // store's own `Signal<Vec<ToastSpec>>` (F009/T208); it is not part of `chrome_runtime_changed`,
