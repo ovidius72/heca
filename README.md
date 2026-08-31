@@ -981,9 +981,9 @@ max_visible = 5        # how many are on screen at once; the rest queue
   from under the click you are aiming at — the time that costs is given back when
   you move away, and each card resumes with what it had left.
 - **More than fits:** only `max_visible` cards show at once. The rest wait in the
-  order they were raised and take the next slot that frees. A card on screen never
-  moves to fill a vacancy — closing one hands **its** slot to the next in line, so
-  the cards around it stay where they are.
+  order they were raised — nothing is dropped. Closing one slides the cards after it
+  up so the column never has a blank in it, and the next in line appears at the
+  bottom, where a card that has just arrived belongs.
 - **Raising one** — from a keybinding, a script, or a plugin — is the `notify`
   action: `notify title="Build finished" body="3 warnings" severity=success`.
   Rust code in the app uses `Notification::info("…").body("…").send()`.

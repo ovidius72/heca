@@ -161,7 +161,7 @@ fn default_notification_auto_dismiss_ms() -> u64 {
 /// Default number of notification cards on screen at once.
 ///
 /// Small on purpose: the cards are transient and the stack is not a log. Overflow is not lost — it
-/// queues and takes the next slot that frees — so raising this trades reading room against how much
+/// queues and joins the column as slots free — so raising this trades reading room against how much
 /// of the window the stack is allowed to cover.
 fn default_notification_max_visible() -> usize {
     5
@@ -199,12 +199,11 @@ pub struct NotificationSystemConfig {
     /// still wins. Default: 4000.
     #[serde(default = "default_notification_auto_dismiss_ms")]
     pub auto_dismiss_ms: u64,
-    /// How many notification cards are on screen at once. Further notifications queue and take
-    /// the next slot that frees, in the order they were raised — nothing is dropped.
+    /// How many notification cards are on screen at once. Further notifications queue in the order
+    /// they were raised — nothing is dropped.
     ///
-    /// A visible card never moves to fill a vacancy: closing one lets the next queued card take
-    /// **that** slot, so the cards around it stay where they are and the click after does not land
-    /// on something that slid under the cursor. Default: 5. Clamped to at least 1.
+    /// Closing one slides the cards after it up so the column never shows a blank slot, and the
+    /// next in line joins at the **end**. Default: 5. Clamped to at least 1.
     #[serde(default = "default_notification_max_visible")]
     pub max_visible: usize,
 }

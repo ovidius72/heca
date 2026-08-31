@@ -167,10 +167,9 @@ mode = "app"
 # a notification that sets its own lifetime still wins.
 auto_dismiss_ms = 4000
 
-# How many notification cards are on screen at once. Further notifications queue
-# and take the next slot that frees, in the order they were raised — nothing is
-# dropped. A visible card never moves to fill a vacancy: closing one lets the next
-# queued card take that slot, so the cards around it stay put.
+# How many notification cards are on screen at once. Further notifications queue in
+# the order they were raised — nothing is dropped. Closing one slides the cards
+# after it up so there is never a blank slot, and the next in line joins at the end.
 max_visible = 5
 
 # ─────────────────────────────────────────────────────────────────────────────

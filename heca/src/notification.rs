@@ -673,8 +673,10 @@ impl NotificationStoreUpdate {
 ///
 /// - An id appears in exactly one placement: `queued`, one entry of `visible`,
 ///   or `history`.
-/// - `visible` has exactly [`MAX_VISIBLE_NOTIFICATIONS`] stable slots. A slot
-///   may become vacant but no existing visible id moves to fill it.
+/// - `visible` has exactly [`max_visible`](NotificationStore::max_visible) slots, and the occupied
+///   ones are packed at the front: a card leaving closes its gap by sliding the ones after it up,
+///   and a promoted card joins at the end. The column therefore reads top to bottom in the order
+///   the notifications were raised, with no blank between them.
 /// - Every id in a placement resolves in `notifications`, and every dedup index
 ///   entry resolves to exactly one canonical notification with that key.
 /// - `next_id` only increases. IDs are never reused, including after history
@@ -696,9 +698,10 @@ pub struct NotificationStore {
     dedup_index: HashMap<String, NotificationId>,
     /// FIFO ids waiting for a visible slot. The front is promoted first.
     queued: VecDeque<NotificationId>,
-    /// Stable presentation slots. Existing visible entries never reorder.
-    /// Stable presentation slots — as many as `max_visible`, fixed for the store's life. Length is
-    /// the capacity; a `None` is a vacancy, and an occupied slot never moves to fill one.
+    /// Presentation slots, packed from the front — see [`close_gaps`](Self::close_gaps).
+    /// Presentation slots — as many as `max_visible`, fixed for the store's life. Length is the
+    /// capacity, and the occupied ones are packed at the front: `None`s are the free tail, never a
+    /// hole in the middle. See [`close_gaps`](Self::close_gaps).
     visible: Vec<Option<NotificationId>>,
     /// FIFO archival order; the oldest entry is evicted first.
     history: VecDeque<NotificationId>,
@@ -859,10 +862,9 @@ impl NotificationStore {
 
     /// Dismiss an entry through the user-facing lifecycle path.
     ///
-    /// Visible entries vacate only their current slot; pending entries are
-    /// removed from the FIFO. Both are archived, then a pending entry fills a
-    /// newly-vacant slot without moving cards already on screen. Dedup keys
-    /// remain indexed while in history so T195 can reactivate the same ID.
+    /// A visible entry leaves its slot and the cards after it slide up to close the gap; a pending
+    /// entry is removed from the FIFO. Both are archived, then a pending entry joins at the end.
+    /// Dedup keys remain indexed while in history so T195 can reactivate the same ID.
     pub fn dismiss(
         &mut self,
         notification_id: NotificationId,
@@ -919,9 +921,8 @@ impl NotificationStore {
 
     /// Archive every visible auto-dismiss notification due at `now`.
     ///
-    /// Slots are cleared in place and then refilled FIFO from pending entries;
-    /// occupied slots retain their positions. Sticky notifications have no
-    /// deadline and are never selected.
+    /// A due card leaves, the cards after it slide up to close the gap, and pending entries join
+    /// at the end FIFO. Sticky notifications have no deadline and are never selected.
     pub fn expire_due(&mut self, now: Instant) -> NotificationStoreUpdate {
         let (_, update) = self.transition_at(now, |store, now| {
             let mut due_ids = Vec::new();
@@ -1075,7 +1076,7 @@ impl NotificationStore {
     /// Promote pending notifications into vacant slots without reordering an
     /// existing visible card. Returns whether the visible projection changed.
     fn promote_pending(&mut self, now: Instant) -> bool {
-        let mut visible_changed = false;
+        let mut visible_changed = self.close_gaps();
         for slot in self.visible.iter_mut().filter(|slot| slot.is_none()) {
             let Some(notification_id) = self.queued.pop_front() else {
                 break;
@@ -1096,6 +1097,26 @@ impl NotificationStore {
             visible_changed = true;
         }
         visible_changed
+    }
+
+    /// **Slide the remaining cards up so the stack has no hole in it**, and report whether any
+    /// moved.
+    ///
+    /// A card that goes leaves a gap wherever it was. The stack closes it: the cards below move up
+    /// one, and whatever is promoted joins at the **end**, so the column always reads top to bottom
+    /// in the order the notifications were raised, with no blank between them.
+    ///
+    /// The alternative — leave the hole and drop the next queued card straight into it — keeps
+    /// every card perfectly still, which is why it was built that way. It also inserts a brand new
+    /// card in the middle of ones that have been read, and shows a blank slot in the meantime.
+    /// (Antonio, driving, 2026-08-31: it should append at the end and close the vacancy.)
+    fn close_gaps(&mut self) -> bool {
+        let before = self.visible.clone();
+        let mut occupied: Vec<Option<NotificationId>> =
+            self.visible.iter().filter(|slot| slot.is_some()).copied().collect();
+        occupied.resize(self.visible.len(), None);
+        self.visible = occupied;
+        self.visible != before
     }
 
     /// Execute one store-owned transition at a caller-supplied time.
@@ -1968,10 +1989,16 @@ mod tests {
 
         let (_, update) = store.transition_at(now, |store, now| ((), store.promote_pending(now)));
         assert!(update.visible_projection_changed());
-        assert_eq!(store.visible[0], Some(visible_ids[0]));
-        assert_eq!(store.visible[1], Some(queued_id));
-        assert_eq!(store.visible[2], Some(visible_ids[2]));
-        assert_eq!(store.visible[3], Some(visible_ids[3]));
+        // The hole closes and the promoted card lands at the end, so the column reads in the order
+        // the notifications were raised with no blank in it.
+        let mut expected: Vec<Option<NotificationId>> = visible_ids
+            .iter()
+            .copied()
+            .filter(|id| *id != released_id)
+            .map(Some)
+            .collect();
+        expected.push(Some(queued_id));
+        assert_eq!(store.visible, expected);
         assert!(store.queued.is_empty());
     }
 
@@ -2155,14 +2182,13 @@ mod tests {
         );
     }
 
-    /// **Overflow queues; it is never dropped** — and it enters at the slot that freed.
+    /// **Overflow queues; it is never dropped** — and it joins at the end, behind the gap closing.
     ///
-    /// With more notifications than slots, the extras wait in the order they were raised. Closing
-    /// one hands its **own** slot to the next in line, so the cards around it do not slide: the
-    /// click after a close lands where the user is looking, not on something that moved under the
-    /// cursor while they were still holding the mouse.
+    /// With more notifications than slots the extras wait in the order they were raised. Closing
+    /// one slides the cards after it up so the column has no blank in it, and the next in line
+    /// appears at the bottom, which is where a card that has just arrived belongs.
     #[test]
-    fn overflow_waits_its_turn_and_takes_the_slot_that_freed() {
+    fn overflow_waits_its_turn_and_joins_at_the_end() {
         let now = Instant::now();
         let mut store = NotificationStore::with_capacity(100, 3);
         let ids: Vec<_> = (0..6)
@@ -2177,22 +2203,22 @@ mod tests {
         assert_eq!(store.visible, vec![Some(ids[0]), Some(ids[1]), Some(ids[2])]);
         assert_eq!(store.queued.len(), 3, "the rest are waiting, not lost");
 
-        // Close the middle card: the next queued takes *that* slot.
+        // Close the middle card: the one after it slides up, and the next queued appends.
         store.dismiss(ids[1], now);
         assert_eq!(
             store.visible,
-            vec![Some(ids[0]), Some(ids[3]), Some(ids[2])],
-            "the vacancy is filled in place; its neighbours do not move",
+            vec![Some(ids[0]), Some(ids[2]), Some(ids[3])],
+            "the gap closes and the newcomer goes last",
         );
 
-        // And again, at the front this time.
+        // And again, at the front this time — the whole column shifts up by one.
         store.dismiss(ids[0], now);
-        assert_eq!(store.visible, vec![Some(ids[4]), Some(ids[3]), Some(ids[2])]);
+        assert_eq!(store.visible, vec![Some(ids[2]), Some(ids[3]), Some(ids[4])]);
         assert_eq!(store.queued.len(), 1);
     }
 
     #[test]
-    fn dismiss_visible_archives_it_and_refills_only_its_slot() {
+    fn dismiss_visible_closes_its_gap_and_appends_the_next_queued() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
         let visible_ids: Vec<_> = (0..store.max_visible())
@@ -2205,13 +2231,16 @@ mod tests {
         assert!(store.notifications[&visible_ids[1]].is_history());
         assert_eq!(store.history, VecDeque::from([visible_ids[1]]));
 
-        // **The queued card takes the vacated slot, and nothing else moves.** Closing the second
-        // card must not slide the third and fourth up under the cursor that just clicked — the
-        // next click would land on a card the user never aimed at. So the promotion fills the hole
-        // rather than appending, and every neighbour keeps its place.
-        let mut expected: Vec<Option<NotificationId>> =
-            visible_ids.iter().copied().map(Some).collect();
-        expected[1] = Some(queued_id);
+        // **The gap closes and the newcomer joins at the end.** Closing the second card slides the
+        // rest up, so there is never a blank slot in the column, and the promoted card appears
+        // where a new one belongs — after the ones already being read, not inserted among them.
+        let mut expected: Vec<Option<NotificationId>> = visible_ids
+            .iter()
+            .copied()
+            .filter(|id| *id != visible_ids[1])
+            .map(Some)
+            .collect();
+        expected.push(Some(queued_id));
         assert_eq!(store.visible, expected);
     }
 
