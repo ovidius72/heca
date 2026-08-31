@@ -35,7 +35,7 @@
 
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, Handled, PaintCx};
-use crate::reactive::{Signal, SignalGet};
+use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use crate::style::{Align, Direction, Justify, Length};
 use crate::widgets::{Button, Toast, ToastPosition, ToastSpec};
 use heca_core::layout::Point;
@@ -78,6 +78,8 @@ pub struct ToastStack {
     margin: f32,
     on_dismiss: Option<Rc<dyn Fn(u64)>>,
     on_action: Option<Rc<dyn Fn(u64, &str)>>,
+    /// **Is the pointer resting on one of the cards** — see [`hovered_signal`](Self::hovered_signal).
+    hovered: Option<Signal<bool>>,
     /// One per child, same index — see [`Slot`].
     slots: Vec<Slot>,
 }
@@ -101,6 +103,7 @@ impl ToastStack {
             margin: DEFAULT_MARGIN,
             on_dismiss: None,
             on_action: None,
+            hovered: None,
             slots: Vec::new(),
         };
         stack.sync_anchor();
@@ -150,6 +153,28 @@ impl ToastStack {
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_action(mut self, f: impl Fn(u64, &str) + 'static) -> Self {
         self.on_action = Some(Rc::new(f));
+        self
+    }
+
+    /// **Report whether the pointer is resting on a card**, into a signal the host owns.
+    ///
+    /// A stack is a place people *read* things and then reach for a button, so whoever owns the
+    /// cards' lifetime usually wants to hold it still while the pointer is on one — otherwise a
+    /// card can retire out from under the click that was aimed at it, which is exactly what a close
+    /// button on a timed card invites.
+    ///
+    /// It is a **signal rather than a callback** because it is a state, not an act: the answer is
+    /// true for as long as the pointer stays, whoever asks. The same shape
+    /// [`open_when`](super::KeyHintGroup::open_when) reads, in the other direction.
+    ///
+    /// The stack does not decide what pausing means — it has no clock and no idea what a card's
+    /// lifetime is. It reports the fact; the owner of the lifetime acts on it.
+    ///
+    /// **Hover is asked of the framework, never re-derived**: it is marked along the hit-test
+    /// target's ancestor chain before a move is delivered, so this accounts for which card is on
+    /// top and what is clipped away — neither of which a private `bounds.contains(pos)` could know.
+    pub fn hovered_signal(mut self, hovered: Signal<bool>) -> Self {
+        self.hovered = Some(hovered);
         self
     }
 
@@ -303,6 +328,17 @@ impl ToastStack {
     fn on_a_card(&self) -> bool {
         self.base.children.iter().any(|c| c.base().hovered())
     }
+
+    /// Publish the hover state, **only when it changes**.
+    ///
+    /// Writing every move would wake whatever reads the signal on every pixel of pointer travel,
+    /// for an answer that is the same as it was.
+    fn report_hover(&self, on_a_card: bool) {
+        let Some(hovered) = self.hovered else { return };
+        if hovered.get_untracked() != on_a_card {
+            hovered.set(on_a_card);
+        }
+    }
 }
 
 impl Component for ToastStack {
@@ -376,10 +412,20 @@ impl Component for ToastStack {
     fn on_event(&mut self, ev: &Event) -> Handled {
         match ev {
             Event::PointerMove(_) | Event::PointerDown(_) | Event::Click(_) => {
-                match self.on_a_card() {
+                let on_a_card = self.on_a_card();
+                self.report_hover(on_a_card);
+                match on_a_card {
                     true => Handled::Yes,
                     false => Handled::No,
                 }
+            }
+            // **The pointer leaving is a hover ending, and no move reports it.** Moving off a card
+            // onto empty space is covered above — `on_a_card` simply goes false — but the pointer
+            // leaving the window *over* a card sends no further moves at all. Without this the
+            // stack stays hovered for good, and whatever holds still for it never resumes.
+            Event::PointerLeave(_) => {
+                self.report_hover(self.on_a_card());
+                Handled::No
             }
             _ => Handled::No,
         }

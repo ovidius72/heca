@@ -128,9 +128,18 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
 
     // Auto-dismiss notifications past their deadline — F009/T202. `expire_due` only touches the
     // store's own `Signal<Vec<ToastSpec>>` (F009/T208); it is not part of `chrome_runtime_changed`,
-    // which tracks the chrome_tree's signature, a tree the toast layer is never part of.
-    let notifications_expired = state.notifications.expire_due(Instant::now());
-    if notifications_expired {
+    // which tracks the chrome_tree's signature, a tree the toast surface is never part of.
+    //
+    // **The pointer resting on a card holds the whole stack still**, and the time that costs is
+    // handed back when it leaves, so a card resumes with what it had left. The stack reports the
+    // hover; what it *means* is decided in the runtime, which is where the lifetime lives.
+    let now = Instant::now();
+    use heca_grid_ui::reactive::SignalGet;
+    let deadlines_moved = state
+        .notifications
+        .set_hovered(state.notification_hovered.get_untracked(), now);
+    let notifications_expired = state.notifications.expire_due(now);
+    if notifications_expired || deadlines_moved {
         state.needs_redraw = true;
     }
 
@@ -171,7 +180,14 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             Instant::now() + crate::chrome::FRAME_INTERVAL,
         ));
-    } else if let Some(next_expiry) = state.notifications.next_expiry() {
+    // **Nothing to wake for while the pointer rests on the stack.** The deadlines are frozen, so
+    // waking at one would find nothing due and re-arm at the same instant — a spin, for as long as
+    // the pointer stayed. What ends the hold is a pointer event, which wakes the loop on its own.
+    // Same contract as below, in the one case that would otherwise break it.
+    } else if let Some(next_expiry) = match state.notifications.is_hovered() {
+        true => None,
+        false => state.notifications.next_expiry(),
+    } {
         // No busy-loop (F009/T202's contract): wake exactly once, at the next auto-dismiss
         // deadline, rather than polling every frame while a sticky-free toast is up.
         event_loop.set_control_flow(ControlFlow::WaitUntil(next_expiry));

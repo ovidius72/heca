@@ -762,6 +762,42 @@ impl NotificationStore {
         self.visible().filter_map(AppNotification::expires_at).min()
     }
 
+    /// **Give every visible card `by` more time.**
+    ///
+    /// This is what "the pointer is resting on the stack" costs: a card the user is reading — or
+    /// reaching across to click — must not retire under the cursor, and when they leave it should
+    /// resume with the time it actually had left rather than the time it started with.
+    ///
+    /// Shifting the deadlines is what makes that true. The alternative, simply not sweeping while
+    /// hovered, looks identical until the pointer leaves: every card whose deadline passed during
+    /// the hover is then instantly due, and the stack empties in the frame after the user moves
+    /// away — the same disappearing-under-the-click this exists to stop, moved a moment later.
+    ///
+    /// Sticky entries have no deadline and are untouched. Returns whether anything moved, so a
+    /// caller can skip re-arming a timer for a stack that is all sticky.
+    pub fn extend_visible_deadlines(&mut self, by: std::time::Duration) -> bool {
+        if by.is_zero() {
+            return false;
+        }
+        let ids: Vec<NotificationId> = self.visible.iter().flatten().copied().collect();
+        let mut moved = false;
+        for id in ids {
+            let Some(notification) = self.notifications.get_mut(&id) else {
+                continue;
+            };
+            if let NotificationPlacement::Visible {
+                expires_at: Some(deadline),
+                ..
+            } = &mut notification.placement
+                && let Some(later) = deadline.checked_add(by)
+            {
+                *deadline = later;
+                moved = true;
+            }
+        }
+        moved
+    }
+
     /// Look up one action of a currently visible notification, by the `key`
     /// `ToastStack::on_action(id, key)` reports back — matched against that
     /// action's `intent.action` name, which doubles as its identity.
@@ -1389,6 +1425,11 @@ pub struct NotificationRuntime {
     /// Whether the one-time "`system` mode has no OS backend yet" notice has already been
     /// shown for the current mode. Reset whenever [`set_mode`](Self::set_mode) changes the mode.
     system_fallback_announced: bool,
+    /// **When the pointer came to rest on a card**, or `None` when it is not on one.
+    ///
+    /// The stack reports the *fact* through a signal (it has no clock and no idea what a card's
+    /// lifetime is); this is where that fact becomes time. See [`set_hovered`](Self::set_hovered).
+    hovered_since: Option<Instant>,
 }
 
 impl NotificationRuntime {
@@ -1403,6 +1444,7 @@ impl NotificationRuntime {
             auto_dismiss,
             mode,
             system_fallback_announced: false,
+            hovered_since: None,
         }
     }
 
@@ -1514,8 +1556,51 @@ impl NotificationRuntime {
         self.store.next_expiry()
     }
 
+    /// **Hold the stack still while the pointer rests on it, and give back the time it cost.**
+    ///
+    /// Driven by the signal [`ToastStack::hovered_signal`](heca_grid_ui::widgets::ToastStack::hovered_signal)
+    /// writes: the widget reports whether the pointer is on a card, and the meaning of that — that
+    /// a card being read must not retire under the cursor — is decided here, where the lifetime
+    /// lives. Idempotent, so the caller may pass the same answer every frame.
+    ///
+    /// On release every visible deadline moves forward by however long the hover lasted, so each
+    /// card resumes with the time it had left rather than the time it started with. Returns whether
+    /// the deadlines moved, so the caller can re-arm its wake.
+    ///
+    /// **The hold is not a sticky-ness.** A card the user never hovers is unaffected, and one they
+    /// hover and leave goes back to expiring — this only removes the case where the countdown ran
+    /// while they were reaching for the button it was counting down to.
+    pub fn set_hovered(&mut self, hovered: bool, now: Instant) -> bool {
+        match (hovered, self.hovered_since) {
+            // Resting on a card, and already known to be: the deadlines are frozen by not being
+            // swept, so there is nothing to do until the pointer leaves.
+            (true, Some(_)) => false,
+            (true, None) => {
+                self.hovered_since = Some(now);
+                false
+            }
+            (false, Some(since)) => {
+                self.hovered_since = None;
+                self.store
+                    .extend_visible_deadlines(now.saturating_duration_since(since))
+            }
+            (false, None) => false,
+        }
+    }
+
+    /// Whether the stack is currently held still by the pointer resting on it.
+    pub fn is_hovered(&self) -> bool {
+        self.hovered_since.is_some()
+    }
+
     /// Auto-dismiss everything past its deadline. Call from the lifecycle tick.
+    ///
+    /// **A no-op while the pointer rests on the stack** — that is the whole of the hold, and doing
+    /// it here rather than at the call site means every caller gets it, including a future one.
     pub fn expire_due(&mut self, now: Instant) -> bool {
+        if self.is_hovered() {
+            return false;
+        }
         let update = self.store.expire_due(now);
         let changed = update.visible_projection_changed();
         if changed {
@@ -1874,6 +1959,111 @@ mod tests {
         assert!(visible_ids.iter().all(|id| store.notifications[id].is_history()));
         assert_eq!(store.history.len(), MAX_VISIBLE_NOTIFICATIONS);
         assert_eq!(store.notifications[&queued_id].visible_since(), Some(later));
+    }
+
+    /// **The runtime turns the reported hover into time.**
+    ///
+    /// The stack has no clock — it says only whether the pointer is on a card. Arriving starts the
+    /// hold; leaving ends it and pays back exactly what it cost. Idempotent while the answer does
+    /// not change, because the caller reports it every frame.
+    #[test]
+    fn the_runtime_holds_the_stack_while_the_pointer_rests_on_it() {
+        let now = Instant::now();
+        let mut runtime = NotificationRuntime::new(
+            100,
+            std::time::Duration::from_secs(4),
+            heca_config::settings::NotificationSystem::App,
+        );
+        runtime
+            .push(NotificationDraft::new("Read me"), now)
+            .expect("the stack is empty, so the draft is accepted");
+
+        assert!(!runtime.is_hovered());
+        assert!(
+            !runtime.set_hovered(true, now),
+            "arriving costs nothing yet"
+        );
+        assert!(runtime.is_hovered());
+        assert!(
+            !runtime.set_hovered(true, now + std::time::Duration::from_secs(1)),
+            "still resting — reported every frame, and idempotent",
+        );
+
+        // Nothing expires while it is held, however long the pointer stays.
+        assert!(!runtime.expire_due(now + std::time::Duration::from_secs(60)));
+
+        assert!(
+            runtime.set_hovered(false, now + std::time::Duration::from_secs(3)),
+            "leaving pays back the three seconds it cost",
+        );
+        assert!(!runtime.is_hovered());
+        assert!(
+            !runtime.expire_due(now + std::time::Duration::from_secs(5)),
+            "one second still left of the four",
+        );
+        assert!(
+            runtime.expire_due(now + std::time::Duration::from_secs(8)),
+            "…and then it goes"
+        );
+    }
+
+    /// **Hovering pauses; it does not skip.**
+    ///
+    /// The naive version — stop sweeping while the pointer is on a card — looks identical until the
+    /// pointer leaves: every deadline that passed during the hover is instantly due, and the stack
+    /// empties in the frame after the user moves away. That is the same card-vanishing-under-the-
+    /// click the hold exists to prevent, moved a moment later. So the time the hover cost is handed
+    /// back, and a card resumes with what it had left.
+    #[test]
+    fn hovering_hands_back_the_time_it_cost_rather_than_skipping_the_deadline() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(100);
+        let id = store
+            .push(
+                NotificationDraft::new("Read me")
+                    .lifecycle(NotificationLifecycle::auto(std::time::Duration::from_secs(4))),
+                now,
+            )
+            .unwrap()
+            .notification_id();
+        assert_eq!(
+            store.notifications[&id].expires_at(),
+            now.checked_add(std::time::Duration::from_secs(4))
+        );
+
+        // The pointer rested for three seconds — a card read, then reached for.
+        assert!(store.extend_visible_deadlines(std::time::Duration::from_secs(3)));
+        assert_eq!(
+            store.notifications[&id].expires_at(),
+            now.checked_add(std::time::Duration::from_secs(7)),
+            "it resumes with the second it had left, not with a fresh four",
+        );
+
+        // Three seconds in, it is not due: without the shift it would already have gone.
+        let update = store.expire_due(now + std::time::Duration::from_secs(5));
+        assert!(!update.visible_projection_changed(), "still on screen");
+        // And it still goes, at the moment it now has.
+        let update = store.expire_due(now + std::time::Duration::from_secs(8));
+        assert!(
+            update.visible_projection_changed(),
+            "the hold was a pause, not a reprieve"
+        );
+    }
+
+    /// **A sticky card has no deadline to move**, so a hover costs it nothing and reports nothing.
+    #[test]
+    fn extending_deadlines_leaves_a_sticky_card_alone() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(100);
+        let id = store
+            .push(
+                NotificationDraft::new("Acknowledge me").lifecycle(NotificationLifecycle::sticky()),
+                now,
+            )
+            .unwrap()
+            .notification_id();
+        assert!(!store.extend_visible_deadlines(std::time::Duration::from_secs(3)));
+        assert!(store.notifications[&id].expires_at().is_none());
     }
 
     #[test]

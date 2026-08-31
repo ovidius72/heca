@@ -979,6 +979,14 @@ pub struct AppState {
     /// The notification store + its retained `Signal<Vec<ToastSpec>>` — F009/T208. Owns queueing,
     /// lifecycle, dedup and the projection the mounted `ToastStack` persistent layer reads.
     pub notifications: crate::notification::NotificationRuntime,
+    /// **Is the pointer resting on a toast card**, written by
+    /// [`ToastStack::hovered_signal`](heca_grid_ui::widgets::ToastStack::hovered_signal).
+    ///
+    /// A signal rather than a callback because it is a *state*: true for as long as the pointer
+    /// stays. The stack reports the fact and nothing more — it has no clock and does not know what
+    /// a card's lifetime is; `NotificationRuntime::set_hovered` decides what it costs, which is
+    /// that a card being read must not retire under the cursor reaching for its button.
+    pub notification_hovered: heca_grid_ui::reactive::Signal<bool>,
     /// Whether the scoped `notification.pick` picker is open. `KeyHintGroup::open_when` on the
     /// toast surface reads this directly — F009/T492. In addition to global `prefix+/`, not
     /// instead.

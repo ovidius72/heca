@@ -64,6 +64,9 @@ pub(crate) fn mount_notification_stack(state: &mut AppState) {
 
     let stack = ToastStack::new(state.notifications.visible_toasts)
         .position(ToastPosition::TopRight)
+        // **A card must not retire under the pointer reaching for its button.** The stack reports
+        // the hover and nothing more; the runtime owns what it costs and hands the time back.
+        .hovered_signal(state.notification_hovered)
         .on_dismiss({
             let emit = emit.clone();
             move |toast_id| {

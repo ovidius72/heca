@@ -498,6 +498,7 @@ pub(crate) async fn init_state(
             app_config.config.settings.notification_system.mode,
         ),
         notification_pick_open: heca_grid_ui::reactive::signal(false),
+        notification_hovered: heca_grid_ui::reactive::signal(false),
     });
     // Mount the toast stack — F009/T203. After the state literal (needs `notifications` /
     // `notification_pick_open` to already exist) and before providers register their own
