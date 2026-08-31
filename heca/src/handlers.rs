@@ -2223,8 +2223,10 @@ pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &Wm
 ///
 /// No overlay up is a no-op, which is what makes binding Escape to it harmless.
 pub fn handle_close_overlay(state: &mut AppState, _action: &WmAction) {
-    let Some(id) = state.layers.top_modal_id() else { return };
-    state.layers.hide(id);
+    let Some(id) = state.layers.top_modal_id(&state.window_root) else {
+        return;
+    };
+    state.layers.hide(&mut state.window_root, id);
     state.needs_redraw = true;
 }
 
@@ -2244,10 +2246,10 @@ pub fn handle_layer_visibility(state: &mut AppState, action: &WmAction) {
         crate::chrome::rebuild_named_layer(state, name);
     }
     let Some(id) = state.layers.by_name(name) else { return };
-    let show = show.unwrap_or(!state.layers.is_visible_named(name));
+    let show = show.unwrap_or(!state.layers.is_visible_named(&state.window_root, name));
     match show {
-        true => state.layers.show(id),
-        false => state.layers.hide(id),
+        true => state.layers.show(&mut state.window_root, id),
+        false => state.layers.hide(&mut state.window_root, id),
     }
     state.needs_redraw = true;
 }

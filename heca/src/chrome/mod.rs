@@ -57,7 +57,7 @@ pub(crate) use dispatch::{
     drain_pending_menus, open_declared_menu_for_focus,
 };
 mod layers_glue;
-pub(crate) use layers_glue::{layout_layers, paint_layers, rebuild_named_layer};
+pub(crate) use layers_glue::rebuild_named_layer;
 mod notification_layer;
 pub(crate) use notification_layer::{
     mount_notification_stack, surface_key as notification_surface_key,
@@ -463,6 +463,43 @@ pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
         Some(at) => children[at] = chrome,
         None => children.insert(0, chrome),
     }
+}
+
+/// **A registry-owned surface's key in the window root.**
+///
+/// One scheme, derived from the id the registry already allocates, so the tree and the registry
+/// cannot disagree about which node is which layer. A surface that has left the registry entirely
+/// (the toast stack) declares its own name instead.
+pub(crate) fn surface_slot(id: LayerId) -> String {
+    format!("surface:{}", id.raw())
+}
+
+/// The live tree of a registry-owned surface, if it is placed.
+pub(crate) fn surface_node(root: &Flex, id: LayerId) -> Option<&dyn Component> {
+    let key = surface_slot(id);
+    root.base()
+        .children
+        .iter()
+        .find(|c| c.base().key.as_deref() == Some(key.as_str()))
+        .map(|c| c.as_ref())
+}
+
+/// The same, mutably — for a caller that must drive the surface (open it, tick it, fire a pick in
+/// it) rather than only read it.
+pub(crate) fn surface_node_mut(root: &mut Flex, id: LayerId) -> Option<&mut Box<dyn Component>> {
+    let key = surface_slot(id);
+    root.base_mut()
+        .children
+        .iter_mut()
+        .find(|c| c.base().key.as_deref() == Some(key.as_str()))
+}
+
+/// **Take a surface out of the window root.** The counterpart of [`place_surface`]; an unknown key
+/// is a no-op, so removing twice is safe.
+pub(crate) fn remove_surface(root: &mut Flex, key: &str) {
+    root.base_mut()
+        .children
+        .retain(|c| c.base().key.as_deref() != Some(key));
 }
 
 /// **Place a surface in the window root** — the whole of "how do I put something on screen"

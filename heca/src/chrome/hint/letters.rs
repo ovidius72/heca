@@ -192,7 +192,10 @@ fn offer_in_every_tree(
         }
     };
     for layer in state.layers.visible_front_to_back() {
-        if heca_grid_ui::offer_hint_by_key(layer.root(), key, label.clone()) {
+        let Some(node) = crate::chrome::surface_node(&state.window_root, layer.id) else {
+            continue;
+        };
+        if heca_grid_ui::offer_hint_by_key(node, key, label.clone()) {
             return true;
         }
     }

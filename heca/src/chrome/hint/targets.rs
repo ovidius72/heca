@@ -169,9 +169,12 @@ fn visible_hint_targets(
         // `Pct(1.0)` square because it *positions* its cards on screen, not because it covers the
         // screen. Taking its bounds as an occluder blanked every letter in the app for as long as
         // the stack was mounted — chrome, panes and all — leaving letters only on the toast.
-        let occluders = layer_occluders(layer.covers_content, layer.root().base().bounds);
+        let Some(node) = crate::chrome::surface_node(&state.window_root, layer.id) else {
+            continue;
+        };
+        let occluders = layer_occluders(layer.covers_content, node.base().bounds);
         layers.push(HintLayer {
-            targets: hints_of(&HintSurface::Layer(layer.id), layer.root()),
+            targets: hints_of(&HintSurface::Layer(layer.id), node),
             occluders,
             modal: layer.modal,
         });

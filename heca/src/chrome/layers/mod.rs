@@ -21,7 +21,7 @@
 mod layer;
 mod order;
 
-pub(crate) use layer::{layer_name, DynamicLayer, LayerContent, LayerId, LayerKind, HOST_OWNER};
+pub(crate) use layer::{layer_name, DynamicLayer, LayerId, LayerKind, HOST_OWNER};
 
 use heca_grid_ui::Component;
 use heca_view::ViewNode;
@@ -39,7 +39,7 @@ use heca_view::ViewNode;
 /// and there is no registry left to ask (`docs/surface-compositor.md` § 0.8).
 pub(crate) fn surface_key_of(name: Option<&str>, id: LayerId) -> crate::app::interaction::SurfaceKey {
     crate::app::interaction::SurfaceKey::of(
-        &name.map_or_else(|| format!("surface:{}", id.0), str::to_owned),
+        &name.map_or_else(|| format!("surface:{}", id.raw()), str::to_owned),
     )
 }
 
@@ -75,9 +75,11 @@ impl LayerRegistry {
         modal: bool,
         covers_content: bool,
         root: Box<dyn Component>,
+        window: &mut heca_grid_ui::widgets::Flex,
     ) -> LayerId {
         let id = self.reserve_id();
-        self.push_layer(id, parent, kind, modal, covers_content, LayerContent::Native(root), None);
+        self.push_layer(id, parent, kind, modal, covers_content, None);
+        crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), root);
         id
     }
 
@@ -92,8 +94,7 @@ impl LayerRegistry {
         kind: LayerKind,
         modal: bool,
         covers_content: bool,
-        content: LayerContent,
-        realized: Option<Box<dyn Component>>,
+        node: Option<ViewNode>,
     ) {
         self.layers.push(DynamicLayer {
             id,
@@ -104,8 +105,7 @@ impl LayerRegistry {
             covers_content,
             visible: matches!(kind, LayerKind::Persistent),
             name: None,
-            content,
-            realized,
+            node,
         });
     }
 
@@ -127,16 +127,10 @@ impl LayerRegistry {
         covers_content: bool,
         node: ViewNode,
         realized: Box<dyn Component>,
+        window: &mut heca_grid_ui::widgets::Flex,
     ) -> LayerId {
-        self.push_layer(
-            id,
-            parent,
-            kind,
-            modal,
-            covers_content,
-            LayerContent::View(node),
-            Some(realized),
-        );
+        self.push_layer(id, parent, kind, modal, covers_content, Some(node));
+        crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), realized);
         id
     }
 
@@ -164,6 +158,7 @@ impl LayerRegistry {
         modal: bool,
         covers_content: bool,
         root: Box<dyn Component>,
+        window: &mut heca_grid_ui::widgets::Flex,
     ) -> LayerId {
         // **A re-registration keeps the layer's PLACE in the stack.** It is the same layer with
         // fresh content, not a new one arriving — and position is what "on top" means here:
@@ -185,13 +180,19 @@ impl LayerRegistry {
         // changed the focus, the map rebuilt, and it zoomed open on every keystroke (Antonio,
         // driving, 2026-08-11).
         let carried = previous.map(|at| {
-            let l = &mut self.layers[at];
-            (l.visible, l.doomed, l.root_mut().presence_mut().map(std::mem::take))
+            let l = &self.layers[at];
+            (
+                l.visible,
+                l.doomed,
+                crate::chrome::surface_node_mut(window, id)
+                    .and_then(|n| n.presence_mut().map(std::mem::take)),
+            )
         });
         if let Some(at) = previous {
             self.layers.remove(at);
         }
-        self.push_layer(id, parent, kind, modal, covers_content, LayerContent::Native(root), None);
+        self.push_layer(id, parent, kind, modal, covers_content, None);
+        crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), root);
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
             l.name = Some(name);
             if let Some((visible, doomed, presence)) = carried {
@@ -204,13 +205,18 @@ impl LayerRegistry {
                 // driving, 2026-08-11). Handing over the whole `Presence` carries the animation
                 // *in flight* as well as the fact that it is open, so a rebuild mid-arrival
                 // continues rather than restarting or snapping.
-                if let (Some(carried), Some(fresh)) = (presence, l.root_mut().presence_mut()) {
+                if let (Some(carried), Some(fresh)) = (
+                    presence,
+                    crate::chrome::surface_node_mut(window, id).and_then(|n| n.presence_mut()),
+                ) {
                     *fresh = carried;
                 }
                 if visible {
                     // The same call the stack makes to raise it, and it replays nothing: the
                     // carried presence already says the surface is up, or that it is leaving.
-                    l.root_mut().open();
+                    if let Some(node) = crate::chrome::surface_node_mut(window, id) {
+                        node.open();
+                    }
                 }
             }
         }
@@ -242,11 +248,21 @@ impl LayerRegistry {
     // the surface says when its exit has played out (⭐⭐ RULE ZERO, F003/P082/T459).
 
     /// How opaque a layer should be painted this frame — `1.0` unless it is on its way out.
-    pub(crate) fn opacity(&self, id: LayerId) -> f32 {
-        self.layers
-            .iter()
-            .find(|l| l.id == id)
-            .map_or(1.0, DynamicLayer::opacity)
+    pub(crate) fn opacity(&self, window: &heca_grid_ui::widgets::Flex, id: LayerId) -> f32 {
+        crate::chrome::surface_node(window, id)
+            .and_then(|n| n.presence())
+            .map_or(1.0, |p| p.frame().opacity)
+    }
+
+    /// **Is this surface still leaving?** Any part of its exit still playing.
+    ///
+    /// Read from the surface's own node, because the gesture is the surface's: a dismissed overlay
+    /// stays on screen, inert, until every effect of its exit has finished. Tying the lifetime to
+    /// the fade alone is what made `Fade::delay` unusable (F003/P082/T327).
+    pub(crate) fn is_leaving(&self, window: &heca_grid_ui::widgets::Flex, id: LayerId) -> bool {
+        crate::chrome::surface_node(window, id)
+            .and_then(|n| n.presence())
+            .is_some_and(heca_grid_ui::animation::Presence::is_leaving)
     }
 
     /// **Advance every visible layer by one frame**, and retire the ones whose exit has finished.
@@ -258,20 +274,26 @@ impl LayerRegistry {
     /// layer goes. Ticking them apart meant the registry could not see the transition it has to act
     /// on. Widgets inside a layer — a modal button's tooltip reveal, a press flash — advance in the
     /// same pass, so a new layer animates with no per-layer wiring.
-    pub(crate) fn tick(&mut self, dt: f32) -> bool {
+    pub(crate) fn tick(&mut self, window: &mut heca_grid_ui::widgets::Flex, dt: f32) -> bool {
         let mut fading = false;
-        for l in &mut self.layers {
-            if !l.visible {
-                continue;
-            }
-            let was_leaving = l.is_leaving();
-            if l.root_mut().tick(dt) {
+        let ids: Vec<LayerId> = self.layers.iter().filter(|l| l.visible).map(|l| l.id).collect();
+        for id in ids {
+            let was_leaving = self.is_leaving(window, id);
+            if let Some(node) = crate::chrome::surface_node_mut(window, id)
+                && node.tick(dt)
+            {
                 fading = true;
             }
+            let Some(l) = self.layers.iter_mut().find(|l| l.id == id) else {
+                continue;
+            };
             // **The frame the whole exit finishes is the frame the surface goes** — and the surface
             // answers for *every* part of its gesture, so nothing retires it while a shrink is
             // still playing under a dissolve that has already ended.
-            if was_leaving && !l.is_leaving() {
+            let still_leaving = crate::chrome::surface_node(window, id)
+                .and_then(|n| n.presence())
+                .is_some_and(heca_grid_ui::animation::Presence::is_leaving);
+            if was_leaving && !still_leaving {
                 l.visible = false;
                 // **And ask for one more frame, to paint its absence.** Both effects have just
                 // reported themselves done, so without this nothing requests another frame — and
@@ -284,9 +306,17 @@ impl LayerRegistry {
         }
         // A layer whose removal was waiting on its exit leaves for good now — and that, too, is a
         // change to the picture, so the frame that paints it is requested here.
-        let before = self.layers.len();
-        self.layers.retain(|l| !l.doomed || l.is_leaving());
-        if self.layers.len() != before {
+        let gone: Vec<LayerId> = self
+            .layers
+            .iter()
+            .filter(|l| l.doomed && !self.is_leaving(window, l.id))
+            .map(|l| l.id)
+            .collect();
+        if !gone.is_empty() {
+            for id in &gone {
+                crate::chrome::remove_surface(window, &crate::chrome::surface_slot(*id));
+            }
+            self.layers.retain(|l| !gone.contains(&l.id));
             fading = true;
         }
         fading
@@ -337,10 +367,10 @@ impl LayerRegistry {
     }
 
     /// Is the layer named `name` participating this frame?
-    pub(crate) fn is_visible_named(&self, name: &str) -> bool {
+    pub(crate) fn is_visible_named(&self, window: &heca_grid_ui::widgets::Flex, name: &str) -> bool {
         self.layers
             .iter()
-            .any(|l| l.name.as_deref() == Some(name) && l.is_active())
+            .any(|l| l.name.as_deref() == Some(name) && l.is_active(self.is_leaving(window, l.id)))
     }
 
     /// The names of the **host's own** visible layers — what
@@ -350,11 +380,11 @@ impl LayerRegistry {
     /// Host-owned only, by the [`HOST_OWNER`] prefix the naming scheme already guarantees: a
     /// plugin's layer is rebuilt by the plugin, and calling into one from a mutation hook would
     /// make every layout change run foreign code.
-    pub(crate) fn visible_host_layer_names(&self) -> Vec<String> {
+    pub(crate) fn visible_host_layer_names(&self, window: &heca_grid_ui::widgets::Flex) -> Vec<String> {
         let prefix = format!("{HOST_OWNER}.");
         self.layers
             .iter()
-            .filter(|l| l.is_active())
+            .filter(|l| l.is_active(self.is_leaving(window, l.id)))
             .filter_map(|l| l.name.clone())
             .filter(|n| n.starts_with(&prefix))
             .collect()
@@ -372,6 +402,7 @@ impl LayerRegistry {
     /// Add a layer under an id previously handed out by [`reserve_id`](Self::reserve_id).
     /// `Persistent` layers are visible immediately; `OnDemand` layers start visible here
     /// too (an overlay is shown the moment it's inserted), unlike [`add`](Self::add).
+    #[allow(clippy::too_many_arguments)] // the layer's own declarations, plus where to place it
     pub(crate) fn insert(
         &mut self,
         id: LayerId,
@@ -380,6 +411,7 @@ impl LayerRegistry {
         modal: bool,
         covers_content: bool,
         root: Box<dyn Component>,
+        window: &mut heca_grid_ui::widgets::Flex,
     ) {
         self.layers.push(DynamicLayer {
             id,
@@ -390,9 +422,9 @@ impl LayerRegistry {
             covers_content,
             visible: true,
             name: None,
-            content: LayerContent::Native(root),
-            realized: None,
+            node: None,
         });
+        crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), root);
         if modal {
             self.enter_context(id);
         }
@@ -407,28 +439,37 @@ impl LayerRegistry {
     ///
     /// Its completion has already run by then; what lingers is only the picture. [`tick`](Self::tick)
     /// finishes the job.
-    pub(crate) fn remove(&mut self, id: LayerId) {
+    pub(crate) fn remove(&mut self, window: &mut heca_grid_ui::widgets::Flex, id: LayerId) {
         // The context goes back now, not when the picture finishes: as far as its owner is
         // concerned this surface is already gone, and what lingers is only the dissolve.
         self.leave_context(id);
-        let Some(l) = self.layers.iter_mut().find(|l| l.id == id) else { return };
-        l.root_mut().hide();
-        if l.is_leaving() {
-            l.doomed = true;
+        if self.layers.iter().all(|l| l.id != id) {
+            return;
+        }
+        if let Some(node) = crate::chrome::surface_node_mut(window, id) {
+            node.hide();
+        }
+        if self.is_leaving(window, id) {
+            if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
+                l.doomed = true;
+            }
             return;
         }
         self.layers.retain(|l| l.id != id);
+        crate::chrome::remove_surface(window, &crate::chrome::surface_slot(id));
     }
 
     /// Show a layer (bring it into the stack this frame). `ShowLayer` dispatches here.
-    pub(crate) fn show(&mut self, id: LayerId) {
+    pub(crate) fn show(&mut self, window: &mut heca_grid_ui::widgets::Flex, id: LayerId) {
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
             l.visible = true;
             // **The surface decides what showing means to it.** Whether this is a real arrival —
             // rather than a rebuild of something already up, or a re-show of something already on
             // its way out — is a rule about surfaces, not about layers, so it lives in the widget
             // (`Presence::show`) and every host gets it for free.
-            l.root_mut().open();
+        }
+        if let Some(node) = crate::chrome::surface_node_mut(window, id) {
+            node.open();
         }
         // **A modal that arrives becomes the active context**, and only a modal does. That is §2's
         // coarse mechanism: an exclusive surface makes everything beneath it dormant, while the
@@ -445,13 +486,16 @@ impl LayerRegistry {
     /// dissolving and stays visible until [`tick`](Self::tick) runs the fade out. Everything that
     /// reads `visible` therefore keeps treating it as up for those few frames, which is right:
     /// while you can still see a modal it is still covering the panes.
-    pub(crate) fn hide(&mut self, id: LayerId) {
-        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
-            l.root_mut().hide();
-            // Nothing declared to play on the way out ⇒ it goes now.
-            if !l.is_leaving() {
-                l.visible = false;
-            }
+    pub(crate) fn hide(&mut self, window: &mut heca_grid_ui::widgets::Flex, id: LayerId) {
+        if let Some(node) = crate::chrome::surface_node_mut(window, id) {
+            node.hide();
+        }
+        // Nothing declared to play on the way out ⇒ it goes now.
+        let leaving = self.is_leaving(window, id);
+        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id)
+            && !leaving
+        {
+            l.visible = false;
         }
         self.leave_context(id);
     }
@@ -476,10 +520,10 @@ impl LayerRegistry {
     /// missed: both paths that raise a decision-demanding overlay — `open_modal` and
     /// `insert_menu_layer` — declare coverage themselves, which is where the declaration belongs.
     /// Forcing it here meant the exposé could never say the truth about itself.
-    pub(crate) fn content_covered(&self) -> bool {
+    pub(crate) fn content_covered(&self, window: &heca_grid_ui::widgets::Flex) -> bool {
         self.layers
             .iter()
-            .any(|l| l.is_active() && l.covers_content)
+            .any(|l| l.is_active(self.is_leaving(window, l.id)) && l.covers_content)
     }
 
     /// One layer by id, whatever its visibility — how a [`HintTarget`](super::HintTarget) finds

@@ -88,14 +88,6 @@ impl LayerRegistry {
         out
     }
 
-    /// Mutable roots of the visible layers (order-independent) — for the per-frame layout pass.
-    pub(crate) fn visible_roots_mut(&mut self) -> impl Iterator<Item = &mut Box<dyn Component>> {
-        self.layers
-            .iter_mut()
-            .filter(|l| l.visible)
-            .map(|l| l.root_mut())
-    }
-
     /// The id of the front-most visible **modal** layer (the one that captures input), if any.
     /// Front-most = most-recently inserted (a later modal opens on top of an earlier one).
     /// The front-most active modal layer, **in the order the user is looking at** — band first,
@@ -110,25 +102,32 @@ impl LayerRegistry {
     ///
     /// A component author never calls this and never declares anything for it: a layer says which
     /// **band** it belongs to, and that is the whole of what it has to know.
-    pub(super) fn top_modal_index(&self) -> Option<usize> {
+    pub(super) fn top_modal_index(&self, window: &heca_grid_ui::widgets::Flex) -> Option<usize> {
         self.layers
             .iter()
             .enumerate()
-            .filter(|(_, l)| l.is_active() && l.modal)
+            .filter(|(_, l)| l.is_active(self.is_leaving(window, l.id)) && l.modal)
             // The front-most is the greatest z-path. Paint reads the same order, so the two can no
             // longer disagree about which surface is in front.
             .max_by_key(|(_, l)| self.z_path(l.id))
             .map(|(i, _)| i)
     }
 
-    pub(crate) fn top_modal_id(&self) -> Option<LayerId> {
-        self.top_modal_index().map(|i| self.layers[i].id)
+    pub(crate) fn top_modal_id(&self, window: &heca_grid_ui::widgets::Flex) -> Option<LayerId> {
+        self.top_modal_index(window).map(|i| self.layers[i].id)
     }
 
-    /// The root of the front-most visible modal layer, mutably — the input target while a modal
-    /// is up. Pairs with [`top_modal_id`](Self::top_modal_id).
-    pub(crate) fn top_modal_root_mut(&mut self) -> Option<&mut (dyn Component + 'static)> {
-        let at = self.top_modal_index()?;
-        Some(self.layers[at].root_mut().as_mut())
+    /// **The front-most modal's live node**, for a caller that must drive it — today the keyboard
+    /// path, which hands a key to the surface holding it.
+    ///
+    /// The node lives in the window root like every other surface; this only answers *which* one is
+    /// in front, which is the registry's job and not the tree's.
+    pub(crate) fn top_modal_node_mut<'w>(
+        &self,
+        window: &'w mut heca_grid_ui::widgets::Flex,
+    ) -> Option<&'w mut (dyn Component + 'static)> {
+        let id = self.top_modal_id(window)?;
+        crate::chrome::surface_node_mut(window, id).map(|n| n.as_mut())
     }
+
 }

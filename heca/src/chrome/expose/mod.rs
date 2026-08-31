@@ -348,7 +348,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     // one already registered under this name is the one to name.
     let id = state.layers.slot_for_name(&name);
     let emit = super::layer_emitter(&state.event_proxy, super::surface_key_of(Some(&name), id));
-    let already_up = state.layers.is_visible_named(&name);
+    let already_up = state.layers.is_visible_named(&state.window_root, &name);
     let here = open_on(
         &state.session,
         already_up,
@@ -375,7 +375,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
         .flatten()
         .filter(|id| crate::app::focus::find_pane_workspace(&state.session, *id).is_some());
     let root = map(&rows, &theme, emit, here, &state.session.options, &keys, previous);
-    let was_visible = state.layers.is_visible_named(&name);
+    let was_visible = state.layers.is_visible_named(&state.window_root, &name);
     let id = state.layers.add_named(
         id,
         name.clone(),
@@ -390,6 +390,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
         // intents were arranged. A dialog covers. A map does not.
         false,
         root,
+        &mut state.window_root,
     );
     // **The frost is declared on the surface too, in `map`** — `.frosted(true)`, beside the
     // animation, for the same reason.
@@ -398,7 +399,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     // what a plugin writes. It used to be two `pub(crate)` calls on the registry here, holding a
     // `LayerId` and knowing the sequencing rule; a plugin could reach none of it (F003/P082/T459).
     if was_visible {
-        state.layers.show(id);
+        state.layers.show(&mut state.window_root, id);
     }
     state.needs_redraw = true;
     Some(id)

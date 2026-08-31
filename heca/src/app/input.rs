@@ -128,7 +128,7 @@ pub(crate) fn handle_keyboard_input(
             {
                 // A layer's intents are stamped with the surface that owns them, which is what lets
                 // the policy tell the map acting on itself from the app being driven behind it.
-                let source = match state.layers.top_modal_id() {
+                let source = match state.layers.top_modal_id(&state.window_root) {
                     Some(id) if matches!(surface, FocusedSurface::Layer { .. }) => {
                         InteractionSource::Surface(state.layers.surface_key(id))
                     }
@@ -342,7 +342,7 @@ fn floor_action(
 /// Which surface holds the keyboard, read off the session — the whole of [`AppState`] this rule
 /// needs, so [`surface_action`] can stay a pure function of plain data.
 pub(crate) fn focused_surface(state: &AppState) -> FocusedSurface {
-    if let Some(id) = state.layers.top_modal_id() {
+    if let Some(id) = state.layers.top_modal_id(&state.window_root) {
         return FocusedSurface::Layer {
             name: state.layers.name_of(id),
         };

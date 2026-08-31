@@ -215,11 +215,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let w = phys_size.width as f32 / scale;
     let h = phys_size.height as f32 / scale;
 
-    // Generic dynamic-layer layout, before the scene-texture borrow so paint can take a shared
-    // `&AppState` (overlay dialogs incl. the destructive-confirm prompt + the right-click context
-    // menu, plugin panels).
-    crate::chrome::layout_layers(state, w, h);
-
     let glow_alpha_scale =
         heca_renderer::scene::glow_alpha_scale_for_background(state.theme.background.to_f32x4());
     let surface_alpha = state.terminal_surface_opacity();
@@ -1028,15 +1023,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     // ── Dynamic layers (overlay dialogs, the context menu, plugin panels, the exposé) ──
     //
-    // Painted into a scene of their own and flushed **after** the chrome shell, so a layer can ask
-    // for a backdrop that is "the frame so far" — the blur below stamps between the two passes.
-    // That is also why they are no longer part of `chrome_scene`: everything a frosted layer
-    // covers has to be on the scene texture before the blur reads it.
+    // **They were painted here, into a scene of their own. They are not any more.** Every surface is
+    // a child of the window root, so `paint_chrome_root` above already walked it — one tree, one
+    // paint (`docs/surface-compositor.md` § 0.8). What is left is the GPU work the walk recorded.
     //
-    // Being last also settles a z-order that used to be the other way round by accident: the bell
-    // flash and the search highlights painted *over* an open dialog. A layer is above them now.
-    let mut layer_scene = heca_grid_ui::Scene::default();
-    crate::chrome::paint_layers(&state.layers, &mut layer_scene, w, h, &chrome_theme);
+    // The z-order that pass used to arrange by hand is now child order: a surface is placed after
+    // the chrome, so it paints above the bell flash and the search highlights, which is what it did
+    // before by being flushed later.
+    let layer_scene = &chrome_scene;
     // **Perform the host work the scene recorded** (`docs/surface-compositor.md` § 0.5).
     //
     // The host asks nothing about layers here and knows no surface by name. A node that wants its
@@ -1047,7 +1041,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     //
     // `HostDraw::Surface` is not emitted yet — the terminal still blits through its retained path
     // until `P094(F011)/T449` makes it a component.
-    for req in heca_renderer::scene::host_requests(&layer_scene) {
+    for req in heca_renderer::scene::host_requests(layer_scene) {
         let heca_grid_ui::scene::HostDraw::Backdrop { radius } = req.draw else {
             continue;
         };
@@ -1106,18 +1100,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // into an overlay segment deferred to a later band — under the map again, at the right
     // coordinates (F003/P082/T427). A host cannot know which half of which scene a widget it has
     // never seen paints into, so it must not try.
-    if !layer_scene.is_empty() {
-        render_chrome(
-            &mut state.grid_renderer,
-            &mut state.text_renderer,
-            &state.queue,
-            &layer_scene,
-            ChromePassOpts { damage: None, glow_alpha_scale },
-            scene_view,
-            &mut encoder,
-            &mut overlay_sink,
-        );
-    }
+    // **There is no second flush.** The surfaces were painted by the same walk as the chrome, into
+    // the same scene, and that scene was flushed above — a second `render_chrome` here would draw
+    // the whole frame twice. What is left of the old ordering is where the frost is performed:
+    // after the base flush, before the overlay band, which is the moment a backdrop means.
 
     // Top band: every surface's overlay content (tooltips, popovers), above all bases.
     render_overlay_band(

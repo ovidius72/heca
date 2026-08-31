@@ -124,7 +124,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // reveal, a press flash — and the surface's own arrival or exit are the same frame, and the
     // registry has to see the frame an exit *finishes* to retire the layer on it. A new layer
     // animates for free, with no per-layer wiring.
-    chrome_animating |= state.layers.tick(dt);
+    chrome_animating |= state.layers.tick(&mut state.window_root, dt);
 
     // Auto-dismiss notifications past their deadline — F009/T202. `expire_due` only touches the
     // store's own `Signal<Vec<ToastSpec>>` (F009/T208); it is not part of `chrome_runtime_changed`,

@@ -122,7 +122,7 @@ pub(crate) fn handle_window_event(
                         let handled = keymap.deliver_release(key, |ev| {
                             state
                                 .layers
-                                .top_modal_root_mut()
+                                .top_modal_node_mut(&mut state.window_root)
                                 .map(|root| heca_grid_ui::dispatch(root, ev))
                                 .unwrap_or(Handled::No)
                         });
@@ -184,7 +184,7 @@ pub(crate) fn handle_window_event(
                     let handled = keymap.deliver_press(&press, |ev| {
                         state
                             .layers
-                            .top_modal_root_mut()
+                            .top_modal_node_mut(&mut state.window_root)
                             .map(|root| heca_grid_ui::dispatch(root, ev))
                             .unwrap_or(Handled::No)
                     });
@@ -225,7 +225,7 @@ pub(crate) fn handle_window_event(
             // Shift+Tab / Ctrl+h-l itself — its `Event::Key` carries no modifiers.
             if crate::chrome::top_modal(state).is_some() {
                 let mods = grid_modifiers(state.modifiers);
-                if let Some(root) = state.layers.top_modal_root_mut() {
+                if let Some(root) = state.layers.top_modal_node_mut(&mut state.window_root) {
                     let _ = heca_grid_ui::dispatch(root, &Event::ModifiersChanged(mods));
                 }
             }

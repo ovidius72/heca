@@ -96,7 +96,7 @@ pub(super) fn hint_surface_root<'a>(
             .pane_headers
             .get(pane_id)
             .map(|h| &h.root as &dyn heca_grid_ui::Component),
-        HintSurface::Layer(id) => state.layers.get(*id).map(|l| l.root()),
+        HintSurface::Layer(id) => crate::chrome::surface_node(&state.window_root, *id),
     }
 }
 
@@ -117,7 +117,9 @@ fn hint_surface_root_mut<'a>(
             .pane_headers
             .get_mut(pane_id)
             .map(|h| &mut h.root as &mut dyn heca_grid_ui::Component),
-        HintSurface::Layer(id) => state.layers.get_mut(*id).map(|l| l.root_mut().as_mut()),
+        HintSurface::Layer(id) => {
+            crate::chrome::surface_node_mut(&mut state.window_root, *id).map(|n| n.as_mut())
+        }
     }
 }
 
@@ -169,7 +171,10 @@ pub(crate) fn fire_hint(state: &mut crate::app_state::AppState, target: &HintTar
 /// nothing, exactly as an unmounted provider's does.
 pub(crate) fn fire_widget_action(state: &crate::app_state::AppState, name: &str) -> bool {
     for layer in state.layers.visible_front_to_back() {
-        if heca_grid_ui::fire_action(layer.root(), name) {
+        let Some(node) = crate::chrome::surface_node(&state.window_root, layer.id) else {
+            continue;
+        };
+        if heca_grid_ui::fire_action(node, name) {
             return true;
         }
     }
@@ -196,6 +201,8 @@ pub(crate) fn clear_hint_letters(state: &crate::app_state::AppState) {
         heca_grid_ui::clear_hints(&header.root);
     }
     for layer in state.layers.visible_front_to_back() {
-        heca_grid_ui::clear_hints(layer.root());
+        if let Some(node) = crate::chrome::surface_node(&state.window_root, layer.id) {
+            heca_grid_ui::clear_hints(node);
+        }
     }
 }

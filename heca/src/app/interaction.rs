@@ -256,7 +256,7 @@ pub(crate) enum Domain {
 /// - otherwise the session's own `Tiled | Floating`.
 pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain {
     if base_context_is_dormant(
-        state.layers.top_modal_id().map(|id| state.layers.surface_key(id)),
+        state.layers.top_modal_id(&state.window_root).map(|id| state.layers.surface_key(id)),
         crate::chrome::content_covered(state),
         source,
     ) {
@@ -277,7 +277,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
     // in the wrong place: it also ate `q` and `Esc`, which are catalogued actions the host resolves
     // (F004/P084/T400). Here the layer claims only the keyboard, and `ActionPolicy` decides the
     // rest — `Global` actions still run, `ContainerFocused` ones do not.
-    let modal_holds_keyboard = state.layers.top_modal_id().is_some();
+    let modal_holds_keyboard = state.layers.top_modal_id(&state.window_root).is_some();
     if keyboard_driven
         && !modal_holds_keyboard
         && state.chrome_state.focused_container().is_some()
@@ -932,7 +932,7 @@ pub(crate) fn dispatch_intent(
         // resolved as a dismissal, which is what pops it and runs its completion.
         let overlay = match overlay {
             Some(id) => id,
-            None => match state.layers.top_modal_id() {
+            None => match state.layers.top_modal_id(&state.window_root) {
                 Some(id) => crate::chrome::OverlayId(id),
                 None => return,
             },

@@ -36,7 +36,7 @@ pub(crate) fn dispatch_modal_pointer(
     if top_modal(state).is_none() {
         return false;
     }
-    if let Some(root) = state.layers.top_modal_root_mut() {
+    if let Some(root) = state.layers.top_modal_node_mut(&mut state.window_root) {
         let _ = heca_grid_ui::dispatch(root, ev);
     }
     state.mark_full_redraw();

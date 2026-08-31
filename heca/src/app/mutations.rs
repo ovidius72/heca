@@ -57,7 +57,7 @@ fn after_mutation_change_inner(state: &mut AppState, kind: MutationKind) {
 /// action — it is a property of the session having changed, which is exactly what this hook means.
 /// Nothing happens when no host layer is visible, which is the ordinary case.
 fn refresh_visible_layers(state: &mut AppState) {
-    for name in state.layers.visible_host_layer_names() {
+    for name in state.layers.visible_host_layer_names(&state.window_root) {
         crate::chrome::rebuild_named_layer(state, &name);
     }
 }

@@ -3,8 +3,6 @@
 //! The stack that owns them is [`LayerRegistry`](super::LayerRegistry); this file is the data it
 //! keeps, and the questions a single layer can answer on its own.
 
-use heca_grid_ui::animation::Presence;
-use heca_grid_ui::Component;
 use heca_view::ViewNode;
 
 /// Build a layer's addressable name: `<owner>.<short>` — `layer_name("docker", "expose")` is
@@ -33,6 +31,14 @@ pub(crate) const HOST_OWNER: &str = "heca";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct LayerId(pub(super) u64);
 
+impl LayerId {
+    /// The raw counter value — for deriving the surface's key in the window root
+    /// (`chrome::surface_slot`), which is the one place outside this module that needs it.
+    pub(crate) fn raw(self) -> u64 {
+        self.0
+    }
+}
+
 /// Whether a layer is always present or shown on demand — the "panes-like vs exposé-like"
 /// distinction. Only [`OnDemand`](LayerKind::OnDemand) layers are meaningfully driven by
 /// `ShowLayer`/`HideLayer`.
@@ -44,8 +50,13 @@ pub(crate) enum LayerKind {
     OnDemand,
 }
 
-/// A dynamically registered layer. Its content is either a native retained tree or a
-/// [`ViewNode`] description — see [`LayerContent`].
+/// A registered surface's **bookkeeping** — its identity, its nesting, and what it declares about
+/// itself.
+///
+/// The surface's live tree is **not here**: it is a child of the window root
+/// (`docs/surface-compositor.md` § 0.8), which is what lets one walk lay it out, paint it, deliver
+/// its pointer events and collect its hint letters. This is what is left once a thing on screen is
+/// a node like any other.
 pub(crate) struct DynamicLayer {
     pub(crate) id: LayerId,
     /// **Who this surface hangs from — and therefore where it sits in z.**
@@ -104,64 +115,19 @@ pub(crate) struct DynamicLayer {
     /// seating an action means is a separate optional argument, the way `[[keys.component]]` takes
     /// an optional `id` and `focus_dock` an optional `dock`.
     pub(crate) name: Option<String>,
-    /// What the layer holds — a tree the host built, or a **description** it was handed.
-    pub(crate) content: LayerContent,
-    /// The tree realized from `content` when it is a [`LayerContent::View`]; `None` for a
-    /// `Native` layer, whose tree *is* its content.
+    /// **The description this surface was described by**, when it was described rather than built.
     ///
-    /// Host bookkeeping **about** the content, deliberately not inside it: `LayerContent` is the
-    /// vocabulary a plugin author reads, and a realization cache is not part of that vocabulary.
-    /// It lives here for the same reason `visible` does. Realizing needs the theme, an intent
-    /// emitter, the hint sink and the form bindings — none of which a registry holds — so the host
-    /// realizes first and registers both.
-    pub(crate) realized: Option<Box<dyn Component>>,
+    /// The source of truth a theme reload or a plugin update re-realizes from. The *live tree* is
+    /// not here: it is a child of the window root, found by
+    /// [`chrome::surface_node`](crate::chrome::surface_node), because a thing on screen is a node in
+    /// the one tree and nowhere else (`docs/surface-compositor.md` § 0.8). What remains in this
+    /// struct is what the registry is *for* — the name, the nesting, and what the surface declares
+    /// about itself.
+    pub(crate) node: Option<ViewNode>,
 }
 
-/// What a layer's content **is** (F003/P082/T339).
-///
-/// Two arms because there are two authors. The host builds its own overlays as native trees; a
-/// plugin, a config file or an RPC line can only send a [`ViewNode`] — a description — and it is
-/// realized through the **one** bridge (`heca_view_realize::realize`, re-exported as
-/// [`chrome::realize`](super::realize)). There is deliberately no second mapper: a layer that drew
-/// a description its own way would be a parallel implementation of every widget.
-///
-/// The arm holds the **description only** — the shape ratified in the surface-compositor model
-/// (`docs/surface-compositor.md` §9). The node is the source of truth a theme reload or a plugin update re-realizes
-/// from; the tree realized from it is host bookkeeping and lives on
-/// [`DynamicLayer::realized`](DynamicLayer#structfield.realized), outside the vocabulary a plugin
-/// author reads.
-pub(crate) enum LayerContent {
-    /// Built in Rust — chrome, a pane header, an overlay the host assembled.
-    Native(Box<dyn Component>),
-    /// Data- or plugin-described; the host `realize()`s it.
-    View(ViewNode),
-}
-
-impl LayerContent {
-    /// The description this layer was described by, if it was.
-    pub(crate) fn node(&self) -> Option<&ViewNode> {
-        match self {
-            Self::Native(_) => None,
-            Self::View(node) => Some(node),
-        }
-    }
-}
 
 impl DynamicLayer {
-    /// **How opaque this layer's surface is drawing itself this frame.**
-    ///
-    /// The layer does not fade its own content — the surface does, through its
-    /// [`Animation`](heca_grid_ui::Animation), and it paints that itself, backdrop included. This
-    /// is left for the tests that assert an exit is playing, and for a host that needs to read a
-    /// surface's progress without knowing what animation it declared.
-    ///
-    /// `1.0` for a surface that declared no animation, which is most of them.
-    pub(crate) fn opacity(&self) -> f32 {
-        self.root()
-            .presence()
-            .map_or(1.0, |p| p.frame().opacity)
-    }
-
     /// Is this layer **still in charge** — capturing input, covering the panes, answering as the
     /// front-most modal?
     ///
@@ -171,47 +137,13 @@ impl DynamicLayer {
     /// the pane you chose, and while the dissolve still counted as coverage the focus was refused
     /// by `Domain::Overlay` for the whole length of the animation — every activation blocked, with
     /// `blocked intent from Keyboard` in the log.
-    pub(crate) fn is_active(&self) -> bool {
-        self.visible && !self.is_leaving()
+    /// `leaving` is the surface's own answer, read from its node — see
+    /// [`LayerRegistry::is_leaving`](super::LayerRegistry::is_leaving).
+    pub(crate) fn is_active(&self, leaving: bool) -> bool {
+        self.visible && !leaving
     }
 
-    /// **Is this surface still leaving?** Any part of its exit still playing — the dissolve, the
-    /// shrink, or both.
-    ///
-    /// A surface's exit is one gesture made of several effects, and it is not gone until every one
-    /// of them has finished. Everything that asks "is it still there" reads *this*, so a surface can
-    /// sequence its exit — hold the picture, shrink, then dissolve — without any of them retiring it
-    /// early. Tying the lifetime to the **fade alone** is what made `Fade::delay` unusable: delaying
-    /// the dissolve left the cards on screen after the map itself had gone, so the feature was built
-    /// and reverted (F003/P082/T327, 2026-08-12).
-    pub(crate) fn is_leaving(&self) -> bool {
-        self.root().presence().is_some_and(Presence::is_leaving)
-    }
 
-    /// The live tree — what the host lays out, paints and hint-walks.
-    ///
-    /// For a `Native` layer that is the content itself; for a `View` layer it is
-    /// [`realized`](Self::realized), which the host produced from the description before
-    /// registering. The arm says where the tree came from, never how the stack treats it.
-    pub(crate) fn root(&self) -> &dyn Component {
-        match &self.content {
-            LayerContent::Native(root) => root.as_ref(),
-            LayerContent::View(_) => self
-                .realized
-                .as_deref()
-                .expect("a View layer is registered with its realized tree (add_view/insert_view)"),
-        }
-    }
-
-    pub(crate) fn root_mut(&mut self) -> &mut Box<dyn Component> {
-        match &mut self.content {
-            LayerContent::Native(root) => root,
-            LayerContent::View(_) => self
-                .realized
-                .as_mut()
-                .expect("a View layer is registered with its realized tree (add_view/insert_view)"),
-        }
-    }
 }
 
 #[cfg(test)]
