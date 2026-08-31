@@ -18,8 +18,14 @@ that has sixteen paths, not the picker.
 **Everything on screen should be a node in one tree.** Chrome, panes, overlays, toasts, the exposé, a
 plugin's panel. Nesting is real, ordering is tree position, and one walk delivers input to all of it.
 
-**Today that is half true.** Chrome and panes live in the tree. Overlays live in a separate registry.
-Input only walks the tree, so anything in the registry receives **no pointer events at all**.
+**As of `P097(F003)/T494` (2026-08-31) this is TRUE for every surface.** The chrome, the panes, the
+toast stack, the exposé, the command palette, every modal and every context menu are children of
+`AppState::window_root`, and the one walk lays them out, paints them, delivers their pointer events
+and collects their hint letters.
+
+It was half true until then: chrome and panes lived in the tree, overlays lived in a separate
+registry, and input only walked the tree — so anything registered received **no pointer events at
+all**. It was painted and dead to the mouse, with no error. § 0.2 is what that cost.
 
 ### 0.2 Why it matters — two silent failures, two days apart
 
@@ -109,22 +115,53 @@ function that describes *what to draw* a second job — owning GPU pass lifetime
 to supply one including the showcase, which has no GPU pass of its own, and drag `wgpu` types across
 a crate boundary a plugin composing a tree must never see.
 
-### 0.6 Today vs after `P097(F003)`
+### 0.6 What changed, and what the registry is now
 
-| | today | after |
+| | before `P097/T494` | now |
 |---|---|---|
-| where a surface lives | chrome tree **or** the layer registry | the tree |
-| how nesting is stored | parent links in a flat list, re-derived every frame | child position |
-| who owns a surface's root | the registry | its parent |
-| how input reaches it | 16 per-surface functions; registry surfaces get none | one walk from the root |
-| show / hide by name | a registry lookup | find the node by its identity, flip its `open` signal |
-| what the registry is | a parallel tree, ~900 lines | a phone book: name → node |
+| where a surface lives | chrome tree **or** the layer registry | the tree — `AppState::window_root` |
+| who owns a surface's tree | the registry | its parent, as a keyed child |
+| how input reaches it | 16 per-surface functions; registry surfaces got none | one walk from the root |
+| layout and paint | a second set of passes (`layout_layers` / `paint_layers`) | the root's own walk |
+| what the registry holds | a parallel tree, ~900 lines | name, nesting, modality, `covers_content` |
 
-### 0.7 If you must add a surface before that lands
+**How to put a surface on screen:** `chrome::place_surface(&mut state.window_root, key, boxed)`. It
+positions the surface out of the flow at the full viewport, so it takes no space from the chrome
+beside it, and re-placing under the same key replaces it. `chrome::remove_surface` is the
+counterpart. Registry-owned surfaces are keyed `chrome::surface_slot(id)` → `"surface:<n>"` and found
+with `chrome::surface_node(_mut)`; a surface that has left the registry declares its own name (the
+toast stack is `heca.notifications`).
 
-Prefer the tree. If you genuinely cannot reach it — check, because the answer is usually that you
-can — use the registry and **be aware your surface receives no pointer events until P097 lands**.
-Say so in a comment where you mount it. Do not work around it by adding a dispatch function.
+**The chrome is child 0**, seated by `chrome::seat_chrome`, which finds its slot **by key**
+(`chrome::CHROME_KEY`) and never by position — a surface may be placed before the first chrome is
+ever built, and a positional "child 0" would seat the chrome straight over it. The window root is
+**not an `Option`** and outlives every chrome rebuild: the chrome subtree is discarded whenever its
+signature changes (window size, scale, sidebar widths, theme) and `reload_config` drops it outright,
+so a surface parented to the chrome would lose its open state, its half-played arrival and its focus.
+
+### 0.7 ⚠️ THE TREE TICKS; THE REGISTRY ONLY RECONCILES
+
+**Read this before touching the frame loop.** Surfaces are children of the window root, so
+`window_root.tick(dt)` advances them — **once**. Nothing else may advance them.
+
+The registry's job is only to notice the frame an exit *finished*, and that means looking either side
+of a tick it does not own:
+
+```rust
+let leaving_before = state.layers.leaving_before_tick(&state.window_root);   // BEFORE
+let mut chrome_animating = state.window_root.tick(dt);                       // the one advance
+chrome_animating |= state.layers.retire_finished_exits(&mut state.window_root, &leaving_before);
+```
+
+When the registry ticked them as well, every surface advanced twice a frame and the registry read
+`was_leaving` *after* the tree's tick had already consumed the transition. On the frame an exit
+finished it saw "was not leaving", never retired the surface and never requested the frame that
+paints its absence: **the exposé stuck at a tenth opacity until some other input forced a repaint,
+stayed modal, and swallowed `ctrl+h/j/k/l` for ever after** (Antonio, driving, 2026-08-31).
+
+Tests must run the real order — snapshot, tick the **tree**, reconcile. A test that calls a registry
+tick alone cannot see this, because it never runs the walk doing the second advance. See the `frame`
+helper in `heca/src/chrome/layers/tests.rs`.
 
 ### 0.8 The target model — four passes, one tree
 
@@ -452,7 +489,10 @@ these reads the same structure instead of re-deriving order per feature.
 
 ## 9. Dynamic layers — registry, actions, plugins (SHIPPED, then SUPERSEDED)
 
-> ⚠️ **This section describes the layer registry, which is being removed.** It was built and it
+> ⚠️ **This section describes the layer registry as it was when it owned surface trees. It no
+> longer does** — `P097(F003)/T494` moved every tree into the window root (§ 0.6) and the registry
+> now keeps only name, nesting, modality and `covers_content`. Read § 0 first; what follows is
+> history plus the parts of the registry that survive. It was built and it
 > works, but it turned out to be a **parallel tree implementation** — it stores parent links and
 > re-derives nesting every frame, duplicating what child position gives for free, and every walk over
 > it is a separate implementation free to disagree with the others. That is what produced both
