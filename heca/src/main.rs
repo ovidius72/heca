@@ -300,8 +300,13 @@ impl HecaApp {
             }
             update_session_viewport(state);
             // Force a full chrome rebuild so STRUCTURAL config (border style, pane
-            // info bar, etc.) re-applies — the retained tree is otherwise only
-            // rebuilt when `chrome_signature` changes, which can miss config edits.
+            // info bar, etc.) re-applies — the chrome is otherwise only rebuilt when
+            // `chrome_signature` changes, which can miss config edits.
+            //
+            // This drops the *build*, never the tree: the window root and every surface hanging
+            // from it are untouched, so a reload while an overlay is open leaves the overlay
+            // exactly where it was. That is the whole reason the chrome is a child of the root
+            // rather than the root itself (`docs/surface-compositor.md` § 0.8).
             state.chrome_tree = None;
             state.needs_redraw = true;
             // Reload runs in `about_to_wait`; request an explicit redraw so the

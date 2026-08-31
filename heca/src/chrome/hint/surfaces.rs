@@ -87,10 +87,7 @@ pub(super) fn hint_surface_root<'a>(
     surface: &HintSurface,
 ) -> Option<&'a dyn heca_grid_ui::Component> {
     match surface {
-        HintSurface::Chrome => state
-            .chrome_tree
-            .as_ref()
-            .map(|t| &t.root as &dyn heca_grid_ui::Component),
+        HintSurface::Chrome => Some(&state.window_root as &dyn heca_grid_ui::Component),
         HintSurface::Pane(pane_id) => state
             .panes
             .get(pane_id)
@@ -111,10 +108,7 @@ fn hint_surface_root_mut<'a>(
     surface: &HintSurface,
 ) -> Option<&'a mut (dyn heca_grid_ui::Component + 'static)> {
     match surface {
-        HintSurface::Chrome => state
-            .chrome_tree
-            .as_mut()
-            .map(|t| &mut t.root as &mut dyn heca_grid_ui::Component),
+        HintSurface::Chrome => Some(&mut state.window_root as &mut dyn heca_grid_ui::Component),
         HintSurface::Pane(pane_id) => state
             .panes
             .get_mut(pane_id)
@@ -179,9 +173,7 @@ pub(crate) fn fire_widget_action(state: &crate::app_state::AppState, name: &str)
             return true;
         }
     }
-    if let Some(tree) = state.chrome_tree.as_ref()
-        && heca_grid_ui::fire_action(&tree.root, name)
-    {
+    if heca_grid_ui::fire_action(&state.window_root, name) {
         return true;
     }
     state
@@ -196,9 +188,7 @@ pub(crate) fn fire_widget_action(state: &crate::app_state::AppState, name: &str)
 /// letters were up still loses its keycap. A stale letter left over a card is the failure this
 /// exists to stop.
 pub(crate) fn clear_hint_letters(state: &crate::app_state::AppState) {
-    if let Some(tree) = state.chrome_tree.as_ref() {
-        heca_grid_ui::clear_hints(&tree.root);
-    }
+    heca_grid_ui::clear_hints(&state.window_root);
     for shell in state.panes.values() {
         heca_grid_ui::clear_hints(&shell.root);
     }

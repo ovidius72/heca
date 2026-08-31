@@ -219,16 +219,10 @@ pub(crate) fn chrome_dispatch_button_press(
     pos: (f32, f32),
     button: heca_grid_ui::PointerButton,
 ) -> bool {
-    state
-        .chrome_tree
-        .as_mut()
-        .map(|tree| {
-            heca_grid_ui::dispatch(
-                &mut tree.root,
-                &Event::pointer_pressed(Point::new(pos.0 as f64, pos.1 as f64), button),
-            ) == heca_grid_ui::Handled::Yes
-        })
-        .unwrap_or(false)
+    heca_grid_ui::dispatch(
+        &mut state.window_root,
+        &Event::pointer_pressed(Point::new(pos.0 as f64, pos.1 as f64), button),
+    ) == heca_grid_ui::Handled::Yes
 }
 
 /// Deliver a **button release** to the chrome tree.
@@ -242,16 +236,10 @@ pub(crate) fn chrome_dispatch_button_release(
     pos: (f32, f32),
     button: heca_grid_ui::PointerButton,
 ) -> bool {
-    state
-        .chrome_tree
-        .as_mut()
-        .map(|tree| {
-            heca_grid_ui::dispatch(
-                &mut tree.root,
-                &Event::pointer_released(Point::new(pos.0 as f64, pos.1 as f64), button),
-            ) == heca_grid_ui::Handled::Yes
-        })
-        .unwrap_or(false)
+    heca_grid_ui::dispatch(
+        &mut state.window_root,
+        &Event::pointer_released(Point::new(pos.0 as f64, pos.1 as f64), button),
+    ) == heca_grid_ui::Handled::Yes
 }
 
 /// **Open the menu declared nearest the focused widget**, bubbling outwards — the keyboard
@@ -272,10 +260,7 @@ pub(crate) fn open_declared_menu_for_focus(state: &mut crate::app_state::AppStat
             .focused_container()
             .and_then(|mount| state.chrome_state.container_cursor(&mount).get())
     };
-    let Some(tree) = state.chrome_tree.as_ref() else {
-        return false;
-    };
-    heca_grid_ui::open_for_keyboard(&tree.root, cursor.as_deref())
+    heca_grid_ui::open_for_keyboard(&state.window_root, cursor.as_deref())
 }
 
 /// Mount every menu a widget declared and asked to open since the last frame.
@@ -295,9 +280,7 @@ pub(crate) fn drain_pending_menus(state: &mut crate::app_state::AppState) {
 /// One call per tree the host mounts, because each keeps its own hover — that is the point of the
 /// state living on the widgets rather than in one router the host would have to own.
 pub(crate) fn chrome_dispatch_cancelled(state: &mut crate::app_state::AppState, ev: &Event) {
-    if let Some(tree) = state.chrome_tree.as_mut() {
-        let _ = heca_grid_ui::dispatch(&mut tree.root, ev);
-    }
+    let _ = heca_grid_ui::dispatch(&mut state.window_root, ev);
     for header in state.pane_headers.values_mut() {
         let _ = heca_grid_ui::dispatch(&mut header.root, ev);
     }
@@ -311,9 +294,13 @@ pub(crate) fn chrome_dispatch_cancelled(state: &mut crate::app_state::AppState, 
 /// still waiting for the end of a gesture nobody told it about. Deliberately not hit-tested: a
 /// release ends the gesture wherever the cursor drifted to.
 pub(crate) fn chrome_dispatch_release(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
-    if let Some(tree) = state.chrome_tree.as_mut() {
-        heca_grid_ui::dispatch(&mut tree.root, &Event::pointer_released(Point::new(pos.0 as f64, pos.1 as f64), heca_grid_ui::PointerButton::Left));
-    }
+    heca_grid_ui::dispatch(
+        &mut state.window_root,
+        &Event::pointer_released(
+            Point::new(pos.0 as f64, pos.1 as f64),
+            heca_grid_ui::PointerButton::Left,
+        ),
+    );
 }
 
 /// Feed the wheel into the retained chrome tree. Returns `true` when it was consumed — a hovered
@@ -322,11 +309,7 @@ pub(crate) fn chrome_dispatch_wheel(
     state: &mut crate::app_state::AppState,
     ev: &Event,
 ) -> bool {
-    state
-        .chrome_tree
-        .as_mut()
-        .map(|tree| heca_grid_ui::dispatch(&mut tree.root, ev) == heca_grid_ui::Handled::Yes)
-        .unwrap_or(false)
+    heca_grid_ui::dispatch(&mut state.window_root, ev) == heca_grid_ui::Handled::Yes
 }
 
 /// Feed a semantic [`WidgetIntent`](heca_grid_ui::WidgetIntent) into the retained chrome tree.
@@ -344,13 +327,8 @@ pub(crate) fn chrome_dispatch_widget(
     state: &mut crate::app_state::AppState,
     intent: heca_grid_ui::WidgetIntent,
 ) -> bool {
-    state
-        .chrome_tree
-        .as_mut()
-        .map(|tree| {
-            heca_grid_ui::dispatch(&mut tree.root, &Event::Widget(intent)) == heca_grid_ui::Handled::Yes
-        })
-        .unwrap_or(false)
+    heca_grid_ui::dispatch(&mut state.window_root, &Event::Widget(intent))
+        == heca_grid_ui::Handled::Yes
 }
 
 /// Feed a pointer-move into the retained chrome tree so its **hover affordances**
@@ -360,7 +338,8 @@ pub(crate) fn chrome_dispatch_widget(
 /// [`chrome_dispatch_press`] this does **not** discard the tree — hover is transient
 /// and must persist across moves; the caller already requests a repaint.
 pub(crate) fn chrome_dispatch_move(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
-    if let Some(tree) = state.chrome_tree.as_mut() {
-        heca_grid_ui::dispatch(&mut tree.root, &Event::pointer_moved(Point::new(pos.0 as f64, pos.1 as f64)));
-    }
+    heca_grid_ui::dispatch(
+        &mut state.window_root,
+        &Event::pointer_moved(Point::new(pos.0 as f64, pos.1 as f64)),
+    );
 }

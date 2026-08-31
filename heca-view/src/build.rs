@@ -1108,6 +1108,14 @@ impl Overlay {
     pub fn opened(self, on: bool) -> Self {
         self.prop("opened", PropValue::Bool(on))
     }
+    /// **Blur what is behind it.** The scrim's counterpart: a scrim tints what is underneath, a
+    /// frost takes its detail away, and a surface may want either, both or neither.
+    ///
+    /// Strength is the theme's `overlay_frost_radius` — a described surface asks for the effect,
+    /// never a number, so a theme that wants a flat backdrop answers for every surface at once.
+    pub fn frosted(self, on: bool) -> Self {
+        self.prop("frosted", PropValue::Bool(on))
+    }
 }
 
 impl Scroll {

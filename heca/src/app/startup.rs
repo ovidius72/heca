@@ -437,6 +437,7 @@ pub(crate) async fn init_state(
         needs_redraw: true,
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,
+        window_root: crate::chrome::new_window_root(),
         chrome_tree: None,
         panes: std::collections::HashMap::new(),
         pane_headers: std::collections::HashMap::new(),

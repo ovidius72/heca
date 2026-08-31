@@ -22,7 +22,7 @@ mod layer;
 mod order;
 
 pub(crate) use layer::{
-    layer_name, DynamicLayer, LayerBackdrop, LayerContent, LayerId, LayerKind, HOST_OWNER,
+    layer_name, DynamicLayer, LayerContent, LayerId, LayerKind, HOST_OWNER,
 };
 
 use heca_grid_ui::Component;
@@ -83,7 +83,6 @@ impl LayerRegistry {
         self.layers.push(DynamicLayer {
             id,
             parent,
-            backdrop: LayerBackdrop::default(),
             doomed: false,
             kind,
             modal,
@@ -210,17 +209,6 @@ impl LayerRegistry {
         id
     }
 
-    /// Declare what a layer wants drawn behind it (see [`LayerBackdrop`]).
-    ///
-    /// Set after registering rather than passed to `add`, the way [`name`](Self::add_named) is:
-    /// every layer has a backdrop and almost every one wants the default, so it does not belong in
-    /// the argument list four call sites would have to carry.
-    pub(crate) fn set_backdrop(&mut self, id: LayerId, backdrop: LayerBackdrop) {
-        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
-            l.backdrop = backdrop;
-        }
-    }
-
     /// Is any layer participating this frame?
     ///
     /// Asked by the renderer rather than "did the layer scene draw anything", because an
@@ -287,27 +275,6 @@ impl LayerRegistry {
             fading = true;
         }
         fading
-    }
-
-    /// How strongly to stamp the frosted backdrop this frame — the **boldest** frosted layer's own
-    /// opacity, so the blur under a dissolving map dissolves with it instead of snapping back
-    /// sharp in one frame at the end.
-    pub(crate) fn frost_opacity(&self) -> f32 {
-        self.layers
-            .iter()
-            .filter(|l| l.visible && l.backdrop == LayerBackdrop::Frosted)
-            .map(DynamicLayer::opacity)
-            .fold(0.0, f32::max)
-    }
-
-    /// Does any layer participating this frame want a frosted backdrop?
-    ///
-    /// One question for the renderer, because the blur is **one pass over the whole frame**: two
-    /// frosted layers up at once share it rather than each paying for their own.
-    pub(crate) fn wants_frost(&self) -> bool {
-        self.layers
-            .iter()
-            .any(|l| l.visible && l.backdrop == LayerBackdrop::Frosted)
     }
 
     /// **The id [`add_named`](Self::add_named) will register `name` under** — the existing layer's
@@ -392,7 +359,6 @@ impl LayerRegistry {
         self.layers.push(DynamicLayer {
             id,
             parent,
-            backdrop: LayerBackdrop::default(),
             doomed: false,
             kind,
             modal,

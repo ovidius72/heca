@@ -180,11 +180,11 @@ fn visible_hint_targets(
     // 2. Chrome (top bar + sidebars), drawn on top of all pane content. Its own targets
     //    are eligible; the chrome frame AROUND the content (bars + sidebars) occludes pane
     //    targets beneath it. Occluders come from `content_rect`, not constants.
-    if let Some(tree) = state.chrome_tree.as_ref() {
+    {
         let (cl, ct) = (content.loc.x, content.loc.y);
         let (cr, cb) = (content.loc.x + content.size.w, content.loc.y + content.size.h);
         layers.push(HintLayer {
-            targets: hints_of(&HintSurface::Chrome, &tree.root),
+            targets: hints_of(&HintSurface::Chrome, &state.window_root),
             occluders: vec![
                 Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, ct)), // top bar
                 Rectangle::new(Point::new(0.0, 0.0), Size::new(cl, vh)), // left sidebar

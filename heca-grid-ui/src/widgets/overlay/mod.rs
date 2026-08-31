@@ -80,6 +80,8 @@ pub struct Overlay {
     /// Blocking layer policy: scrim + swallow outside input (modal). `false` ⇒
     /// no scrim; outside input falls through after the outside-click callback.
     blocking: bool,
+    /// Whether what is behind this surface is blurred — see [`frosted`](Overlay::frosted).
+    frosted: bool,
     /// Fired when a press lands outside the panel — the standalone dismissal
     /// hook (a composing widget usually implements its own policy instead).
     on_outside_click: Option<Box<dyn Fn()>>,
@@ -124,6 +126,7 @@ impl Overlay {
             base,
             open,
             blocking: true,
+            frosted: false,
             on_outside_click: None,
             position: OverlayPosition::Center,
             panel_size: None,
@@ -211,6 +214,33 @@ impl Overlay {
     #[heca_grid_ui_macros::prop]
     pub fn blocking(mut self, blocking: bool) -> Self {
         self.blocking = blocking;
+        self
+    }
+
+    /// **Blur what is behind this surface.** The counterpart of the scrim: a scrim tints what is
+    /// underneath, a frost takes its detail away, and a surface may want either, both or neither.
+    ///
+    /// ```ignore
+    /// Overlay::new().blocking(true).frosted(true).panel(map)   // the exposé's backdrop
+    /// ```
+    ///
+    /// **Strength is the theme's**, not the caller's — `overlay_frost_radius`, beside the scrim
+    /// alpha it is the counterpart of. A theme that wants a flat backdrop sets it to `0` and every
+    /// frosted surface answers together; nothing is decided at a call site. Same bargain as every
+    /// other token: the caller picks the semantic, the widget owns the pixels.
+    ///
+    /// **It blurs exactly what it occludes** — the viewport when [`blocking`](Overlay::blocking),
+    /// the panel alone when not — and it **fades with the surface that asked for it**, so a
+    /// dissolving overlay's backdrop dissolves with it instead of holding the session out of focus
+    /// and snapping sharp in one frame.
+    ///
+    /// The blur is GPU work, so this widget only **records the request** at its place in the
+    /// drawing order and the host performs it (`docs/surface-compositor.md` § 0.5). That is why a
+    /// frosted surface needs nothing from whoever places it — no registry, no declaration, no host
+    /// pass keyed on it.
+    #[heca_grid_ui_macros::prop]
+    pub fn frosted(mut self, frosted: bool) -> Self {
+        self.frosted = frosted;
         self
     }
 
@@ -360,6 +390,17 @@ impl Overlay {
             .unwrap_or_else(|| Rectangle::new(Point::new(0.0, 0.0), Size::new(0.0, 0.0)))
     }
 
+    /// **How far a blocking surface reaches** — the whole viewport, or the panel alone before one
+    /// has been seen. The scrim and the frosted backdrop are the same reach said twice, so they
+    /// read it from one place rather than each deriving it.
+    fn scrim_rect(&self, panel: Rectangle) -> Rectangle {
+        let vp = self.viewport.get();
+        match vp.w.is_finite() {
+            true => Rectangle::new(Point::new(0.0, 0.0), vp),
+            false => panel,
+        }
+    }
+
     fn is_open(&self) -> bool {
         self.open.get_untracked()
     }
@@ -500,24 +541,52 @@ impl Component for Overlay {
             return;
         }
         self.viewport.set(cx.viewport());
-        let (background, scrim_a) = {
+        let (background, scrim_a, frost_radius) = {
             let t = cx.theme();
-            (t.colors.background, t.colors.interaction.scrim)
+            (
+                t.colors.background,
+                t.colors.interaction.scrim,
+                t.colors.overlay_frost_radius,
+            )
         };
         let panel = self.panel_bounds();
 
         let frame = self.presence.frame();
+
+        // **The frost is recorded here, in the BASE segment, before anything this surface draws.**
+        //
+        // Two placements matter and neither is arbitrary:
+        //
+        // - **Not inside `with_overlay`.** Everything this surface draws goes to the deferred
+        //   overlay band so it composites above its siblings; a backdrop must sit in the base
+        //   segment instead, because the host performs it between flushing the base and flushing
+        //   the overlay bands — which is exactly "after everything beneath me, before me".
+        // - **Faded by the animation but NOT scaled.** `frame.apply` also scales and translates,
+        //   and a blurred *region* that zooms is not what "blur what is behind me" means. The
+        //   opacity alone is wanted: it is what makes the backdrop dissolve with the surface that
+        //   asked for it.
+        //
+        // It blurs what it occludes — the viewport when blocking, the panel alone when not —
+        // mirroring `overlay_occludes`, so the frost and the input policy can never disagree about
+        // this surface's reach.
+        if self.frosted {
+            let reach = if self.blocking { self.scrim_rect(panel) } else { panel };
+            cx.with_opacity(frame.opacity, |cx| {
+                cx.backdrop_blur(reach, frost_radius, 1.0);
+            });
+        }
+
         frame.apply(cx, self.scale_origin(), |cx| cx.with_overlay(|cx| {
             // Scrim over the whole viewport — the visual half of the blocking
             // layer policy (the event half swallows outside input below).
             if self.blocking {
-                let vp = self.viewport.get();
-                let scrim = if vp.w.is_finite() {
-                    Rectangle::new(Point::new(0.0, 0.0), vp)
-                } else {
-                    panel
-                };
-                cx.rect(scrim, background.with_alpha(scrim_a), None, 0.0, None);
+                cx.rect(
+                    self.scrim_rect(panel),
+                    background.with_alpha(scrim_a),
+                    None,
+                    0.0,
+                    None,
+                );
             }
 
             // Lift the panel, fill it, stamp the shared bracket reticle (same

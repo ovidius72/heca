@@ -3138,7 +3138,8 @@ pub fn handle_set_chrome_region_shown(state: &mut AppState, action: &WmAction) {
         Region::Bottom => state.show_bottom_bar = new_val,
     }
     // Geometry changed → recompute the real viewport + force a full chrome rebuild
-    // (mirrors the reload path in `main.rs`).
+    // (mirrors the reload path in `main.rs`). Drops the build, never the window root, so any
+    // surface that is up rides through it.
     crate::app::render::update_session_viewport(state);
     state.chrome_tree = None;
     state.needs_redraw = true;

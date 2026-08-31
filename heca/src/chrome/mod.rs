@@ -72,7 +72,7 @@ mod state;
 #[allow(unused_imports)]
 pub(crate) use expose::record_expose_cursor;
 pub(crate) use layers::{
-    LayerBackdrop, LayerId, LayerKind, LayerRegistry,
+    LayerId, LayerKind, LayerRegistry,
 };
 // Declarative UI model (plugin-task-ui-1); consumed by `realize` (ui-3) + Modal body (ui-4).
 // It lives in the `heca-view` crate since F003/P017/T009 — a plugin depends on that crate, and it
@@ -406,7 +406,6 @@ impl Component for RepaintWatch {
 /// frames (no per-frame signal churn) and gives a live tree to dispatch events into
 /// (F4.2). The collapsed sidebar rail is still hand-drawn in `render.rs`.
 pub(crate) struct RetainedChrome {
-    pub(crate) root: Flex,
     pub(crate) sig: u64,
     /// Handles to the tree's **value** signals (selection + status), so they update
     /// in place via [`sync_chrome_signals`] instead of forcing a rebuild.
@@ -425,6 +424,33 @@ pub(crate) struct RetainedChrome {
     /// nothing (Antonio, driving 2026-08-21). Guessing the source in the filter was the bug; there
     /// is one authority and this is a copy of it, made at construction.
     pub(crate) intent_source: crate::app::interaction::InteractionSource,
+}
+
+/// **A fresh, empty window root** — what [`AppState::window_root`](crate::app_state::AppState)
+/// starts as, before any chrome has been built or any surface placed.
+///
+/// It fills the window and imposes nothing else: the chrome subtree sizes itself in real pixels and
+/// a surface placed beside it takes itself out of the flow, so this level changes no geometry. It
+/// exists to **outlive** the chrome, not to lay anything out.
+pub(crate) fn new_window_root() -> Flex {
+    Flex::column()
+        .width(Length::Pct(1.0))
+        .height(Length::Pct(1.0))
+}
+
+/// **Seat a freshly built chrome subtree as the window root's first child**, keeping every surface
+/// already hanging beside it.
+///
+/// Doing it this way rather than replacing the retained tree is the whole point of the extra level.
+/// The chrome is rebuilt on a resize, a sidebar toggle and a theme reload — and dropped outright by
+/// `reload_config` — all of which happen while an overlay is open. None of them may take it with
+/// them.
+pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
+    let children = &mut root.base_mut().children;
+    match children.first_mut() {
+        Some(slot) => *slot = Box::new(chrome),
+        None => children.push(Box::new(chrome)),
+    }
 }
 
 /// `pane:<id>` — **a pane's identity**, declared by the pane itself.
@@ -525,7 +551,8 @@ pub(crate) fn sidebar_drag_source(
     pos: (f32, f32),
 ) -> Option<ChromeDragItem> {
     let tree = state.chrome_tree.as_ref()?;
-    let id = heca_grid_ui::drag::source_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))?;
+    let id =
+        heca_grid_ui::drag::source_at(&state.window_root, Point::new(pos.0 as f64, pos.1 as f64))?;
     tree.drag_items.get(id).cloned()
 }
 
@@ -542,7 +569,7 @@ pub(crate) fn sidebar_item_at(
 ) -> Option<ChromeDragItem> {
     let tree = state.chrome_tree.as_ref()?;
     let hit = heca_grid_ui::drag::resolve_at_filtered(
-        &tree.root,
+        &state.window_root,
         Point::new(pos.0 as f64, pos.1 as f64),
         &|_| true,
     )?;
@@ -599,7 +626,7 @@ fn resolve_sidebar_drop(
             .is_some_and(|it| target_accepted_by(source, it))
     };
     let hit = heca_grid_ui::drag::resolve_at_filtered(
-        &tree.root,
+        &state.window_root,
         Point::new(pos.0 as f64, pos.1 as f64),
         &accept,
     )?;

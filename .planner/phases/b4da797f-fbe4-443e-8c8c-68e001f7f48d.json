@@ -42,7 +42,7 @@
       "priority": 1,
       "shortName": "layer-roots-become-children-of",
       "title": "Layer roots become children of the one tree",
-      "status": "planned",
+      "status": "in-progress",
       "description": "GOAL: every registered layer (heca/src/chrome/layers/) is a node in the single retained tree, so the existing capture->target->bubble walk delivers pointer input to it. This alone fixes the toast bug (notification_layer.rs mounts a Persistent non-modal layer that today gets layout+paint and zero input).\n\nCURRENT STATE:\n- heca/src/chrome/layers_glue.rs: layout_layers() iterates state.layers.visible_roots_mut() and lays each out at viewport size; paint_layers() iterates state.layers.visible_back_to_front(). No input pass anywhere.\n- heca/src/chrome/dispatch.rs: dispatch_modal_pointer (line ~28) is the ONLY layer input path and it only touches top_modal. chrome_dispatch_* only touch state.chrome_tree.\n- heca/src/app/events.rs handle_window_event: CursorMoved/MouseInput/MouseWheel call dispatch_modal_pointer then chrome_dispatch_* then forward to the terminal. Persistent layers are never offered anything.\n- heca-grid-ui/src/component.rs dispatch(node, ev) is the capture->target->bubble walk; ToastStack already returns Handled::Yes only for the strip its cards cover (see heca-renderer/examples/showcase.rs CursorMoved/MouseInput arms for the reference wiring).\n\nWORK:\n- Make the chrome tree root own the visible layers as positioned children (in back-to-front order), OR introduce a single window-root node above chrome_tree + layers. Either way there is ONE root the host dispatches into.\n- Delete the per-root iteration in layout_layers/paint_layers in favour of one walk over that root (layout/paint recurse already).\n- In events.rs, dispatch every pointer event into the single root; fall through to terminal forwarding only on Handled::No. Remove the hand-ordered dispatch_modal_pointer + chrome_dispatch_* + forward sequence.\n- Cancelled/PointerLeave must still reach every subtree (hover clear).\n\nPRESERVE: layer paint order (back-to-front), the frost/backdrop behaviour in app/render.rs (state.layers.wants_frost / frost_opacity), and that a non-covering layer does not put the app in Domain::Overlay (interaction policy reads DynamicLayer::covers_content, unrelated to input).\n\nVERIFY: Antonio drives — toast x closes it, a toast action button fires, hovering a toast does NOT highlight the pane beneath, and prefix+Enter still splits a pane with a toast up. Green tests do not count here.\n\nPairs with the modal-as-swallowing-node task; the two land together (~1 day).",
       "descriptionUpdatedAt": "2026-08-27T19:39:49.909Z",
       "notes": "",
@@ -62,6 +62,14 @@
           "toStatus": "planned",
           "title": "in-progress → planned (checkpoint saved)",
           "description": "Reason: T494 cannot land before the scene seam exists. The frost backdrop blurs whatever is behind an exposé, and needs a point in the frame where the scene holds everything beneath the surface and nothing of it. That point exists today only because chrome and layers paint into two separate scenes. Move layers into one tree and they paint in one continuous walk — the moment disappears and the frost breaks the instant T494 lands, unless a node can first say \"blur what is behind me here\" and let the host perform it. That is exactly this task's seam.\nWhat was being done: Read only, no code. Established: (1) the task's stated approach — chrome root owns the layers, or a window root above both — fights the registry's design; (2) the registry is itself a parallel tree, storing parent links and re-deriving nesting every frame via z_path, duplicating what child position gives free; (3) blast radius is 21 LayerId references across 8 files and 18 layer-root accesses across 6; (4) the `Overlay` widget already provides everything the registry does — modal capture, fall-through, show/hide, animation, keyboard, occlusion geometry, and nesting — except reach outside the chrome tree; (5) the layout engine already supports absolutely-positioned children that take no space, so layers as stacked children need no new layout capability. All of it is written up in docs/surface-compositor.md § 0 and committed (9f40fb7), together with heca/tests/surface_drift.rs, which fails the build when a new surface is registered instead of placed.\nResume location: heca/src/chrome/layers_glue.rs (the three passes, no input pass); heca/src/chrome/dispatch.rs:28 (dispatch_modal_pointer, the only layer input path); heca/src/app/events.rs (the hand-ordered pointer sequence); heca/src/app/render.rs:1045-1075 (the frost pass that forces the ordering).\nHow to resume: Do T448 first. Then rewrite this task against the real plan rather than its current text: overlays become ordinary children (the Overlay widget already handles modal capture, fall-through, nesting, animation and keyboard), the registry shrinks to a name-to-node lookup so show_layer/hide_layer keep working, and input becomes one walk from the root. Read docs/surface-compositor.md § 0 rather than re-deriving any of it."
+        },
+        {
+          "id": "95f9188a-32c5-4c47-9ab6-4ff8ffa9deb9",
+          "date": "2026-08-31T07:24:52.748Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from heca/src/chrome/layers_glue.rs (the three passes, no input pass); heca/src/chrome/dispatch.rs:28 (dispatch_modal_pointer, the only layer input path); heca/src/app/events.rs (the hand-ordered pointer sequence); heca/src/app/render.rs:1045-1075 (the frost pass that forces the ordering).. Do T448 first. Then rewrite this task against the real plan rather than its current text: overlays become ordinary children (the Overlay widget already handles modal capture, fall-through, nesting, animation and keyboard), the registry shrinks to a name-to-node lookup so show_layer/hide_layer keep working, and input becomes one walk from the root. Read docs/surface-compositor.md § 0 rather than re-deriving any of it."
         }
       ],
       "decisions": [],
@@ -69,16 +77,7 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "pauseSnapshot": {
-        "id": "d034dd83-a667-4572-81b3-98a1b833c6bb",
-        "reason": "T494 cannot land before the scene seam exists. The frost backdrop blurs whatever is behind an exposé, and needs a point in the frame where the scene holds everything beneath the surface and nothing of it. That point exists today only because chrome and layers paint into two separate scenes. Move layers into one tree and they paint in one continuous walk — the moment disappears and the frost breaks the instant T494 lands, unless a node can first say \"blur what is behind me here\" and let the host perform it. That is exactly this task's seam.",
-        "whatWasBeingDone": "Read only, no code. Established: (1) the task's stated approach — chrome root owns the layers, or a window root above both — fights the registry's design; (2) the registry is itself a parallel tree, storing parent links and re-deriving nesting every frame via z_path, duplicating what child position gives free; (3) blast radius is 21 LayerId references across 8 files and 18 layer-root accesses across 6; (4) the `Overlay` widget already provides everything the registry does — modal capture, fall-through, show/hide, animation, keyboard, occlusion geometry, and nesting — except reach outside the chrome tree; (5) the layout engine already supports absolutely-positioned children that take no space, so layers as stacked children need no new layout capability. All of it is written up in docs/surface-compositor.md § 0 and committed (9f40fb7), together with heca/tests/surface_drift.rs, which fails the build when a new surface is registered instead of placed.",
-        "resumeLocation": "heca/src/chrome/layers_glue.rs (the three passes, no input pass); heca/src/chrome/dispatch.rs:28 (dispatch_modal_pointer, the only layer input path); heca/src/app/events.rs (the hand-ordered pointer sequence); heca/src/app/render.rs:1045-1075 (the frost pass that forces the ordering).",
-        "howToResume": "Do T448 first. Then rewrite this task against the real plan rather than its current text: overlays become ordinary children (the Overlay widget already handles modal capture, fall-through, nesting, animation and keyboard), the registry shrinks to a name-to-node lookup so show_layer/hide_layer keep working, and input becomes one walk from the root. Read docs/surface-compositor.md § 0 rather than re-deriving any of it.",
-        "relatedTaskId": "03754626-e33b-4c53-8f7e-aaff41cc4b65",
-        "pausedAt": "2026-08-28T10:34:40.119Z",
-        "pausedBy": ""
-      },
+      "pauseSnapshot": null,
       "pauseHistory": [
         {
           "id": "d034dd83-a667-4572-81b3-98a1b833c6bb",
@@ -94,8 +93,12 @@
       "startedAt": "2026-08-28T08:38:27.641Z",
       "completedAt": "",
       "createdAt": "2026-08-27T19:39:49.868Z",
-      "updatedAt": "2026-08-28T10:34:40.119Z",
+      "updatedAt": "2026-08-31T07:24:52.748Z",
       "sessionInfo": [
+        {
+          "sessionId": "81e7b61f-5fdc-4535-b72c-5a9c9468d452",
+          "createdAt": "2026-08-28T14:43:38.477Z"
+        },
         {
           "sessionId": "mcp-process:f2720c67-3db6-4507-82df-f5b669c10418",
           "createdAt": "2026-08-28T08:38:27.542Z"
@@ -350,9 +353,21 @@
       "toStatus": "planned",
       "title": "in-progress → planned",
       "description": ""
+    },
+    {
+      "id": "4f441075-5e20-4146-b008-e90b28f32e41",
+      "date": "2026-08-31T07:24:52.776Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "81e7b61f-5fdc-4535-b72c-5a9c9468d452",
+      "createdAt": "2026-08-28T14:43:38.477Z"
+    },
     {
       "sessionId": "mcp-process:f2720c67-3db6-4507-82df-f5b669c10418",
       "createdAt": "2026-08-28T08:38:27.542Z"

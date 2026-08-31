@@ -741,8 +741,25 @@ pub struct AppState {
     pub needs_redraw: bool,
     pub focused_pane: Option<PaneId>,
     pub input_mode: InputMode,
-    /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
-    /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
+    /// **The window root — the one retained tree** (`docs/surface-compositor.md` § 0.8).
+    ///
+    /// Everything on screen hangs from here: the chrome subtree is child 0, and a surface — an
+    /// overlay, a modal, a toast stack, a plugin's panel — is a positioned child beside it. One root
+    /// means one walk for layout, paint, input and hints, which is what lets a surface receive
+    /// pointer events by *being placed* rather than by being enrolled somewhere.
+    ///
+    /// **It is not an `Option`, and the chrome is a child rather than the root itself**, for the
+    /// same reason: it has to outlive the chrome. The chrome subtree is discarded and rebuilt
+    /// whenever its signature changes — window size, scale, sidebar widths, theme — and
+    /// `reload_config` drops the build outright. A surface parented to any of that would be
+    /// destroyed by a resize, a sidebar toggle or a theme reload, losing its open state, its
+    /// half-played arrival and its focus. Here it survives all of them, and a surface can be placed
+    /// before the first chrome has ever been built.
+    pub window_root: heca_grid_ui::Flex,
+    /// What the last chrome **build** produced — its signature and the handles that came with it.
+    /// The tree it built lives in [`window_root`](Self::window_root) as child 0; this is the
+    /// bookkeeping about it, so dropping it forces a rebuild without taking any surface with it.
+    /// See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
     /// **Retained per-pane shells**, keyed by pane — the frame around whatever app runs inside,
     /// and the widget that carries the pane's identity and its pick letter. Built/positioned each

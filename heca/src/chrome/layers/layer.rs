@@ -53,26 +53,6 @@ pub(crate) enum LayerKind {
     OnDemand,
 }
 
-/// What a layer wants **behind** it — the one thing a widget tree cannot draw for itself.
-///
-/// A layer paints into a `Scene`, whose vocabulary is rects, text and clips. "Everything already
-/// on screen, blurred" is not a shape: it is a GPU pass over the frame so far, which only the
-/// renderer can run. So a layer *declares* the backdrop it wants and the host performs it, exactly
-/// as [`covers_content`](DynamicLayer::covers_content) declares what it obscures and the router
-/// acts on it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub(crate) enum LayerBackdrop {
-    /// Whatever is behind shows through unchanged (the historical behaviour).
-    #[default]
-    Plain,
-    /// The frame so far, blurred, stamped under the layer — depth for a full-screen surface, and
-    /// the reason a map reads as *above* the session rather than as a replacement for it.
-    ///
-    /// Strength is the theme's `overlay_frost_radius`, so a theme that wants a flat backdrop sets
-    /// it to `0` and every frosted layer answers together.
-    Frosted,
-}
-
 /// A dynamically registered layer. Its content is either a native retained tree or a
 /// [`ViewNode`] description — see [`LayerContent`].
 pub(crate) struct DynamicLayer {
@@ -93,8 +73,6 @@ pub(crate) struct DynamicLayer {
     /// above the exposé and goes when it goes — bookkeeping every caller could get wrong in a flat
     /// list, and free in a tree.
     pub(crate) parent: Option<LayerId>,
-    /// What this layer wants drawn behind it. See [`LayerBackdrop`].
-    pub(crate) backdrop: LayerBackdrop,
     /// Set while a **removal** is waiting on the dissolve: the layer is gone as far as its owner is
     /// concerned and only the picture is still playing out. [`LayerRegistry::tick`] drops it.
     pub(crate) doomed: bool,
@@ -182,9 +160,9 @@ impl DynamicLayer {
     /// **How opaque this layer's surface is drawing itself this frame.**
     ///
     /// The layer does not fade its own content — the surface does, through its
-    /// [`Animation`](heca_grid_ui::Animation), and it paints that itself. What the host still needs
-    /// this for is everything drawn *around* the surface: the frosted backdrop is stamped **behind**
-    /// the layer, so it has to dissolve with it or it snaps back sharp in one frame at the end.
+    /// [`Animation`](heca_grid_ui::Animation), and it paints that itself, backdrop included. This
+    /// is left for the tests that assert an exit is playing, and for a host that needs to read a
+    /// surface's progress without knowing what animation it declared.
     ///
     /// `1.0` for a surface that declared no animation, which is most of them.
     pub(crate) fn opacity(&self) -> f32 {

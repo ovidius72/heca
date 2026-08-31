@@ -27,25 +27,6 @@ fn scale_of(reg: &LayerRegistry, id: LayerId) -> f32 {
         .map_or(1.0, |p| p.frame().scale)
 }
 
-/// **A frost is only paid for while the layer asking for it is up.** The blur is a full-frame
-/// GPU pass, so a hidden exposé must not keep the renderer running it, and a plain dialog must
-/// never trigger one it did not ask for.
-#[test]
-fn only_a_visible_layer_that_asked_for_it_wants_a_frost() {
-    let mut reg = LayerRegistry::default();
-    let plain = reg.add(None, LayerKind::OnDemand, true, true, empty_root());
-    let frosted = reg.add(None, LayerKind::OnDemand, true, true, empty_root());
-    reg.set_backdrop(frosted, LayerBackdrop::Frosted);
-
-    assert!(!reg.wants_frost(), "both are hidden — nothing to frost behind");
-    reg.show(plain);
-    assert!(!reg.wants_frost(), "a plain layer does not summon a blur pass");
-    reg.show(frosted);
-    assert!(reg.wants_frost());
-    reg.hide(frosted);
-    assert!(!reg.wants_frost(), "hidden again, and the pass stops with it");
-}
-
 /// **A dissolving layer is removed only after its dissolve.** Escape and a widget's own
 /// dismiss both go through `overlay::resolve`, which *removes*; hiding was the only path that
 /// faded. So the map dissolved on a click and cut on Escape — two dismissals, two behaviours.
@@ -392,24 +373,6 @@ fn a_rebuild_part_way_through_an_arrival_carries_it_on() {
     assert_eq!(scale_of(&reg, rebuilt), mid, "the arrival carried on from where it was");
     assert!(reg.tick(0.05), "…and is still going");
     assert!(scale_of(&reg, rebuilt) < mid, "…toward life size, not back to the start");
-}
-
-/// **The frost dissolves with the surface it is under.** The blur is stamped *behind* the
-/// layer, so a map that dissolves over a sharp backdrop and then cuts it away in one frame at
-/// the end reads as the app snapping back into focus a beat too late.
-#[test]
-fn the_frosted_backdrop_follows_its_surface_out() {
-    let mut reg = LayerRegistry::default();
-    let id = reg.add(None, LayerKind::OnDemand, true, true, fading_root());
-    reg.set_backdrop(id, LayerBackdrop::Frosted);
-    reg.show(id);
-    while reg.tick(0.05) {} // the arrival plays; the blur comes up with it
-    assert_eq!(reg.frost_opacity(), 1.0, "up, and the blur is full strength");
-
-    reg.hide(id);
-    reg.tick(0.1);
-    let frost = reg.frost_opacity();
-    assert!(frost > 0.0 && frost < 1.0, "the blur is going with it: {frost}");
 }
 
 /// **Input goes to the layer the user sees in front, and there is only one order to read.**

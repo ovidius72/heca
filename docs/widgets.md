@@ -3968,9 +3968,43 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   the chrome around it. `.panel_boxed(Box<dyn Component>)` takes a mapper-produced panel (e.g.
   `heca`'s `realize(ViewNode)`).
 - **Builders**: `.blocking(bool)` (default `true` — scrim + swallow outside input; `false` = no
-  scrim, outside input falls through), `.opened(bool)` (the **initial** state — see *Showing and
+  scrim, outside input falls through), `.frosted(bool)` (default `false` — see *The frosted
+  backdrop* below), `.opened(bool)` (the **initial** state — see *Showing and
   hiding* below), `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
   policy instead).
+
+#### The frosted backdrop — `.frosted(true)`
+
+**Blur what is behind the surface.** The scrim's counterpart: a scrim *tints* what is underneath,
+a frost takes its *detail* away, and a surface may want either, both or neither.
+
+```rust
+Overlay::new().blocking(true).frosted(true).panel(map)   // the exposé's backdrop
+```
+
+```json
+{"kind": "overlay", "props": {"blocking": true, "frosted": true}}
+```
+
+- **Strength is the theme's**, never the caller's — `overlay_frost_radius`, beside the scrim alpha
+  it is the counterpart of. A theme that wants a flat backdrop sets it to `0` and every frosted
+  surface answers together. A described surface asks for the *effect*, never a radius.
+- **It blurs exactly what it occludes** — the viewport when `blocking`, the panel alone when not.
+  The same reach [`overlay_occludes`](#component-trait) reports, read from one place, so the frost
+  and the input policy can never disagree about how far a surface goes.
+- **It fades with the surface that asked for it.** Left at full strength it holds the whole session
+  out of focus for the length of the fade and then snaps sharp in one frame — the exact pop the
+  fade exists to remove. It takes the animation's *opacity* and nothing else: a blurred **region**
+  that also zoomed would be blurring somewhere the surface is not.
+- **It is recorded, not performed.** A blur is GPU work, so the widget emits a
+  [`backdrop_blur`](#painting--paintcx) request at its place in the drawing order and the host
+  performs it (`docs/surface-compositor.md` § 0.5). The request goes into the **base** band, not
+  the deferred overlay band the surface's own visuals use — the host flushes the base, performs the
+  requests, then flushes the overlay bands, which is what "after everything beneath me, before me"
+  means in one pass order.
+
+A frosted surface therefore needs **nothing** from whoever places it: no registration, no host pass
+keyed on it, no declaration outside the tree.
 - **Positioning**: `.position(OverlayPosition)` picks how the panel is placed —
   `OverlayPosition::Center` (default: fill the viewport, taffy-center the panel — the modal
   [`Dialog`](#dialog) case) or `OverlayPosition::Anchored { anchor, gap }` (dropdown/popover:
@@ -4888,7 +4922,7 @@ and a bad value costs only itself: the good props on the same node still apply.
 | `Surface` | (container — children only) | — |
 | `Panel` | `text` (the heading; omit it and no header row is drawn) + children | — |
 | `Scroll` | `axes` (`vertical` / `horizontal` / `both`, default vertical) + children | — |
-| **`Overlay`** | `blocking` (Bool, default `true`), `open` (Bool), `animation` (`none` / `fade` / `zoom` / `zoom_fade`), **+ children** = the panel (one child *is* the panel; several are stacked into one) | — (dismissal is the host's) |
+| **`Overlay`** | `blocking` (Bool, default `true`), `frosted` (Bool, default `false` — blur what is behind it, at the theme's radius), `open` (Bool), `animation` (`none` / `fade` / `zoom` / `zoom_fade`), **+ children** = the panel (one child *is* the panel; several are stacked into one) | — (dismissal is the host's) |
 | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 | `Badge` / `Tag` / `Alert` | `text` | — |
 | **`Button`** | `variant`, `size`, **+ children** (the content); `text`, `icon` = the **childless sugar** | `press` |

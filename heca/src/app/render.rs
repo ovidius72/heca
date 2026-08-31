@@ -964,10 +964,13 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // and a live tree to dispatch events into in F4.2).
     let chrome_sig = crate::chrome::chrome_signature(state, chrome);
     if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
-        let (root, signals, drag_items, intent_source) =
+        let (chrome_root, signals, drag_items, intent_source) =
             crate::chrome::build_chrome_root(state, chrome);
+        // **Seat the chrome subtree, keep the window root.** Every surface hangs beside the chrome
+        // rather than inside it, so a rebuild — a resize, a sidebar toggle, a theme reload — leaves
+        // them untouched.
+        crate::chrome::seat_chrome(&mut state.window_root, chrome_root);
         state.chrome_tree = Some(crate::chrome::RetainedChrome {
-            root,
             sig: chrome_sig,
             signals,
             drag_items,
@@ -977,25 +980,17 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Push value-state (selection + status) into the retained tree's bound signals so
     // focus/mode changes update in place without a rebuild (the signature excludes them).
     let chrome_signals_changed = crate::chrome::sync_chrome_signals(state);
-    if chrome_signals_changed && let Some(tree) = state.chrome_tree.as_mut() {
+    if chrome_signals_changed {
         // Runtime/git signal writes happen during render, but wrappers like
         // `Visibility` apply their `style.hidden` flip in `tick()`. Advance the
         // retained chrome tree immediately so new branch/count rows participate in
         // this frame's layout + damage pass instead of waiting for a later focus/input
         // event to flush the signal-backed structure.
-        tree.root.tick(0.0);
+        state.window_root.tick(0.0);
     }
     let chrome_theme = crate::chrome::chrome_gui_theme(state);
-    let mut chrome_scene = crate::chrome::paint_chrome_root(
-        &mut state
-            .chrome_tree
-            .as_mut()
-            .expect("chrome tree set above")
-            .root,
-        w,
-        h,
-        &chrome_theme,
-    );
+    let mut chrome_scene =
+        crate::chrome::paint_chrome_root(&mut state.window_root, w, h, &chrome_theme);
     // F4.5 1b — in-drag visuals on the expanded sidebar: paint the drop indicator +
     // ghost into the chrome scene so they sit ON TOP of the grid-ui shell. Width is 0
     // when Hidden, so a positive width means Expanded.
@@ -1041,38 +1036,66 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Being last also settles a z-order that used to be the other way round by accident: the bell
     // flash and the search highlights painted *over* an open dialog. A layer is above them now.
     let mut layer_scene = heca_grid_ui::Scene::default();
-    crate::chrome::paint_layers(state, &mut layer_scene, w, h, &chrome_theme);
-    if state.layers.any_visible() {
-        // **The frost is one pass for the whole frame**, taken here because "here" is the only
-        // moment the scene holds everything under the layer and nothing of the layer itself. The
-        // strength is the theme's `overlay_frost_radius`, beside the scrim it is the counterpart
-        // of — nothing decided here, and `0.0` in a theme means flat.
-        let frost_radius = chrome_theme.colors.overlay_frost_radius;
-        let frost_alpha = state.layers.frost_opacity();
-        if state.layers.wants_frost() && frost_radius > 0.0 && frost_alpha > 0.0 {
-            let vp_w = phys_size.width as f32;
-            let vp_h = phys_size.height as f32;
-            let blurred =
-                state
-                    .blur
-                    .process(&state.device, &state.queue, &mut encoder, scene_view,
-                        frost_radius * state.scale_factor as f32);
-            state.backdrop.draw(
-                &state.device,
-                &state.queue,
-                &mut encoder,
-                scene_view,
-                blurred,
-                (vp_w, vp_h),
-                (0.0, 0.0, vp_w, vp_h),
-                Some([0.0, 0.0, 1.0, 1.0]),
-                // The frost fades with the layer that asked for it. Left at full strength it would
-                // hold the whole session out of focus for the length of the fade and then snap
-                // back sharp in one frame — the exact pop the fade exists to remove.
-                frost_alpha,
-                None,
-            );
+    crate::chrome::paint_layers(&state.layers, &mut layer_scene, w, h, &chrome_theme);
+    // **Perform the host work the scene recorded** (`docs/surface-compositor.md` § 0.5).
+    //
+    // The host asks nothing about layers here and knows no surface by name. A node that wants its
+    // backdrop blurred records the request while it paints — `Overlay::frosted` is the one that
+    // does today — and this performs it: blur the scene texture, stamp it back. Between the base
+    // flush and the overlay flush is exactly "after everything beneath the surface, before the
+    // surface", which is what a backdrop means and the reason the request goes in the base band.
+    //
+    // `HostDraw::Surface` is not emitted yet — the terminal still blits through its retained path
+    // until `P094(F011)/T449` makes it a component.
+    for req in heca_renderer::scene::host_requests(&layer_scene) {
+        let heca_grid_ui::scene::HostDraw::Backdrop { radius } = req.draw else {
+            continue;
+        };
+        let sf = state.scale_factor as f32;
+        let vp_w = phys_size.width as f32;
+        let vp_h = phys_size.height as f32;
+        // Logical → physical, then intersect with the clip in force where it was recorded.
+        let (mut x, mut y, mut bw, mut bh) = (
+            req.rect.loc.x as f32 * sf,
+            req.rect.loc.y as f32 * sf,
+            req.rect.size.w as f32 * sf,
+            req.rect.size.h as f32 * sf,
+        );
+        if let Some(c) = req.clip {
+            let x1 = (x + bw).min((c[0] + c[2]) * sf);
+            let y1 = (y + bh).min((c[1] + c[3]) * sf);
+            x = x.max(c[0] * sf);
+            y = y.max(c[1] * sf);
+            bw = (x1 - x).max(0.0);
+            bh = (y1 - y).max(0.0);
         }
+        if radius <= 0.0 || req.alpha <= 0.0 || bw <= 0.0 || bh <= 0.0 {
+            continue;
+        }
+        let blurred = state.blur.process(
+            &state.device,
+            &state.queue,
+            &mut encoder,
+            scene_view,
+            radius * sf,
+        );
+        state.backdrop.draw(
+            &state.device,
+            &state.queue,
+            &mut encoder,
+            scene_view,
+            blurred,
+            (vp_w, vp_h),
+            // `None` src-uv samples the same screen location as the destination, so the blur is of
+            // exactly what sits behind the rect.
+            (x, y, bw, bh),
+            None,
+            // The frost fades with the layer that asked for it. Left at full strength it would hold
+            // the whole session out of focus for the length of the fade and then snap back sharp in
+            // one frame — the exact pop the fade exists to remove.
+            req.alpha,
+            None,
+        );
     }
     // **The picker's keycaps are NOT painted here, and must never be.** Each is drawn by the widget
     // that declared the pick, in that widget's own paint (`heca_grid_ui::offer_hint`).
