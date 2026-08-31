@@ -570,7 +570,10 @@ impl Component for Overlay {
         // mirroring `overlay_occludes`, so the frost and the input policy can never disagree about
         // this surface's reach.
         if self.frosted {
-            let reach = if self.blocking { self.scrim_rect(panel) } else { panel };
+            let reach = match self.blocking {
+                true => self.scrim_rect(panel),
+                false => panel,
+            };
             cx.with_opacity(frame.opacity, |cx| {
                 cx.backdrop_blur(reach, frost_radius, 1.0);
             });

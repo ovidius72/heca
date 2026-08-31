@@ -347,7 +347,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     // map's own deletes with them (F003/P082/T416). A re-registration keeps the layer's id, so the
     // one already registered under this name is the one to name.
     let id = state.layers.slot_for_name(&name);
-    let emit = super::layer_emitter(&state.event_proxy, id);
+    let emit = super::layer_emitter(&state.event_proxy, super::surface_key_of(Some(&name), id));
     let already_up = state.layers.is_visible_named(&name);
     let here = open_on(
         &state.session,

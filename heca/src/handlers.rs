@@ -2884,10 +2884,13 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
     let Some((intent, dismiss_after)) = state.notifications.action_and_dismiss_after_for_visible(id, key) else {
         return;
     };
-    if let Some(layer_id) = state.notification_layer_id {
-        let emit = crate::chrome::layer_emitter(&state.event_proxy, layer_id);
-        emit.fire(crate::app::interaction::InteractionIntent::View(intent));
-    }
+    // Fired **as the stack**, so the relayed intent is judged exactly as the click that asked for
+    // it was — the surface's identity comes from its own constant, not from an id someone kept.
+    let emit = crate::chrome::layer_emitter(
+        &state.event_proxy,
+        crate::chrome::notification_surface_key(),
+    );
+    emit.fire(crate::app::interaction::InteractionIntent::View(intent));
     if dismiss_after {
         state.notifications.dismiss_one(id, std::time::Instant::now());
         state.needs_redraw = true;

@@ -33,15 +33,6 @@ pub(crate) const HOST_OWNER: &str = "heca";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct LayerId(pub(super) u64);
 
-impl LayerId {
-    /// A specific id, for tests that need two that differ. Runtime ids only ever come from
-    /// [`LayerRegistry::reserve_id`] — the counter is the registry's, not a caller's.
-    #[cfg(test)]
-    pub(crate) fn for_test(n: u64) -> Self {
-        Self(n)
-    }
-}
-
 /// Whether a layer is always present or shown on demand — the "panes-like vs exposé-like"
 /// distinction. Only [`OnDemand`](LayerKind::OnDemand) layers are meaningfully driven by
 /// `ShowLayer`/`HideLayer`.

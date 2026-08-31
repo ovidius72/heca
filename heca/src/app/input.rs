@@ -130,7 +130,7 @@ pub(crate) fn handle_keyboard_input(
                 // the policy tell the map acting on itself from the app being driven behind it.
                 let source = match state.layers.top_modal_id() {
                     Some(id) if matches!(surface, FocusedSurface::Layer { .. }) => {
-                        InteractionSource::Surface(id)
+                        InteractionSource::Surface(state.layers.surface_key(id))
                     }
                     _ => InteractionSource::Keyboard,
                 };

@@ -59,7 +59,9 @@ pub(crate) use dispatch::{
 mod layers_glue;
 pub(crate) use layers_glue::{layout_layers, paint_layers, rebuild_named_layer};
 mod notification_layer;
-pub(crate) use notification_layer::mount_notification_stack;
+pub(crate) use notification_layer::{
+    mount_notification_stack, surface_key as notification_surface_key,
+};
 mod host;
 /// The identity rule's reporting half (F003/P082/T444) — see the module docs.
 mod identity;
@@ -71,9 +73,7 @@ mod state;
 // confirm dialog as a layer, plugins) — some names not yet referenced in-binary.
 #[allow(unused_imports)]
 pub(crate) use expose::record_expose_cursor;
-pub(crate) use layers::{
-    LayerId, LayerKind, LayerRegistry,
-};
+pub(crate) use layers::{surface_key_of, LayerId, LayerKind, LayerRegistry};
 // Declarative UI model (plugin-task-ui-1); consumed by `realize` (ui-3) + Modal body (ui-4).
 // It lives in the `heca-view` crate since F003/P017/T009 — a plugin depends on that crate, and it
 // cannot depend on this binary. Re-exported here so the app keeps one path to the vocabulary.
@@ -328,11 +328,11 @@ impl ChromeIntentEmitter {
 /// has to be built before the layer is inserted, which is the usual case.
 pub(crate) fn layer_emitter(
     event_proxy: &winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
-    id: LayerId,
+    key: crate::app::interaction::SurfaceKey,
 ) -> ChromeIntentEmitter {
     ChromeIntentEmitter::new(
         event_proxy,
-        crate::app::interaction::InteractionSource::Surface(id),
+        crate::app::interaction::InteractionSource::Surface(key),
     )
 }
 
@@ -438,18 +438,61 @@ pub(crate) fn new_window_root() -> Flex {
         .height(Length::Pct(1.0))
 }
 
-/// **Seat a freshly built chrome subtree as the window root's first child**, keeping every surface
-/// already hanging beside it.
+/// **The chrome subtree's identity in the window root.** Its slot is found by this, never by
+/// position — a surface may be placed before the first chrome is ever built (the toast stack is,
+/// at startup), and a positional "child 0" would then seat the chrome *over* it.
+pub(crate) const CHROME_KEY: &str = "heca.chrome";
+
+/// **Seat a freshly built chrome subtree in the window root**, keeping every surface beside it.
 ///
 /// Doing it this way rather than replacing the retained tree is the whole point of the extra level.
 /// The chrome is rebuilt on a resize, a sidebar toggle and a theme reload — and dropped outright by
 /// `reload_config` — all of which happen while an overlay is open. None of them may take it with
 /// them.
+///
+/// It goes **first**, so every surface placed beside it paints and hit-tests above it: child order
+/// is z-order in one tree, which is what replaces the layer stack's separate sort
+/// (`docs/surface-compositor.md` § 0.6).
 pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
+    let chrome = Box::new(chrome.key(CHROME_KEY));
     let children = &mut root.base_mut().children;
-    match children.first_mut() {
-        Some(slot) => *slot = Box::new(chrome),
-        None => children.push(Box::new(chrome)),
+    match children
+        .iter()
+        .position(|c| c.base().key.as_deref() == Some(CHROME_KEY))
+    {
+        Some(at) => children[at] = chrome,
+        None => children.insert(0, chrome),
+    }
+}
+
+/// **Place a surface in the window root** — the whole of "how do I put something on screen"
+/// (`docs/surface-compositor.md` § 0.3).
+///
+/// It is a child, like any widget: the one walk lays it out, paints it, delivers its pointer events
+/// and collects its hint letters, with nothing registered and no dispatch function added for it.
+///
+/// Positioned out of the flow at the full viewport, so it takes no space from the chrome beside it
+/// and places its own content within itself — which is what `at_rect` means and why layers needed
+/// no new layout capability to become children.
+///
+/// Re-placing under the same `key` **replaces** that surface, so a rebuild is a swap rather than a
+/// second copy accumulating behind the first.
+pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: Box<dyn Component>) {
+    let mut surface = surface;
+    surface.base_mut().key = Some(key.to_string());
+    surface.base_mut().style.layout.placement = Some(heca_grid_ui::style::Placement {
+        left: Length::Pct(0.0),
+        top: Length::Pct(0.0),
+        width: Length::Pct(1.0),
+        height: Length::Pct(1.0),
+    });
+    let children = &mut root.base_mut().children;
+    match children
+        .iter()
+        .position(|c| c.base().key.as_deref() == Some(key))
+    {
+        Some(at) => children[at] = surface,
+        None => children.push(surface),
     }
 }
 

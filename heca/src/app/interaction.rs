@@ -46,6 +46,34 @@ use heca_core::layout::{FocusDomain, PaneId};
 // Interaction source
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// **Which surface an intent was declared on** — the identity
+/// [`InteractionSource::Surface`] carries.
+///
+/// Derived from the surface's own **key**, never handed out. That matters because a surface is
+/// moving from the layer registry into the one retained tree (`docs/surface-compositor.md` § 0.8):
+/// a `LayerId` stops existing the moment it is a node, while the key it declares on itself survives
+/// the move — and is the same identity the picker, the drag registry and a row's `key` already use.
+///
+/// **Nobody constructs one to get a capability.** The host derives it when it builds a surface's
+/// emitter, exactly as it stamped the id before, so a plugin declares a handler on its widget and
+/// the framework says where the intent came from (⭐⭐ RULE ZERO).
+///
+/// A `u64` rather than the string so [`InteractionSource`] stays `Copy` — it is stored on the
+/// retained chrome and copied through 170-odd call sites, and making it allocate to answer "who
+/// asked" would be a heavy price for an equality check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct SurfaceKey(u64);
+
+impl SurfaceKey {
+    /// The key a surface declares on itself, reduced to the value the policy compares.
+    pub(crate) fn of(key: &str) -> Self {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        key.hash(&mut h);
+        Self(h.finish())
+    }
+}
+
 /// Where did the interaction come from?
 ///
 /// Different sources may have different policy for the same action.
@@ -82,10 +110,14 @@ pub(crate) enum InteractionSource {
     /// own `x` must still delete the card the cursor is on. Both arrive as keys; only the surface
     /// they were declared on separates them.
     ///
-    /// The host stamps this when it builds a layer's emitter, so a plugin's layer is judged the
+    /// The host stamps this when it builds a surface's emitter, so a plugin's surface is judged the
     /// same way without constructing anything: it declares a handler on its widget and the
     /// framework says where the intent came from.
-    Surface(crate::chrome::LayerId),
+    ///
+    /// It carries the surface's [`SurfaceKey`] rather than a registry id, because a surface that
+    /// has moved into the one retained tree has no registry id to be named by — only the key it
+    /// declares on itself.
+    Surface(SurfaceKey),
     // Future sources — not implemented yet:
     // MouseRightSidebar,
     // MouseTopMenu,
@@ -224,7 +256,7 @@ pub(crate) enum Domain {
 /// - otherwise the session's own `Tiled | Floating`.
 pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain {
     if base_context_is_dormant(
-        state.layers.top_modal_id(),
+        state.layers.top_modal_id().map(|id| state.layers.surface_key(id)),
         crate::chrome::content_covered(state),
         source,
     ) {
@@ -280,7 +312,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
 /// the point (Antonio: *"each overlay might use its own actions and keybindings so we risk blocking
 /// future actions"*).
 fn base_context_is_dormant(
-    active_context: Option<crate::chrome::LayerId>,
+    active_context: Option<SurfaceKey>,
     content_covered: bool,
     source: InteractionSource,
 ) -> bool {
@@ -1571,9 +1603,11 @@ mod tests {
         ));
     }
 
-    /// A layer id for the tests. Ids are opaque and this module only needs two that differ.
-    fn layer(n: u64) -> crate::chrome::LayerId {
-        crate::chrome::LayerId::for_test(n)
+    /// A surface identity for the tests, from a name the way a real one is. This module only needs
+    /// two that differ — and naming them is the point: a surface is known by the key it declares,
+    /// so a test says `surface("expose")`, not an id it had to be handed.
+    fn surface(name: &str) -> SurfaceKey {
+        SurfaceKey::of(name)
     }
 
     /// **The exposé's defect, as a rule.** The map declares `covers_content: false` — you can see
@@ -1583,7 +1617,7 @@ mod tests {
     #[test]
     fn a_surface_that_took_the_keyboard_makes_the_base_context_dormant_even_if_it_covers_nothing() {
         assert!(base_context_is_dormant(
-            Some(layer(1)),
+            Some(surface("heca.expose")),
             false, // covers nothing — a map of the panes is not a lid over them
             InteractionSource::Keyboard,
         ));
@@ -1595,9 +1629,9 @@ mod tests {
     #[test]
     fn the_active_surface_acting_on_itself_is_not_refused() {
         assert!(!base_context_is_dormant(
-            Some(layer(1)),
+            Some(surface("heca.expose")),
             false,
-            InteractionSource::Surface(layer(1)),
+            InteractionSource::Surface(surface("heca.expose")),
         ));
     }
 
@@ -1606,9 +1640,9 @@ mod tests {
     #[test]
     fn a_surface_underneath_the_active_one_gets_no_reach() {
         assert!(base_context_is_dormant(
-            Some(layer(2)),
+            Some(surface("heca.confirm")),
             false,
-            InteractionSource::Surface(layer(1)),
+            InteractionSource::Surface(surface("heca.expose")),
         ));
     }
 

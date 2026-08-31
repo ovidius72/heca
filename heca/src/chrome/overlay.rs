@@ -188,7 +188,7 @@ pub(crate) fn open_modal(
     // `AppEvent::ChromeIntent` stamped with the layer it was declared in, dispatched by the event
     // loop. This used to claim `MouseContent`, which was untrue of a button reached by keyboard and
     // said nothing about *which* surface acted (F003/P082/T416).
-    let emit = super::layer_emitter(&state.event_proxy, id.0);
+    let emit = super::layer_emitter(&state.event_proxy, super::surface_key_of(None, id.0));
 
     let mut forms = FormBindings::default();
     let root = build_modal_root(
@@ -243,7 +243,7 @@ pub(crate) fn open_view_layer(
     // Reserved before the tree is built, because the tree's intent sink names the layer it lives in
     // — a plugin's panel is judged by *which* surface acted, exactly as the exposé is.
     let id = state.layers.reserve_id();
-    let emit = super::layer_emitter(&state.event_proxy, id);
+    let emit = super::layer_emitter(&state.event_proxy, super::surface_key_of(None, id));
     // Same boundary as `build_modal_root`: `realize` speaks the model's own `Intent` and knows
     // nothing of `InteractionIntent`, so the carrier is put on here.
     let view_emit: super::IntentEmitter = {

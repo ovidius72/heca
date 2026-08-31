@@ -14,14 +14,16 @@ use std::path::{Path, PathBuf};
 /// The surfaces that predate the rule. Each one is a place a thing on screen lives outside the
 /// tree, and each is removed by P097(F003).
 ///
+/// **The toast stack came off this list** (F003/P097/T494): it is placed in the window root with
+/// `chrome::place_surface`, so the one walk delivers its pointer events and its × works. It is the
+/// worked example for the three that remain.
+///
 /// **Do not add to this list.** Adding an entry is the moment to read
 /// `docs/surface-compositor.md` § 0 instead — a surface belongs in the tree, and `Overlay` already
 /// gives you modal capture, fall-through, nesting, animation and keyboard.
 const KNOWN_REGISTRY_SURFACES: &[&str] = &[
     // the command palette
     "chrome/palette.rs",
-    // the notification toast stack — the one that proved the point
-    "chrome/notification_layer.rs",
     // OverlayHost: open_modal and open_dropdown
     "chrome/overlay.rs",
     // the exposé

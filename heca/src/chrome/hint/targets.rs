@@ -99,7 +99,7 @@ fn pick_source(
             .as_ref()
             .map(|t| t.intent_source)
             .unwrap_or(S::Keyboard),
-        HintSurface::Layer(id) => S::Surface(*id),
+        HintSurface::Layer(id) => S::Surface(state.layers.surface_key(*id)),
         HintSurface::Pane(_) | HintSurface::PaneHeader(_) => S::Keyboard,
     }
 }

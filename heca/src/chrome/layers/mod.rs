@@ -21,12 +21,27 @@
 mod layer;
 mod order;
 
-pub(crate) use layer::{
-    layer_name, DynamicLayer, LayerContent, LayerId, LayerKind, HOST_OWNER,
-};
+pub(crate) use layer::{layer_name, DynamicLayer, LayerContent, LayerId, LayerKind, HOST_OWNER};
 
 use heca_grid_ui::Component;
 use heca_view::ViewNode;
+
+/// The key string a surface is known by — its name, or `surface:<n>` for one nobody named.
+///
+/// A free function, taking the name rather than looking it up, for a reason that bites otherwise:
+/// a caller builds its tree's emitter **before** registering (the tree carries the sink naming the
+/// surface it lives in), so a registry lookup would answer `surface:7` then and `heca.expose`
+/// afterwards — one surface with two identities, and the policy comparing them would silently stop
+/// matching. Derived from what the caller already holds, it is the same key either side of
+/// registration.
+///
+/// It is also the key such a surface will declare on **itself** once it is a node in the one tree
+/// and there is no registry left to ask (`docs/surface-compositor.md` § 0.8).
+pub(crate) fn surface_key_of(name: Option<&str>, id: LayerId) -> crate::app::interaction::SurfaceKey {
+    crate::app::interaction::SurfaceKey::of(
+        &name.map_or_else(|| format!("surface:{}", id.0), str::to_owned),
+    )
+}
 
 /// The registry of dynamically added layers, held on `AppState`. The built-in surfaces are
 /// **not** stored here (they keep their own trees + lifecycle); this holds only layers added
@@ -290,6 +305,16 @@ impl LayerRegistry {
             Some(l) => l.id,
             None => self.reserve_id(),
         }
+    }
+
+    /// **The identity the interaction policy knows this layer by.**
+    ///
+    /// Its addressable name when it has one (`heca.expose`), and `surface:<n>` when it does not —
+    /// a dropdown or an ad-hoc modal nobody named. One derivation, so the key a layer answers to
+    /// here is the same key it will declare on itself once it is a node in the one tree and the
+    /// registry no longer exists to be asked (`docs/surface-compositor.md` § 0.8).
+    pub(crate) fn surface_key(&self, id: LayerId) -> crate::app::interaction::SurfaceKey {
+        surface_key_of(self.name_of(id).as_deref(), id)
     }
 
     /// **What this layer is called** — the addressable, owner-prefixed name (`heca.expose`,
