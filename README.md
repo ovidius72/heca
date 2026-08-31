@@ -922,6 +922,10 @@ mode = "app"                  # "app" (in-app toast stack) | "system" (OS notifi
 auto_dismiss_ms = 4000        # How long an in-app toast stays before dismissing itself (ms).
                               # A notification a producer marks sticky, or one with its own
                               # lifetime, ignores this. Applies on prefix+Shift+r.
+                              # The countdown pauses while the pointer rests on a card.
+max_visible = 5               # How many toasts are on screen at once. The rest queue in the
+                              # order they were raised — nothing is dropped — and each takes
+                              # the slot that frees. Minimum 1.
 ```
 
 ### Confirmation prompts
@@ -963,6 +967,7 @@ mode = "app"          # "app" (in-app toast stack) | "system" (OS notifications 
                       # reserved, falls back to "app" until that backend exists) |
                       # "none" (no notifications at all — stderr logs are unaffected)
 auto_dismiss_ms = 4000 # how long a toast stays before dismissing itself
+max_visible = 5        # how many are on screen at once; the rest queue
 ```
 
 - **Severity is tone, not importance.** `info` / `success` / `warning` / `danger`
@@ -970,8 +975,15 @@ auto_dismiss_ms = 4000 # how long a toast stays before dismissing itself
   toast auto-dismisses after `auto_dismiss_ms` unless the code that raised it
   marked it sticky (a config-reload failure is sticky — you fix it and press
   **Retry**).
-- **Interacting:** `prefix+/` puts pick letters on the visible toasts' buttons and
-  their × ; `prefix+n` dismisses. (Clicking a toast is a work in progress.)
+- **Interacting:** click a toast's × or one of its buttons; `prefix+/` puts pick
+  letters on the visible toasts' buttons and their × , and `prefix+n` dismisses.
+  **Resting the pointer on a card holds the whole stack still**, so nothing retires
+  from under the click you are aiming at — the time that costs is given back when
+  you move away, and each card resumes with what it had left.
+- **More than fits:** only `max_visible` cards show at once. The rest wait in the
+  order they were raised and take the next slot that frees. A card on screen never
+  moves to fill a vacancy — closing one hands **its** slot to the next in line, so
+  the cards around it stay where they are.
 - **Raising one** — from a keybinding, a script, or a plugin — is the `notify`
   action: `notify title="Build finished" body="3 warnings" severity=success`.
   Rust code in the app uses `Notification::info("…").body("…").send()`.

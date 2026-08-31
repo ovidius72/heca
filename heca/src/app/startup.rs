@@ -490,12 +490,13 @@ pub(crate) async fn init_state(
         current_cursor: winit::window::CursorIcon::Default,
         // `[settings.notification_system]` config (F009/T186/T187/T191); the history depth
         // of 50 is still a placeholder pending its own knob.
-        notifications: crate::notification::NotificationRuntime::new(
+        notifications: crate::notification::NotificationRuntime::with_capacity(
             50,
             std::time::Duration::from_millis(
                 app_config.config.settings.notification_system.auto_dismiss_ms,
             ),
             app_config.config.settings.notification_system.mode,
+            app_config.config.settings.notification_system.max_visible,
         ),
         notification_pick_open: heca_grid_ui::reactive::signal(false),
         notification_hovered: heca_grid_ui::reactive::signal(false),

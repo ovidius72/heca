@@ -158,6 +158,15 @@ fn default_notification_auto_dismiss_ms() -> u64 {
     4000
 }
 
+/// Default number of notification cards on screen at once.
+///
+/// Small on purpose: the cards are transient and the stack is not a log. Overflow is not lost — it
+/// queues and takes the next slot that frees — so raising this trades reading room against how much
+/// of the window the stack is allowed to cover.
+fn default_notification_max_visible() -> usize {
+    5
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  NotificationSystemConfig
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -190,6 +199,14 @@ pub struct NotificationSystemConfig {
     /// still wins. Default: 4000.
     #[serde(default = "default_notification_auto_dismiss_ms")]
     pub auto_dismiss_ms: u64,
+    /// How many notification cards are on screen at once. Further notifications queue and take
+    /// the next slot that frees, in the order they were raised — nothing is dropped.
+    ///
+    /// A visible card never moves to fill a vacancy: closing one lets the next queued card take
+    /// **that** slot, so the cards around it stay where they are and the click after does not land
+    /// on something that slid under the cursor. Default: 5. Clamped to at least 1.
+    #[serde(default = "default_notification_max_visible")]
+    pub max_visible: usize,
 }
 
 impl Default for NotificationSystemConfig {
@@ -197,6 +214,7 @@ impl Default for NotificationSystemConfig {
         Self {
             mode: NotificationSystem::default(),
             auto_dismiss_ms: default_notification_auto_dismiss_ms(),
+            max_visible: default_notification_max_visible(),
         }
     }
 }
@@ -521,6 +539,26 @@ mod tests {
     fn test_terminal_foreground_override_parses() {
         let s: SettingsConfig = toml::from_str("terminal-foreground = \"#4c4f69\"").unwrap();
         assert!(s.terminal_foreground.is_some());
+    }
+
+    /// **The stack's size is config, not a compiled-in number**, and it clamps.
+    ///
+    /// A zero would queue every notification for ever and show none — that is what `mode = "none"`
+    /// is for, so a zero here is a typo rather than a way to silence the app. The clamp itself
+    /// lives in the store; this pins that the value travels.
+    #[test]
+    fn notification_max_visible_defaults_to_five_and_is_overridable() {
+        let s = SettingsConfig::default();
+        assert_eq!(s.notification_system.max_visible, 5);
+
+        let s: SettingsConfig =
+            toml::from_str("[notification_system]\nmax_visible = 3\n").expect("parses");
+        assert_eq!(s.notification_system.max_visible, 3);
+
+        // Absent from a present subtable → still the default.
+        let s: SettingsConfig =
+            toml::from_str("[notification_system]\nmode = \"app\"\n").expect("parses");
+        assert_eq!(s.notification_system.max_visible, 5);
     }
 
     #[test]

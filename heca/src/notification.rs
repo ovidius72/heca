@@ -581,8 +581,14 @@ pub struct AppNotification {
     placement: NotificationPlacement,
 }
 
-/// The fixed number of simultaneous notification cards in the toast host.
-pub const MAX_VISIBLE_NOTIFICATIONS: usize = 4;
+/// **How many cards the stack shows at once when nothing says otherwise** —
+/// `[settings.notification_system] max_visible`.
+///
+/// A default, not a limit: the store's capacity is chosen at construction, so a user whose window
+/// has the room says so in config rather than living with a number compiled in. It stays a small
+/// number on purpose — the cards are transient and the stack is not a log, and a column tall enough
+/// to reach the panes is a worse read than a queue.
+pub const DEFAULT_MAX_VISIBLE_NOTIFICATIONS: usize = 5;
 
 /// Outcome of one store-owned state transition.
 ///
@@ -691,7 +697,9 @@ pub struct NotificationStore {
     /// FIFO ids waiting for a visible slot. The front is promoted first.
     queued: VecDeque<NotificationId>,
     /// Stable presentation slots. Existing visible entries never reorder.
-    visible: [Option<NotificationId>; MAX_VISIBLE_NOTIFICATIONS],
+    /// Stable presentation slots — as many as `max_visible`, fixed for the store's life. Length is
+    /// the capacity; a `None` is a vacancy, and an occupied slot never moves to fill one.
+    visible: Vec<Option<NotificationId>>,
     /// FIFO archival order; the oldest entry is evicted first.
     history: VecDeque<NotificationId>,
     /// Maximum retained history entries; zero disables retention.
@@ -699,19 +707,34 @@ pub struct NotificationStore {
 }
 
 impl NotificationStore {
-    /// Create an empty store with a bounded runtime history.
+    /// Create an empty store with a bounded runtime history and the default number of slots.
     ///
     /// `history_limit` is a runtime retention policy, not persisted state.
     pub fn new(history_limit: usize) -> Self {
+        Self::with_capacity(history_limit, DEFAULT_MAX_VISIBLE_NOTIFICATIONS)
+    }
+
+    /// The same, with an explicit number of simultaneous cards
+    /// (`[settings.notification_system] max_visible`).
+    ///
+    /// **Clamped to at least one.** A zero-slot store would queue every notification for ever and
+    /// show none, which is what `mode = "none"` is for — a capacity of nothing is a config typo,
+    /// not a way to silence the app.
+    pub fn with_capacity(history_limit: usize, max_visible: usize) -> Self {
         Self {
             next_id: Some(1),
             notifications: HashMap::new(),
             dedup_index: HashMap::new(),
             queued: VecDeque::new(),
-            visible: [None; MAX_VISIBLE_NOTIFICATIONS],
+            visible: vec![None; max_visible.max(1)],
             history: VecDeque::new(),
             history_limit,
         }
+    }
+
+    /// How many cards this store shows at once.
+    pub fn max_visible(&self) -> usize {
+        self.visible.len()
     }
 
     /// The configured maximum number of retained archived notifications.
@@ -1087,7 +1110,7 @@ impl NotificationStore {
         now: Instant,
         transition: impl FnOnce(&mut Self, Instant) -> (R, bool),
     ) -> (R, NotificationStoreUpdate) {
-        let visible_before = self.visible;
+        let visible_before = self.visible.clone();
         let (result, payload_changed) = transition(self, now);
         self.assert_invariants();
 
@@ -1438,8 +1461,24 @@ impl NotificationRuntime {
         auto_dismiss: std::time::Duration,
         mode: heca_config::settings::NotificationSystem,
     ) -> Self {
+        Self::with_capacity(
+            history_limit,
+            auto_dismiss,
+            mode,
+            DEFAULT_MAX_VISIBLE_NOTIFICATIONS,
+        )
+    }
+
+    /// The same, with the configured number of simultaneous cards
+    /// (`[settings.notification_system] max_visible`).
+    pub fn with_capacity(
+        history_limit: usize,
+        auto_dismiss: std::time::Duration,
+        mode: heca_config::settings::NotificationSystem,
+        max_visible: usize,
+    ) -> Self {
         Self {
-            store: NotificationStore::new(history_limit),
+            store: NotificationStore::with_capacity(history_limit, max_visible),
             visible_toasts: heca_grid_ui::reactive::signal(Vec::new()),
             auto_dismiss,
             mode,
@@ -1854,7 +1893,7 @@ mod tests {
         assert_eq!(store.next_id, Some(1));
         assert_eq!(store.history_limit(), 100);
         assert!(store.queued.is_empty());
-        assert_eq!(store.visible, [None; MAX_VISIBLE_NOTIFICATIONS]);
+        assert!(store.visible.iter().all(Option::is_none));
         assert!(store.history.is_empty());
         assert!(store.dedup_index.is_empty());
     }
@@ -1882,7 +1921,8 @@ mod tests {
     fn push_queues_after_all_stable_slots_are_occupied_without_an_expiry() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
-        for number in 0..MAX_VISIBLE_NOTIFICATIONS {
+        let capacity = store.max_visible();
+        for number in 0..capacity {
             store.push(NotificationDraft::new(format!("Visible {number}")), now).unwrap();
         }
 
@@ -1912,7 +1952,8 @@ mod tests {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
         let mut visible_ids = Vec::new();
-        for number in 0..MAX_VISIBLE_NOTIFICATIONS {
+        let capacity = store.max_visible();
+        for number in 0..capacity {
             visible_ids.push(
                 store.push(NotificationDraft::new(format!("Visible {number}")), now)
                     .unwrap()
@@ -1940,7 +1981,8 @@ mod tests {
         let later = now + std::time::Duration::from_secs(1);
         let mut store = NotificationStore::new(100);
         let mut visible_ids = Vec::new();
-        for number in 0..MAX_VISIBLE_NOTIFICATIONS {
+        let capacity = store.max_visible();
+        for number in 0..capacity {
             visible_ids.push(
                 store.push(
                     NotificationDraft::new(format!("Visible {number}"))
@@ -1957,7 +1999,7 @@ mod tests {
         assert!(update.visible_projection_changed());
         assert_eq!(store.visible[0], Some(queued_id));
         assert!(visible_ids.iter().all(|id| store.notifications[id].is_history()));
-        assert_eq!(store.history.len(), MAX_VISIBLE_NOTIFICATIONS);
+        assert_eq!(store.history.len(), capacity);
         assert_eq!(store.notifications[&queued_id].visible_since(), Some(later));
     }
 
@@ -2095,11 +2137,65 @@ mod tests {
         assert_eq!(store.visible[0], Some(id));
     }
 
+    /// **The stack's size is chosen, and a zero is a typo rather than a mute switch.**
+    ///
+    /// `mode = "none"` is how the app is silenced; a capacity of nothing would instead accept every
+    /// notification, queue it for ever and show none — the worst of both.
+    #[test]
+    fn the_number_of_slots_is_configured_and_never_zero() {
+        assert_eq!(
+            NotificationStore::new(100).max_visible(),
+            DEFAULT_MAX_VISIBLE_NOTIFICATIONS
+        );
+        assert_eq!(NotificationStore::with_capacity(100, 2).max_visible(), 2);
+        assert_eq!(
+            NotificationStore::with_capacity(100, 0).max_visible(),
+            1,
+            "a zero-slot stack would swallow everything silently",
+        );
+    }
+
+    /// **Overflow queues; it is never dropped** — and it enters at the slot that freed.
+    ///
+    /// With more notifications than slots, the extras wait in the order they were raised. Closing
+    /// one hands its **own** slot to the next in line, so the cards around it do not slide: the
+    /// click after a close lands where the user is looking, not on something that moved under the
+    /// cursor while they were still holding the mouse.
+    #[test]
+    fn overflow_waits_its_turn_and_takes_the_slot_that_freed() {
+        let now = Instant::now();
+        let mut store = NotificationStore::with_capacity(100, 3);
+        let ids: Vec<_> = (0..6)
+            .map(|n| {
+                store
+                    .push(NotificationDraft::new(format!("N{n}")), now)
+                    .unwrap()
+                    .notification_id()
+            })
+            .collect();
+
+        assert_eq!(store.visible, vec![Some(ids[0]), Some(ids[1]), Some(ids[2])]);
+        assert_eq!(store.queued.len(), 3, "the rest are waiting, not lost");
+
+        // Close the middle card: the next queued takes *that* slot.
+        store.dismiss(ids[1], now);
+        assert_eq!(
+            store.visible,
+            vec![Some(ids[0]), Some(ids[3]), Some(ids[2])],
+            "the vacancy is filled in place; its neighbours do not move",
+        );
+
+        // And again, at the front this time.
+        store.dismiss(ids[0], now);
+        assert_eq!(store.visible, vec![Some(ids[4]), Some(ids[3]), Some(ids[2])]);
+        assert_eq!(store.queued.len(), 1);
+    }
+
     #[test]
     fn dismiss_visible_archives_it_and_refills_only_its_slot() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
-        let visible_ids: Vec<_> = (0..MAX_VISIBLE_NOTIFICATIONS)
+        let visible_ids: Vec<_> = (0..store.max_visible())
             .map(|number| store.push(NotificationDraft::new(format!("Visible {number}")), now).unwrap().notification_id())
             .collect();
         let queued_id = store.push(NotificationDraft::new("Queued"), now).unwrap().notification_id();
@@ -2108,14 +2204,22 @@ mod tests {
         assert!(matches!(result, NotificationDismissResult::Dismissed(update) if update.visible_projection_changed()));
         assert!(store.notifications[&visible_ids[1]].is_history());
         assert_eq!(store.history, VecDeque::from([visible_ids[1]]));
-        assert_eq!(store.visible, [Some(visible_ids[0]), Some(queued_id), Some(visible_ids[2]), Some(visible_ids[3])]);
+
+        // **The queued card takes the vacated slot, and nothing else moves.** Closing the second
+        // card must not slide the third and fourth up under the cursor that just clicked — the
+        // next click would land on a card the user never aimed at. So the promotion fills the hole
+        // rather than appending, and every neighbour keeps its place.
+        let mut expected: Vec<Option<NotificationId>> =
+            visible_ids.iter().copied().map(Some).collect();
+        expected[1] = Some(queued_id);
+        assert_eq!(store.visible, expected);
     }
 
     #[test]
     fn dismiss_pending_archives_without_changing_visible_slots() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
-        let visible_ids: Vec<_> = (0..MAX_VISIBLE_NOTIFICATIONS)
+        let visible_ids: Vec<_> = (0..store.max_visible())
             .map(|number| store.push(NotificationDraft::new(format!("Visible {number}")), now).unwrap().notification_id())
             .collect();
         let queued_id = store.push(NotificationDraft::new("Queued"), now).unwrap().notification_id();
@@ -2124,7 +2228,9 @@ mod tests {
         assert!(matches!(result, NotificationDismissResult::Dismissed(update) if !update.visible_projection_changed()));
         assert!(store.notifications[&queued_id].is_history());
         assert!(store.queued.is_empty());
-        assert_eq!(store.visible, [Some(visible_ids[0]), Some(visible_ids[1]), Some(visible_ids[2]), Some(visible_ids[3])]);
+        let expected: Vec<Option<NotificationId>> =
+            visible_ids.iter().copied().map(Some).collect();
+        assert_eq!(store.visible, expected);
     }
 
     #[test]
@@ -2169,7 +2275,7 @@ mod tests {
     fn dedup_pending_moves_entry_to_fifo_front_without_displacing_visible() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
-        for index in 0..MAX_VISIBLE_NOTIFICATIONS {
+        for index in 0..store.max_visible() {
             store.push(NotificationDraft::new(format!("Visible {index}")), now).unwrap();
         }
         let pending_id = store.push(NotificationDraft::new("Old").dedup_key("pending"), now).unwrap().notification_id();
