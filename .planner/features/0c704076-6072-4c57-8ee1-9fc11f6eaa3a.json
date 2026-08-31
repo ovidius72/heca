@@ -5,7 +5,7 @@
   "priority": 0,
   "name": "🖋️ Neovim GUI Pane",
   "description": "Integrazione Neovim GUI come pane: `nvim --embed`, msgpack-RPC, render singola grid, multi-istanza, `ext_multigrid`, input routing, image layer dedicato e markdown layer. Feature ancora in fase di idea/progettazione.",
-  "descriptionUpdatedAt": "",
+  "descriptionUpdatedAt": "2026-07-01T18:08:37.398Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
