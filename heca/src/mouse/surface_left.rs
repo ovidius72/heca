@@ -73,37 +73,11 @@ pub(crate) fn accept_drop(
     pane_id: PaneId,
     original_ws: usize,
     swap: bool,
-    pos: (f32, f32),
+    target: Option<(crate::providers::workspaces::WorkspaceRow, DropSide)>,
 ) {
-    // Drop target + side resolved from the RETAINED chrome tree's bounds (F4.5), not
-    // the legacy fixed-row geometry. The side (Before/Onto/After, from vertical thirds)
-    // decides which edge of the target the source lands on. This is the PANE drop path,
-    // so only pane targets count; dropping a pane onto a column/workspace falls through
-    // to "re-add to the active workspace" (pane→column placement is a later enhancement).
-    //
-    let target =
-        crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Pane)
-            .and_then(|(item, side)| match item {
-                crate::chrome::ChromeDragItem::Pane(pid) => {
-                    Some((crate::providers::workspaces::WorkspaceRow::Pane { pane_id: pid }, side))
-                }
-                // Dropping a pane on a workspace's header/empty area moves it INTO that
-                // workspace — the only way to reach an *empty* workspace (which has no pane
-                // card to aim at). Columns can't be empty, so they need no pane-drop target.
-                crate::chrome::ChromeDragItem::Workspace { ws } => {
-                    // A drop target is resolved live from a hit test, so the identity is looked up
-                    // here rather than carried by the drag item.
-                    let ws_id = state.session.workspaces.get(ws).map(|w| w.id)?;
-                    Some((
-                        crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx: ws, ws_id },
-                        side,
-                    ))
-                }
-                crate::chrome::ChromeDragItem::Column { .. } => None,
-            });
-
-    // Now clear all drag state.
-    state.mouse.drag_ctx.cancel_all();
+    // **The target arrives resolved.** It used to be hunted for under the pointer here, at the
+    // moment of release — which is how the drop came to be tied to one sidebar: the hunt was keyed
+    // to it. The gesture now says what it landed on (F003/P097/T496).
     state.mouse.interactive_move = None;
 
     // Swap applies only to a pane-on-pane drop; a workspace target falls through to a

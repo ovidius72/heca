@@ -116,7 +116,9 @@ impl WorkspaceFrame<'_> {
             workspace_key(ws_id),
             ChromeDragItem::Workspace { ws: ws_idx },
         );
-        dock = dock.drop_target();
+        // A workspace takes either: a pane dropped on its header or empty area moves in — the only
+        // way into an empty one — and a column moves to its end.
+        dock = dock.accepts(["pane", "column"]);
         // Columns stacked with a clear gap between them (the gap + bar mark each column);
         // panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);

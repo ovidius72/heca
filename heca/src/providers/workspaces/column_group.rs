@@ -57,8 +57,8 @@ impl ColumnGroup<'_> {
                 );
                 heca_grid_ui::widgets::ContextMenu::new(MENU_COLUMN).child(menu)
             })
-            .draggable()
-            .drop_target();
+            .draggable_as("column")
+            .accepts(["column"]);
         for pane in &column.panes {
             col = col.child(
                 PaneRow {

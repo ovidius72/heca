@@ -317,8 +317,10 @@ impl PaneRow<'_> {
                 );
                 heca_grid_ui::widgets::ContextMenu::new(MENU_PANE).child(ctx_menu)
             })
-            .draggable()
-            .drop_target()
+            // A pane card is a pane, and it takes panes. A column dragged over it is refused
+            // before anything is drawn, so no line appears where a release would do nothing.
+            .draggable_as("pane")
+            .accepts(["pane"])
             // Click / Enter / Space run the row's declared click.
             .on_activate(press)
             .child(content);

@@ -226,10 +226,28 @@ pub struct Base {
     /// hate"*). A widget with no `key` is not a drag source, because there would be nothing to
     /// name what was picked up.
     pub draggable: bool,
+    /// **What this widget is, when it is dragged** — an opaque word its component chose
+    /// (`"pane"`, `"column"`, `"docker.container"`). Set with
+    /// [`ComponentExt::draggable_as`](crate::builders::ComponentExt::draggable_as); `None` means it
+    /// says nothing about itself and every target takes it.
+    ///
+    /// It is deliberately a free string and not a list the library knows: a closed set is one a
+    /// plugin cannot join, and the same shape a row already uses to say what its right-click menu
+    /// is about.
+    pub drag_kind: Option<String>,
     /// This widget **accepts drops**, identified the same way — by its [`key`](Self::key).
     /// Universal opt-in via [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target);
     /// resolved generically by [`drag::resolve_at`](crate::drag::resolve_at).
     pub drop_target: bool,
+    /// **What this widget takes**, by the same words. Empty means it takes anything, which is what
+    /// a target that says nothing gets. Set with
+    /// [`ComponentExt::accepts`](crate::builders::ComponentExt::accepts).
+    ///
+    /// A target that refuses is not offered: the walk skips it and keeps looking outward, so
+    /// nothing is drawn over something that would then do nothing. That mismatch is what this
+    /// exists to end — the line said yes and the release said no, because the drawing and the rule
+    /// lived in different places (Antonio, driving, 2026-09-01).
+    pub accepts: Vec<String>,
     /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
     /// the right-click target and the drag are three readers of this one declaration.
     ///
@@ -459,7 +477,9 @@ impl Base {
             tab_index: None,
             children: Vec::new(),
             draggable: false,
+            drag_kind: None,
             drop_target: false,
+            accepts: Vec::new(),
             key: None,
             scope_key: None,
             font: 15.0,
@@ -1000,6 +1020,20 @@ pub trait Component {
     /// [`drag::resolve_at`](crate::drag::resolve_at).
     fn is_drop_target(&self) -> bool {
         self.base().drop_target
+    }
+
+    /// **Would this widget take what is being dragged?** A target that declared no
+    /// [`accepts`](Base::accepts) takes anything; one that did takes only what it named, and a
+    /// dragged widget that named nothing is taken by anyone.
+    ///
+    /// Asked during resolution, so a target that would refuse is never offered and never drawn on.
+    fn accepts_drag(&self, kind: Option<&str>) -> bool {
+        let want = &self.base().accepts;
+        match kind {
+            _ if want.is_empty() => true,
+            Some(k) => want.iter().any(|w| w == k),
+            None => true,
+        }
     }
 }
 

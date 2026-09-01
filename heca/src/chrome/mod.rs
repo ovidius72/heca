@@ -54,7 +54,7 @@ pub(crate) use dispatch::{
     chrome_dispatch_widget, dispatch_pane_header_move,
     dispatch_surface_pointer, dispatch_pane_header_press, dispatch_pane_header_release, dispatch_pane_header_wheel,
     dispatch_pane_viewport_move, dispatch_pane_viewport_press, dispatch_pane_viewport_release,
-    drain_pending_menus, open_declared_menu_for_focus,
+    drain_pending_drops, drain_pending_menus, open_declared_menu_for_focus,
 };
 mod layers_glue;
 pub(crate) use layers_glue::rebuild_named_layer;
@@ -666,6 +666,30 @@ pub(crate) fn sidebar_item_at(
         &|_| true,
     )?;
     tree.drag_items.get(&hit.key).cloned()
+}
+
+/// **What a pane can be dropped onto**, as the workspaces component names it.
+///
+/// One translation, so the two callers that need it — the pointer path and the drop the framework
+/// hands back — cannot disagree about what a pane landing on a workspace means. A column is not a
+/// pane target: pane-into-column placement does not exist yet, and a pane dropped there falls
+/// through to "re-add to the active workspace".
+pub(crate) fn pane_drop_row(
+    state: &crate::app_state::AppState,
+    item: ChromeDragItem,
+) -> Option<crate::providers::workspaces::WorkspaceRow> {
+    match item {
+        ChromeDragItem::Pane(pane_id) => {
+            Some(crate::providers::workspaces::WorkspaceRow::Pane { pane_id })
+        }
+        // Dropping a pane on a workspace's header or empty area moves it INTO that workspace — the
+        // only way to reach an *empty* one, which has no pane card to aim at.
+        ChromeDragItem::Workspace { ws } => {
+            let ws_id = state.session.workspaces.get(ws).map(|w| w.id)?;
+            Some(crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx: ws, ws_id })
+        }
+        ChromeDragItem::Column { .. } => None,
+    }
 }
 
 /// The kind of thing being dragged — passed **explicitly** by the caller so drop

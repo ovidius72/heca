@@ -477,11 +477,40 @@ pub trait ComponentExt: Component + Sized {
         self.base_mut().draggable = true;
         self
     }
+    /// **This widget can be dragged, and it says what it is** — an opaque word its component
+    /// chose (`"pane"`, `"column"`, `"docker.container"`), so a target can take some things and
+    /// refuse others.
+    ///
+    /// ```ignore
+    /// Row::new().key("col:3").draggable_as("column").drop_target().accepts(["column"])
+    /// ```
+    ///
+    /// Say nothing and every target takes it, which is what [`draggable`](Self::draggable) alone
+    /// means. The word is never interpreted by the library, and it is not from a list the library
+    /// knows — a closed set is one a plugin cannot join.
+    fn draggable_as(mut self, kind: impl Into<String>) -> Self {
+        let b = self.base_mut();
+        b.draggable = true;
+        b.drag_kind = Some(kind.into());
+        self
+    }
     /// **This widget accepts drops**, identified the same way — by its
     /// [`key`](ComponentExt::key). A drag released over its bounds drops onto it, with the side
     /// (before / onto / after) computed from where in its bounds the pointer sits.
     fn drop_target(mut self) -> Self {
         self.base_mut().drop_target = true;
+        self
+    }
+    /// **What this target takes**, by the words a drag source names itself with
+    /// ([`draggable_as`](Self::draggable_as)). Anything else is refused *before* it is drawn on, so
+    /// a line never appears over something that would then do nothing.
+    ///
+    /// Declaring nothing takes anything. Implies [`drop_target`](Self::drop_target), because a
+    /// widget saying what it takes has said it takes something.
+    fn accepts(mut self, kinds: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let b = self.base_mut();
+        b.drop_target = true;
+        b.accepts = kinds.into_iter().map(Into::into).collect();
         self
     }
 

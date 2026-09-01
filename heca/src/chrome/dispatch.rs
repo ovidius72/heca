@@ -288,6 +288,50 @@ pub(crate) fn drain_pending_menus(state: &mut crate::app_state::AppState) {
     }
 }
 
+/// **Act on the drops the framework handed back** — the twin of [`drain_pending_menus`], drained in
+/// the same breath and for the same reason: a row owns the gesture, but moving a pane between
+/// workspaces needs `&mut AppState`, which a sink has not (F003/P097/T496).
+///
+/// Two **names** arrive, already resolved. What they mean is this component's own knowledge, so it
+/// is looked up in the registry the tree wrote — never parsed. A name neither side recognises is
+/// dropped: that is a plugin's row using the same gesture for something the host knows nothing
+/// about, and it is not an error.
+pub(crate) fn drain_pending_drops(state: &mut crate::app_state::AppState) {
+    let queued: Vec<_> = state.pending_drops.borrow_mut().drain(..).collect();
+    for dropped in queued {
+        let (Some(source), Some(target)) = (
+            state
+                .chrome_tree
+                .as_ref()
+                .and_then(|t| t.drag_items.get(&dropped.source).cloned()),
+            state
+                .chrome_tree
+                .as_ref()
+                .and_then(|t| t.drag_items.get(&dropped.target).cloned()),
+        ) else {
+            continue;
+        };
+        // heca reads Shift as "swap these two". The framework reports the modifiers and has no
+        // opinion, which is what lets another host read them differently.
+        let swap = dropped.modifiers.shift;
+        match source {
+            ChromeDragItem::Pane(pane_id) => {
+                let Some((ws_idx, _, _)) = crate::find_pane_location(&state.session, pane_id)
+                else {
+                    continue;
+                };
+                let row = pane_drop_row(state, target).map(|row| (row, dropped.side));
+                crate::mouse::surface_left::accept_drop(state, pane_id, ws_idx, swap, row);
+            }
+            ChromeDragItem::Column { ws, col } => {
+                crate::mouse::release::column_drop(state, ws, col, swap, target, dropped.side);
+            }
+            // A workspace is a drop target only — nothing picks one up.
+            ChromeDragItem::Workspace { .. } => {}
+        }
+    }
+}
+
 /// Tell every retained tree the pointer is gone: hover clears, any capture or drag ends.
 ///
 /// One call per tree the host mounts, because each keeps its own hover — that is the point of the

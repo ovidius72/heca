@@ -35,7 +35,15 @@ pub(crate) fn surface_accept_drop(
 ) {
     match id {
         DragSurfaceId::LeftSidebar => {
-            super::surface_left::accept_drop(state, pane_id, original_ws, swap, pos)
+            // The old machine still hunts for the target under the pointer; the new path is told.
+            // This resolution dies with the machine (F003/P097/T496).
+            let target =
+                crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Pane)
+                    .and_then(|(item, side)| {
+                        crate::chrome::pane_drop_row(state, item).map(|row| (row, side))
+                    });
+            state.mouse.drag_ctx.cancel_all();
+            super::surface_left::accept_drop(state, pane_id, original_ws, swap, target)
         }
     }
 }

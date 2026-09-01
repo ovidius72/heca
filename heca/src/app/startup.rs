@@ -190,6 +190,17 @@ pub(crate) async fn init_state(
         let _ = menu_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
     });
 
+    // **A drop nobody took**, queued the same way and for the same reason: the row owns the
+    // gesture, but moving a pane between workspaces needs `&mut AppState`, which a sink has not.
+    let pending_drops: std::rc::Rc<std::cell::RefCell<Vec<heca_grid_ui::drag::Dropped>>> =
+        Default::default();
+    let drops = pending_drops.clone();
+    let drop_proxy = event_proxy.clone();
+    heca_grid_ui::drag::install_drop_sink(move |dropped| {
+        drops.borrow_mut().push(dropped);
+        let _ = drop_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
+    });
+
     let appearance = app_config.config.appearance.clone();
     let window_attrs = Window::default_attributes()
         .with_title("heca")
@@ -485,6 +496,7 @@ pub(crate) async fn init_state(
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         widget_keymap: crate::app::registry::build_widget_keymap(&app_config.config),
         pending_menus: pending_menus.clone(),
+        pending_drops: pending_drops.clone(),
         pending_reload: false,
         window_focused: true,
         current_cursor: winit::window::CursorIcon::Default,

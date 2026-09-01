@@ -967,6 +967,15 @@ pub struct AppState {
     pub pending_menus: std::rc::Rc<
         std::cell::RefCell<Vec<(heca_grid_ui::widgets::ContextMenu, heca_grid_ui::widgets::MenuAnchor)>>,
     >,
+    /// **Drops no widget took**, waiting to become moves (F003/P097/T496).
+    ///
+    /// The twin of [`pending_menus`](Self::pending_menus), for the same reason: a row owns the
+    /// gesture and the framework resolves what landed on what, but moving a pane between
+    /// workspaces needs `&mut AppState`, which a sink has not. Drained each frame.
+    ///
+    /// What arrives is two **names** — the host decides what its own names mean, and a name it does
+    /// not recognise is simply dropped. That is what lets a plugin's rows use the same gesture.
+    pub pending_drops: std::rc::Rc<std::cell::RefCell<Vec<heca_grid_ui::drag::Dropped>>>,
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
     pub pending_reload: bool,

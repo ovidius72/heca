@@ -69,6 +69,15 @@ pub fn resolve_at(root: &dyn Component, point: Point) -> Option<DropHit> {
     resolve_at_filtered(root, point, &|_| true)
 }
 
+/// [`resolve_at`], for a drag that says **what it is** — a target that does not
+/// [`accept`](crate::builders::ComponentExt::accepts) that word is skipped and the walk keeps
+/// going outward, so the drop lands on the nearest thing that would actually take it and nothing
+/// else is ever drawn on.
+pub fn resolve_at_for(root: &dyn Component, point: Point, kind: Option<&str>) -> Option<DropHit> {
+    let mut path = Vec::new();
+    drop_at(root, root, point, &|_| true, kind, &mut path)
+}
+
 /// Like [`resolve_at`], but only considers drop targets whose id satisfies
 /// `accept`. A rejected target is skipped *and the walk continues outward*, so the
 /// deepest **accepted** target under the cursor wins — e.g. while dragging a
@@ -81,7 +90,7 @@ pub fn resolve_at_filtered(
     accept: &dyn Fn(&str) -> bool,
 ) -> Option<DropHit> {
     let mut path = Vec::new();
-    drop_at(root, root, point, accept, &mut path)
+    drop_at(root, root, point, accept, None, &mut path)
 }
 
 /// The recursive half of [`resolve_at_filtered`], carrying the path so a hit can be named by
@@ -92,6 +101,7 @@ fn drop_at(
     node: &dyn Component,
     point: Point,
     accept: &dyn Fn(&str) -> bool,
+    kind: Option<&str>,
     path: &mut Vec<usize>,
 ) -> Option<DropHit> {
     if skip(node) {
@@ -99,12 +109,13 @@ fn drop_at(
     }
     for (i, child) in node.base().children.iter().enumerate().rev() {
         path.push(i);
-        if let Some(hit) = drop_at(root, child.as_ref(), point, accept, path) {
+        if let Some(hit) = drop_at(root, child.as_ref(), point, accept, kind, path) {
             return Some(hit);
         }
         path.pop();
     }
     if node.is_drop_target()
+        && node.accepts_drag(kind)
         && let Some(key) = drag_identity(root, node, path)
         && accept(&key)
     {
@@ -252,6 +263,69 @@ mod tests {
         // Unfiltered still returns the deepest (inner).
         assert_eq!(
             resolve_at(&outer, Point::new(20.0, 20.0)).map(|h| h.key),
+            Some("pane:2".to_string()),
+        );
+    }
+
+    /// **Nothing hovers under a drag.** A row lit as the pointer crossed it reads as "you may drop
+    /// here", while the drop is decided by the rules and lands elsewhere.
+    #[test]
+    fn a_drag_in_flight_clears_hover() {
+        use crate::component::dispatch;
+        use crate::event::{Event, PointerButton};
+
+        let mut root = Flex::column();
+        root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 80.0));
+        let mut a = Surface::new().key("row:a").draggable();
+        a.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
+        let mut b = Surface::new().key("row:b").drop_target();
+        b.base_mut().bounds = Rectangle::new(Point::new(0.0, 40.0), Size::new(100.0, 40.0));
+        root.base_mut().children.push(Box::new(a));
+        root.base_mut().children.push(Box::new(b));
+
+        let at = |y: f64| Point::new(50.0, y);
+        dispatch(&mut root, &Event::pointer_moved(at(60.0)));
+        assert!(
+            root.base().children[1].base().pointer.is_hovered(),
+            "with no drag, the row under the pointer hovers",
+        );
+
+        dispatch(&mut root, &Event::pointer_pressed(at(20.0), PointerButton::Left));
+        dispatch(&mut root, &Event::pointer_moved(at(60.0)));
+        assert!(
+            !root.base().children[1].base().pointer.is_hovered(),
+            "while a drag is in flight nothing under the pointer may light up",
+        );
+    }
+
+    /// **A target that will not take it is never offered** — so a line is never drawn over
+    /// something a release would then ignore.
+    ///
+    /// Antonio, driving 2026-09-01: a column could be dropped above a pane, the insertion line
+    /// appeared, and releasing did nothing. The drawing and the rule lived in different places —
+    /// the widget drew, and the app refused afterwards. A target says what it takes, and the walk
+    /// keeps going outward past one that does not.
+    #[test]
+    fn a_target_that_refuses_the_kind_is_skipped_for_the_one_that_takes_it() {
+        let mut outer = Surface::new().key("col:1").accepts(["column"]);
+        outer.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
+        let mut inner = Surface::new().key("pane:2").accepts(["pane"]);
+        inner.base_mut().bounds = Rectangle::new(Point::new(10.0, 10.0), Size::new(30.0, 30.0));
+        outer.base_mut().children.push(Box::new(inner));
+
+        // Dragging a column over the pane card lands on the column that contains it.
+        assert_eq!(
+            resolve_at_for(&outer, Point::new(20.0, 20.0), Some("column")).map(|h| h.key),
+            Some("col:1".to_string()),
+        );
+        // Dragging a pane over the same point lands on the pane card itself.
+        assert_eq!(
+            resolve_at_for(&outer, Point::new(20.0, 20.0), Some("pane")).map(|h| h.key),
+            Some("pane:2".to_string()),
+        );
+        // A drag that says nothing about itself is taken by the nearest target, as before.
+        assert_eq!(
+            resolve_at_for(&outer, Point::new(20.0, 20.0), None).map(|h| h.key),
             Some("pane:2".to_string()),
         );
     }

@@ -196,6 +196,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Mount whatever a widget asked to open since the last frame: a declared context menu is a
     // layer, and this is the one moment the host has `&mut AppState` and has not yet drawn.
     crate::chrome::drain_pending_menus(state);
+    // And the drags that finished: the same shape, drained in the same breath.
+    crate::chrome::drain_pending_drops(state);
     if !state.needs_redraw {
         return;
     }

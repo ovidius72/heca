@@ -45,7 +45,7 @@
 //! position welds a thumb to the cursor. The rule is here, once, instead of in each of them.
 
 use crate::component::{Base, Component};
-use crate::drag::{DropSide, resolve_at};
+use crate::drag::DropSide;
 use crate::event::{
     DragEvent, Event, EventKind, Handled, Modifiers, PointerButton, PointerEvent, RawPointer,
     RawPointerKind,
@@ -191,7 +191,18 @@ pub fn route(root: &mut dyn Component, raw: &RawPointer) -> Handled {
 /// to do anything), then the move itself, then whatever the drag machinery makes of it.
 fn route_move(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     let target = hit_test(root, raw.pos);
-    update_hover(root, target.as_deref(), raw);
+    // **A drag owns the pointer, so nothing hovers under it.** Hover says "the pointer is on you
+    // and a click would land here", which is false mid-drag: what a release will do is decided by
+    // the drop rules, not by what happens to be beneath the cursor. Leaving it on lit a pane card
+    // as a column was dragged across it, which reads as "you may drop here" — and the drop then
+    // went somewhere else entirely (Antonio, driving, 2026-09-01). Passing `None` also clears
+    // whatever was lit when the drag began. The drop mark stays: that one is drawn from the
+    // resolved target and is the only truthful feedback while a drag is in flight.
+    let hover = match dragging_path(root).is_some() {
+        true => None,
+        false => target.as_deref(),
+    };
+    update_hover(root, hover, raw);
 
     let capture = capture_path(root);
     let mut handled = Handled::No;
@@ -205,6 +216,11 @@ fn route_move(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     // control that took the press can still be the thing being dragged.
     if let Some(path) = capture.or_else(|| press_path(root)) {
         handled = or(handled, drive_drag(root, &path, raw));
+    }
+    // And again after, because the move that *starts* a drag arrives while nothing is dragging yet:
+    // the check above cannot know, so the row under the cursor would stay lit until the next move.
+    if dragging_path(root).is_some() {
+        update_hover(root, None, raw);
     }
     handled
 }
@@ -571,7 +587,8 @@ fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPointer) -> Ha
         let _ = deliver_path(root, &source_path, &ev);
     }
 
-    let hit = resolve_at(root, raw.pos);
+    let kind = node_at(root, &source_path).base().drag_kind.clone();
+    let hit = crate::drag::resolve_at_for(root, raw.pos, kind.as_deref());
     {
         // The source draws what follows the cursor, so it is the source that must know where the
         // cursor is: its own bounds still say where it was picked up from.
@@ -603,7 +620,8 @@ fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     let Some(item) = drag_identity(root, &source_path) else {
         return Handled::No;
     };
-    let hit = resolve_at(root, raw.pos);
+    let kind = node_at(root, &source_path).base().drag_kind.clone();
+    let hit = crate::drag::resolve_at_for(root, raw.pos, kind.as_deref());
     let mut handled = Handled::No;
     if let Some(hit) = hit.as_ref()
         && let Some(path) = path_of_drop_target(root, &hit.key)

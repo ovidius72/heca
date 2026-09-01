@@ -99,11 +99,24 @@ pub(super) fn handle_sidebar_column_drag_release(
     let target =
         crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Column);
     state.mouse.drag_ctx.cancel_all();
-
     let Some((item, side)) = target else {
         return;
     };
+    column_drop(state, src_ws, src_col, swap, item, side);
+}
 
+/// **What dropping a column means** — told what it landed on, rather than hunting for it under the
+/// pointer at the moment of release (F003/P097/T496). The rules are unchanged: onto another column
+/// it inserts before or after (or swaps, on Shift); onto a workspace it moves to the end of that
+/// workspace, where a swap is meaningless.
+pub(crate) fn column_drop(
+    state: &mut AppState,
+    src_ws: usize,
+    src_col: usize,
+    swap: bool,
+    item: ChromeDragItem,
+    side: DropSide,
+) {
     let action = match item {
         ChromeDragItem::Column {
             ws: dst_ws,
