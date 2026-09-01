@@ -1789,11 +1789,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 pane_states.borrow_mut().push(row.state());
                 let pane_states = pane_states.clone();
                 let pane_titles = pane_titles.clone();
-                // DnD framework (universal `ComponentExt`): each card is a drag source
-                // carrying its index as the opaque id. The app resolves a drop via
+                // DnD framework (universal `ComponentExt`): each card is a drag source, and what
+                // it drags is the name it declares about itself. The app resolves a drop via
                 // `drag::source_at`/`resolve_at` over the laid-out tree and paints
                 // `PaintCx::drag_ghost`/`drop_indicator` — see docs/widgets.md §Drag.
-                row.draggable(DragItemId::new(i)).on_activate(move || {
+                row.key(format!("pane:{i}")).draggable().on_activate(move || {
                     pane_sel.set(i);
                     for (j, s) in pane_states.borrow().iter().enumerate() {
                         let selected = j == i;
@@ -1899,7 +1899,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             // hides outside repos.
             // The dock is a DnD drop target (universal `ComponentExt`) — its cards drop here.
             let panes = DockFrame::new("PANES")
-                .drop_target(DragItemId::new(usize::MAX))
+                .key("dock:panes")
+                .drop_target()
                 .child(
                     pane(
                         Glyph::FileCode,
@@ -1953,8 +1954,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     MarkerGroup::new()
                         .active(true)
                         .gap(4.0)
-                        .draggable(DragItemId::new(900))
-                        .drop_target(DragItemId::new(900))
+                        .key("col:900")
+                        .draggable()
+                        .drop_target()
                         .child(
                             KeyHint::new(Row::new().padding(6.0).child(Label::new("pane A")))
                                 .hint(rail_hints[0])
@@ -1980,8 +1982,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         // active column's glowing bar.
                         .nav_selected(true)
                         .gap(4.0)
-                        .draggable(DragItemId::new(901))
-                        .drop_target(DragItemId::new(901))
+                        .key("col:901")
+                        .draggable()
+                        .drop_target()
                         .child(
                             // `.color(theme.colors.warning)` tints the keycap differently — the
                             // app uses this so a "move → workspace" pick reads distinctly

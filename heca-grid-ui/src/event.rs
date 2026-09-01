@@ -49,7 +49,6 @@
 //! }
 //! ```
 
-use crate::drag::DragItemId;
 use heca_core::layout::{Point, Rectangle};
 /// **The answer every widget gives to every event: "was this mine?"**
 ///
@@ -303,13 +302,14 @@ impl PointerEvent {
 /// What a drag event carries: the dragged item, where the pointer is, and — on a drop — which
 /// half of the target it landed on.
 ///
-/// The **item** is a [`DragItemId`], the opaque registry slot the app already hands a draggable
-/// widget ([`ComponentExt::draggable`](crate::builders::ComponentExt::draggable)). The library moves it
-/// around and hands it back; only the host knows what it means.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// The **item** is the dragged widget's own name — what it declared with
+/// [`ComponentExt::key`](crate::builders::ComponentExt::key), the same identity the keyboard cursor
+/// and the right-click target read. The library moves it around and hands it back; only the host
+/// knows what it means.
+#[derive(Debug, Clone, PartialEq)]
 pub struct DragEvent {
-    /// What is being dragged — the source's [`Base::drag_source`](crate::component::Base::drag_source).
-    pub item: DragItemId,
+    /// What is being dragged — the source's own [`Base::key`](crate::component::Base::key).
+    pub item: String,
     /// Where the pointer is, in logical pixels.
     pub pos: Point,
     /// The modifier keys held (a copy-drag is `alt` in most conventions; the library has no

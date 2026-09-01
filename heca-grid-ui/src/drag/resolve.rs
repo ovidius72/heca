@@ -5,11 +5,15 @@
 //! frame). They replace hand-computed, per-surface hit-testing — any widget marked
 //! via [`ComponentExt`](crate::builders::ComponentExt) participates automatically.
 //!
-//! Domain-neutral: results are opaque [`DragItemId`]s the app maps back to its own
-//! model. No app types, no GPU, no per-surface special-casing.
+//! Domain-neutral: a result is the widget's **identity** — the name it declared with
+//! [`key`](crate::component::Base::key), or one derived from its content when it declared none
+//! ([`nav::identity_of`](crate::nav::identity_of)). The same string the keyboard cursor, the
+//! right-click target and a remembered hint letter use, so all four agree about what they are
+//! pointing at. No app types, no GPU, no per-surface special-casing, and nothing handed out by a
+//! host, so a plugin's row drags on the same terms as ours — and `.draggable()` on its own is
+//! enough, with no name to invent.
 
 use crate::component::Component;
-use crate::drag::DragItemId;
 use crate::reactive::SignalGet;
 use heca_core::layout::{Point, Rectangle};
 
@@ -27,9 +31,12 @@ pub enum DropSide {
 
 /// A resolved drop position: which target, its laid-out bounds, and the side the
 /// cursor is over (for an insertion indicator).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct DropHit {/// The opaque id the app registered via [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target).
-    pub id: DragItemId, /// The target's laid-out bounds (logical px) — paint the indicator against these.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DropHit {
+    /// The target's own name — what it declared with
+    /// [`ComponentExt::key`](crate::builders::ComponentExt::key).
+    pub key: String,
+    /// The target's laid-out bounds (logical px) — paint the indicator against these.
     pub bounds: Rectangle, /// Which side of the target the cursor is over.
     pub side: DropSide}
 
@@ -67,27 +74,44 @@ pub fn resolve_at(root: &dyn Component, point: Point) -> Option<DropHit> {
 /// deepest **accepted** target under the cursor wins — e.g. while dragging a
 /// container you can accept only container-level targets and have a nested
 /// leaf target fall through to its accepted ancestor. Domain-neutral: the app
-/// decides acceptance from the opaque [`DragItemId`].
+/// decides acceptance from the target's own name.
 pub fn resolve_at_filtered(
     root: &dyn Component,
     point: Point,
-    accept: &dyn Fn(DragItemId) -> bool,
+    accept: &dyn Fn(&str) -> bool,
 ) -> Option<DropHit> {
-    if skip(root) {
+    let mut path = Vec::new();
+    drop_at(root, root, point, accept, &mut path)
+}
+
+/// The recursive half of [`resolve_at_filtered`], carrying the path so a hit can be named by
+/// [`identity_of`](crate::nav::identity_of) — which needs the whole chain from the root to derive a
+/// name for a widget that declared none.
+fn drop_at(
+    root: &dyn Component,
+    node: &dyn Component,
+    point: Point,
+    accept: &dyn Fn(&str) -> bool,
+    path: &mut Vec<usize>,
+) -> Option<DropHit> {
+    if skip(node) {
         return None;
     }
-    for child in root.base().children.iter().rev() {
-        if let Some(hit) = resolve_at_filtered(child.as_ref(), point, accept) {
+    for (i, child) in node.base().children.iter().enumerate().rev() {
+        path.push(i);
+        if let Some(hit) = drop_at(root, child.as_ref(), point, accept, path) {
             return Some(hit);
         }
+        path.pop();
     }
-    if let Some(id) = root.as_drop_target()
-        && accept(id)
+    if node.is_drop_target()
+        && let Some(key) = drag_identity(root, node, path)
+        && accept(&key)
     {
-        let bounds = root.base().bounds;
+        let bounds = node.base().bounds;
         if bounds.contains(point) {
             return Some(DropHit {
-                id,
+                key,
                 bounds,
                 side: side_for(bounds, point),
             });
@@ -98,17 +122,49 @@ pub fn resolve_at_filtered(
 
 /// Find the **topmost, deepest** drag source whose bounds contain `point` — the
 /// thing a press at `point` would start dragging. `None` if none is hit.
-pub fn source_at(root: &dyn Component, point: Point) -> Option<DragItemId> {
-    if skip(root) {
+pub fn source_at(root: &dyn Component, point: Point) -> Option<String> {
+    let mut path = Vec::new();
+    source_at_path(root, root, point, &mut path)
+}
+
+/// The recursive half of [`source_at`] — see [`drop_at`] for why the path is carried.
+fn source_at_path(
+    root: &dyn Component,
+    node: &dyn Component,
+    point: Point,
+    path: &mut Vec<usize>,
+) -> Option<String> {
+    if skip(node) {
         return None;
     }
-    for child in root.base().children.iter().rev() {
-        if let Some(id) = source_at(child.as_ref(), point) {
+    for (i, child) in node.base().children.iter().enumerate().rev() {
+        path.push(i);
+        if let Some(id) = source_at_path(root, child.as_ref(), point, path) {
             return Some(id);
         }
+        path.pop();
     }
-    root.as_drag_source()
-        .filter(|_| root.base().bounds.contains(point))
+    if node.is_drag_source() && node.base().bounds.contains(point) {
+        return drag_identity(root, node, path);
+    }
+    None
+}
+
+/// **What a dragged widget is called** — the name it declared, and a derived one when it declared
+/// none.
+///
+/// Two readers have to agree and they want it spelled slightly differently, so this is the one
+/// place that decides. A widget that named itself answers with **that name, unscoped**, because a
+/// right-click and a drag must point at the same thing and
+/// [`key_at`](crate::nav::key_at) answers a right-click with the row's own name. A widget that named
+/// nothing answers with the identity derived from its content
+/// ([`identity_of`](crate::nav::identity_of)) — which is what keeps `.draggable()` working on its
+/// own, with no name for an author to invent and no internal rule to learn first.
+fn drag_identity(root: &dyn Component, node: &dyn Component, path: &[usize]) -> Option<String> {
+    node.base()
+        .key
+        .clone()
+        .or_else(|| crate::nav::identity_of(root, path))
 }
 
 #[cfg(test)]
@@ -130,7 +186,7 @@ mod tests {
         let mut root = Flex::column();
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 90.0));
         root.base_mut().children.push(at(
-            Surface::new().drop_target(DragItemId::new(5)),
+            Surface::new().key("pane:5").drop_target(),
             0.0,
             0.0,
             100.0,
@@ -151,28 +207,28 @@ mod tests {
             Some(DropSide::After)
         );
         assert_eq!(
-            resolve_at(&root, Point::new(50.0, 45.0)).map(|h| h.id),
-            Some(DragItemId::new(5))
+            resolve_at(&root, Point::new(50.0, 45.0)).map(|h| h.key),
+            Some("pane:5".to_string())
         );
     }
 
     #[test]
     fn resolve_at_returns_the_deepest_target() {
         // Outer target contains an inner target; a hit inside the inner returns it.
-        let mut inner = Surface::new().drop_target(DragItemId::new(2));
+        let mut inner = Surface::new().key("pane:2").drop_target();
         inner.base_mut().bounds = Rectangle::new(Point::new(10.0, 10.0), Size::new(30.0, 30.0));
-        let mut outer = Surface::new().drop_target(DragItemId::new(1));
+        let mut outer = Surface::new().key("col:1").drop_target();
         outer.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
         outer.base_mut().children.push(Box::new(inner));
 
         assert_eq!(
-            resolve_at(&outer, Point::new(20.0, 20.0)).map(|h| h.id),
-            Some(DragItemId::new(2))
+            resolve_at(&outer, Point::new(20.0, 20.0)).map(|h| h.key),
+            Some("pane:2".to_string())
         );
         // Outside the inner but inside the outer → the outer.
         assert_eq!(
-            resolve_at(&outer, Point::new(80.0, 80.0)).map(|h| h.id),
-            Some(DragItemId::new(1))
+            resolve_at(&outer, Point::new(80.0, 80.0)).map(|h| h.key),
+            Some("col:1".to_string())
         );
     }
 
@@ -181,28 +237,53 @@ mod tests {
         // Outer accepted target (1) contains an inner rejected target (2) — like a
         // column MarkerGroup containing pane cards. A hit inside the inner must skip it
         // and resolve to the outer, so dragging a column targets the column, not a pane.
-        let mut inner = Surface::new().drop_target(DragItemId::new(2));
+        let mut inner = Surface::new().key("pane:2").drop_target();
         inner.base_mut().bounds = Rectangle::new(Point::new(10.0, 10.0), Size::new(30.0, 30.0));
-        let mut outer = Surface::new().drop_target(DragItemId::new(1));
+        let mut outer = Surface::new().key("col:1").drop_target();
         outer.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
         outer.base_mut().children.push(Box::new(inner));
 
-        let accept = |id: DragItemId| id != DragItemId::new(2);
+        let accept = |key: &str| key != "pane:2";
         assert_eq!(
-            resolve_at_filtered(&outer, Point::new(20.0, 20.0), &accept).map(|h| h.id),
-            Some(DragItemId::new(1)),
+            resolve_at_filtered(&outer, Point::new(20.0, 20.0), &accept).map(|h| h.key),
+            Some("col:1".to_string()),
             "a hit inside the rejected inner target resolves to the accepted outer one",
         );
         // Unfiltered still returns the deepest (inner).
         assert_eq!(
-            resolve_at(&outer, Point::new(20.0, 20.0)).map(|h| h.id),
-            Some(DragItemId::new(2)),
+            resolve_at(&outer, Point::new(20.0, 20.0)).map(|h| h.key),
+            Some("pane:2".to_string()),
+        );
+    }
+
+    /// **`.draggable()` on its own is enough** — a widget that never named itself is still
+    /// draggable, because its identity is derived from its content the way the picker's remembered
+    /// letters are.
+    ///
+    /// Requiring a name here would put an internal rule in front of an author before they could
+    /// drag anything, and would make `.draggable()` silently do nothing on every widget that had no
+    /// reason to be named (Antonio, 2026-09-01: *"this makes developers know about an internal API
+    /// not common"*).
+    #[test]
+    fn an_unnamed_widget_is_still_draggable() {
+        use crate::widgets::Label;
+
+        let mut root = Flex::column();
+        root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
+        let mut row = Surface::new().draggable();
+        row.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
+        row.base_mut().children.push(Box::new(Label::new("Containers")));
+        root.base_mut().children.push(Box::new(row));
+
+        assert!(
+            source_at(&root, Point::new(50.0, 20.0)).is_some(),
+            "an unnamed draggable widget must still be picked up",
         );
     }
 
     #[test]
     fn resolve_at_misses_outside_all_targets() {
-        let mut root = Surface::new().drop_target(DragItemId::new(1));
+        let mut root = Surface::new().key("col:1").drop_target();
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(10.0, 10.0));
         assert!(resolve_at(&root, Point::new(50.0, 50.0)).is_none());
     }
@@ -213,14 +294,14 @@ mod tests {
         let mut root = Flex::column();
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
         root.base_mut().children.push(at(
-            Surface::new().draggable(DragItemId::new(1)),
+            Surface::new().key("row:1").draggable(),
             0.0,
             0.0,
             100.0,
             100.0,
         ));
         root.base_mut().children.push(at(
-            Surface::new().draggable(DragItemId::new(2)),
+            Surface::new().key("row:2").draggable(),
             0.0,
             0.0,
             100.0,
@@ -228,13 +309,13 @@ mod tests {
         ));
         assert_eq!(
             source_at(&root, Point::new(50.0, 50.0)),
-            Some(DragItemId::new(2))
+            Some("row:2".to_string())
         );
     }
 
     #[test]
     fn source_at_ignores_drop_only_widgets() {
-        let mut root = Surface::new().drop_target(DragItemId::new(9));
+        let mut root = Surface::new().key("row:9").drop_target();
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
         assert!(source_at(&root, Point::new(50.0, 50.0)).is_none());
     }

@@ -4,13 +4,15 @@
 //! gives one meaning, so a kind round-trips through `drag::source_at` / `resolve_at` without
 //! anything trusting a raw number.
 
-use heca_core::layout::PaneId;
-use heca_grid_ui::DragItemId;
+use std::collections::HashMap;
 
-/// What a sidebar [`DragItemId`] refers to. The drag framework is domain-neutral
-/// (ids are opaque `usize`); this app-side map gives them meaning. `ColumnId` can't
-/// be the id directly — it's assigned inconsistently and can collide with a `PaneId`
-/// (`scrolling.rs` builds `ColumnId(pane.id.0)`), so kind is decided by this map.
+use heca_core::layout::PaneId;
+
+/// What one of this component's own row names means. The drag framework is domain-neutral — it
+/// hands back the **name the row declared about itself** (`"pane:7"`) and knows nothing else — so
+/// this is the app-side map that gives one meaning. A key is never parsed: the component that wrote
+/// it is the only thing that may say what it is, exactly as `Provider::context_path` answers for
+/// the right-click menu.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ChromeDragItem {
     /// A pane card (drag source + drop target).
@@ -22,30 +24,33 @@ pub(crate) enum ChromeDragItem {
     Workspace { ws: usize },
 }
 
-/// Build-time registry that hands out dense [`DragItemId`]s (id = push index) and
-/// records what each refers to. Lives on [`RetainedChrome`]; rebuilt with the tree.
+/// What each of this component's row names means, recorded as the tree is built and read back when
+/// a drag starts or lands. Lives on [`RetainedChrome`]; rebuilt with the tree.
+///
+/// It used to hand out an opaque index and the widget carried that instead of its own name, so a
+/// row said who it was twice — and a plugin's row could say it neither time, because the list of
+/// draggable surfaces was a closed enum in our source. The widget layer now carries the name only;
+/// what a name *means* stays here, where the component that wrote it lives.
 #[derive(Default, Clone, Debug)]
 pub(crate) struct DragItemRegistry {
-    items: Vec<ChromeDragItem>,
+    items: HashMap<String, ChromeDragItem>,
 }
 
 impl DragItemRegistry {
-    /// Register a draggable/droppable item and return its freshly-assigned id.
-    pub(crate) fn register(&mut self, item: ChromeDragItem) -> DragItemId {
-        let id = DragItemId::new(self.items.len());
-        self.items.push(item);
-        id
+    /// Record what one of this component's row names refers to.
+    pub(crate) fn register(&mut self, key: impl Into<String>, item: ChromeDragItem) {
+        self.items.insert(key.into(), item);
     }
 
-    /// Decode an id back to what it refers to (`None` if not from this build).
-    pub(crate) fn get(&self, id: DragItemId) -> Option<&ChromeDragItem> {
-        self.items.get(id.raw())
+    /// What a name means (`None` when it is not one this build wrote).
+    pub(crate) fn get(&self, key: &str) -> Option<&ChromeDragItem> {
+        self.items.get(key)
     }
 
-    /// All registered items, in id order.
+    /// Everything recorded, for tests.
     #[cfg(test)]
-    pub(crate) fn items(&self) -> &[ChromeDragItem] {
-        &self.items
+    pub(crate) fn items(&self) -> Vec<ChromeDragItem> {
+        self.items.values().cloned().collect()
     }
 }
 

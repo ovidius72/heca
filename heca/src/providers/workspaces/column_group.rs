@@ -33,11 +33,15 @@ impl ColumnGroup<'_> {
             .panes
             .iter()
             .any(|p| seams.active_pane == Some(p.pane_id));
-        // The MarkerGroup is a column drag source + drop target (F4.5 step 2).
-        let drag_id = reg.drag.register(ChromeDragItem::Column {
-            ws: ws_idx,
-            col: column.col_idx,
-        });
+        // The MarkerGroup is a column drag source + drop target, and what it drags is the name it
+        // declares below — the same one its cursor and its right-click read.
+        reg.drag.register(
+            column_key(column.col_id),
+            ChromeDragItem::Column {
+                ws: ws_idx,
+                col: column.col_idx,
+            },
+        );
         let mut col = MarkerGroup::new()
             .active(active)
             .gap(3.0)
@@ -53,8 +57,8 @@ impl ColumnGroup<'_> {
                 );
                 heca_grid_ui::widgets::ContextMenu::new(MENU_COLUMN).child(menu)
             })
-            .draggable(drag_id)
-            .drop_target(drag_id);
+            .draggable()
+            .drop_target();
         for pane in &column.panes {
             col = col.child(
                 PaneRow {

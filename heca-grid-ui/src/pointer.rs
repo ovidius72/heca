@@ -47,7 +47,8 @@
 use crate::component::{Base, Component};
 use crate::drag::{DropSide, resolve_at};
 use crate::event::{
-    DragEvent, Event, EventKind, Handled, PointerButton, PointerEvent, RawPointer, RawPointerKind,
+    DragEvent, Event, EventKind, Handled, Modifiers, PointerButton, PointerEvent, RawPointer,
+    RawPointerKind,
 };
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_core::layout::{Point, Rectangle};
@@ -97,6 +98,16 @@ pub struct PointerState {
     dragging: Cell<bool>,
     /// `true` while a drag in flight is over this drop target.
     drag_over: Cell<bool>,
+    /// Where in this target the drag currently sits — before it, onto it, or after it — so the
+    /// widget can draw the insertion line without measuring anything.
+    drag_side: Cell<DropSide>,
+    /// **Where the pointer is, while this widget is the source of a drag.** The one thing the
+    /// picture that follows the cursor needs and layout cannot give: the source is still laid out
+    /// where it was, and what follows the cursor is drawn somewhere else entirely.
+    drag_pos: Cell<Point>,
+    /// The modifiers held during the drag, kept so a widget can answer them while drawing. The
+    /// library has no opinion on what they mean.
+    drag_mods: Cell<Modifiers>,
 }
 
 impl PointerState {
@@ -109,6 +120,9 @@ impl PointerState {
             run: Cell::new(None),
             dragging: Cell::new(false),
             drag_over: Cell::new(false),
+            drag_side: Cell::new(DropSide::Onto),
+            drag_pos: Cell::new(Point::new(0.0, 0.0)),
+            drag_mods: Cell::new(Modifiers::default()),
         }
     }
 
@@ -125,6 +139,22 @@ impl PointerState {
     /// Whether a drag in flight is currently over this drop target.
     pub fn is_drag_over(&self) -> bool {
         self.drag_over.get()
+    }
+
+    /// Where in this target the drag sits — meaningful only while
+    /// [`is_drag_over`](Self::is_drag_over).
+    pub fn drag_side(&self) -> DropSide {
+        self.drag_side.get()
+    }
+
+    /// Where the pointer is — meaningful only while [`is_dragging`](Self::is_dragging).
+    pub fn drag_pos(&self) -> Point {
+        self.drag_pos.get()
+    }
+
+    /// The modifiers held during the drag in flight.
+    pub fn drag_modifiers(&self) -> Modifiers {
+        self.drag_mods.get()
     }
 }
 
@@ -309,7 +339,7 @@ fn route_wheel(root: &mut dyn Component, raw: &RawPointer) -> Handled {
 fn cancel(root: &mut dyn Component, raw: &RawPointer) {
     update_hover(root, None, raw);
     if let Some(path) = dragging_path(root) {
-        let item = node_at(root, &path).base().drag_source;
+        let item = drag_identity(root, &path);
         clear_drag_over(root);
         if let Some(item) = item {
             let ev = Event::DragEnd(DragEvent {
@@ -537,17 +567,29 @@ fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPointer) -> Ha
             return Handled::No;
         }
         node_at(root, &source_path).base().pointer.dragging.set(true);
-        let ev = Event::DragStart(drag_event(item, raw, DropSide::Onto));
+        let ev = Event::DragStart(drag_event(&item, raw, DropSide::Onto));
         let _ = deliver_path(root, &source_path, &ev);
     }
 
     let hit = resolve_at(root, raw.pos);
-    update_drag_over(root, hit.map(|h| (h.id, h.side)), item, raw);
-    let side = hit.map_or(DropSide::Onto, |h| h.side);
+    {
+        // The source draws what follows the cursor, so it is the source that must know where the
+        // cursor is: its own bounds still say where it was picked up from.
+        let p = &node_at(root, &source_path).base().pointer;
+        p.drag_pos.set(raw.pos);
+        p.drag_mods.set(raw.modifiers);
+    }
+    let side = hit.as_ref().map_or(DropSide::Onto, |h| h.side);
+    update_drag_over(
+        root,
+        hit.as_ref().map(|h| (h.key.clone(), h.side)),
+        &item,
+        raw,
+    );
     deliver_path(
         root,
         &source_path,
-        &Event::Drag(drag_event(item, raw, side)),
+        &Event::Drag(drag_event(&item, raw, side)),
     )
 }
 
@@ -558,32 +600,35 @@ fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     let Some(source_path) = dragging_path(root) else {
         return Handled::No;
     };
-    let Some(item) = node_at(root, &source_path).base().drag_source else {
+    let Some(item) = drag_identity(root, &source_path) else {
         return Handled::No;
     };
     let hit = resolve_at(root, raw.pos);
     let mut handled = Handled::No;
-    if let Some(hit) = hit
-        && let Some(path) = path_of_drop_target(root, hit.id)
+    if let Some(hit) = hit.as_ref()
+        && let Some(path) = path_of_drop_target(root, &hit.key)
     {
-        let ev = Event::Drop(drag_event(item, raw, hit.side));
+        let ev = Event::Drop(drag_event(&item, raw, hit.side));
         handled = deliver_path(root, &path, &ev);
     }
     clear_drag_over(root);
     node_at(root, &source_path).base().pointer.dragging.set(false);
-    let ev = Event::DragEnd(drag_event(item, raw, hit.map_or(DropSide::Onto, |h| h.side)));
+    let side = hit.as_ref().map_or(DropSide::Onto, |h| h.side);
+    let ev = Event::DragEnd(drag_event(&item, raw, side));
     or(handled, deliver_path(root, &source_path, &ev))
 }
 
 /// Move the "a drag is over me" flag to `now`, emitting enter/leave/over as it goes.
 fn update_drag_over(
     root: &mut dyn Component,
-    now: Option<(crate::drag::DragItemId, DropSide)>,
-    item: crate::drag::DragItemId,
+    now: Option<(String, DropSide)>,
+    item: &str,
     raw: &RawPointer,
 ) {
     let previous = drag_over_path(root);
-    let current = now.and_then(|(id, _)| path_of_drop_target(root, id));
+    let current = now
+        .as_ref()
+        .and_then(|(key, _)| path_of_drop_target(root, key));
     if previous != current
         && let Some(path) = previous.clone()
     {
@@ -593,6 +638,7 @@ fn update_drag_over(
     }
     if let Some(path) = current {
         let side = now.map_or(DropSide::Onto, |(_, s)| s);
+        node_at(root, &path).base().pointer.drag_side.set(side);
         if previous.as_ref() != Some(&path) {
             node_at(root, &path).base().pointer.drag_over.set(true);
             let ev = Event::DragEnter(drag_event(item, raw, side));
@@ -604,14 +650,11 @@ fn update_drag_over(
 }
 
 /// The innermost drag source at or above the pressed widget, and its path.
-fn drag_source_on(
-    root: &dyn Component,
-    press: &[usize],
-) -> Option<(Path, crate::drag::DragItemId)> {
+fn drag_source_on(root: &dyn Component, press: &[usize]) -> Option<(Path, String)> {
     let mut node = root;
-    let mut best: Option<(Path, crate::drag::DragItemId)> = None;
+    let mut best: Option<(Path, String)> = None;
     let mut here = Path::new();
-    if let Some(id) = node.as_drag_source() {
+    if let Some(id) = drag_identity(root, &here) {
         best = Some((here.clone(), id));
     }
     for i in press {
@@ -620,7 +663,7 @@ fn drag_source_on(
         };
         node = child.as_ref();
         here.push(*i);
-        if let Some(id) = node.as_drag_source() {
+        if let Some(id) = drag_identity(root, &here) {
             best = Some((here.clone(), id));
         }
     }
@@ -650,8 +693,37 @@ fn drag_over_path(root: &dyn Component) -> Option<Path> {
 }
 
 /// The path to the drop target registered under `id`.
-fn path_of_drop_target(root: &dyn Component, id: crate::drag::DragItemId) -> Option<Path> {
-    find(root, &|c| c.as_drop_target() == Some(id))
+/// The dragged identity of the widget at `path`, when it is a drag source at all — the same
+/// answer [`drag::source_at`](crate::drag::source_at) gives, so the gesture and the resolution
+/// cannot disagree about what is being carried.
+fn drag_identity(root: &dyn Component, path: &[usize]) -> Option<String> {
+    let node = node_at(root, path);
+    if !node.is_drag_source() {
+        return None;
+    }
+    node.base()
+        .key
+        .clone()
+        .or_else(|| crate::nav::identity_of(root, path))
+}
+
+fn path_of_drop_target(root: &dyn Component, key: &str) -> Option<Path> {
+    fn walk(root: &dyn Component, node: &dyn Component, key: &str, at: &mut Path) -> bool {
+        let named = node.base().key.clone().or_else(|| crate::nav::identity_of(root, at));
+        if node.is_drop_target() && named.as_deref() == Some(key) {
+            return true;
+        }
+        for (i, child) in node.base().children.iter().enumerate() {
+            at.push(i);
+            if walk(root, child.as_ref(), key, at) {
+                return true;
+            }
+            at.pop();
+        }
+        false
+    }
+    let mut at = Path::new();
+    walk(root, root, key, &mut at).then_some(at)
 }
 
 /// Depth-first search for the first node satisfying `f`, returning its path.
@@ -749,9 +821,9 @@ fn deliver_targeted(root: &mut dyn Component, path: &[usize], ev: Event) -> Hand
     deliver_path(root, path, &ev)
 }
 
-fn drag_event(item: crate::drag::DragItemId, raw: &RawPointer, side: DropSide) -> DragEvent {
+fn drag_event(item: &str, raw: &RawPointer, side: DropSide) -> DragEvent {
     DragEvent {
-        item,
+        item: item.to_string(),
         pos: raw.pos,
         modifiers: raw.modifiers,
         side,

@@ -410,9 +410,10 @@ pub(crate) struct RetainedChrome {
     /// Handles to the tree's **value** signals (selection + status), so they update
     /// in place via [`sync_chrome_signals`] instead of forcing a rebuild.
     pub(crate) signals: ChromeSignals,
-    /// Maps each draggable/droppable widget's opaque [`DragItemId`] back to *what it
-    /// is* (pane / column / workspace). Populated during [`build_chrome_root`] and
-    /// queried by [`sidebar_drag_source`]/[`sidebar_drop_target`].
+    /// Maps each draggable/droppable row's **own name** back to *what it is* (pane / column /
+    /// workspace) — the component's own knowledge, kept beside the tree that wrote it. Populated
+    /// during [`build_chrome_root`] and queried by
+    /// [`sidebar_drag_source`]/[`sidebar_drop_target`]. A name is never parsed here.
     pub(crate) drag_items: DragItemRegistry,
     /// **The [`InteractionSource`](crate::app::interaction::InteractionSource) every intent from
     /// this tree is dispatched with** — taken from the emitter that built it, never restated.
@@ -642,9 +643,9 @@ pub(crate) fn sidebar_drag_source(
     pos: (f32, f32),
 ) -> Option<ChromeDragItem> {
     let tree = state.chrome_tree.as_ref()?;
-    let id =
+    let key =
         heca_grid_ui::drag::source_at(&state.window_root, Point::new(pos.0 as f64, pos.1 as f64))?;
-    tree.drag_items.get(id).cloned()
+    tree.drag_items.get(&key).cloned()
 }
 
 /// The deepest sidebar item (pane → column → workspace) under `pos`, regardless of
@@ -664,7 +665,7 @@ pub(crate) fn sidebar_item_at(
         Point::new(pos.0 as f64, pos.1 as f64),
         &|_| true,
     )?;
-    tree.drag_items.get(hit.id).cloned()
+    tree.drag_items.get(&hit.key).cloned()
 }
 
 /// The kind of thing being dragged — passed **explicitly** by the caller so drop
@@ -711,9 +712,9 @@ fn resolve_sidebar_drop(
     source: DragSourceKind,
 ) -> Option<(ChromeDragItem, heca_grid_ui::drag::DropHit)> {
     let tree = state.chrome_tree.as_ref()?;
-    let accept = |id| {
+    let accept = |key: &str| {
         tree.drag_items
-            .get(id)
+            .get(key)
             .is_some_and(|it| target_accepted_by(source, it))
     };
     let hit = heca_grid_ui::drag::resolve_at_filtered(
@@ -721,7 +722,7 @@ fn resolve_sidebar_drop(
         Point::new(pos.0 as f64, pos.1 as f64),
         &accept,
     )?;
-    let item = tree.drag_items.get(hit.id).cloned()?;
+    let item = tree.drag_items.get(&hit.key).cloned()?;
     Some((item, hit))
 }
 

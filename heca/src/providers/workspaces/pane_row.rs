@@ -75,10 +75,11 @@ impl PaneRow<'_> {
         // is drawn by `Row` from its `active` signal, not baked into the background. This
         // keeps styling fully signal-driven (active flips in place via `sync_chrome_signals`,
         // no tree rebuild) and theme-driven (no ad-hoc per-state alphas).
-        // The card is both a drag source and a drop target (F4.5); its opaque DragItemId
-        // is assigned by the registry (which records that it's this pane) so the kind
-        // round-trips through `drag::source_at`/`resolve_at` without trusting raw ids.
-        let drag_id = reg.drag.register(ChromeDragItem::Pane(pane_id));
+        // The card is both a drag source and a drop target, and what it drags is the name it
+        // declares below (`pane:7`) — one identity for the cursor, the right-click, and this. The
+        // registry records only what that name *means*, which is the component's own knowledge.
+        reg.drag
+            .register(pane_key(pane_id), ChromeDragItem::Pane(pane_id));
         // This row kind's declared click, by name — so a menu entry, a keybinding or RPC can fire the
         // same one (F003/P086/T365). A **pick** is declared separately, on the wrapper below: it is a
         // different gesture and this row answers it differently.
@@ -316,8 +317,8 @@ impl PaneRow<'_> {
                 );
                 heca_grid_ui::widgets::ContextMenu::new(MENU_PANE).child(ctx_menu)
             })
-            .draggable(drag_id)
-            .drop_target(drag_id)
+            .draggable()
+            .drop_target()
             // Click / Enter / Space run the row's declared click.
             .on_activate(press)
             .child(content);

@@ -7,7 +7,7 @@
 //! once on [`PaintCx`], so every component reuses it (DRY).
 
 use crate::color::Color;
-use crate::drag::{DragItemId, DropSide};
+use crate::drag::DropSide;
 use crate::hint::DeclaredAction;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{
@@ -214,21 +214,26 @@ pub struct Base {
     pub tab_index: Option<i32>,
     /// Child components, laid out by this component's flex container.
     pub children: Vec<Box<dyn Component>>,
-    /// If set, this widget is a **drag source**: a press inside its bounds can
-    /// begin a drag carrying this opaque id (the app maps it back to a pane /
-    /// column / etc.). Universal opt-in via [`ComponentExt::draggable`](crate::builders::ComponentExt::draggable);
-    /// resolved generically by [`drag::source_at`](crate::drag::source_at).
-    pub drag_source: Option<DragItemId>,
-    /// When set, this widget is a **drop target**: a drag released over its bounds
-    /// drops onto this opaque id. Universal opt-in via
-    /// [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target); resolved
-    /// generically by [`drag::resolve_at`](crate::drag::resolve_at).
-    pub drop_target: Option<DragItemId>,
-    /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
-    /// the right-click target and (later) drag are three readers of this one declaration.
+    /// This widget **can be dragged**, and what is dragged is [`key`](Self::key) — the identity it
+    /// already declares about itself. Universal opt-in via
+    /// [`ComponentExt::draggable`](crate::builders::ComponentExt::draggable); resolved generically
+    /// by [`drag::source_at`](crate::drag::source_at).
     ///
-    /// Unlike [`drag_source`](Self::drag_source) — a registry slot the app hands out — this is a
-    /// string the component chose about *itself*, so it
+    /// It used to carry an opaque id handed out by a host registry, and a closed list of which
+    /// surfaces were allowed to drag at all. Both are gone: a row said who it was twice, and a
+    /// plugin's row could say it neither time — it could not be added to a list that is an enum in
+    /// our source, so it could never be dragged (Antonio, 2026-09-01: *"hardcode smell?? what i
+    /// hate"*). A widget with no `key` is not a drag source, because there would be nothing to
+    /// name what was picked up.
+    pub draggable: bool,
+    /// This widget **accepts drops**, identified the same way — by its [`key`](Self::key).
+    /// Universal opt-in via [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target);
+    /// resolved generically by [`drag::resolve_at`](crate::drag::resolve_at).
+    pub drop_target: bool,
+    /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
+    /// the right-click target and the drag are three readers of this one declaration.
+    ///
+    /// A string the component chose about *itself*, so it
     /// survives a tree rebuild. Universal opt-in via [`ComponentExt::key`](crate::builders::ComponentExt::key);
     /// enumerated by [`nav::collect_keys`](crate::nav::collect_keys) and hit-tested by
     /// [`nav::key_at`](crate::nav::key_at). Opaque here — nothing in this library parses it.
@@ -453,8 +458,8 @@ impl Base {
             pointer_transparent: false,
             tab_index: None,
             children: Vec::new(),
-            drag_source: None,
-            drop_target: None,
+            draggable: false,
+            drop_target: false,
             key: None,
             scope_key: None,
             font: 15.0,
@@ -977,17 +982,23 @@ pub trait Component {
         soonest
     }
 
-    /// The opaque drag-source id if this widget is draggable (see
-    /// [`Base::drag_source`]). Default reads the base; widgets needing dynamic
-    /// behavior may override. Walked by [`drag::source_at`](crate::drag::source_at).
-    fn as_drag_source(&self) -> Option<DragItemId> {
-        self.base().drag_source
+    /// **Can this widget be dragged?** Default reads [`draggable`](Base::draggable); a widget whose
+    /// draggability changes may override.
+    ///
+    /// It answers only *whether*, never *what*: what gets dragged is the widget's identity, and an
+    /// identity is [`key`](Base::key) **when it declared one and derived from its content when it
+    /// did not** — the same string the keyboard cursor, the right-click target and a remembered
+    /// hint letter are filed under ([`nav::identity_of`](crate::nav::identity_of)). Asking for the
+    /// key here instead would make `.draggable()` silently do nothing on every widget that never
+    /// needed a name, and put an internal rule in front of the author (Antonio, 2026-09-01).
+    fn is_drag_source(&self) -> bool {
+        self.base().draggable
     }
 
-    /// The opaque drop-target id if this widget accepts drops (see
-    /// [`Base::drop_target`]). Default reads the base. Walked by
+    /// **Does this widget accept drops?** The same shape, reading
+    /// [`drop_target`](Base::drop_target). Walked by
     /// [`drag::resolve_at`](crate::drag::resolve_at).
-    fn as_drop_target(&self) -> Option<DragItemId> {
+    fn is_drop_target(&self) -> bool {
         self.base().drop_target
     }
 }
@@ -1245,6 +1256,49 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
     }
     c.paint(cx);
     crate::widgets::key_hint::paint_hint_label(c, cx);
+    paint_drag_feedback(c, cx);
+}
+
+/// **What a drag looks like, drawn by the widgets taking part in it** — the target marks where the
+/// thing would land, and the source carries a picture of itself under the cursor.
+///
+/// It is here, beside the hint letter, because both are the same kind of thing: something the
+/// framework draws *over* any widget from state the framework already keeps, so no widget opts in
+/// and no host paints on their behalf. That is what every other drag-and-drop library settled on —
+/// Flutter's target rebuilds with what is over it, SwiftUI and the browser show a picture of the
+/// dragged view by default, and the thing that follows the cursor is drawn in a layer above
+/// everything so no scroll area clips it.
+///
+/// heca drew all of this centrally instead: the app read its own drag phases and painted the
+/// indicator and the chip for the whole window, so a new surface — a plugin's especially — got a
+/// drag that looked like nothing at all until the app was taught about it.
+///
+/// **What a widget may still decide** is what it *is*: `Onto` versus an insertion line comes from
+/// where the pointer sits in the target, and the modifiers ride along for a host convention (heca
+/// reads Shift as "swap these two"). The library has no opinion on what a modifier means; it only
+/// makes sure the widget can answer.
+fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
+    let b = c.base();
+    if b.pointer.is_drag_over() {
+        let bounds = b.bounds;
+        match b.pointer.drag_modifiers().shift {
+            true => cx.swap_indicator(bounds),
+            false => cx.drop_indicator(bounds, b.pointer.drag_side()),
+        }
+    }
+    if b.pointer.is_dragging() {
+        // A picture of what was picked up, offset off the cursor and vertically centred on it, in
+        // the overlay band so nothing this widget sits inside can clip it.
+        let at = b.pointer.drag_pos();
+        let text = c.text_summary().unwrap_or_default();
+        let h = b.bounds.size.h.clamp(18.0, 28.0);
+        let w = (text.chars().count() as f64 * 7.5 + 20.0).clamp(48.0, 220.0);
+        let rect = Rectangle::new(
+            Point::new(at.x + 10.0, at.y - h / 2.0),
+            heca_core::layout::Size::new(w, h),
+        );
+        cx.drag_ghost(rect, &text, b.pointer.drag_modifiers().shift);
+    }
 }
 
 /// Translate a component's whole subtree by `(dx, dy)` — bounds only, no re-layout.

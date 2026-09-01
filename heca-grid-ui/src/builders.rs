@@ -11,7 +11,6 @@
 
 use crate::color::Color;
 use crate::component::Component;
-use crate::drag::DragItemId;
 use crate::reactive::SignalUpdate;
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify, Length, WidgetSize};
@@ -462,16 +461,27 @@ impl<F: Fn() -> crate::widgets::ContextMenu> IntoContextMenu for F {
 /// only (a `Label` has no `.child()`).
 pub trait ComponentExt: Component + Sized {
 
-    /// Make this widget a **drag source** carrying `id`. A press inside its bounds
-    /// can begin a drag; the app maps `id` back to the dragged thing.
-    fn draggable(mut self, id: DragItemId) -> Self {
-        self.base_mut().drag_source = Some(id);
+    /// **This widget can be dragged**, and what gets dragged is the identity it already declares
+    /// with [`key`](ComponentExt::key) — the same one the keyboard cursor and the right-click
+    /// target read.
+    ///
+    /// ```ignore
+    /// Row::new().key("pane:7").draggable().drop_target()
+    /// ```
+    ///
+    /// One declaration, and nothing to hand out: it took an opaque id from a host registry before,
+    /// beside a closed list of which surfaces were even allowed to drag — so a row named itself
+    /// twice and a plugin's row could not be named at all. A widget with no `key` is not a drag
+    /// source; there would be nothing to say about what was picked up.
+    fn draggable(mut self) -> Self {
+        self.base_mut().draggable = true;
         self
     }
-    /// Make this widget a **drop target** identified by `id`. A drag released over
-    /// its bounds drops onto `id`.
-    fn drop_target(mut self, id: DragItemId) -> Self {
-        self.base_mut().drop_target = Some(id);
+    /// **This widget accepts drops**, identified the same way — by its
+    /// [`key`](ComponentExt::key). A drag released over its bounds drops onto it, with the side
+    /// (before / onto / after) computed from where in its bounds the pointer sits.
+    fn drop_target(mut self) -> Self {
+        self.base_mut().drop_target = true;
         self
     }
 

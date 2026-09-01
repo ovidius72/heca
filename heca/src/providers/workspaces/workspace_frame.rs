@@ -112,7 +112,11 @@ impl WorkspaceFrame<'_> {
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
         // column anywhere on it that isn't a deeper column/pane target moves the column
         // into this workspace. Innermost-first hit-testing lets columns/panes override.
-        dock = dock.drop_target(reg.drag.register(ChromeDragItem::Workspace { ws: ws_idx }));
+        reg.drag.register(
+            workspace_key(ws_id),
+            ChromeDragItem::Workspace { ws: ws_idx },
+        );
+        dock = dock.drop_target();
         // Columns stacked with a clear gap between them (the gap + bar mark each column);
         // panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
