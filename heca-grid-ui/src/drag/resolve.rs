@@ -256,6 +256,42 @@ mod tests {
         );
     }
 
+    /// **A drop nobody took reaches the host, with both names already resolved** — the same shape
+    /// as an unclaimed right-click, so a row that can be dropped on writes no handler and a
+    /// plugin's row writes none either.
+    #[test]
+    fn an_unclaimed_drop_is_handed_to_the_host() {
+        use crate::component::dispatch;
+        use crate::event::{Event, PointerButton};
+        use crate::widgets::Label;
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        let seen: Rc<RefCell<Vec<crate::drag::Dropped>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = seen.clone();
+        crate::drag::install_drop_sink(move |d| sink.borrow_mut().push(d));
+
+        let mut root = Flex::column();
+        root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 80.0));
+        let mut a = Surface::new().key("row:a").draggable();
+        a.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
+        a.base_mut().children.push(Box::new(Label::new("A")));
+        let mut b = Surface::new().key("row:b").drop_target();
+        b.base_mut().bounds = Rectangle::new(Point::new(0.0, 40.0), Size::new(100.0, 40.0));
+        root.base_mut().children.push(Box::new(a));
+        root.base_mut().children.push(Box::new(b));
+
+        let at = |x: f64, y: f64| Point::new(x, y);
+        dispatch(&mut root, &Event::pointer_pressed(at(50.0, 20.0), PointerButton::Left));
+        dispatch(&mut root, &Event::pointer_moved(at(50.0, 60.0)));
+        dispatch(&mut root, &Event::pointer_released(at(50.0, 60.0), PointerButton::Left));
+
+        let got = seen.borrow();
+        assert_eq!(got.len(), 1, "exactly one drop reached the host");
+        assert_eq!(got[0].source, "row:a");
+        assert_eq!(got[0].target, "row:b");
+    }
+
     /// **`.draggable()` on its own is enough** — a widget that never named itself is still
     /// draggable, because its identity is derived from its content the way the picker's remembered
     /// letters are.

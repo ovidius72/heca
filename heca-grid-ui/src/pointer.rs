@@ -610,6 +610,20 @@ fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     {
         let ev = Event::Drop(drag_event(&item, raw, hit.side));
         handled = deliver_path(root, &path, &ev);
+        // **What happens to a drop nobody took is the host's**, the same way an unclaimed
+        // right-click with a declared menu is. A row can say it accepts drops; it cannot move a
+        // pane into another workspace. So this crosses back once, with both identities already
+        // resolved — and a row that wants to answer for itself still wins, because it consumed the
+        // event above and never reaches here.
+        if handled == Handled::No {
+            crate::drag::sink::present(crate::drag::Dropped {
+                source: item.clone(),
+                target: hit.key.clone(),
+                side: hit.side,
+                modifiers: raw.modifiers,
+            });
+            handled = Handled::Yes;
+        }
     }
     clear_drag_over(root);
     node_at(root, &source_path).base().pointer.dragging.set(false);

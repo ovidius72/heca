@@ -19,10 +19,12 @@ mod context;
 mod item;
 mod math;
 mod resolve;
+pub(crate) mod sink;
 mod state;
 
 pub use context::DragContext;
 pub use item::{DragItemId, DragSurfaceId};
 pub use math::{DEFAULT_DRAG_THRESHOLD_SQ, rubberband};
 pub use resolve::{DropHit, DropSide, resolve_at, resolve_at_filtered, source_at};
+pub use sink::{Dropped, has_drop_sink, install_drop_sink};
 pub use state::{DragLabel, DragPhase, SurfaceDragState};
