@@ -271,6 +271,16 @@ impl HecaApp {
             state.notifications.set_mode(
                 self.app_config.config.settings.notification_system.mode,
             );
+            // Every setting in this table must be re-applied here. One that is only read at startup
+            // is dead until someone remembers it — the defect `P031(F006)/T415` is filed against,
+            // and `max_visible` walked straight into it the day it was added (2026-08-31).
+            let max_visible = self.app_config.config.settings.notification_system.max_visible;
+            if state
+                .notifications
+                .set_max_visible(max_visible, std::time::Instant::now())
+            {
+                state.needs_redraw = true;
+            }
             state.confirm = self.app_config.config.confirm.clone();
             let link_detection = self.app_config.config.appearance.terminal.link_detection;
             let palette_defaults = terminal_palette_defaults(&state.theme);

@@ -754,6 +754,44 @@ impl NotificationStore {
         }
     }
 
+    /// **Change how many cards are on screen at once** — the `prefix+Shift+r` path for
+    /// `[settings.notification_system] max_visible`.
+    ///
+    /// Clamped to at least one, like [`with_capacity`](Self::with_capacity): a zero would queue
+    /// everything and show nothing, which is what `mode = "none"` is for.
+    ///
+    /// **Shrinking hands the surplus back to the queue, at the front**, in the order they were
+    /// raised — they were on screen before anything still waiting, so they keep their turn rather
+    /// than going to the back of it. Nothing is archived: a card the user never saw dismissed must
+    /// not be silently swallowed by a config edit. Growing simply opens slots; the next
+    /// [`promote_pending`](Self::promote_pending) fills them.
+    ///
+    /// Returns whether the visible set changed, so the caller can refresh its projection.
+    pub fn set_max_visible(&mut self, max_visible: usize, now: Instant) -> bool {
+        let want = max_visible.max(1);
+        if want == self.visible.len() {
+            return false;
+        }
+        let (_, update) = self.transition_at(now, |store, now| {
+            if want < store.visible.len() {
+                // Surplus goes back to the head of the queue, newest-last, so the FIFO still reads
+                // in the order the notifications were raised.
+                let surplus: Vec<NotificationId> =
+                    store.visible.split_off(want).into_iter().flatten().collect();
+                for id in surplus.into_iter().rev() {
+                    if let Some(n) = store.notifications.get_mut(&id) {
+                        n.placement = NotificationPlacement::Queued;
+                    }
+                    store.queued.push_front(id);
+                }
+            } else {
+                store.visible.resize(want, None);
+            }
+            ((), store.promote_pending(now))
+        });
+        update.visible_projection_changed()
+    }
+
     /// Iterate retained archived notifications from oldest to newest.
     ///
     /// The store keeps ownership of all lifecycle buckets; callers receive no
@@ -1653,6 +1691,15 @@ impl NotificationRuntime {
         self.hovered_since.is_some()
     }
 
+    /// Apply a new `max_visible` (`prefix+Shift+r`). Returns whether the projection changed.
+    pub fn set_max_visible(&mut self, max_visible: usize, now: Instant) -> bool {
+        let changed = self.store.set_max_visible(max_visible, now);
+        if changed {
+            self.sync_visible_toasts();
+        }
+        changed
+    }
+
     /// Auto-dismiss everything past its deadline. Call from the lifecycle tick.
     ///
     /// **A no-op while the pointer rests on the stack** — that is the whole of the hold, and doing
@@ -2162,6 +2209,52 @@ mod tests {
 
         assert!(!store.expire_due(now + std::time::Duration::from_secs(60)).visible_projection_changed());
         assert_eq!(store.visible[0], Some(id));
+    }
+
+    /// **Shrinking the stack hands cards back to the queue; it never swallows them.**
+    ///
+    /// `prefix+Shift+r` can make the stack smaller while cards are on screen. Those cards were
+    /// raised before anything still waiting, so they go to the **front** of the queue and keep their
+    /// turn — archiving them would silently dismiss notifications the user never acknowledged, on a
+    /// config edit. Growing just opens slots and the queue fills them.
+    #[test]
+    fn resizing_the_stack_returns_surplus_cards_to_the_front_of_the_queue() {
+        let now = Instant::now();
+        let mut store = NotificationStore::with_capacity(100, 4);
+        let ids: Vec<_> = (0..5)
+            .map(|n| {
+                store
+                    .push(NotificationDraft::new(format!("N{n}")), now)
+                    .unwrap()
+                    .notification_id()
+            })
+            .collect();
+        assert_eq!(store.visible.len(), 4);
+        assert_eq!(store.queued.len(), 1);
+
+        assert!(store.set_max_visible(2, now));
+        assert_eq!(store.visible, vec![Some(ids[0]), Some(ids[1])]);
+        assert_eq!(
+            store.queued.iter().copied().collect::<Vec<_>>(),
+            vec![ids[2], ids[3], ids[4]],
+            "the two that came off keep their place ahead of the one already waiting",
+        );
+        assert!(
+            ids.iter().all(|id| !store.notifications[id].is_history()),
+            "a config edit must not dismiss anything",
+        );
+
+        // And growing lets the queue back in, in order.
+        assert!(store.set_max_visible(4, now));
+        assert_eq!(
+            store.visible,
+            vec![Some(ids[0]), Some(ids[1]), Some(ids[2]), Some(ids[3])]
+        );
+        assert_eq!(store.queued.len(), 1);
+
+        assert!(!store.set_max_visible(4, now), "no change, no churn");
+        assert!(store.set_max_visible(0, now), "zero clamps to one");
+        assert_eq!(store.visible.len(), 1);
     }
 
     /// **The stack's size is chosen, and a zero is a typo rather than a mute switch.**
