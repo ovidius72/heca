@@ -103,7 +103,9 @@ pub trait LayoutExt: Component + Sized {
     ///   (`layout::tests::a_percentage_margin_resolves_against_the_parents_width_on_both_axes`).
     ///
     /// The rect **overrides** [`width`](Self::width) / [`height`](Self::height): it names both, and
-    /// a leftover size beside it would draw a different rect than the one asked for.
+    /// a leftover size beside it would draw a different rect than the one asked for. **Except
+    /// where it says `Auto`** — an axis left auto has said *where*, not *how big*, so the widget's
+    /// own size stands there. That is what lets a caller place something without also resizing it.
     fn at_rect(
         mut self,
         left: impl Into<crate::style::Length>,

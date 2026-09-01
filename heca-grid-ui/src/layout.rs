@@ -450,6 +450,57 @@ mod tests {
         assert_eq!(placed.size, Size::new(400.0, 200.0));
     }
 
+    /// **Placing something is not resizing it.** An axis left `Auto` in a placement is a question
+    /// the caller did not answer, so the widget's own size stands there — which is what lets a
+    /// host seat a surface at the window origin without also deciding how big it is.
+    ///
+    /// Reading `Auto` as "shrink to content" instead is how a menu seated as a surface ended up
+    /// stretched down the whole window: the seat handed it the viewport, and a menu is not a layer
+    /// — it *is* its panel. Both halves are here, because the trap is that one of them is silent:
+    /// a layer that declares its own `Pct(1.0)` must keep filling the window.
+    #[test]
+    fn a_placement_that_leaves_an_axis_auto_keeps_the_widgets_own_size() {
+        let mut root = Flex::row()
+            .width(Length::Px(800.0))
+            .height(Length::Px(400.0))
+            // Sizes itself, like a menu panel: the seat must not touch it.
+            .child(
+                Flex::row()
+                    .width(Length::Px(220.0))
+                    .height(Length::Px(90.0))
+                    .at_rect(
+                        Length::Pct(0.0),
+                        Length::Pct(0.0),
+                        Length::Auto,
+                        Length::Auto,
+                    ),
+            )
+            // Declares itself the whole window, like every layer-shaped surface.
+            .child(
+                Flex::row()
+                    .width(Length::Pct(1.0))
+                    .height(Length::Pct(1.0))
+                    .at_rect(
+                        Length::Pct(0.0),
+                        Length::Pct(0.0),
+                        Length::Auto,
+                        Length::Auto,
+                    ),
+            );
+        LayoutEngine::new().compute(&mut root, Size::new(800.0, 400.0));
+
+        assert_eq!(
+            root.base().children[0].base().bounds.size,
+            Size::new(220.0, 90.0),
+            "the panel kept the size it set on itself",
+        );
+        assert_eq!(
+            root.base().children[1].base().bounds.size,
+            Size::new(800.0, 400.0),
+            "and the layer still fills the window",
+        );
+    }
+
     /// **A leading icon never pushes the text out of the row** (F003/P082/T481).
     ///
     /// The row is willing to shrink and the label is willing to be cut, and it still overflowed:

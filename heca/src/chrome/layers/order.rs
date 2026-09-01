@@ -7,7 +7,6 @@
 //! order cannot disagree.
 
 use super::{DynamicLayer, LayerId, LayerRegistry};
-use heca_grid_ui::Component;
 
 impl LayerRegistry {
     /// **This surface's z, as a path.** The chain of sibling indices from the root down to it —
@@ -116,18 +115,4 @@ impl LayerRegistry {
     pub(crate) fn top_modal_id(&self, window: &heca_grid_ui::widgets::Flex) -> Option<LayerId> {
         self.top_modal_index(window).map(|i| self.layers[i].id)
     }
-
-    /// **The front-most modal's live node**, for a caller that must drive it — today the keyboard
-    /// path, which hands a key to the surface holding it.
-    ///
-    /// The node lives in the window root like every other surface; this only answers *which* one is
-    /// in front, which is the registry's job and not the tree's.
-    pub(crate) fn top_modal_node_mut<'w>(
-        &self,
-        window: &'w mut heca_grid_ui::widgets::Flex,
-    ) -> Option<&'w mut (dyn Component + 'static)> {
-        let id = self.top_modal_id(window)?;
-        crate::chrome::surface_node_mut(window, id).map(|n| n.as_mut())
-    }
-
 }

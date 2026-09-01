@@ -922,3 +922,205 @@ fn a_named_layer_is_addressable_and_re_registering_replaces_it() {
         "the unnamed layer is still in the stack after two named registrations",
     );
 }
+
+/// **A key reaches a surface because the surface is a node in the tree, not because the host
+/// picked it** (F003/P097/T495).
+///
+/// This is the assertion the keyboard half of that task rests on. The host used to look the
+/// front-most modal up in this registry and dispatch straight into its node; it now hands the key
+/// to the window root and lets delivery follow focus. That only works if an open surface actually
+/// holds focus where it is placed — and until this task nothing exercised it, because the old path
+/// reached the surface whether it held focus or not.
+///
+/// So the failure it guards against is silent and total: a dialog that answers no key at all, with
+/// every test still green. A `Handled::No` here means the focus half of the seating is broken.
+/// **Fix the focus** — do not reintroduce a predicate that offers keys to a widget which does not
+/// hold them (`routes_own_subtree` / `takes_raw_keys` / `takes_text_input` were deleted for
+/// exactly that).
+///
+/// A `Dialog` is the shape the app really places (`OverlayHost::open_modal` builds one), and Tab
+/// is the key it answers itself — so this asks the same question the user asks by pressing Tab in
+/// a confirm dialog.
+#[test]
+fn a_key_dispatched_at_the_window_root_reaches_a_placed_surface() {
+    use heca_grid_ui::widgets::{Button, Dialog};
+    use heca_grid_ui::{Event, GridKey, Handled};
+
+    let mut reg = LayerRegistry::default();
+    let mut window = crate::chrome::new_window_root();
+    let id = reg.add(
+        None,
+        LayerKind::OnDemand,
+        true,
+        true,
+        Box::new(
+            Dialog::new("Close pane?")
+                .action(Button::new("Cancel"))
+                .action(Button::new("OK"))
+                .open(true),
+        ),
+        &mut window,
+    );
+    reg.show(&mut window, id);
+
+    assert_eq!(
+        heca_grid_ui::dispatch(
+            &mut window,
+            &Event::Key {
+                key: GridKey::Tab,
+                pressed: true,
+            },
+        ),
+        Handled::Yes,
+        "the key never reached the surface: an open dialog must hold focus where it is placed, \
+         so delivery finds it without the host naming it",
+    );
+}
+
+/// **A menu is its own panel, so seating it as a surface must not resize it** (F003/P097/T495).
+///
+/// `place_surface` gives every surface the whole viewport, which is right for an `Overlay` — a
+/// layer fills the window and positions a panel *inside* itself. A `ContextMenu` is not shaped
+/// that way: the widget **is** the panel (`panel_base` sets its own direction, padding and width
+/// bounds, and its rows are its children), so handing it a full-viewport box stretches the panel
+/// down the whole window.
+///
+/// Two things go wrong at once, and only one of them is visible: the panel is drawn floor to
+/// ceiling, **and** its hit area becomes the whole window — so with a menu open, every press
+/// anywhere lands on the menu instead of what is under the cursor, and a right-click elsewhere
+/// opens nothing (Antonio, driving, 2026-09-01).
+#[test]
+fn a_menu_seated_as_a_surface_keeps_its_own_height() {
+    use heca_core::layout::Size;
+    use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
+    use heca_grid_ui::LayoutEngine;
+
+    let viewport = Size::new(1400.0, 900.0);
+    let menu = ContextMenu::new("pane")
+        .child(
+            Menu::new("Pane", "")
+                .child(MenuItem::new().label("New column"))
+                .child(MenuItem::new().label("New pane"))
+                .child(MenuItem::new().label("Close pane")),
+        )
+        .open(true);
+
+    let mut reg = LayerRegistry::default();
+    let mut window = crate::chrome::new_window_root();
+    let id = reg.add(
+        None,
+        LayerKind::OnDemand,
+        true,
+        true,
+        Box::new(menu),
+        &mut window,
+    );
+    reg.show(&mut window, id);
+    LayoutEngine::new().compute(&mut window, viewport);
+
+    let h = crate::chrome::surface_node(&window, id)
+        .expect("the menu is seated")
+        .base()
+        .bounds
+        .size
+        .h;
+    assert!(
+        h < viewport.h / 2.0,
+        "the menu was stretched to the seat instead of keeping its own height: {h} of {}",
+        viewport.h,
+    );
+}
+
+/// An open layer, built the way `fading_root` builds one.
+fn fading_root_open() -> Overlay {
+    let mut o = Overlay::new().panel(Flex::row());
+    o.open();
+    o
+}
+
+/// The other half of the seat, and the silent one: **a layer-shaped surface still fills the
+/// window**.
+///
+/// The seat leaves both sizes to the surface, so this is what would break if a layer ever stopped
+/// declaring its own — and it would break invisibly, as a surface that paints and hit-tests in a
+/// box the size of its content while still believing it owns the screen.
+#[test]
+fn a_layer_seated_as_a_surface_still_fills_the_window() {
+    use heca_core::layout::Size;
+    use heca_grid_ui::LayoutEngine;
+
+    let viewport = Size::new(1400.0, 900.0);
+    let mut reg = LayerRegistry::default();
+    let mut window = crate::chrome::new_window_root();
+    let id = reg.add(
+        None,
+        LayerKind::OnDemand,
+        true,
+        true,
+        Box::new(fading_root_open()),
+        &mut window,
+    );
+    reg.show(&mut window, id);
+    LayoutEngine::new().compute(&mut window, viewport);
+
+    assert_eq!(
+        crate::chrome::surface_node(&window, id)
+            .expect("the layer is seated")
+            .base()
+            .bounds
+            .size,
+        viewport,
+        "a layer declares its own full-viewport size and the seat must not shrink it",
+    );
+}
+
+/// **A seated surface must not stand between the pointer and the page where it draws nothing**
+/// (F003/P097/T495).
+///
+/// The notification stack's box is the whole window on purpose — that is how a corner means the
+/// *screen's* corner — and it sits above the chrome, because child order is z-order. Take the
+/// default input surface and the consequence is total and silent: every press anywhere in the app
+/// hit-tests to the stack, so the chrome under it stops answering the mouse and a sidebar row can
+/// never be right-clicked (Antonio, driving, 2026-09-01).
+///
+/// The guard is here, on the seating, rather than only in the widget: this is the arrangement that
+/// makes it dangerous — a window-sized node in front of everything — and any future surface seated
+/// the same way is subject to the same rule.
+#[test]
+fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
+    use heca_core::layout::{Point, Size};
+    use heca_grid_ui::reactive::signal;
+    use heca_grid_ui::style::Length;
+    use heca_grid_ui::widgets::{KeyHintGroup, ToastStack};
+    use heca_grid_ui::{LayoutEngine, LayoutExt};
+
+    let viewport = Size::new(1280.0, 800.0);
+    let mut window = crate::chrome::new_window_root();
+    // The chrome: a plain child of the window root, and the thing the pointer must reach.
+    crate::chrome::seat_chrome(
+        &mut window,
+        Flex::row().width(Length::Pct(1.0)).height(Length::Pct(1.0)),
+    );
+    // The stack, seated **exactly as the app seats it** — wrapped in its picker group, and empty,
+    // as it is nearly always. The wrapper is the point: a first version of this guard placed a bare
+    // stack, passed, and the app was still broken, because what the pointer actually meets is the
+    // decorator hugging it. A guard for a seating must build the arrangement the app seats.
+    crate::chrome::place_surface(
+        &mut window,
+        "heca.notifications",
+        Box::new(KeyHintGroup::new_boxed(Box::new(ToastStack::new(signal(
+            Vec::new(),
+        ))))),
+    );
+    LayoutEngine::new().compute(&mut window, viewport);
+
+    let path = heca_grid_ui::hit_test(&window, Point::new(146.0, 171.0))
+        .expect("the chrome is under the pointer");
+    assert_eq!(
+        path.first(),
+        Some(&0),
+        "the pointer reached child {:?} — the chrome is child 0 and an empty surface must not \
+         claim the point in front of it",
+        path.first(),
+    );
+}

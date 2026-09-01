@@ -38,7 +38,7 @@ use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use crate::style::{Align, Direction, Justify, Length};
 use crate::widgets::{Button, Toast, ToastPosition, ToastSpec};
-use heca_core::layout::Point;
+use heca_core::layout::{Point, Rectangle, Size};
 use std::rc::Rc;
 
 /// Gap between stacked toasts.
@@ -88,10 +88,23 @@ impl ToastStack {
     /// A new stack bound to the host's `items` signal (the render list it owns).
     pub fn new(items: Signal<Vec<ToastSpec>>) -> Self {
         let mut base = Base::new();
-        // Fill the viewport and let the engine anchor the column — the same shape an `Overlay`
-        // uses to centre a modal. `justify`/`align` are set from the corner in `sync_anchor`.
-        base.style.layout.width = Length::Pct(1.0);
-        base.style.layout.height = Length::Pct(1.0);
+        // **The stack is the size of its cards, not the size of the window.**
+        //
+        // It used to fill the viewport and shift itself into the corner, which made its box a
+        // window-sized rectangle sitting in front of the whole app. Everything downstream of a box
+        // then inherited that lie: it is what the pointer meets, what a wrapper hugs, and what a
+        // parent reserves. The consequence was total and silent — every press anywhere in the app
+        // hit-tested to an empty notification stack and the chrome beneath it stopped answering
+        // the mouse (Antonio, driving, 2026-09-01). Fixing the stack's own input surface was not
+        // enough, because the `KeyHintGroup` wrapped around it hugs the child and inherited the
+        // same window-sized box; the only fix that ends the family is for the box to be honest.
+        //
+        // Anchoring does not need the box: `on_layout` reads the viewport the layout pass stamps
+        // on every node and moves the finished group to its corner, and it computes that shift
+        // from the group's own size — so it works the same whether the box is the window or the
+        // cards. `justify`/`align` are set from the corner in `sync_anchor`.
+        base.style.layout.width = Length::Auto;
+        base.style.layout.height = Length::Auto;
         base.style.layout.direction = Direction::Column;
         base.style.layout.padding = DEFAULT_MARGIN;
         base.style.layout.gap = DEFAULT_GAP;
@@ -329,6 +342,28 @@ impl ToastStack {
         self.base.children.iter().any(|c| c.base().hovered())
     }
 
+    /// **The area the cards actually occupy** — the one definition of where this stack is, read by
+    /// both [`hit_bounds`](Component::hit_bounds) and
+    /// [`overlay_occludes`](Component::overlay_occludes) so they can never give different answers.
+    ///
+    /// `None` when nothing is showing: an empty stack is not on screen, so it must not stand
+    /// between the pointer and the page — its box still spans the window, because that is what
+    /// anchors a card to a corner.
+    fn cards_rect(&self) -> Option<Rectangle> {
+        self.base
+            .children
+            .iter()
+            .filter(|c| showing(c.as_ref()))
+            .map(|c| c.base().bounds)
+            .reduce(|a, b| {
+                let x0 = a.loc.x.min(b.loc.x);
+                let y0 = a.loc.y.min(b.loc.y);
+                let x1 = (a.loc.x + a.size.w).max(b.loc.x + b.size.w);
+                let y1 = (a.loc.y + a.size.h).max(b.loc.y + b.size.h);
+                Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0))
+            })
+    }
+
     /// Publish the hover state, **only when it changes**.
     ///
     /// Writing every move would wake whatever reads the signal on every pixel of pointer travel,
@@ -395,12 +430,33 @@ impl Component for ToastStack {
     /// context menu) under one. Points between and outside the cards are not occluded.
     ///
     /// It is the cards' own laid-out bounds, not a private layout pass — the engine placed them,
-    /// and this reads where they landed.
+    /// and this reads where they landed. Same source as [`hit_bounds`](Component::hit_bounds), so
+    /// the two answers cannot drift apart.
     fn overlay_occludes(&self, pos: Point) -> bool {
-        self.base
-            .children
-            .iter()
-            .any(|c| showing(c.as_ref()) && c.base().bounds.contains(pos))
+        self.cards_rect().is_some_and(|r| {
+            r.contains(pos)
+                && self
+                    .base
+                    .children
+                    .iter()
+                    .any(|c| showing(c.as_ref()) && c.base().bounds.contains(pos))
+        })
+    }
+
+    /// **The stack is a frame for placing cards, not a thing you can click.**
+    ///
+    /// Its box is the whole window on purpose — that is how "top right" means the *screen's* top
+    /// right rather than whatever slot a parent handed it (see [`on_layout`](Component::on_layout)).
+    /// The box is therefore the wrong answer to *where can this be clicked*: taking the default put
+    /// a window-sized target above the page, so **every press anywhere in the app landed on the
+    /// stack** and the chrome beneath it — sidebar rows included — stopped answering the mouse
+    /// entirely, with nothing failing anywhere (Antonio, driving, 2026-09-01).
+    ///
+    /// So the input surface is the cards, and nothing when there are none. A widget whose box is
+    /// bigger than what it draws owns this answer itself; `Overlay` states the same thing for its
+    /// scrim and panel.
+    fn hit_bounds(&self) -> Option<Rectangle> {
+        self.cards_rect()
     }
 
     /// **A card claims the pointer over it, and the stack claims nothing else.**

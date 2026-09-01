@@ -51,8 +51,8 @@ pub(crate) use scene::{
 pub(crate) use dispatch::{
     chrome_dispatch_button_press, chrome_dispatch_button_release, chrome_dispatch_cancelled,
     chrome_dispatch_move, chrome_dispatch_press, chrome_dispatch_release, chrome_dispatch_wheel,
-    chrome_dispatch_widget, dispatch_modal_pointer, dispatch_pane_header_move,
-    dispatch_pane_header_press, dispatch_pane_header_release, dispatch_pane_header_wheel,
+    chrome_dispatch_widget, dispatch_pane_header_move,
+    dispatch_surface_pointer, dispatch_pane_header_press, dispatch_pane_header_release, dispatch_pane_header_wheel,
     dispatch_pane_viewport_move, dispatch_pane_viewport_press, dispatch_pane_viewport_release,
     drain_pending_menus, open_declared_menu_for_focus,
 };
@@ -517,11 +517,22 @@ pub(crate) fn remove_surface(root: &mut Flex, key: &str) {
 pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: Box<dyn Component>) {
     let mut surface = surface;
     surface.base_mut().key = Some(key.to_string());
+    // Seated above the page, so it answers the pointer the way a positioned wrapper does in a
+    // browser: through, except where it covers something. The author of the surface writes nothing
+    // for this and cannot get it wrong.
+    surface.base_mut().surface = true;
+    // **The seat says where, the surface says how big.** Out of the flow at the window's origin,
+    // with both sizes left to the surface: every layer-shaped one already declares itself
+    // full-viewport (`Overlay`, `ToastStack`, `CommandPalette` all set `Pct(1.0)` in their own
+    // constructors), so they are unchanged — while a surface that is *not* a layer keeps the size
+    // it gives itself. A `ContextMenu` is the case: the widget **is** its panel, so being handed
+    // the viewport stretched it down the whole window and made every point in the window
+    // clickable as the menu (F003/P097/T495).
     surface.base_mut().style.layout.placement = Some(heca_grid_ui::style::Placement {
         left: Length::Pct(0.0),
         top: Length::Pct(0.0),
-        width: Length::Pct(1.0),
-        height: Length::Pct(1.0),
+        width: Length::Auto,
+        height: Length::Auto,
     });
     let children = &mut root.base_mut().children;
     match children

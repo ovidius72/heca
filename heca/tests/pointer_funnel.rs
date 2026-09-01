@@ -19,7 +19,7 @@
 use std::path::{Path, PathBuf};
 
 /// The single funnel: it takes a pointer event and gives it to whatever tree owns the pointer.
-const FUNNEL: &str = "dispatch_modal_pointer";
+const FUNNEL: &str = "dispatch_surface_pointer";
 
 /// The winit branches that carry pointer input. Each must reach the funnel.
 const POINTER_BRANCHES: &[(&str, &str)] = &[

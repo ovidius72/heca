@@ -370,6 +370,18 @@ pub fn hit_test(root: &dyn Component, pos: Point) -> Option<Path> {
             return Some(sub);
         }
     }
+    // **A surface passes the pointer through where it covers nothing** — the browser's
+    // `pointer-events: none` on a positioned wrapper, and the reason an author seats a surface and
+    // writes nothing else. Its children have already had their turn above and keep everything that
+    // lands on them; what is left is the surface's own box, and a surface's box is routinely much
+    // bigger than what it draws (a notification stack spans the window so a corner means the
+    // *screen's* corner). Claiming that box is how an empty, invisible surface came to swallow
+    // every press in the app with nothing failing anywhere. A surface that means to swallow says so
+    // in `overlay_occludes` — which is what `Overlay::blocking(true)` answers for the whole
+    // viewport, so a modal is unaffected.
+    if root.base().surface {
+        return root.overlay_occludes(pos).then(Path::new);
+    }
     rect.contains(pos).then(Path::new)
 }
 

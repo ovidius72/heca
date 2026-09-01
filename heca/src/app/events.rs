@@ -109,7 +109,7 @@ pub(crate) fn handle_window_event(
             // runs, because a release resolves to no action and an in-flight prefix sequence is
             // driven by presses.
             if event.state != ElementState::Pressed {
-                if crate::chrome::top_modal(state).is_some() {
+                if layer_holds_keyboard(state) {
                     let key_text = event.logical_key.to_text().unwrap_or("").to_string();
                     let combo = build_event_combo(
                         &event.logical_key,
@@ -120,11 +120,7 @@ pub(crate) fn handle_window_event(
                     if let Some((key, _)) = crate::app::registry::combo_to_grid(&combo) {
                         let keymap = state.widget_keymap.clone();
                         let handled = keymap.deliver_release(key, |ev| {
-                            state
-                                .layers
-                                .top_modal_node_mut(&mut state.window_root)
-                                .map(|root| heca_grid_ui::dispatch(root, ev))
-                                .unwrap_or(Handled::No)
+                            heca_grid_ui::dispatch(&mut state.window_root, ev)
                         });
                         if matches!(handled, Handled::Yes) {
                             state.mark_full_redraw();
@@ -147,19 +143,20 @@ pub(crate) fn handle_window_event(
             );
             let is_prefix = is_prefix_match(&event_combo, &state.prefix_combo, log_key, &key_text);
 
-            // A visible modal **layer** (overlay dialog) owns the keyboard — EXCEPT the universal
-            // hint picker, which must still reach the modal's buttons (they're collected as hint
-            // targets by the layer system). So the prefix trigger and any in-flight prefix /
-            // hint-pick sequence fall through to the keymap machinery below; every other key is
-            // just forwarded to the modal's root, which self-handles focus/activation/dismiss
-            // (a `Dialog` tracks its own modifier state from the broadcast `ModifiersChanged`).
+            // A layer in front owns the keyboard — EXCEPT the universal hint picker, which must
+            // still reach its buttons (they are collected as hint targets out of the laid-out
+            // tree). So the prefix trigger and any in-flight prefix / hint-pick sequence fall
+            // through to the keymap machinery below; every other key goes to the tree, which
+            // delivers it to whatever holds focus inside that layer and bubbles it back up (a
+            // `Dialog` self-handles focus/activation/dismiss, and tracks its own modifier state
+            // from the broadcast `ModifiersChanged`).
             let picker_seq = is_prefix
                 || matches!(
                     state.input_mode,
                     crate::app_state::InputMode::Prefix
                         | crate::app_state::InputMode::HintPick { .. }
                 );
-            if !picker_seq && crate::chrome::top_modal(state).is_some() {
+            if !picker_seq && layer_holds_keyboard(state) {
                 // Overlay key resolution via the single host-owned widget keymap
                 // (`widget-keys-config`). `Keymap::dispatch` delivers the raw key to the overlay
                 // **field-first** (so an `Input`'s typing / caret and a menu's quick-pick letters
@@ -182,11 +179,7 @@ pub(crate) fn handle_window_event(
                     };
                     let keymap = state.widget_keymap.clone();
                     let handled = keymap.deliver_press(&press, |ev| {
-                        state
-                            .layers
-                            .top_modal_node_mut(&mut state.window_root)
-                            .map(|root| heca_grid_ui::dispatch(root, ev))
-                            .unwrap_or(Handled::No)
+                        heca_grid_ui::dispatch(&mut state.window_root, ev)
                     });
                     // **A key the overlay ignored is not consumed by the overlay.** Returning
                     // regardless swallowed every binding an open surface had no use for — which is
@@ -221,14 +214,15 @@ pub(crate) fn handle_window_event(
         WindowEvent::ModifiersChanged(new_mods) => {
             state.modifiers = new_mods.state();
             mouse::on_modifiers_changed(state);
-            // Broadcast to an open modal overlay so a self-contained widget (a `Dialog`) can do
+            // Announce it to the whole tree so a self-contained widget (a `Dialog`) can do
             // Shift+Tab / Ctrl+h-l itself — its `Event::Key` carries no modifiers.
-            if crate::chrome::top_modal(state).is_some() {
-                let mods = grid_modifiers(state.modifiers);
-                if let Some(root) = state.layers.top_modal_node_mut(&mut state.window_root) {
-                    let _ = heca_grid_ui::dispatch(root, &Event::ModifiersChanged(mods));
-                }
-            }
+            //
+            // No gate and no target: a modifier change is an announcement, and the framework
+            // broadcasts it. Picking the front-most modal out of the registry and delivering only
+            // there meant every other surface — a dock, a menu, a plugin's panel — tracked
+            // modifiers only when it happened to be the thing in front.
+            let mods = grid_modifiers(state.modifiers);
+            let _ = heca_grid_ui::dispatch(&mut state.window_root, &Event::ModifiersChanged(mods));
             // Refresh the cursor affordance: pressing/releasing Cmd over a link
             // toggles the pointer cue even without pointer movement.
             mouse::update_cursor(state, state.mouse.pos);
@@ -240,9 +234,10 @@ pub(crate) fn handle_window_event(
                 position.y as f32 / state.scale_factor as f32,
             );
             state.mouse.pos = pos;
-            // A visible modal layer owns the pointer while open (hover on its buttons + menu rows,
-            // and a thumb drag inside its body).
-            if crate::chrome::dispatch_modal_pointer(
+            // A surface above the page gets the move first — hover on a dialog's buttons and menu
+            // rows, and a thumb drag inside its body. It declines a move that misses it (a
+            // notification card), and the page's own hover work below then runs as usual.
+            if crate::chrome::dispatch_surface_pointer(
                 state,
                 &raw_pointer(state, RawPointerKind::Moved, PointerButton::Left),
             ) {
@@ -277,8 +272,10 @@ pub(crate) fn handle_window_event(
         // a gesture the release never came back for — survives the cursor going somewhere else
         // entirely, which reads as a UI frozen mid-interaction.
         WindowEvent::CursorLeft { .. } => {
+            // One walk is enough: `chrome_dispatch_cancelled` already feeds the whole window tree,
+            // and every surface is a node in it. This used to deliver the cancel to the front-most
+            // modal first and then again with the tree, which is one event arriving twice.
             let ev = raw_pointer(state, RawPointerKind::Cancelled, PointerButton::Left);
-            crate::chrome::dispatch_modal_pointer(state, &ev);
             crate::chrome::chrome_dispatch_cancelled(state, &ev);
             state.mark_full_redraw();
         }
@@ -287,20 +284,24 @@ pub(crate) fn handle_window_event(
             button,
             ..
         } => {
-            // A visible modal layer swallows all button input: a press on a button (its
-            // `on_click` emits `SubmitOverlay`) or the scrim (`Dialog::on_dismiss` emits
-            // `CloseOverlay`) resolves it; anything else is consumed so clicks don't leak.
+            // A surface above the page gets the button first. A blocking one swallows it: a press
+            // on a button (its `on_click` emits `SubmitOverlay`) or on the scrim
+            // (`Dialog::on_dismiss` emits `CloseOverlay`) resolves it, and anything else is
+            // consumed so clicks don't leak to the page. A surface that only wants what lands on
+            // it — a notification card's × — declines the rest, and the page's own press pipeline
+            // below runs untouched.
             // The **release** goes in too — this branch used to forward the press alone, which is
             // what left a body's scrollbar thumb stuck to the cursor: the widget was still waiting
             // for the end of a gesture the host had decided not to deliver.
-            if crate::chrome::top_modal(state).is_some() {
+            {
                 let kind = match button_state {
                     ElementState::Pressed => RawPointerKind::Pressed,
                     ElementState::Released => RawPointerKind::Released,
                 };
                 let ev = raw_pointer(state, kind, grid_button(button));
-                crate::chrome::dispatch_modal_pointer(state, &ev);
-                return;
+                if crate::chrome::dispatch_surface_pointer(state, &ev) {
+                    return;
+                }
             }
             // Pane info-bar action **buttons** intercept a plain left-press so a click
             // hits the button (not the terminal). Only an actual button hit is
@@ -404,7 +405,7 @@ pub(crate) fn handle_window_event(
             // behind must stay still either way. This branch did not exist, so a described
             // scroll area inside a modal could not be scrolled at all.
             let wheel = wheel_event(state, delta);
-            if crate::chrome::dispatch_modal_pointer(state, &wheel) {
+            if crate::chrome::dispatch_surface_pointer(state, &wheel) {
                 return;
             }
             // The retained chrome tree next: a hovered scroll region in the sidebar takes it, and
@@ -421,6 +422,29 @@ pub(crate) fn handle_window_event(
         }
         _ => {}
     }
+}
+
+/// Is a **layer** the surface in front of the keyboard?
+///
+/// The one question the key path needs before it hands a raw key to the tree, and it is asked of
+/// the same rule everything else asks — [`focused_surface`](crate::app::input::focused_surface),
+/// which AGENTS.md § Keybinding Style states as *a key acts on the surface in front of you*.
+///
+/// **A dock is deliberately not included.** A focused container answers keys through the actions it
+/// declared (F003/P085/T352-T355): the key resolves in its own `[[keys.surface]]` map and arrives
+/// as the intent it meant. Offering it the raw key here as well would be a second door onto one
+/// input, and the two cannot stay identical — the thing ⭐⭐ RULE ZERO forbids.
+///
+/// This replaces `top_modal(state).is_some()` (F003/P097/T495). The difference is not the answer
+/// but *what is asked*: the old form went on to name a node for the key to be delivered into, and
+/// a host that names the target is a second opinion about what is in front. Now the key goes to
+/// the tree and the tree delivers it to whatever holds focus — so a dialog's field, its buttons,
+/// and a nested surface above it are reached by the rule that already reaches every other widget.
+fn layer_holds_keyboard(state: &AppState) -> bool {
+    matches!(
+        crate::app::input::focused_surface(state),
+        crate::app::input::FocusedSurface::Layer { .. }
+    )
 }
 
 /// A winit wheel delta as grid-ui's [`Event::Scroll`], in **lines** (positive = down / right).

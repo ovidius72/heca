@@ -233,6 +233,29 @@ pub struct Base {
     /// enumerated by [`nav::collect_keys`](crate::nav::collect_keys) and hit-tested by
     /// [`nav::key_at`](crate::nav::key_at). Opaque here — nothing in this library parses it.
     pub key: Option<String>,
+
+    /// **This node was seated as a surface** — placed above the page rather than laid out in it.
+    /// A host sets it when it seats one; no author ever writes it and no widget behaves
+    /// differently for having it.
+    ///
+    /// It buys one rule, and the rule is the browser's: a surface **passes the pointer through
+    /// where it covers nothing**, exactly as `pointer-events: none` on a positioned wrapper does,
+    /// while its children keep taking what lands on them. Right-click still opens the menu of
+    /// whatever is under the cursor.
+    ///
+    /// It exists because a surface's *box* is routinely much bigger than what it draws — a
+    /// notification stack spans the window so a corner can mean the screen's corner, and a
+    /// decorator wrapped around one hugs it and spans the window too. Left to the box, an empty
+    /// invisible surface swallows every press in the application and nothing anywhere fails
+    /// (Antonio, driving, 2026-09-01). Fixing the widgets one at a time does not end it: the next
+    /// surface, or the next decorator over one, brings it back, and its author had no way to know
+    /// they were meant to think about it.
+    ///
+    /// A surface that *wants* to swallow says so where it already says it —
+    /// [`overlay_occludes`](Component::overlay_occludes), which `Overlay::blocking(true)` answers
+    /// for the whole viewport. So the cost to an author is nothing, and the cost of forgetting is
+    /// nothing.
+    pub surface: bool,
     /// **Which enclosing region this subtree belongs to** — a panel, a dock, a tab group, whatever
     /// the host calls the thing that holds rows. Universal opt-in via
     /// [`ComponentExt::scope_key`](crate::builders::ComponentExt::scope_key); hit-tested by
@@ -439,6 +462,7 @@ impl Base {
             pointer: crate::pointer::PointerState::new(),
             handlers: None,
             context_menu: None,
+            surface: false,
             hint: None,
             hintable: true,
             activatable: false,

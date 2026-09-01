@@ -7,11 +7,11 @@
 
 use super::*;
 
-/// Deliver a pointer event to the open modal layer — **the whole set, in one place**.
+/// Offer a pointer event to the **surfaces above the page** — the whole set, in one place.
 ///
-/// Returns `true` when a modal owns the pointer, so every caller stops there and nothing leaks to
-/// the page behind. There is deliberately **one** function rather than a branch per winit event:
-/// the input this tree needs is not a per-caller choice.
+/// Returns `true` when one of them took it, so the caller stops there and nothing leaks to the
+/// page behind. There is deliberately **one** function rather than a branch per winit event: the
+/// input a surface needs is not a per-caller choice.
 ///
 /// That choice is what kept breaking. A widget with a *gesture* needs the whole set or it fails in
 /// a way nothing catches — a [`ScrollRegion`](heca_grid_ui::ScrollRegion) that never receives the
@@ -24,21 +24,34 @@ use super::*;
 /// framework resolves it into whatever it meant. The set cannot go missing a kind because there
 /// are no longer kinds to choose between.
 ///
-/// So: a caller says *a pointer event happened*, not *which kinds this surface deigns to forward*.
-pub(crate) fn dispatch_modal_pointer(
+/// **This asks the tree, not the registry** (F003/P097/T495). It used to look up the front-most
+/// modal layer and dispatch straight into that node, which is a second answer to "what is in
+/// front" beside the one the walk already has — and the two disagreed once already. Now it asks
+/// the tree whether a surface owns this **point** and lets the ordinary walk pick the target
+/// itself: a modal's scrim owns every point, a notification card owns only itself, and with
+/// nothing over the pointer the page keeps its own gesture order — the drag question is still
+/// asked before a row can claim the press (F003/P085/T368).
+///
+/// **Positional, and once.** The page's own pipeline feeds this same tree further down (a press
+/// reaches the chrome after the drag question), so a gate that dispatched and then let the caller
+/// continue would deliver one press twice — pairing a click out of the halves twice with it. So
+/// the question is asked *before* the event moves: owned ⇒ deliver here and stop; not owned ⇒
+/// touch nothing and let the page run.
+pub(crate) fn dispatch_surface_pointer(
     state: &mut crate::app_state::AppState,
     ev: &Event,
 ) -> bool {
     debug_assert!(
         matches!(ev, Event::Raw(_)),
-        "dispatch_modal_pointer is the pointer path; keys go through the keymap",
+        "dispatch_surface_pointer is the pointer path; keys go through the keymap",
     );
-    if top_modal(state).is_none() {
+    let Some(pos) = ev.position() else {
+        return false;
+    };
+    if !heca_grid_ui::overlay_occluded_at(&state.window_root, pos) {
         return false;
     }
-    if let Some(root) = state.layers.top_modal_node_mut(&mut state.window_root) {
-        let _ = heca_grid_ui::dispatch(root, ev);
-    }
+    let _ = heca_grid_ui::dispatch(&mut state.window_root, ev);
     state.mark_full_redraw();
     true
 }

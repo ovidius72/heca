@@ -226,9 +226,11 @@ pub struct Placement {
     pub left: Length,
     /// Distance from the parent's top content edge.
     pub top: Length,
-    /// The box's own width.
+    /// The box's own width. [`Auto`](Length::Auto) leaves the question to the widget: whatever
+    /// width it set on itself stands, and with nothing set it is sized by its content.
     pub width: Length,
-    /// The box's own height.
+    /// The box's own height. [`Auto`](Length::Auto) leaves the question to the widget — see
+    /// [`width`](Placement::width).
     pub height: Length,
 }
 
@@ -685,9 +687,26 @@ impl Layout {
             // `width`/`height` fields — a caller who said "this rect" has already answered both,
             // and honouring a stale `width` beside it would silently draw a different rect than
             // the one asked for.
-            size: match self.placement {
-                Some(p) => Size { width: p.width.to_taffy(), height: p.height.to_taffy() },
-                None => Size { width: self.width.to_taffy(), height: self.height.to_taffy() },
+            //
+            // **Per axis, and `Auto` is not an answer.** A placement that leaves an axis `Auto` has
+            // said *where*, not *how big*, so the widget's own size stands on that axis. Reading
+            // `Auto` as "shrink to content" instead let a placement quietly overrule a size the
+            // widget had set on itself, which is how a context menu seated as a surface came to be
+            // stretched down the whole window: the seat gives every surface the viewport, and a
+            // menu is not a layer — it *is* its panel, so the box it drew and the box it could be
+            // clicked in both became the window (Antonio, driving, 2026-09-01).
+            size: {
+                let axis = |placed: Length, own: Length| match placed {
+                    Length::Auto => own.to_taffy(),
+                    other => other.to_taffy(),
+                };
+                match self.placement {
+                    Some(p) => Size {
+                        width: axis(p.width, self.width),
+                        height: axis(p.height, self.height),
+                    },
+                    None => Size { width: self.width.to_taffy(), height: self.height.to_taffy() },
+                }
             },
             // Out of the flow when placed: an absolutely positioned child takes no space from its
             // siblings and is not moved by them, which is what "drawn *over* the row, where it
