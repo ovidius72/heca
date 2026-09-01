@@ -88,10 +88,10 @@
       "shortId": "GKVDS",
       "priority": 2,
       "shortName": "host-overlay-open",
-      "title": "Add app.overlay open modal and dropdown",
+      "title": "Host API: a plugin asks for a modal or dropdown, and offers a surface of its own",
       "status": "planned",
-      "description": "Host API per modal/dropdown con risultato async.",
-      "descriptionUpdatedAt": "2026-07-01T18:12:25.316Z",
+      "description": "Host API per modal/dropdown con risultato async — WIDENED 2026-09-01 (Antonio) to cover the third shape, which nothing else plans.\n\n═══ THE THREE SHAPES, AND WHICH ARE COVERED ═══\n\n`docs/chrome-and-ui.md` R6 already decides the split, and it predates P097:\n  \"A modal, dropdown or context menu is not something a plugin puts in its tree. It asks the host\n   and waits for a typed answer. The host owns stacking, focus trapping, Escape, click-outside and\n   placement. Panels, toolbars and status segments go INTO a region. Modals and dropdowns are\n   REQUESTED.\"\n\n1. REQUESTED, transient, returns an answer — modal + dropdown. This task's original scope\n   (app.overlay.openModal / openDropdown, async result). The host owns z-order, focus trap,\n   keyboard routing, Escape, click-outside and positioning.\n2. CONTRIBUTED INTO A REGION — a panel/toolbar/status segment seated in the chrome. Already\n   possible: a Provider offers a container and the host mounts it (P035(F003)/T064 covers add/move).\n3. ⚠️ A PLUGIN'S OWN NAMED SURFACE — its own panel, of its own design, addressed by NAME and driven\n   by the ordinary action system the way `heca.expose` is. NOT a transient dialog, NOT seated in a\n   sidebar region. NOTHING PLANNED THIS. It is the gap found on 2026-09-01 while finishing\n   P097(F003)/T495, and Antonio decided it lands here rather than as a new task.\n\n═══ WHY THE GAP IS NARROW — MOST OF IT IS ALREADY BUILT ═══\n\nOnly ATTACHING is missing. Everything that happens afterwards already works and is proven by the\nexposé:\n- OPENING is an ordinary action carrying the surface's name: keybindings.default.toml binds\n  prefix+Tab to `toggle_layer` with args { name = \"heca.expose\" }. So the user can rebind it, and it\n  is reachable from the palette and RPC — which is the project rule that a capability must not be\n  trapped behind one surface.\n- THE SURFACE'S OWN KEYS are declared under its name: `[[keys.surface]] name = \"heca.expose\"` carries\n  its deletes and its `pick`, consulted BEFORE the global map.\n- THE WAY OUT is free and cannot be removed: the `layer` floor binds Escape (asserted, unremovable)\n  plus q / Ctrl+q to `close_overlay`, declared once for every layer rather than copied per surface —\n  and those keys do not exist while no overlay is up, so `:q` still quits vim.\n- INPUT, HINTS, LAYOUT, PAINT, Z-ORDER all follow from being a node in the one tree (P097/T494-T495).\n  Z is tree position; a surface passes the pointer through where it covers nothing.\n\nSo a plugin's surface needs a NAME and a TREE, and it inherits the rest.\n\n═══ THE SHAPE TO BUILD ═══\n\n⭐⭐ RULE ZERO governs this task — P035's own description says it is \"exactly where the wrong shape\ngets built\". Write the line a plugin author types. It must NOT be a plugin reaching into the app:\n`place_surface(&mut state.window_root, key, Box::new(..))` takes a host-private handle and fails the\ntest in its first three words. R6 forbids the plugin mounting it too.\n\nThe shape that matches what already exists: a plugin OFFERS a surface and the host attaches it —\nthe same way a Provider already offers a container through `build_contribution` and never touches\nthe tree. The host decides where it is seated and under which parent; the plugin declares a name\nand its content, and can neither get the order wrong nor hold a handle it should not have.\n\n- Native and described must be ONE door, not two. A described surface is a `ViewNode` realized\n  through the single bridge and placed by the host; a native one is the same call with a component.\n  Two doors over one capability drift, and the plugin one is always the poorer.\n- The attach must answer WHICH PARENT: a surface opened from another surface belongs under it, so it\n  sits above it and goes away with it. From a click the triggering event knows; from a keybinding or\n  RPC there is no widget, and the answer is the surface that currently holds the keyboard, else the\n  root — which `app::input::focused_surface` already computes.\n\n═══ RELATED, AND WHAT THEY DO NOT COVER ═══\n- P097(F003)/T501 — the declarative building blocks (13 of 46 widgets have no described form, and\n  the right-click menu is a declaration on a node, not a widget kind). Says what a plugin can put\n  INSIDE a panel. Does not attach one.\n- P097(F003)/T502 — the acceptance test: rebuild one real overlay the way a plugin must. It ASSUMES\n  this door exists (\"mounted from the described path\") and would only discover its absence as a\n  finding. ⚠️ Its text still names `LayerContent`, deleted in T494 — read it as \"the described path\",\n  which is add_view + place_surface.\n- P035(F003)/T064 — add/move a container in a region. Shape 2, not shape 3.",
+      "descriptionUpdatedAt": "2026-09-01T13:13:59.680Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -104,7 +104,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:25.316Z",
-      "updatedAt": "2026-07-01T18:12:25.316Z",
+      "updatedAt": "2026-09-01T13:13:59.678Z",
       "sessionInfo": []
     },
     {
@@ -135,11 +135,20 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-08-31T09:53:31.939Z",
+  "updatedAt": "2026-09-01T13:13:59.678Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "843c8db9-36ab-45ee-84fe-052b69eae63d",
+      "date": "2026-09-01T13:13:59.707Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
   "sessionInfo": []
 }

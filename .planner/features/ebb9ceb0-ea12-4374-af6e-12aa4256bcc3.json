@@ -1,11 +1,11 @@
 {
   "id": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
   "number": 3,
-  "shortId": "QSMTX",
+  "shortId": "",
   "priority": 0,
   "name": "🧩 Pluggable Chrome Architecture",
-  "description": "Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.",
-  "descriptionUpdatedAt": "2026-07-01T18:08:37.398Z",
+  "description": "Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.\n\n═══ THE PLUGIN STORY ON ONE PAGE — the map, not the status (2026-09-01) ═══\nFull version, with the reasoning: docs/chrome-and-ui.md, the section right after \"How to find\nthings\". Read that before planning anything here. Every id below was read, not recalled.\n\nWHERE THIS IS GOING, in P022's own words: a plugin author writes their interface the way they would\nin Flutter or SwiftUI, and gets EXACTLY what the app's own chrome gets — same widgets, same prefix+/\npicker, same menus, focus and policy. If a plugin ends up with a poorer version of a shipped\nfeature, that phase has failed regardless of what loads.\n\nTHE THREE WAYS A PLUGIN PUTS SOMETHING ON SCREEN (decided in chrome-and-ui §2.7 / R6, older than\nP097). A plugin never puts a surface in the tree itself; it OFFERS one and the host attaches it.\n1. REQUESTED — a modal or dropdown that asks a question and returns a typed answer. The host owns\n   stacking, focus trap, Escape, click-outside, placement. P035/T065.\n2. CONTRIBUTED INTO A REGION — a panel, toolbar or status segment seated in the chrome. Possible\n   today; add/move is P035/T064.\n3. ITS OWN NAMED SURFACE — a panel of its own design, addressed by name and opened by an action the\n   way heca.expose is. ⚠️ This was tracked NOWHERE; folded into P035/T065 on 2026-09-01.\n\nWHAT A NAMED SURFACE INHERITS — only ATTACHING was ever missing. Opening is an ordinary action\ncarrying the name (toggle_layer { name = … }), user-rebindable and reachable from palette and RPC.\nIts own keys live in a [[keys.surface]] block under its name, consulted before the global map. The\nway out is free and unremovable: the `layer` floor binds Escape plus q/Ctrl+q to close_overlay,\ndeclared once for every layer — and those keys do not exist while no layer is up, so `:q` still\nquits vim. Input, hints, layout, paint and z follow from being a node in the one tree (P097).\n\nHOW A PLUGIN WRITES WHAT GOES INSIDE — BUILT, and it is not hand-written JSON:\n  heca-view               the MODEL — serde and nothing else; a plugin depends on this alone\n  heca-view/src/build.rs  the TYPED SDK — one Rust type per kind, so the compiler refuses what the\n                          widget cannot do. This is what an author writes.\n  heca-view-realize       the ONE bridge — realize(...), below `heca`\nIt crosses as data because of the SANDBOX, not because of WASM: a plugin cannot hand us a closure, a\nsignal or a pointer to a live widget. A press comes back as an Intent (name + args). Consequence to\ndesign around: our chrome updates in place through signals; a plugin's change is a new description —\nfine for a panel or dialog, not for something changing many times a second.\n\nWHAT IS MISSING, AND WHERE IT IS TRACKED\n- Other languages: generated type definitions from the closed WidgetKind::ALL list — F003/P001/T006.\n  Today a Rust author gets editor help; a JS or Python author gets nothing. This is the gap between\n  \"a plugin CAN do this\" and \"anyone can write a plugin\".\n- The vocabulary's holes: 13 of 46 widgets have no described form, and a context menu has no\n  described declaration — P097/T501. ⚠️ Corrected 2026-09-01: a menu is a DECLARATION ATTACHED TO A\n  NODE, like a press or a hint — never a widget kind an author assembles and positions.\n- The proof: rebuild one of our own overlays using only what a plugin can write — P097/T502. ⚠️ Its\n  text still names LayerContent, deleted in P097/T494; read it as \"the described path\". Until this\n  lands, \"a plugin can add an overlay\" is an intention, not a fact.\n- No host-only exceptions: the rule is compile-enforced per builder; the AUDIT proving the host-only\n  list is only the legitimate cases has not been done — F004/P084/T398.\n- The boundary itself: loading someone else's code, the event bus, region contributions and action\n  registration across it — P022, which says outright it has NO REAL SPEC YET and needs a discovery\n  pass before it can be planned. It is the least defined thing in this feature.\n\nTHE PLUGIN THAT NEEDS NO CODE AT ALL — P053, plugins from config.toml. A large share of plugins add\na command that runs a program, a panel in a region, a menu entry and a key. None of that is logic:\nit is a text file declaring what exists and where it appears, in the same shapes our own defaults\nuse, merged by the same per-key rules so a user can override any of it. Two things follow: declaring\nan action there makes it reachable by key, mouse and script at once, so a plugin cannot trap a\nfeature behind its own button; and everything declared is known BEFORE the plugin is loaded, so the\npalette can list it and the keymap can bind it without running anything.",
+  "descriptionUpdatedAt": "2026-09-01T13:32:48.278Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -42,26 +42,8 @@
     "b4da797f-fbe4-443e-8c8c-68e001f7f48d"
   ],
   "dependsOn": [],
-  "statusLog": [
-    {
-      "id": "d92616e1-731c-41a9-8a7b-7bbcf90002a7",
-      "date": "2026-08-28T10:34:40.233Z",
-      "fromStatus": "planned",
-      "toStatus": "in-progress",
-      "title": "planned → in-progress",
-      "description": ""
-    }
-  ],
+  "statusLog": [],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-09-01T07:54:35.463Z",
-  "sessionInfo": [
-    {
-      "sessionId": "b8266d14-4bed-4222-afc6-25dbfe80885b",
-      "createdAt": "2026-09-01T09:00:37.279Z"
-    },
-    {
-      "sessionId": "81e7b61f-5fdc-4535-b72c-5a9c9468d452",
-      "createdAt": "2026-08-28T14:43:38.477Z"
-    }
-  ]
+  "updatedAt": "2026-09-01T13:32:48.278Z",
+  "sessionInfo": []
 }
