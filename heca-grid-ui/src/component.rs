@@ -248,6 +248,20 @@ pub struct Base {
     /// exists to end — the line said yes and the release said no, because the drawing and the rule
     /// lived in different places (Antonio, driving, 2026-09-01).
     pub accepts: Vec<String>,
+    /// **Can a thing be dropped *onto* this widget, or only beside it?**
+    ///
+    /// `true` — the default — means the middle of the target is real: dropping a pane onto a pane
+    /// swaps or moves it there, so the target reads as three bands (before it, onto it, after it).
+    /// `false` says the target is a **sibling in an ordered list**, where "onto" means nothing: a
+    /// column dropped on a column is a reorder and can only land before or after, so the target
+    /// reads as two halves and the insertion line flips at the midpoint.
+    ///
+    /// Set by [`accepts`](crate::builders::ComponentExt::accepts) and
+    /// [`accepts_beside`](crate::builders::ComponentExt::accepts_beside). It exists because the
+    /// two are genuinely different and only the component knows which it is (Antonio, 2026-09-01:
+    /// *"a pane should be released above another pane because we want to move or swap; a column
+    /// above another column doesn't tell us if it is placed below or above"*).
+    pub accepts_onto: bool,
     /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
     /// the right-click target and the drag are three readers of this one declaration.
     ///
@@ -480,6 +494,7 @@ impl Base {
             drag_kind: None,
             drop_target: false,
             accepts: Vec::new(),
+            accepts_onto: true,
             key: None,
             scope_key: None,
             font: 15.0,
@@ -1321,6 +1336,13 @@ fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
         }
     }
     if b.pointer.is_dragging() {
+        // **What you are carrying is faded where it still sits.** Otherwise a container's highlight
+        // is drawn around a source that looks untouched, and the two read as both being
+        // highlighted — which is exactly the case of dropping a column into the workspace that
+        // holds it (Antonio, 2026-09-01). Faded here, outlined there, and the chip under the cursor
+        // says which is which.
+        let bg = cx.theme().colors.background;
+        cx.rect(b.bounds, bg.with_alpha(160), None, cx.theme().colors.border_radius, None);
         // A picture of what was picked up, offset off the cursor and vertically centred on it, in
         // the overlay band so nothing this widget sits inside can clip it.
         let at = b.pointer.drag_pos();

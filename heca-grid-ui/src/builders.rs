@@ -511,6 +511,21 @@ pub trait ComponentExt: Component + Sized {
         let b = self.base_mut();
         b.drop_target = true;
         b.accepts = kinds.into_iter().map(Into::into).collect();
+        b.accepts_onto = true;
+        self
+    }
+    /// **What this target takes *beside* itself** — for a sibling in an ordered list, where being
+    /// dropped *onto* it means nothing.
+    ///
+    /// A column dropped on a column is a reorder: it can only land before or after, so the target
+    /// reads as two halves and the line flips at the midpoint — never a third band that silently
+    /// picks one for you. Use [`accepts`](Self::accepts) where the middle is real, as a pane is for
+    /// another pane, which it swaps or moves onto.
+    fn accepts_beside(mut self, kinds: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let b = self.base_mut();
+        b.drop_target = true;
+        b.accepts = kinds.into_iter().map(Into::into).collect();
+        b.accepts_onto = false;
         self
     }
 

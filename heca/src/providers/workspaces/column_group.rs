@@ -58,7 +58,8 @@ impl ColumnGroup<'_> {
                 heca_grid_ui::widgets::ContextMenu::new(MENU_COLUMN).child(menu)
             })
             .draggable_as("column")
-            .accepts(["column"]);
+            // A column beside a column is a reorder — before or after, never "onto".
+            .accepts_beside(["column"]);
         for pane in &column.panes {
             col = col.child(
                 PaneRow {

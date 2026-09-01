@@ -599,7 +599,7 @@ fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPointer) -> Ha
     let side = hit.as_ref().map_or(DropSide::Onto, |h| h.side);
     update_drag_over(
         root,
-        hit.as_ref().map(|h| (h.key.clone(), h.side)),
+        hit.as_ref().map(|h| (h.path.clone(), h.side)),
         &item,
         raw,
     );
@@ -623,11 +623,9 @@ fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     let kind = node_at(root, &source_path).base().drag_kind.clone();
     let hit = crate::drag::resolve_at_for(root, raw.pos, kind.as_deref());
     let mut handled = Handled::No;
-    if let Some(hit) = hit.as_ref()
-        && let Some(path) = path_of_drop_target(root, &hit.key)
-    {
+    if let Some(hit) = hit.as_ref() {
         let ev = Event::Drop(drag_event(&item, raw, hit.side));
-        handled = deliver_path(root, &path, &ev);
+        handled = deliver_path(root, &hit.path, &ev);
         // **What happens to a drop nobody took is the host's**, the same way an unclaimed
         // right-click with a declared menu is. A row can say it accepts drops; it cannot move a
         // pane into another workspace. So this crosses back once, with both identities already
@@ -653,14 +651,14 @@ fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled {
 /// Move the "a drag is over me" flag to `now`, emitting enter/leave/over as it goes.
 fn update_drag_over(
     root: &mut dyn Component,
-    now: Option<(String, DropSide)>,
+    now: Option<(Path, DropSide)>,
     item: &str,
     raw: &RawPointer,
 ) {
     let previous = drag_over_path(root);
-    let current = now
-        .as_ref()
-        .and_then(|(key, _)| path_of_drop_target(root, key));
+    // **The node the walk found, not a second search for its name.** Two seatings of one container
+    // give their rows the same name, so a search lights whichever comes first — the other sidebar.
+    let current = now.as_ref().map(|(path, _)| path.clone());
     if previous != current
         && let Some(path) = previous.clone()
     {
@@ -739,24 +737,6 @@ fn drag_identity(root: &dyn Component, path: &[usize]) -> Option<String> {
         .or_else(|| crate::nav::identity_of(root, path))
 }
 
-fn path_of_drop_target(root: &dyn Component, key: &str) -> Option<Path> {
-    fn walk(root: &dyn Component, node: &dyn Component, key: &str, at: &mut Path) -> bool {
-        let named = node.base().key.clone().or_else(|| crate::nav::identity_of(root, at));
-        if node.is_drop_target() && named.as_deref() == Some(key) {
-            return true;
-        }
-        for (i, child) in node.base().children.iter().enumerate() {
-            at.push(i);
-            if walk(root, child.as_ref(), key, at) {
-                return true;
-            }
-            at.pop();
-        }
-        false
-    }
-    let mut at = Path::new();
-    walk(root, root, key, &mut at).then_some(at)
-}
 
 /// Depth-first search for the first node satisfying `f`, returning its path.
 fn find(node: &dyn Component, f: &dyn Fn(&dyn Component) -> bool) -> Option<Path> {

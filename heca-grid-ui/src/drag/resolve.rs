@@ -34,17 +34,36 @@ pub enum DropSide {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DropHit {
     /// The target's own name — what it declared with
-    /// [`ComponentExt::key`](crate::builders::ComponentExt::key).
+    /// [`ComponentExt::key`](crate::builders::ComponentExt::key), or one derived from its content.
+    /// This is what a **host** reads: it says *what* was landed on, and a pane is the same pane
+    /// whichever seating you dragged it in.
     pub key: String,
+    /// **Which node it is** — the path the walk found it at.
+    ///
+    /// Carried because the walk already knows, and searching for it again by name is wrong: the
+    /// same container seated twice gives two rows the same name, so the search finds whichever
+    /// comes first and lights up the wrong sidebar (Antonio, driving, 2026-09-01). *What* was
+    /// landed on and *which node* it is are two questions; one string cannot answer both.
+    pub path: Vec<usize>,
     /// The target's laid-out bounds (logical px) — paint the indicator against these.
-    pub bounds: Rectangle, /// Which side of the target the cursor is over.
-    pub side: DropSide}
+    pub bounds: Rectangle,
+    /// Which side of the target the cursor is over.
+    pub side: DropSide,
+}
 
 /// Classify `point` against `bounds` into a [`DropSide`] by vertical thirds
 /// (the common vertically-stacked list case).
-fn side_for(bounds: Rectangle, point: Point) -> DropSide {
-    let third = bounds.size.h / 3.0;
+fn side_for(bounds: Rectangle, point: Point, onto: bool) -> DropSide {
     let dy = point.y - bounds.loc.y;
+    if !onto {
+        // A sibling in an ordered list: two halves, and the line flips at the midpoint. There is no
+        // third band, because "onto" would have to silently mean one of the other two.
+        return match dy < bounds.size.h / 2.0 {
+            true => DropSide::Before,
+            false => DropSide::After,
+        };
+    }
+    let third = bounds.size.h / 3.0;
     if dy < third {
         DropSide::Before
     } else if dy > bounds.size.h - third {
@@ -104,7 +123,11 @@ fn drop_at(
     kind: Option<&str>,
     path: &mut Vec<usize>,
 ) -> Option<DropHit> {
-    if skip(node) {
+    // **What is being carried is not somewhere to put it.** Dropping a thing on itself — or on
+    // anything inside it — can only mean nothing happens, and a target that will do nothing must
+    // not light up as though it will (Antonio, driving, 2026-09-01). Skipping the whole subtree is
+    // deliberate: a column dropped on one of its own panes is the same no-op.
+    if skip(node) || node.base().pointer.is_dragging() {
         return None;
     }
     for (i, child) in node.base().children.iter().enumerate().rev() {
@@ -123,8 +146,9 @@ fn drop_at(
         if bounds.contains(point) {
             return Some(DropHit {
                 key,
+                path: path.clone(),
                 bounds,
-                side: side_for(bounds, point),
+                side: side_for(bounds, point, node.base().accepts_onto),
             });
         }
     }
@@ -297,6 +321,65 @@ mod tests {
             "while a drag is in flight nothing under the pointer may light up",
         );
     }
+
+    /// **What is being carried is not somewhere to put it**, and neither is anything inside it.
+    ///
+    /// Dropping a column on itself or on one of its own panes can only mean nothing happens, and a
+    /// target that will do nothing must not light up as though it will. Skipping the subtree lets
+    /// the walk reach what encloses it — the workspace — which is a real place to drop it.
+    #[test]
+    fn the_thing_being_dragged_is_not_a_target_for_itself() {
+        use crate::component::dispatch;
+        use crate::event::{Event, PointerButton};
+
+        let mut ws = Surface::new().key("ws:0").accepts(["column"]);
+        ws.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
+        let mut col = Surface::new()
+            .key("col:1")
+            .draggable_as("column")
+            .accepts_beside(["column"]);
+        col.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 60.0));
+        ws.base_mut().children.push(Box::new(col));
+
+        // Not dragging: the column is the nearest target under the point.
+        assert_eq!(
+            resolve_at_for(&ws, Point::new(50.0, 30.0), Some("column")).map(|h| h.key),
+            Some("col:1".to_string()),
+        );
+
+        // Picked up and moved: it is no longer a place to put itself, so the walk reaches the
+        // workspace that holds it.
+        dispatch(&mut ws, &Event::pointer_pressed(Point::new(50.0, 30.0), PointerButton::Left));
+        dispatch(&mut ws, &Event::pointer_moved(Point::new(50.0, 50.0)));
+        assert_eq!(
+            resolve_at_for(&ws, Point::new(50.0, 30.0), Some("column")).map(|h| h.key),
+            Some("ws:0".to_string()),
+        );
+    }
+
+    /// **A reorder has no middle.** A target that takes something *beside* it reads as two halves,
+    /// so the answer flips at the midpoint and is never a silent third choice.
+    #[test]
+    fn a_sibling_target_is_two_halves_and_a_container_is_three_bands() {
+        let mut sibling = Surface::new().key("col:1").accepts_beside(["column"]);
+        sibling.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(90.0, 90.0));
+        for (y, want) in [(20.0, DropSide::Before), (44.0, DropSide::Before), (46.0, DropSide::After), (70.0, DropSide::After)] {
+            assert_eq!(
+                resolve_at_for(&sibling, Point::new(45.0, y), Some("column")).map(|h| h.side),
+                Some(want),
+                "a sibling at y={y} flips at the midpoint",
+            );
+        }
+
+        let mut container = Surface::new().key("pane:1").accepts(["pane"]);
+        container.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(90.0, 90.0));
+        assert_eq!(
+            resolve_at_for(&container, Point::new(45.0, 45.0), Some("pane")).map(|h| h.side),
+            Some(DropSide::Onto),
+            "a container keeps a real middle — a pane dropped onto a pane means something",
+        );
+    }
+
 
     /// **A target that will not take it is never offered** — so a line is never drawn over
     /// something a release would then ignore.
