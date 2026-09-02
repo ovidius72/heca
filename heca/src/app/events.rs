@@ -248,12 +248,23 @@ pub(crate) fn handle_window_event(
             }
             // Feed the move into the retained chrome tree so sidebar hover affordances
             // (MarkerGroup grip "grab" cue, Row hover) light up — the app otherwise
-            // only sends presses. NOT during a drag: otherwise pane rows would light
-            // their hover as if droppable, contradicting the source-aware drop
-            // indicator (a column drag targets columns, not the panes inside them).
+            // only sends presses.
+            //
+            // ⚠️ **A drag is NOT a reason to withhold this.** The move is what *drives* a drag in
+            // flight: the framework reads the cursor position for the picture that follows it, runs
+            // `DragEnter`/`DragOver` to mark the target and pick before/after/onto, and re-reads the
+            // modifiers that decide move versus swap. Hold the move back and the gesture freezes
+            // where it started — the one move that crosses the threshold gets through, and nothing
+            // after it does. Hover is no reason either: the framework lights nothing under a drag
+            // (guard `a_drag_in_flight_clears_hover`).
+            if !mouse::is_resizing(state) {
+                crate::chrome::chrome_dispatch_move(state, pos);
+            }
+            // The pane header and the pane viewport are their OWN retained trees, which a drag in
+            // the window root does not reach — so they are still told to stay dark while something
+            // is being carried, which is what keeps "nothing hovers under a drag" true for them.
             let mut pane_viewport_over = false;
             if !crate::chrome::drag_in_flight(state) && !mouse::is_resizing(state) {
-                crate::chrome::chrome_dispatch_move(state, pos);
                 // Feed the move into the retained pane-info-bar headers so the action
                 // buttons' hover affordance lights up (repaint via mark_full_redraw below).
                 crate::chrome::dispatch_pane_header_move(state, pos);

@@ -228,3 +228,50 @@ fn the_key_funnel_delivers_releases_and_not_only_presses() {
          This is not caught by any behaviour test: they dispatch both halves themselves.",
     );
 }
+
+/// **The move that drives a drag must not be gated on a drag being in flight.**
+///
+/// A drag is not a state the host maintains alongside the pointer — it is a thing the framework
+/// runs *out of* pointer moves. Each move that reaches the tree is what moves the picture under the
+/// cursor, re-runs `DragEnter`/`DragOver` to mark the target and pick before/after/onto, and
+/// re-reads the modifiers that decide move versus swap. Withhold the move and the gesture freezes:
+/// the one move that crosses the threshold gets through — the gate was still false when it was
+/// tested — and nothing after it does.
+///
+/// It shipped exactly that way. The guard had asked whether the app's own drag machine was running,
+/// and that machine had stopped being set the moment rows took over their own dragging, so the
+/// answer was always "no" and the dispatch always ran. Re-pointing the same question at the tree
+/// made it truthful, and truthful is what broke it: the preview stuck where it was picked up and
+/// the target marks stopped moving, with the whole suite green.
+///
+/// Hover was the reason the gate was written, and it is not a reason any more: the framework lights
+/// nothing under a drag (`a_drag_in_flight_clears_hover`). A lint, like its neighbours: what it
+/// guards is *absence*, and the absence is of an event nobody sent.
+#[test]
+fn the_move_that_drives_a_drag_is_not_withheld_while_dragging() {
+    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let body = branch_body(&src, "WindowEvent::CursorMoved").expect("the move branch");
+
+    let call = body
+        .find("chrome_dispatch_move")
+        .expect("the move branch no longer feeds the window tree — move this guard with it");
+
+    // Everything the call is nested inside: the last `if` opened before it still decides whether it
+    // runs, so that is the condition to read.
+    let guard = body[..call]
+        .rfind("if ")
+        .map(|i| &body[i..call])
+        .unwrap_or("");
+
+    assert!(
+        !guard.contains("drag_in_flight"),
+        "`chrome_dispatch_move` is gated on a drag being in flight.\n\
+         That is backwards: the move is what DRIVES the drag. Withholding it freezes the picture \
+         under the cursor where it was picked up, stops `DragOver` so the insertion line and the \
+         swap outline never move, and stops the modifiers being re-read so Shift no longer switches \
+         move to swap.\n\
+         Hover is not a reason to hold it back — the framework lights nothing under a drag \
+         (`a_drag_in_flight_clears_hover`). Gate the OTHER trees if they need it; this one must \
+         always be fed.",
+    );
+}
