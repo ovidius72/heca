@@ -16,7 +16,7 @@
 //! `.draggable()` and `.drop_target()` and writes nothing else, and a plugin's row is identical
 //! because there is nothing for it to miss.
 
-use crate::drag::DropSide;
+use crate::drag::{DropAction, DropSide};
 use crate::event::Modifiers;
 use std::cell::RefCell;
 
@@ -34,8 +34,12 @@ pub struct Dropped {
     pub target: String,
     /// Where in the target it landed — before it, onto it, or after it.
     pub side: DropSide,
-    /// The modifiers held at the release. The library has no opinion on what they mean; heca reads
-    /// Shift as "swap these two".
+    /// **What this drop does** — move or swap. Already decided, from the one place that decides it
+    /// ([`DropAction`]), so a host acts on it instead of reading a modifier and reaching its own
+    /// conclusion. That second reading is how the swap outline and the swap itself came apart.
+    pub action: DropAction,
+    /// Everything held at the release, for a host with a convention of its own beyond move/swap.
+    /// Prefer [`action`](Self::action) for that distinction — it is the shared answer.
     pub modifiers: Modifiers,
 }
 

@@ -213,7 +213,6 @@ pub(crate) fn handle_window_event(
         }
         WindowEvent::ModifiersChanged(new_mods) => {
             state.modifiers = new_mods.state();
-            mouse::on_modifiers_changed(state);
             // Announce it to the whole tree so a self-contained widget (a `Dialog`) can do
             // Shift+Tab / Ctrl+h-l itself — its `Event::Key` carries no modifiers.
             //
@@ -221,8 +220,15 @@ pub(crate) fn handle_window_event(
             // broadcasts it. Picking the front-most modal out of the registry and delivering only
             // there meant every other surface — a dock, a menu, a plugin's panel — tracked
             // modifiers only when it happened to be the thing in front.
+            //
+            // ⚠️ **Told before anyone is asked.** The framework records what is held from this
+            // announcement, and the app's own reaction below asks it what a drag now means
+            // (`DropAction::held`). Reacting first asks the question before the answer has been
+            // given, so the drag's move-versus-swap trails one modifier event behind — flipping
+            // when the key comes UP rather than when it goes down (F003/P097/T496).
             let mods = grid_modifiers(state.modifiers);
             let _ = heca_grid_ui::dispatch(&mut state.window_root, &Event::ModifiersChanged(mods));
+            mouse::on_modifiers_changed(state);
             // Refresh the cursor affordance: pressing/releasing Cmd over a link
             // toggles the pointer cue even without pointer movement.
             mouse::update_cursor(state, state.mouse.pos);

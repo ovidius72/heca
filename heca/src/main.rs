@@ -145,6 +145,9 @@ impl HecaApp {
         // reported **once**, after the components have registered too (see `resumed`).
         let mut conflicts = crate::app::conflicts::Conflicts::default();
         let keymaps = build_keymaps(&app_config.config, &mut conflicts);
+        // Which modifier means "swap these two" is a user setting, not a constant compiled into a
+        // widget library — and it must not be the key that starts the drag.
+        crate::app::conflicts::settle_drag_modifiers(&app_config.config.settings, &mut conflicts);
 
         Self {
             state: None,
@@ -185,6 +188,11 @@ impl HecaApp {
                 ..Default::default()
             };
             self.keymaps = build_keymaps(&self.app_config.config, &mut conflicts);
+            // Re-settled from the file, like the keymaps beside it.
+            crate::app::conflicts::settle_drag_modifiers(
+                &self.app_config.config.settings,
+                &mut conflicts,
+            );
             self.conflicts = conflicts;
             // The layers were just rebuilt from a file that knows nothing about a plugin mounted
             // afterwards, so a reload would otherwise silently unbind every key it registered.

@@ -17,6 +17,65 @@ use crate::component::Component;
 use crate::reactive::SignalGet;
 use heca_core::layout::{Point, Rectangle};
 
+/// **What a drop does** — the drag API's own answer, so nobody works it out twice.
+///
+/// A drag has always had two meanings: put this *where* I am pointing, or *exchange* it with what
+/// is there. Which one it is comes from the modifiers, and the rule was written in two places at
+/// once — the framework painted a swap outline on Shift, and the host separately read Shift off the
+/// drop to decide what to do. Two copies of one convention, free to disagree, and they did: the
+/// outline promised a swap while the drop performed a move (Antonio, driving, 2026-09-02).
+///
+/// So the rule lives here, where the gesture already lives. Ask [`DropAction::held`] or read it off
+/// the [`Dropped`](crate::drag::Dropped) — never re-derive it from a modifier.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DropAction {
+    /// Put the dragged thing at the drop position, taking it out of where it was.
+    Move,
+    /// Exchange the dragged thing with what it landed on; both keep a place.
+    Swap,
+}
+
+type SwapRule = Box<dyn Fn(crate::event::Modifiers) -> bool>;
+
+thread_local! {
+    /// How the host spells "swap". `None` until it says, and Shift until then.
+    static SWAP_RULE: std::cell::RefCell<Option<SwapRule>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// **Say which modifier means swap.** Call once at startup, like the sinks beside it.
+///
+/// A modifier is a *binding*, and a binding is data a user sets — so it cannot be a constant
+/// compiled into a widget library. Shift is only the default, and a host whose own drag gesture
+/// already claims Shift needs to be able to say so rather than live with two meanings on one key.
+///
+/// ```ignore
+/// heca_grid_ui::drag::set_swap_rule(|m| m.alt);
+/// ```
+pub fn set_swap_rule(rule: impl Fn(crate::event::Modifiers) -> bool + 'static) {
+    SWAP_RULE.with(|r| *r.borrow_mut() = Some(Box::new(rule)));
+}
+
+impl DropAction {
+    /// What the modifiers currently held mean for a drop — **the one place that is decided**, for
+    /// the framework's own drag feedback and for whatever the host does with the drop.
+    pub fn held() -> Self {
+        let swap = SWAP_RULE.with(|r| match r.borrow().as_ref() {
+            Some(rule) => rule(crate::event::modifiers()),
+            None => crate::event::modifiers().shift,
+        });
+        match swap {
+            true => Self::Swap,
+            false => Self::Move,
+        }
+    }
+
+    /// Whether this is a swap, for a caller that wants a bool.
+    pub fn is_swap(self) -> bool {
+        matches!(self, Self::Swap)
+    }
+}
+
 /// Where, relative to a drop target, a drop would land. The app decides what each
 /// means (insert before/after a sibling, or drop *onto* a container).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -204,6 +263,92 @@ fn drag_identity(root: &dyn Component, node: &dyn Component, path: &[usize]) -> 
 
 #[cfg(test)]
 mod tests {
+    /// **Which modifier means swap is the host's to say.** It is a binding, and a binding is data
+    /// a user sets — so it cannot be a constant compiled into a widget library. Shift is only the
+    /// default.
+    #[test]
+    fn the_host_says_which_modifier_means_swap() {
+        use crate::component::dispatch;
+        use crate::event::{Event, Modifiers};
+
+        let mut root = Flex::column();
+        let mut hold = |m: Modifiers| {
+            dispatch(&mut root, &Event::ModifiersChanged(m));
+            DropAction::held()
+        };
+        let shift = Modifiers { shift: true, ..Modifiers::default() };
+        let alt = Modifiers { alt: true, ..Modifiers::default() };
+
+        assert_eq!(hold(shift), DropAction::Swap, "Shift by default");
+
+        crate::drag::set_swap_rule(|m| m.alt);
+        assert_eq!(hold(alt), DropAction::Swap, "the host moved swap onto Alt");
+        assert_eq!(hold(shift), DropAction::Move, "and Shift stopped meaning it");
+
+        // A host whose own gesture claims every candidate can say nothing means swap.
+        crate::drag::set_swap_rule(|_| false);
+        assert_eq!(hold(shift), DropAction::Move);
+        assert_eq!(hold(alt), DropAction::Move);
+
+        crate::drag::set_swap_rule(|m| m.shift);
+    }
+
+    /// **The outline and the drop must never disagree.** Move-versus-swap is one decision, so the
+    /// picture the framework paints and the answer the host acts on come from the same place.
+    ///
+    /// They did disagree: the framework painted a swap outline when Shift was down while the host
+    /// separately read the modifier off the drop — and the host's copy was reached through a path
+    /// that had lost the modifiers entirely, so the outline promised a swap and the drop performed
+    /// a move (Antonio, driving, 2026-09-02).
+    #[test]
+    fn what_a_drop_does_is_decided_in_one_place() {
+        use crate::component::dispatch;
+        use crate::event::{Event, Modifiers};
+
+        let mut root = Flex::column();
+        let mut held = |shift: bool| {
+            dispatch(
+                &mut root,
+                &Event::ModifiersChanged(Modifiers { shift, ..Modifiers::default() }),
+            );
+            DropAction::held()
+        };
+
+        assert_eq!(held(true), DropAction::Swap, "Shift down means swap");
+        assert!(held(true).is_swap());
+        assert_eq!(held(false), DropAction::Move, "Shift up means move");
+        assert!(!held(false).is_swap());
+    }
+
+    /// **A pointer event does not carry the modifiers; the framework fills them in.**
+    ///
+    /// The host has more than one place it feeds a tree from, and "remember to attach the
+    /// modifiers" is a rule some of them always forget — silently, because an event built without
+    /// them says "nothing held", which is a real answer. So a drop read as a plain move however
+    /// hard Shift was pressed, and every test that built its own event still passed.
+    #[test]
+    fn a_pointer_event_built_without_modifiers_still_knows_what_is_held() {
+        use crate::component::dispatch;
+        use crate::event::{Event, Modifiers, PointerButton};
+
+        let mut root = Flex::column();
+        root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 80.0));
+        dispatch(
+            &mut root,
+            &Event::ModifiersChanged(Modifiers { shift: true, ..Modifiers::default() }),
+        );
+
+        // Built the way every host convenience constructor builds one: no modifiers attached.
+        let ev = Event::pointer_pressed(Point::new(50.0, 40.0), PointerButton::Left);
+        dispatch(&mut root, &ev);
+
+        assert_eq!(
+            DropAction::held(),
+            DropAction::Swap,
+            "an event that carried no modifiers must not erase what the host announced",
+        );
+    }
+
     use super::*;
     use crate::builders::ComponentExt;
     use crate::widgets::{Flex, Surface};

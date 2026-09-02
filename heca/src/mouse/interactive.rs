@@ -29,7 +29,11 @@ pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
 /// Enters the rubberband threshold phase. The pane stays in layout with
 /// a dampened offset until the cursor moves beyond the threshold.
 pub(super) fn start_interactive_move(state: &mut AppState, pane_id: PaneId, mouse_pos: (f32, f32)) {
-    let swap = state.modifiers.shift_key();
+    // **Not read off the modifiers here.** Move-versus-swap is one decision for every drag in the
+    // app, and it is the drag API's — so this gesture cannot end up meaning something the outline
+    // the framework paints disagrees with, and it follows a reconfigured modifier without being
+    // taught about it (F003/P097/T496).
+    let swap = heca_grid_ui::drag::DropAction::held().is_swap();
     state.mouse.interactive_move = Some(InteractiveMovePhase::Starting {
         pane_id,
         original_ws: state.session.active_workspace_idx,
@@ -87,10 +91,10 @@ pub(super) fn reset_interactive_move_offset(state: &mut AppState) {
     }
 }
 
-/// Keep an interactive move in sync with the Shift modifier, so it can switch live while the button
-/// is held.
+/// Keep an interactive move in sync with the swap modifier, so it can switch live while the button
+/// is held. What the modifier *means* is the drag API's answer, not this module's.
 pub(super) fn sync_drag_swap_mode(state: &mut AppState) {
-    set_drag_swap_mode(state, state.modifiers.shift_key());
+    set_drag_swap_mode(state, heca_grid_ui::drag::DropAction::held().is_swap());
 }
 
 // ── Cursor-move handlers (called from drag::on_cursor_moved) ─────────────

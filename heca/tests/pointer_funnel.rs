@@ -275,3 +275,38 @@ fn the_move_that_drives_a_drag_is_not_withheld_while_dragging() {
          always be fed.",
     );
 }
+
+/// **The tree is told what is held before anyone is asked what it means.**
+///
+/// The framework records the modifier state from the `ModifiersChanged` broadcast, and the app's
+/// own reaction to that same event asks it what a drag now means (`DropAction::held`). Reacting
+/// before announcing asks the question before the answer exists, so the answer is the *previous*
+/// one: a drag's move-versus-swap trails one event behind and flips when the key comes up instead
+/// of when it goes down.
+///
+/// A lint, like its neighbours, and for the same reason — what it guards is an *ordering*, and the
+/// symptom is a value that is merely stale rather than an event that is missing.
+#[test]
+fn the_tree_learns_the_modifiers_before_the_app_reacts_to_them() {
+    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let body = branch_body(&src, "WindowEvent::ModifiersChanged").expect("the modifiers branch");
+
+    // The *call*, not the event name: `WindowEvent::ModifiersChanged` — the branch head itself —
+    // ends with the string `Event::ModifiersChanged`, so matching on that finds position zero and
+    // the check passes whatever the order is. It did, until the guard was run against the bug it
+    // was written for.
+    let announced = body
+        .find("heca_grid_ui::dispatch(")
+        .expect("the modifiers branch no longer announces to the tree — move this guard with it");
+    let reacted = body
+        .find("on_modifiers_changed")
+        .expect("the modifiers branch no longer reacts — move this guard with it");
+
+    assert!(
+        announced < reacted,
+        "the app reacts to a modifier change BEFORE telling the tree about it.\n\
+         Everything that asks what a modifier means now reads the framework's record of what is \
+         held, so asking before announcing returns the state from the previous event: a drag \
+         switches between move and swap one keystroke late, on the release rather than the press.",
+    );
+}

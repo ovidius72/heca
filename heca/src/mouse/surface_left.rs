@@ -308,7 +308,8 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
     // Reset drag offset so layout positions are correct for removal.
     crate::mouse::interactive::reset_interactive_move_offset(state);
 
-    let shift_held = state.modifiers.shift_key();
+    // The same one answer the sidebar's own drops and the framework's outline use.
+    let shift_held = heca_grid_ui::drag::DropAction::held().is_swap();
 
     match item {
         ChromeDragItem::Pane(target_pid) if shift_held => {

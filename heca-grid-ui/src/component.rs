@@ -1330,16 +1330,16 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
 /// drag that looked like nothing at all until the app was taught about it.
 ///
 /// **What a widget may still decide** is what it *is*: `Onto` versus an insertion line comes from
-/// where the pointer sits in the target, and the modifiers ride along for a host convention (heca
-/// reads Shift as "swap these two"). The library has no opinion on what a modifier means; it only
-/// makes sure the widget can answer.
+/// where the pointer sits in the target. Whether the drop moves or swaps is not the widget's to
+/// work out — it asks [`DropAction::held`](crate::drag::DropAction::held), the same answer the drop
+/// itself carries, so the outline never promises something the drop will not do.
 fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
     let b = c.base();
     if b.pointer.is_drag_over() {
         let bounds = b.bounds;
-        match b.pointer.drag_modifiers().shift {
-            true => cx.swap_indicator(bounds),
-            false => cx.drop_indicator(bounds, b.pointer.drag_side()),
+        match crate::drag::DropAction::held() {
+            crate::drag::DropAction::Swap => cx.swap_indicator(bounds),
+            crate::drag::DropAction::Move => cx.drop_indicator(bounds, b.pointer.drag_side()),
         }
     }
     if b.pointer.is_dragging() {
@@ -1360,7 +1360,7 @@ fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
             Point::new(at.x + 10.0, at.y - h / 2.0),
             heca_core::layout::Size::new(w, h),
         );
-        cx.drag_ghost(rect, &text, b.pointer.drag_modifiers().shift);
+        cx.drag_ghost(rect, &text, crate::drag::DropAction::held().is_swap());
     }
 }
 

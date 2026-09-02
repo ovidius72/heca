@@ -47,7 +47,7 @@
 use crate::component::{Base, Component};
 use crate::drag::DropSide;
 use crate::event::{
-    DragEvent, Event, EventKind, Handled, Modifiers, PointerButton, PointerEvent, RawPointer,
+    DragEvent, Event, EventKind, Handled, PointerButton, PointerEvent, RawPointer,
     RawPointerKind,
 };
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
@@ -105,9 +105,6 @@ pub struct PointerState {
     /// picture that follows the cursor needs and layout cannot give: the source is still laid out
     /// where it was, and what follows the cursor is drawn somewhere else entirely.
     drag_pos: Cell<Point>,
-    /// The modifiers held during the drag, kept so a widget can answer them while drawing. The
-    /// library has no opinion on what they mean.
-    drag_mods: Cell<Modifiers>,
 }
 
 impl PointerState {
@@ -122,7 +119,6 @@ impl PointerState {
             drag_over: Cell::new(false),
             drag_side: Cell::new(DropSide::Onto),
             drag_pos: Cell::new(Point::new(0.0, 0.0)),
-            drag_mods: Cell::new(Modifiers::default()),
         }
     }
 
@@ -150,11 +146,6 @@ impl PointerState {
     /// Where the pointer is — meaningful only while [`is_dragging`](Self::is_dragging).
     pub fn drag_pos(&self) -> Point {
         self.drag_pos.get()
-    }
-
-    /// The modifiers held during the drag in flight.
-    pub fn drag_modifiers(&self) -> Modifiers {
-        self.drag_mods.get()
     }
 }
 
@@ -603,7 +594,6 @@ fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPointer) -> Ha
         // cursor is: its own bounds still say where it was picked up from.
         let p = &node_at(root, &source_path).base().pointer;
         p.drag_pos.set(raw.pos);
-        p.drag_mods.set(raw.modifiers);
     }
     let side = hit.as_ref().map_or(DropSide::Onto, |h| h.side);
     update_drag_over(
@@ -645,6 +635,7 @@ fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled {
                 source: item.clone(),
                 target: hit.key.clone(),
                 side: hit.side,
+                action: crate::drag::DropAction::held(),
                 modifiers: raw.modifiers,
             });
             handled = Handled::Yes;

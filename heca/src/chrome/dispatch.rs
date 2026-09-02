@@ -311,9 +311,10 @@ pub(crate) fn drain_pending_drops(state: &mut crate::app_state::AppState) {
         ) else {
             continue;
         };
-        // heca reads Shift as "swap these two". The framework reports the modifiers and has no
-        // opinion, which is what lets another host read them differently.
-        let swap = dropped.modifiers.shift;
+        // **Already decided.** Move or swap is the drag API's answer, from the one place that
+        // decides it — reading the modifier again here is what let the swap outline promise
+        // something this code then did not do (F003/P097/T496).
+        let swap = dropped.action.is_swap();
         match source {
             ChromeDragItem::Pane(pane_id) => {
                 let Some((ws_idx, _, _)) = crate::find_pane_location(&state.session, pane_id)
