@@ -4,10 +4,10 @@
 //! existing winit-driven behavior.
 
 use crate::actions::ActionRegistry;
-use crate::app::input::{KeyInputContext, handle_keyboard_input};
-use crate::app::interaction::{InteractionIntent, InteractionSource, dispatch_action};
+use crate::app::input::{handle_keyboard_input, KeyInputContext};
+use crate::app::interaction::{dispatch_action, InteractionIntent, InteractionSource};
 use crate::app::keyboard::{build_event_combo, is_prefix_match};
-use crate::app::mutations::{MutationKind, after_mutation_change};
+use crate::app::mutations::{after_mutation_change, MutationKind};
 use crate::app::render::{render_frame, update_session_viewport};
 use crate::app::terminal_host::{
     forward_mouse_button, forward_mouse_move, forward_mouse_wheel, notify_window_focus_changed,
@@ -272,8 +272,11 @@ pub(crate) fn handle_window_event(
             if !crate::chrome::drag_in_flight(state) && !mouse::is_resizing(state) {
                 // Feed the move into the retained pane-info-bar headers so the action
                 // buttons' hover affordance lights up (repaint via mark_full_redraw below).
-                crate::chrome::dispatch_pane_header_move(state, pos);
-                pane_viewport_over = crate::chrome::dispatch_pane_viewport_move(state, pos);
+                crate::chrome::deliver_to_pane_headers(state, &moved);
+                // Over one, or holding one: a thumb grabbed here keeps the pointer even when the
+                // cursor has left its bounds, and the terminal must not see the move either way.
+                pane_viewport_over = crate::chrome::deliver_to_pane_viewports(state, &moved)
+                    || crate::chrome::pane_viewport_at(state, pos);
             }
             // Don't forward moves to the terminal while resizing a divider or while a
             // retained viewport widget (badge / scrollbar) owns the pointer.
@@ -329,8 +332,7 @@ pub(crate) fn handle_window_event(
             if button == winit::event::MouseButton::Left
                 && button_state == ElementState::Pressed
                 && !mouse::interactive_move_modifier_held(state)
-                && let Some((_pane_id, true)) =
-                    crate::chrome::dispatch_pane_header_press(state, state.mouse.pos)
+                && crate::chrome::deliver_to_pane_headers(state, &ev)
             {
                 mouse::update_cursor(state, state.mouse.pos);
                 state.mark_full_redraw();
@@ -341,7 +343,7 @@ pub(crate) fn handle_window_event(
             if button == winit::event::MouseButton::Left
                 && button_state == ElementState::Pressed
                 && !mouse::interactive_move_modifier_held(state)
-                && crate::chrome::dispatch_pane_viewport_press(state, state.mouse.pos)
+                && crate::chrome::deliver_to_pane_viewports(state, &ev)
             {
                 mouse::update_cursor(state, state.mouse.pos);
                 state.mark_full_redraw();
@@ -364,9 +366,7 @@ pub(crate) fn handle_window_event(
             // Read before the release block below ends any resize drag, so a release that ended
             // one still counts as consumed and is not also forwarded to the terminal.
             let resize_before = mouse::is_resizing(state);
-            if button == winit::event::MouseButton::Left
-                && button_state == ElementState::Released
-            {
+            if button == winit::event::MouseButton::Left && button_state == ElementState::Released {
                 // **The divider resize ends here, at the same level its press started it.** It used
                 // to end inside `mouse::on_mouse_input`, which sits behind the viewport
                 // early-return below — so a release that a pane's scrollbar happened to claim (it
@@ -382,8 +382,8 @@ pub(crate) fn handle_window_event(
                 // chrome tree is unconditional: it consumes nothing it did not start, and gating a
                 // release on position is precisely how a thumb ends up welded to the cursor.
                 crate::chrome::deliver(state, &ev);
-                crate::chrome::dispatch_pane_header_release(state, state.mouse.pos);
-                if crate::chrome::dispatch_pane_viewport_release(state, state.mouse.pos) {
+                crate::chrome::deliver_to_pane_headers(state, &ev);
+                if crate::chrome::deliver_to_pane_viewports(state, &ev) {
                     mouse::update_cursor(state, state.mouse.pos);
                     state.mark_full_redraw();
                     return;
@@ -429,7 +429,7 @@ pub(crate) fn handle_window_event(
             // the terminal must not also scroll. A region gates on its own hover, so this is a
             // no-op whenever the pointer is over a pane.
             if crate::chrome::deliver(state, &wheel)
-                || crate::chrome::dispatch_pane_header_wheel(state, &wheel)
+                || crate::chrome::deliver_to_pane_headers(state, &wheel)
             {
                 state.mark_full_redraw();
                 return;

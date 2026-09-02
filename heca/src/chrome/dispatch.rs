@@ -56,73 +56,18 @@ pub(crate) fn dispatch_surface_pointer(
     true
 }
 
-/// Dispatch a pointer press at `pos` into the retained pane headers. Returns
-/// `Some((pane_id, consumed))` when the press lands inside a header's bounds:
-/// `consumed = true` if an action button handled it (caller must not forward to
-/// the terminal); `false` for the header band's empty area (caller focuses the
-/// pane, treating the band as chrome — no terminal selection). `None` off any header.
-pub(crate) fn dispatch_pane_header_press(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) -> Option<(PaneId, bool)> {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    // Collect candidate ids first (avoid holding the map borrow across the dispatch).
-    let hit = state
-        .pane_headers
-        .iter()
-        .find(|(_, h)| rect_contains(h.root.base().bounds, point))
-        .map(|(id, _)| *id)?;
-    let header = state.pane_headers.get_mut(&hit)?;
-    let consumed =
-        heca_grid_ui::dispatch(&mut header.root, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
-            == heca_grid_ui::Handled::Yes;
-    Some((hit, consumed))
-}
-
-/// Dispatch a pointer move at `pos` into the retained pane headers so the action
-/// buttons' hover affordance updates. Returns `true` if the pointer is over any
-/// header (the caller requests a repaint). Does not discard the trees (hover is
-/// transient and must persist across moves).
-pub(crate) fn dispatch_pane_header_move(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) -> bool {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    let mut over = false;
-    for header in state.pane_headers.values_mut() {
-        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::pointer_moved(point));
-        if rect_contains(header.root.base().bounds, point) {
-            over = true;
-        }
-    }
-    over
-}
-
-/// Feed a pointer release into the retained pane headers, so a gesture that started on one can end.
+/// **Give every pane header the event.** Returns whether one of them took it.
 ///
-/// The header seam had a press and a move and no release — the last of the four surfaces to be
-/// missing a kind. Nothing there grabs the pointer *today*, which is exactly why it went unnoticed:
-/// the first widget mounted here that does would have been broken on arrival, the same way a scroll
-/// region was in three other places. Not hit-tested, deliberately: a release ends the gesture
-/// wherever the cursor drifted to.
-pub(crate) fn dispatch_pane_header_release(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    for header in state.pane_headers.values_mut() {
-        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left));
-    }
-}
-
-/// Feed the wheel into the retained pane headers. Returns `true` when one consumed it.
+/// One function, not one per kind. The per-kind set that stood here rebuilt an event from a
+/// position at each call site and spelled `PointerButton::Left` into every one of them — so a
+/// right-click could not reach a pane header at all, and would have failed the way a missing kind
+/// always does: the widget lays out, paints and hit-tests perfectly while being dead
+/// (F003/P097/T496).
 ///
-/// Nothing in a header scrolls today. It is wired anyway, because "no widget here needs it yet" is
-/// the reasoning that produced every other missing kind.
-pub(crate) fn dispatch_pane_header_wheel(
-    state: &mut crate::app_state::AppState,
-    ev: &Event,
-) -> bool {
+/// Every header is offered it, not just the one under the pointer: the framework hit-tests within
+/// each tree, so only the header the event belongs to answers — and a release has to reach the one
+/// that started a gesture wherever the cursor has drifted to since.
+pub(crate) fn deliver_to_pane_headers(state: &mut crate::app_state::AppState, ev: &Event) -> bool {
     let mut handled = false;
     for header in state.pane_headers.values_mut() {
         handled |= heca_grid_ui::dispatch(&mut header.root, ev) == heca_grid_ui::Handled::Yes;
@@ -130,67 +75,31 @@ pub(crate) fn dispatch_pane_header_wheel(
     handled
 }
 
-/// Feed a pointer press into the retained terminal viewport widgets. Returns
-/// `true` when any widget consumed the press (badge click or scrollbar drag).
-pub(crate) fn dispatch_pane_viewport_press(
+/// **Give every pane's viewport widgets the event** — the scrollback badge and the scrollbar.
+/// Returns whether one took it. The same one door as the headers, for the same reasons.
+pub(crate) fn deliver_to_pane_viewports(
     state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
+    ev: &Event,
 ) -> bool {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    for widgets in state.pane_viewport_widgets.values_mut() {
-        if heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
-            == heca_grid_ui::Handled::Yes
-            || heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
-                == heca_grid_ui::Handled::Yes
-        {
-            return true;
-        }
-    }
-    false
-}
-
-/// Feed pointer motion into the retained terminal viewport widgets so hover and
-/// scrollbar drags update. Returns `true` if the pointer is over any widget.
-pub(crate) fn dispatch_pane_viewport_move(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) -> bool {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    let mut over = false;
-    for widgets in state.pane_viewport_widgets.values_mut() {
-        let badge_handled = heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_moved(point))
-            == heca_grid_ui::Handled::Yes;
-        let scrollbar_handled = heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_moved(point))
-            == heca_grid_ui::Handled::Yes;
-        if badge_handled || scrollbar_handled {
-            over = true;
-        }
-        if (widgets.badge.base().visible.get_untracked()
-            && rect_contains(widgets.badge.base().bounds, point))
-            || (widgets.scrollbar.base().visible.get_untracked()
-                && rect_contains(widgets.scrollbar.base().bounds, point))
-        {
-            over = true;
-        }
-    }
-    over
-}
-
-/// Feed a pointer release into the retained terminal viewport widgets so a
-/// scrollbar drag can end even when released outside its bounds.
-pub(crate) fn dispatch_pane_viewport_release(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) -> bool {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
     let mut handled = false;
     for widgets in state.pane_viewport_widgets.values_mut() {
-        handled |= heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left))
-            == heca_grid_ui::Handled::Yes;
-        handled |= heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left))
-            == heca_grid_ui::Handled::Yes;
+        handled |= heca_grid_ui::dispatch(&mut widgets.badge, ev) == heca_grid_ui::Handled::Yes;
+        handled |= heca_grid_ui::dispatch(&mut widgets.scrollbar, ev) == heca_grid_ui::Handled::Yes;
     }
     handled
+}
+
+/// **Is a viewport widget under this point?** A question about geometry, not about an event — which
+/// is why it is its own function rather than a return value bolted onto a move.
+///
+/// The caller keeps a move from reaching the terminal underneath while the pointer is over one.
+pub(crate) fn pane_viewport_at(state: &crate::app_state::AppState, pos: (f32, f32)) -> bool {
+    let point = Point::new(pos.0 as f64, pos.1 as f64);
+    state.pane_viewport_widgets.values().any(|w| {
+        (w.badge.base().visible.get_untracked() && rect_contains(w.badge.base().bounds, point))
+            || (w.scrollbar.base().visible.get_untracked()
+                && rect_contains(w.scrollbar.base().bounds, point))
+    })
 }
 
 fn rect_contains(r: Rectangle, p: Point) -> bool {
@@ -315,9 +224,8 @@ pub(crate) fn drag_in_flight(state: &crate::app_state::AppState) -> bool {
 /// state living on the widgets rather than in one router the host would have to own.
 pub(crate) fn cancel_every_tree(state: &mut crate::app_state::AppState, ev: &Event) {
     let _ = deliver(state, ev);
-    for header in state.pane_headers.values_mut() {
-        let _ = heca_grid_ui::dispatch(&mut header.root, ev);
-    }
+    let _ = deliver_to_pane_headers(state, ev);
+    let _ = deliver_to_pane_viewports(state, ev);
 }
 
 

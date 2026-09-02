@@ -164,12 +164,12 @@ pub(crate) fn settle_drag_modifiers(
     use heca_config::settings::ModifierKey;
 
     let start = settings.interactive_move_modifier;
-    let swap = ModifierKey::Shift;
+    let swap = settings.swap_modifier;
     if start == swap {
         conflicts.modifier(ModifierConflict {
             modifier: format!("{swap:?}"),
             kept: "settings.interactive_move_modifier".to_string(),
-            rejected: "the drag swap modifier".to_string(),
+            rejected: "settings.swap_modifier".to_string(),
             fallback: "no swap — every drag is a plain move".to_string(),
         });
         // Nothing means swap, rather than everything meaning it.

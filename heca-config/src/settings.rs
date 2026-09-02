@@ -75,6 +75,11 @@ fn default_auto_scroll_edge() -> bool {
     true
 }
 
+/// Shift is the near-universal "and swap them" modifier; it is a default, not a rule.
+fn default_swap_modifier() -> ModifierKey {
+    ModifierKey::Shift
+}
+
 /// Default gap between overview rows: a tenth of a screen height, niri's.
 fn default_overview_gap() -> f64 {
     0.1
@@ -321,6 +326,15 @@ pub struct SettingsConfig {
     /// Modifier key that must be held to initiate an interactive pane drag with the mouse.
     #[serde(default)]
     pub interactive_move_modifier: ModifierKey,
+    /// Modifier key that turns a drag from a **move** into a **swap** — dropping exchanges the two
+    /// things instead of placing one at the other's position. Applies to every drag alike: a row in
+    /// a sidebar, a pane carried across the content area, a plugin's own row.
+    ///
+    /// Must differ from [`interactive_move_modifier`](Self::interactive_move_modifier): one key
+    /// cannot both start a drag and change what it means, or every drag is a swap and a plain move
+    /// becomes unreachable. Heca reports the collision at startup and keeps the gesture.
+    #[serde(default = "default_swap_modifier")]
+    pub swap_modifier: ModifierKey,
     /// Center a single column even when it fits within the viewport.
     #[serde(default = "default_always_center_single_column")]
     pub always_center_single_column: bool,
@@ -440,6 +454,7 @@ impl Default for SettingsConfig {
             terminal_brights: None,
             auto_scroll_edge: default_auto_scroll_edge(),
             interactive_move_modifier: ModifierKey::default(),
+            swap_modifier: default_swap_modifier(),
             always_center_single_column: default_always_center_single_column(),
             center_focused_column: CenterFocusedColumn::default(),
             overview_zoom_from: default_overview_zoom_from(),
@@ -484,6 +499,7 @@ mod tests {
         assert_eq!(s.terminal_brights, None);
         assert!(s.auto_scroll_edge);
         assert_eq!(s.interactive_move_modifier, ModifierKey::Super);
+        assert_eq!(s.swap_modifier, ModifierKey::Shift);
         assert!(!s.always_center_single_column);
         assert!(s.shell_integration);
         assert_eq!(s.terminal_scrollback_lines, 3500);

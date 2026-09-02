@@ -81,13 +81,13 @@ fn the_chrome_tree_gets_the_release_and_the_wheel_too() {
         ),
         (
             "WindowEvent::MouseInput",
-            "dispatch_pane_header_release",
+            "crate::chrome::deliver_to_pane_headers(",
             "the pane headers were the last seam missing a kind — the first widget mounted there \
              with a gesture would have been broken on arrival",
         ),
         (
             "WindowEvent::MouseWheel",
-            "dispatch_pane_header_wheel",
+            "crate::chrome::deliver_to_pane_headers(",
             "nothing in a header scrolls yet, and \"nothing needs it yet\" is the reasoning that \
              produced every other missing kind",
         ),
@@ -199,13 +199,12 @@ fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
             "the button branch no longer ends the divider resize. It must: the press starts the \
              drag here, so the release has to end it here too, or the drag outlives the button.",
         );
-    let swallows = body
-        .find("dispatch_pane_viewport_release")
-        .expect("the viewport release moved — move this guard with it rather than deleting it");
-
+    // Searched FORWARD from where the resize ends, not from the top of the branch: the viewport
+    // widgets are given the press too, further up, and that call cannot swallow a release. What
+    // has to hold is that the swallowing call comes after the resize has been told.
     assert!(
-        ends < swallows,
-        "the divider resize is ended AFTER a branch that can return early and swallow the \
+        body[ends..].contains("crate::chrome::deliver_to_pane_viewports("),
+        "the divider resize is ended AFTER the branch that can return early and swallow the \
          release.\nA resize that is never told the button came up keeps resizing on every cursor \
          move, with nothing held down, until the pane is gone.",
     );
@@ -344,9 +343,22 @@ fn the_window_tree_has_one_door_and_not_a_function_per_kind() {
         "`deliver` is gone — if the one door moved, move this guard with it rather than deleting it",
     );
 
-    let per_kind: Vec<_> = ["_press(", "_release(", "_move(", "_wheel(", "_cancelled("]
+    // Every tree the host mounts: the window root, the pane headers, the pane viewports. Each gets
+    // the event the loop built; none gets a function per kind. The header and viewport sets were
+    // the last per-kind survivors, and each spelled `PointerButton::Left` into every call — so a
+    // right-click could not reach a pane header at all.
+    let per_kind: Vec<_> = ["press", "release", "move", "wheel", "cancelled"]
         .iter()
-        .filter(|suffix| src.contains(&format!("fn chrome_dispatch{suffix}")))
+        .flat_map(|kind| {
+            [
+                "chrome_dispatch_",
+                "dispatch_pane_header_",
+                "dispatch_pane_viewport_",
+            ]
+            .iter()
+            .map(move |prefix| format!("fn {prefix}{kind}("))
+        })
+        .filter(|sig| src.contains(sig.as_str()))
         .collect();
     assert!(
         per_kind.is_empty(),

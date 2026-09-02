@@ -48,10 +48,9 @@ pub(crate) use scene::{
     build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints, paint_search,
 };
 pub(crate) use dispatch::{
-    cancel_every_tree, deliver, dispatch_pane_header_move, dispatch_pane_header_press,
-    dispatch_pane_header_release, dispatch_pane_header_wheel, dispatch_pane_viewport_move,
-    dispatch_pane_viewport_press, dispatch_pane_viewport_release, dispatch_surface_pointer,
-    drag_in_flight, drain_pending_drops, drain_pending_menus, open_declared_menu_for_focus,
+    cancel_every_tree, deliver, deliver_to_pane_headers, deliver_to_pane_viewports,
+    dispatch_surface_pointer, drag_in_flight, drain_pending_drops, drain_pending_menus,
+    open_declared_menu_for_focus, pane_viewport_at,
 };
 mod layers_glue;
 pub(crate) use layers_glue::rebuild_named_layer;
