@@ -712,6 +712,16 @@ fn press_path(root: &dyn Component) -> Option<Path> {
     find(root, &|c| c.base().pointer.press.get().is_some())
 }
 
+/// **Is a drag in flight anywhere in this tree?**
+///
+/// The one question a host asks about a drag it does not own: while something is being carried, the
+/// cursor changes shape, nothing hovers, and a move must not reach the program in a pane. The app
+/// used to answer it from a drag machine of its own; the framework runs the gesture, so the
+/// framework answers (F003/P097/T496).
+pub fn dragging(root: &dyn Component) -> bool {
+    dragging_path(root).is_some()
+}
+
 /// The path to the widget currently dragging, if any.
 fn dragging_path(root: &dyn Component) -> Option<Path> {
     find(root, &|c| c.base().pointer.dragging.get())

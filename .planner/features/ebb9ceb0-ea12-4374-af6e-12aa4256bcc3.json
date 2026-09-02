@@ -44,8 +44,8 @@
   "dependsOn": [],
   "statusLog": [
     {
-      "id": "2505a4dd-d0d4-48e4-9d4d-e3e61d874e99",
-      "date": "2026-09-01T14:16:20.074Z",
+      "id": "0c184e39-9c7e-4b5f-93c6-caad13370ab9",
+      "date": "2026-09-01T15:40:31.641Z",
       "fromStatus": "planned",
       "toStatus": "in-progress",
       "title": "planned → in-progress",
@@ -53,6 +53,6 @@
     }
   ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-07-13T15:29:44.427Z",
+  "updatedAt": "2026-09-02T07:36:12.775Z",
   "sessionInfo": []
 }

@@ -37,7 +37,7 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
 }
 
 /// Whether a divider resize-drag is currently in flight. Callers gate the normal
-/// hover/forward paths on this (mirrors the `drag_ctx.is_dragging()` guard).
+/// hover/forward paths on this (mirrors the `chrome::drag_in_flight` guard).
 pub(crate) fn is_resizing(state: &AppState) -> bool {
     state.mouse.resize.is_some()
 }
@@ -53,7 +53,7 @@ pub(crate) fn update_cursor(state: &mut AppState, pos: (f32, f32)) {
     use winit::window::CursorIcon;
     // The cursor only signals grabbable/grabbed (there is no "swap" cursor); the
     // move-vs-swap distinction lives on the drag ghost + the on-target indicator.
-    let icon = if state.mouse.drag_ctx.is_dragging() {
+    let icon = if crate::chrome::drag_in_flight(state) {
         CursorIcon::Grabbing
     } else if let Some(resize_icon) = resize::cursor_for(state, pos) {
         // Active resize-drag → the drag axis; otherwise the divider under the cursor.
@@ -116,7 +116,7 @@ fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
 /// This keeps move/swap behavior live while the user presses or releases Shift.
 pub fn on_modifiers_changed(state: &mut AppState) {
     interactive::sync_drag_swap_mode(state);
-    if state.mouse.drag_ctx.is_dragging() || state.mouse.interactive_move.is_some() {
+    if crate::chrome::drag_in_flight(state) || state.mouse.interactive_move.is_some() {
         drag::on_cursor_moved(state, state.mouse.pos);
     }
 }

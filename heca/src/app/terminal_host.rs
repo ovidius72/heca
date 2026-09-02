@@ -95,7 +95,7 @@ fn fitted_grid_units(extent: f32, approx_cell: f32) -> usize {
 }
 
 pub(crate) fn forward_mouse_move(state: &mut AppState, pos: (f32, f32)) {
-    if state.mouse.interactive_move.is_some() || state.mouse.drag_ctx.is_dragging() {
+    if state.mouse.interactive_move.is_some() || crate::chrome::drag_in_flight(state) {
         return;
     }
 
@@ -177,7 +177,7 @@ pub(crate) fn forward_mouse_button(
         state.needs_redraw = true;
     }
 
-    if started_interactive_move(state, button, button_state) || state.mouse.drag_ctx.is_dragging() {
+    if started_interactive_move(state, button, button_state) || crate::chrome::drag_in_flight(state) {
         return;
     }
 
@@ -263,7 +263,7 @@ pub(crate) fn forward_mouse_button(
 }
 
 pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: MouseScrollDelta) {
-    if state.mouse.interactive_move.is_some() || state.mouse.drag_ctx.is_dragging() {
+    if state.mouse.interactive_move.is_some() || crate::chrome::drag_in_flight(state) {
         return;
     }
 

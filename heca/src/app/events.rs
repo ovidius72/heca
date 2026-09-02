@@ -252,7 +252,7 @@ pub(crate) fn handle_window_event(
             // their hover as if droppable, contradicting the source-aware drop
             // indicator (a column drag targets columns, not the panes inside them).
             let mut pane_viewport_over = false;
-            if !state.mouse.drag_ctx.is_dragging() && !mouse::is_resizing(state) {
+            if !crate::chrome::drag_in_flight(state) && !mouse::is_resizing(state) {
                 crate::chrome::chrome_dispatch_move(state, pos);
                 // Feed the move into the retained pane-info-bar headers so the action
                 // buttons' hover affordance lights up (repaint via mark_full_redraw below).

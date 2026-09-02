@@ -102,7 +102,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         after_config_change(state);
     }
 
-    if state.mouse.drag_ctx.is_dragging() || state.mouse.interactive_move.is_some() {
+    if crate::chrome::drag_in_flight(state) || state.mouse.interactive_move.is_some() {
         state.mark_full_redraw();
     }
 

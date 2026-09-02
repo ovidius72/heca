@@ -332,6 +332,16 @@ pub(crate) fn drain_pending_drops(state: &mut crate::app_state::AppState) {
     }
 }
 
+/// **Is something being dragged right now?** Asked by the cursor shape, by hover suppression and by
+/// whatever decides a move must not reach the program in a pane.
+///
+/// One place, so the eight callers that need it cannot drift, and it asks the tree — the framework
+/// runs the gesture, so it is the only thing that knows (F003/P097/T496). It replaces the app's own
+/// drag machine answering for itself, which stopped being true the moment a row owned its dragging.
+pub(crate) fn drag_in_flight(state: &crate::app_state::AppState) -> bool {
+    heca_grid_ui::dragging(&state.window_root)
+}
+
 /// Tell every retained tree the pointer is gone: hover clears, any capture or drag ends.
 ///
 /// One call per tree the host mounts, because each keeps its own hover — that is the point of the

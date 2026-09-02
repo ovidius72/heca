@@ -54,7 +54,7 @@ pub(crate) use dispatch::{
     chrome_dispatch_widget, dispatch_pane_header_move,
     dispatch_surface_pointer, dispatch_pane_header_press, dispatch_pane_header_release, dispatch_pane_header_wheel,
     dispatch_pane_viewport_move, dispatch_pane_viewport_press, dispatch_pane_viewport_release,
-    drain_pending_drops, drain_pending_menus, open_declared_menu_for_focus,
+    drag_in_flight, drain_pending_drops, drain_pending_menus, open_declared_menu_for_focus,
 };
 mod layers_glue;
 pub(crate) use layers_glue::rebuild_named_layer;

@@ -70,7 +70,7 @@ pub use event::{
 };
 pub use event::typed_text;
 pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
-pub use pointer::{PointerState, clear_hover, hit_test};
+pub use pointer::{PointerState, clear_hover, dragging, hit_test};
 pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};
 pub use hint::{
