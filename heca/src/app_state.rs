@@ -1,13 +1,11 @@
 use crate::app::backend_store::BackendStore;
 use crate::app::events::AppEvent;
 pub use crate::app::selection_model::SelectionState;
-use crate::input::WmAction;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
 use heca_config::programs::ProgramsConfig;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
-use heca_grid_ui::drag::DragContext;
 use heca_renderer::backdrop::Backdrop;
 use heca_renderer::background::BackgroundLayer;
 use heca_renderer::blur::Blur;
@@ -335,42 +333,12 @@ pub enum PickKind {
     FocusDock,
 }
 
-/// What a surface drag carries — the app payload `P` for
-/// [`DragContext<AppDragPayload>`]. The `heca-grid-ui` drag framework is
-/// payload-agnostic (generic over `P`); this struct is the *one* place the app's
-/// drag semantics live, keeping pane/workspace concepts out of the UI crate.
-///
-/// One variant per draggable sidebar source. Panes were first (1a/1b); columns
-/// arrive in F4.5 step 2. The drop *target* is resolved separately at release
-/// (see `ChromeDragItem`) — this is only what the in-flight drag carries.
-#[derive(Clone, Debug)]
-pub enum AppDragPayload {
-    /// A pane card dragged from the sidebar.
-    Pane {
-        /// The pane being dragged.
-        pane_id: PaneId,
-        /// Workspace the drag originated in.
-        origin_ws: usize,
-        /// If true, drop performs a swap instead of a move.
-        swap: bool,
-    },
-    /// A column (its `MarkerGroup` grip) dragged from the sidebar.
-    Column {
-        /// Workspace the column lives in (its origin).
-        ws: usize,
-        /// The column's index within that workspace.
-        col: usize,
-        /// If true, drop performs a swap instead of a move.
-        swap: bool,
-    },
-}
-
 /// State for the interactive content-area drag (pane moved by mouse).
 ///
-/// This is separate from the surface drag system (`DragContext`) because
-/// interactive move detaches a pane from the layout, shows a ghost pane
-/// following the cursor, and computes an insert hint — all content-area
-/// concepts that don't apply to sidebar/inspector surfaces.
+/// This is the app's own gesture, and the only one left: a dragged ROW is the framework's, which
+/// runs it and hands back a drop. Interactive move stays here because it detaches a pane from the
+/// layout, shows a ghost pane following the cursor and computes an insert hint — content-area
+/// concepts a widget knows nothing about.
 #[derive(Clone, Debug)]
 pub enum InteractiveMovePhase {
     /// Phase 1: rubberband — pane still in layout, waiting for threshold.
@@ -436,8 +404,6 @@ pub struct ResizeDrag {
 #[derive(Clone, Debug)]
 pub struct MouseState {
     pub pos: (f32, f32),
-    /// Surface drag coordinator (sidebar, inspector, etc.).
-    pub drag_ctx: DragContext<AppDragPayload>,
     /// In-flight column/pane divider resize-drag (`None` when not resizing).
     pub resize: Option<ResizeDrag>,
     /// Content-area interactive move state (separate from surface drags).
@@ -448,23 +414,17 @@ pub struct MouseState {
     pub insert_hint: Option<heca_core::layout::types::PaneInsertTarget>,
     /// Last time edge scroll was processed (for frame-rate independence).
     pub last_edge_scroll_time: Option<std::time::Instant>,
-    /// Pending click action when a sidebar drag doesn't exceed threshold.
-    /// Stored here instead of in `DragPhase` to keep the framework
-    /// dependency-free (no `WmAction` in `heca-grid-ui`).
-    pub pending_click_action: Option<WmAction>,
 }
 
 impl MouseState {
     pub fn new() -> Self {
         Self {
             pos: (0.0, 0.0),
-            drag_ctx: DragContext::new(),
             resize: None,
             interactive_move: None,
             detached_pane: None,
             insert_hint: None,
             last_edge_scroll_time: None,
-            pending_click_action: None,
         }
     }
 }

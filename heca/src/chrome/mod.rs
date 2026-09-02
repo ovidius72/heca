@@ -45,8 +45,7 @@ use scene::{
 #[cfg(test)]
 use scene::chrome_scene;
 pub(crate) use scene::{
-    build_chrome_root, paint_bell_flash, paint_chrome_root, paint_drag_overlay, paint_link_hints,
-    paint_search,
+    build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints, paint_search,
 };
 pub(crate) use dispatch::{
     chrome_dispatch_button_press, chrome_dispatch_button_release, chrome_dispatch_cancelled,
@@ -219,7 +218,6 @@ use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::drag::{DragPhase, DragSurfaceId};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
@@ -412,8 +410,8 @@ pub(crate) struct RetainedChrome {
     pub(crate) signals: ChromeSignals,
     /// Maps each draggable/droppable row's **own name** back to *what it is* (pane / column /
     /// workspace) — the component's own knowledge, kept beside the tree that wrote it. Populated
-    /// during [`build_chrome_root`] and queried by
-    /// [`sidebar_drag_source`]/[`sidebar_drop_target`]. A name is never parsed here.
+    /// during [`build_chrome_root`] and queried by [`sidebar_drag_source`], [`sidebar_item_at`]
+    /// and the drop the framework hands back. A name is never parsed here.
     pub(crate) drag_items: DragItemRegistry,
     /// **The [`InteractionSource`](crate::app::interaction::InteractionSource) every intent from
     /// this tree is dispatched with** — taken from the emitter that built it, never restated.
@@ -690,75 +688,6 @@ pub(crate) fn pane_drop_row(
         }
         ChromeDragItem::Column { .. } => None,
     }
-}
-
-/// The kind of thing being dragged — passed **explicitly** by the caller so drop
-/// resolution never depends on the live drag payload, which is already wiped to
-/// `Idle` by the time the release handler runs (`mouse.rs` `mem::replace`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum DragSourceKind {
-    /// A pane is being dragged.
-    Pane,
-    /// A column is being dragged.
-    Column,
-}
-
-/// Which drop-target kinds a given drag source may land on (F4.5 scope C). A pane
-/// drag targets panes **and workspaces** — a workspace is only the resolved target
-/// when the cursor is over its header/empty area (a pane card under the cursor is the
-/// deeper hit and wins), which is the one way to move a pane into an *empty* workspace
-/// (empty columns can't exist, so columns need no pane-drop target). A column drag
-/// targets columns + workspaces — **never** the nested pane cards, or the deepest hit
-/// would always be a pane and a column could never be dropped on another column.
-fn target_accepted_by(source: DragSourceKind, item: &ChromeDragItem) -> bool {
-    match source {
-        DragSourceKind::Pane => {
-            matches!(
-                item,
-                ChromeDragItem::Pane(_) | ChromeDragItem::Workspace { .. }
-            )
-        }
-        DragSourceKind::Column => {
-            matches!(
-                item,
-                ChromeDragItem::Column { .. } | ChromeDragItem::Workspace { .. }
-            )
-        }
-    }
-}
-
-/// Resolve the drop a drag of `source` kind would land on at `pos`, filtered to the
-/// target kinds it accepts (see [`target_accepted_by`]). `None` when no acceptable
-/// target is under the cursor.
-fn resolve_sidebar_drop(
-    state: &crate::app_state::AppState,
-    pos: (f32, f32),
-    source: DragSourceKind,
-) -> Option<(ChromeDragItem, heca_grid_ui::drag::DropHit)> {
-    let tree = state.chrome_tree.as_ref()?;
-    let accept = |key: &str| {
-        tree.drag_items
-            .get(key)
-            .is_some_and(|it| target_accepted_by(source, it))
-    };
-    let hit = heca_grid_ui::drag::resolve_at_filtered(
-        &state.window_root,
-        Point::new(pos.0 as f64, pos.1 as f64),
-        &accept,
-    )?;
-    let item = tree.drag_items.get(&hit.key).cloned()?;
-    Some((item, hit))
-}
-
-/// The drop target + [`DropSide`](heca_grid_ui::drag::DropSide) a drag of `source`
-/// kind at `pos` lands on, source-aware (see [`resolve_sidebar_drop`]). `None` off
-/// any acceptable item.
-pub(crate) fn sidebar_drop_target(
-    state: &crate::app_state::AppState,
-    pos: (f32, f32),
-    source: DragSourceKind,
-) -> Option<(ChromeDragItem, heca_grid_ui::drag::DropSide)> {
-    resolve_sidebar_drop(state, pos, source).map(|(item, hit)| (item, hit.side))
 }
 
 /// Hash of everything the chrome tree displays (window size, theme, status text,

@@ -1,14 +1,13 @@
-//! Mouse release handlers for drag-and-drop.
+//! What a release means, once the gesture that produced it has ended.
 //!
-//! Extracted from `on_mouse_input()` for clarity. Each function handles
-//! one release scenario: interactive move, sidebar drag, or sidebar drag starting.
+//! Two of them: an interactive move (a pane carried out of the content area), and a column dropped
+//! on something — the latter reached from the drop the framework hands back, not from the pointer.
 
-use crate::app::interaction::InteractionSource;
 use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::chrome::ChromeDragItem;
 use crate::input::WmAction;
 use heca_core::layout::PaneId;
-use heca_grid_ui::drag::{DragSurfaceId, DropSide};
+use heca_grid_ui::drag::DropSide;
 
 /// Handle release during an active interactive move (content-area drag).
 ///
@@ -35,11 +34,7 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
                     b_id: target_id,
                 },
             );
-        } else if super::target::surface_interactive_move_drop(
-            state,
-            DragSurfaceId::LeftSidebar,
-            pos,
-        ) {
+        } else if super::surface_left::handle_interactive_move_drop(state, pos) {
             // Sidebar drop handled as a move.
         } else if let Some(hint) = state.mouse.insert_hint.take() {
             // Fallback: move semantics in the content area.
@@ -47,7 +42,7 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
         } else {
             super::interactive::cancel_interactive_move(state);
         }
-    } else if super::target::surface_interactive_move_drop(state, DragSurfaceId::LeftSidebar, pos) {
+    } else if super::surface_left::handle_interactive_move_drop(state, pos) {
         // Sidebar drop handled.
     } else if let Some(hint) = state.mouse.insert_hint.take() {
         // Move mode: pane is still in layout. Remove it and
@@ -60,49 +55,6 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
 
     state.mouse.interactive_move = None;
     state.mouse.insert_hint = None;
-}
-
-/// Handle release during an active sidebar drag.
-pub(super) fn handle_sidebar_drag_release(
-    state: &mut AppState,
-    pane_id: PaneId,
-    original_ws: usize,
-    swap: bool,
-    pos: (f32, f32),
-) {
-    super::target::surface_accept_drop(
-        state,
-        DragSurfaceId::LeftSidebar,
-        pane_id,
-        original_ws,
-        swap,
-        pos,
-    );
-}
-
-/// Handle release during an active sidebar **column** drag (F4.5 step 2).
-///
-/// Resolves the drop target (source-aware: a column drag only hits columns /
-/// workspaces), then dispatches the matching action:
-/// - onto another **column** → `MoveColumn` (Before/After = which side), or
-///   `SwapColumns` when Shift is held;
-/// - onto a **workspace** → `MoveColumn` to the end of that workspace.
-///
-/// Resolves BEFORE cancelling — the source-aware filter reads the live payload.
-pub(super) fn handle_sidebar_column_drag_release(
-    state: &mut AppState,
-    src_ws: usize,
-    src_col: usize,
-    swap: bool,
-    pos: (f32, f32),
-) {
-    let target =
-        crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Column);
-    state.mouse.drag_ctx.cancel_all();
-    let Some((item, side)) = target else {
-        return;
-    };
-    column_drop(state, src_ws, src_col, swap, item, side);
 }
 
 /// **What dropping a column means** — told what it landed on, rather than hunting for it under the
@@ -196,21 +148,6 @@ fn column_move_dst_idx(
     } else {
         dst_col + 1
     }
-}
-
-/// Handle release during sidebar drag starting (threshold not exceeded).
-///
-/// If a pending click action was stored, dispatch it. Otherwise, just clear the drag state.
-pub(super) fn handle_sidebar_drag_starting_release(
-    state: &mut AppState,
-) -> Option<(WmAction, InteractionSource)> {
-    let click_action = state.mouse.pending_click_action.take();
-    state.mouse.drag_ctx.cancel_all();
-
-    if let Some(action) = click_action {
-        return Some((action, InteractionSource::MouseLeftSidebar));
-    }
-    None
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────

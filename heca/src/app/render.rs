@@ -988,12 +988,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let chrome_theme = crate::chrome::chrome_gui_theme(state);
     let mut chrome_scene =
         crate::chrome::paint_chrome_root(&mut state.window_root, w, h, &chrome_theme);
-    // F4.5 1b — in-drag visuals on the expanded sidebar: paint the drop indicator +
-    // ghost into the chrome scene so they sit ON TOP of the grid-ui shell. Width is 0
-    // when Hidden, so a positive width means Expanded.
-    if chrome.left_sidebar_width > 0.0 {
-        crate::chrome::paint_drag_overlay(state, &mut chrome_scene, w, h, &chrome_theme);
-    }
+    // **A drag draws itself.** The insertion line, the swap outline and the picture of the thing
+    // under the pointer are painted by the widgets the drag passes through, inside `paint_child` —
+    // so nothing opts in, and a plugin's own row gets the same feedback (F003/P097/T496). The host
+    // pass that drew this for the left sidebar alone is gone.
     // Follow-link keycaps (prefix+Shift+o) over the focused terminal's hyperlinks,
     // painted into the chrome scene so they sit above pane content. terminal-task-18.
     crate::chrome::paint_link_hints(state, &mut chrome_scene, w, h, &chrome_theme);

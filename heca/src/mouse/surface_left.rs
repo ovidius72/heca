@@ -1,10 +1,8 @@
-//! Left sidebar drag surface implementation.
+//! What a click or a drop MEANS in the left sidebar.
 //!
-//! Implements all surface dispatch functions for `DragSurfaceId::LeftSidebar`:
-//! hit testing, click routing, hover updates, and drop acceptance.
-//!
-//! This module absorbs the former `sidebar.rs` (click routing) and
-//! `sidebar_drop.rs` (drop logic) into a single surface handler.
+//! Hit testing, click routing and drop acceptance. Every entry point here is *told* what it landed
+//! on: finding a target under the pointer was the old machine's job, and the framework resolves it
+//! now (F003/P097/T496).
 
 use crate::app::pane_ops::{insert_pane_at_position, remove_pane_by_id};
 use crate::app_state::{AppState, InteractiveMovePhase};
@@ -12,7 +10,7 @@ use crate::chrome::{ChromeDragItem, default_column_width};
 use crate::input::WmAction;
 use heca_core::layout::types::Point;
 use heca_core::layout::{ColumnId, ColumnWidth, PaneId};
-use heca_grid_ui::drag::{DragSurfaceId, DropSide};
+use heca_grid_ui::drag::DropSide;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Geometry
@@ -389,12 +387,8 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
         }
     }
 
-    state.mouse.drag_ctx.cancel_all();
     state.mouse.interactive_move = None;
     state.mouse.insert_hint = None;
-    if let Some(s) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
-        s.hover_item = None;
-    }
     crate::app::mutations::after_layout_change(state);
     true
 }

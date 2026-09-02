@@ -1,5 +1,9 @@
 //! **Building and painting the chrome scene** — the root tree, the sidebar shell, and every
-//! drawing pass the host runs over it (drag overlay, bell flash, link hints, scrollback search).
+//! drawing pass the host runs over it (bell flash, link hints, scrollback search).
+//!
+//! ⚠️ A drag is **not** one of these passes. The insertion line, the swap outline and the picture
+//! of the thing under the pointer are drawn by the widgets the drag passes through, inside
+//! `heca_grid_ui::paint_child` — so nothing opts in and a plugin's row gets them free.
 //!
 //! ⚠️ The app must **never** draw a hint letter itself. A widget carrying a letter has it drawn by
 //! the framework inside `heca_grid_ui::paint_child`; a host pass that stamps its own keycap is the
@@ -430,60 +434,6 @@ pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiThem
         heca_grid_ui::paint_child(root, &mut cx);
     }
     scene
-}
-
-/// Paint the in-flight sidebar-drag overlay (drop indicator + ghost chip) into the
-/// chrome `scene`, on top of the **expanded** grid-ui sidebar (F4.5 1b). Driven by the
-/// retained-tree geometry (`resolve_at`) — not the legacy fixed-row hit-test — so the
-/// indicator tracks the real laid-out pane cards. No-op unless a sidebar drag is in its
-/// `Dragging` phase. The collapsed rail keeps its own hand-drawn ghost/highlight, so the
-/// caller only invokes this for the expanded sidebar.
-pub(crate) fn paint_drag_overlay(
-    state: &crate::app_state::AppState,
-    scene: &mut Scene,
-    w: f32,
-    h: f32,
-    theme: &GuiTheme,
-) {
-    let Some(surf) = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar) else {
-        return;
-    };
-    // During paint the drag is in flight (phase is still `Dragging`), so the live
-    // payload gives the source kind (for the source-aware filter) + the swap flag.
-    let (source, swap) = match &surf.phase {
-        DragPhase::Dragging { payload } => match payload {
-            crate::app_state::AppDragPayload::Pane { swap, .. } => (DragSourceKind::Pane, *swap),
-            crate::app_state::AppDragPayload::Column { swap, .. } => {
-                (DragSourceKind::Column, *swap)
-            }
-        },
-        _ => return,
-    };
-    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-
-    // Indicator on the hovered target, resolved with the *source-aware* filter (a
-    // column drag hints columns/workspaces, not the nested pane cards). A swap targets
-    // the WHOLE item (no before/after), so it uses the distinct swap indicator.
-    if let Some((_item, hit)) = resolve_sidebar_drop(state, state.mouse.pos, source) {
-        if swap {
-            cx.swap_indicator(hit.bounds);
-        } else {
-            cx.drop_indicator(hit.bounds, hit.side);
-        }
-    }
-
-    // Ghost chip following the cursor (offset off the pointer + vertically centered,
-    // mirroring the legacy hand-drawn ghost so the two paths look identical).
-    if let Some(label) = &surf.ghost_label {
-        let rect = Rectangle::new(
-            Point::new(
-                (label.x + 10.0) as f64,
-                (label.y - label.height / 2.0) as f64,
-            ),
-            Size::new(label.width as f64, label.height as f64),
-        );
-        cx.drag_ghost(rect, &label.text, swap);
-    }
 }
 
 /// Keycap glyph size (logical px) for follow-link hints — compact so a label sits

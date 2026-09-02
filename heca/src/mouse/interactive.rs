@@ -4,14 +4,25 @@
 //! starting (rubberband), moving (offset tracking), cancellation,
 //! and swap-mode synchronization.
 //!
-//! This is separate from the surface drag system (`DragContext`) because
-//! interactive move detaches a pane from the layout, shows a ghost pane
-//! following the cursor, and computes an insert hint — all content-area
-//! concepts that don't apply to sidebar/inspector surfaces.
+//! This is the app's **only** pointer gesture. Dragging a row — a pane, a column — is the
+//! framework's: the row says it can be dragged and `heca-grid-ui` runs the gesture, so there is
+//! nothing here about sidebars. Interactive move stays the app's because it detaches a pane from
+//! the layout, shows a ghost pane following the cursor and computes an insert hint — content-area
+//! concepts a widget knows nothing about.
 
 use heca_core::layout::{PaneId, Point};
 
-use crate::app_state::{AppDragPayload, AppState, InteractiveMovePhase};
+use crate::app_state::{AppState, InteractiveMovePhase};
+
+/// Route cursor movement to the interactive-move phase handlers: cross the threshold, then track
+/// the offset. The two are called in order because crossing the threshold in this same frame must
+/// still move the pane it just detached.
+pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
+    state.mouse.pos = pos;
+
+    handle_interactive_move_starting(state, pos);
+    handle_interactive_move_drag(state, pos);
+}
 
 /// Start an interactive move from a content-area pane.
 ///
@@ -59,7 +70,6 @@ pub(super) fn cancel_interactive_move(state: &mut AppState) {
     }
     state.mouse.interactive_move = None;
     state.mouse.insert_hint = None;
-    state.mouse.drag_ctx.cancel_all();
     crate::app::mutations::after_layout_change(state);
 }
 
@@ -77,10 +87,8 @@ pub(super) fn reset_interactive_move_offset(state: &mut AppState) {
     }
 }
 
-/// Keep the current drag operation in sync with the Shift modifier.
-///
-/// This updates both the content-area drag states and the surface drag
-/// states so the operation can switch live while the pointer is held down.
+/// Keep an interactive move in sync with the Shift modifier, so it can switch live while the button
+/// is held.
 pub(super) fn sync_drag_swap_mode(state: &mut AppState) {
     set_drag_swap_mode(state, state.modifiers.shift_key());
 }
@@ -174,23 +182,14 @@ pub(super) fn handle_interactive_move_drag(state: &mut AppState, pos: (f32, f32)
 
 // ── Internal helpers ─────────────────────────────────────────────────────
 
+/// Shift means swap, and it can be pressed or released mid-gesture. Only interactive move is asked:
+/// a dragged row reads the modifiers off the drop the framework hands back, so its swap flag is
+/// decided at the moment of release rather than tracked all the way through.
 fn set_drag_swap_mode(state: &mut AppState, swap: bool) {
-    // Interactive move
     match &mut state.mouse.interactive_move {
         Some(InteractiveMovePhase::Starting { swap: s, .. }) => *s = swap,
         Some(InteractiveMovePhase::Moving { swap: s, .. }) => *s = swap,
         None => {}
-    }
-    // Surface drags — the swap flag lives in the app payload, so reach it via the
-    // framework's generic `payload_mut` accessor (which spans Starting/Dragging).
-    for surface_state in state.mouse.drag_ctx.surfaces.values_mut() {
-        if let Some(payload) = surface_state.payload_mut() {
-            match payload {
-                AppDragPayload::Pane { swap: s, .. } | AppDragPayload::Column { swap: s, .. } => {
-                    *s = swap
-                }
-            }
-        }
     }
 }
 

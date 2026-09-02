@@ -1,20 +1,23 @@
 //! **Navigation keys** — a row's own identity, declared once and read by everything that has to
 //! name a row.
 //!
-//! A list-shaped component labels its rows with [`ComponentExt::key`]; the host then derives the
-//! keyboard cursor, the right-click target, and (later) the drag identity from that **one**
-//! declaration. Three readers, one thing said — instead of a closed enum of row kinds that only the
-//! app can extend, which is what made a plugin row impossible to point at.
+//! A list-shaped component labels its rows with [`ComponentExt::key`]; the keyboard cursor, the
+//! right-click target and the drag identity are all read off that **one** declaration. Three
+//! readers, one thing said — instead of a closed enum of row kinds that only the app can extend,
+//! which is what made a plugin row impossible to point at.
 //!
-//! # Why a string, when [`DragItemId`](crate::drag::DragItemId) is an opaque integer
+//! # Why a string, and not a token from a registry
 //!
-//! That one is a **registry slot**: the widget takes a token and the app keeps the map, valid for
-//! as long as the tree that registered it. A nav key is the opposite — it must **survive a tree
+//! A registry slot — the widget takes an opaque id and the app keeps the map — is valid only for as
+//! long as the tree that registered it. A nav key is the opposite: it must **survive a tree
 //! rebuild**, because a chrome tree is rebuilt for reasons that have nothing to do with navigation
 //! (a pane's git status changing is enough), and a cursor that resets every time is not a cursor.
 //! An index into a tree cannot do that; an identity the row asserts about itself can. This is also
 //! why a scoped [`FocusManager`](crate::focus::FocusManager) — a visit *index* — cannot be the
 //! cursor.
+//!
+//! A row need not be named at all: one that declares no key still has an identity derived from its
+//! **content**, so a capability is never gated on having been named.
 //!
 //! The key is **opaque to this library**: it is a string the component chose (`"pane:7"`,
 //! `"container:abc123"`), and nothing here parses it.

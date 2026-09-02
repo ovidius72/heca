@@ -72,7 +72,7 @@ pub use event::typed_text;
 pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use pointer::{PointerState, clear_hover, dragging, hit_test};
 pub use keymap::{KeyChord, KeyPress, Keymap};
-pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};
+pub use drag::{DropHit, DropSide, resolve_at, source_at};
 pub use hint::{
     clear_hints, collect_actions, collect_hints, fire_action, fire_hint, hint_intent, offer_hint,
     hint_targets_of, offer_hint_by_key, DeclaredAction, Hint,
@@ -111,7 +111,6 @@ pub mod prelude {
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers, WidgetIntent};
     pub use crate::event::{DragEvent, EventCx, EventKind, PointerButton, PointerEvent};
     pub use crate::keymap::{KeyChord, Keymap};
-    pub use crate::drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
     pub use crate::hint::{
         clear_hints, collect_actions, collect_hints, fire_action, fire_hint, hint_intent,
         hint_targets_of, offer_hint, offer_hint_by_key, Hint,

@@ -1,27 +1,27 @@
 //! Mouse interaction system.
 //!
-//! Handles focus-follows-mouse, click-to-focus, interactive drag-and-drop,
-//! and edge scrolling. All WM actions (focus, sidebar clicks) are returned
-//! as `Option<WmAction>` for the caller to dispatch via `registry.execute()`.
-//! Drag-and-drop state machine is managed internally since it involves
-//! mouse-specific state (detached pane, insert position).
+//! Focus-follows-mouse, click-to-focus, interactive move and edge scrolling. All WM actions (focus,
+//! sidebar clicks) are returned as `Option<WmAction>` for the caller to dispatch via
+//! `registry.execute()`.
+//!
+//! **Dragging a row is not here.** A row declares that it can be dragged and `heca-grid-ui` runs
+//! the gesture over the same tree it lays out and paints; the drop comes back through
+//! `chrome::drain_pending_drops`. What is left in this module is the content area's own gesture —
+//! interactive move, which detaches a pane — and divider resizing.
 
-mod drag;
 mod hit_test;
 mod interactive;
 pub(crate) mod release;
 mod render;
 pub(crate) mod resize;
 pub(crate) mod surface_left;
-mod target;
 
 use crate::app::interaction::InteractionSource;
 use crate::app::terminal_host::should_intercept_selection_gesture;
-use crate::app_state::{AppDragPayload, AppState, InteractiveMovePhase};
+use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::chrome::ChromeConfig;
 use crate::input::WmAction;
 use heca_core::layout::PaneId;
-use heca_grid_ui::drag::{DragPhase, DragSurfaceId};
 use winit::event::{ElementState, MouseButton};
 
 /// Handle cursor movement. Returns a `WmAction` if one should be dispatched
@@ -32,7 +32,7 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
     if state.mouse.resize.is_some() {
         return resize::on_drag_move(state, pos);
     }
-    drag::on_cursor_moved(state, pos);
+    interactive::on_cursor_moved(state, pos);
     None
 }
 
@@ -43,10 +43,10 @@ pub(crate) fn is_resizing(state: &AppState) -> bool {
 }
 
 /// Cursor policy: pick the OS cursor for the current state and apply it to the
-/// window — but only when it changes (cursor-moved fires very often). While a sidebar
-/// drag is in flight → `Grabbing`; hovering a draggable source (a pane card or a column
-/// grip, via [`sidebar_drag_source`](crate::chrome::sidebar_drag_source)) → `Grab`;
-/// otherwise the default arrow. `heca-grid-ui` stays cursor-free (it only emits a
+/// window — but only when it changes (cursor-moved fires very often). While anything is being
+/// dragged → `Grabbing`; hovering something that says it can be dragged (a pane card, a column
+/// grip — asked of the tree via [`sidebar_drag_source`](crate::chrome::sidebar_drag_source)) →
+/// `Grab`; otherwise the default arrow. `heca-grid-ui` stays cursor-free (it only emits a
 /// `Scene`) — the OS cursor is a host concern. General by design: add text/resize
 /// cursors here as more affordances arrive.
 pub(crate) fn update_cursor(state: &mut AppState, pos: (f32, f32)) {
@@ -117,7 +117,7 @@ fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
 pub fn on_modifiers_changed(state: &mut AppState) {
     interactive::sync_drag_swap_mode(state);
     if crate::chrome::drag_in_flight(state) || state.mouse.interactive_move.is_some() {
-        drag::on_cursor_moved(state, state.mouse.pos);
+        interactive::on_cursor_moved(state, state.mouse.pos);
     }
 }
 
@@ -177,43 +177,21 @@ pub fn on_mouse_input(
             // Each of the branches below returns early, so doing this later would mean repeating it
             // in every one of them and still missing the paths that consume.
 
-            // **No per-region press branches.** The right sidebar and the top bar each used to
-            // catch a press here and consume it, which is why a pane could be dragged in the left
-            // sidebar and not in the right one though it is the same component: the press never
-            // reached the row. A press goes to the tree like any other now, and whatever is under
-            // it answers (F003/P097/T496).
-
-            // **A draggable row is asked about first** (F003/P085/T368). A row consumes a press the
-            // moment it arrives (`Row` activates on mouse-down), so giving the retained tree first
-            // refusal meant a pane card always claimed the press and the drag below was never
-            // reached — panes stopped being draggable while columns, whose `MarkerGroup` consumes
-            // nothing, kept working.
+            // **The row answers its own press, and there is no branch here per region.** A press
+            // goes to the tree like any other, wherever it lands — a scrollbar thumb, a collapse
+            // caret, a button, a pane card in either sidebar. A row that says it can be dragged is
+            // dragged by the framework, and one whose press never crosses the threshold pairs with
+            // its release into a click, which is what focuses the pane.
             //
-            // The order was that way round because a scrollbar's *grab lane* used to reach 9px over
-            // the rows beside it, so resolving by geometry read a press meant for the thumb as a
-            // press on the pane behind it. That overlap is gone — a scroll region now reserves the
-            // whole lane, so the lane and the rows occupy different pixels — which is what makes
-            // asking geometry first correct again rather than merely convenient.
-            //
-            // For a draggable item the click effect is deferred to release (`pending_click_action`),
-            // so a press that never crosses the drag threshold still focuses the pane.
-            // **The row answers its own press.** This used to ask "is this a drag source?" first
-            // and start a drag of its own, which is the ordering that made the tree wait — and the
-            // reason dragging existed only where the app had been taught about it. A press goes to
-            // the tree; a row that says it can be dragged is dragged by the framework, and one
-            // that never crosses the threshold turns the press and the release into a click, which
-            // is what focuses the pane (F003/P097/T496).
-
-            // Nothing draggable here, so the retained tree has the press: a scrollbar thumb, a
-            // collapse caret, a button. It comes *after* the drag question now (see above) — the
-            // two can no longer be asking about the same pixel.
+            // Nothing is asked before the tree. The app used to take the press first to put its own
+            // question — is this a drag source? — which is what made dragging exist only where the
+            // app had been taught about it (F003/P097/T496).
             if crate::chrome::chrome_dispatch_press(state, pos) {
                 return None;
             }
 
             // Sidebar click.
-            let sidebar_action =
-                target::surface_click_action(state, DragSurfaceId::LeftSidebar, pos);
+            let sidebar_action = surface_left::click_action(state, pos);
 
             // Sidebar button clicks / non-pane item clicks dispatch immediately.
             if let Some(action) = sidebar_action {
@@ -244,41 +222,10 @@ pub fn on_mouse_input(
                 release::handle_interactive_move_release(state, pos);
                 return None;
             }
-            // Then check surface drags.
-            if let Some(active) = state.mouse.drag_ctx.active_surface {
-                match active {
-                    DragSurfaceId::LeftSidebar => {
-                        let left = state
-                            .mouse
-                            .drag_ctx
-                            .surface_mut(DragSurfaceId::LeftSidebar)
-                            .expect("LeftSidebar pre-populated in DragContext::default");
-                        let phase = std::mem::replace(&mut left.phase, DragPhase::Idle);
-                        match phase {
-                            DragPhase::Dragging { payload } => match payload {
-                                AppDragPayload::Pane {
-                                    pane_id,
-                                    origin_ws,
-                                    swap,
-                                } => {
-                                    release::handle_sidebar_drag_release(
-                                        state, pane_id, origin_ws, swap, pos,
-                                    );
-                                }
-                                AppDragPayload::Column { ws, col, swap } => {
-                                    release::handle_sidebar_column_drag_release(
-                                        state, ws, col, swap, pos,
-                                    );
-                                }
-                            },
-                            DragPhase::Starting { .. } => {
-                                return release::handle_sidebar_drag_starting_release(state);
-                            }
-                            DragPhase::Idle => {}
-                        }
-                    }
-                }
-            }
+            // **A dragged row's release is not handled here.** The framework pairs the press with
+            // the release, ends the gesture and hands back a drop naming what it landed on, which
+            // `chrome::drain_pending_drops` acts on. A release that crossed no threshold becomes a
+            // click by the same pairing, which is what focuses the pane (F003/P097/T496).
         }
         // Right-button fallback for divider resize: hold right-button on a pane to
         // resize along the nearer axis (for when the thin gap fights the terminal).
