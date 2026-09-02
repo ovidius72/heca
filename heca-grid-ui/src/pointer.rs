@@ -175,6 +175,15 @@ type Path = Vec<usize>;
 /// host reads to decide whether the input also belongs to whatever sits behind the tree (in heca,
 /// the terminal).
 pub fn route(root: &mut dyn Component, raw: &RawPointer) -> Handled {
+    // **The framework fills in what is held down; the caller never does.** Modifiers are device
+    // state, not a property of this event, and a host has more than one place it feeds a tree from
+    // — so "attach the modifiers here" is a rule some call site always forgets, silently, because
+    // "nothing held" is indistinguishable from "nobody asked". Read from the one place that is
+    // told (F003/P097/T496).
+    let raw = &RawPointer {
+        modifiers: crate::event::modifiers(),
+        ..*raw
+    };
     match raw.kind {
         RawPointerKind::Moved => route_move(root, raw),
         RawPointerKind::Pressed => route_press(root, raw),

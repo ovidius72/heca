@@ -474,11 +474,13 @@ fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
     } else {
         (dx_raw, dy_raw)
     };
+    // No modifiers attached: the framework fills in what is held down, from the
+    // `ModifiersChanged` this same loop broadcasts. Attaching them here is the second source of
+    // truth that let a drop disagree with its own outline (F003/P097/T496).
     let mut raw = RawPointer::new(
         RawPointerKind::Wheel,
         Point::new(state.mouse.pos.0 as f64, state.mouse.pos.1 as f64),
-    )
-    .with_modifiers(grid_modifiers(state.modifiers));
+    );
     raw.delta_x = delta_x;
     raw.delta_y = delta_y;
     Event::Raw(raw)
@@ -496,8 +498,7 @@ fn raw_pointer(state: &AppState, kind: RawPointerKind, button: PointerButton) ->
             kind,
             Point::new(state.mouse.pos.0 as f64, state.mouse.pos.1 as f64),
         )
-        .with_button(button)
-        .with_modifiers(grid_modifiers(state.modifiers)),
+        .with_button(button),
     )
 }
 

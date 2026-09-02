@@ -1077,6 +1077,13 @@ pub fn soonest_redraw(a: Option<f32>, b: Option<f32>) -> Option<f32> {
 /// wheel or a release. That is not a mistake anyone makes on purpose; it is what a hand-written
 /// list does over time. Now there is no list.
 pub fn dispatch(node: &mut dyn Component, ev: &Event) -> Handled {
+    // **What is held down is remembered here, once.** It is an announcement about the device, so it
+    // is recorded before it is passed on and everything else reads it from
+    // [`event::modifiers`](crate::event::modifiers) — instead of each widget keeping a private copy
+    // of the same broadcast and each pointer call site remembering to attach it.
+    if let Event::ModifiersChanged(m) = ev {
+        crate::event::remember_modifiers(*m);
+    }
     // The raw pointer stream is not delivered: it is resolved, once, and what it *means* is
     // delivered instead — to the widget under the pointer and then up its ancestors.
     if let Event::Raw(raw) = ev {

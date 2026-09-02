@@ -1520,6 +1520,10 @@ fn meta_backspace_and_delete_clear_to_boundary() {
         pressed: true,
     });
     assert_eq!(a.value_str(), "beta", "meta+backspace deletes to start");
+    // **Meta comes back up.** Modifiers are device state the framework keeps once, not a copy each
+    // widget owns, so a second field built here still sees what is held — exactly as a second field
+    // in the real app does. Releasing is the host's next event, so the test sends it.
+    heca_grid_ui::dispatch(&mut a, &Event::ModifiersChanged(Modifiers::default()));
 
     // Meta+Delete deletes from the caret to the end.
     let mut b = Input::new().value("alpha beta");
@@ -1537,6 +1541,7 @@ fn meta_backspace_and_delete_clear_to_boundary() {
         pressed: true,
     });
     assert_eq!(b.value_str(), "alpha", "meta+delete deletes to end");
+    heca_grid_ui::dispatch(&mut b, &Event::ModifiersChanged(Modifiers::default()));
 }
 
 #[test]

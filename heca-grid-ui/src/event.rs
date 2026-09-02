@@ -199,6 +199,36 @@ pub struct Modifiers {
     pub meta: bool,
 }
 
+thread_local! {
+    /// What is held down right now. Updated from the [`Event::ModifiersChanged`] broadcast, which
+    /// every host already sends, and read by everything that needs to know.
+    static HELD: std::cell::Cell<Modifiers> = const {
+        std::cell::Cell::new(Modifiers { ctrl: false, alt: false, shift: false, meta: false })
+    };
+}
+
+/// **What is held down right now.**
+///
+/// The modifiers are *device* state, not a property of each event, so the framework keeps them in
+/// one place and fills them in on every event it delivers. Nothing has to carry them, and nothing
+/// has to remember them.
+///
+/// It was the other way round and it was wrong twice over. A pointer event carried its own
+/// modifiers, which meant every host call site had to remember to attach them — and a host has more
+/// than one call site, so the ones that forgot sent "nothing held" with no way to tell: a drop
+/// resolved as a plain move however hard Shift was pressed. Meanwhile three widgets each kept a
+/// private copy of the same broadcast, which is the same rule written four times counting the
+/// plugin that comes next (F003/P097/T496).
+pub fn modifiers() -> Modifiers {
+    HELD.with(|m| m.get())
+}
+
+/// Record what the host just announced. Called by `dispatch` for every
+/// [`Event::ModifiersChanged`], so a widget never has to track this itself.
+pub(crate) fn remember_modifiers(m: Modifiers) {
+    HELD.with(|c| c.set(m));
+}
+
 /// Which pointer button an event is about.
 ///
 /// A press used to carry none, so a widget could not tell a right-click from a left one — which is
