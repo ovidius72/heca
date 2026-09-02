@@ -2716,7 +2716,7 @@ fn scroll_focused_dock(state: &mut AppState, intent: heca_grid_ui::WidgetIntent)
     if state.chrome_state.focused_container().is_none() {
         return false;
     }
-    crate::chrome::chrome_dispatch_widget(state, intent);
+    crate::chrome::deliver(state, &heca_grid_ui::Event::Widget(intent));
     state.needs_redraw = true;
     true
 }

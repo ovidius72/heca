@@ -35,26 +35,6 @@ fn sidebar_bounds(state: &AppState) -> (f32, f32, f32, f32) {
 //  Click routing
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Handle a click (press+release without drag) in the left sidebar.
-///
-/// The press goes into the **retained** chrome tree, whose widgets route their own intents through
-/// the app event loop. Nothing here resolves a row: the tree knows where its rows are.
-pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
-    let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-
-    if pos.0 >= sx
-        && pos.0 <= sx + sw
-        && pos.1 >= sidebar_top
-        && pos.1 <= sidebar_bottom
-        // The sidebar is Expanded whenever it is visible (there is no collapsed rail).
-        && state.chrome_state.left_visible()
-    {
-        let _ = crate::chrome::chrome_dispatch_press(state, pos);
-    }
-
-    None
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Hover
 // ═══════════════════════════════════════════════════════════════════════════════

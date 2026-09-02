@@ -197,62 +197,28 @@ fn rect_contains(r: Rectangle, p: Point) -> bool {
     p.x >= r.loc.x && p.x <= r.loc.x + r.size.w && p.y >= r.loc.y && p.y <= r.loc.y + r.size.h
 }
 
-/// Feed a pointer-press into the retained chrome tree so widget callbacks can route
-/// sidebar intents through the app event loop.
+/// **The one door into the window tree.** Every event the host gives the chrome goes through here.
 ///
-/// **The tree is kept.** It used to be dropped here (`chrome_tree = None`) to stop incidental
-/// widget-local state drifting from the canonical store — but that is a rebuild used as a reset,
-/// and it takes everything else with it. Nothing that spans two events can survive: a scrollbar
-/// grab, a scroll position, a hover. A scroll region in the sidebar was impossible for exactly this
-/// reason, not for any reason to do with scrolling.
+/// It takes the event the loop already built — one `Event::Raw` per device event — rather than a
+/// kind per call site. There used to be eight functions here, one per kind, each re-deriving from a
+/// position what the loop had just been told; a caller then picked which to call, and picking is
+/// how a kind goes missing. A widget with a gesture needs the whole set or it fails in a way
+/// nothing catches: a scroll region that never receives the release leaves its thumb welded to the
+/// cursor, and one that never receives the wheel simply does not scroll (F003/P097/T496).
 ///
-/// The drift it guarded against is already handled properly, twice over: the tree is rebuilt
-/// whenever `chrome_signature` changes (which is what a press that alters canonical state does),
-/// and `sync_chrome_signals` pushes value-state into the tree's bound signals every frame. State
-/// that must not drift belongs in one of those — in the store, read through a signal — which is the
-/// read-via-signals/write-via-actions rule this codebase already runs on.
-/// Returns `true` when a widget consumed the press — the caller must then treat it as spoken for
-/// and not also resolve it by geometry. That gate is what stops a press on the sidebar's scrollbar
-/// thumb being read as a press on the pane card behind it.
-pub(crate) fn chrome_dispatch_press(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) -> bool {
-    chrome_dispatch_button_press(state, pos, heca_grid_ui::PointerButton::Left)
-}
-
-/// The same, for a **named button** — so a right-press reaches the tree instead of being read off
-/// it from the outside.
+/// Returns whether a widget consumed it — a `false` is a legitimate answer, not a failure. The host
+/// uses it to decide whether the input **also** belongs to whatever sits behind the tree: `false`
+/// on a wheel is what lets the pane scroll instead of the sidebar, and on a press it is what stops
+/// a press on the sidebar's scrollbar thumb also reading as a press on the card behind it.
 ///
-/// A press carries its button now, which is what makes a widget able to answer a right-click at
-/// all. The app still has its own menu path behind this (F004/P084/T395 is what removes it); this
-/// is the door that lets a widget claim the press before any of that runs.
-pub(crate) fn chrome_dispatch_button_press(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-    button: heca_grid_ui::PointerButton,
-) -> bool {
-    heca_grid_ui::dispatch(
-        &mut state.window_root,
-        &Event::pointer_pressed(Point::new(pos.0 as f64, pos.1 as f64), button),
-    ) == heca_grid_ui::Handled::Yes
-}
-
-/// Deliver a **button release** to the chrome tree.
-///
-/// The other half of [`chrome_dispatch_button_press`], and not optional: the framework synthesises
-/// `Click` / `RightClick` from a press **and** a release on the same widget, so a host that
-/// delivers only presses produces no clicks at all — a declared context menu would never open, and
-/// a widget that captured the press would never learn the gesture ended.
-pub(crate) fn chrome_dispatch_button_release(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-    button: heca_grid_ui::PointerButton,
-) -> bool {
-    heca_grid_ui::dispatch(
-        &mut state.window_root,
-        &Event::pointer_released(Point::new(pos.0 as f64, pos.1 as f64), button),
-    ) == heca_grid_ui::Handled::Yes
+/// **The tree is kept.** A press used to drop it (`chrome_tree = None`) to stop widget-local state
+/// drifting from the canonical store — a rebuild used as a reset, which takes everything else with
+/// it. Nothing spanning two events could survive: a scrollbar grab, a scroll position, a hover. A
+/// scroll region in the sidebar was impossible for exactly that reason, nothing to do with
+/// scrolling. The drift is handled properly twice over: the tree rebuilds when `chrome_signature`
+/// changes, and `sync_chrome_signals` pushes value-state into its bound signals every frame.
+pub(crate) fn deliver(state: &mut crate::app_state::AppState, ev: &Event) -> bool {
+    heca_grid_ui::dispatch(&mut state.window_root, ev) == heca_grid_ui::Handled::Yes
 }
 
 /// **Open the menu declared nearest the focused widget**, bubbling outwards — the keyboard
@@ -347,8 +313,8 @@ pub(crate) fn drag_in_flight(state: &crate::app_state::AppState) -> bool {
 ///
 /// One call per tree the host mounts, because each keeps its own hover — that is the point of the
 /// state living on the widgets rather than in one router the host would have to own.
-pub(crate) fn chrome_dispatch_cancelled(state: &mut crate::app_state::AppState, ev: &Event) {
-    let _ = heca_grid_ui::dispatch(&mut state.window_root, ev);
+pub(crate) fn cancel_every_tree(state: &mut crate::app_state::AppState, ev: &Event) {
+    let _ = deliver(state, ev);
     for header in state.pane_headers.values_mut() {
         let _ = heca_grid_ui::dispatch(&mut header.root, ev);
     }
@@ -356,58 +322,3 @@ pub(crate) fn chrome_dispatch_cancelled(state: &mut crate::app_state::AppState, 
 
 
 
-/// Feed a pointer-release into the retained chrome tree, so a gesture that started there can end.
-///
-/// Without it a scrollbar thumb grabbed in the sidebar stays welded to the cursor — the widget is
-/// still waiting for the end of a gesture nobody told it about. Deliberately not hit-tested: a
-/// release ends the gesture wherever the cursor drifted to.
-pub(crate) fn chrome_dispatch_release(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
-    heca_grid_ui::dispatch(
-        &mut state.window_root,
-        &Event::pointer_released(
-            Point::new(pos.0 as f64, pos.1 as f64),
-            heca_grid_ui::PointerButton::Left,
-        ),
-    );
-}
-
-/// Feed the wheel into the retained chrome tree. Returns `true` when it was consumed — a hovered
-/// scroll region took it — so the caller leaves the terminal alone.
-pub(crate) fn chrome_dispatch_wheel(
-    state: &mut crate::app_state::AppState,
-    ev: &Event,
-) -> bool {
-    heca_grid_ui::dispatch(&mut state.window_root, ev) == heca_grid_ui::Handled::Yes
-}
-
-/// Feed a semantic [`WidgetIntent`](heca_grid_ui::WidgetIntent) into the retained chrome tree.
-///
-/// One intent goes to the **root**, not to a container the host picked: every mounted container sits
-/// inside a [`FocusScope`](heca_grid_ui::FocusScope), and only the focused one lets a
-/// `Event::Widget` into its subtree (F003/P085/T351). So the host says *what*, and the tree decides
-/// *where* — which is what keeps this working when a second dock is mounted, or the same dock is
-/// placed twice.
-///
-/// Returns `true` when something acted on it. A `false` is a legitimate answer, not a failure: a
-/// container with nothing scrollable **declines**, and the caller must not then fall through to the
-/// pane — the pane is not an outer scroll area of the sidebar.
-pub(crate) fn chrome_dispatch_widget(
-    state: &mut crate::app_state::AppState,
-    intent: heca_grid_ui::WidgetIntent,
-) -> bool {
-    heca_grid_ui::dispatch(&mut state.window_root, &Event::Widget(intent))
-        == heca_grid_ui::Handled::Yes
-}
-
-/// Feed a pointer-move into the retained chrome tree so its **hover affordances**
-/// update in the real app — the `MarkerGroup` grip brightening (the column's "grab
-/// me" cue) and `Row` hover. The app otherwise only dispatches `PointerPressed`, so
-/// these were inert in the sidebar though they work in the showcase. Unlike
-/// [`chrome_dispatch_press`] this does **not** discard the tree — hover is transient
-/// and must persist across moves; the caller already requests a repaint.
-pub(crate) fn chrome_dispatch_move(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
-    heca_grid_ui::dispatch(
-        &mut state.window_root,
-        &Event::pointer_moved(Point::new(pos.0 as f64, pos.1 as f64)),
-    );
-}

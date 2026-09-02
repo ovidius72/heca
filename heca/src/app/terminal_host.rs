@@ -407,11 +407,14 @@ pub(crate) fn notify_window_focus_changed(state: &mut AppState, focused: bool) {
 pub(crate) fn should_intercept_selection_gesture(
     state: &AppState,
     pos: (f32, f32),
-    button: MouseButton,
-    button_state: ElementState,
+    ev: &heca_grid_ui::Event,
 ) -> bool {
-    if button != MouseButton::Left
-        || button_state != ElementState::Pressed
+    use heca_grid_ui::event::RawPointerKind as Kind;
+    let heca_grid_ui::Event::Raw(raw) = ev else {
+        return false;
+    };
+    if raw.button != heca_grid_ui::PointerButton::Left
+        || raw.kind != Kind::Pressed
         || !state.modifiers.shift_key()
     {
         return false;

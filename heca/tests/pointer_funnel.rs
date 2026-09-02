@@ -75,7 +75,7 @@ fn the_chrome_tree_gets_the_release_and_the_wheel_too() {
     for (head, call, why) in [
         (
             "WindowEvent::MouseInput",
-            "chrome_dispatch_release",
+            "crate::chrome::deliver(",
             "a gesture started in the sidebar has to be able to end — a thumb grabbed there stays \
              welded to the cursor otherwise",
         ),
@@ -93,7 +93,7 @@ fn the_chrome_tree_gets_the_release_and_the_wheel_too() {
         ),
         (
             "WindowEvent::MouseWheel",
-            "chrome_dispatch_wheel",
+            "crate::chrome::deliver(",
             "a scroll region in the sidebar scrolls on the wheel, and the terminal must not also \
              scroll when it takes it",
         ),
@@ -143,24 +143,34 @@ fn the_button_branch_feeds_the_funnel_both_press_and_release() {
 /// A lint, like its neighbours above: what it guards is *absence*, which no behaviour test can see.
 #[test]
 fn the_mouse_layer_sends_a_release_for_every_press_it_sends() {
-    let src = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"),
-    )
-    .expect("read the mouse layer");
+    let src = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"))
+        .expect("read the mouse layer");
 
-    assert!(
-        src.contains("chrome_dispatch_button_press"),
-        "the mouse layer no longer presses into the chrome tree — if that moved, move this guard \
-         with it rather than deleting it",
-    );
-    assert!(
-        src.contains("chrome_dispatch_button_release"),
-        "the mouse layer dispatches a button PRESS to the chrome tree and never a RELEASE.\n\
-         A press with no release is not a click: `Click` and `RightClick` are synthesised from the \
-         pair, so nothing that depends on a click happens at all — a widget's declared context \
-         menu never opens, and a widget that captured the press never learns the gesture ended.\n\
-         This is not caught by any behaviour test: they dispatch both halves themselves.",
-    );
+    // The two arms that hand a right button to the tree. Named by their match pattern, because the
+    // point is that BOTH halves of the gesture are handed over — not that the file mentions the
+    // call somewhere.
+    for arm in [
+        "(Btn::Right, Kind::Pressed) =>",
+        "(Btn::Right, Kind::Released) =>",
+    ] {
+        let at = src
+            .find(arm)
+            .unwrap_or_else(|| panic!("the mouse layer no longer has a `{arm}` arm — if that moved, move this guard with it rather than deleting it"));
+        let body = &src[at..];
+        let end = body[arm.len()..]
+            .find("\n        (")
+            .map(|i| i + arm.len())
+            .unwrap_or(body.len());
+        assert!(
+            body[..end].contains("crate::chrome::deliver("),
+            "the mouse layer's `{arm}` arm does not hand the event to the tree.\n\
+             A press with no release is not a click: `Click` and `RightClick` are synthesised from \
+             the pair, so nothing that depends on a click happens at all — a widget's declared \
+             context menu never opens, and a widget that captured the press never learns the \
+             gesture ended.\n\
+             This is not caught by any behaviour test: they dispatch both halves themselves.",
+        );
+    }
 }
 
 /// **A divider resize must end at the same level its press started it.**
@@ -253,7 +263,7 @@ fn the_move_that_drives_a_drag_is_not_withheld_while_dragging() {
     let body = branch_body(&src, "WindowEvent::CursorMoved").expect("the move branch");
 
     let call = body
-        .find("chrome_dispatch_move")
+        .find("crate::chrome::deliver(")
         .expect("the move branch no longer feeds the window tree — move this guard with it");
 
     // Everything the call is nested inside: the last `if` opened before it still decides whether it
@@ -265,7 +275,7 @@ fn the_move_that_drives_a_drag_is_not_withheld_while_dragging() {
 
     assert!(
         !guard.contains("drag_in_flight"),
-        "`chrome_dispatch_move` is gated on a drag being in flight.\n\
+        "the move into the window tree is gated on a drag being in flight.\n\
          That is backwards: the move is what DRIVES the drag. Withholding it freezes the picture \
          under the cursor where it was picked up, stops `DragOver` so the insertion line and the \
          swap outline never move, and stops the modifiers being re-read so Shift no longer switches \
@@ -308,5 +318,42 @@ fn the_tree_learns_the_modifiers_before_the_app_reacts_to_them() {
          Everything that asks what a modifier means now reads the framework's record of what is \
          held, so asking before announcing returns the state from the previous event: a drag \
          switches between move and swap one keystroke late, on the release rather than the press.",
+    );
+}
+
+/// **One door into the window tree, and no growing a second set beside it.**
+///
+/// There were eight `chrome_dispatch_*` functions, one per event kind, each rebuilding from a
+/// position what the event loop had just been told — and a caller then chose which to call.
+/// Choosing is how a kind goes missing: the chrome tree got the press and the move for years and
+/// neither the release nor the wheel, so a scrollbar grabbed in the sidebar could never be let go
+/// and the wheel did nothing there at all. Every guard above this one exists because of a kind
+/// somebody did not think to pass on.
+///
+/// So the kinds are gone and there is one `deliver`, taking whatever the loop built. This fails if
+/// a per-kind wrapper comes back — that is the shape to reject, before it has callers.
+#[test]
+fn the_window_tree_has_one_door_and_not_a_function_per_kind() {
+    let src = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/chrome/dispatch.rs"),
+    )
+    .expect("read the chrome dispatch module");
+
+    assert!(
+        src.contains("pub(crate) fn deliver("),
+        "`deliver` is gone — if the one door moved, move this guard with it rather than deleting it",
+    );
+
+    let per_kind: Vec<_> = ["_press(", "_release(", "_move(", "_wheel(", "_cancelled("]
+        .iter()
+        .filter(|suffix| src.contains(&format!("fn chrome_dispatch{suffix}")))
+        .collect();
+    assert!(
+        per_kind.is_empty(),
+        "a per-kind dispatch function is back in the chrome module: {per_kind:?}.\n\
+         The window tree takes the event the loop already built. A function per kind puts the \
+         caller in charge of which kinds get through, and the caller is where kinds go missing — \
+         silently, because a widget that never receives one lays out, paints and hit-tests \
+         perfectly while being dead.",
     );
 }

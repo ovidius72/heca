@@ -240,13 +240,12 @@ pub(crate) fn handle_window_event(
                 position.y as f32 / state.scale_factor as f32,
             );
             state.mouse.pos = pos;
+            // **One event for this device event**, built once and handed to each tree that gets it.
+            let moved = raw_pointer(state, RawPointerKind::Moved, PointerButton::Left);
             // A surface above the page gets the move first — hover on a dialog's buttons and menu
             // rows, and a thumb drag inside its body. It declines a move that misses it (a
             // notification card), and the page's own hover work below then runs as usual.
-            if crate::chrome::dispatch_surface_pointer(
-                state,
-                &raw_pointer(state, RawPointerKind::Moved, PointerButton::Left),
-            ) {
+            if crate::chrome::dispatch_surface_pointer(state, &moved) {
                 return;
             }
             if let Some(action) = mouse::on_cursor_moved(state, pos) {
@@ -264,7 +263,7 @@ pub(crate) fn handle_window_event(
             // after it does. Hover is no reason either: the framework lights nothing under a drag
             // (guard `a_drag_in_flight_clears_hover`).
             if !mouse::is_resizing(state) {
-                crate::chrome::chrome_dispatch_move(state, pos);
+                crate::chrome::deliver(state, &moved);
             }
             // The pane header and the pane viewport are their OWN retained trees, which a drag in
             // the window root does not reach — so they are still told to stay dark while something
@@ -289,11 +288,11 @@ pub(crate) fn handle_window_event(
         // a gesture the release never came back for — survives the cursor going somewhere else
         // entirely, which reads as a UI frozen mid-interaction.
         WindowEvent::CursorLeft { .. } => {
-            // One walk is enough: `chrome_dispatch_cancelled` already feeds the whole window tree,
+            // One walk is enough: `cancel_every_tree` already feeds the whole window tree,
             // and every surface is a node in it. This used to deliver the cancel to the front-most
             // modal first and then again with the tree, which is one event arriving twice.
             let ev = raw_pointer(state, RawPointerKind::Cancelled, PointerButton::Left);
-            crate::chrome::chrome_dispatch_cancelled(state, &ev);
+            crate::chrome::cancel_every_tree(state, &ev);
             state.mark_full_redraw();
         }
         WindowEvent::MouseInput {
@@ -310,15 +309,16 @@ pub(crate) fn handle_window_event(
             // The **release** goes in too — this branch used to forward the press alone, which is
             // what left a body's scrollbar thumb stuck to the cursor: the widget was still waiting
             // for the end of a gesture the host had decided not to deliver.
-            {
-                let kind = match button_state {
-                    ElementState::Pressed => RawPointerKind::Pressed,
-                    ElementState::Released => RawPointerKind::Released,
-                };
-                let ev = raw_pointer(state, kind, grid_button(button));
-                if crate::chrome::dispatch_surface_pointer(state, &ev) {
-                    return;
-                }
+            // **One event for this device event.** Built here and handed to every tree below and
+            // to `mouse::on_mouse_input`, rather than each of them rebuilding one from the winit
+            // pair — which is how the same press reached the chrome tree twice.
+            let kind = match button_state {
+                ElementState::Pressed => RawPointerKind::Pressed,
+                ElementState::Released => RawPointerKind::Released,
+            };
+            let ev = raw_pointer(state, kind, grid_button(button));
+            if crate::chrome::dispatch_surface_pointer(state, &ev) {
+                return;
             }
             // Pane info-bar action **buttons** intercept a plain left-press so a click
             // hits the button (not the terminal). Only an actual button hit is
@@ -381,7 +381,7 @@ pub(crate) fn handle_window_event(
                 // or not the cursor is still over it — that is what ends a scrollbar drag. The
                 // chrome tree is unconditional: it consumes nothing it did not start, and gating a
                 // release on position is precisely how a thumb ends up welded to the cursor.
-                crate::chrome::chrome_dispatch_release(state, state.mouse.pos);
+                crate::chrome::deliver(state, &ev);
                 crate::chrome::dispatch_pane_header_release(state, state.mouse.pos);
                 if crate::chrome::dispatch_pane_viewport_release(state, state.mouse.pos) {
                     mouse::update_cursor(state, state.mouse.pos);
@@ -390,7 +390,7 @@ pub(crate) fn handle_window_event(
                 }
             }
             let interactive_before = state.mouse.interactive_move.is_some();
-            if let Some((action, source)) = mouse::on_mouse_input(state, button, button_state) {
+            if let Some((action, source)) = mouse::on_mouse_input(state, &ev) {
                 dispatch_action(state, registry, source, &action);
             }
             let started_interactive_move =
@@ -428,7 +428,7 @@ pub(crate) fn handle_window_event(
             // The retained chrome tree next: a hovered scroll region in the sidebar takes it, and
             // the terminal must not also scroll. A region gates on its own hover, so this is a
             // no-op whenever the pointer is over a pane.
-            if crate::chrome::chrome_dispatch_wheel(state, &wheel)
+            if crate::chrome::deliver(state, &wheel)
                 || crate::chrome::dispatch_pane_header_wheel(state, &wheel)
             {
                 state.mark_full_redraw();

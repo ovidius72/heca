@@ -22,7 +22,6 @@ use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::chrome::ChromeConfig;
 use crate::input::WmAction;
 use heca_core::layout::PaneId;
-use winit::event::{ElementState, MouseButton};
 
 /// Handle cursor movement. Returns a `WmAction` if one should be dispatched
 /// (e.g. focus-follows-mouse triggered), or `None` for internal state updates.
@@ -124,19 +123,28 @@ pub fn on_modifiers_changed(state: &mut AppState) {
 /// Check the focus-follows-mouse timer on every frame (even without cursor movement).
 /// Call from `about_to_wait` for frame-rate-independent debounce.
 /// Handle mouse button events. Returns a `WmAction` if one should be dispatched.
+///
+/// **Takes the event the loop built, not the winit pair it was built from.** One `Event::Raw` per
+/// device event, handed down rather than reconstructed here — a second construction is a second
+/// answer, and the one that used to happen further down this file delivered the same press to the
+/// chrome tree twice (F003/P097/T496).
 pub fn on_mouse_input(
     state: &mut AppState,
-    button: MouseButton,
-    button_state: ElementState,
+    ev: &heca_grid_ui::Event,
 ) -> Option<(WmAction, InteractionSource)> {
     if !state.mouse_enabled {
         return None;
     }
 
+    let heca_grid_ui::Event::Raw(raw) = ev else {
+        return None;
+    };
     let pos = state.mouse.pos;
 
-    match (button, button_state) {
-        (MouseButton::Left, ElementState::Pressed) => {
+    use heca_grid_ui::PointerButton as Btn;
+    use heca_grid_ui::event::RawPointerKind as Kind;
+    match (raw.button, raw.kind) {
+        (Btn::Left, Kind::Pressed) => {
             // A click on a search field re-enters query entry and places the caret.
             // Checked first: the bar floats above pane content, so a press that lands
             // on it must not also be read as a click into the terminal underneath.
@@ -158,7 +166,7 @@ pub fn on_mouse_input(
             }
 
             // Meta+click on content pane → start drag from content.
-            if !should_intercept_selection_gesture(state, pos, button, button_state)
+            if !should_intercept_selection_gesture(state, pos, ev)
                 && interactive_move_modifier_held(state)
                 && let Some(pane_id) = hit_test_pane(state, pos)
             {
@@ -186,16 +194,8 @@ pub fn on_mouse_input(
             // Nothing is asked before the tree. The app used to take the press first to put its own
             // question — is this a drag source? — which is what made dragging exist only where the
             // app had been taught about it (F003/P097/T496).
-            if crate::chrome::chrome_dispatch_press(state, pos) {
+            if crate::chrome::deliver(state, ev) {
                 return None;
-            }
-
-            // Sidebar click.
-            let sidebar_action = surface_left::click_action(state, pos);
-
-            // Sidebar button clicks / non-pane item clicks dispatch immediately.
-            if let Some(action) = sidebar_action {
-                return Some((action, InteractionSource::MouseLeftSidebar));
             }
 
             // Content click → focus. The release that used to be here is gone: the generic
@@ -208,7 +208,7 @@ pub fn on_mouse_input(
                 ));
             }
         }
-        (MouseButton::Left, ElementState::Released) => {
+        (Btn::Left, Kind::Released) => {
             // End a divider resize-drag first (left-button gap drag).
             if resize::on_release(state) {
                 return None;
@@ -229,22 +229,18 @@ pub fn on_mouse_input(
         }
         // Right-button fallback for divider resize: hold right-button on a pane to
         // resize along the nearer axis (for when the thin gap fights the terminal).
-        (MouseButton::Right, ElementState::Pressed) if resize::on_right_press(state, pos) => {
+        (Btn::Right, Kind::Pressed) if resize::on_right_press(state, pos) => {
             return None;
         }
-        (MouseButton::Right, ElementState::Released) if resize::on_release(state) => {
+        (Btn::Right, Kind::Released) if resize::on_release(state) => {
             return None;
         }
         // **The release is what makes it a click.** The framework pairs a press with a release on
         // the same widget and only then emits `RightClick` — which is what an unclaimed right-click
         // turns into a declared context menu (F004/P084/T395). Delivering only the press produced
         // no clicks at all, so no sidebar row opened a menu.
-        (MouseButton::Right, ElementState::Released) => {
-            if crate::chrome::chrome_dispatch_button_release(
-                state,
-                pos,
-                heca_grid_ui::PointerButton::Right,
-            ) {
+        (Btn::Right, Kind::Released) => {
+            if crate::chrome::deliver(state, ev) {
                 state.needs_redraw = true;
             }
             return None;
@@ -258,16 +254,12 @@ pub fn on_mouse_input(
         // Aiming the keyboard first used to be impossible here: opening a menu captured the input
         // mode to restore afterwards, and moving focus first would have rewritten what it captured.
         // Nothing is restored any more, so the constraint went with it.
-        (MouseButton::Right, ElementState::Pressed) => {
+        (Btn::Right, Kind::Pressed) => {
             // **The widget gets the right-click first.** It carries its button now, so a widget
             // that declares `on_right_click` owns its own menu and the host never has to work out
             // what was under the cursor on its behalf. Only when nothing claims it does the app's
             // own row-menu path run.
-            if crate::chrome::chrome_dispatch_button_press(
-                state,
-                pos,
-                heca_grid_ui::PointerButton::Right,
-            ) {
+            if crate::chrome::deliver(state, ev) {
                 state.needs_redraw = true;
                 return None;
             }
