@@ -11,12 +11,12 @@ pub(crate) use theme::{
 pub(crate) mod signals;
 pub(crate) use signals::{sync_chrome_signals, sync_chrome_state, ChromeSignals};
 pub(crate) mod pane;
-pub(crate) use pane::{clear_panes, sync_panes, RetainedPane};
+pub(crate) use pane::{clear_panes, header_height as pane_header_height, sync_panes, RetainedPane};
 pub(crate) mod pane_header;
 pub(crate) use pane_header::{
-    action_tooltip, clear_pane_headers, home_relative_path, pane_info_view, sync_pane_headers,
+    action_tooltip, build_pane_headers, home_relative_path, pane_info_view,
     sync_pane_viewport_widgets, truncate_path_left, ActionShortcuts, PaneInfoSignals,
-    RetainedPaneHeader, RetainedPaneViewportWidgets, CARD_META_FONT_SCALE,
+    RetainedPaneViewportWidgets, CARD_META_FONT_SCALE,
 };
 pub(crate) mod drag;
 pub(crate) use drag::{ChromeDragItem, DragItemRegistry};
@@ -48,7 +48,7 @@ pub(crate) use scene::{
     build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints, paint_search,
 };
 pub(crate) use dispatch::{
-    cancel_every_tree, deliver, deliver_to_pane_headers, deliver_to_pane_viewports,
+    cancel_every_tree, deliver, deliver_to_panes, deliver_to_pane_viewports,
     dispatch_surface_pointer, drag_in_flight, drain_pending_drops, drain_pending_menus,
     open_declared_menu_for_focus, pane_viewport_at,
 };

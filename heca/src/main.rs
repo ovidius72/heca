@@ -243,7 +243,7 @@ impl HecaApp {
             // `terminal_layers.clear()` and `chrome_tree = None`; without it, existing
             // panes keep stale (faint) icon colors after a theme swap while
             // freshly-created panes look correct.
-            crate::chrome::clear_pane_headers(state);
+            crate::chrome::clear_panes(state);
             // The pane shells bake the theme too, so they are invalidated with the headers.
             crate::chrome::clear_panes(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);

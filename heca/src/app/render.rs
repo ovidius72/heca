@@ -206,7 +206,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Build/position the retained per-pane info-bar headers *before* the GPU borrow
     // below (`scene_view` borrows `state.compositor`), so render can paint them
     // read-only and `mouse.rs` can dispatch pointer events into them.
-    crate::chrome::sync_pane_headers(state);
     // The retained per-pane shells — the frame, the pane's identity and its pick letter. Same
     // moment and same reason as the headers: built before the GPU borrow so render can paint them
     // read-only (F011/P094/T451).
@@ -273,7 +272,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let pane_border_width = state.appearance.effective_pane_border_width(&state.theme);
     let pane_border_radius = state.appearance.effective_pane_border_radius(&state.theme);
     let pane_content_inset = state.appearance.effective_pane_padding(&state.theme);
-    let pane_title_top_inset = crate::app::terminal_render::pane_title_top_inset(state);
     let pane_positions = state
         .session
         .active_workspace()
@@ -301,6 +299,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
         let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         let pw = rect.size.w as f32;
         let ph = rect.size.h as f32;
+        // Measured per pane, from its own laid-out header — not one number for all of them.
+        let pane_title_top_inset =
+            crate::app::terminal_render::pane_title_top_inset(state, *pane_id);
         let content_rect =
             stable_tiled_content_rect(px, py, pw, ph, pane_content_inset, pane_title_top_inset);
         let base_cell = state.pane_base_cell_size(*pane_id);
@@ -351,7 +352,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 fw,
                 fh,
                 pane_content_inset,
-                pane_title_top_inset,
+                crate::app::terminal_render::pane_title_top_inset(state, float.pane.id),
             );
             let base_cell = state.pane_base_cell_size(float.pane.id);
             let mount = content_rect.and_then(|content_rect| {

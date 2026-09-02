@@ -21,6 +21,30 @@ reinventing something, and it will be rejected.
    and a trailing slot. `Row` is the selection shell. `ScrollRegion` owns scrolling and its window.
    `Input` owns text editing and its shortcuts. `Label` owns text. Search `docs/widgets.md` and run
    the showcase — do not go by memory, including your own from earlier in the session.
+
+   **Search all THREE inventories, every time — the catalog is bigger than the library:**
+   - **`docs/widgets.md`** — every `heca-grid-ui` widget, with a table of contents. Read the
+     entry, not the name: `Tag` is not "a label", it is a **multi-segment chip** (icon + text per
+     segment, divider between) — which is exactly a pane's title bar, already used there and in
+     the showcase.
+   - **`heca/src/components/`** — app-side compositions shared by a second surface
+     (`FolderLine`, `PaneName`). Its `mod.rs` carries the widget-vs-component test.
+   - **`heca/src/chrome/<surface>/`** — components still living beside their only surface
+     (`expose/pane_card.rs`, `providers/workspaces/pane_row.rs`, `pane/shell.rs`). A component is
+     born next to its surface and moves up the day a **second** caller wants it.
+
+   **Then compose, the way HTML or React is written** — elements nested in elements, each sizing
+   and spacing itself:
+
+   ```
+   Flex::row().justify(SpaceBetween)
+       .child( Tag …title segments… )
+       .child( Flex::row().gap(..) …IconButtons… )
+   ```
+
+   A bespoke tree that hand-positions its parts, hand-picks its font, or re-implements what a
+   widget already does is the thing this question exists to prevent. **Reaching for the piece you
+   already have is not a nicety — it is the difference between one shape and two that drift.**
 2. **If none exists — which planner task covers it?** Search the planner (`planner-task-list`,
    grep the phases) for the *pieces*, not just the feature you were asked for. Quote the id. Half of
    what looks unbuilt is already planned, sometimes with the design decided in a task of its own —

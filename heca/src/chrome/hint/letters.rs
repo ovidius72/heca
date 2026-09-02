@@ -222,13 +222,6 @@ fn offer_in_every_tree(
             for_view(HintSurface::Pane(*pane_id)),
         );
     }
-    for (pane_id, header) in state.pane_headers.iter() {
-        offered |= heca_grid_ui::offer_hint_by_key(
-            &header.root,
-            key,
-            for_view(HintSurface::PaneHeader(*pane_id)),
-        );
-    }
     offered
 }
 

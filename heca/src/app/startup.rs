@@ -451,7 +451,6 @@ pub(crate) async fn init_state(
         window_root: crate::chrome::new_window_root(),
         chrome_tree: None,
         panes: std::collections::HashMap::new(),
-        pane_headers: std::collections::HashMap::new(),
         layers: crate::chrome::LayerRegistry::default(),
         overlays: crate::chrome::OverlayHost::default(),
         pane_viewport_widgets: std::collections::HashMap::new(),

@@ -53,6 +53,32 @@ pub(crate) struct RetainedPane {
 pub(crate) const ACTIVE_GLOW_RADIUS: f32 = 10.0;
 pub(crate) const ACTIVE_GLOW_STRENGTH: f32 = 0.55;
 
+/// **How much of a pane its header takes — measured, never computed.**
+///
+/// Read off the laid-out tree, so it is right for whatever was put in the header slot: a terminal's
+/// info bar today, something else tomorrow, of any height. It used to be arithmetic on the host's
+/// side — an approximation of `Tag`'s internal padding, plus a copy of the library's line-height
+/// ratio, plus a margin — which meant anything else placed in that slot had to add up to the same
+/// three numbers or sit wrong (Antonio, driving, 2026-09-02).
+///
+/// The shell builds the pane as a column of two when there is a header: the header at its natural
+/// height, then the content taking the rest. One child means no header.
+pub(crate) fn header_height(state: &crate::app_state::AppState, pane_id: PaneId) -> f32 {
+    use heca_grid_ui::Component;
+    let Some(retained) = state.panes.get(&pane_id) else {
+        return 0.0;
+    };
+    // KeyHint wraps the Pane; the Pane holds [header, content] or just [content].
+    let Some(pane) = retained.root.base().children.first() else {
+        return 0.0;
+    };
+    let children = &pane.base().children;
+    match children.len() {
+        2 => children[0].base().bounds.size.h as f32,
+        _ => 0.0,
+    }
+}
+
 pub(crate) fn clear_panes(state: &mut crate::app_state::AppState) {
     state.panes.clear();
 }
@@ -120,21 +146,39 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
         })
         .collect();
 
+    // What each pane wants along its top. Built here and handed down as a child — the shell has no
+    // idea what a terminal is, so the bar arrives as an ordinary widget like any other content.
+    let mut headers = crate::chrome::build_pane_headers(state);
+
     let cb = callbacks(state);
 
     // ── Phase 2: build (only when changed), lay out, position, prune ──
     let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
     for model in &models {
         seen.insert(model.pane_id);
-        let key = model.key();
+        let header = headers.remove(&model.pane_id);
+        // ONE key for the pane and what it carries, so they rebuild together or not at all. Two
+        // keys would let a bar go stale inside a pane that had no reason to rebuild.
+        let key = match &header {
+            Some((_, header_key)) => format!("{}|{header_key}", model.key()),
+            None => model.key(),
+        };
         let needs_build = state
             .panes
             .get(&model.pane_id)
             .map(|p| p.key != key)
             .unwrap_or(true);
         if needs_build {
-            let root = PaneShell { model, cb: &cb }.build();
-            state.panes.insert(model.pane_id, RetainedPane { root, key });
+            let root = PaneShell {
+                model,
+                cb: &cb,
+                header: header.map(|(tree, _)| Box::new(tree) as Box<dyn heca_grid_ui::Component>),
+                    content: None,
+            }
+            .build();
+            state
+                .panes
+                .insert(model.pane_id, RetainedPane { root, key });
         }
         if let Some(retained) = state.panes.get_mut(&model.pane_id) {
             // The pane's rect is a per-frame input, written onto the retained tree rather than

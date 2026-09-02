@@ -81,13 +81,13 @@ fn the_chrome_tree_gets_the_release_and_the_wheel_too() {
         ),
         (
             "WindowEvent::MouseInput",
-            "crate::chrome::deliver_to_pane_headers(",
-            "the pane headers were the last seam missing a kind — the first widget mounted there \
-             with a gesture would have been broken on arrival",
+            "crate::chrome::deliver_to_panes(",
+            "a pane's own tree carries its info bar now, so a bar button that captured a press has \
+             to learn the gesture ended",
         ),
         (
             "WindowEvent::MouseWheel",
-            "crate::chrome::deliver_to_pane_headers(",
+            "crate::chrome::deliver_to_panes(",
             "nothing in a header scrolls yet, and \"nothing needs it yet\" is the reasoning that \
              produced every other missing kind",
         ),

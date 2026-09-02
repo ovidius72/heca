@@ -1490,8 +1490,10 @@ including form fields (see below), so most layouts need no dedicated widget.
   `.pad_x(Spacing)` / `.pad_y(Spacing)` (same font-relative scaling as `gap_spacing`).
 - **Sizing** (from `LayoutExt`, shared by every widget): `.width(Length)` / `.height(Length)`
   (`Auto` / `Px` / `Pct`), `.grow(f32)` (flex-grow, absorb leftover space), `.margin*`.
-- **Traits**: `LayoutExt`, `Parent`. (No `StyleExt` — it's purely arrangement; use
-  [`Surface`](#surface) when you need a background/border/glow.)
+- **Traits**: `LayoutExt`, `Parent`. **No `StyleExt`, deliberately** — a `Flex` arranges, it does
+  not paint, so `.background(..)` on one is a compile error rather than a missing feature. Put the
+  colour on a [`Surface`](#surface) and the `Flex` inside it. See
+  [Surface or Flex?](#surface-or-flex--decoration-vs-arrangement).
 
 ```rust
 Flex::row().gap(12.0).align(Align::Center)
@@ -1520,10 +1522,52 @@ A [`Dialog`](#dialog) body already defaults its own children to `gap_spacing(Md)
 
 ### Surface
 
-A styled box: the base building block for backgrounds/borders/glow.
+**The generic container — the `div`.** A box that both *decorates* and *arranges*: background,
+border, glow and radius, plus padding, gap, direction and children. Reach for it whenever something
+needs a background or padding around its content.
 
-- **Construct**: `Surface::new()`, `Surface::row()`, `Surface::column()`.
+- **Construct**: `Surface::new()` / `Surface::column()` (a column), `Surface::row()` (a row).
+- **Decoration** (`StyleExt`): `.background(Color)`, `.border(Color, width)`, `.radius(px)`,
+  `.glow(Color)` / `.glow_with(..)`.
+- **Arrangement** (`LayoutExt`, `Parent`): the same `.padding*` / `.pad_*(Spacing)` / `.gap*` /
+  `.width` / `.height` / `.grow` / `.child(..)` as [`Flex`](#flex--container).
 - **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
+
+#### Surface or Flex? — decoration vs arrangement
+
+They are the same box split by job, and the split is **enforced**, not merely advised: `Flex` has no
+`StyleExt`, so `.background(..)` on one does not compile. That error is the rule doing its work —
+it is not a missing feature, and the answer is never to add the colour somewhere else.
+
+| you need | reach for |
+|---|---|
+| arrange children — direction, justify, align, gap | **`Flex`** |
+| a background, border, radius or glow behind content | **`Surface`** |
+| both | a **`Surface`** with a `Flex` inside it |
+
+The last row is the common shape, and it composes exactly like HTML: the surface is the painted
+box, the flex is how its contents line up.
+
+```rust
+// A strip with its own background, contents pushed to either end.
+Surface::new()
+    .background(theme.colors.surface)
+    .pad_y(Spacing::Xs)                       // token, not px — see Flex
+    .width(Length::Pct(1.0))
+    .child(
+        Flex::row()
+            .justify(Justify::SpaceBetween)
+            .align(Align::Center)
+            .child(Tag::new("~").segment_text(Glyph::Terminal, "zsh"))
+            .child(Flex::row().gap_spacing(Spacing::Xs).child(close_button)),
+    );
+```
+
+**Do not give the box a height to make it fill a strip.** Let it size to its content and let the
+parent give it the space — a height computed from the font is a measurement standing in for "as
+tall as what is in me", and anything else placed in the same slot then has to reproduce the same
+arithmetic. If something outside needs to know how tall it came out, **measure the laid-out tree**
+rather than recomputing it.
 
 ```rust
 Surface::column().padding(16.0).gap(8.0)

@@ -56,7 +56,7 @@ pub(crate) fn dispatch_surface_pointer(
     true
 }
 
-/// **Give every pane header the event.** Returns whether one of them took it.
+/// **Give every pane's own tree the event** — its frame, and whatever sits in its header slot. Returns whether one of them took it.
 ///
 /// One function, not one per kind. The per-kind set that stood here rebuilt an event from a
 /// position at each call site and spelled `PointerButton::Left` into every one of them — so a
@@ -67,10 +67,10 @@ pub(crate) fn dispatch_surface_pointer(
 /// Every header is offered it, not just the one under the pointer: the framework hit-tests within
 /// each tree, so only the header the event belongs to answers — and a release has to reach the one
 /// that started a gesture wherever the cursor has drifted to since.
-pub(crate) fn deliver_to_pane_headers(state: &mut crate::app_state::AppState, ev: &Event) -> bool {
+pub(crate) fn deliver_to_panes(state: &mut crate::app_state::AppState, ev: &Event) -> bool {
     let mut handled = false;
-    for header in state.pane_headers.values_mut() {
-        handled |= heca_grid_ui::dispatch(&mut header.root, ev) == heca_grid_ui::Handled::Yes;
+    for pane in state.panes.values_mut() {
+        handled |= heca_grid_ui::dispatch(&mut pane.root, ev) == heca_grid_ui::Handled::Yes;
     }
     handled
 }
@@ -224,7 +224,7 @@ pub(crate) fn drag_in_flight(state: &crate::app_state::AppState) -> bool {
 /// state living on the widgets rather than in one router the host would have to own.
 pub(crate) fn cancel_every_tree(state: &mut crate::app_state::AppState, ev: &Event) {
     let _ = deliver(state, ev);
-    let _ = deliver_to_pane_headers(state, ev);
+    let _ = deliver_to_panes(state, ev);
     let _ = deliver_to_pane_viewports(state, ev);
 }
 

@@ -731,10 +731,6 @@ pub struct AppState {
     /// carry one — which is why the pane letters used to be stamped by a host paint pass
     /// (F011/P094/T451).
     pub panes: HashMap<PaneId, crate::chrome::RetainedPane>,
-    /// Retained per-pane info-bar headers (segment `Tag` + action `IconButton`s),
-    /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
-    /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.
-    pub pane_headers: HashMap<PaneId, crate::chrome::RetainedPaneHeader>,
     /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
     /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
     /// trees; this holds runtime-added layers that join the same surface stack. See

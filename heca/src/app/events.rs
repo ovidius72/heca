@@ -272,7 +272,7 @@ pub(crate) fn handle_window_event(
             if !crate::chrome::drag_in_flight(state) && !mouse::is_resizing(state) {
                 // Feed the move into the retained pane-info-bar headers so the action
                 // buttons' hover affordance lights up (repaint via mark_full_redraw below).
-                crate::chrome::deliver_to_pane_headers(state, &moved);
+                crate::chrome::deliver_to_panes(state, &moved);
                 // Over one, or holding one: a thumb grabbed here keeps the pointer even when the
                 // cursor has left its bounds, and the terminal must not see the move either way.
                 pane_viewport_over = crate::chrome::deliver_to_pane_viewports(state, &moved)
@@ -332,7 +332,7 @@ pub(crate) fn handle_window_event(
             if button == winit::event::MouseButton::Left
                 && button_state == ElementState::Pressed
                 && !mouse::interactive_move_modifier_held(state)
-                && crate::chrome::deliver_to_pane_headers(state, &ev)
+                && crate::chrome::deliver_to_panes(state, &ev)
             {
                 mouse::update_cursor(state, state.mouse.pos);
                 state.mark_full_redraw();
@@ -382,7 +382,7 @@ pub(crate) fn handle_window_event(
                 // chrome tree is unconditional: it consumes nothing it did not start, and gating a
                 // release on position is precisely how a thumb ends up welded to the cursor.
                 crate::chrome::deliver(state, &ev);
-                crate::chrome::deliver_to_pane_headers(state, &ev);
+                crate::chrome::deliver_to_panes(state, &ev);
                 if crate::chrome::deliver_to_pane_viewports(state, &ev) {
                     mouse::update_cursor(state, state.mouse.pos);
                     state.mark_full_redraw();
@@ -429,7 +429,7 @@ pub(crate) fn handle_window_event(
             // the terminal must not also scroll. A region gates on its own hover, so this is a
             // no-op whenever the pointer is over a pane.
             if crate::chrome::deliver(state, &wheel)
-                || crate::chrome::deliver_to_pane_headers(state, &wheel)
+                || crate::chrome::deliver_to_panes(state, &wheel)
             {
                 state.mark_full_redraw();
                 return;

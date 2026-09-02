@@ -9,6 +9,7 @@
 //! Split out of a 5236-line `chrome/mod.rs` that held every kind of logic at once.
 
 use super::*;
+use heca_grid_ui::builders::StyleExt as _;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PaneInfoView {
@@ -270,17 +271,6 @@ pub(crate) struct PaneHeaderCtx {
     pub(crate) ws_idx: usize,
     pub(crate) col_idx: usize,
     pub(crate) event_proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
-}
-
-/// A retained per-pane info-bar header (segment `Tag` + action `IconButton`s).
-/// Rebuilt only when [`pane_header_key`] changes (so button hover/press signals
-/// survive across frames); re-laid-out + positioned every frame by
-/// [`sync_pane_headers`]; painted read-only in `terminal_render` and dispatched
-/// pointer events by `mouse.rs`.
-pub(crate) struct RetainedPaneHeader {
-    pub(crate) root: Flex,
-    /// Content key (see [`pane_header_key`]) the tree was built from.
-    pub(crate) key: String,
 }
 
 /// Retained per-pane terminal viewport widgets (scrollbar + scrolled-up badge).
@@ -697,10 +687,11 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
 pub(crate) fn build_pane_header(
     content: &PaneHeaderContent,
     theme: &GuiTheme,
+    band: heca_grid_ui::Color,
     font: f32,
     avail_w: f32,
     ctx: PaneHeaderCtx,
-) -> Option<Flex> {
+) -> Option<Surface> {
     // The button set is a dynamic vector of descriptors (config-driven today,
     // plugin-extensible later) — the loop below never matches on a concrete action.
     let specs = pane_header_buttons(content, &ctx);
@@ -802,17 +793,46 @@ pub(crate) fn build_pane_header(
         font,
     );
 
-    let root = Flex::row().width(Length::Px(avail_w)).align(Align::Center);
-    let root = match (bar, buttons) {
-        (Some(bar), Some(buttons)) => root
+    // **The bar carries no size of its own.** It fills the width and the height it is given and
+    // centres its content in them — it is a child of the pane, so the pane's layout owns its box.
+    //
+    // Neither a width nor a height belongs here. It used to carry a pixel width left over from
+    // being positioned by hand, and a height computed from the font is the same mistake one step
+    // further on: a measurement standing in for "as tall as the space I am in"
+    // (Antonio, driving, 2026-09-02). The pane is a column of two — this bar at its natural height,
+    // the content taking everything left — so the bar is exactly as tall as what is in it.
+    let row = Flex::row()
+        .width(Length::Pct(1.0))
+        // **The bar's own breathing room, which is what makes the strip the height it is.** The
+        // host reserves `title_bar_reserve` at the pane top — the bar's content height plus this
+        // margin twice over — so carrying the margin here is what makes the bar exactly fill the
+        // strip that was reserved for it, instead of sitting at the top of it with dead space
+        // below (Antonio, driving, 2026-09-02).
+        .align(Align::Center);
+    let row = match (bar, buttons) {
+        (Some(bar), Some(buttons)) => row
             .justify(Justify::SpaceBetween)
             .child(bar)
             .child(buttons),
-        (Some(bar), None) => root.justify(Justify::Start).child(bar),
-        (None, Some(buttons)) => root.justify(Justify::End).child(buttons),
+        (Some(bar), None) => row.justify(Justify::Start).child(bar),
+        (None, Some(buttons)) => row.justify(Justify::End).child(buttons),
         (None, None) => return None,
     };
-    Some(root)
+    // **The band is the bar's own surface**, so the strip is exactly as tall as what is in it —
+    // rather than a rect the host drew at a height it had worked out separately, which anything
+    // else placed in a pane's header slot would have had to match. `Flex` carries no background on
+    // purpose: it lays out, a `Surface` decorates.
+    Some(
+        Surface::new()
+            .background(band)
+            .width(Length::Pct(1.0))
+            // **A theme token, not a pixel count.** `Spacing` resolves against the inherited font
+            // at layout, so the bar's breathing room scales with the font, the size variant and UI
+            // zoom. A raw px value is tuned for one font size and wrong at every other
+            // (`docs/widgets.md` § Flex).
+            .pad_y(heca_grid_ui::Spacing::Xs)
+            .child(row),
+    )
 }
 
 const VIEWPORT_BADGE_MARGIN: f32 = 0.0;
@@ -879,7 +899,11 @@ pub(crate) fn sync_pane_viewport_widgets(
 ) {
     let font = chrome_gui_theme(state).font_size;
     let show_mode = state.appearance.terminal.show_scrollbar;
-    let pane_info_bar_shown = state.appearance.pane_info_bar_visible();
+    // Measured before the loop takes a mutable borrow of the widgets it positions.
+    let header_heights: std::collections::HashMap<PaneId, f32> = panes
+        .iter()
+        .map(|p| (p.pane_id, crate::chrome::pane_header_height(state, p.pane_id)))
+        .collect();
     let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
     for pane in panes {
         seen.insert(pane.pane_id);
@@ -953,29 +977,15 @@ pub(crate) fn sync_pane_viewport_widgets(
             let badge_bounds = widgets.badge.base().bounds;
             // Align to the pane's outer right edge (flush, like the scrollbar).
             let badge_x = pane.x + pane.w - badge_bounds.size.w as f32;
-            // Sit *below* the pane info-bar header so it doesn't cover the action
-            // buttons. When the info bar is hidden there is no header to avoid.
-            let header_h = if pane_info_bar_shown {
-                crate::app::terminal_render::title_bar_reserve(font)
-            } else {
-                0.0
-            };
+            // Sit *below* the pane's header so it doesn't cover the action buttons — measured
+            // from the pane's own laid-out tree, so it clears whatever is actually in the header
+            // slot rather than a height guessed from the font. Zero when there is no header.
+            let header_h = header_heights.get(&pane.pane_id).copied().unwrap_or(0.0);
             let badge_y = pane.y + header_h + VIEWPORT_BADGE_MARGIN;
             translate_tree(&mut widgets.badge, badge_x as f64, badge_y as f64);
         }
     }
     state.pane_viewport_widgets.retain(|id, _| seen.contains(id));
-}
-
-/// Drop every retained pane header. Used when headers are globally invalidated: the info-bar is
-/// turned off, or a config reload changes the theme/font baked into the trees (see `reload_config`,
-/// which mirrors this alongside `terminal_layers.clear()`). `sync_pane_headers` rebuilds them from
-/// scratch next frame.
-///
-/// Nothing has to be released with them: a header's pickable buttons declare what a pick does
-/// **on themselves** ([`HintTarget`]), so a tree that is gone simply has no declarations left.
-pub(crate) fn clear_pane_headers(state: &mut crate::app_state::AppState) {
-    state.pane_headers.clear();
 }
 
 /// Build/position the retained per-pane info-bar headers for every visible pane.
@@ -984,17 +994,20 @@ pub(crate) fn clear_pane_headers(state: &mut crate::app_state::AppState) {
 /// them read-only and `mouse.rs` dispatches pointer events into them. Rebuilds a
 /// pane's tree only when its content key changes; re-lays-out + repositions every
 /// frame; prunes panes that disappeared.
-pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
+pub(crate) fn build_pane_headers(
+    state: &crate::app_state::AppState,
+) -> std::collections::HashMap<PaneId, (Surface, String)> {
+    let mut built = std::collections::HashMap::new();
     let segments = state.appearance.pane.title_segments.clone();
     let actions = state.appearance.pane.title_actions.clone();
     if segments.is_empty() && actions.is_empty() {
-        // Info bar disabled: drop every header (releasing its hint targets).
-        clear_pane_headers(state);
-        return;
+        // Info bar disabled: no pane gets one.
+        return built;
     }
     let theme = chrome_gui_theme(state);
+    // The strip behind the bar, from the same token the host used to paint it with.
+    let band = crate::chrome::theme::top_bottom_pane_background_color(&state.theme);
     let font = theme.font_size;
-    let band = crate::app::terminal_render::title_bar_reserve(font);
 
     // Phase 1: gather per-pane inputs with only immutable borrows of `state`.
     struct Input {
@@ -1006,14 +1019,12 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
         runtime: Option<PaneRuntime>,
         zoomed: bool,
         floating: bool,
-        x: f32,
-        y: f32,
         avail_w: f32,
     }
     let frames = crate::app::terminal_host::pane_outer_frames(state);
     let active_ws = state.session.active_workspace_idx;
     let mut inputs = Vec::with_capacity(frames.len());
-    for (pane_id, x, y, w, _h) in frames {
+    for (pane_id, _x, _y, w, _h) in frames {
         let (ws_idx, col_idx) = crate::find_pane_location(&state.session, pane_id)
             .map(|(ws, col, _)| (ws, col))
             .unwrap_or((active_ws, 0));
@@ -1052,16 +1063,14 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             runtime,
             zoomed,
             floating,
-            x,
-            y,
             avail_w: (w - 2.0 * HEADER_MARGIN).max(0.0),
         });
     }
 
-    // Phase 2: build (if changed) + position each header (mutates `state.pane_headers`).
-    let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
+    // Phase 2: build one bar per pane. No key comparison and no pruning here — `sync_panes` folds
+    // this key into the pane's own, so a pane and the bar inside it rebuild together or not at all,
+    // and a bar disappears with the pane that held it.
     for input in &inputs {
-        seen.insert(input.pane_id);
         let content = PaneHeaderContent {
             programs: &state.programs,
             fallback_name: &input.name,
@@ -1077,51 +1086,22 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             catalog: &state.action_catalog,
         };
         let key = pane_header_key(&content, font, input.avail_w);
-        let needs_build = state
-            .pane_headers
-            .get(&input.pane_id)
-            .map(|h| h.key != key)
-            .unwrap_or(true);
-        if needs_build {
-            let ctx = PaneHeaderCtx {
-                pane_id: input.pane_id,
-                ws_idx: input.ws_idx,
-                col_idx: input.col_idx,
-                event_proxy: state.event_proxy.clone(),
-            };
-            match build_pane_header(&content, &theme, font, input.avail_w, ctx) {
-                Some(root) => {
-                    // The identity rule's warning half (F003/P082/T444). This tree is where it was
-                    // actually broken: zooming changed what the header rendered, and the buttons'
-                    // hint letters moved under Antonio while he was driving (F011/P094/T451). They
-                    // carry `.key(action_name)` now, and this is what says so if that ever goes.
-                    super::identity::report_ambiguous_widgets("pane-header", &root);
-                    state
-                        .pane_headers
-                        .insert(input.pane_id, RetainedPaneHeader { root, key });
-                }
-                None => {
-                    state.pane_headers.remove(&input.pane_id);
-                    continue;
-                }
-            }
-        }
-        if let Some(header) = state.pane_headers.get_mut(&input.pane_id) {
-            LayoutEngine::new().base_font(font).compute(
-                &mut header.root,
-                Size::new(input.avail_w as f64, band as f64),
-            );
-            let bar_h = header.root.base().bounds.size.h as f32;
-            let bar_y = input.y + f64::from(((band - bar_h) / 2.0).max(0.0)) as f32;
-            translate_tree(
-                &mut header.root,
-                (input.x + HEADER_MARGIN) as f64,
-                bar_y as f64,
-            );
+        let ctx = PaneHeaderCtx {
+            pane_id: input.pane_id,
+            ws_idx: input.ws_idx,
+            col_idx: input.col_idx,
+            event_proxy: state.event_proxy.clone(),
+        };
+        if let Some(root) = build_pane_header(&content, &theme, band, font, input.avail_w, ctx) {
+            // The identity rule's warning half (F003/P082/T444). This tree is where it was actually
+            // broken: zooming changed what the bar rendered, and the buttons' hint letters moved
+            // under Antonio while he was driving (F011/P094/T451). They carry `.key(action_name)`
+            // now, and this is what says so if that ever goes.
+            super::identity::report_ambiguous_widgets("pane-header", &root);
+            built.insert(input.pane_id, (root, key));
         }
     }
-    // Prune vanished panes.
-    state.pane_headers.retain(|id, _| seen.contains(id));
+    built
 }
 
 

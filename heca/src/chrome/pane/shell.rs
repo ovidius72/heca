@@ -11,7 +11,7 @@
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::widgets::{HintPlacement, KeyHint, Pane as UiPane};
-use heca_grid_ui::{ComponentExt, LayoutExt, StyleExt};
+use heca_grid_ui::{ComponentExt, LayoutExt, Parent, StyleExt};
 
 use super::model::PaneShellModel;
 
@@ -28,6 +28,26 @@ pub(crate) struct PaneCallbacks {
 pub(crate) struct PaneShell<'a> {
     pub(crate) model: &'a PaneShellModel,
     pub(crate) cb: &'a PaneCallbacks,
+    /// **The header slot — whatever the thing running in this pane wants along its top.**
+    ///
+    /// The shell does not know what a terminal is, so it does not know what a title bar is either.
+    /// A terminal fills this with its info bar (a `Tag` of title segments and a row of action
+    /// `IconButton`s); an editor, a browser or a plugin's pane fills it with something else, or
+    /// with nothing. Same slot, same rules, no special case — exactly what
+    /// [`DockFrame::header`](heca_grid_ui::widgets::DockFrame::header) already does for a dock.
+    ///
+    /// It is a **child**, which is the whole point: the layout places it, it sizes itself, and one
+    /// walk delivers its input. Before this it was a second retained tree the app laid out,
+    /// positioned by hand and routed events to separately (F003/P097/T497).
+    pub(crate) header: Option<Box<dyn heca_grid_ui::Component>>,
+    /// **The content slot — what actually runs in this pane**, under the header.
+    ///
+    /// Empty today: a terminal paints itself into the pane's rect rather than being a child
+    /// (P094/T449 is what makes it one). The slot exists anyway, because it is what gives the
+    /// column its second row — the header takes its natural height and this takes everything
+    /// left, which is what puts the header in a strip at the top instead of in the middle of the
+    /// pane.
+    pub(crate) content: Option<Box<dyn heca_grid_ui::Component>>,
 }
 
 impl PaneShell<'_> {
@@ -76,7 +96,20 @@ impl PaneShell<'_> {
         // The pane's own identity, from the data — never a counter, never a position. A pane id is
         // stable across every rebuild, which is what lets a letter stay with the same pane between
         // openings of the picker (F003/P082/T445).
-        let pane = pane.key(crate::chrome::pane_key(pane_id));
+        let mut pane = pane.key(crate::chrome::pane_key(pane_id));
+
+        // **Two rows: the header at its own height, the content taking the rest.** The header is
+        // whatever the thing running in this pane wants along its top; the shell neither builds it
+        // nor knows what it is.
+        if let Some(header) = self.header {
+            pane = pane.child_boxed(header);
+        }
+        // The content row. It grows, which is what holds the header to a strip at the top rather
+        // than letting it centre itself down the middle of the pane.
+        pane = match self.content {
+            Some(content) => pane.child_boxed(content),
+            None => pane.child(heca_grid_ui::widgets::Flex::column().grow(1.0)),
+        };
 
         let pick = self.cb.pick.clone();
         // **Say what the pick IS, not only what it runs** (F003/P082/T432). The closure emits
@@ -138,7 +171,13 @@ mod tests {
     fn the_pane_declares_its_own_identity() {
         let (cb, _) = recording_callbacks();
         let m = model(7);
-        let tree = PaneShell { model: &m, cb: &cb }.build();
+        let tree = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
         // The wrapper is transparent; the identity belongs to the pane inside it.
         let pane = &tree.base().children[0];
         assert_eq!(pane.base().key.as_deref(), Some("pane:7"));
@@ -155,7 +194,13 @@ mod tests {
     fn the_pane_says_what_picking_it_would_do() {
         let (cb, _) = recording_callbacks();
         let m = model(7);
-        let tree = PaneShell { model: &m, cb: &cb }.build();
+        let tree = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
         let intent = tree
             .base()
             .hint
@@ -177,7 +222,13 @@ mod tests {
     fn picking_the_pane_focuses_that_pane() {
         let (cb, picked) = recording_callbacks();
         let m = model(3);
-        let tree = PaneShell { model: &m, cb: &cb }.build();
+        let tree = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
         let hint = tree.base().hint.as_ref().expect("the pane declares a pick");
         hint.run();
         assert_eq!(*picked.borrow(), vec![heca_core::layout::PaneId(3)]);
@@ -189,7 +240,13 @@ mod tests {
     fn the_letter_is_centred_over_the_pane() {
         let (cb, _) = recording_callbacks();
         let m = model(1);
-        let tree = PaneShell { model: &m, cb: &cb }.build();
+        let tree = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
         assert_eq!(tree.base().hint_style.placement, HintPlacement::Center);
     }
 
@@ -203,7 +260,13 @@ mod tests {
     fn resizing_an_already_built_shell_moves_the_frame() {
         let (cb, _) = recording_callbacks();
         let m = model(1);
-        let mut tree = PaneShell { model: &m, cb: &cb }.build();
+        let mut tree = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
 
         super::size_to(&mut tree, 320.0, 728.0);
         LayoutEngine::new().compute(&mut tree, Size::new(320.0, 728.0));
@@ -228,7 +291,13 @@ mod tests {
             let mut m = model(1);
             m.w = w;
             m.h = h;
-            let mut tree = PaneShell { model: &m, cb: &cb }.build();
+            let mut tree = PaneShell {
+                model: &m,
+                cb: &cb,
+                header: None,
+                content: None,
+            }
+            .build();
             super::size_to(&mut tree, w, h);
             LayoutEngine::new().compute(&mut tree, Size::new(w as f64, h as f64));
             let b = tree.base().bounds;

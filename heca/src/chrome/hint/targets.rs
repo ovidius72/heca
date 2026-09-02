@@ -100,7 +100,7 @@ fn pick_source(
             .map(|t| t.intent_source)
             .unwrap_or(S::Keyboard),
         HintSurface::Layer(id) => S::Surface(state.layers.surface_key(*id)),
-        HintSurface::Pane(_) | HintSurface::PaneHeader(_) => S::Keyboard,
+        HintSurface::Pane(_) => S::Keyboard,
     }
 }
 
@@ -206,16 +206,13 @@ fn visible_hint_targets(
         .into_iter()
         .rev()
     {
-        // The pane's own shell first — it OWNS the pane (its identity, its letter); the header is
-        // a view of what runs inside it. Both are real declarations, so both wear a letter, and
-        // both are hidden by the same occluder because they are one pane.
-        let mut targets = match state.panes.get(&pane_id) {
+        // The pane's shell and its info bar are ONE tree now — the bar is a child of the pane —
+        // so one walk collects the pane's own letter and its bar buttons' together. They were
+        // always hidden by the same occluder anyway, because they are one pane.
+        let targets = match state.panes.get(&pane_id) {
             Some(shell) => hints_of(&HintSurface::Pane(pane_id), &shell.root),
             None => Vec::new(),
         };
-        if let Some(header) = state.pane_headers.get(&pane_id) {
-            targets.extend(hints_of(&HintSurface::PaneHeader(pane_id), &header.root));
-        }
         if targets.is_empty() {
             continue;
         }
