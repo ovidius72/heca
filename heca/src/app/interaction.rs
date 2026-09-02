@@ -560,7 +560,21 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // (`Domain::Container`), which is what keeps "put the cursor on that row" out of the
         // command palette and RPC while nobody is in a dock. A click on a row emits
         // [`WmAction::FocusDock`] first, so the domain is `Container` by the time this runs.
-        WmAction::CursorTo { .. } => ActionPolicy::ContainerFocused,
+        // **Moving a container's cursor is the container's own state, not an act on anything.**
+        // It was `ContainerFocused`, which exists to stop "delete the row my cursor is on" being
+        // asked from the palette or over RPC while the dock is not being driven. This is not that
+        // kind of request: it changes no pane, no column and no layout — it only records which row
+        // the cursor is on, so there is nothing for a focus domain to protect.
+        //
+        // The gate had a real cost. Clicking a sidebar row focuses the *pane*, so by the time the
+        // cursor move was judged the container no longer held the keyboard and it was refused —
+        // the click focused the pane but left the cursor behind, and arrowing afterwards resumed
+        // from wherever it had been. A row should behave like a file manager's: click it, then go
+        // up and down from there (Antonio, driving, 2026-09-02).
+        //
+        // `Global`, not `AlwaysAllowed`: a floating pane is no reason to refuse moving a dock's
+        // cursor, and `AlwaysAllowed` is refused while something covers the content.
+        WmAction::CursorTo { .. } => ActionPolicy::Global,
         WmAction::UnfocusDock => ActionPolicy::Global,
         // Horizontal scroll reaches a chrome container's scroll area only — chrome state, no pane
         // layout impact — so it stays reachable while a floating pane is active, unlike the vertical
@@ -961,6 +975,10 @@ pub(crate) fn dispatch_intent(
         );
         return;
     }
+    // Kept for the debug line below: routing consumes the intent, and a refusal that cannot name
+    // what was refused is not actionable.
+    #[cfg(debug_assertions)]
+    let refused = intent.clone();
     let decision = route_interaction(state, source, intent);
 
     match decision {
@@ -1003,8 +1021,12 @@ pub(crate) fn dispatch_intent(
             dispatch_view_intent(state, registry, source, &vi);
         }
         RouteDecision::Block => {
+            // **Say WHAT was refused, not only who asked.** The source alone cannot be acted on: a
+            // single click can send more than one intent, so identical lines may be different
+            // refusals — and one of them being correct says nothing about the others
+            // (Antonio, driving, 2026-09-02).
             #[cfg(debug_assertions)]
-            eprintln!("[heca] interaction: blocked intent from {:?}", source);
+            eprintln!("[heca] interaction: blocked {refused:?} from {source:?}");
         }
     }
 }
