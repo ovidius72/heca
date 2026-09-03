@@ -145,6 +145,9 @@ impl LayoutEngine {
             }
         };
         c.base_mut().font = resolved;
+        // The tree's own base, unscaled by any size variant — what a widget floats *beside* itself
+        // is a small panel belonging to the surface, not a part of the control.
+        c.base_mut().root_font = self.base_font;
         // Resolve theme spacing tokens (font-relative) into concrete padding px, so a
         // container takes its padding from the theme instead of a hand-computed value.
         //

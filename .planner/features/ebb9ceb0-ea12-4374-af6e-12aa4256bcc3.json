@@ -11,8 +11,8 @@
   "contextReadyReason": "",
   "startDate": "",
   "endDate": "",
-  "workDone": "",
-  "workRemaining": "",
+  "workDone": "F003's priority-0 input work is essentially complete: P097 has collapsed the 16 hand-written per-surface pointer dispatch functions into one door per retained tree family, each taking the single Event::Raw the event loop builds. The framework now owns the pointer gesture end to end — the drag identity a row already declares, the modifier state, and what a drop means — and the app's parallel drag machine is deleted. The pane info bar has become a child of its pane through a generic header slot, the first real demonstration that a component can own its own input.",
+  "workRemaining": "P097's T497 has two unverified gaps to drive, then T499, T500 and the plugin-capability half (T501/T502). Elsewhere in F003: P035's host-API namespaces and StateView (T506, T058, T064, T065), P082's five open bugs, and P096's two card defects.",
   "acceptedDecisions": [],
   "phaseIds": [
     "09bcb3cf-f8ea-454a-913e-ea377c53d37e",
@@ -53,8 +53,12 @@
     }
   ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-09-02T07:36:12.775Z",
+  "updatedAt": "2026-09-02T15:03:48.253Z",
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:71143b76-44da-44d9-983a-3d7cd3314804",
+      "createdAt": "2026-09-02T15:07:41.201Z"
+    },
     {
       "sessionId": "mcp-process:939eca9a-a26d-40ed-8a64-25c8c929cff9",
       "createdAt": "2026-09-02T10:09:28.620Z"

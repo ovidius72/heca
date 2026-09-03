@@ -307,6 +307,15 @@ pub struct Base {
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
     pub font: f32,
+    /// **The tree's own base font**, written by the layout pass — before any widget's size variant
+    /// scales it.
+    ///
+    /// [`font`](Self::font) is what this widget draws its *content* at, and a size variant is meant
+    /// to scale that. What a widget floats *beside* itself is different: a tooltip bubble is a small
+    /// panel belonging to the surface, not a part of the control, so an emphasized button was
+    /// getting an emphasized bubble — 1.25× the text of an identical tip on the button next to it
+    /// (Antonio, driving, 2026-09-03).
+    pub root_font: f32,
     /// The **viewport the tree was laid out against**, written by the layout pass.
     ///
     /// A widget that draws a floating panel has to clamp it on screen, and it used to learn the
@@ -362,6 +371,19 @@ pub struct Base {
     /// why sidebar letters kept failing with no error. `KeyHint` stays as a decorator for a
     /// **region that is not a widget you can put a builder on**, and nothing else.
     pub hint: Option<crate::hint::Hint>,
+    /// **What this widget says on hover.** `None` — the default — means it says nothing and costs
+    /// nothing.
+    ///
+    /// Declared with [`tooltip`](crate::builders::ComponentExt::tooltip), on **every** widget, and
+    /// the framework does the rest: the reveal is timed from the hover clock the pointer router
+    /// already keeps, and the bubble is drawn in [`paint_child`] beside the hint letter and the
+    /// drag feedback.
+    ///
+    /// It used to be a wrapper placed *around* a widget, so the rule lived in every caller's
+    /// discipline — and a widget held in a typed container could not be wrapped at all without
+    /// ceasing to be what the container accepts. The same move the pick declaration made when it
+    /// left [`KeyHint`](crate::widgets::KeyHint) for every widget.
+    pub tooltip: Option<crate::widgets::tooltip::Tip>,
     /// **May this widget be offered a letter at all?** `true` for everything, until a caller says
     /// otherwise with [`hintable(false)`](crate::builders::ComponentExt::hintable).
     ///
@@ -498,12 +520,14 @@ impl Base {
             key: None,
             scope_key: None,
             font: 15.0,
+            root_font: 15.0,
             viewport: Size::new(f64::MAX, f64::MAX),
             pointer: crate::pointer::PointerState::new(),
             handlers: None,
             context_menu: None,
             surface: false,
             hint: None,
+            tooltip: None,
             hintable: true,
             activatable: false,
             hint_label: crate::reactive::signal(None),
@@ -892,6 +916,19 @@ pub trait Component {
         false
     }
 
+    /// **Show only your icon, keeping your words** — or go back to showing both.
+    ///
+    /// A question a container asks a child it is short of room for, answered by whatever the child
+    /// happens to be. `false` by default: a widget with nothing to shorten simply ignores it, and a
+    /// widget with no icon must ignore it, since hiding its words would leave an empty box.
+    ///
+    /// It is a trait method for the same reason [`activate`](Self::activate) is: a container holds
+    /// `dyn Component`, so without one the only way to ask would be to know the child's concrete
+    /// type — which is exactly the coupling a container must not have. The container decides *what*
+    /// is shown; the widget owns *how it looks* when it is, including that a button with no words
+    /// is square and one with words is not.
+    fn set_icon_only(&mut self, _on: bool) {}
+
     fn wants_visible(&self) -> bool {
         self.base().focused_by_keyboard()
     }
@@ -913,7 +950,7 @@ pub trait Component {
     /// Overlay widgets that paint **outside** their own bounds (a tooltip bubble, a command-palette
     /// panel) override it so a redraw covers what they actually drew.
     fn damage_bounds(&self) -> Rectangle {
-        self.base().bounds
+        crate::widgets::tooltip::damage(self.base())
     }
 
     /// `true` when this widget **clips** its children to its own bounds, so a press or a move
@@ -1010,7 +1047,7 @@ pub trait Component {
     /// the soonest such time across the tree instead of redrawing continuously.
     /// `None` = no timed redraw pending. Default: the soonest across children.
     fn next_redraw(&self) -> Option<f32> {
-        let mut soonest = None;
+        let mut soonest = crate::widgets::tooltip::wake(self.base());
         for child in self.base().children.iter() {
             soonest = soonest_redraw(soonest, child.next_redraw());
         }
@@ -1312,6 +1349,7 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
     }
     c.paint(cx);
     crate::widgets::key_hint::paint_hint_label(c, cx);
+    crate::widgets::tooltip::paint_tooltip(c, cx);
     paint_drag_feedback(c, cx);
 }
 

@@ -247,6 +247,12 @@ background_transparency = 0
 #         popover | menu | full_screen_ui | window_background
 # vibrancy = "under_window_background"
 
+# The `prefix+/` picker's letter size, in logical px. ONE size for every letter in
+# the app: a letter is drawn *over* whatever it points at, so it is not scaled by
+# the size of that thing — an emphasized header button and a whole pane wear the
+# same letter. Raise it if the letters read small at your font size.
+hint_font_size = 12.0
+
 # Effect tokens — override the theme; unset → inherit the theme value.
 # glow_size         : owns glow presence + halo radius + strength — including the
 #                     faint REST glow every control surface carries.

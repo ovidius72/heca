@@ -297,8 +297,8 @@ pub(super) struct ChromeFrame<'a> {
 
 /// A sidebar collapse toggle for the **top bar** (sidebar-fu-14): a small arrow
 /// `IconButton` that emits `ActivateAction(action)` (expand↔rail for its region),
-/// wrapped in a tooltip carrying its keybind (resolved centrally by `action_name`
-/// — like every other chrome button). Lives in the always-visible top bar so it
+/// carrying a tooltip with its keybind (resolved centrally by `action_name` — like every other
+/// chrome button; the tip is a property of the widget, so this still returns the widget). Lives in the always-visible top bar so it
 /// works in both expanded and collapsed states.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn sidebar_toggle_button(
@@ -309,7 +309,7 @@ pub(super) fn sidebar_toggle_button(
     catalog: &crate::actions::ActionCatalog,
     emit: ChromeIntentEmitter,
     color: Color,
-) -> Tooltip {
+) -> KeyHint {
     use crate::app::interaction::InteractionIntent;
     // Label from the action descriptor (catalog-owned), never re-spelled here.
     let label = catalog.label(action_name).unwrap_or(action_name);
@@ -346,8 +346,8 @@ fn chrome_root(
     frame: &ChromeFrame,
     left_sidebar: Option<Flex>,
     right_sidebar: Option<Flex>,
-    left_toggle: Option<Tooltip>,
-    right_toggle: Option<Tooltip>,
+    left_toggle: Option<KeyHint>,
+    right_toggle: Option<KeyHint>,
     signals: &mut ChromeSignals,
 ) -> Flex {
     let ChromeFrame {

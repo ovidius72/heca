@@ -625,8 +625,11 @@ impl Component for Input {
     }
 
     fn next_redraw(&self) -> Option<f32> {
+        // Its own tooltip is still pending whether or not the caret is blinking — an unfocused
+        // field with a tip would otherwise never wake to show it.
+        let tip = crate::widgets::tooltip::wake(&self.base);
         if !self.base.focused.get_untracked() {
-            return None;
+            return tip;
         }
         // Time until the caret flips: the next half-`BLINK_PERIOD` boundary.
         let phase = self
@@ -635,11 +638,12 @@ impl Component for Input {
             .as_secs_f32()
             .rem_euclid(BLINK_PERIOD);
         let half = BLINK_PERIOD / 2.0;
-        Some(if phase < half {
+        let caret = if phase < half {
             half - phase
         } else {
             BLINK_PERIOD - phase
-        })
+        };
+        crate::component::soonest_redraw(tip, Some(caret))
     }
 }
 

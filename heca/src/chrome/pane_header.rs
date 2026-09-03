@@ -10,6 +10,7 @@
 
 use super::*;
 use heca_grid_ui::builders::StyleExt as _;
+use heca_grid_ui::widgets::{Button, ButtonGroup, ButtonVariant};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PaneInfoView {
@@ -253,12 +254,6 @@ pub(crate) fn build_pane_info_bar(
 
 // ── In-pane info-bar header: segments (left) + interactive action buttons (right) ──
 
-/// Horizontal margin from the pane edge to the header content (matches the render
-/// side's `TITLE_BAR_MARGIN` in `terminal_render.rs`).
-const HEADER_MARGIN: f32 = 6.0;
-/// Gap between adjacent action buttons (logical px) — tight, so the cluster reads
-/// as one control group.
-const HEADER_BUTTON_GAP: f32 = 1.0;
 
 /// Font multiplier for a sidebar card's **secondary metadata** — the dimmed `(process)`
 /// suffix and the cwd row — smaller than the name so it reads as supporting detail.
@@ -438,12 +433,12 @@ pub(crate) fn pane_action_name(action: heca_config::appearance::PaneAction) -> &
 /// resolved centrally from `shortcuts` by `action_name`. The one place any button's
 /// tooltip is composed: callers name the action, never the shortcut, so a rebind
 /// updates every tip and no surface can drift on the leader symbol or format.
-pub(crate) fn action_tooltip(
-    child: impl Component + 'static,
+pub(crate) fn action_tooltip<C: Component + heca_grid_ui::ComponentExt + 'static>(
+    child: C,
     action_name: &str,
     label: &str,
     shortcuts: &ActionShortcuts,
-) -> Tooltip {
+) -> C {
     let tip = match shortcuts.get(action_name) {
         Some(sc) if !sc.is_empty() => format!("{label}  {sc}"),
         _ => label.to_string(),
@@ -467,7 +462,11 @@ pub(crate) fn action_tooltip(
     {
         hint.intent = Some(heca_view::Intent::new(action_name));
     }
-    Tooltip::new(child, tip).side(TooltipSide::Bottom)
+    // **The tip is a property of the button, not a box around it** — so the button that comes back
+    // is still a button, and can go into a `ButtonGroup`, which takes `Button` children. Wrapping
+    // it returned a `Tooltip`, which the group would refuse; that is what forced the tooltip onto
+    // every widget in the first place.
+    child.tooltip(tip).tooltip_side(TooltipSide::Bottom)
 }
 
 /// Map a configured [`PaneAction`] to its `(icon, WM action, label, needs_focus)`.
@@ -588,8 +587,10 @@ pub(crate) struct PaneHeaderButton {
     needs_focus: bool,
     /// Held-on status (zoomed column / floating pane) → the icon paints as toggled-on.
     is_active: bool,
-    /// Destructive (close) → danger-hued glyph + hover/press.
-    is_close: bool,
+    /// **Destructive** → the button reads in the danger hue. Declared by the action itself and read
+    /// from the catalog, never decided here: which acts cannot be undone is not a fact about pane
+    /// headers.
+    destructive: bool,
 }
 
 /// Resolve the header's action buttons for `content` into the generic
@@ -621,7 +622,7 @@ pub(crate) fn pane_header_buttons(content: &PaneHeaderContent, ctx: &PaneHeaderC
                 // and a `FocusPane` from MouseContent is blocked in the floating domain.
                 needs_focus: needs_focus && !content.floating,
                 is_active,
-                is_close: matches!(action, PaneAction::Close),
+                destructive: content.catalog.destructive(pane_action_name(action)),
             }
         })
         .collect();
@@ -698,20 +699,35 @@ pub(crate) fn build_pane_header(
     // Build the action-button cluster first: each button self-sizes from its
     // `WidgetSize::Header` variant (emphasized glyph + snug cluster padding), so its
     // width is owned by the widget, not hand-computed here.
-    let mut buttons = if specs.is_empty() {
+    let buttons = if specs.is_empty() {
         None
     } else {
-        let mut row = Flex::row().align(Align::Center).gap(HEADER_BUTTON_GAP);
+        // **A `ButtonGroup`, not a hand-built row.** It owns what happens when the pane is too
+        // narrow for its actions: the words come off first (they become what each button says on
+        // hover), then whatever still does not fit moves into a menu behind a trailing ⋮. Before
+        // this the cluster was a plain row of icon buttons, and a narrow pane squashed every one of
+        // them to a seven-pixel sliver while the title beside them ellipsed correctly (Antonio,
+        // driving, 2026-09-02).
+        // **Icons, always.** A pane's header is a strip, not a toolbar with room for words — the
+        // labels are still carried, and they are what each button says on hover and what its row
+        // reads once the group has to put it in the menu.
+        let mut group = ButtonGroup::new()
+            .size(WidgetSize::Header)
+            .variant(ButtonVariant::Ghost)
+            .display(heca_grid_ui::widgets::Display::IconOnly);
         for spec in specs {
             // Close is destructive → its glyph + hover/press use the theme danger
             // hue; the rest use the foreground glyph with an accent hover. The danger
             // glyph is softened toward the header surface so the red reads as a cue,
             // not an alarm (full-intensity danger was too vibrant).
-            let (icon_color, tone) = if spec.is_close {
-                (theme.colors.danger.lerp(theme.colors.surface, 0.25), theme.colors.danger)
-            } else {
-                (theme.colors.foreground, theme.colors.accent)
-            };
+            // **A destructive action reads in the danger hue, without being a boxed destructive
+            // control.** The `Destructive` variant carries a border, and in a row of quiet ghost
+            // buttons that made it the only framed one (Antonio, driving, 2026-09-03). A tone is the
+            // hue without the frame, and it comes from the theme so it follows a reload.
+            //
+            // *Which* actions are destructive is the action's own declaration, read from the
+            // catalog — this loop only maps that answer onto a colour.
+            let tone = spec.destructive.then_some(theme.colors.danger);
             let proxy = ctx.event_proxy.clone();
             let pane_id = ctx.pane_id;
             let wm_action = spec.wm_action.clone();
@@ -734,11 +750,17 @@ pub(crate) fn build_pane_header(
                 });
             };
             let hint = fire.clone();
-            let button = IconButton::new(Icon::new(spec.glyph).color(icon_color))
-                .size(WidgetSize::Header)
-                .tone(tone)
+            // **Its words are carried even while only its icon shows** — they are what it says on
+            // hover, and what its row reads in the menu once the pane is too narrow to hold it.
+            // Every `Button` constructor takes them, which is what makes a collapsed group
+            // readable with nothing extra written here.
+            let mut button = Button::new(spec.label)
+                .icon(spec.glyph)
                 .active(spec.is_active)
                 .on_click(fire);
+            if let Some(tone) = tone {
+                button = button.tone(tone);
+            }
             // **What a pick does to this button**, declared on the button itself: no id, no
             // registry, and nothing for a config-added or plugin-added button to forget — the
             // picker collects the declaration out of the laid-out tree.
@@ -754,34 +776,29 @@ pub(crate) fn build_pane_header(
             // The action name is exactly what a key should be — from the data, never a counter —
             // and it is unique WITHOUT the pane id in it, because each pane's header is its own
             // hint surface: `target_identity` prefixes it, giving `pane-header:7/zoom` and
-            // `pane-header:9/zoom`. It goes on the wrapper because the wrapper is what declares the
-            // pick, and the picker addresses whatever declared it.
-            let button = KeyHint::new(button)
-                .key(spec.action_name)
-                .on_hint(hint);
+            // `pane-header:9/zoom`. It goes **on the button**, because every widget takes both
+            // builders — the decorator is for a region that is not a widget you can put one on.
+            let button = button.key(spec.action_name).on_hint(hint);
             // Tooltip = label + the action's current keybind(s), resolved centrally
-            // by name (never hand-picked here); the leader renders via PREFIX_SYMBOL.
-            row = row.child(action_tooltip(button, spec.action_name, spec.label, content.shortcuts));
+            // by name (never hand-picked here); the leader renders via PREFIX_SYMBOL. It is a
+            // property now, so what comes back is still a `Button` and the group will take it.
+            group = group.child(action_tooltip(
+                button,
+                spec.action_name,
+                spec.label,
+                content.shortcuts,
+            ));
         }
-        Some(row)
+        Some(group)
     };
 
-    // Measure the cluster's natural width by laying it out on its own — the widget
-    // reports its size, we don't compute it. (The outer tree is re-laid-out every
-    // frame in `sync_pane_headers`; this pass only feeds the bar's truncation budget.)
-    let buttons_w = if let Some(row) = buttons.as_mut() {
-        LayoutEngine::new()
-            .base_font(font)
-            .compute(row, Size::new(avail_w as f64, avail_w as f64));
-        row.base().bounds.size.w as f32
-    } else {
-        0.0
-    };
-    // The bar yields width to the button cluster first.
-    let bar_max = (avail_w
-        - buttons_w
-        - if buttons_w > 0.0 { HEADER_BUTTON_GAP } else { 0.0 })
-    .max(0.0);
+    // **Nothing measures the buttons to work out the title's budget any more.** That was a second
+    // layout pass whose only job was to feed an estimate — and the estimate then guessed the title's
+    // width from a character count and two font multiples, with the per-pane render clip as its
+    // stated backstop. That clip is gone (the bar is a child of its pane now), so the guess had
+    // nothing catching it. The row divides the space instead: the group keeps its buttons at their
+    // own size and gives them up when it must, and the title chip ellipses itself in what is left.
+    let bar_max = avail_w;
     let bar = build_pane_info_bar(
         content.programs,
         content.fallback_name,
@@ -803,6 +820,9 @@ pub(crate) fn build_pane_header(
     // the content taking everything left — so the bar is exactly as tall as what is in it.
     let row = Flex::row()
         .width(Length::Pct(1.0))
+        // **Air between the title and the actions**, as a token — it resolves against the inherited
+        // font, so it holds at every font size and UI zoom instead of being tuned for one.
+        .gap_spacing(heca_grid_ui::Spacing::Sm)
         // **The bar's own breathing room, which is what makes the strip the height it is.** The
         // host reserves `title_bar_reserve` at the pane top — the bar's content height plus this
         // margin twice over — so carrying the margin here is what makes the bar exactly fill the
@@ -826,6 +846,10 @@ pub(crate) fn build_pane_header(
         Surface::new()
             .background(band)
             .width(Length::Pct(1.0))
+            // **The strip's own inset, on both axes.** It replaces a hand-subtracted 6px margin
+            // that the host used to take off the pane width before handing the bar a budget — the
+            // container holds its own padding, and nothing outside it has to know the number.
+            .pad_x(heca_grid_ui::Spacing::Xs)
             // **A theme token, not a pixel count.** `Spacing` resolves against the inherited font
             // at layout, so the bar's breathing room scales with the font, the size variant and UI
             // zoom. A raw px value is tuned for one font size and wrong at every other
@@ -1063,7 +1087,9 @@ pub(crate) fn build_pane_headers(
             runtime,
             zoomed,
             floating,
-            avail_w: (w - 2.0 * HEADER_MARGIN).max(0.0),
+            // The pane's own width. The strip insets its content with its own padding, so nothing
+            // out here subtracts a margin from it any more.
+            avail_w: w.max(0.0),
         });
     }
 
@@ -1111,6 +1137,28 @@ mod tests {
     use heca_grid_ui::builders::ComponentExt as _;
     use heca_grid_ui::widgets::Label;
 
+    /// **Which actions are destructive is the action's own declaration, not a surface's.**
+    ///
+    /// It was written into this file as `matches!(action, PaneAction::Close)` — a styling rule keyed
+    /// to a name, in a file that should know nothing about which acts cannot be undone (Antonio,
+    /// 2026-09-03). Every surface that renders an action reads the same answer now, exactly as they
+    /// already do for its icon and its label, so a header button, a menu entry and the palette
+    /// cannot disagree about what is dangerous.
+    #[test]
+    fn a_headers_danger_hue_comes_from_the_action_not_from_its_name() {
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        assert!(
+            catalog.destructive("close"),
+            "closing a pane is declared destructive by the action"
+        );
+        for safe in ["zoom_column", "float", "add_pane_to_column"] {
+            assert!(
+                !catalog.destructive(safe),
+                "{safe} is not destructive, so nothing should draw it as though it were"
+            );
+        }
+    }
+
     /// **A chrome button's pick says what it is, so the picker can refuse it** (F003/P082/T432).
     ///
     /// A button hands over the same closure for its click and its pick — they are one gesture for a
@@ -1127,7 +1175,10 @@ mod tests {
         let button = Label::new("×").on_hint(|| {});
         let tip = action_tooltip(button, "close", "Close", &shortcuts);
 
-        let named = tip.base().children[0]
+        // Read straight off the widget: the tip is a **property** now, so what comes back is the
+        // button itself rather than a wrapper around it — which is exactly what lets a pane header
+        // button go into a `ButtonGroup`.
+        let named = tip
             .base()
             .hint
             .as_ref()
@@ -1149,7 +1200,7 @@ mod tests {
         ));
         let tip = action_tooltip(button, "close", "Close", &shortcuts);
 
-        let named = tip.base().children[0]
+        let named = tip
             .base()
             .hint
             .as_ref()

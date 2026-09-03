@@ -761,6 +761,25 @@ impl Button {
     pub fn bordered(self, on: bool) -> Self {
         self.prop("bordered", on)
     }
+    /// **Held on** — a toggled status rather than a transient hover, painted as a persistent
+    /// tone-tinted wash and a firm border under whatever the variant draws. The same state, and the
+    /// same look, as an icon button's.
+    pub fn active(self, on: bool) -> Self {
+        self.prop("active", on)
+    }
+    /// **Show only the icon, keeping the words** — the label is not drawn and takes no space, and
+    /// the button becomes square, since the horizontal room a button reserves exists for text. The
+    /// words are still carried: they are what it says on hover, and what its row reads if a button
+    /// group moves it into a menu. A button with no icon ignores it.
+    pub fn icon_only(self, on: bool) -> Self {
+        self.prop("icon_only", on)
+    }
+    /// **The hue this button reads in**, overriding what its variant would use — a theme token name
+    /// or a literal. A button can be *about* something dangerous without being drawn as a boxed
+    /// destructive control, which in a row of quiet buttons is the odd one out.
+    pub fn tone(self, colour: &str) -> Self {
+        self.prop("tone", colour)
+    }
 }
 
 impl IconButton {

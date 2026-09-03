@@ -3551,7 +3551,10 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
-            tip.paint(&mut cx);
+            // **Through `paint_child`, the way a host paints a tree** — the bubble is drawn by the
+            // framework from the declaration on the widget's base, beside the hint letter and the
+            // drag feedback, so a bare `.paint(cx)` shows the widget and none of the three.
+            heca_grid_ui::paint_child(tip, &mut cx);
         }
         scene.iter().any(|c| matches!(c, DrawCommand::Text(t) if t.text == "HELP"))
     };
@@ -3573,6 +3576,65 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     // Pointer leaves: hidden again immediately.
     heca_grid_ui::dispatch(&mut tip, &Event::pointer_moved(Point::new(-50.0, -50.0)));
     assert!(!shows_help(&mut tip), "hidden once the pointer leaves");
+}
+
+/// **A tooltip is a property of the widget, not a box around it** — declared with one builder on
+/// any widget, revealed and drawn by the framework.
+///
+/// This is the capability the wrapper used to be the only way to get, and it is what lets a widget
+/// held by a typed container (a `ButtonGroup` takes `Button` children) carry one at all: wrapping
+/// it would change what it is, so the container would refuse it.
+#[test]
+fn any_widget_declares_its_own_tooltip_without_being_wrapped() {
+    use heca_grid_ui::ComponentExt;
+
+    let mut button = Button::new("Close").tooltip("Close the pane").tooltip_delay(0.02);
+
+    let shows = |b: &mut Button| -> bool {
+        LayoutEngine::new().compute(b, Size::new(300.0, 200.0));
+        let theme = Theme::default();
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            heca_grid_ui::paint_child(b, &mut cx);
+        }
+        scene
+            .iter()
+            .any(|c| matches!(c, DrawCommand::Text(t) if t.text == "Close the pane"))
+    };
+
+    assert!(!shows(&mut button), "nothing is said before the pointer arrives");
+
+    LayoutEngine::new().compute(&mut button, Size::new(300.0, 200.0));
+    let b = button.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(center));
+    std::thread::sleep(std::time::Duration::from_millis(60));
+    assert!(shows(&mut button), "the bubble reveals once the pointer has rested");
+
+    heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(Point::new(-50.0, -50.0)));
+    assert!(!shows(&mut button), "and goes as soon as the pointer leaves");
+}
+
+/// **The host is woken to show a bubble the pointer is already resting on.** Without this the
+/// reveal waits for the next unrelated event — the user nudging the mouse a second time — because
+/// a still pointer produces no frames of its own.
+#[test]
+fn a_pending_tooltip_asks_the_host_to_wake_for_it() {
+    use heca_grid_ui::ComponentExt;
+
+    let mut button = Button::new("Close").tooltip("Close the pane");
+    LayoutEngine::new().compute(&mut button, Size::new(300.0, 200.0));
+    assert_eq!(button.next_redraw(), None, "nothing pending while unhovered");
+
+    let b = button.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(center));
+    let wake = button.next_redraw().expect("a pending reveal wakes the host");
+    assert!(
+        wake > 0.0 && wake <= 0.5,
+        "it wakes at the reveal, not sooner or later (got {wake})"
+    );
 }
 
 #[test]
@@ -3620,7 +3682,7 @@ fn tooltip_flips_to_fit_the_viewport() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
-        tip.paint(&mut cx);
+        heca_grid_ui::paint_child(&tip, &mut cx);
     }
     let bubble = scene
         .iter()

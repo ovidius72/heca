@@ -65,6 +65,15 @@ impl IconButton {
         base.style.layout.align = Align::Center;
         base.style.layout.justify = Justify::Center;
         base.style.layout.padding = DEFAULT_PAD;
+        // **An icon is not negotiable.** The layout makes every child willing to give way once its
+        // row is out of room — without that, a long title shoves a caret or a drag handle clean
+        // outside its frame — and the escape clause is that a widget which must keep its size says
+        // so. An icon-only control has nothing to give: shrink it and there is no label to ellipse,
+        // just a smaller and smaller glyph. Unset, a pane's header buttons fell to seven pixels in
+        // a narrow pane while the title beside them ellipsed correctly (Antonio, driving,
+        // 2026-09-02). What happens when a row of them genuinely will not fit is a
+        // [`ButtonGroup`](super::ButtonGroup)'s job, not a silent squashing.
+        base.style.layout.flex_shrink = Some(0.0);
         base.children.push(Box::new(icon));
         Self {
             base,

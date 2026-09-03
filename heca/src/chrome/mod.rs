@@ -221,7 +221,6 @@ use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
     BadgeButton, Flex, FocusScope, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label, Pane,
     ScrollBar, Separator, Surface, Tag,
-    Tooltip,
     TooltipSide,
 };
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};

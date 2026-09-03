@@ -1172,7 +1172,9 @@ impl Component for CommandPalette {
         if self.is_open() {
             self.panel.get()
         } else {
-            self.base.bounds
+            // Closed, it damages like any other widget — its own box plus its bubble, which draws
+            // on the overlay layer outside that box.
+            crate::widgets::tooltip::damage(&self.base)
         }
     }
 
@@ -1347,10 +1349,12 @@ impl Component for CommandPalette {
     /// While open, wake the host for the query caret's next blink (instead of
     /// redrawing every frame). Closed: nothing pending.
     fn next_redraw(&self) -> Option<f32> {
+        // Its own tooltip wakes it whether the panel is open or shut — the trigger can carry one.
+        let tip = crate::widgets::tooltip::wake(&self.base);
         if self.is_open() {
-            self.query.borrow().next_redraw()
+            crate::component::soonest_redraw(tip, self.query.borrow().next_redraw())
         } else {
-            None
+            tip
         }
     }
 

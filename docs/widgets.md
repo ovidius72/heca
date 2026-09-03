@@ -21,7 +21,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
-  - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
+  - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
@@ -2387,6 +2387,131 @@ ViewNode::new(WidgetKind::Button)
 Both spellings produce the **same retained tree** — see
 [the declarative UI model](#declarative-ui-model-viewnode).
 
+### ButtonGroup
+
+**A row of related actions that fits the space it is given.**
+
+A toolbar is not a `Flex` of buttons, because a `Flex` has no answer for the moment the room runs
+out. Left alone, a row of icon buttons is **squashed to slivers** — the layout makes every child
+willing to give way once its row is short, which is what stops a long title shoving a caret outside
+its frame. Told not to shrink, the same row **overflows its container** instead. Neither is a design;
+both are the layout doing exactly what it was asked. `ButtonGroup` owns that question.
+
+As the space narrows it gives things up in the order that costs least:
+
+| stage | what goes | what stays |
+| --- | --- | --- |
+| 1 | the **words** | the icons — and the words become what the button says on hover |
+| 2 | the **buttons that no longer fit** | a single trailing `⋮`, whose menu reads their words again |
+
+Nothing is ever squashed, and nothing is ever silently unreachable.
+
+```rust
+ButtonGroup::new()
+    .size(WidgetSize::Header)                       // one size for every button in the group
+    .variant(ButtonVariant::Ghost)                  // …and one variant
+    .gap_spacing(Spacing::Xs)                       // a token, never a pixel count
+    .child(Button::new("Split").icon(Glyph::Plus).on_click(split))
+    .child(Button::new("Zoom").icon(Glyph::FrameCorners).on_click(zoom))
+    .child(Button::new("Close").icon(Glyph::Minus).on_click(close))
+```
+
+#### Its children are `Button`s, and that is the point
+
+Typed to `Button` deliberately — the same way [`Select`](#select) types its options to
+[`Choice`](#choice). **Every `Button` constructor takes its text**, so a button in a group cannot be
+built without words. That is what makes a collapsed row readable, with nothing required of the
+author and no runtime check anyone can forget.
+
+The alternative was forcing text with a typestate builder, which this library
+[considered and rejected](#forcing-a-key--a-warning-not-a-type) for `key`: noise on every widget, and
+meaningless to a plugin sending JSON. The type does it instead.
+
+#### A collapsed button runs its own click
+
+There is no handler on the group. Each button keeps its `on_click`, and a menu row runs **that same
+button** through [`Component::activate`] — the one entry every way of pressing a button already goes
+through (pointer, keyboard, a caller invoking it). So the visible button and the collapsed row do
+not merely agree: they are the same handler, and cannot drift.
+
+#### Builders
+
+| builder | what it does |
+| --- | --- |
+| `.child(Button)` | add an action. Its text is its menu label and its hover words; its icon is what it shows once there is no room for words. |
+| `.display(Display)` | `IconOnly` (default) — always icons, words kept for hover and the menu · `Full` — always words · `Auto` — words while they fit. ⚠️ **`Auto` is not settled**: taking the words off makes the row narrower, so it then fits, which is the condition for putting them back; at some widths it still alternates. Use `IconOnly` or `Full`. |
+| `.variant(ButtonVariant)` | the variant the group's buttons take. **A button that named its own keeps it** — which is what lets a toolbar be uniformly quiet while its close button still reads as destructive, without either fact being written twice. |
+| `.size(WidgetSize)` | from [`LayoutExt`](#builder-traits), and it cascades: children inherit their parent's size variant. |
+| `.gap_spacing(Spacing)` / `.gap(px)` | from `LayoutExt`, applied to the row inside. **Prefer the token.** |
+| `.shown_count()` / `.is_collapsed()` | what the group decided, for a caller that needs to know. |
+
+> ⚠️ **`display` governs stages 1 and 2 only.** Collapsing into the menu still happens whenever the
+> buttons genuinely do not fit, whichever display is pinned — otherwise pinning `Full` would bring
+> back the squashing this widget exists to end.
+
+#### How it decides — it reads the layout, it does not measure
+
+**Nothing here measures a button or works out a budget.** The group takes the room that is left and
+lays its buttons out at their own size, aligned to the **end** of it. Anything too wide for that room
+is placed *outside* the box — off the left, exactly as an end-aligned row overflows in a browser —
+and the group counts those and drops the same number from the trailing end. All of it is read off the
+finished layout, the way the pane header reads its own height.
+
+Two things make it stable:
+
+1. **It grows into the room it is given.** A group that hugs its content is as wide as whatever it
+   decided to show, so asking it how much room there is returns the answer it just produced — hide a
+   button and the room shrinks, which is the reading that hid it. It costs nothing visually, because
+   the buttons sit at the end of that room.
+2. **The buttons are built in the mode they will be shown in.** Otherwise the first layout is of
+   buttons with their words whatever the mode says, and the first decision is made from an
+   arrangement that was never going to be drawn.
+
+#### The ⋮ is one of the row's own buttons
+
+It is a `Button` like the rest, not an icon button — a different control has different padding and a
+different height, and a group's own affordance has to be one of the things the group arranges.
+
+**It declares its own pick.** A widget that is merely actionable wears a `prefix+/` letter for free,
+but only where nothing above it has already declared one: a declaration shadows the actionability
+beneath it, so that a card declaring a pick does not also letter every button inside it. A pane
+declares a pick, so everything in its header is shadowed — and the ⋮ would wear no letter at all
+unless it says what picking it does. It says the same thing its click does, anchored under itself,
+because a pick carries no pointer.
+
+#### Composition, and where it sits in a header
+
+It **arranges with a `Flex`**, like anything else would — the group decides *what* is in the row and
+`Flex` decides where those things sit. A widget that sets direction, align and justify on its own
+base has quietly re-implemented a row, and then owns every question a row already answers.
+
+**It hugs its buttons and gives way when the row is short** — it does not fill the space it is
+offered. That is what lets it be one end of a header:
+
+```rust
+Flex::row().justify(Justify::SpaceBetween).align(Align::Center)
+    .child(title)
+    .child(ButtonGroup::new().display(Display::IconOnly) /* … */)
+```
+
+A group that filled the row would leave `SpaceBetween` nothing to distribute, and the title and the
+actions would sit side by side at the left. Hugging while remaining **shrinkable** is also what makes
+the decision well founded: a flex item that may shrink is laid out at `min(its content, the room
+there is)`, so when the buttons do not fit, the group's own width *is* the room available.
+
+#### Its first caller — the pane header
+
+heca's in-pane header is a `ButtonGroup`. It replaced a hand-built row of icon buttons plus a second
+throwaway layout pass whose only job was to measure that row, so the title's width budget could be
+guessed from a character count and two font multiples — with the per-pane render clip named in the
+code as the backstop for when the guess was wrong. The bar is a child of its pane now, so that clip
+is gone and nothing was catching it. The row divides the space instead.
+
+#### Declarative (`ViewNode`)
+
+`display` and `variant` are ordinary props. `child` is **host-only**: a description adds actions
+through `children`, like every other container.
+
 ### IconButton
 
 The icon-only cousin of `Button` — a compact, clickable icon affordance for toolbars/headers.
@@ -3911,9 +4036,49 @@ container's scroll area binds as its keyboard target. See
 
 ### Tooltip
 
-A transparent wrapper that reveals a floating label when the pointer rests over its child past a
-short delay. The bubble is drawn on the **overlay layer** so it sits above siblings. It captures
-**no** input — the wrapped widget stays fully interactive (forwards events + focus).
+**A tooltip is a property of a widget, not a box around it.** Every widget takes one, on the same
+terms, with one builder:
+
+```rust
+Button::new("Close").icon(Glyph::Minus).tooltip("Close the pane")
+IconButton::new(Icon::new(Glyph::Gear)).tooltip("Settings").tooltip_side(TooltipSide::Bottom)
+```
+
+The framework owns everything behind it. The reveal is timed from the hover clock the **pointer
+router already keeps** (`PointerState::hovered_for`), and the bubble is drawn in `paint_child` — the
+one place every widget passes through — beside the hint letter and the drag feedback. Those three
+are the same kind of thing: something the framework draws *over* any widget from state it already
+has, so **no widget opts in and no host paints on their behalf**.
+
+| builder | what it does |
+| --- | --- |
+| `.tooltip(text)` | what this widget says on hover. Unset = it says nothing, and costs nothing. |
+| `.tooltip_signal(Signal<String>)` | the same, from a live signal — an action's current keybinding, a changing status — so the bubble follows without the widget being rebuilt. |
+| `.tooltip_side(TooltipSide)` | which side to prefer (`Top` default). Flipped automatically when there is no room, so it is a preference, not a placement. No-op with no tooltip declared. |
+| `.tooltip_delay(seconds)` | how long the pointer must rest (default `0.5`). No-op with no tooltip declared. |
+
+> ⚠️ **The bubble is drawn by `paint_child`, not by the widget's own `paint`.** Anything that paints
+> a tree with a bare `.paint(cx)` shows the widget and none of the three things the framework draws
+> over it — no tooltip, no hint letter, no drag feedback. Hosts and tests must go through
+> `paint_child`, exactly as the letter already requires.
+
+#### The wrapper — for a region that is not a widget
+
+`Tooltip::new(child, text)` still exists, and is now **implemented in terms of the property**: it is
+a transparent wrapper carrying a tip on its own base, so there is one reveal, one placement and one
+bubble rather than two that can drift.
+
+Reach for it only when there is no widget to declare the tooltip on. That is exactly the role
+[`KeyHint`](#keyhint) kept when the pick declaration moved onto every widget, and it is kept here
+for the same reason.
+
+**Why the property had to exist**, beyond the wrapping being noise: a widget held by a **typed**
+container cannot be wrapped. [`ButtonGroup`](#buttongroup) takes `Button` children, and
+`Tooltip::new(button, …)` is a `Tooltip`, not a `Button` — so under the old design a grouped button
+could not carry a tip at all.
+
+The bubble is drawn on the **overlay layer** so it sits above siblings. It captures **no** input —
+the widget stays fully interactive (events + focus pass through untouched).
 
 **It hand-rolls neither its placement nor its surface** — both come from the shared authorities,
 so a tooltip cannot drift away from the rest of the overlay family:
@@ -3930,10 +4095,11 @@ so a tooltip cannot drift away from the rest of the overlay family:
   and `PanelElevation::Hover` — the shared shadow at a quarter depth, because the full panel
   shadow is larger than a ~30px bubble.
 
-- **Construct**: `Tooltip::new(child, text)`, or `Tooltip::new_signal(child, Signal<String>)` for
-  a reactive label.
-- **Builders**: `.side(TooltipSide)` (`Top` | `Bottom` | `Left` | `Right`, default `Top`),
-  `.delay(seconds)` (hover delay before reveal, default `0.5`).
+- **Construct the wrapper**: `Tooltip::new(child, text)`, or
+  `Tooltip::new_signal(child, Signal<String>)` for a reactive label.
+- **Wrapper builders**: `.side(TooltipSide)` (`Top` | `Bottom` | `Left` | `Right`, default `Top`),
+  `.delay(seconds)` (hover delay before reveal, default `0.5`) — the same two values the
+  `.tooltip_side` / `.tooltip_delay` builders set on any widget.
 - **`TooltipSide` is `BesideSide`** — the same type, re-exported under the name that reads better
   at a call site. There is one four-sided vocabulary, not two.
 

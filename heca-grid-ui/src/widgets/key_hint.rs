@@ -563,12 +563,22 @@ pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
     if text.is_empty() {
         return;
     }
-    let style = base.hint_style;
-    let (cap, permitted) = keycap_rect(base.bounds, base.font, &style, &text, cx.viewport());
+    let mut style = base.hint_style;
+    // **One size and one colour for every letter in the app**, taken from the picker's own tokens
+    // rather than from the widget the letter happens to sit on.
+    //
+    // A size variant scales what a widget draws as its *own content*; a pane is drawn with its own
+    // theme, whose accent differs between the active pane and the rest. A letter is neither — it is
+    // chrome the framework stamps over a target, and it belongs to the picker. Read from the target
+    // instead, an emphasized header button wore a letter a quarter larger than the pane's own, and
+    // in a different colour, in the same picker (Antonio, driving, 2026-09-03).
+    let picker_font = cx.theme().hint_font_size;
+    style.color = Some(style.color.unwrap_or(cx.theme().hint_color));
+    let (cap, permitted) = keycap_rect(base.bounds, picker_font, &style, &text, cx.viewport());
     let Some(cap) = fit_into_view(cap, permitted, cx.clip()) else {
         return;
     };
-    let font = hint_font(base.font, &style, base.bounds);
+    let font = hint_font(picker_font, &style, base.bounds);
     cx.with_overlay(|cx| {
         paint_keycap(cx, cap, &text, font, style.color, KeycapVariant::Filled);
     });

@@ -86,6 +86,14 @@ pub struct PointerState {
     /// [`Row`](crate::widgets::Row) hands it to a list's cursor, a
     /// [`Button`](crate::widgets::Button) eases its fill toward it.
     pub hovered: Signal<bool>,
+    /// **When the pointer arrived**, or `None` while it is elsewhere. Stamped on the same
+    /// transition that sets [`hovered`](Self::hovered), so the two cannot disagree.
+    ///
+    /// It exists because "how long has this been hovered" is not a question any one widget should
+    /// answer for itself — a tooltip's reveal delay reads it, and before this the tooltip wrapper
+    /// kept a private clock started from its own capture handler, which is the same shape as the
+    /// six widgets that each tested `bounds.contains(pos)` before this module existed.
+    hovered_since: Cell<Option<Instant>>,
     /// Set on the widget that consumed a [`PointerDown`](Event::PointerDown): moves and the
     /// release route here until the button comes up.
     capture: Cell<bool>,
@@ -112,6 +120,7 @@ impl PointerState {
     pub fn new() -> Self {
         Self {
             hovered: signal(false),
+            hovered_since: Cell::new(None),
             capture: Cell::new(false),
             press: Cell::new(None),
             run: Cell::new(None),
@@ -125,6 +134,22 @@ impl PointerState {
     /// Whether the pointer is over this widget or a descendant.
     pub fn is_hovered(&self) -> bool {
         self.hovered.get_untracked()
+    }
+
+    /// **How long the pointer has rested here**, in seconds, or `None` if it is not hovering.
+    ///
+    /// The one clock, read by anything whose behaviour is "after the pointer has been still for a
+    /// while" — the tooltip reveal today.
+    pub fn hovered_for(&self) -> Option<f32> {
+        self.hovered_since
+            .get()
+            .map(|since| since.elapsed().as_secs_f32())
+    }
+
+    /// Start or clear the hover clock. Called by the hover walk on the same transition that sets
+    /// [`hovered`](Self::hovered) — never by a widget.
+    pub(crate) fn set_hovered_since(&self, now: Option<Instant>) {
+        self.hovered_since.set(now);
     }
 
     /// Whether this widget is dragging (it is the source of a drag in flight).
@@ -459,6 +484,11 @@ fn hover_walk(node: &mut dyn Component, target: Option<&[usize]>, e: &PointerEve
     let was = node.base().pointer.hovered.get_untracked();
     if was != on_path {
         node.base().pointer.hovered.set(on_path);
+        // The clock starts and stops with the hover itself, so nothing downstream has to observe
+        // enter/leave to keep its own copy in step.
+        node.base()
+            .pointer
+            .set_hovered_since(on_path.then(Instant::now));
         node.base().mark_needs_paint();
         let ev = if on_path {
             Event::PointerEnter(*e)

@@ -156,6 +156,9 @@ fn heca_theme_to_grid_ui(ht: &heca_theme::Theme) -> Theme {
         // TODO: map from config `focus_border_width` once added to heca-theme;
         // for now the affordance outlines keep their visible default.
         focus_border_width: 1.5,
+        // The picker's own size and colour — one of each, whatever a letter sits on.
+        hint_font_size: heca_config::appearance::AppearanceConfig::default().hint_font_size,
+        hint_color: ht.accent,
     }
 }
 
@@ -1303,6 +1306,72 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .child(Label::new("GLOW").font_scale(0.62).color(theme.colors.muted)),
                 ),
         )
+        // ButtonGroup: a row of actions that fits the space it is given. Drag the window narrow
+        // and watch it give things up in order — first the words (the buttons become their icons,
+        // and the words move to the hover bubble), then the buttons that still do not fit, into the
+        // menu behind the trailing ⋮. Nothing is ever squashed, which is what a plain Flex of
+        // buttons does instead.
+        .child(caption("ButtonGroup · fits the space it is given"))
+        .child(
+            Surface::new()
+                .background(theme.colors.surface)
+                .pad_all(Spacing::Xs)
+                .width(Length::Pct(0.5))
+                .child(
+                    ButtonGroup::new()
+                        .size(WidgetSize::Small)
+                        .gap_spacing(Spacing::Xs)
+                        .child(
+                            Button::new("Split")
+                                .icon(Glyph::Plus)
+                                .on_click(|| println!("[showcase] split")),
+                        )
+                        .child(
+                            Button::new("Zoom")
+                                .icon(Glyph::FrameCorners)
+                                .on_click(|| println!("[showcase] zoom")),
+                        )
+                        .child(
+                            Button::new("Float")
+                                .icon(Glyph::Sidebar)
+                                .on_click(|| println!("[showcase] float")),
+                        )
+                        .child(
+                            Button::new("Close")
+                                .icon(Glyph::Minus)
+                                .on_click(|| println!("[showcase] close")),
+                        ),
+                ),
+        )
+        // A group pinned to icons, for a strip that never wants words. The labels are still
+        // carried — they are what the hover bubble and the collapsed menu say.
+        .child(caption("ButtonGroup · Display::IconOnly"))
+        .child(
+            Surface::new()
+                .background(theme.colors.surface)
+                .pad_all(Spacing::Xs)
+                .child(
+                    ButtonGroup::new()
+                        .size(WidgetSize::Small)
+                        .display(heca_grid_ui::widgets::Display::IconOnly)
+                        .gap_spacing(Spacing::Xs)
+                        .child(
+                            Button::new("Split")
+                                .icon(Glyph::Plus)
+                                .on_click(|| println!("[showcase] split")),
+                        )
+                        .child(
+                            Button::new("Zoom")
+                                .icon(Glyph::FrameCorners)
+                                .on_click(|| println!("[showcase] zoom")),
+                        )
+                        .child(
+                            Button::new("Close")
+                                .icon(Glyph::Minus)
+                                .on_click(|| println!("[showcase] close")),
+                        ),
+                ),
+        )
         // IconButton + Tooltip: a toolbar of compact, clickable icon affordances —
         // ghost at rest, tinted hover frame + press flash + focus ring — each
         // wrapped in a hover-revealed Tooltip label. The danger one uses `.tone()`.
@@ -1311,21 +1380,24 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             Flex::row()
                 .gap(8.0)
                 .align(Align::Center)
-                .child(Tooltip::new(
+                // **The tooltip is a property of the button**, not a box around it — one builder,
+                // on every widget. This row used to wrap each button in a `Tooltip`, which is the
+                // noise the property removed.
+                .child(
                     IconButton::new(Icon::new(Glyph::Search).color(theme.colors.foreground).size(20.0))
-                        .on_click(|| println!("[showcase] search")),
-                    "Search",
-                ))
-                .child(Tooltip::new(
+                        .on_click(|| println!("[showcase] search"))
+                        .tooltip("Search"),
+                )
+                .child(
                     IconButton::new(Icon::new(Glyph::Gear).color(theme.colors.foreground).size(20.0))
-                        .on_click(|| println!("[showcase] settings")),
-                    "Settings",
-                ))
-                .child(Tooltip::new(
+                        .on_click(|| println!("[showcase] settings"))
+                        .tooltip("Settings"),
+                )
+                .child(
                     IconButton::new(Icon::new(Glyph::Plus).color(theme.colors.foreground).size(20.0))
-                        .on_click(|| println!("[showcase] add")),
-                    "New pane",
-                ))
+                        .on_click(|| println!("[showcase] add"))
+                        .tooltip("New pane"),
+                )
                 // `.active(true)`: held-on (toggled) status — a persistent tone-tinted
                 // frame, like the in-pane zoom/float buttons when engaged.
                 .child(Tooltip::new(

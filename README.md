@@ -814,6 +814,11 @@ overlay_border_style = "bracketed"   # bracketed | bordered | none — the share
                                      # `bordered` = plain edge, `none` = no frame. Each widget's own
                                      # accent border/glow is separate and unaffected.
 
+# The `prefix+/` picker's letters
+hint_font_size = 12.0      # one size for EVERY letter in the app, in logical px. A letter is drawn
+                           # over whatever it points at, so it is not scaled by the size of that
+                           # thing — a header button and a whole pane wear the same letter.
+
 # Keyboard focus outline
 show_focus_border = true   # draw the focus ring at all
 # focus_ring = "#7fd3ff"   # focus-outline color; unset = the accent shifted toward `foreground`

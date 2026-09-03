@@ -49,7 +49,8 @@ mod tabs;
 mod tag;
 mod toast;
 mod toggle;
-mod tooltip;
+mod button_group;
+pub mod tooltip;
 mod visibility;
 
 pub use alert::{Alert, AlertVariant};
@@ -103,5 +104,6 @@ pub use tabs::Tabs;
 pub use tag::Tag;
 pub use toast::{Toast, ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack};
 pub use toggle::Toggle;
-pub use tooltip::{Tooltip, TooltipSide};
+pub use button_group::{ButtonGroup, Display};
+pub use tooltip::{Tip, Tooltip, TooltipSide};
 pub use visibility::Visibility;

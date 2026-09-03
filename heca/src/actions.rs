@@ -2265,6 +2265,21 @@ impl ActionCatalog {
         self.find(name).map(|m| m.label.as_str())
     }
 
+    /// **Is this action destructive?** — the single source, read by every surface that renders it.
+    ///
+    /// An action declares this by carrying a [`ConfirmSpec`]: the central gate asks before running
+    /// it because it cannot be undone, and that is the same fact a surface needs to draw it in the
+    /// danger hue. Declared once, in `builtin_confirm_specs`, rather than each surface deciding
+    /// from the action's *name* — which is how a pane header came to have `matches!(action, Close)`
+    /// written into it, a styling rule keyed to a name that no other surface would ever share
+    /// (Antonio, 2026-09-03).
+    ///
+    /// Same reasoning as [`icon`](Self::icon): every surface reads it from here instead of
+    /// inventing its own, so a menu entry, a header button and the palette cannot drift.
+    pub fn destructive(&self, name: &str) -> bool {
+        self.find(name).is_some_and(|m| m.confirm.is_some())
+    }
+
     /// Every action's metadata, in stable order — what a surface that **renders** actions walks
     /// (the command palette). Distinct from [`describe_all`](Self::describe_all), which projects to
     /// the serializable [`ActionInfo`] for the wire and drops the `Glyph`.
