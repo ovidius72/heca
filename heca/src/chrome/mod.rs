@@ -1862,7 +1862,7 @@ mod tests {
     }
 
     #[test]
-    fn pane_header_key_changes_on_content_and_width() {
+    fn pane_header_key_changes_on_content_but_never_on_width() {
         use heca_config::appearance::{PaneAction, PaneSegment};
         let programs = ProgramsConfig::default();
         let segments = [PaneSegment::AppName, PaneSegment::GitBranch];
@@ -1940,23 +1940,23 @@ mod tests {
                 300.0
             )
         );
-        // A large width change ⇒ different key (re-truncate); tiny jitter ⇒ same bucket.
-        assert_ne!(
-            base,
-            super::pane_header::pane_header_key(
-                &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
-                15.0,
-                120.0
-            )
-        );
-        assert_eq!(
-            base,
-            super::pane_header::pane_header_key(
-                &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
-                15.0,
-                295.0
-            )
-        );
+        // **A width change ⇒ the SAME key.** A pane's width is a per-frame layout input, not part of
+        // what the header is — the same rule the pane shell states for its own rect. The bar used to
+        // re-run width arithmetic of its own, so a resize had to rebuild it; `Label` truncates
+        // itself, so nothing does now. Keying on width meant every step of a drag threw the header
+        // away and built a new one: a burst of CPU and a visible flicker in the buttons (Antonio,
+        // driving, 2026-09-03). It re-lays out instead.
+        for w in [120.0, 295.0, 1600.0] {
+            assert_eq!(
+                base,
+                super::pane_header::pane_header_key(
+                    &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
+                    15.0,
+                    w
+                ),
+                "a resize to {w} rebuilt the header instead of re-laying it out"
+            );
+        }
     }
 
 }

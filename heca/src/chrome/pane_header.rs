@@ -650,9 +650,16 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
         .runtime
         .and_then(|r| r.cwd.as_ref())
         .map(|c| c.display().to_string());
-    // Bucket width so layout jitter doesn't thrash the rebuild, but real resizes
-    // re-truncate the location segment.
-    let w_bucket = (avail_w / 16.0) as i32;
+    // ⚠️ **The width is deliberately NOT part of this key.**
+    //
+    // A pane's width is a per-frame layout input, not part of what the header *is* — the same rule
+    // the pane shell states for its own rect. It was bucketed in here so a resize would re-run the
+    // bar's own width arithmetic; `Label` truncates itself (`Ellipsis::End` is its default), so
+    // there is nothing left that needs re-running. Keying on it meant every step of a drag threw the
+    // whole header away and built a new one — a burst of CPU and a visible flicker in the buttons
+    // (Antonio, driving, 2026-09-03). A resize now re-lays out the retained tree instead.
+    let _ = avail_w;
+    let w_bucket = 0;
     // Tooltip hints for the configured actions (so a rebind rebuilds the tips).
     let hints: Vec<String> = content
         .actions
