@@ -182,12 +182,16 @@ impl ButtonGroup {
         };
         // A button never gives way: shrinking one has no answer — there is no label left to
         // ellipse once it is an icon — and giving way is exactly what this widget replaces.
-        // The group's variant, unless this button named one of its own.
-        let button = match self.variant {
-            Some(v) if button.variant_of() == ButtonVariant::default() => button.variant(v),
-            _ => button,
-        };
-        let button = button.shrink(0.0);
+        // **The group's variant, through the one rule.** It used to test the button's variant here
+        // and skip anything that had named its own — which meant a destructive button kept the whole
+        // destructive look, frame included, and was the only boxed thing in a quiet row. The widget
+        // decides what to keep and what to take (`Component::set_variant`): a button left at the
+        // default takes the group's, and one that is *about* something dangerous takes the group's
+        // chrome while going on reading in danger.
+        let mut button = button.shrink(0.0);
+        if let Some(v) = self.variant {
+            Component::set_variant(&mut button, v);
+        }
         // Before the ⋮, which is always the last child.
         let at = self.entries.len().saturating_sub(1);
         self.row_mut()
