@@ -164,6 +164,10 @@ pub struct Button {
     label: String,
     /// Overrides the hue this button reads in. See [`tone`](Self::tone).
     tone: Option<Color>,
+    /// **This button is about something destructive.** Set by the `Destructive` variant and kept
+    /// even when a container hands the button its own chrome — being dangerous is what the button
+    /// *is*, while the frame around it is how the row it sits in is styled.
+    dangerous: bool,
     /// **The glyph this button was given**, if any. Recorded when [`icon`](Self::icon) inserts it,
     /// so a container can ask what a button *is* without taking its content apart —
     /// [`ButtonGroup`](super::ButtonGroup) does, to build the row a collapsed button becomes.
@@ -198,6 +202,7 @@ impl Button {
             on_click: None,
             active: false,
             icon_only: false,
+            dangerous: false,
             label: String::new(),
             tone: None,
             glyph: None,
@@ -333,6 +338,7 @@ impl Button {
     #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: ButtonVariant) -> Self {
         self.variant = variant;
+        self.dangerous = variant == ButtonVariant::Destructive;
         self
     }
 
@@ -477,6 +483,18 @@ impl Component for Button {
     /// focus required, because an addressed call is not an event competing for a target.
     /// Its own [`icon_only`](Self::icon_only), reachable through `dyn Component` so a container
     /// short of room can ask without knowing what its children are.
+    /// A container styling a row as one group hands its variant down; a button that was given its
+    /// own keeps it, which is what lets a quiet toolbar still have a destructive button in it.
+    fn set_variant(&mut self, variant: ButtonVariant) {
+        // **The row's chrome, the button's own hue.** A destructive button in a quiet toolbar was
+        // the only framed one, because `Destructive` decides both — and a frame is about the row,
+        // not about the act. It takes the container's chrome and keeps reading as dangerous
+        // (Antonio, driving, 2026-09-03).
+        if self.variant == ButtonVariant::default() || self.dangerous {
+            self.variant = variant;
+        }
+    }
+
     fn set_icon_only(&mut self, on: bool) {
         let on = on && self.glyph.is_some();
         if self.icon_only == on {
@@ -596,8 +614,13 @@ impl Component for Button {
         // accent — content, hover wash, held-on frame — without changing which variant this is.
         let accent = if disabled {
             accent
+        } else if let Some(tone) = self.tone {
+            tone
+        } else if self.dangerous {
+            // The theme's danger, read at paint, so it follows a reload like every other colour.
+            danger
         } else {
-            self.tone.unwrap_or(accent)
+            accent
         };
         let b = self.base.bounds;
 

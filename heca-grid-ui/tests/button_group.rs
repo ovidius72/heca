@@ -470,3 +470,37 @@ fn constructing_a_group_does_not_request_a_frame() {
         frames.get()
     );
 }
+
+
+/// **Giving way is not one-way** — the room coming back brings the buttons back.
+#[test]
+fn a_collapsed_group_fills_up_again_when_the_room_returns() {
+    let g = group();
+    // Collapse it hard, then widen the same group and let it settle.
+    let mut parent = Flex::row().width(Length::Px(40.0)).child(g);
+    for _ in 0..6 {
+        LayoutEngine::new().base_font(13.0).compute(&mut parent, Size::new(40.0, 60.0));
+    }
+    let collapsed = row(&parent)
+        .base()
+        .children
+        .iter()
+        .filter(|c| !c.base().style.layout.hidden)
+        .count();
+
+    parent.base_mut().style.layout.width = Length::Px(900.0);
+    for _ in 0..12 {
+        LayoutEngine::new().base_font(13.0).compute(&mut parent, Size::new(900.0, 60.0));
+    }
+    let reopened = row(&parent)
+        .base()
+        .children
+        .iter()
+        .filter(|c| !c.base().style.layout.hidden)
+        .count();
+
+    assert!(
+        reopened > collapsed,
+        "the group stayed collapsed at 900px after being squeezed at 40px ({collapsed} shown, then {reopened})"
+    );
+}

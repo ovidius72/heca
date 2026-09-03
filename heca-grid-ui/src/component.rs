@@ -929,6 +929,14 @@ pub trait Component {
     /// is square and one with words is not.
     fn set_icon_only(&mut self, _on: bool) {}
 
+    /// **Take this variant**, if you are the kind of widget that has one.
+    ///
+    /// A container asks a child it is styling as a group — a
+    /// [`ButtonGroup`](crate::widgets::ButtonGroup) does, so its own affordance reads the same as
+    /// the buttons beside it. `false` by default: a widget with no variant ignores it, and one that
+    /// was given its own keeps it (that is the widget's judgement, not the container's).
+    fn set_variant(&mut self, _variant: crate::widgets::ButtonVariant) {}
+
     fn wants_visible(&self) -> bool {
         self.base().focused_by_keyboard()
     }

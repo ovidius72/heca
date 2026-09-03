@@ -54,6 +54,10 @@ pub enum Display {
     Full,
 }
 
+/// Extra room a button must have before the group takes it back — hysteresis, so the two
+/// thresholds cannot meet and dragging across one width cannot strobe.
+const STICKY_MARGIN: f64 = 12.0;
+
 /// What the ⋮ is called — on hover, and as the title of the menu it opens.
 const OVERFLOW_LABEL: &str = "More actions";
 
@@ -214,6 +218,15 @@ impl ButtonGroup {
     #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: ButtonVariant) -> Self {
         self.variant = Some(variant);
+        // **The ⋮ takes it too.** It is built in the constructor — before the group has been told
+        // anything — so setting the variant only on later children left it the odd one out: a
+        // `Primary` button among ghosts, drawing its glyph in the accent, which a pane dims when it
+        // is not the active one. Its dots were invisible on every inactive pane (Antonio, driving,
+        // 2026-09-03).
+        let count = self.entries.len();
+        if let Some(t) = self.base.children.get_mut(count) {
+            t.set_variant(variant);
+        }
         self
     }
 
@@ -364,6 +377,36 @@ impl Component for ButtonGroup {
         // first time it does, one more gives way to it.
         if over > 0 && shown_now == count {
             fits = fits.saturating_sub(1);
+        }
+        // **And it takes them back when the room returns.** Giving way was one-way: a group that had
+        // collapsed stayed collapsed however wide the pane grew afterwards (Antonio, driving,
+        // 2026-09-03).
+        //
+        // One at a time, and only against **visible slack** — the gap the layout left between the
+        // group's edge and the first thing in it. Asking for a button back costs more room than
+        // giving one up released, so the two thresholds cannot meet and a drag across the boundary
+        // cannot strobe.
+        if over == 0 && shown_now < count {
+            let first = self
+                .row()
+                .base()
+                .children
+                .iter()
+                .find(|c| !c.base().style.layout.hidden && c.base().bounds.size.w > 0.0)
+                .map(|c| c.base().bounds.loc.x)
+                .unwrap_or(left);
+            let slack = first - left;
+            let widest = self
+                .row()
+                .base()
+                .children
+                .iter()
+                .filter(|c| !c.base().style.layout.hidden)
+                .map(|c| c.base().bounds.size.w)
+                .fold(0.0_f64, f64::max);
+            if widest > 0.0 && slack > widest + STICKY_MARGIN {
+                fits += 1;
+            }
         }
 
         if fits != shown_now || !self.applied.get() {
