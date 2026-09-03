@@ -720,14 +720,15 @@ pub(crate) fn build_pane_header(
             // hue; the rest use the foreground glyph with an accent hover. The danger
             // glyph is softened toward the header surface so the red reads as a cue,
             // not an alarm (full-intensity danger was too vibrant).
-            // **A destructive action reads in the danger hue, without being a boxed destructive
-            // control.** The `Destructive` variant carries a border, and in a row of quiet ghost
-            // buttons that made it the only framed one (Antonio, driving, 2026-09-03). A tone is the
-            // hue without the frame, and it comes from the theme so it follows a reload.
-            //
-            // *Which* actions are destructive is the action's own declaration, read from the
-            // catalog — this loop only maps that answer onto a colour.
-            let tone = spec.destructive.then_some(theme.colors.danger);
+            // **A destructive action says so as a variant** — the semantic the library already has,
+            // not a colour chosen here. Which actions are destructive is the action's own
+            // declaration, read from the catalog; what a destructive button looks like is the
+            // widget's business and the theme's.
+            let variant = if spec.destructive {
+                ButtonVariant::Destructive
+            } else {
+                ButtonVariant::Primary
+            };
             let proxy = ctx.event_proxy.clone();
             let pane_id = ctx.pane_id;
             let wm_action = spec.wm_action.clone();
@@ -754,13 +755,13 @@ pub(crate) fn build_pane_header(
             // hover, and what its row reads in the menu once the pane is too narrow to hold it.
             // Every `Button` constructor takes them, which is what makes a collapsed group
             // readable with nothing extra written here.
-            let mut button = Button::new(spec.label)
+            // `Primary` is the group's cue that this button named nothing of its own, so the
+            // group's variant applies; `Destructive` is a button naming one, and it keeps it.
+            let button = Button::new(spec.label)
                 .icon(spec.glyph)
+                .variant(variant)
                 .active(spec.is_active)
                 .on_click(fire);
-            if let Some(tone) = tone {
-                button = button.tone(tone);
-            }
             // **What a pick does to this button**, declared on the button itself: no id, no
             // registry, and nothing for a config-added or plugin-added button to forget — the
             // picker collects the declaration out of the laid-out tree.

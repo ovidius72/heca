@@ -153,9 +153,6 @@ impl ButtonGroup {
         };
         // The ⋮ exists from the start, hidden until something needs it — never added mid-layout.
         g.build_trigger();
-        if let Some(t) = g.base.children.last_mut() {
-            t.base_mut().set_hidden(true);
-        }
         g
     }
 

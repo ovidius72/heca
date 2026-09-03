@@ -442,3 +442,31 @@ fn the_group_adds_nothing_to_the_tree_after_the_first_layout() {
          something was created during the walk"
     );
 }
+
+/// **Building a group does not ask for a frame.**
+///
+/// `set_hidden` asks for the layout that has to follow a change, and asking for a layout asks for a
+/// frame. A widget being *constructed* has no layout to redo — and the pane headers are rebuilt
+/// every frame to work out their key, so a constructor that asked for a frame asked for one every
+/// frame: the app never went idle and sat at a full core with nothing happening.
+#[test]
+fn constructing_a_group_does_not_request_a_frame() {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let frames = Rc::new(Cell::new(0u32));
+    let seen = frames.clone();
+    heca_grid_ui::install_frame_request(move || seen.set(seen.get() + 1));
+
+    let _g = ButtonGroup::new()
+        .size(WidgetSize::Small)
+        .child(Button::new("Zoom").icon(Glyph::FrameCorners))
+        .child(Button::new("Close").icon(Glyph::Minus));
+
+    assert_eq!(
+        frames.get(),
+        0,
+        "building a group asked for {} frame(s); nothing is being changed, only made",
+        frames.get()
+    );
+}
