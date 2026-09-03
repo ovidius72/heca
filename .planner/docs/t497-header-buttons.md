@@ -105,3 +105,53 @@ bug — several passed on first write and were rebuilt until they went red.
 - Resize-direction actions (`resize_top` / `resize_bottom` / `resize_left` / `resize_right`, or a
   modifier on `j`/`k` in resize mode) — requested 2026-09-03, not started. Needs the full
   "Adding New Actions" checklist, not a keybinding.
+
+---
+
+## The API this session added — the surface a new agent needs to know exists
+
+**On every widget** (`ComponentExt`, so blanket-implemented — no widget opts in):
+`.tooltip(text)`, `.tooltip_signal(Signal<String>)`, `.tooltip_side(TooltipSide)`,
+`.tooltip_delay(secs)`.
+
+**On `Base`:** `tooltip: Option<Tip>` (the declaration), `root_font: f32` (the tree's base font,
+written by the layout pass — what chrome a widget floats *beside* itself should read, never the
+widget's own size-scaled font).
+
+**On `Component`** (default no-ops, so any widget may answer):
+`set_icon_only(bool)` — "show only your icon, keep your words";
+`set_variant(ButtonVariant)` — "take this variant if you have one" (a widget that named its own
+keeps it; a *dangerous* one takes the chrome and keeps its hue).
+
+**On `PointerState`:** `hovered_for() -> Option<f32>` — how long the pointer has rested here,
+stamped by the hover walk on the same transition that sets `hovered`. The one clock.
+
+**On `Button`:** `.active(bool)` (held-on status), `.tone(Color)` (hue override, mirrors
+`IconButton::tone`), `.icon_only(bool)`, and the readers `label()`, `glyph()`, `variant_of()`,
+`click_handler()` (a shared handle, so a menu row runs the button's own closure).
+
+**On `Theme` (grid-ui):** `hint_font_size: f32`, `hint_color: Color` — the picker's own, set once at
+`chrome_gui_theme` and carried unchanged into a pane's derived theme.
+
+**On `ActionCatalog`:** `destructive(name) -> bool`, beside `icon` and `label`.
+
+**New widget:** `ButtonGroup` + `Display` (`IconOnly` default, `Full`, `Auto`), exported from the
+prelude. Catalog entry in `docs/widgets.md`.
+
+**Config:** `[appearance] hint_font_size` (default 12.0), in `config.default.toml` and `README.md`.
+
+**Tests:** `heca-grid-ui/tests/button_group.rs` (19), plus additions to `phase_a.rs`,
+`heca-core/src/layout/column.rs`'s `pane_height_tests`, and `heca/src/chrome/pane_header.rs`'s tests.
+
+## Resolved — the previous handoff's two open gaps
+
+The handoff before this one left T497 with two unverified gaps. **Both are closed; do not
+re-investigate them.**
+
+- **A press on the empty header band does NOT start a terminal selection.** Antonio drove it:
+  *"no it requires prefix+s or shift+click to start selection."* The fall-through is correct and the
+  task's PRESERVE clause is satisfied.
+- **The bar is not clipped to its pane, and does not need to be.** When the bar was a separate tree
+  positioned by hand it could genuinely land outside its pane; as a child sized `Pct(1.0)` inside the
+  pane's padding its box cannot exceed the pane. What can overflow is *text*, and `Label` truncates
+  itself. Antonio confirmed the ellipsis is right.
