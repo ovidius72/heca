@@ -64,7 +64,9 @@ pub(crate) fn collect_all_pane_candidates(session: &Session) -> Vec<(char, PaneI
 /// column/pane to workspace" pick — **excluding the active workspace** (moving the
 /// active column/pane to the workspace it already lives in is a no-op). Letters are
 /// assigned sequentially over the remaining workspaces; capped at 52.
-pub(crate) fn collect_workspace_candidates(session: &Session) -> Vec<(char, usize)> {
+pub(crate) fn collect_workspace_candidates(
+    session: &Session,
+) -> Vec<(char, usize, heca_core::layout::WorkspaceId)> {
     let active = session.active_workspace_idx;
     session
         .workspaces
@@ -73,14 +75,16 @@ pub(crate) fn collect_workspace_candidates(session: &Session) -> Vec<(char, usiz
         .filter(|(ws_idx, _)| *ws_idx != active)
         // Zipping the alphabet caps the list at its length, so the cap cannot drift from it.
         .zip(heca_grid_ui::widgets::DEFAULT_LETTERS.chars())
-        .map(|((ws_idx, _), ch)| (ch, ws_idx))
+        .map(|((ws_idx, ws), ch)| (ch, ws_idx, ws.id))
         .collect()
 }
 
 /// Collect **all** columns across **all** workspaces as letter candidates
 /// (letter → `(ws_idx, col_idx)`) for the "move pane to column" pick — a pane can be
 /// stacked into a column in any workspace. Capped at 52.
-pub(crate) fn collect_column_candidates(session: &Session) -> Vec<(char, usize, usize)> {
+pub(crate) fn collect_column_candidates(
+    session: &Session,
+) -> Vec<(char, usize, usize, heca_core::layout::ColumnId)> {
     session
         .workspaces
         .iter()
@@ -90,10 +94,10 @@ pub(crate) fn collect_column_candidates(session: &Session) -> Vec<(char, usize, 
                 .columns
                 .iter()
                 .enumerate()
-                .map(move |(col_idx, _)| (ws_idx, col_idx))
+                .map(move |(col_idx, col)| (ws_idx, col_idx, col.id))
         })
         .zip(heca_grid_ui::widgets::DEFAULT_LETTERS.chars())
-        .map(|((ws_idx, col_idx), ch)| (ch, ws_idx, col_idx))
+        .map(|((ws_idx, col_idx, col_id), ch)| (ch, ws_idx, col_idx, col_id))
         .collect()
 }
 

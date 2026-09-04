@@ -141,6 +141,47 @@ impl Column {
         self.pane_sizes.clear(); // Invalidate cache
     }
 
+    /// **Make room for a pane that is about to exist.**
+    ///
+    /// A height a pane was dragged to is a *preference*. Two panes dragged to fill the column
+    /// between them hold the whole of it, and a third arriving has nothing left: it was assigned a
+    /// single pixel, and the pass that scales the column to fit shaved barely one per cent off the
+    /// other two. The pane was there, in the column, and could not be seen — which is what
+    /// "splitting a third time pushes the last pane off the screen" actually was (Antonio, driving,
+    /// 2026-09-03/04). Nothing was pushed anywhere, so checking that the heights summed to the
+    /// column found nothing: they always did.
+    ///
+    /// ⚠️ **This is the ADD, not the distribution.** It would be simpler to reserve a floor for
+    /// every pane inside `compute_pane_sizes`, and it is wrong there: that runs on every drag too,
+    /// and a boundary must move space between its own two panes and *nothing else* — held by
+    /// `a_resize_leaves_every_other_pane_where_it_was`. Making room is something a new pane does,
+    /// once, at the moment it arrives.
+    ///
+    /// The preferences are scaled rather than dropped, so the proportions the user dragged survive
+    /// as far as the column still allows.
+    pub fn make_room_for_one_more(&mut self, working_height: f64, gaps: f64) {
+        let after = self.panes.len() + 1;
+        let available = working_height - gaps * (after as f64 + 1.0);
+        let floor = MIN_PANE_HEIGHT.min(available / after as f64).max(1.0);
+        let pinned: f64 = self.panes.iter().filter_map(|p| p.preferred_height).sum();
+        // What the pinned panes may hold and still leave every other pane its floor.
+        let unpinned = self
+            .panes
+            .iter()
+            .filter(|p| p.preferred_height.is_none())
+            .count();
+        let ceiling = available - floor * (unpinned + 1) as f64;
+        if pinned <= ceiling || pinned <= 0.0 {
+            return;
+        }
+        let scale = (ceiling / pinned).max(0.0);
+        for pane in &mut self.panes {
+            if let Some(h) = pane.preferred_height {
+                pane.preferred_height = Some((h * scale).max(floor));
+            }
+        }
+    }
+
     /// Remove a pane by index.
     pub fn remove_pane(&mut self, idx: usize) -> Option<Pane> {
         if idx >= self.panes.len() {
@@ -189,7 +230,16 @@ impl Column {
 
         // Second pass: distribute remaining height to auto panes.
         if auto_count > 0 {
-            let auto_height = (height_left / auto_count as f64).max(min_h);
+            // **The floor is bounded by the room actually left to them.** `min_h` above is worked
+            // out against the whole column; the auto panes are sharing only what the *fixed* ones
+            // did not take. Forcing the column-wide floor here is what made the heights sum past
+            // the column — and once they did, the proportional scale below shrank every pane to
+            // compensate, including the two the user had just pinned by dragging their boundary.
+            // Which is the symptom: resizing the middle pane moved the bottom edge, and then at a
+            // certain point started moving the top one too (Antonio, driving, 2026-09-03).
+            let per_auto = (height_left / auto_count as f64).max(0.0);
+            let auto_floor = min_h.min(per_auto).max(1.0);
+            let auto_height = per_auto.max(auto_floor);
             for (i, pane) in self.panes.iter().enumerate() {
                 if pane.preferred_height.is_none() {
                     sizes[i].h = auto_height;
@@ -197,10 +247,23 @@ impl Column {
             }
         }
 
-        // Third pass: if all panes have fixed heights and there's leftover space,
-        // scale them up proportionally so the column is always full.
+        // Third pass: **the panes fill the column exactly** — scaled proportionally, in whichever
+        // direction is needed.
+        //
+        // It used to scale only *up*, to fill leftover space, and that left the overflowing case
+        // unhandled: the per-pane floor above is worked out from `available / pane_count`, but the
+        // auto panes are then floored at it against `height_left` — the room left after the *fixed*
+        // panes have taken theirs. With one pane resized (so carrying a `preferred_height`) and two
+        // sharing the rest, that floor could exceed what was left, the heights summed to more than
+        // the column, and the last pane was pushed off the bottom of the screen.
+        //
+        // Which is why it only happened in the column that had been resized, and why the effective
+        // minimum differed between that column and a freshly created one (Antonio, driving,
+        // 2026-09-03). Scaling both ways makes "the panes exactly fill the column" true by
+        // construction rather than in one direction only; a column too small for every pane's floor
+        // degrades proportionally, which is what the floor's own note already asks for.
         let total_pane_height: f64 = sizes.iter().map(|s| s.h).sum();
-        if total_pane_height < available_height && total_pane_height > 0.0 {
+        if total_pane_height > 0.0 && available_height > 0.0 {
             let scale = available_height / total_pane_height;
             for size in &mut sizes {
                 size.h *= scale;
@@ -232,8 +295,28 @@ impl Column {
     /// Move the **boundary the active pane owns** by `delta` logical px **along the axis**, so
     /// positive is *down the screen*. The direction is the whole point: see
     /// [`move_pane_boundary`](Self::move_pane_boundary).
+    ///
+    /// A pane has two edges, and this is the one *below* it — except for the last pane, which has
+    /// none and trades with the one above instead. To aim at the other edge deliberately, use
+    /// [`move_active_pane_top_boundary`](Self::move_active_pane_top_boundary).
     pub fn move_active_pane_boundary(&mut self, delta: f64, working_height: f64, gaps: f64) {
         self.move_pane_boundary(self.active_pane_idx, delta, working_height, gaps);
+    }
+
+    /// Move the boundary **above** the active pane by `delta` logical px, positive being *down the
+    /// screen* like every other resize verb — so a positive delta here **shrinks** the active pane
+    /// from the top, and a negative one grows it upwards.
+    ///
+    /// The counterpart to [`move_active_pane_boundary`](Self::move_active_pane_boundary), which
+    /// takes the edge below. Which of a pane's two edges moves is the column's own business: a
+    /// caller says *which edge*, never which pane index the divider happens to be named by.
+    ///
+    /// **No-op for the first pane**, which has nothing above it to trade with.
+    pub fn move_active_pane_top_boundary(&mut self, delta: f64, working_height: f64, gaps: f64) {
+        let Some(above) = self.active_pane_idx.checked_sub(1) else {
+            return;
+        };
+        self.move_pane_boundary(above, delta, working_height, gaps);
     }
 
     /// Move the boundary pane `pane_idx` owns — the one **below** it, or the one **above** when it
@@ -418,5 +501,109 @@ impl Pane {
             move_offset: Animated::Static(Point::default()),
             interactive_move_offset: Point::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod pane_height_tests {
+    use super::*;
+
+    fn column_of(n: usize) -> Column {
+        let mut col = Column::new(
+            ColumnId(1),
+            Pane::new(PaneId(1), "p1"),
+            ColumnWidth::Proportion(1.0),
+        );
+        for i in 1..n {
+            col.add_pane_at(i, Pane::new(PaneId(i as u64 + 1), format!("p{}", i + 1)));
+        }
+        col
+    }
+
+    /// **The panes exactly fill the column, always.**
+    ///
+    /// A pane that has been resized carries a fixed height, and the floor the others were given was
+    /// worked out against the *whole* column rather than the room those fixed panes had left — so
+    /// three panes in a resized column summed to more than the column and the last one was pushed
+    /// off the bottom of the screen. It happened only in a column that had been resized, which is
+    /// exactly why a freshly created one looked fine (Antonio, driving, 2026-09-03).
+    #[test]
+    fn panes_never_sum_to_more_than_the_column() {
+        let working = 800.0;
+        let gaps = 4.0;
+        for fixed in [None, Some(600.0), Some(700.0), Some(60.0)] {
+            let mut col = column_of(3);
+            if let Some(h) = fixed {
+                col.panes[0].preferred_height = Some(h);
+            }
+            col.compute_pane_sizes(working, gaps);
+            let total: f64 = col.pane_sizes.iter().map(|s| s.h).sum();
+            let available = working - gaps * (col.panes.len() as f64 + 1.0);
+            assert!(
+                total <= available + 0.5,
+                "three panes summed to {total} in {available} of room (first pane fixed at {fixed:?})"
+            );
+        }
+    }
+
+    /// …and they fill it, rather than leaving a gap at the bottom.
+    #[test]
+    fn panes_fill_the_column_they_are_given() {
+        let working = 800.0;
+        let gaps = 4.0;
+        let mut col = column_of(3);
+        col.panes[0].preferred_height = Some(200.0);
+        col.compute_pane_sizes(working, gaps);
+        let total: f64 = col.pane_sizes.iter().map(|s| s.h).sum();
+        let available = working - gaps * 4.0;
+        assert!((total - available).abs() < 0.5, "{total} of {available}");
+    }
+
+    /// **A boundary moves space between its own two panes and nothing else** — right up to the
+    /// limit.
+    ///
+    /// Dragging the middle pane's lower boundary moved the bottom edge, and then at a certain point
+    /// started moving the *top* one too: the untouched panes were being forced above the room left
+    /// to them, the heights summed past the column, and the proportional scale that keeps the column
+    /// full then shrank every pane — including the two the drag had just pinned (Antonio, driving,
+    /// 2026-09-03).
+    #[test]
+    fn a_resize_leaves_every_other_pane_where_it_was() {
+        let working = 400.0;
+        let gaps = 4.0;
+        let mut col = column_of(3);
+        // Two panes pinned by earlier drags, leaving the third less than its floor. That is the
+        // case: the third was then forced up to the column-wide floor, the heights summed past the
+        // column, and the scale that keeps the column full pulled the two pinned panes off the
+        // sizes the user had just set.
+        col.panes[0].preferred_height = Some(250.0);
+        col.panes[1].preferred_height = Some(MIN_PANE_HEIGHT);
+        col.compute_pane_sizes(working, gaps);
+
+        assert!(
+            (col.pane_sizes[0].h - 250.0).abs() < 0.5,
+            "a pinned pane keeps the height it was given (got {})",
+            col.pane_sizes[0].h
+        );
+        assert!(
+            (col.pane_sizes[1].h - MIN_PANE_HEIGHT).abs() < 0.5,
+            "and so does the one on the other side of that boundary (got {})",
+            col.pane_sizes[1].h
+        );
+    }
+
+    /// **A column too small for every pane's floor degrades proportionally** rather than pushing
+    /// the last pane out — which is what the floor's own note asks for.
+    #[test]
+    fn a_short_column_shrinks_every_pane_rather_than_losing_one() {
+        let mut col = column_of(5);
+        col.compute_pane_sizes(200.0, 2.0);
+        let available = 200.0 - 2.0 * 6.0;
+        let total: f64 = col.pane_sizes.iter().map(|s| s.h).sum();
+        assert!(total <= available + 0.5, "{total} of {available}");
+        assert!(
+            col.pane_sizes.iter().all(|s| s.h > 0.0),
+            "no pane collapses to nothing"
+        );
     }
 }

@@ -102,33 +102,52 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         after_config_change(state);
     }
 
-    if state.mouse.drag_ctx.is_dragging() || state.mouse.interactive_move.is_some() {
+    if crate::chrome::drag_in_flight(state) || state.mouse.interactive_move.is_some() {
         state.mark_full_redraw();
     }
 
     state.session.advance_animations();
     let dt = crate::chrome::FRAME_INTERVAL.as_secs_f32();
-    let mut chrome_animating = if let Some(tree) = state.chrome_tree.as_mut() {
-        tree.root.tick(dt)
-    } else {
-        false
-    };
-    // Tick the retained pane-info-bar headers too, so their action buttons' press
-    // flash / hover animation and tooltip reveal advance (and a redraw is requested
-    // while they animate) instead of getting stuck.
-    for header in state.pane_headers.values_mut() {
-        chrome_animating |= header.root.tick(dt);
+    // **Which surfaces are mid-exit, before anything advances.** The tick below is the one that
+    // advances them — they are children of this tree — so the registry has to look either side of
+    // it to catch the frame an exit finishes. Reading it afterwards misses that frame entirely.
+    let leaving_before = state.layers.leaving_before_tick(&state.window_root);
+    let mut chrome_animating = state.window_root.tick(dt);
+    // Tick every pane's own tree, so its info bar's action buttons' press flash, hover animation
+    // and tooltip reveal advance (and a redraw is requested while they animate) instead of getting
+    // stuck. The bar is a child of its pane, so one tick reaches both.
+    for pane in state.panes.values_mut() {
+        chrome_animating |= pane.root.tick(dt);
     }
     for widgets in state.pane_viewport_widgets.values_mut() {
         chrome_animating |= widgets.badge.tick(dt);
         chrome_animating |= widgets.scrollbar.tick(dt);
     }
-    // Every dynamically-registered layer (overlay dialogs, plugin panels, the exposé) advances in
-    // one pass inside the registry: the widgets in a layer's tree — a modal button's tooltip
-    // reveal, a press flash — and the surface's own arrival or exit are the same frame, and the
-    // registry has to see the frame an exit *finishes* to retire the layer on it. A new layer
-    // animates for free, with no per-layer wiring.
-    chrome_animating |= state.layers.tick(dt);
+    // Every surface — an overlay dialog, a plugin panel, the exposé — advanced in the walk above,
+    // because it is a child of that tree. All that is left is to **retire the ones whose exit just
+    // finished**, which is the registry's bookkeeping and not an animation pass: a surface that was
+    // leaving before the tick and is not leaving now has finished, and its absence needs one more
+    // frame to be painted.
+    chrome_animating |= state
+        .layers
+        .retire_finished_exits(&mut state.window_root, &leaving_before);
+
+    // Auto-dismiss notifications past their deadline — F009/T202. `expire_due` only touches the
+    // store's own `Signal<Vec<ToastSpec>>` (F009/T208); it is not part of `chrome_runtime_changed`,
+    // which tracks the chrome_tree's signature, a tree the toast surface is never part of.
+    //
+    // **The pointer resting on a card holds the whole stack still**, and the time that costs is
+    // handed back when it leaves, so a card resumes with what it had left. The stack reports the
+    // hover; what it *means* is decided in the runtime, which is where the lifetime lives.
+    let now = Instant::now();
+    use heca_grid_ui::reactive::SignalGet;
+    let deadlines_moved = state
+        .notifications
+        .set_hovered(state.notification_hovered.get_untracked(), now);
+    let notifications_expired = state.notifications.expire_due(now);
+    if notifications_expired || deadlines_moved {
+        state.needs_redraw = true;
+    }
 
     let backend_poll = poll_backends(state);
     let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
@@ -143,6 +162,23 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.bell_flash_until = None;
     }
 
+    // **What the widgets themselves are waiting for.** A tooltip revealing under a resting pointer,
+    // a caret blinking — behaviour due at a time rather than on an event, so nothing would draw it.
+    // The widget says when; one question covers every tree the app draws.
+    //
+    // ⚠️ **Scheduling the wake is only half of it.** Arriving at the deadline, every reason-to-draw
+    // above is false — the widget no longer reports a pending wake, because it is due *now* — so the
+    // loop would wake and go straight back to sleep, and the bubble would still be waiting for the
+    // user to nudge the mouse. The deadline is remembered, and reaching it is itself a reason to
+    // draw.
+    let widget_wake = crate::chrome::next_redraw_across_trees(state);
+    let widget_due = state
+        .widget_frame_due
+        .is_some_and(|due| Instant::now() >= due);
+    if widget_due {
+        state.widget_frame_due = None;
+    }
+
     let terminal_animating = backend_poll.terminal_animating;
     // An animated inline image (GIF/APNG) keeps the loop ticking so frames advance.
     let image_animating = state.has_animated_images;
@@ -154,7 +190,8 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         || state.session.are_animations_ongoing()
         || terminal_animating
         || image_animating
-        || chrome_animating;
+        || chrome_animating
+        || widget_due;
     if needs_frame {
         state.window.request_redraw();
     }
@@ -167,6 +204,22 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             Instant::now() + crate::chrome::FRAME_INTERVAL,
         ));
+    } else if let Some(secs) = widget_wake {
+        // Wake once, when it comes due — not every frame while the pointer rests.
+        let at = Instant::now() + std::time::Duration::from_secs_f32(secs.max(0.0));
+        state.widget_frame_due = Some(at);
+        event_loop.set_control_flow(ControlFlow::WaitUntil(at));
+    // **Nothing to wake for while the pointer rests on the stack.** The deadlines are frozen, so
+    // waking at one would find nothing due and re-arm at the same instant — a spin, for as long as
+    // the pointer stayed. What ends the hold is a pointer event, which wakes the loop on its own.
+    // Same contract as below, in the one case that would otherwise break it.
+    } else if let Some(next_expiry) = match state.notifications.is_hovered() {
+        true => None,
+        false => state.notifications.next_expiry(),
+    } {
+        // No busy-loop (F009/T202's contract): wake exactly once, at the next auto-dismiss
+        // deadline, rather than polling every frame while a sticky-free toast is up.
+        event_loop.set_control_flow(ControlFlow::WaitUntil(next_expiry));
     } else {
         event_loop.set_control_flow(ControlFlow::Wait);
     }

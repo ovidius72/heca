@@ -156,6 +156,9 @@ fn heca_theme_to_grid_ui(ht: &heca_theme::Theme) -> Theme {
         // TODO: map from config `focus_border_width` once added to heca-theme;
         // for now the affordance outlines keep their visible default.
         focus_border_width: 1.5,
+        // The picker's own size and colour — one of each, whatever a letter sits on.
+        hint_font_size: heca_config::appearance::AppearanceConfig::default().hint_font_size,
+        hint_color: ht.accent,
     }
 }
 
@@ -500,9 +503,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // renderer limitation to fix later).
     let toasts = signal(Vec::<ToastSpec>::new());
     let toast_stack = ToastStack::new(toasts)
-        .corner(ToastCorner::TopRight)
+        .position(ToastPosition::TopRight)
         .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)))
-        .on_action(|id| println!("[showcase] toast {id} action"));
+        .on_action(|id, key| println!("[showcase] toast {id} action {key}"));
 
     // An **animated surface** (F003/P082/T459): the same `Overlay` every layer is, declaring how
     // it arrives and leaves in one builder — which is the whole capability. Opening zooms it in
@@ -990,12 +993,30 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::column()
                 .gap(10.0)
-                .child(Toast::success("Build succeeded").body("12 crates compiled in 4.2s"))
+                .child(Toast::success("Build succeeded").body_text("12 crates compiled in 4.2s"))
                 .child(
                     Toast::danger("Connection lost")
-                        .body("Reconnecting to the grid…")
-                        .action("Retry", click("toast-retry"))
+                        .body_text("Reconnecting to the grid…")
+                        // Two actions, each a real Button: the card places them and publishes its
+                        // severity, so they tone themselves — and `prefix+/` letters them with
+                        // nothing declared.
+                        .action(Button::outline("Retry").on_click(click("toast-retry")))
+                        .action(Button::ghost("Details").on_click(click("toast-details")))
                         .on_dismiss(click("toast-dismiss")),
+                )
+                // A COMPOSED body: the slot takes any component, not just a line of text — so a
+                // notification can carry structure. Neither Label names a colour; the body slot
+                // is painted under the theme's muted token and the card publishes its severity.
+                .child(
+                    Toast::warning("Build finished with warnings")
+                        .body(
+                            Flex::column()
+                                .gap(2.0)
+                                .child(Label::new("3 warnings in heca-grid-ui"))
+                                .child(Label::new("cargo check exited 0").font_scale(0.85)),
+                        )
+                        .action(Button::new("Open log").on_click(click("toast-log")))
+                        .action(Button::ghost("Ignore").on_click(click("toast-ignore"))),
                 )
                 // A clickable card with no body — the inline "notification row" case.
                 .child(Toast::info("New message from GRID-7").on_click(click("toast-open"))),
@@ -1285,6 +1306,72 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .child(Label::new("GLOW").font_scale(0.62).color(theme.colors.muted)),
                 ),
         )
+        // ButtonGroup: a row of actions that fits the space it is given. Drag the window narrow
+        // and watch it give things up in order — first the words (the buttons become their icons,
+        // and the words move to the hover bubble), then the buttons that still do not fit, into the
+        // menu behind the trailing ⋮. Nothing is ever squashed, which is what a plain Flex of
+        // buttons does instead.
+        .child(caption("ButtonGroup · fits the space it is given"))
+        .child(
+            Surface::new()
+                .background(theme.colors.surface)
+                .pad_all(Spacing::Xs)
+                .width(Length::Pct(0.5))
+                .child(
+                    ButtonGroup::new()
+                        .size(WidgetSize::Small)
+                        .gap_spacing(Spacing::Xs)
+                        .child(
+                            Button::new("Split")
+                                .icon(Glyph::Plus)
+                                .on_click(|| println!("[showcase] split")),
+                        )
+                        .child(
+                            Button::new("Zoom")
+                                .icon(Glyph::FrameCorners)
+                                .on_click(|| println!("[showcase] zoom")),
+                        )
+                        .child(
+                            Button::new("Float")
+                                .icon(Glyph::Sidebar)
+                                .on_click(|| println!("[showcase] float")),
+                        )
+                        .child(
+                            Button::new("Close")
+                                .icon(Glyph::Minus)
+                                .on_click(|| println!("[showcase] close")),
+                        ),
+                ),
+        )
+        // A group pinned to icons, for a strip that never wants words. The labels are still
+        // carried — they are what the hover bubble and the collapsed menu say.
+        .child(caption("ButtonGroup · Display::IconOnly"))
+        .child(
+            Surface::new()
+                .background(theme.colors.surface)
+                .pad_all(Spacing::Xs)
+                .child(
+                    ButtonGroup::new()
+                        .size(WidgetSize::Small)
+                        .display(heca_grid_ui::widgets::Display::IconOnly)
+                        .gap_spacing(Spacing::Xs)
+                        .child(
+                            Button::new("Split")
+                                .icon(Glyph::Plus)
+                                .on_click(|| println!("[showcase] split")),
+                        )
+                        .child(
+                            Button::new("Zoom")
+                                .icon(Glyph::FrameCorners)
+                                .on_click(|| println!("[showcase] zoom")),
+                        )
+                        .child(
+                            Button::new("Close")
+                                .icon(Glyph::Minus)
+                                .on_click(|| println!("[showcase] close")),
+                        ),
+                ),
+        )
         // IconButton + Tooltip: a toolbar of compact, clickable icon affordances —
         // ghost at rest, tinted hover frame + press flash + focus ring — each
         // wrapped in a hover-revealed Tooltip label. The danger one uses `.tone()`.
@@ -1293,21 +1380,24 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             Flex::row()
                 .gap(8.0)
                 .align(Align::Center)
-                .child(Tooltip::new(
+                // **The tooltip is a property of the button**, not a box around it — one builder,
+                // on every widget. This row used to wrap each button in a `Tooltip`, which is the
+                // noise the property removed.
+                .child(
                     IconButton::new(Icon::new(Glyph::Search).color(theme.colors.foreground).size(20.0))
-                        .on_click(|| println!("[showcase] search")),
-                    "Search",
-                ))
-                .child(Tooltip::new(
+                        .on_click(|| println!("[showcase] search"))
+                        .tooltip("Search"),
+                )
+                .child(
                     IconButton::new(Icon::new(Glyph::Gear).color(theme.colors.foreground).size(20.0))
-                        .on_click(|| println!("[showcase] settings")),
-                    "Settings",
-                ))
-                .child(Tooltip::new(
+                        .on_click(|| println!("[showcase] settings"))
+                        .tooltip("Settings"),
+                )
+                .child(
                     IconButton::new(Icon::new(Glyph::Plus).color(theme.colors.foreground).size(20.0))
-                        .on_click(|| println!("[showcase] add")),
-                    "New pane",
-                ))
+                        .on_click(|| println!("[showcase] add"))
+                        .tooltip("New pane"),
+                )
                 // `.active(true)`: held-on (toggled) status — a persistent tone-tinted
                 // frame, like the in-pane zoom/float buttons when engaged.
                 .child(Tooltip::new(
@@ -1771,11 +1861,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 pane_states.borrow_mut().push(row.state());
                 let pane_states = pane_states.clone();
                 let pane_titles = pane_titles.clone();
-                // DnD framework (universal `ComponentExt`): each card is a drag source
-                // carrying its index as the opaque id. The app resolves a drop via
+                // DnD framework (universal `ComponentExt`): each card is a drag source, and what
+                // it drags is the name it declares about itself. The app resolves a drop via
                 // `drag::source_at`/`resolve_at` over the laid-out tree and paints
                 // `PaintCx::drag_ghost`/`drop_indicator` — see docs/widgets.md §Drag.
-                row.draggable(DragItemId::new(i)).on_activate(move || {
+                row.key(format!("pane:{i}")).draggable().on_activate(move || {
                     pane_sel.set(i);
                     for (j, s) in pane_states.borrow().iter().enumerate() {
                         let selected = j == i;
@@ -1881,7 +1971,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             // hides outside repos.
             // The dock is a DnD drop target (universal `ComponentExt`) — its cards drop here.
             let panes = DockFrame::new("PANES")
-                .drop_target(DragItemId::new(usize::MAX))
+                .key("dock:panes")
+                .drop_target()
                 .child(
                     pane(
                         Glyph::FileCode,
@@ -1935,8 +2026,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     MarkerGroup::new()
                         .active(true)
                         .gap(4.0)
-                        .draggable(DragItemId::new(900))
-                        .drop_target(DragItemId::new(900))
+                        .key("col:900")
+                        .draggable()
+                        .drop_target()
                         .child(
                             KeyHint::new(Row::new().padding(6.0).child(Label::new("pane A")))
                                 .hint(rail_hints[0])
@@ -1962,8 +2054,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         // active column's glowing bar.
                         .nav_selected(true)
                         .gap(4.0)
-                        .draggable(DragItemId::new(901))
-                        .drop_target(DragItemId::new(901))
+                        .key("col:901")
+                        .draggable()
+                        .drop_target()
                         .child(
                             // `.color(theme.colors.warning)` tints the keycap differently — the
                             // app uses this so a "move → workspace" pick reads distinctly
@@ -2709,6 +2802,14 @@ impl GpuState {
         // Recompute layout ONLY when an input changed it (resize / font / content
         // event) — never on pure-animation frames. The full per-frame taffy
         // relayout was the bulk of the render() CPU.
+        // **A widget that changed the shape of its own tree asks for a layout pass.** Damage is
+        // about pixels; this is about position — a stacked toast that finished leaving is gone
+        // from the tree, and the cards below it are still laid out around the hole. Asked BEFORE
+        // the layout block so the pass runs on this frame, not the next input event.
+        if heca_grid_ui::needs_layout(&self.ui) | heca_grid_ui::needs_layout(&self.overlays) {
+            self.layout_dirty = true;
+        }
+
         if self.layout_dirty {
             // The root ScrollRegion IS the window; the page inside it lays out at
             // natural size and the region scrolls/clips it (T009 — replaces the old
@@ -2907,8 +3008,8 @@ impl ApplicationHandler for App {
                 // decorated window's edges) — don't override it.
                 // Route hover through grid-ui: the overlay LAYER gets first dibs but
                 // only swallows it if it consumes it (an input-grabbing Dialog/palette
-                // returns Yes so items behind don't hover; the ToastStack returns No so
-                // buttons behind it still hover/animate while toasts show), otherwise
+                // returns Yes so items behind don't hover; the ToastStack returns Yes only for
+                // the strip its cards actually cover), otherwise
                 // it falls to the page tree (whose own overlay scan covers an open
                 // Select dropdown) and then the widget under the cursor.
                 let ev = Event::Raw(state.raw(RawPointerKind::Moved, PointerButton::Left));
@@ -3101,16 +3202,34 @@ impl ApplicationHandler for App {
                             use std::io::Write;
                             let _ = std::io::stdout().flush();
                         }
-                        // `t` pushes a new toast onto the host-owned list; the
-                        // ToastStack slides it in, and × dismisses (removes the id).
+                        // `t` pushes a new toast onto the host-owned list; the ToastStack slides
+                        // it in and × dismisses (removes the id). Each push rotates the severity
+                        // AND the action's button variant, because **the developer raising a
+                        // notification chooses how its action reads** — the stack builds what the
+                        // spec says and picks no face of its own (F003/P096/T486).
                         GridKey::Char('t') if state.focus.focused().is_none() => {
                             state.toasts.update(|v| {
                                 let id = v.iter().map(|s| s.id).max().unwrap_or(0) + 1;
+                                let (severity, variant, how) = match id % 4 {
+                                    1 => (ToastSeverity::Info, ButtonVariant::Primary, "primary"),
+                                    2 => (ToastSeverity::Success, ButtonVariant::Secondary, "secondary"),
+                                    3 => (ToastSeverity::Warning, ButtonVariant::Outline, "outline"),
+                                    _ => (ToastSeverity::Danger, ButtonVariant::Ghost, "ghost"),
+                                };
                                 v.push(
                                     ToastSpec::new(id, format!("Event #{id}"))
-                                        .severity(ToastSeverity::Info)
-                                        .body("Pushed with the `t` key")
-                                        .action("View"),
+                                        .severity(severity)
+                                        .body(format!("Its action is a {how} button"))
+                                        .action_with(
+                                            ToastAction::new("view", "View").variant(variant),
+                                        )
+                                        // Every other push carries a SECOND action, so the row
+                                        // that wraps and the per-action variant are both visible:
+                                        // "one action" was a widget limit, not a real rule.
+                                        .action_with(
+                                            ToastAction::new("dismiss", "Not now")
+                                                .variant(ButtonVariant::Ghost),
+                                        ),
                                 );
                             });
                             state.window.request_redraw();
@@ -3179,13 +3298,11 @@ mod sweeps {
     /// catalog's says what a card's title really looks like.
     ///
     /// **Base layer only**: the overlay band exists for what must escape its box (a dropdown, a
-    /// hint keycap), so asserting there would forbid the feature.
+    /// hint keycap), so asserting there would forbid the feature. Both that and the clip
+    /// arithmetic come from `Scene::draws_outside` — this sweep and the per-kind one each had
+    /// their own copy, and both read a clip lying outside the clip already open as "no clip",
+    /// which is what produced the five phantom escapes it was ignored for (F003/P082/T481).
     #[test]
-    // Five places remain, all the same shape as the per-kind sweep's allowlist: a leading icon or
-    // handle placed before the text without the row's width being consulted. Attributing them to
-    // widgets needs the class-3 pass (F003/P082/T438); the sweep is committed **ignored** rather
-    // than allowlisted, because an anonymous rect cannot carry an honest reason next to it.
-    #[ignore = "5 known class-3 escapes: leading icons pushing content past the edge"]
     fn the_catalog_paints_nothing_outside_the_window_it_is_given() {
         let mut escapes: Vec<String> = Vec::new();
         for w in [1400.0f64, 900.0, 600.0, 320.0] {
@@ -3214,46 +3331,11 @@ mod sweeps {
                 let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(w, 900.0));
                 built.ui.paint(&mut cx);
             }
-            // **Honour the clip stack**: a draw scissored to a clip that is itself inside the
-            // window cannot escape it — that is what the clip is for. Ignoring them reports a
-            // scrolling page's content, which is exactly the case where overflow is the feature.
-            let mut clips: Vec<heca_core::layout::Rectangle> = Vec::new();
-            for cmd in scene.base_layer().iter() {
-                match cmd {
-                    heca_grid_ui::DrawCommand::PushClip(r) => {
-                        let inner = clips.last().and_then(|c: &heca_core::layout::Rectangle| c.intersection(*r)).unwrap_or(*r);
-                        clips.push(inner);
-                        continue;
-                    }
-                    heca_grid_ui::DrawCommand::PopClip => {
-                        clips.pop();
-                        continue;
-                    }
-                    _ => {}
-                }
-                let (what, rect) = match cmd {
-                    heca_grid_ui::DrawCommand::Text(t) if t.text.is_empty() => continue,
-                    heca_grid_ui::DrawCommand::Text(t) => {
-                        (format!("text {:?}", t.text), t.rect)
-                    }
-                    heca_grid_ui::DrawCommand::Rect(r) => ("rect".to_string(), r.rect),
-                    _ => continue,
-                };
-                // A box squeezed to nothing paints nothing, wherever its origin ended up.
-                    if rect.size.w <= 0.0 || rect.size.h <= 0.0 {
-                        continue;
-                    }
-                    let Some(rect) = clips.last().map_or(Some(rect), |c| c.intersection(rect)) else {
-                        continue; // entirely scissored away
-                    };
-                    let right = rect.loc.x + rect.size.w;
-                if rect.loc.x < -0.5 || right > w + 0.5 {
-                    escapes.push(format!(
-                        "{w}px: {what} spans {:.0}..{:.0}",
-                        rect.loc.x, right,
-                    ));
-                }
-            }
+            let window = heca_core::layout::Rectangle::new(
+                heca_core::layout::Point::default(),
+                Size::new(w, 900.0),
+            );
+            escapes.extend(scene.draws_outside(window).iter().map(|e| format!("{w}px: {e}")));
         }
         escapes.sort();
         escapes.dedup();

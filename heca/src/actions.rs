@@ -617,6 +617,25 @@ impl ActionRegistry {
             args: &[],
         },
         ActionDescriptor {
+            name: "cursor_to",
+            label: "Move Container Cursor",
+            description: "Put a mounted container's cursor on a named row. Moves the cursor and nothing else.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            args: &[
+                ArgDescriptor::required(
+                    "mount",
+                    ArgKind::Text,
+                    "Id of the mounted container whose cursor moves.",
+                ),
+                ArgDescriptor::required(
+                    "key",
+                    ArgKind::Text,
+                    "Identity of the row the cursor moves to.",
+                ),
+            ],
+        },
+        ActionDescriptor {
             name: "focus_dock",
             label: "Focus Dock",
             description: "Give chrome keyboard focus to a dock — press a letter to pick one, or name it.",
@@ -1414,6 +1433,50 @@ impl ActionRegistry {
             icon: Some(Glyph::Gear),
             args: &[],
         },
+        // ── Notifications (F009) ──
+        ActionDescriptor {
+            name: "notification_dismiss_one",
+            label: "Dismiss Notification",
+            description: "Dismiss a visible notification by id, when its lifecycle permits it.",
+            category: ActionCategory::Chrome,
+            icon: Some(Glyph::XSquare),
+            args: &[ArgDescriptor::required("id", ArgKind::Int, "The notification's runtime id.")],
+        },
+        ActionDescriptor {
+            name: "notification_dismiss_all",
+            label: "Dismiss All Notifications",
+            description: "Dismiss every currently visible notification.",
+            category: ActionCategory::Chrome,
+            icon: Some(Glyph::XSquare),
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "notification_dismiss_last",
+            label: "Dismiss Last Notification",
+            description: "Dismiss the first eligible visible notification in stable toast order.",
+            category: ActionCategory::Chrome,
+            icon: Some(Glyph::XSquare),
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "notification_pick",
+            label: "Pick Notification Action",
+            description: "Open a scoped picker over the visible toast actions/dismiss affordances, in addition to their global prefix+/ letters.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "notification_action_relay",
+            label: "Run Notification Action",
+            description: "Internal: the toast's inline action button cannot carry its own Intent (the notification, and therefore the Intent, does not exist yet when the button is built at mount time), so it names this relay by id + key instead — an address, not a smuggled closure — and the relay resolves it against the store and dispatches it. Not meant to be bound directly.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            args: &[
+                ArgDescriptor::required("id", ArgKind::Int, "The notification's runtime id."),
+                ArgDescriptor::required("key", ArgKind::Text, "The action's key (its own intent name)."),
+            ],
+        },
         // ── Scrollback (host terminal viewport) ──
         ActionDescriptor {
             name: "scrollback_page_up",
@@ -1795,13 +1858,13 @@ impl ActionRegistry {
         ActionDescriptor {
             name: "resize",
             label: "Resize",
-            description: "Move the boundary the focused column or pane owns, along one axis.",
+            description: "Move a boundary of the focused column or pane. The target decides the axis: a column is resized across, a pane down.",
             category: ActionCategory::Layout,
             icon: None,
             args: &[
                 ArgDescriptor::required_enum("target", <crate::input::ResizeTarget as crate::input::EnumArg>::VALUES, "What to resize."),
-                ArgDescriptor::required_enum("axis", <crate::input::ResizeAxis as crate::input::EnumArg>::VALUES, "Which axis to resize along."),
-                ArgDescriptor::required("amount", ArgKind::Float, "How far to move the boundary, along the axis: +x is right, +y is DOWN. A pane's boundary is the one below it, or the one above when it is last — so the divider moves the same way whichever pane is active."),
+                ArgDescriptor::required("amount", ArgKind::Float, "How far to move the boundary, and which way: positive is right for a column, down for a pane. A pane's boundary is the one below it, or the one above when it is last — so the divider moves the same way whichever pane is active. Thousandths of the working width for a column; logical pixels for a pane."),
+                ArgDescriptor::optional_enum("edge", <crate::input::ResizeEdge as crate::input::EnumArg>::VALUES, "Which of the target's edges moves. Omit it for the edge the target already owned. 'top' takes a pane's upper edge instead, so a positive amount shrinks it from the top and a negative one grows it upwards; it does nothing on the first pane, which has no edge above."),
             ],
         },
         ActionDescriptor {
@@ -2200,6 +2263,21 @@ impl ActionCatalog {
     /// rather than re-spelling the label.
     pub fn label(&self, name: &str) -> Option<&str> {
         self.find(name).map(|m| m.label.as_str())
+    }
+
+    /// **Is this action destructive?** — the single source, read by every surface that renders it.
+    ///
+    /// An action declares this by carrying a [`ConfirmSpec`]: the central gate asks before running
+    /// it because it cannot be undone, and that is the same fact a surface needs to draw it in the
+    /// danger hue. Declared once, in `builtin_confirm_specs`, rather than each surface deciding
+    /// from the action's *name* — which is how a pane header came to have `matches!(action, Close)`
+    /// written into it, a styling rule keyed to a name that no other surface would ever share
+    /// (Antonio, 2026-09-03).
+    ///
+    /// Same reasoning as [`icon`](Self::icon): every surface reads it from here instead of
+    /// inventing its own, so a menu entry, a header button and the palette cannot drift.
+    pub fn destructive(&self, name: &str) -> bool {
+        self.find(name).is_some_and(|m| m.confirm.is_some())
     }
 
     /// Every action's metadata, in stable order — what a surface that **renders** actions walks
@@ -2693,7 +2771,7 @@ mod tests {
         // An enum lists what it will accept, so the reader does not have to go looking.
         let specs = builtin_args("resize").unwrap();
         let mut bad = sample_args(&specs);
-        bad.insert("axis".to_string(), "sideways".to_string());
+        bad.insert("edge".to_string(), "sideways".to_string());
         let message = check_args(&specs, &bad)
             .iter()
             .map(|p| p.to_string())
@@ -2701,7 +2779,7 @@ mod tests {
             .join("; ");
         assert_eq!(
             message,
-            "argument 'axis' expected one of x, horizontal, width, y, vertical, height, got 'sideways'",
+            "argument 'edge' expected one of auto, top, bottom, left, right, got 'sideways'",
         );
     }
 
@@ -2712,12 +2790,20 @@ mod tests {
         let catalog = ActionCatalog::with_builtins();
         let info = catalog.describe("resize").unwrap();
         let names: Vec<&str> = info.args.iter().map(|a| a.name.as_str()).collect();
-        assert_eq!(names, ["target", "axis", "amount"]);
+        assert_eq!(names, ["target", "amount", "edge"]);
 
         let target = &info.args[0];
         assert_eq!(target.kind, ArgKind::Enum);
         assert!(target.values.contains(&"column".to_string()));
         assert!(target.required);
+
+        // **An optional argument says so, and still lists its vocabulary.** `edge` chooses which of
+        // a pane's two boundaries a resize moves; omitting it keeps the one the target already
+        // owned, so every binding written before it existed is unaffected.
+        let edge = info.args.last().expect("resize declares an edge");
+        assert_eq!(edge.kind, ArgKind::Enum);
+        assert!(!edge.required, "omitting it is what every old binding does");
+        assert!(edge.values.contains(&"top".to_string()));
 
         let json = serde_json::to_string(&info).unwrap();
         let back: ActionInfo = serde_json::from_str(&json).unwrap();

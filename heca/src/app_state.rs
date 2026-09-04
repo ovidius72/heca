@@ -1,13 +1,11 @@
 use crate::app::backend_store::BackendStore;
 use crate::app::events::AppEvent;
 pub use crate::app::selection_model::SelectionState;
-use crate::input::WmAction;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
 use heca_config::programs::ProgramsConfig;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
-use heca_grid_ui::drag::DragContext;
 use heca_renderer::backdrop::Backdrop;
 use heca_renderer::background::BackgroundLayer;
 use heca_renderer::blur::Blur;
@@ -94,14 +92,17 @@ pub enum InputMode {
     /// universal `KeyHint` over its sidebar dock); the next keypress moves `target`
     /// (the active column or pane, captured on entry) into that workspace.
     WorkspacePick {
-        candidates: Vec<(char, usize)>,
+        /// `(letter, ws_idx, ws_id)` — the position the action acts on, and the identity the
+        /// letter is offered against.
+        candidates: Vec<(char, usize, heca_core::layout::WorkspaceId)>,
         target: WorkspacePickTarget,
     },
     /// Move-to-column letter pick: each column (across all workspaces) is assigned a
     /// letter (shown as a `KeyHint` over its sidebar column); the next keypress moves
     /// the active pane into that `(ws_idx, col_idx)` column (stacking with its panes).
     ColumnPick {
-        candidates: Vec<(char, usize, usize)>,
+        /// `(letter, ws_idx, col_idx, col_id)` — see [`InputMode::WorkspacePick`].
+        candidates: Vec<(char, usize, usize, heca_core::layout::ColumnId)>,
         pane_id: PaneId,
     },
     /// Follow-link letter pick: each visible terminal hyperlink across **all
@@ -226,7 +227,7 @@ impl InputMode {
     }
 
     /// Workspace pick candidates (letter → `ws_idx`) while a `WorkspacePick` is active.
-    pub fn ws_candidates(&self) -> Option<&[(char, usize)]> {
+    pub fn ws_candidates(&self) -> Option<&[(char, usize, heca_core::layout::WorkspaceId)]> {
         match self {
             InputMode::WorkspacePick { candidates, .. } => Some(candidates),
             _ => None,
@@ -234,7 +235,9 @@ impl InputMode {
     }
 
     /// Column pick candidates (letter → `(ws_idx, col_idx)`) while a `ColumnPick` is active.
-    pub fn col_candidates(&self) -> Option<&[(char, usize, usize)]> {
+    pub fn col_candidates(
+        &self,
+    ) -> Option<&[(char, usize, usize, heca_core::layout::ColumnId)]> {
         match self {
             InputMode::ColumnPick { candidates, .. } => Some(candidates),
             _ => None,
@@ -330,42 +333,12 @@ pub enum PickKind {
     FocusDock,
 }
 
-/// What a surface drag carries — the app payload `P` for
-/// [`DragContext<AppDragPayload>`]. The `heca-grid-ui` drag framework is
-/// payload-agnostic (generic over `P`); this struct is the *one* place the app's
-/// drag semantics live, keeping pane/workspace concepts out of the UI crate.
-///
-/// One variant per draggable sidebar source. Panes were first (1a/1b); columns
-/// arrive in F4.5 step 2. The drop *target* is resolved separately at release
-/// (see `ChromeDragItem`) — this is only what the in-flight drag carries.
-#[derive(Clone, Debug)]
-pub enum AppDragPayload {
-    /// A pane card dragged from the sidebar.
-    Pane {
-        /// The pane being dragged.
-        pane_id: PaneId,
-        /// Workspace the drag originated in.
-        origin_ws: usize,
-        /// If true, drop performs a swap instead of a move.
-        swap: bool,
-    },
-    /// A column (its `MarkerGroup` grip) dragged from the sidebar.
-    Column {
-        /// Workspace the column lives in (its origin).
-        ws: usize,
-        /// The column's index within that workspace.
-        col: usize,
-        /// If true, drop performs a swap instead of a move.
-        swap: bool,
-    },
-}
-
 /// State for the interactive content-area drag (pane moved by mouse).
 ///
-/// This is separate from the surface drag system (`DragContext`) because
-/// interactive move detaches a pane from the layout, shows a ghost pane
-/// following the cursor, and computes an insert hint — all content-area
-/// concepts that don't apply to sidebar/inspector surfaces.
+/// This is the app's own gesture, and the only one left: a dragged ROW is the framework's, which
+/// runs it and hands back a drop. Interactive move stays here because it detaches a pane from the
+/// layout, shows a ghost pane following the cursor and computes an insert hint — content-area
+/// concepts a widget knows nothing about.
 #[derive(Clone, Debug)]
 pub enum InteractiveMovePhase {
     /// Phase 1: rubberband — pane still in layout, waiting for threshold.
@@ -431,8 +404,6 @@ pub struct ResizeDrag {
 #[derive(Clone, Debug)]
 pub struct MouseState {
     pub pos: (f32, f32),
-    /// Surface drag coordinator (sidebar, inspector, etc.).
-    pub drag_ctx: DragContext<AppDragPayload>,
     /// In-flight column/pane divider resize-drag (`None` when not resizing).
     pub resize: Option<ResizeDrag>,
     /// Content-area interactive move state (separate from surface drags).
@@ -443,23 +414,17 @@ pub struct MouseState {
     pub insert_hint: Option<heca_core::layout::types::PaneInsertTarget>,
     /// Last time edge scroll was processed (for frame-rate independence).
     pub last_edge_scroll_time: Option<std::time::Instant>,
-    /// Pending click action when a sidebar drag doesn't exceed threshold.
-    /// Stored here instead of in `DragPhase` to keep the framework
-    /// dependency-free (no `WmAction` in `heca-grid-ui`).
-    pub pending_click_action: Option<WmAction>,
 }
 
 impl MouseState {
     pub fn new() -> Self {
         Self {
             pos: (0.0, 0.0),
-            drag_ctx: DragContext::new(),
             resize: None,
             interactive_move: None,
             detached_pane: None,
             insert_hint: None,
             last_edge_scroll_time: None,
-            pending_click_action: None,
         }
     }
 }
@@ -736,8 +701,25 @@ pub struct AppState {
     pub needs_redraw: bool,
     pub focused_pane: Option<PaneId>,
     pub input_mode: InputMode,
-    /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
-    /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
+    /// **The window root — the one retained tree** (`docs/surface-compositor.md` § 0.8).
+    ///
+    /// Everything on screen hangs from here: the chrome subtree is child 0, and a surface — an
+    /// overlay, a modal, a toast stack, a plugin's panel — is a positioned child beside it. One root
+    /// means one walk for layout, paint, input and hints, which is what lets a surface receive
+    /// pointer events by *being placed* rather than by being enrolled somewhere.
+    ///
+    /// **It is not an `Option`, and the chrome is a child rather than the root itself**, for the
+    /// same reason: it has to outlive the chrome. The chrome subtree is discarded and rebuilt
+    /// whenever its signature changes — window size, scale, sidebar widths, theme — and
+    /// `reload_config` drops the build outright. A surface parented to any of that would be
+    /// destroyed by a resize, a sidebar toggle or a theme reload, losing its open state, its
+    /// half-played arrival and its focus. Here it survives all of them, and a surface can be placed
+    /// before the first chrome has ever been built.
+    pub window_root: heca_grid_ui::Flex,
+    /// What the last chrome **build** produced — its signature and the handles that came with it.
+    /// The tree it built lives in [`window_root`](Self::window_root) as child 0; this is the
+    /// bookkeeping about it, so dropping it forces a rebuild without taking any surface with it.
+    /// See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
     /// **Retained per-pane shells**, keyed by pane — the frame around whatever app runs inside,
     /// and the widget that carries the pane's identity and its pick letter. Built/positioned each
@@ -749,10 +731,6 @@ pub struct AppState {
     /// carry one — which is why the pane letters used to be stamped by a host paint pass
     /// (F011/P094/T451).
     pub panes: HashMap<PaneId, crate::chrome::RetainedPane>,
-    /// Retained per-pane info-bar headers (segment `Tag` + action `IconButton`s),
-    /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
-    /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.
-    pub pane_headers: HashMap<PaneId, crate::chrome::RetainedPaneHeader>,
     /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
     /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
     /// trees; this holds runtime-added layers that join the same surface stack. See
@@ -799,6 +777,19 @@ pub struct AppState {
     /// terminal bell when `[appearance.terminal] bell_visual` is on; the render pass
     /// draws a fading content-area overlay until `Instant::now()` reaches it.
     pub bell_flash_until: Option<std::time::Instant>,
+    /// **When a widget asked to be drawn again**, with no event coming to prompt it.
+    ///
+    /// Some behaviour is due at a *time*: a tooltip revealing once the pointer has rested, a caret
+    /// blinking. A resting pointer produces no events, so the frame that would draw it never
+    /// happens on its own. The widget says how long it needs (`Component::next_redraw`, folded down
+    /// a whole tree), the loop sleeps until then, and **this is what makes the loop actually draw
+    /// when it gets there** — without it, waking finds every reason-to-draw false and goes straight
+    /// back to sleep, which is a tooltip that appears only when you nudge the mouse (Antonio,
+    /// driving, 2026-09-04).
+    ///
+    /// Same shape as [`bell_flash_until`](Self::bell_flash_until): a deadline the frame loop reads,
+    /// never a per-widget timer the host would have to keep in step.
+    pub widget_frame_due: Option<std::time::Instant>,
     /// Active scrollback searches, **one per pane**. Drives each pane's query bar,
     /// its match highlights, and `n`/`N` navigation. terminal-task-19.
     ///
@@ -945,6 +936,15 @@ pub struct AppState {
     pub pending_menus: std::rc::Rc<
         std::cell::RefCell<Vec<(heca_grid_ui::widgets::ContextMenu, heca_grid_ui::widgets::MenuAnchor)>>,
     >,
+    /// **Drops no widget took**, waiting to become moves (F003/P097/T496).
+    ///
+    /// The twin of [`pending_menus`](Self::pending_menus), for the same reason: a row owns the
+    /// gesture and the framework resolves what landed on what, but moving a pane between
+    /// workspaces needs `&mut AppState`, which a sink has not. Drained each frame.
+    ///
+    /// What arrives is two **names** — the host decides what its own names mean, and a name it does
+    /// not recognise is simply dropped. That is what lets a plugin's rows use the same gesture.
+    pub pending_drops: std::rc::Rc<std::cell::RefCell<Vec<heca_grid_ui::drag::Dropped>>>,
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
     pub pending_reload: bool,
@@ -954,6 +954,21 @@ pub struct AppState {
     /// calls `Window::set_cursor` when the icon actually changes (cursor-moved fires
     /// very often). See `mouse::update_cursor`.
     pub current_cursor: winit::window::CursorIcon,
+    /// The notification store + its retained `Signal<Vec<ToastSpec>>` — F009/T208. Owns queueing,
+    /// lifecycle, dedup and the projection the mounted `ToastStack` persistent layer reads.
+    pub notifications: crate::notification::NotificationRuntime,
+    /// **Is the pointer resting on a toast card**, written by
+    /// [`ToastStack::hovered_signal`](heca_grid_ui::widgets::ToastStack::hovered_signal).
+    ///
+    /// A signal rather than a callback because it is a *state*: true for as long as the pointer
+    /// stays. The stack reports the fact and nothing more — it has no clock and does not know what
+    /// a card's lifetime is; `NotificationRuntime::set_hovered` decides what it costs, which is
+    /// that a card being read must not retire under the cursor reaching for its button.
+    pub notification_hovered: heca_grid_ui::reactive::Signal<bool>,
+    /// Whether the scoped `notification.pick` picker is open. `KeyHintGroup::open_when` on the
+    /// toast surface reads this directly — F009/T492. In addition to global `prefix+/`, not
+    /// instead.
+    pub notification_pick_open: heca_grid_ui::reactive::Signal<bool>,
 }
 
 

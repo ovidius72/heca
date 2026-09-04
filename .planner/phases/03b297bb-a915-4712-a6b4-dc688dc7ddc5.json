@@ -3,24 +3,40 @@
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 55,
   "shortId": "6AMV9",
-  "priority": 2,
+  "priority": 6,
   "slug": "notification-06-routing-producers",
   "title": "notification-06: Routing + Additional Producers",
-  "discussedAt": "",
-  "contextReady": false,
-  "contextReadyReason": "",
-  "summary": "Choke point `notify`, routing per app/system/none e producer aggiuntivi.",
-  "description": "Aggiungere un helper/router unico per emettere notifiche secondo `[settings].notification_system`; implementare comportamento `none`, definire fallback v1 per `system`, e aggiungere backlog producer per pane exit, spawn failure, provider/plugin error e agent events.",
-  "notes": "",
-  "goals": [],
-  "nonGoals": [],
-  "dependencies": [],
+  "discussedAt": "2026-08-27T09:19:18.567Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Choke point notify, routing per app/system/none e producer aggiuntivi.",
+  "description": "Azione notify (register_dynamic, args title/body/severity/dedup_key), comportamento none, fallback v1 per system, producer per pane exit/spawn failure/provider-plugin error/agent events/azione rifiutata.",
+  "descriptionUpdatedAt": "2026-08-27T09:19:18.567Z",
+  "notes": "**Handoff context update:**\nP055 is 7/9 done + T491. Producers built this session: T221 (pane-exited), T225 (spawn-failed), T222 (system-mode fallback notice + the routing-sink decision). T219 superseded, T220/T224 done. The raise architecture, the [settings.notification_system] config (mode + auto_dismiss_ms), the config-reload producer (P062), and tests+README (P057) are all done and pushed on feat/notification-system-app @ 8517257.\n\n**Remaining work:**\nT381 (declined-action producer — full design captured in the task; fresh-session build touching heca/src/app/interaction.rs). T223 deferred (no provider error channel). P063 deferred (OS backend, routing-sink architecture recorded). None of F009 driven in the app by Antonio.",
+  "goals": [
+    "Un unico modo per RPC/keybinding/plugin di generare una notifica dall'esterno di Rust (l'azione name-keyed notify), piu i producer applicativi che la useranno internamente."
+  ],
+  "nonGoals": [
+    "Argomento action-button su notify in v1: scelta di scope (nessun ArgKind per un Intent annidato), non limite del widget."
+  ],
+  "dependencies": [
+    "heca/src/actions.rs register_dynamic/ActionMeta (gia esistenti, non serve heca-grid-ui)."
+  ],
   "dependsOn": [],
   "risks": [],
   "openQuestions": [],
-  "decisions": [],
+  "decisions": [
+    "OS notification backend is a routing sink behind Notification::send(), not a component (Antonio 2026-08-28).",
+    "Severity is tone not importance — default_lifetime_for_severity deleted (T503); everything auto-dismisses, .sticky() opts out. Reversible.",
+    "Notification::send() is the only public raise door; both push methods pub(crate); raise() is the one Instant::now() site.",
+    "Declined-action pattern (T381): picked-vs-bound tag, cx.decline sink, central builder, declined_actions=picked|all|off config; grey-out prevention deferred.",
+    "T207 canceled — pointer half is the P097 input-architecture phase; acceptance criteria moved to P097(F003)/T500."
+  ],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "T491 notify registrata name-keyed, verificata con cargo check (fatto)",
+    "producer pane-exit/spawn-failure/provider-error/agent-events/declined-action (non iniziati)"
+  ],
   "taskIds": [
     "25a3e40a-1bea-433b-9499-14e37faddd13",
     "46aefbb4-8ad0-4440-a951-ec249b507662",
@@ -29,7 +45,10 @@
     "9fb188aa-1ff7-4963-aa66-1f6bc09888ee",
     "c0385fb4-5921-4161-8346-9af8ae1530ac",
     "d90411b0-50c8-42cf-8d85-645686a17c44",
-    "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c"
+    "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c",
+    "28af6ba2-3f6a-471b-a5ad-e8b3377794d5",
+    "deef08b2-b838-428d-afce-2151533b5dd4",
+    "3a5ca1f3-f626-49d0-b4a0-033f0b64924e"
   ],
   "tasks": [
     {
@@ -40,19 +59,32 @@
       "priority": 1,
       "shortName": "notify-helper",
       "title": "Add AppState notify/router helper",
-      "status": "planned",
-      "description": "Creare un choke point unico per emissione notifiche, preferibilmente `AppState::notify`, evitando match manuali nei producer.",
+      "status": "done",
+      "description": "Creare un choke point unico per emissione notifiche, preferibilmente `AppState::notify`, evitando match manuali nei producer.\n\n---\n**Completion summary:**\nSUPERSEDED by the T493 raise-path redesign — the single choke point exists, it is just not `AppState::notify`. Every notification goes through `Notification::…send()` (the public door) → the host-installed sink → `AppEvent::RaiseNotification` → `notification::raise(state, draft)` (heca/src/notification.rs), which is the ONE place `Instant::now()` is read and the only non-test caller of `NotificationRuntime::push`. The name-keyed `notify` action funnels through the same `raise()`. A producer never writes a manual match — it types `Notification::info(\"…\").send()` and the routing (delivery mode, clock, store) is behind the API. No `AppState::notify` needed or wanted.\nVERIFICATION: covered by notification_send_hands_the_exact_draft_through_the_installed_sink and the P062 reload-flow tests. Both lint gates exit 0.\nFILES: heca/src/notification.rs (raise), heca/src/main.rs (RaiseNotification handler).",
+      "descriptionUpdatedAt": "2026-08-28T08:43:22.198Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "25a3e40a-1bea-433b-9499-14e37faddd13-check-001-planned-done",
+          "date": "2026-08-28T08:43:22.196Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SUPERSEDED by the T493 raise-path redesign — the single choke point exists, it is just not `AppState::notify`. Every notification goes through `Notification::…send()` (the public door) → the host-installed sink → `AppEvent::RaiseNotification` → `notification::raise(state, draft)` (heca/src/notification.rs), which is the ONE place `Instant::now()` is read and the only non-test caller of `NotificationRuntime::push`. The name-keyed `notify` action funnels through the same `raise()`. A producer never writes a manual match — it types `Notification::info(\"…\").send()` and the routing (delivery mode, clock, store) is behind the API. No `AppState::notify` needed or wanted.\nVERIFICATION: covered by notification_send_hands_the_exact_draft_through_the_installed_sink and the P062 reload-flow tests. Both lint gates exit 0.\nFILES: heca/src/notification.rs (raise), heca/src/main.rs (RaiseNotification handler)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:43:22.196Z",
+      "completedAt": "2026-08-28T08:43:22.196Z",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-08-28T08:43:22.196Z",
+      "sessionInfo": []
     },
     {
       "id": "46aefbb4-8ad0-4440-a951-ec249b507662",
@@ -62,19 +94,32 @@
       "priority": 3,
       "shortName": "none-mode",
       "title": "Implement none notification mode",
-      "status": "planned",
-      "description": "Quando `notification_system = \"none\"`, sopprimere i producer non critici del piano senza sopprimere stderr/debug logs.",
+      "status": "done",
+      "description": "Quando `notification_system = \"none\"`, sopprimere i producer non critici del piano senza sopprimere stderr/debug logs.\n\n---\n**Completion summary:**\nSHIPPED (commit bfabbb7 / this session): `[settings.notification_system] mode = \"none\"` suppresses every notification. NotificationRuntime holds the mode; NotificationRuntime::suppressed() returns true for None; notification::raise() early-returns when suppressed, before the draft reaches the store — nothing queues, no timer is scheduled. stderr / debug logs are NOT suppressed: the reload-failure eprintln! lines (T218), the spawn-failure eprintln! (T225), and every #[cfg(debug_assertions)] trace all still fire regardless of mode. set_mode() applies a change on prefix+Shift+r.\nNote vs the original wording (\"suppress non-critical producers\"): mode=\"none\" suppresses ALL notifications, matching what config.default.toml and README document (\"no notifications at all\"). Severity is tone not importance (T503) — there is no \"critical\" tier to keep.\nVERIFICATION: test mode_none_suppresses_and_mode_change_is_live; both lint gates exit 0.\nFILES: heca/src/notification.rs, heca-config/src/settings.rs, heca/src/app/startup.rs, heca/src/main.rs.",
+      "descriptionUpdatedAt": "2026-08-28T08:43:29.753Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "46aefbb4-8ad0-4440-a951-ec249b507662-check-001-planned-done",
+          "date": "2026-08-28T08:43:29.752Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SHIPPED (commit bfabbb7 / this session): `[settings.notification_system] mode = \"none\"` suppresses every notification. NotificationRuntime holds the mode; NotificationRuntime::suppressed() returns true for None; notification::raise() early-returns when suppressed, before the draft reaches the store — nothing queues, no timer is scheduled. stderr / debug logs are NOT suppressed: the reload-failure eprintln! lines (T218), the spawn-failure eprintln! (T225), and every #[cfg(debug_assertions)] trace all still fire regardless of mode. set_mode() applies a change on prefix+Shift+r.\nNote vs the original wording (\"suppress non-critical producers\"): mode=\"none\" suppresses ALL notifications, matching what config.default.toml and README document (\"no notifications at all\"). Severity is tone not importance (T503) — there is no \"critical\" tier to keep.\nVERIFICATION: test mode_none_suppresses_and_mode_change_is_live; both lint gates exit 0.\nFILES: heca/src/notification.rs, heca-config/src/settings.rs, heca/src/app/startup.rs, heca/src/main.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:43:29.752Z",
+      "completedAt": "2026-08-28T08:43:29.752Z",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-08-28T08:43:29.752Z",
+      "sessionInfo": []
     },
     {
       "id": "7073c9d2-c610-43e3-9f0a-7537f644bc42",
@@ -84,19 +129,32 @@
       "priority": 5,
       "shortName": "pane-exited-producer",
       "title": "Add pane exited notification producer",
-      "status": "planned",
-      "description": "Producer backlog: notificare uscita backend pane con severity info/warning, focus action opzionale e dedup `pane.exited:<pane_id>`.",
+      "status": "done",
+      "description": "Producer backlog: notificare uscita backend pane con severity info/warning, focus action opzionale e dedup `pane.exited:<pane_id>`.\n\n---\n**Completion summary:**\nSHIPPED: pane-exited notification producer in heca/src/app/process_monitor.rs. In sync_pane_runtime_from_backends, for each drained exit code: if the pane's close-policy keeps it open (a dead shell sitting there), notify_pane_exited(pane, code) raises a toast — Info for exit 0/None, Warning with \"exit code N\" body for a non-zero code — dedup_key \"pane.exited:<pane_id>\" (a flapping backend does not spray), plus a Focus action (focus_pane intent, dismiss_after). A pane that is about to auto-close gets no toast.\nVERIFICATION: test pane_exited_notification_maps_severity_and_keys_per_pane (installs a sink, asserts severity/body/dedup_key/Focus action for a clean and a crashed exit). ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh exit 0, heca clippy-clean. NOT driven by Antonio — needs a real shell exiting in a kept pane.\nFILES: heca/src/app/process_monitor.rs.\nNOTE: a command that does not exist (prefix+g with lazygit not installed) spawns fine — the shell exits 127 — so it surfaces through THIS producer as \"Pane N process exited, exit code 127\" when the pane is kept. T225 covers the genuine PTY/spawn failure.",
+      "descriptionUpdatedAt": "2026-08-28T08:43:38.081Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "7073c9d2-c610-43e3-9f0a-7537f644bc42-check-001-planned-done",
+          "date": "2026-08-28T08:43:38.080Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SHIPPED: pane-exited notification producer in heca/src/app/process_monitor.rs. In sync_pane_runtime_from_backends, for each drained exit code: if the pane's close-policy keeps it open (a dead shell sitting there), notify_pane_exited(pane, code) raises a toast — Info for exit 0/None, Warning with \"exit code N\" body for a non-zero code — dedup_key \"pane.exited:<pane_id>\" (a flapping backend does not spray), plus a Focus action (focus_pane intent, dismiss_after). A pane that is about to auto-close gets no toast.\nVERIFICATION: test pane_exited_notification_maps_severity_and_keys_per_pane (installs a sink, asserts severity/body/dedup_key/Focus action for a clean and a crashed exit). ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh exit 0, heca clippy-clean. NOT driven by Antonio — needs a real shell exiting in a kept pane.\nFILES: heca/src/app/process_monitor.rs.\nNOTE: a command that does not exist (prefix+g with lazygit not installed) spawns fine — the shell exits 127 — so it surfaces through THIS producer as \"Pane N process exited, exit code 127\" when the pane is kept. T225 covers the genuine PTY/spawn failure."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:43:38.080Z",
+      "completedAt": "2026-08-28T08:43:38.080Z",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-08-28T08:43:38.080Z",
+      "sessionInfo": []
     },
     {
       "id": "750b8ef0-b707-4693-a58d-21511d60f882",
@@ -106,19 +164,32 @@
       "priority": 2,
       "shortName": "system-mode-v1",
       "title": "Define v1 behavior for system notification mode",
-      "status": "planned",
-      "description": "Decidere e implementare comportamento deterministico per `notification_system = \"system\"` prima del backend OS; raccomandato fallback in-app con warning una tantum.",
+      "status": "done",
+      "description": "DECIDED (Antonio, 2026-08-28): the OS-notification backend is a ROUTING SINK behind Notification::send(), NOT a component.\n\nTHE MODEL:\n- Notification::send() stays the only door. A producer never knows or cares where a notification surfaces — it types Notification::info(\"…\").send() and nothing else.\n- Where it surfaces is a host routing decision, invisible to the caller, driven by [settings.notification_system] mode:\n  - \"app\"    → the in-app ToastStack (today's path via notification::raise → NotificationRuntime::push).\n  - \"system\" → the OS backend (P063): macOS Notification Center, Linux libnotify, Windows toast. An OS notification has no bounds, no parent, no input — it is NOT a widget in heca's tree, which is exactly why it is a sink and not a component. Antonio's \"place it anywhere and it handles itself\" rule does not apply to it.\n  - \"none\"   → dropped (already implemented — suppressed()).\n- The routing happens in ONE place: notification::raise (heca/src/notification.rs), which already reads the mode. Today: App and System both fall through to the in-app store. P063 adds the System arm — raise() hands the accepted draft to an installed OS sink instead of / in addition to the store.\n- The OS sink is installed the same way the in-app sink is (install_notification_sink pattern) — host-installed once at startup, absent in a headless test.\n\nv1 BEHAVIOUR FOR \"system\" BEFORE P063 LANDS (this task):\n- mode = \"system\" falls back to the in-app toast (App behaviour) — already the case.\n- ADD a one-time info notification on the first raise under mode=\"system\" while no OS sink is installed: \"OS notifications aren't available yet — showing in-app.\" dedup_key \"notification.system.unavailable\" so it appears once, not per notification. This is the only code T222 itself ships; the rest is the P063 phase.\n\nCONSEQUENCES for P063: it builds the OS sink + its install point + the raise() System arm + per-OS spikes. It does NOT build a component, a widget, a layer, or anything in the tree. Update the P063 phase description to this model.\n\nCONSEQUENCE for T381: declined_actions lives in this same [settings.notification_system] table and assumes this routing model — build T381 after this is recorded (done) or alongside P063.\n\n---\n**Completion summary:**\nDECIDED (Antonio 2026-08-28): the OS backend is a ROUTING SINK behind Notification::send(), not a component — see the P063 phase description for the full model.\n\nSHIPPED (this task's own small piece): mode = \"system\" with no OS backend yet falls back to the in-app stack AND announces it once.\n- NotificationRuntime gains system_fallback_announced: bool; set_mode resets it on any mode change.\n- NotificationRuntime::system_fallback_notice() -> Option<NotificationDraft>: Some the first time it is asked while mode == System (\"OS notifications aren't available yet\" / body \"Showing notifications in-app until the system backend lands.\" / dedup_key \"notification.system.unavailable\"), None after, None ever for App/None.\n- notification::raise() pushes the notice (routed in-app like anything else) before the first real notification under System mode. When P063 installs the OS sink this branch stops firing.\nVERIFICATION: test system_mode_announces_the_in_app_fallback_exactly_once (app/none never produce it; system produces it once; switching away and back re-arms). notification:: 67/67; ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh exit 0, heca/heca-config clippy-clean. NOT driven by Antonio.\nFILES: heca/src/notification.rs.\nREMAINING = the P063 phase (the actual OS backend). T381's declined_actions config builds on the same routing model, now recorded.",
+      "descriptionUpdatedAt": "2026-08-28T11:28:16.376Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "750b8ef0-b707-4693-a58d-21511d60f882-check-001-planned-done",
+          "date": "2026-08-28T11:28:16.374Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "DECIDED (Antonio 2026-08-28): the OS backend is a ROUTING SINK behind Notification::send(), not a component — see the P063 phase description for the full model.\n\nSHIPPED (this task's own small piece): mode = \"system\" with no OS backend yet falls back to the in-app stack AND announces it once.\n- NotificationRuntime gains system_fallback_announced: bool; set_mode resets it on any mode change.\n- NotificationRuntime::system_fallback_notice() -> Option<NotificationDraft>: Some the first time it is asked while mode == System (\"OS notifications aren't available yet\" / body \"Showing notifications in-app until the system backend lands.\" / dedup_key \"notification.system.unavailable\"), None after, None ever for App/None.\n- notification::raise() pushes the notice (routed in-app like anything else) before the first real notification under System mode. When P063 installs the OS sink this branch stops firing.\nVERIFICATION: test system_mode_announces_the_in_app_fallback_exactly_once (app/none never produce it; system produces it once; switching away and back re-arms). notification:: 67/67; ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh exit 0, heca/heca-config clippy-clean. NOT driven by Antonio.\nFILES: heca/src/notification.rs.\nREMAINING = the P063 phase (the actual OS backend). T381's declined_actions config builds on the same routing model, now recorded."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T11:28:16.374Z",
+      "completedAt": "2026-08-28T11:28:16.374Z",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-08-28T11:28:16.374Z",
+      "sessionInfo": []
     },
     {
       "id": "9fb188aa-1ff7-4963-aa66-1f6bc09888ee",
@@ -128,19 +199,32 @@
       "priority": 7,
       "shortName": "provider-error-producer",
       "title": "Add provider/plugin error notification producer",
-      "status": "planned",
+      "status": "deferred",
       "description": "Producer backlog: notificare errori provider/plugin con dedup `provider.error:<provider_id>` evitando spam per-frame.",
+      "descriptionUpdatedAt": "2026-07-03T22:52:52.635Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "9fb188aa-1ff7-4963-aa66-1f6bc09888ee-check-001-planned-deferred",
+          "date": "2026-08-28T08:43:57.741Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "No provider or plugin can error today, so this producer has nothing to produce into. Provider::perform (heca/src/providers/mod.rs) returns Handled (Yes = handled, No = silent decline) with NO error channel — a decline is explicitly \"a real answer, not an error\". WASM plugins are unbuilt. The only mounted provider is the built-in WorkspacesContainer, which cannot fail. Building the producer now would be dead code (nothing emits into it), which AGENTS.md forbids. Revisit when the plugin boundary lands (F011-adjacent) or a Provider error channel is added — at which point this is: on a provider/plugin error, Notification::danger(...).dedup_key(format!(\"provider.error:{id}\")), rate-limited so a per-frame error source does not spray (the store's dedup already handles the update-in-place half).",
+          "description": "No provider or plugin can error today, so this producer has nothing to produce into. Provider::perform (heca/src/providers/mod.rs) returns Handled (Yes = handled, No = silent decline) with NO error channel — a decline is explicitly \"a real answer, not an error\". WASM plugins are unbuilt. The only mounted provider is the built-in WorkspacesContainer, which cannot fail. Building the producer now would be dead code (nothing emits into it), which AGENTS.md forbids. Revisit when the plugin boundary lands (F011-adjacent) or a Provider error channel is added — at which point this is: on a provider/plugin error, Notification::danger(...).dedup_key(format!(\"provider.error:{id}\")), rate-limited so a per-frame error source does not spray (the store's dedup already handles the update-in-place half)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-08-28T08:43:57.741Z",
+      "sessionInfo": []
     },
     {
       "id": "c0385fb4-5921-4161-8346-9af8ae1530ac",
@@ -150,19 +234,32 @@
       "priority": 6,
       "shortName": "agent-producer-backlog",
       "title": "Park future agent event notifications",
-      "status": "planned",
-      "description": "Tracciare producer futuri per agent waiting/completed/sidecar disconnected, gated su agent integration model; non implementare in v1.",
+      "status": "done",
+      "description": "Tracciare producer futuri per agent waiting/completed/sidecar disconnected, gated su agent integration model; non implementare in v1.\n\n---\n**Completion summary:**\nPARK task — its own spec says \"non implementare in v1\". Tracked, not built. Agent-event producers (agent waiting / completed / sidecar disconnected) are gated on the agent-integration model, which does not exist. There is no NotificationSourceKind::Agent by deliberate design (see heca/src/notification.rs module docs — \"agent-originated notifications belong to a separate feature\"). When the agent integration lands, this producer is: subscribe to the agent event stream, raise Notification::info/warning per event with dedup_key \"agent.<id>.<event>\". Nothing to do until then.\nVERIFICATION: n/a (nothing implemented, per spec).",
+      "descriptionUpdatedAt": "2026-08-28T08:43:51.153Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "c0385fb4-5921-4161-8346-9af8ae1530ac-check-001-planned-done",
+          "date": "2026-08-28T08:43:51.152Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "PARK task — its own spec says \"non implementare in v1\". Tracked, not built. Agent-event producers (agent waiting / completed / sidecar disconnected) are gated on the agent-integration model, which does not exist. There is no NotificationSourceKind::Agent by deliberate design (see heca/src/notification.rs module docs — \"agent-originated notifications belong to a separate feature\"). When the agent integration lands, this producer is: subscribe to the agent event stream, raise Notification::info/warning per event with dedup_key \"agent.<id>.<event>\". Nothing to do until then.\nVERIFICATION: n/a (nothing implemented, per spec)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:43:51.152Z",
+      "completedAt": "2026-08-28T08:43:51.152Z",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-08-28T08:43:51.152Z",
+      "sessionInfo": []
     },
     {
       "id": "d90411b0-50c8-42cf-8d85-645686a17c44",
@@ -172,19 +269,32 @@
       "priority": 4,
       "shortName": "spawn-failed-producer",
       "title": "Add spawn command failed notification producer",
-      "status": "planned",
-      "description": "Producer backlog: notificare failure di SpawnCommand/future spawn-pane come sticky danger, dopo che gli handler espongono il risultato errore.",
+      "status": "done",
+      "description": "Producer backlog: notificare failure di SpawnCommand/future spawn-pane come sticky danger, dopo che gli handler espongono il risultato errore.\n\n---\n**Completion summary:**\nSHIPPED: spawn-command-failed notification producer.\n- heca/src/app/backend_factory.rs: create_command_backend_for_state and create_command_backend_with_options now return Result<Box<dyn PaneBackend>, String>. The Err(_) => FakeBackend silent fallback is gone for command panes — the message is handed back (a genuine PTY-open / shell-spawn failure). The terminal (shell) backend keeps its FakeBackend fallback — a blank startup pane beats none.\n- heca/src/handlers.rs handle_spawn_command: builds the backend BEFORE touching the layout; on Err raises Notification::danger(format!(\"Couldn't run '{command}'\")).body(e).dedup_key(format!(\"spawn.failed:{command}\")).sticky() and returns — no empty pane left behind.\nVERIFICATION: cargo check + both lint gates exit 0, heca clippy-clean. NOT driven by Antonio.\nSCOPE NOTE: \"command not found\" is NOT this path — the command runs through the shell, which spawns fine and exits 127; that surfaces via T221 (\"Pane N process exited, exit code 127\") when the pane is kept. A `which`-style precheck for a crisper \"no such command\" message is a possible follow-up, not built here.\nFILES: heca/src/app/backend_factory.rs, heca/src/handlers.rs.",
+      "descriptionUpdatedAt": "2026-08-28T08:43:45.575Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "d90411b0-50c8-42cf-8d85-645686a17c44-check-001-planned-done",
+          "date": "2026-08-28T08:43:45.574Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SHIPPED: spawn-command-failed notification producer.\n- heca/src/app/backend_factory.rs: create_command_backend_for_state and create_command_backend_with_options now return Result<Box<dyn PaneBackend>, String>. The Err(_) => FakeBackend silent fallback is gone for command panes — the message is handed back (a genuine PTY-open / shell-spawn failure). The terminal (shell) backend keeps its FakeBackend fallback — a blank startup pane beats none.\n- heca/src/handlers.rs handle_spawn_command: builds the backend BEFORE touching the layout; on Err raises Notification::danger(format!(\"Couldn't run '{command}'\")).body(e).dedup_key(format!(\"spawn.failed:{command}\")).sticky() and returns — no empty pane left behind.\nVERIFICATION: cargo check + both lint gates exit 0, heca clippy-clean. NOT driven by Antonio.\nSCOPE NOTE: \"command not found\" is NOT this path — the command runs through the shell, which spawns fine and exits 127; that surfaces via T221 (\"Pane N process exited, exit code 127\") when the pane is kept. A `which`-style precheck for a crisper \"no such command\" message is a possible follow-up, not built here.\nFILES: heca/src/app/backend_factory.rs, heca/src/handlers.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:43:45.574Z",
+      "completedAt": "2026-08-28T08:43:45.574Z",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-08-28T08:43:45.574Z",
+      "sessionInfo": []
     },
     {
       "id": "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c",
@@ -194,8 +304,9 @@
       "priority": 8,
       "shortName": "a-declined-action-says-so-the",
       "title": "A declined action says so — the producer for \"nothing happened, and here is why\"",
-      "status": "waiting",
-      "description": "An action that runs but **declines** currently vanishes. From a keypress that is tolerable; from the command palette, where the user deliberately picked the entry out of a list, it reads as a broken command.\n\n## The report that produced this task (2026-07-30)\n\nThe maintainer chose **Move Column Up** in the palette and nothing happened. The action is not dead: `handle_move_column_up` (`heca/src/handlers.rs:356`) moves the active column **to the workspace above** and returns early when `current_ws == 0`; `handle_move_column_down` :370 does the same at the last workspace. Correct behaviour, invisible outcome.\n\nIt is not one action. The same silent early return is everywhere a precondition can fail:\n- no workspace above/below (`move_column_up` / `move_column_down`, `move_pane_*`),\n- nothing under the cursor (a component's `perform` returns `Handled::No` — `heca/src/providers/mod.rs` documents \"a silent decline is a real answer, not an error\"),\n- no link under the caret (`open_link_at_caret`), no selection (`copy_selection`), no scrollback to page through,\n- a component action whose owner is not mounted (`IntentOutcome::NotRunnable`), one the domain refuses (`IntentOutcome::Blocked`), and one called without its required arguments (`IntentOutcome::MissingArgs`, added F003/P085/T358) — those three are already **named outcomes** on the dispatch path and today only reach a `#[cfg(debug_assertions)] eprintln!`.\n\n## What to build here\n\nA notification producer on the dispatch path: when an intent resolves to `Blocked`, `NotRunnable` or `MissingArgs`, or a handler declines, raise a low-severity notification saying which action and why. `dispatch_view_intent` (`heca/src/app/interaction.rs`) already computes exactly those outcomes and throws them away for every caller but RPC — that is the seam, and it needs no new plumbing.\n\nThe gap to close is the **handler** case: an early `return` inside `handle_move_column_up` is invisible to the dispatcher. Either handlers gain a way to report a decline (a return value, or a `cx`-style sink), or the well-known preconditions are checked before dispatch. That choice is this task's real content — do not paper over it by special-casing the two column actions.\n\n## The related, deliberately separate question\n\n**Prevention, not just reporting**: an optional `can_perform(&self, id) -> bool` would let the palette render an entry *disabled* rather than let it be chosen and then decline. `DropdownItem` already carries an `enabled` flag, so the menu half exists. That was deferred in F003/P085/T358 (\"Do not build it now\") and belongs with the palette work, not here — this task is about telling the user what happened, not about greying entries out.\n\n## Behaviors to preserve\n\nA decline is **not an error** and must not read as one: severity low, no modal, no sound. Silence stays correct for a keypress that repeats (holding `j` at the end of a list must not spray toasts) — rate-limit or suppress repeats of the same action, which is the store's job (`notification-02`), not a special case here.",
+      "status": "planned",
+      "description": "A declined action — one that runs, finds a precondition unmet, and returns without doing anything — currently vanishes. From a held key that is fine; from the command palette, where the user picked the entry out of a list, it reads as a broken command. Reported 2026-07-30: \"Move Column Up\" chosen in the palette did nothing (handle_move_column_up, heca/src/handlers.rs, returns early when current_ws == 0). Same silent early return: move_column_down, move_pane_*, copy_selection (no selection), open_link_at_caret (no link), scrollback paging at an edge, and a Provider::perform that returns Handled::No.\n\n=== AGREED DESIGN (Antonio, 2026-08-28) — reusable, centralised, no hardcoding, no per-action flags ===\n\n1. PICKED vs BOUND. Every invocation carries a small tag, orthogonal to InteractionSource and invisible to ActionPolicy:\n   - Picked = user chose it from an explicit list: command palette, right-click menu, a clicked button, RPC.\n   - Bound = user pressed a key mapped to it.\n   Set in the few dispatch entry points, never per action. NOTE: the palette today dispatches as InteractionSource::Keyboard on purpose (heca/src/chrome/palette.rs:318-352) so policy judges it like the key — keep that; the tag rides alongside, it does not replace the source.\n\n2. ONE DECLINE OUTCOME at the single chokepoint. dispatch_action / route_interaction (heca/src/app/interaction.rs) already computes Blocked / NotRunnable / MissingArgs and throws them away for every caller but RPC. Add the handler case: a handler that early-returns calls cx.decline(\"already at the top\") through a sink on the context it already has, instead of a bare return. A handler that does NOT call it produces no notification — safe default, and migration is incremental (wire the handlers people complain about; the rest stay silent exactly as today). Do NOT special-case the two column actions; do NOT change ~100 handler signatures.\n\n3. SURFACING is decided centrally from the tag + config, never by the action:\n   [settings.notification_system]\n   declined_actions = \"picked\"   # \"picked\" (default) | \"all\" | \"off\"\n   - \"picked\": a decline from palette/menu/RPC/button raises a toast; a keybinding decline stays silent. Fixes the reported bug with zero navigation spam.\n   - \"all\": keybinding declines also notify (deduped — a held key is one toast, not a stream). Nav actions (focus_*, scroll_*, scrollback) decline constantly, which is why this is opt-in, not default.\n   - \"off\": never.\n   Config: add a NotificationDeclined enum to NotificationSystemConfig (heca-config/src/settings.rs), serde snake_case, default Picked; document in config.default.toml + README; thread to wherever the chokepoint reads it.\n\n4. THE TOAST is built centrally from the DeclineReason + the action's catalog label/icon (ActionCatalog), low severity, no modal, no sound: Notification::info(format!(\"{label} — {reason}\")).dedup_key(format!(\"declined:{action}\")).send(). The dedup_key collapses any leaked spray.\n\nDEFERRED, separate: prevention — an optional can_perform(action) -> bool so the palette renders an entry disabled (DropdownItem already has an `enabled` flag) rather than letting it be chosen and decline. That is palette work (was F003/P085/T358), not this task. This task is about telling the user what happened.\n\nBEHAVIOURS TO PRESERVE: a decline is NOT an error — low severity, no sound, no modal. Holding a key at a list edge must not spray (dedup + the Bound-is-silent default both cover it).",
+      "descriptionUpdatedAt": "2026-08-28T10:34:39.447Z",
       "notes": "",
       "statusLog": [
         {
@@ -205,6 +316,14 @@
           "toStatus": "waiting",
           "title": "Antonio, 2026-08-04: this is to be worked **in its place inside F009**, not pulled forward as a standalone bug fix. It lives in P055 — \"notification-06: Routing + Additional Producers\" — which is the sixth phase of the Notification System, and F009 is entirely unstarted (0/60 tasks). A producer that says \"the action was declined, and here is why\" has nothing to produce *into* until the model, the store, the toast rendering and the routing exist (P061 → P056 → P060 → P059 → P062 → P055).",
           "description": "Antonio, 2026-08-04: this is to be worked **in its place inside F009**, not pulled forward as a standalone bug fix. It lives in P055 — \"notification-06: Routing + Additional Producers\" — which is the sixth phase of the Notification System, and F009 is entirely unstarted (0/60 tasks). A producer that says \"the action was declined, and here is why\" has nothing to produce *into* until the model, the store, the toast rendering and the routing exist (P061 → P056 → P060 → P059 → P062 → P055).\n\nThe underlying complaint stays valid and is the reason the task exists: `move_column_up` on the first workspace moves the column to the workspace above, returns early, and tells the user nothing — it reads as \"the key does nothing\". Do not fix that with an ad-hoc message; it is the first customer of the notification producer, which is the whole point of filing it here."
+        },
+        {
+          "id": "15f75d71-523a-465e-bd2a-9466d227445f",
+          "date": "2026-08-27T09:41:32.095Z",
+          "fromStatus": "waiting",
+          "toStatus": "planned",
+          "title": "waiting → planned",
+          "description": ""
         }
       ],
       "decisions": [],
@@ -237,16 +356,120 @@
       ],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-30T15:08:21.918Z",
-      "updatedAt": "2026-08-04T19:20:08.688Z"
+      "updatedAt": "2026-08-28T10:34:39.446Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "28af6ba2-3f6a-471b-a5ad-e8b3377794d5",
+      "phaseId": "03b297bb-a915-4712-a6b4-dc688dc7ddc5",
+      "number": 491,
+      "shortId": "4B6SS",
+      "priority": 9,
+      "shortName": "add-name-keyed-notify-action-t",
+      "title": "Add name-keyed `notify` action — the raise capability",
+      "status": "done",
+      "description": "Raising a notification today is `state.notifications.push(NotificationDraft, now)` (heca/src/notification.rs, ported from origin/feature/notification-system@ceade1e) — a private Rust method on AppState's store. No plugin, RPC caller, or keybinding can reach it; only dismiss (NotificationDismissOne/All/Last, P059) is a real registered action. This closes that asymmetry.\n\nWhat exists to build on: `register_dynamic(registry, catalog, meta, handler)` at heca/src/actions.rs:418, `unregister_dynamic` at heca/src/actions.rs:471 — the name-keyed action path documented in docs/widgets.md:4863 \"Registering a custom (name-keyed) action\". AGENTS.md:1554 \"Adding New Actions\", the paragraph after step 11: a name-keyed action skips steps 1-4/8 (no WmAction variant, no action_from_name/build_action/priority/ActionRegistry::ALL descriptor).\n\nRegister `notify` via register_dynamic — NOT a WmAction variant. A future WASM plugin can only ever dispatch by name, never add an enum variant, and \"any plugin can raise a notification\" is the point of this action.\n\nDeclared args (ArgSpec, pattern at docs/widgets.md:4897):\n- title: Text, required\n- body: Text, optional\n- severity: Enum (info|success|warning|danger), optional, default info\n- dedup_key: Text, optional\n\nHandler builds a NotificationDraft from the args (NotificationDraft::new(title).body(..).severity(..).dedup_key(..)) and calls state.notifications.push(draft, Instant::now()).\n\nNo action-button argument in v1 — deliberate scope, not a widget limitation: ToastSpec/ToastAction already support several typed actions per card (T487, landed on heca-4b's side), but there is no ArgKind for a nested Intent, so an RPC caller or a keybinding has no typed way to say \"and run this other action with these args\" as one argument value. A Rust-internal caller that wants a button uses NotificationDraft::action(label, intent) directly with a real Intent it already holds — unaffected by this task.\n\nActionPolicy: Global (app-level, no layout impact, must keep working while a floating pane is up) — cross-check against T213.\n\nEdge cases: wire RPC parser support in heca/src/rpc.rs same as any other action; a default keybinding is optional (raising a static notification via keybinding is an unusual use case — command palette + RPC are the primary doors).\n\n---\n**Completion summary:**\nSHIPPED: register_notify_action(registry, catalog) in heca/src/notification.rs, called once from HecaApp::resumed() in main.rs (after providers::register_provider_actions). Registered via register_dynamic — no WmAction variant. Args: title(Text,required)/body(Text,optional)/severity(Enum,optional,default info)/dedup_key(Text,optional). Handler builds a NotificationDraft and calls state.notifications.push. ActionPolicy::Global. Added NotificationSeverity: EnumArg+FromStr (accepts info/success/warning/danger/error) for the severity arg's declared vocabulary. CORRECTION to this task's own \"edge cases\" text: no rpc.rs changes needed — confirmed the generic `action <name> key=val` RPC verb (heca/src/rpc.rs parse_rpc) already reaches any declared action generically, built-in or name-keyed, with zero per-action code. No default keybinding, by design (command palette + RPC are the doors). VERIFICATION: cargo check -p heca clean. NOT verified: never actually invoked yet (no running app). FILES: heca/src/notification.rs, heca/src/main.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:58:05.035Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "28af6ba2-3f6a-471b-a5ad-e8b3377794d5-check-001-planned-in-progress",
+          "date": "2026-08-27T09:57:53.627Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "28af6ba2-3f6a-471b-a5ad-e8b3377794d5-check-002-in-progress-done",
+          "date": "2026-08-27T09:58:05.033Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: register_notify_action(registry, catalog) in heca/src/notification.rs, called once from HecaApp::resumed() in main.rs (after providers::register_provider_actions). Registered via register_dynamic — no WmAction variant. Args: title(Text,required)/body(Text,optional)/severity(Enum,optional,default info)/dedup_key(Text,optional). Handler builds a NotificationDraft and calls state.notifications.push. ActionPolicy::Global. Added NotificationSeverity: EnumArg+FromStr (accepts info/success/warning/danger/error) for the severity arg's declared vocabulary. CORRECTION to this task's own \"edge cases\" text: no rpc.rs changes needed — confirmed the generic `action <name> key=val` RPC verb (heca/src/rpc.rs parse_rpc) already reaches any declared action generically, built-in or name-keyed, with zero per-action code. No default keybinding, by design (command palette + RPC are the doors). VERIFICATION: cargo check -p heca clean. NOT verified: never actually invoked yet (no running app). FILES: heca/src/notification.rs, heca/src/main.rs."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:57:53.627Z",
+      "completedAt": "2026-08-27T09:58:05.033Z",
+      "createdAt": "2026-08-26T15:37:26.570Z",
+      "updatedAt": "2026-08-27T09:58:05.033Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:57:53.542Z"
+        }
+      ]
+    },
+    {
+      "id": "deef08b2-b838-428d-afce-2151533b5dd4",
+      "phaseId": "03b297bb-a915-4712-a6b4-dc688dc7ddc5",
+      "number": 507,
+      "shortId": "Y8UHC",
+      "priority": 10,
+      "shortName": "dismiss-all-notifications",
+      "title": "Dismiss All Notifications",
+      "status": "planned",
+      "description": "Add an action to dismiss all visible notifications and one to dismiss ALL notifications (queued and not visible) too.\nAdd default keybingings for both the actions\nprefix+n+d\nprefix+n+shift+d\nIf chord bindings cannot be implemented lets discuss how to do.",
+      "descriptionUpdatedAt": "2026-09-01T15:38:40.984Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T15:38:40.910Z",
+      "updatedAt": "2026-09-01T15:38:54.119Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "3a5ca1f3-f626-49d0-b4a0-033f0b64924e",
+      "phaseId": "03b297bb-a915-4712-a6b4-dc688dc7ddc5",
+      "number": 508,
+      "shortId": "6LUBG",
+      "priority": 11,
+      "shortName": "notification-text-should-not-be-truncated",
+      "title": "Notification Text should not be truncated",
+      "status": "planned",
+      "description": "Long text is truncated. Like when reloading wrong config file.\nWe need a way to provide the full text to the user.",
+      "descriptionUpdatedAt": "2026-09-04T10:03:13.174Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-04T10:03:13.098Z",
+      "updatedAt": "2026-09-04T10:03:13.098Z",
+      "sessionInfo": []
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-08-04T19:20:08.688Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-09-04T10:03:13.098Z",
+  "handoff": "# F009 Notification System — near-complete; T381 + P063 remain\n\nCreated at: 2026-08-28\nUpdated at: 2026-08-28 (rev 3 — restored the cold-resume operational notes)\nReason: F009 is functionally complete and pushed. Full state for a context-free resume of T381\n(declined-action producer) and P063 (OS backend), plus the new build guards and the planner /\ntesting / cross-session gotchas a fresh agent needs.\n\n## 0. READ THIS FIRST — a fresh session starts in the MAIN checkout\n- The work is on branch **`feat/notification-system-app`** in worktree\n  `/Users/antonio/projects/myvim-code`. Tip `222daa0` (a rev-3 handoff commit bumps this). This\n  handoff is a tracked `.planner/` file *on that branch* — if you are on `main` you will not see it\n  until you `git checkout feat/notification-system-app` (or `cd` to the worktree). Once heca-57\n  merges, it is on `feat/hint-anything-actionable` too.\n- **`planner-handoff-show` returns an EMPTY payload — a real tool bug.** Use **`planner-handoff-list`**,\n  which returns the full content. Do not proceed without reading it.\n- **The planner drops large payloads SILENTLY** and still answers \"✅ updated\". Read back anything\n  substantial you write (a phase/task description, a handoff). Long design content goes in a\n  committed `docs/` file with the planner pointing at it.\n- **Always use qualified refs `P0xx(F0xx)/Txxx`** — bare `T###` collide with heca-57's planner\n  (two `.planner/` dirs merged via git, both allocating small sequential numbers).\n- **One task in-progress at a time** across the whole planner (`ACTIVE_TASK_CONFLICT` otherwise).\n  Every `planner-task-start` / `-switch` needs a fresh `full=true` read of that exact task + its\n  phase + `F009` *immediately* before — a read one tool-call stale is rejected.\n- **Do NOT pull heca-57's branch.** This tree is based on `ac0e71b`; nothing added here is a\n  registry call, so it stays green through heca-57's merge. Pulling mid-stream only churns.\n\n## 0b. Cross-session coordination\n`heca-57` runs in `/Users/antonio/projects/heca` on `heca-grid-ui/` / `heca-view-realize/` /\n`heca-renderer/` (the widget layer + `ToastStack`, `ToastSpec`, `ToastAction`, `LayerRegistry`).\nThis session owns **`heca/` + `heca-config/` + the default `.toml` files only**. Never edit\nanything under `heca-grid-ui/`, `heca-view-realize/`, `heca-renderer/` — if a widget change seems\nneeded, stop and `SendMessage` heca-57 (address `uds:/tmp/cc-socks/33946.sock`).\nheca-57 **merges `feat/notification-system-app` into its branch ONLY when this session sends an\nexplicit \"ready to merge\" message with the tip SHA** — a push alone is not the signal (Antonio's\ninstruction, 2026-08-28). heca-57's reporting protocol, match it: run a centralization grep (any\npattern written more than once) before reporting progress and state the count; report in\nuser-visible behaviour, never internal identifiers; say plainly what still needs Antonio to drive\nvs what only compiled / passed tests.\n\n## 0c. How to manually test a notification (there is NO RPC transport)\n`heca/src/rpc.rs` parsing is complete, but nothing outside the process can reach it —\n`HecaApp::execute_rpc_command` is `#[expect(dead_code)]` with zero callers, no socket/listener\nanywhere. **Do not tell Antonio \"test it via RPC\".** The only way to see a toast today: insert a\ntemporary `crate::notification::Notification::info(\"Test\").body(\"hello\").send();` right after\n`crate::chrome::mount_notification_stack(&mut state);` in `heca/src/app/startup.rs`, run\n`cargo run -p heca`, remove the line after. The `notify` name-keyed action exists (args\n`title` required, `body` / `severity` / `dedup_key` optional; no action-button arg in v1 — a scope\nchoice, there is no `ArgKind` for a nested `Intent`) but is only reachable from a keybinding, since\nRPC has no transport. Whether `[[keys.component]]` config bindings support inline args was never\nverified — do not assume.\n\n## ⛔ NEW BUILD GUARDS — did not exist when this session started\n- **`heca/tests/surface_drift.rs`** fails the build when a surface is **registered** instead of\n  placed in the tree — any `state.layers.insert` / `add_named` / `add_view` **outside the\n  registry's own module**. Names the file + line, points at `docs/surface-compositor.md § 0`. This\n  is the guard that would have caught the toast being mounted where nothing delivers pointer events.\n  Same shape as `heca-grid-ui/tests/prop_drift.rs`.\n- Four grandfathered files in `KNOWN_REGISTRY_SURFACES`: `chrome/palette.rs`,\n  `chrome/notification_layer.rs`, `chrome/overlay.rs`, `chrome/expose/mod.rs`. A second test flags\n  a stale entry. **A NEW surface must be a tree node, never a registry call.**\n- **`AGENTS.md § 0d`** = Antonio's FIRST RULE: a component owns its own input — put it anywhere and\n  the host teaches it nothing. Test: `Overlay::new().child(Pane::new(\"editor\").child(Terminal::new(\"shell\")))`.\n- **`docs/surface-compositor.md § 0`** is now the whole surfaces-and-input picture.\n  **`docs/input-architecture.md` is a redirect stub — do NOT add content to it.**\n- **`P097` moved to `F003`**; its terminal-viewport task canceled for `P094(F011)/T449`.\n- heca-57 shipped the **scene seam** (`fd4a0b2`, `4d8d1bd`) — a widget can request host-only work\n  (place rasterised content, blur behind it). Nothing emits it yet. Frost + terminal switch next,\n  P094, heca-57's crates. Not yours.\n\n## Current focus\nNothing in progress. F009 is functionally complete. Remaining, both deliberately not built:\n`P055(F009)/T381` (declined-action producer — full design in the task) and phase `P063` (OS\nbackend — deferred, routing-sink architecture in the phase description). `P055/T223` also deferred.\n\n## What was being done\nFinishing F009: P055 (producers), P057 (tests + README), earlier P061/P062. Commits on\n`feat/notification-system-app`, oldest → newest: `bfabbb7` (raise door + pane-creation producer +\nnotification_system config) · `0227019` (T207 cancel) · `6d0765b` (config-reload producer / P062) ·\n`b53f9ff` (Retry dismisses the failure toast) · `3e37585` (pane-exit + spawn-fail producers +\ntests + README / P055+P057) · `bb914b9` (OS-backend = routing-sink decision) · `8517257`\n(mode=\"system\" one-time fallback notice / T222) · `d4b6d6b`/`222daa0` (this handoff).\n\n### The raise architecture (P061/T493 — done)\n`notification::raise(state, draft)` in `heca/src/notification.rs` = the ONE place `Instant::now()`\nis read for a raised notification and the only non-test caller of `NotificationRuntime::push`. Both\ndoors converge on it: `Notification::…send()` (public builder → thread-local sink installed in\n`heca/src/app/startup.rs` → `AppEvent::RaiseNotification` → handled in `heca/src/main.rs`) and the\nname-keyed `notify` action. `NotificationStore::push` + `NotificationRuntime::push` are\n`pub(crate)`; `Notification` is the only public raise surface; `Notification::sticky()` opts out of\nauto-dismiss. `NotificationActionRelay` (a toast button) is classified `Global` in `action_policy`\nand re-fires the stored `Intent` through the router (`handle_notification_action_relay` in\n`heca/src/handlers.rs`), never a direct handler.\n\n### Config — `[settings.notification_system]` (P061/T186/T187/T191 + T503 — done)\n`heca-config/src/settings.rs`: `NotificationSystemConfig { mode: NotificationSystem, auto_dismiss_ms: u64 }`.\n`mode = \"app\" | \"system\" | \"none\"` (default `App`): `none` → `raise()` early-returns via\n`suppressed()`; `system` → in-app fallback + one-time notice (`system_fallback_notice()`, T222).\n`auto_dismiss_ms` (default 4000) applied at the runtime boundary in `push()` via\n`NotificationLifecycle::with_auto_duration`. `set_auto_dismiss` / `set_mode` re-applied on\n`prefix+Shift+r` (`heca/src/main.rs`). Documented in `config.default.toml` + `README.md`\n(\"### Notifications\"). **T503:** `default_lifetime_for_severity` DELETED — severity does not change\nlifetime, everything auto-dismisses, `.sticky()` opts out. **Reversible** (re-add the mapping in\nthe draft severity setters) if Antonio wants errors sticky by default.\n\n### Producers (P055)\n- **T491** `notify` action — done pre-session.\n- **T221** pane-exited — `heca/src/app/process_monitor.rs::notify_pane_exited(pane, code)`: a pane\n  whose process exits *while it stays open* → Info (exit 0) / Warning + \"exit code N\",\n  `dedup_key \"pane.exited:<id>\"`, Focus action. Auto-closing panes → nothing.\n- **T225** spawn-failed — `create_command_backend_for_state` / `_with_options`\n  (`heca/src/app/backend_factory.rs`) now return `Result<Box<dyn PaneBackend>, String>` (command\n  path only; shell/terminal keeps its `FakeBackend` fallback). `handle_spawn_command` builds the\n  backend before layout; `Err` → sticky danger, no empty pane.\n- **T219** superseded, **T220** done, **T224** done (park), **T222** done.\n- Pane-creation: `announce_pane_created(pane_id)` in `heca/src/handlers.rs`, all 5 user-initiated\n  creation handlers; `Notification::info(\"Pane {id} created\")` + Focus action. Id not name (fresh\n  pane has none) — Antonio accepted this.\n\n### Config-reload producer (P062 — done)\n`heca/src/main.rs`: `reload_config()` → `Result<(), ConfigError>`; `notify_reload_outcome()`\n(extracted, tested): success → auto-dismiss \"Configuration reloaded\"; failure → **sticky** \"Config\nreload failed\" + parse-error body + **Retry** (`dismiss_after: true`, fires the existing\n`reload_config` action). Shared `dedup_key \"config-reload\"`. stderr lines kept.\n\n### Tests + docs (P057 — done, 8/8)\nThe 67-test `notification.rs` suite covers store lifecycle / dedup / model conversion / config\nparsing. Added this session: send-door, sticky, dedup-replace, relay action-resolution,\npane-exited producer, reload-outcome smoke, system-fallback. README \"### Notifications\" section.\n`notification-system-plane.md` is a superseded pre-planner analysis — leave it (heca-57 maintains).\n\n## How to resume\n1. `cd /Users/antonio/projects/myvim-code` (or checkout `feat/notification-system-app`). Do not\n   pull heca-57's branch.\n2. `./scripts/lint-changed.sh test` then `./scripts/lint-changed.sh` — **never `--workspace`**\n   (20+ min). Both exit 0 today; only 2 `heca-grid-ui` warnings (heca-57's).\n3. **T381**: `planner-task-show P055(F009)/T381 full=true` — it carries the complete agreed design:\n   a **picked-vs-bound** invocation tag, orthogonal to `InteractionSource`, invisible to\n   `ActionPolicy` (Picked = palette / menu / clicked button / RPC; Bound = a keybinding). One\n   decline outcome at the `dispatch_action` / `route_interaction` chokepoint\n   (`heca/src/app/interaction.rs` — it already computes `Blocked` / `NotRunnable` / `MissingArgs`\n   and discards them for non-RPC callers). Handlers report a precondition decline via a\n   `cx.decline(\"…\")` sink instead of a bare early `return` — silent by default, so migration is\n   incremental (wire the handlers people complain about, e.g. `handle_move_column_up` at ws 0).\n   Central toast builder from the reason + `ActionCatalog` label, `dedup_key \"declined:<action>\"`.\n   Config: `[settings.notification_system] declined_actions = \"picked\" | \"all\" | \"off\"` default\n   `\"picked\"` (`NotificationDeclined` enum, `heca-config/src/settings.rs`). The palette dispatches\n   as `InteractionSource::Keyboard` on purpose (`heca/src/chrome/palette.rs:318-352`) — the tag\n   rides alongside, does not replace the source. Deferred/separate: `can_perform(action)->bool` →\n   grey palette entries (`DropdownItem` already has an `enabled` flag).\n4. **P063**: `planner-phase-show P063 full=true` — full routing-sink model. Build\n   `SystemNotificationBackend` trait + install point (same `install_notification_sink` pattern) +\n   the `System` arm in `notification::raise` + per-OS spikes (notify-rust: libnotify/D-Bus, macOS\n   UNUserNotificationCenter, Windows toast) + failure-fallback to in-app + action-button round-trip\n   through the same relay. **No component / widget / layer / tree node** — a sink is not a registry\n   call, so `surface_drift.rs` is fine with it.\n\n## Files touched\n`heca/src/notification.rs`, `heca/src/main.rs`, `heca/src/handlers.rs`,\n`heca/src/app/process_monitor.rs`, `heca/src/app/backend_factory.rs`, `heca/src/app/startup.rs`,\n`heca-config/src/settings.rs`, `config.default.toml`, `README.md`, `.planner/`. All committed +\npushed on `feat/notification-system-app`.\n\n## Blockers\n- **T381** — no blocker; design settled. Medium change: `heca/src/app/interaction.rs` + a config\n  field + the `cx.decline` sink threaded to handlers. Fresh session.\n- **T223** deferred — `Provider::perform` (`heca/src/providers/mod.rs`) returns `Handled` only\n  (Yes/No, No = silent decline, not an error); plugins unbuilt. Nothing to produce into.\n- **P063** deferred — its own phase.\n\n## ⛔ Do NOT touch\n- `heca/src/chrome/notification_layer.rs` — collides with heca-57's `P097(F003)` **and** is a\n  grandfathered `surface_drift.rs` file. Message heca-57 if a change seems needed.\n- The six oversized-file splits in P082 (`handlers.rs`, `actions.rs`, `app/interaction.rs`,\n  `app/registry.rs`, `input.rs`, `chrome/mod.rs`) — deferred, do not interleave.\n- Any `P097(F003)` task — heca-57's. `docs/input-architecture.md` (redirect stub).\n- `cargo fmt` in this repo (rustfmt 1.9 churns unrelated files — hand-format).\n\n## Next steps\n1. `P055(F009)/T381` — declined-action producer (design captured; fresh-session build).\n2. `P063` — OS backend (deferred; routing-sink model recorded).\n3. `P055(F009)/T223` — provider/plugin error producer (deferred).\n4. **Antonio drives every visual check** — none of F009 driven end to end. Two toast-card defects\n   on heca-57's side: `P096(F003)/T504` (same-id toast card never re-renders — my Retry\n   `dismiss_after` works around it) and `T505` (bodyless toast card: title and × on different lines).\n\n## Recent decisions\n- **OS backend is a routing sink behind `Notification::send()`, not a component** (Antonio\n  2026-08-28) — an OS notification has no bounds/parent/input, so it is not a widget in heca's\n  tree; `mode` routes the accepted draft in `notification::raise`, one place. On T222 + P063.\n- **Severity is tone, not importance** — no per-severity lifetime, no priority field (T503). Every\n  notification auto-dismisses; `.sticky()` opts out. Reversible.\n- **`Notification::send()` is the only public raise door**; both `push` methods `pub(crate)`; one\n  `Instant::now()` site (`raise`) — so the caller never passes a clock and never names the store's\n  verb.\n- **Declined-action pattern (T381)** — the source (picked vs bound), not the action, decides\n  whether a decline surfaces; nothing hardcoded per action. Grey-out prevention deferred.\n- **T207 canceled** — its pointer-passthrough half was never validation, it is the P097\n  input-architecture phase; acceptance criteria folded into `P097(F003)/T500`.\n- **Antonio's FIRST RULE (`AGENTS.md § 0d`)** — a component owns its own input; put it anywhere,\n  the host teaches it nothing. Governs every widget/component going forward.\n- No timestamp/delay argument on `Notification` — `.now()` / `.at()` both proposed and rejected;\n  absent means deliver now, host stamps the clock (carried from the T493 redesign).\n\n## ⚠️ Verification status\nCompiles; 67 notification tests + 661 heca-bin tests pass; `./scripts/lint-changed.sh test` and\n`./scripts/lint-changed.sh` exit 0; `heca` + `heca-config` clippy-clean. **Antonio has driven NONE\nof it in the running app.** Not shipped until raise / dismiss / `prefix+n` / an action firing /\n`prefix+Enter` with a toast up / `prefix+Shift+r` success and failure are all confirmed live —\nand the toast × / action-button *clicks* stay broken until heca-57's `P097(F003)` input work lands\n(only the keyboard paths — `prefix+/` pick, `notification_dismiss_*` — work today).",
+  "handoffUpdatedAt": "2026-08-28T13:03:52.030Z",
+  "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
   "statusLog": [
@@ -257,6 +480,28 @@
       "toStatus": "waiting",
       "title": "draft → waiting",
       "description": ""
+    },
+    {
+      "id": "666958e2-0c62-4186-93d8-f9d6cb6001b2",
+      "date": "2026-08-27T09:41:32.156Z",
+      "fromStatus": "waiting",
+      "toStatus": "planned",
+      "title": "waiting → planned",
+      "description": ""
+    },
+    {
+      "id": "a56f6fc5-98dd-45a6-b9b9-532c75bbac37",
+      "date": "2026-08-27T09:57:53.648Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+      "createdAt": "2026-08-27T09:57:53.542Z"
     }
   ]
 }

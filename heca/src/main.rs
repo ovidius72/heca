@@ -8,6 +8,7 @@ mod host;
 mod input;
 mod keymap;
 mod mouse;
+mod notification;
 mod providers;
 mod rpc;
 mod search_state;
@@ -144,6 +145,9 @@ impl HecaApp {
         // reported **once**, after the components have registered too (see `resumed`).
         let mut conflicts = crate::app::conflicts::Conflicts::default();
         let keymaps = build_keymaps(&app_config.config, &mut conflicts);
+        // Which modifier means "swap these two" is a user setting, not a constant compiled into a
+        // widget library — and it must not be the key that starts the drag.
+        crate::app::conflicts::settle_drag_modifiers(&app_config.config.settings, &mut conflicts);
 
         Self {
             state: None,
@@ -155,17 +159,23 @@ impl HecaApp {
         }
     }
 
-    fn reload_config(&mut self) {
-        if let Some(ref mut state) = self.state {
-            // Try to load the config file. On error, keep the current working
-            // config and report the problem — a bad config must not silently
-            // overwrite the user's working settings.
+    /// Reload `config.toml` at runtime (`prefix+Shift+r`).
+    ///
+    /// Returns `Err` with the parse/load error when the file is bad — the working config is kept
+    /// untouched (a bad config must never overwrite settings that work). The caller turns the
+    /// result into a notification (F009/P062). The stderr lines stay for a terminal user watching
+    /// the process.
+    fn reload_config(&mut self) -> Result<(), heca_config::loader::ConfigError> {
+        let Some(state) = self.state.as_mut() else {
+            return Ok(());
+        };
+        {
             let new_config = match heca_config::loader::AppConfig::try_load() {
                 Ok(cfg) => cfg,
                 Err(e) => {
                     eprintln!("[heca] reload failed: {e}");
                     eprintln!("[heca] fix config.toml and press prefix+Shift+r to retry");
-                    return;
+                    return Err(e);
                 }
             };
             self.app_config = new_config;
@@ -178,6 +188,11 @@ impl HecaApp {
                 ..Default::default()
             };
             self.keymaps = build_keymaps(&self.app_config.config, &mut conflicts);
+            // Re-settled from the file, like the keymaps beside it.
+            crate::app::conflicts::settle_drag_modifiers(
+                &self.app_config.config.settings,
+                &mut conflicts,
+            );
             self.conflicts = conflicts;
             // The layers were just rebuilt from a file that knows nothing about a plugin mounted
             // afterwards, so a reload would otherwise silently unbind every key it registered.
@@ -228,7 +243,7 @@ impl HecaApp {
             // `terminal_layers.clear()` and `chrome_tree = None`; without it, existing
             // panes keep stale (faint) icon colors after a theme swap while
             // freshly-created panes look correct.
-            crate::chrome::clear_pane_headers(state);
+            crate::chrome::clear_panes(state);
             // The pane shells bake the theme too, so they are invalidated with the headers.
             crate::chrome::clear_panes(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
@@ -258,6 +273,22 @@ impl HecaApp {
             state.show_right_sidebar = self.app_config.config.settings.show_right_sidebar;
             state.show_top_bar = self.app_config.config.settings.show_top_bar;
             state.show_bottom_bar = self.app_config.config.settings.show_bottom_bar;
+            state.notifications.set_auto_dismiss(std::time::Duration::from_millis(
+                self.app_config.config.settings.notification_system.auto_dismiss_ms,
+            ));
+            state.notifications.set_mode(
+                self.app_config.config.settings.notification_system.mode,
+            );
+            // Every setting in this table must be re-applied here. One that is only read at startup
+            // is dead until someone remembers it — the defect `P031(F006)/T415` is filed against,
+            // and `max_visible` walked straight into it the day it was added (2026-08-31).
+            let max_visible = self.app_config.config.settings.notification_system.max_visible;
+            if state
+                .notifications
+                .set_max_visible(max_visible, std::time::Instant::now())
+            {
+                state.needs_redraw = true;
+            }
             state.confirm = self.app_config.config.confirm.clone();
             let link_detection = self.app_config.config.appearance.terminal.link_detection;
             let palette_defaults = terminal_palette_defaults(&state.theme);
@@ -287,18 +318,53 @@ impl HecaApp {
             }
             update_session_viewport(state);
             // Force a full chrome rebuild so STRUCTURAL config (border style, pane
-            // info bar, etc.) re-applies — the retained tree is otherwise only
-            // rebuilt when `chrome_signature` changes, which can miss config edits.
+            // info bar, etc.) re-applies — the chrome is otherwise only rebuilt when
+            // `chrome_signature` changes, which can miss config edits.
+            //
+            // This drops the *build*, never the tree: the window root and every surface hanging
+            // from it are untouched, so a reload while an overlay is open leaves the overlay
+            // exactly where it was. That is the whole reason the chrome is a child of the root
+            // rather than the root itself (`docs/surface-compositor.md` § 0.8).
             state.chrome_tree = None;
             state.needs_redraw = true;
             // Reload runs in `about_to_wait`; request an explicit redraw so the
             // reloaded config takes effect immediately instead of on the next input.
             state.window.request_redraw();
         }
+        Ok(())
     }
 
     async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> Box<AppState> {
         build_initial_state(&self.app_config, event_loop, self.event_proxy.clone()).await
+    }
+}
+
+/// Turn a `prefix+Shift+r` outcome into a toast — F009/P062.
+///
+/// Success: a plain "Configuration reloaded" that auto-dismisses. Failure: a **sticky**
+/// "Config reload failed" carrying the parse error and a **Retry** action; `dismiss_after` on
+/// Retry so clicking it clears the error and the retried reload raises a fresh card rather than
+/// mutating this one in place. Both share `dedup_key` so a fixed-then-reloaded config does not
+/// stack toasts.
+fn notify_reload_outcome(outcome: Result<(), heca_config::loader::ConfigError>) {
+    use crate::notification::{Notification, NotificationAction};
+    match outcome {
+        Ok(()) => {
+            Notification::success("Configuration reloaded")
+                .dedup_key("config-reload")
+                .send();
+        }
+        Err(e) => {
+            Notification::danger("Config reload failed")
+                .body(e.to_string())
+                .dedup_key("config-reload")
+                .action(
+                    NotificationAction::new("Retry", heca_view::Intent::new("reload_config"))
+                        .dismiss_after(true),
+                )
+                .sticky()
+                .send();
+        }
     }
 }
 
@@ -314,6 +380,13 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 &mut state,
                 &mut self.registry,
                 &mut self.conflicts,
+            );
+            // `notify` (F009/T491) is a host action, not a component's, but it takes the same
+            // name-keyed door because `WmAction` — a closed enum — cannot express "any plugin can
+            // raise a notification". Registered here, once, alongside every other declared action.
+            let _ = crate::notification::register_notify_action(
+                &mut self.registry,
+                &mut state.action_catalog,
             );
             // Then the keys a plugin registered for them. Core components have theirs from the
             // config file already; this is the path for anything that has no entry in it.
@@ -366,7 +439,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             if let Some(state) = self.state.as_mut() {
                 state.pending_reload = false;
             }
-            self.reload_config();
+            notify_reload_outcome(self.reload_config());
         }
 
         if let Some(ref mut state) = self.state {
@@ -397,6 +470,12 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 state.mark_full_redraw();
                 state.window.request_redraw();
             }
+            AppEvent::RaiseNotification { draft } => {
+                // `notification::raise` is the host's clock, on the event loop's own turn, never
+                // the caller's (F009/T493) — shared with the name-keyed `notify` action.
+                crate::notification::raise(state, draft);
+                state.window.request_redraw();
+            }
         }
     }
 }
@@ -404,10 +483,11 @@ impl ApplicationHandler<AppEvent> for HecaApp {
 /// Edge scroll: auto-scroll the layout when the pointer is near the left/right
 /// edge of the content area. Returns true if scrolling is active.
 fn main() {
-    // `--keys-show` answers "what key runs this action" and exits — before the window, so a script
-    // can ask without a GPU (F003/P086/T366).
+    // Command-line questions — `--help`, `--keys-show`, `--list-actions`, `--describe-action` —
+    // are answered and exited before the window, so a script can ask heca anything without a GPU
+    // (F003/P086/T366). One table dispatches and documents them; see `app::cli`.
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if crate::app::keys_show::run_if_requested(&args) {
+    if crate::app::cli::run_if_requested(&args) {
         return;
     }
     let event_loop = EventLoop::<AppEvent>::with_user_event()
@@ -419,4 +499,59 @@ fn main() {
     event_loop
         .run_app(&mut app)
         .expect("Failed to run event loop");
+}
+
+#[cfg(test)]
+mod reload_notification_tests {
+    use super::notify_reload_outcome;
+    use crate::notification::{install_notification_sink, NotificationDraft, NotificationId};
+    use heca_config::loader::ConfigError;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use std::time::Instant;
+
+    fn capture() -> Rc<RefCell<Vec<NotificationDraft>>> {
+        let captured: Rc<RefCell<Vec<NotificationDraft>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = captured.clone();
+        install_notification_sink(move |d| sink.borrow_mut().push(d));
+        captured
+    }
+
+    #[test]
+    fn a_successful_reload_raises_an_auto_dismissing_confirmation() {
+        let seen = capture();
+        notify_reload_outcome(Ok(()));
+        let drafts = seen.borrow();
+        assert_eq!(drafts.len(), 1);
+        let n = drafts[0]
+            .clone()
+            .build(NotificationId::from_raw(1), Instant::now());
+        assert_eq!(n.title, "Configuration reloaded");
+        assert_eq!(n.severity, crate::notification::NotificationSeverity::Success);
+        assert_eq!(n.dedup_key.as_deref(), Some("config-reload"));
+        assert!(n.actions.is_empty());
+        assert!(n.lifecycle.expires(), "success auto-dismisses");
+    }
+
+    #[test]
+    fn a_failed_reload_raises_a_sticky_danger_with_retry() {
+        let seen = capture();
+        notify_reload_outcome(Err(ConfigError::Invalid {
+            path: "config.toml".into(),
+            message: "expected `=` at line 3".into(),
+        }));
+        let drafts = seen.borrow();
+        assert_eq!(drafts.len(), 1);
+        let n = drafts[0]
+            .clone()
+            .build(NotificationId::from_raw(1), Instant::now());
+        assert_eq!(n.title, "Config reload failed");
+        assert_eq!(n.severity, crate::notification::NotificationSeverity::Error);
+        assert!(n.body.as_deref().unwrap().contains("line 3"));
+        assert_eq!(n.dedup_key.as_deref(), Some("config-reload"));
+        assert!(!n.lifecycle.expires(), "failure is sticky");
+        assert_eq!(n.actions.len(), 1);
+        assert_eq!(n.actions[0].intent.action, "reload_config");
+        assert!(n.actions[0].dismiss_after, "Retry clears the toast");
+    }
 }

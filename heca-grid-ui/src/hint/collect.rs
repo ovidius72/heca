@@ -100,8 +100,8 @@ pub(crate) fn is_target(c: &dyn Component) -> bool {
 /// appearing and one being picked simply offers a fresh set.
 pub fn collect_hints(root: &dyn Component) -> Vec<(Vec<usize>, Rectangle)> {
     let mut out = Vec::new();
-    hints_into(root, &mut Vec::new(), false, None, &mut out);
-    out
+    hints_into(root, &mut Vec::new(), None, None, &mut out);
+    out.into_iter().flatten().collect()
 }
 
 /// **Every pick target in this tree that answers to `identity`** — a pick's address across frames.
@@ -132,43 +132,76 @@ pub fn hint_targets_of(root: &dyn Component, identity: &str) -> Vec<Vec<usize>> 
         .collect()
 }
 
-/// `declared_above` — is some ancestor already saying what a pick of this region does? See the
-/// shadowing rule below.
+/// **One letter per THING, not per layer** — the walk, and the whole of the de-duplication rule.
+///
+/// A widget that can be acted on gets a letter. That is all it takes, and **where it sits never
+/// enters into it**: a button in a pane's bar, in a sidebar row, in a plugin's panel or on its own
+/// is the same button, and an author never has to know which. Anything else makes placement a thing
+/// developers must think about, which is exactly what this project refuses (AGENTS § 0d).
+///
+/// The one case that genuinely needs handling is a **wrapper**: a node that exists only to hold one
+/// other node. The exposé's card is wrapped by a decorator that says what picking does, and the card
+/// within can be activated — two nodes, one card, and two letters came out of it.
+///
+/// So the rule counts things:
+///
+/// - a **wrapper and the single node it holds are one thing**, and share one letter — the inner one,
+///   which is the more precise answer and the one whose bounds the letter should sit on;
+/// - a node holding **more than one** child is a real container, and what is inside it are separate
+///   things — each keeps its own letter, and so does the container if it is a target itself.
+///
+/// A pane holds a bar and its content, so it is a container: the pane keeps its letter and every
+/// button in its bar keeps one too.
+///
+/// ⚠️ **What this replaces, so it is not reinstated.** The previous rule said a declared hint
+/// silenced mere actionability beneath it. That silenced *layers*, and could not tell a decorator
+/// speaking for one card from a pane that merely contains buttons. It made a button's letter depend
+/// on what it had been put inside — so every button in a pane's bar had to repeat its own click as a
+/// hint to win its letter back, and the one control the bar builds for itself (the overflow `⋮`) had
+/// nobody to do that for it and silently wore none (Antonio, driving, 2026-09-04).
 fn hints_into(
     node: &dyn Component,
     path: &mut Vec<usize>,
-    declared_above: bool,
+    // `wrapping`: the target this node would be a mere layer of — `Some((i, declared))` when every
+    // node from that target down to here holds exactly one child, so they are all one thing.
+    wrapping: Option<(usize, bool)>,
     clip: Option<Rectangle>,
-    out: &mut Vec<(Vec<usize>, Rectangle)>,
+    out: &mut Vec<Option<(Vec<usize>, Rectangle)>>,
 ) {
     if skip(node) {
         return;
     }
-    let declares = node.base().hint.is_some();
-    // **A declared hint shadows the mere actionability beneath it — but never another declaration**
-    // (F003/P082/T441).
-    //
-    // `on_hint` says *"picking this does X"* about a whole region, so the widget it wraps must not
-    // also wear a letter for the same gesture: the exposé's card declares a hint on its `KeyHint`
-    // and an `on_activate` on the card within, and every card came out with two letters.
-    //
-    // But a declaration **inside** a declaration is a genuinely different target, and suppressing
-    // that broke the sidebar instantly — a workspace row declares a pick and *contains* pane rows
-    // that each declare their own, so the panes vanished from the picker.
-    // **A target nobody can see is not a target** — and it is dropped here, not at the letter, so
-    // it does not spend one of the 52 either (see [`narrowed`]).
-    if node.base().hintable
-        && (declares || (actionable(node) && !declared_above))
-        && !out_of_view(node, clip)
-    {
-        out.push((path.clone(), node.base().bounds));
+    // **A target nobody can see is not a target** — dropped here rather than at the letter, so it
+    // does not spend one of the 52 either (see [`narrowed`]).
+    let mut here = wrapping;
+    if is_target(node) && !out_of_view(node, clip) {
+        let declares = node.base().hint.is_some();
+        // **Among layers of one thing, a declaration outranks mere actionability.** Saying what a
+        // pick does is precisely saying it is *not* the click — a sidebar row is activated and left
+        // by a click, and peeked at without leaving by a pick — so the layer that said so is the
+        // one the letter must run. Letting the inner layer win regardless turned every pane row's
+        // letter into "go there and leave", which is the click it was overriding.
+        //
+        // Otherwise the inner layer wins: it is the more precise answer, and its bounds are where
+        // the letter belongs.
+        let outer_speaks_for_this = matches!(wrapping, Some((_, true))) && !declares;
+        if !outer_speaks_for_this {
+            if let Some((outer, _)) = wrapping {
+                out[outer] = None;
+            }
+            out.push(Some((path.clone(), node.base().bounds)));
+            here = Some((out.len() - 1, declares));
+        }
     }
+    // Only a node holding exactly one child passes the chain on: anything holding more is a real
+    // container, and its children are things of their own.
+    let pass = (node.base().children.len() == 1).then_some(here).flatten();
     // Judged per node rather than by pruning the subtree: a transparent wrapper can carry bounds
     // its child does not, and pruning on one would silently take every letter beneath it.
     let clip = narrowed(clip, node);
     for (i, child) in node.base().children.iter().enumerate() {
         path.push(i);
-        hints_into(child.as_ref(), path, declared_above || declares, clip, out);
+        hints_into(child.as_ref(), path, pass, clip, out);
         path.pop();
     }
 }

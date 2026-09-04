@@ -190,6 +190,17 @@ pub(crate) async fn init_state(
         let _ = menu_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
     });
 
+    // **A drop nobody took**, queued the same way and for the same reason: the row owns the
+    // gesture, but moving a pane between workspaces needs `&mut AppState`, which a sink has not.
+    let pending_drops: std::rc::Rc<std::cell::RefCell<Vec<heca_grid_ui::drag::Dropped>>> =
+        Default::default();
+    let drops = pending_drops.clone();
+    let drop_proxy = event_proxy.clone();
+    heca_grid_ui::drag::install_drop_sink(move |dropped| {
+        drops.borrow_mut().push(dropped);
+        let _ = drop_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
+    });
+
     let appearance = app_config.config.appearance.clone();
     let window_attrs = Window::default_attributes()
         .with_title("heca")
@@ -437,9 +448,9 @@ pub(crate) async fn init_state(
         needs_redraw: true,
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,
+        window_root: crate::chrome::new_window_root(),
         chrome_tree: None,
         panes: std::collections::HashMap::new(),
-        pane_headers: std::collections::HashMap::new(),
         layers: crate::chrome::LayerRegistry::default(),
         overlays: crate::chrome::OverlayHost::default(),
         pane_viewport_widgets: std::collections::HashMap::new(),
@@ -455,6 +466,7 @@ pub(crate) async fn init_state(
         modifiers: winit::keyboard::ModifiersState::default(),
         selection: app_state::SelectionState::new(),
         bell_flash_until: None,
+        widget_frame_due: None,
         searches: std::collections::BTreeMap::new(),
         last_focused: None,
         last_visited_ws_idx: None,
@@ -484,10 +496,37 @@ pub(crate) async fn init_state(
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         widget_keymap: crate::app::registry::build_widget_keymap(&app_config.config),
         pending_menus: pending_menus.clone(),
+        pending_drops: pending_drops.clone(),
         pending_reload: false,
         window_focused: true,
         current_cursor: winit::window::CursorIcon::Default,
+        // `[settings.notification_system]` config (F009/T186/T187/T191); the history depth
+        // of 50 is still a placeholder pending its own knob.
+        notifications: crate::notification::NotificationRuntime::with_capacity(
+            50,
+            std::time::Duration::from_millis(
+                app_config.config.settings.notification_system.auto_dismiss_ms,
+            ),
+            app_config.config.settings.notification_system.mode,
+            app_config.config.settings.notification_system.max_visible,
+        ),
+        notification_pick_open: heca_grid_ui::reactive::signal(false),
+        notification_hovered: heca_grid_ui::reactive::signal(false),
     });
+    // Mount the toast stack — F009/T203. After the state literal (needs `notifications` /
+    // `notification_pick_open` to already exist) and before providers register their own
+    // actions/layers, so a producer that raises a notification on its very first frame has
+    // somewhere for it to land.
+    crate::chrome::mount_notification_stack(&mut state);
+    // Install the raise sink — F009/T493. `Notification::send` posts through this; the app
+    // reads it here, posting `AppEvent::RaiseNotification` so the host (not the caller) stamps
+    // the time when the event loop actually processes it.
+    {
+        let event_proxy = state.event_proxy.clone();
+        crate::notification::install_notification_sink(move |draft| {
+            let _ = event_proxy.send_event(crate::app::events::AppEvent::RaiseNotification { draft });
+        });
+    }
     // Register the exposé under `heca.expose`, hidden, so `toggle_layer` has something to reach
     // from the very first frame. Re-registering is the rebuild path when the session's shape
     // changes; see `chrome::expose::register`.
@@ -503,6 +542,11 @@ mod tests {
         types::{LayoutOptions, SessionId, Size},
     };
 
+    /// **The initial pane draws from the session counter, so its id is never handed out again.**
+    ///
+    /// Asserted as "the counter has moved past it" rather than "by exactly one": creating a pane
+    /// also creates the column holding it, and a column id is allocated from the same counter now
+    /// that it is a real identity rather than a number derived from the column count.
     #[test]
     fn initial_pane_consumes_session_id_counter() {
         let mut session = Session::new(
@@ -515,6 +559,6 @@ mod tests {
         let first = add_initial_pane(&mut session);
         let second = session.next_id();
 
-        assert_eq!(second, first.0 + 1);
+        assert!(second > first.0, "the counter must never reissue {first:?}");
     }
 }

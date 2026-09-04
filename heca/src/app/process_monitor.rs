@@ -29,11 +29,39 @@ pub(crate) fn sync_pane_runtime_from_backends(state: &mut AppState) {
         bus.emit(ChromeEvent::PaneExited { pane, code });
         if pane_exit_should_close(&state.session, pane, code) {
             panes_to_close.push(pane);
+        } else {
+            // The pane stays with a dead process (its close-policy keeps it) — say so, so a
+            // frozen-looking shell is explained rather than mysterious. F009/P055/T221. A pane
+            // that is about to close needs no toast. dedup per pane so a backend that flaps
+            // does not spray.
+            notify_pane_exited(pane, code);
         }
     }
     for pane in panes_to_close {
         close_pane_by_id_anywhere(state, pane);
     }
+}
+
+/// The pane-exited notification producer — F009/P055/T221.
+fn notify_pane_exited(pane: PaneId, code: Option<i32>) {
+    use crate::notification::{Notification, NotificationAction};
+    use heca_view::{Intent, PropValue};
+
+    let focus = NotificationAction::new(
+        "Focus",
+        Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane.0 as i64)),
+    )
+    .dismiss_after(true);
+
+    let notification = match code {
+        Some(0) | None => Notification::info(format!("Pane {} process exited", pane.0)),
+        Some(c) => Notification::warning(format!("Pane {} process exited", pane.0))
+            .body(format!("exit code {c}")),
+    };
+    notification
+        .dedup_key(format!("pane.exited:{}", pane.0))
+        .action(focus)
+        .send();
 }
 
 /// Testable core of [`sync_pane_runtime_from_backends`] — takes the two pieces
@@ -80,7 +108,7 @@ fn pane_exit_should_close(session: &Session, pane_id: PaneId, code: Option<i32>)
 
 #[cfg(test)]
 mod tests {
-    use super::{pane_exit_should_close, sync_pane_runtime_from_backends_impl};
+    use super::{notify_pane_exited, pane_exit_should_close, sync_pane_runtime_from_backends_impl};
     use crate::app::backend_store::BackendStore;
     use crate::chrome::{ChromeEvent, ChromeEventBus};
     use heca_core::backend::FakeBackend;
@@ -111,6 +139,7 @@ mod tests {
             None,
             true,
             ColumnWidth::Proportion(0.5),
+            heca_core::layout::ColumnId(id.0),
         );
         session
     }
@@ -174,6 +203,33 @@ mod tests {
         }
 
         assert_eq!(seen.borrow().as_slice(), &[(pid, Some(42))]);
+    }
+
+    #[test]
+    fn pane_exited_notification_maps_severity_and_keys_per_pane() {
+        use crate::notification::{install_notification_sink, NotificationDraft, NotificationId};
+        let captured: Rc<RefCell<Vec<NotificationDraft>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = captured.clone();
+        install_notification_sink(move |d| sink.borrow_mut().push(d));
+
+        notify_pane_exited(PaneId(7), Some(0));
+        notify_pane_exited(PaneId(9), Some(137));
+
+        let drafts = captured.borrow();
+        assert_eq!(drafts.len(), 2);
+        let clean = drafts[0]
+            .clone()
+            .build(NotificationId::from_raw(1), std::time::Instant::now());
+        assert_eq!(clean.severity, crate::notification::NotificationSeverity::Info);
+        assert_eq!(clean.dedup_key.as_deref(), Some("pane.exited:7"));
+        assert_eq!(clean.actions.len(), 1, "carries a Focus action");
+
+        let crashed = drafts[1]
+            .clone()
+            .build(NotificationId::from_raw(2), std::time::Instant::now());
+        assert_eq!(crashed.severity, crate::notification::NotificationSeverity::Warning);
+        assert_eq!(crashed.body.as_deref(), Some("exit code 137"));
+        assert_eq!(crashed.dedup_key.as_deref(), Some("pane.exited:9"));
     }
 
     #[test]

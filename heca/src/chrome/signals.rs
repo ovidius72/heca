@@ -264,17 +264,12 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
                 .workspaces
                 .pane_renamed_add_process_name(),
         );
-        let pane_active = active == Some(*pid);
         if sigs.icon.get_untracked() != next.icon {
             sigs.icon.set(next.icon);
             changed = true;
         }
-        if sigs.title_active.get_untracked() != next.title {
-            sigs.title_active.set(next.title.clone());
-            changed = true;
-        }
-        if sigs.title_inactive.get_untracked() != next.title {
-            sigs.title_inactive.set(next.title.clone());
+        if sigs.title.get_untracked() != next.title {
+            sigs.title.set(next.title.clone());
             changed = true;
         }
         let hint_text = next
@@ -307,25 +302,11 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             sigs.cwd_visible.set(cwd_visible);
             changed = true;
         }
-        for (signal, visible) in [
-            (sigs.title_active_visible, pane_active),
-            (sigs.title_inactive_visible, !pane_active),
-            (sigs.status_idle_visible, next.status == ProcessStatus::Idle),
-            (
-                sigs.status_running_visible,
-                next.status == ProcessStatus::Running,
-            ),
-            (
-                sigs.status_success_visible,
-                next.status == ProcessStatus::Success,
-            ),
-            (
-                sigs.status_error_visible,
-                next.status == ProcessStatus::Error,
-            ),
-        ] {
-            if signal.get_untracked() != visible {
-                signal.set(visible);
+        let status = crate::providers::workspaces::dot_status(next.status);
+        {
+            let signal = sigs.status;
+            if signal.get_untracked() != status {
+                signal.set(status);
                 changed = true;
             }
         }

@@ -204,8 +204,10 @@ impl Session {
             .options
             .default_column_width
             .unwrap_or(ColumnWidth::Proportion(0.85));
+        // Allocated here, before the workspace is borrowed, and spent only if a column is created.
+        let new_column_id = ColumnId(self.next_id());
         if let Some(ws) = self.active_workspace_mut() {
-            ws.add_pane(pane, column_idx, activate, width);
+            ws.add_pane(pane, column_idx, activate, width, new_column_id);
         }
     }
 

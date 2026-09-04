@@ -64,7 +64,7 @@ pub(crate) fn create_command_backend_for_state(
     cols: usize,
     rows: usize,
     command: &str,
-) -> Box<dyn PaneBackend> {
+) -> Result<Box<dyn PaneBackend>, String> {
     // Direct command panes spawn a concrete program inside the PTY; shell
     // integration is intentionally disabled because OSC prompt/cwd hooks are a
     // shell concern and would only add noise here.
@@ -76,10 +76,10 @@ pub(crate) fn create_command_backend_for_state(
         state.terminal_scroll_animations_enabled,
     );
     let mut backend =
-        create_command_backend_with_options(cols, rows, state.terminal_cell_size, command, options);
+        create_command_backend_with_options(cols, rows, state.terminal_cell_size, command, options)?;
     backend.set_link_detection(state.appearance.terminal.link_detection);
     backend.set_image_capture(state.appearance.terminal.images);
-    backend
+    Ok(backend)
 }
 
 pub(crate) fn terminal_grid_for_workspace(state: &AppState, ws_idx: usize) -> (usize, usize) {
@@ -222,16 +222,18 @@ fn create_command_backend_with_options(
     cell_size: (f32, f32),
     command: &str,
     options: TerminalBackendOptions,
-) -> Box<dyn PaneBackend> {
+) -> Result<Box<dyn PaneBackend>, String> {
     let (cell_w, cell_h) = cell_size;
     match TerminalBackend::with_command(cols, rows, cell_w, cell_h, command, options) {
-        Ok(backend) => Box::new(backend),
-        Err(_err) => {
-            #[cfg(debug_assertions)]
-            eprintln!(
-                "[heca] warning: failed to create command TerminalBackend ({_err}); falling back to FakeBackend"
-            );
-            Box::new(FakeBackend::with_cell_size(cols, rows, cell_w, cell_h))
+        Ok(backend) => Ok(Box::new(backend)),
+        Err(err) => {
+            // The PTY itself could not be opened / the shell could not be spawned. (A command
+            // that simply does not exist still spawns — the shell exits 127 and the pane's
+            // exit-code notification, F009/P055/T221, reports that.) F009/P055/T225: hand the
+            // message back so `handle_spawn_command` can raise a sticky danger toast instead of
+            // silently substituting an inert FakeBackend.
+            eprintln!("[heca] failed to spawn command pane ({command}): {err}");
+            Err(err.to_string())
         }
     }
 }

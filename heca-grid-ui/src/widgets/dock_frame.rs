@@ -315,10 +315,10 @@ impl DockFrame {
         let rail = self
             .rail_mode
             .is_some_and(|m| m.get_untracked() == RegionMode::CollapsedRail);
-        self.base.children[HEADER].base_mut().style.layout.hidden = rail;
-        self.base.children[BODY].base_mut().style.layout.hidden = rail || !open;
+        self.base.children[HEADER].base_mut().set_hidden(rail);
+        self.base.children[BODY].base_mut().set_hidden(rail || !open);
         if self.base.children.len() > RAIL {
-            self.base.children[RAIL].base_mut().style.layout.hidden = !rail;
+            self.base.children[RAIL].base_mut().set_hidden(!rail);
         }
         // Tighten the frame inset in the rail so the icon fits the thin column;
         // frameless docks tighten too since there are no brackets to clear.
@@ -340,7 +340,7 @@ impl Component for DockFrame {
     /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
     /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
     fn wants_visible(&self) -> bool {
-        self.nav.get_untracked() || self.base.focused.get_untracked()
+        self.nav.get_untracked() || self.base.focused_by_keyboard()
     }
 
     fn base(&self) -> &Base {

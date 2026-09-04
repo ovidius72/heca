@@ -26,7 +26,7 @@ impl Visibility {
             seen: visible.get_untracked(),
         };
         if let Some(child) = this.base.children.first_mut() {
-            child.base_mut().style.layout.hidden = !this.seen;
+            child.base_mut().set_hidden(!this.seen);
         }
         this
     }
@@ -34,6 +34,21 @@ impl Visibility {
     /// Return the visibility signal so hosts can toggle the wrapped child live.
     pub fn visible_signal(&self) -> Signal<bool> {
         self.visible
+    }
+
+    /// **Hidden means gone from the layout — the wrapper's box as well as the child's.**
+    ///
+    /// A wrapper takes its size from what it wraps (`wrap_transparently`), so a wrapper holding a
+    /// hidden child still occupied that child's width: a sidebar row carries four status dots and
+    /// shows one, and the three that were hidden went on taking a dot's width each, overflowing a
+    /// slot sized for one and drawing the visible dot over the icon beside it. They collapsed
+    /// before only because the wrapper was squeezed by a row that had run out of room — the wrong
+    /// mechanism producing the right picture (F003/P096/T483).
+    fn apply(&mut self, visible: bool) {
+        self.base.set_hidden(!visible);
+        if let Some(child) = self.base.children.first_mut() {
+            child.base_mut().set_hidden(!visible);
+        }
     }
 }
 
@@ -49,9 +64,7 @@ impl Component for Visibility {
     fn remeasure(&mut self) {
         let visible = self.visible.get_untracked();
         self.seen = visible;
-        if let Some(child) = self.base.children.first_mut() {
-            child.base_mut().style.layout.hidden = !visible;
-        }
+        self.apply(visible);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -69,9 +82,7 @@ impl Component for Visibility {
         let visible = self.visible.get_untracked();
         if visible != self.seen {
             self.seen = visible;
-            if let Some(child) = self.base.children.first_mut() {
-                child.base_mut().style.layout.hidden = !visible;
-            }
+            self.apply(visible);
             self.base.mark_needs_paint();
         }
         let mut animating = false;

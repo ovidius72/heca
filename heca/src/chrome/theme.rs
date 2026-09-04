@@ -34,6 +34,10 @@ pub(crate) fn app_theme_to_gui_theme(
         // TODO: map from config `focus_border_width` once added to heca-theme; for
         // now the affordance outlines (focus ring + selection) keep a visible default.
         focus_border_width: 1.5,
+        // Overwritten at the chokepoint below from `[appearance] hint_font_size` and the app's own
+        // accent; these are what a theme built outside it (tests, the showcase) gets.
+        hint_font_size: 12.0,
+        hint_color: theme.accent,
     }
 }
 
@@ -113,6 +117,12 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     // `glow_size` owns glow (presence + radius + strength); `intensity` owns
     // scanline/CRT overlay opacity only. Unset → the theme value already set
     // above by `app_theme_to_gui_theme` wins.
+    // **The picker's own size and colour — one of each, app-wide.** Set here, at the single theme
+    // chokepoint, and carried unchanged into a pane's derived theme (which replaces only its accent,
+    // border and background), so a letter looks the same on the active pane, an inactive one, a
+    // header button and a sidebar row.
+    theme.hint_font_size = state.appearance.hint_font_size.clamp(6.0, 48.0);
+    theme.hint_color = state.theme.accent;
     theme.colors.glow_size = state.appearance.effective_glow_size(&state.theme);
     theme.colors.intensity = state.appearance.effective_intensity(&state.theme);
     // Focus-outline visibility (config `show_focus_border`, theme fallback) — the

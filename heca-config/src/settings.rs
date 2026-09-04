@@ -75,6 +75,11 @@ fn default_auto_scroll_edge() -> bool {
     true
 }
 
+/// Shift is the near-universal "and swap them" modifier; it is a default, not a rule.
+fn default_swap_modifier() -> ModifierKey {
+    ModifierKey::Shift
+}
+
 /// Default gap between overview rows: a tenth of a screen height, niri's.
 fn default_overview_gap() -> f64 {
     0.1
@@ -151,6 +156,71 @@ fn default_terminal_scroll_animations() -> bool {
 /// status bar collapses to zero height and the pane area reclaims the space).
 fn default_show_chrome_region() -> bool {
     true
+}
+
+/// Default auto-dismiss delay for an in-app notification, in milliseconds (4 s).
+fn default_notification_auto_dismiss_ms() -> u64 {
+    4000
+}
+
+/// Default number of notification cards on screen at once.
+///
+/// Small on purpose: the cards are transient and the stack is not a log. Overflow is not lost — it
+/// queues and joins the column as slots free — so raising this trades reading room against how much
+/// of the window the stack is allowed to cover.
+fn default_notification_max_visible() -> usize {
+    5
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  NotificationSystemConfig
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Where a raised notification is delivered.
+///
+/// `system` is **reserved** — the OS-notification backend is not built, so it falls back to
+/// `app` until it lands. `none` suppresses every notification (nothing is raised at all).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationSystem {
+    /// In-app toast stack. **The default.**
+    #[default]
+    App,
+    /// OS / desktop notifications. Reserved — falls back to `App` until the backend exists.
+    System,
+    /// No notifications at all.
+    None,
+}
+
+/// `[settings.notification_system]` — how in-app toast notifications behave.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct NotificationSystemConfig {
+    /// Where a notification is delivered: `app` (default) / `system` (reserved) / `none`.
+    #[serde(default)]
+    pub mode: NotificationSystem,
+    /// How long a notification stays on screen before it dismisses itself, in
+    /// milliseconds. Applies to every notification that auto-dismisses; one a
+    /// producer marks sticky ignores it, and a per-notification lifetime override
+    /// still wins. Default: 4000.
+    #[serde(default = "default_notification_auto_dismiss_ms")]
+    pub auto_dismiss_ms: u64,
+    /// How many notification cards are on screen at once. Further notifications queue in the order
+    /// they were raised — nothing is dropped.
+    ///
+    /// Closing one slides the cards after it up so the column never shows a blank slot, and the
+    /// next in line joins at the **end**. Default: 5. Clamped to at least 1.
+    #[serde(default = "default_notification_max_visible")]
+    pub max_visible: usize,
+}
+
+impl Default for NotificationSystemConfig {
+    fn default() -> Self {
+        Self {
+            mode: NotificationSystem::default(),
+            auto_dismiss_ms: default_notification_auto_dismiss_ms(),
+            max_visible: default_notification_max_visible(),
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -256,6 +326,15 @@ pub struct SettingsConfig {
     /// Modifier key that must be held to initiate an interactive pane drag with the mouse.
     #[serde(default)]
     pub interactive_move_modifier: ModifierKey,
+    /// Modifier key that turns a drag from a **move** into a **swap** — dropping exchanges the two
+    /// things instead of placing one at the other's position. Applies to every drag alike: a row in
+    /// a sidebar, a pane carried across the content area, a plugin's own row.
+    ///
+    /// Must differ from [`interactive_move_modifier`](Self::interactive_move_modifier): one key
+    /// cannot both start a drag and change what it means, or every drag is a swap and a plain move
+    /// becomes unreachable. Heca reports the collision at startup and keeps the gesture.
+    #[serde(default = "default_swap_modifier")]
+    pub swap_modifier: ModifierKey,
     /// Center a single column even when it fits within the viewport.
     #[serde(default = "default_always_center_single_column")]
     pub always_center_single_column: bool,
@@ -344,6 +423,10 @@ pub struct SettingsConfig {
     /// Show the bottom bar (status bar). `false` fully hides it (zero height).
     #[serde(default = "default_show_chrome_region", alias = "show-bottom-bar")]
     pub show_bottom_bar: bool,
+
+    /// `[settings.notification_system]` — in-app toast notification behaviour.
+    #[serde(default, alias = "notification-system")]
+    pub notification_system: NotificationSystemConfig,
     // Destructive-action confirmation moved to the generic `[confirm]` table
     // (`ConfirmConfig`, keyed by action name: `close` / `delete_column` / `delete_workspace`).
 }
@@ -371,6 +454,7 @@ impl Default for SettingsConfig {
             terminal_brights: None,
             auto_scroll_edge: default_auto_scroll_edge(),
             interactive_move_modifier: ModifierKey::default(),
+            swap_modifier: default_swap_modifier(),
             always_center_single_column: default_always_center_single_column(),
             center_focused_column: CenterFocusedColumn::default(),
             overview_zoom_from: default_overview_zoom_from(),
@@ -388,6 +472,7 @@ impl Default for SettingsConfig {
             show_right_sidebar: default_show_chrome_region(),
             show_top_bar: default_show_chrome_region(),
             show_bottom_bar: default_show_chrome_region(),
+            notification_system: NotificationSystemConfig::default(),
         }
     }
 }
@@ -414,6 +499,7 @@ mod tests {
         assert_eq!(s.terminal_brights, None);
         assert!(s.auto_scroll_edge);
         assert_eq!(s.interactive_move_modifier, ModifierKey::Super);
+        assert_eq!(s.swap_modifier, ModifierKey::Shift);
         assert!(!s.always_center_single_column);
         assert!(s.shell_integration);
         assert_eq!(s.terminal_scrollback_lines, 3500);
@@ -468,5 +554,51 @@ mod tests {
     fn test_terminal_foreground_override_parses() {
         let s: SettingsConfig = toml::from_str("terminal-foreground = \"#4c4f69\"").unwrap();
         assert!(s.terminal_foreground.is_some());
+    }
+
+    /// **The stack's size is config, not a compiled-in number**, and it clamps.
+    ///
+    /// A zero would queue every notification for ever and show none — that is what `mode = "none"`
+    /// is for, so a zero here is a typo rather than a way to silence the app. The clamp itself
+    /// lives in the store; this pins that the value travels.
+    #[test]
+    fn notification_max_visible_defaults_to_five_and_is_overridable() {
+        let s = SettingsConfig::default();
+        assert_eq!(s.notification_system.max_visible, 5);
+
+        let s: SettingsConfig =
+            toml::from_str("[notification_system]\nmax_visible = 3\n").expect("parses");
+        assert_eq!(s.notification_system.max_visible, 3);
+
+        // Absent from a present subtable → still the default.
+        let s: SettingsConfig =
+            toml::from_str("[notification_system]\nmode = \"app\"\n").expect("parses");
+        assert_eq!(s.notification_system.max_visible, 5);
+    }
+
+    #[test]
+    fn test_notification_system_defaults_and_override() {
+        // Absent section → default mode app, 4 s.
+        let s = SettingsConfig::default();
+        assert_eq!(s.notification_system.mode, NotificationSystem::App);
+        assert_eq!(s.notification_system.auto_dismiss_ms, 4000);
+
+        // `[settings.notification_system]` as a subtable overrides both.
+        let s: SettingsConfig = toml::from_str(
+            "[notification_system]\nmode = \"none\"\nauto_dismiss_ms = 8000\n",
+        )
+        .expect("notification_system subtable should parse");
+        assert_eq!(s.notification_system.mode, NotificationSystem::None);
+        assert_eq!(s.notification_system.auto_dismiss_ms, 8000);
+
+        // `system` parses (reserved — the host falls it back to app).
+        let s: SettingsConfig =
+            toml::from_str("[notification_system]\nmode = \"system\"\n").unwrap();
+        assert_eq!(s.notification_system.mode, NotificationSystem::System);
+
+        // The subtable is optional; unrelated settings still parse without it.
+        let s: SettingsConfig = toml::from_str("mouse = false\n").unwrap();
+        assert_eq!(s.notification_system.mode, NotificationSystem::App);
+        assert_eq!(s.notification_system.auto_dismiss_ms, 4000);
     }
 }

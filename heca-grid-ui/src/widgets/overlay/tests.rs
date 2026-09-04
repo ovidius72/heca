@@ -2,6 +2,7 @@
 use super::*;
 use crate::builders::Parent;
 use crate::event::PointerButton;
+use crate::scene::{DrawCommand, HostCmd, HostDraw, Scene};
 use crate::widgets::{Flex, Label};
 
 /// An open modal, **laid out** — as a host has it before any input reaches it. A layer occupies
@@ -227,4 +228,108 @@ fn anchored_overlay_places_panel_child_on_layout() {
     // Idempotent: a second on_layout must not compound the offset.
     o.on_layout();
     assert_eq!(o.panel_bounds().loc, placed.loc, "re-placing is idempotent");
+}
+
+/// Paint `o` into a fresh scene and report every host request it recorded, split by band.
+///
+/// The split is the point: a backdrop must land in the **base** commands, never the deferred
+/// overlay band, because the host performs the requests between flushing the two.
+fn host_draws(o: &Overlay) -> (Vec<HostCmd>, Vec<HostCmd>) {
+    let theme = crate::theme::Theme::default();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(800.0, 600.0));
+        o.paint(&mut cx);
+    }
+    let host = |s: &Scene| -> Vec<HostCmd> {
+        s.iter()
+            .filter_map(|c| match c {
+                DrawCommand::Host(h) => Some(*h),
+                _ => None,
+            })
+            .collect()
+    };
+    (host(&scene.base_layer()), host(&scene.overlay_layer()))
+}
+
+/// **A frosted surface blurs exactly what it occludes, and asks for it in the base band.**
+///
+/// The band is the whole mechanism: everything an overlay *draws* is deferred so it composites
+/// above its siblings, but a backdrop is the opposite — it must be performed after what is beneath
+/// it and before the surface itself. The host flushes base, performs the requests, then flushes the
+/// overlay bands, so a request recorded in the wrong band blurs the wrong frame.
+#[test]
+fn a_frosted_overlay_records_its_blur_in_the_base_band_over_what_it_occludes() {
+    let mut o = Overlay::new()
+        .frosted(true)
+        .panel(Flex::column().child(Label::new("hi")))
+        .opened(true);
+    crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
+
+    let (base, overlay) = host_draws(&o);
+    let radius = crate::theme::Theme::default().colors.overlay_frost_radius;
+    assert_eq!(
+        base,
+        vec![HostCmd {
+            draw: HostDraw::Backdrop { radius },
+            rect: Rectangle::new(Point::new(0.0, 0.0), Size::new(800.0, 600.0)),
+            alpha: 1.0,
+        }],
+        "blocking, so it blurs the viewport it covers — and in the base band",
+    );
+    assert!(overlay.is_empty(), "a backdrop is never deferred with what the surface draws");
+}
+
+/// **A surface that did not ask for a frost summons no blur pass.** The blur is a GPU pass over
+/// the whole frame; a dialog that never wanted one must not be paying for it.
+#[test]
+fn a_plain_overlay_records_no_backdrop() {
+    let o = open_overlay();
+    assert!(host_draws(&o).0.is_empty());
+}
+
+/// **A non-blocking frosted surface blurs its panel, not the screen.** It occludes only its panel,
+/// and the frost reads the same reach the input policy does — so the two can never disagree about
+/// how far this surface goes.
+#[test]
+fn a_non_blocking_frost_reaches_only_as_far_as_the_panel() {
+    let mut o = Overlay::new()
+        .blocking(false)
+        .frosted(true)
+        .panel(Flex::column().child(Label::new("hi")))
+        .opened(true);
+    crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
+
+    let (base, _) = host_draws(&o);
+    assert_eq!(base.len(), 1);
+    assert_eq!(base[0].rect, o.panel_bounds(), "the panel's reach, not the viewport's");
+}
+
+/// **The backdrop dissolves with the surface that asked for it.**
+///
+/// Left at full strength it holds the whole session out of focus for the length of the fade and
+/// then snaps sharp in one frame — the exact pop the fade exists to remove. It takes the
+/// animation's *opacity* and nothing else: a blurred region that also zoomed would be blurring
+/// somewhere the surface is not.
+#[test]
+fn a_frosted_overlays_backdrop_fades_with_it() {
+    let mut o = Overlay::new()
+        .frosted(true)
+        .animation(Animation::ZoomFade)
+        .panel(Flex::column().child(Label::new("hi")))
+        .opened(true);
+    crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
+    o.open();
+    while o.tick(0.05) {}
+
+    o.hide();
+    o.tick(0.05);
+    let (base, _) = host_draws(&o);
+    assert_eq!(base.len(), 1, "still asking while it leaves");
+    assert!(base[0].alpha < 1.0, "and asking more faintly: {}", base[0].alpha);
+    assert_eq!(
+        base[0].rect,
+        Rectangle::new(Point::new(0.0, 0.0), Size::new(800.0, 600.0)),
+        "the zoom moves the panel, never the region being blurred",
+    );
 }

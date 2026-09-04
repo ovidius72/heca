@@ -99,8 +99,26 @@ fn pick_source(
             .as_ref()
             .map(|t| t.intent_source)
             .unwrap_or(S::Keyboard),
-        HintSurface::Layer(id) => S::Surface(*id),
-        HintSurface::Pane(_) | HintSurface::PaneHeader(_) => S::Keyboard,
+        HintSurface::Layer(id) => S::Surface(state.layers.surface_key(*id)),
+        HintSurface::Pane(_) => S::Keyboard,
+    }
+}
+
+/// **What a layer hides from the letters beneath it.**
+///
+/// `covers_content` is the layer's own declaration and the action router already acts on it;
+/// occlusion is the same question asked about letters, so it is answered from the declaration
+/// rather than assumed from the root's box.
+///
+/// An ambient overlay fills the viewport and draws in a corner of it: a toast stack is `Pct(1.0)`
+/// square because it *positions* its cards on screen, not because it covers the screen. Reading its
+/// bounds as an occluder blanked every letter in the app for as long as the stack was mounted —
+/// chrome, panes and all — leaving letters only on the toast itself.
+fn layer_occluders(covers_content: bool, bounds: Rectangle) -> Vec<Rectangle> {
+    if covers_content {
+        vec![bounds]
+    } else {
+        Vec::new()
     }
 }
 
@@ -143,10 +161,21 @@ fn visible_hint_targets(
     //    and `resolve_hint_layers` stops there — which is what suppresses the chrome and the panes
     //    beneath an exposé.
     for layer in state.layers.visible_front_to_back() {
-        let bounds = layer.root().base().bounds;
+        // **A layer hides what it says it hides.** `covers_content` is the declaration the action
+        // router already acts on, and occlusion is the same question asked about letters, so it is
+        // read here rather than assumed from the root's box.
+        //
+        // An ambient overlay fills the viewport and draws in a corner of it: a toast stack is
+        // `Pct(1.0)` square because it *positions* its cards on screen, not because it covers the
+        // screen. Taking its bounds as an occluder blanked every letter in the app for as long as
+        // the stack was mounted — chrome, panes and all — leaving letters only on the toast.
+        let Some(node) = crate::chrome::surface_node(&state.window_root, layer.id) else {
+            continue;
+        };
+        let occluders = layer_occluders(layer.covers_content, node.base().bounds);
         layers.push(HintLayer {
-            targets: hints_of(&HintSurface::Layer(layer.id), layer.root()),
-            occluders: vec![bounds],
+            targets: hints_of(&HintSurface::Layer(layer.id), node),
+            occluders,
             modal: layer.modal,
         });
     }
@@ -154,11 +183,11 @@ fn visible_hint_targets(
     // 2. Chrome (top bar + sidebars), drawn on top of all pane content. Its own targets
     //    are eligible; the chrome frame AROUND the content (bars + sidebars) occludes pane
     //    targets beneath it. Occluders come from `content_rect`, not constants.
-    if let Some(tree) = state.chrome_tree.as_ref() {
+    {
         let (cl, ct) = (content.loc.x, content.loc.y);
         let (cr, cb) = (content.loc.x + content.size.w, content.loc.y + content.size.h);
         layers.push(HintLayer {
-            targets: hints_of(&HintSurface::Chrome, &tree.root),
+            targets: hints_of(&HintSurface::Chrome, &state.window_root),
             occluders: vec![
                 Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, ct)), // top bar
                 Rectangle::new(Point::new(0.0, 0.0), Size::new(cl, vh)), // left sidebar
@@ -177,16 +206,13 @@ fn visible_hint_targets(
         .into_iter()
         .rev()
     {
-        // The pane's own shell first — it OWNS the pane (its identity, its letter); the header is
-        // a view of what runs inside it. Both are real declarations, so both wear a letter, and
-        // both are hidden by the same occluder because they are one pane.
-        let mut targets = match state.panes.get(&pane_id) {
+        // The pane's shell and its info bar are ONE tree now — the bar is a child of the pane —
+        // so one walk collects the pane's own letter and its bar buttons' together. They were
+        // always hidden by the same occluder anyway, because they are one pane.
+        let targets = match state.panes.get(&pane_id) {
             Some(shell) => hints_of(&HintSurface::Pane(pane_id), &shell.root),
             None => Vec::new(),
         };
-        if let Some(header) = state.pane_headers.get(&pane_id) {
-            targets.extend(hints_of(&HintSurface::PaneHeader(pane_id), &header.root));
-        }
         if targets.is_empty() {
             continue;
         }
@@ -237,4 +263,35 @@ fn hints_of(
         .into_iter()
         .map(|(path, bounds)| (HintTarget::new(surface, root, path), bounds))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::layer_occluders;
+    use heca_core::layout::{Point, Rectangle, Size};
+
+    fn viewport() -> Rectangle {
+        Rectangle::new(Point::new(0.0, 0.0), Size::new(1412.0, 800.0))
+    }
+
+    /// **An ambient overlay hides nothing** (F009 toast stack, found 2026-08-27).
+    ///
+    /// A toast stack sizes itself to the whole viewport because that is how it *positions* its
+    /// cards — top-right, bottom-left. It covers a corner and declares `covers_content: false`.
+    /// Taking its root box as an occluder suppressed every letter in the app for as long as the
+    /// stack was mounted, so `prefix+/` lettered the toast and nothing else — no chrome, no panes.
+    #[test]
+    fn a_layer_that_does_not_cover_content_occludes_nothing() {
+        assert!(
+            layer_occluders(false, viewport()).is_empty(),
+            "a viewport-sized ambient overlay must not hide the letters beneath it",
+        );
+    }
+
+    /// The other half: a layer that *does* claim the content still hides what is under it, which is
+    /// what suppresses chrome and pane letters beneath an exposé or a modal.
+    #[test]
+    fn a_layer_that_covers_content_occludes_its_own_box() {
+        assert_eq!(layer_occluders(true, viewport()), vec![viewport()]);
+    }
 }

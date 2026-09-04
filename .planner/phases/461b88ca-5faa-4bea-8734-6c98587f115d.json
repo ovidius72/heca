@@ -3,24 +3,31 @@
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 57,
   "shortId": "SGTXU",
-  "priority": 7,
+  "priority": 8,
   "slug": "notification-09-tests-docs",
   "title": "notification-09: Tests + Documentation",
-  "discussedAt": "",
-  "contextReady": false,
-  "contextReadyReason": "",
+  "discussedAt": "2026-08-27T09:19:37.772Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
   "summary": "Copertura test e documentazione utente/planner.",
-  "description": "Aggiungere test per adapter, store lifecycle, dedup, config parsing, reload producer e dispatch azioni; documentare il sistema notifiche in README e aggiornare docs/widgets solo se cambiano widget grid-ui.",
+  "description": "Test store lifecycle, config parsing notification_system, toast action dispatch, model conversion, dedup, reload smoke tests; sezione README.",
+  "descriptionUpdatedAt": "2026-08-27T09:19:37.772Z",
   "notes": "",
-  "goals": [],
+  "goals": [
+    "Test per adapter/store/lifecycle/dedup/config/reload/dispatch, e documentazione utente (README) del sistema notifiche."
+  ],
   "nonGoals": [],
-  "dependencies": [],
+  "dependencies": [
+    "Aspetta che il mount (P060) e il config schema (T186/T191) esistano prima dei test che li coprono."
+  ],
   "dependsOn": [],
   "risks": [],
   "openQuestions": [],
   "decisions": [],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "Non ancora iniziato."
+  ],
   "taskIds": [
     "0b00bffd-412b-4557-8f78-efa680f56a3c",
     "107ae543-0959-4d93-a867-fcfa7293be3b",
@@ -40,19 +47,32 @@
       "priority": 1,
       "shortName": "test-store-lifecycle",
       "title": "Store lifecycle unit tests",
-      "status": "planned",
-      "description": "Test push, dismiss per id esatto, auto-dismiss expiry, sticky non scade, next_expiry.",
+      "status": "done",
+      "description": "Test push, dismiss per id esatto, auto-dismiss expiry, sticky non scade, next_expiry.\n\n---\n**Completion summary:**\nCOVERED by the existing notification.rs test suite (66 tests) — the store lifecycle is exercised end to end: push_allocates_an_id_and_promotes_into_a_vacant_slot, push_queues_after_all_stable_slots_are_occupied_without_an_expiry, dismiss_visible_archives_it_and_refills_only_its_slot, dismiss_pending_archives_without_changing_visible_slots, dismiss_unknown_or_persistent_notification_is_a_noop, expire_due_archives_due_visible_entries_and_promotes_pending, sticky_notifications_do_not_expire, auto_lifetime_expires_sticky_does_not, next_expiry_uses_only_the_earliest_visible_auto_deadline, first_auto_dismissible_visible_id_skips_sticky_and_persistent_cards. Plus the runtime layer: runtime_applies_the_configured_auto_dismiss_to_a_default_draft, runtime_leaves_a_sticky_draft_alone, set_auto_dismiss_affects_only_notifications_raised_afterwards.\nVERIFICATION: cargo test -p heca --bin heca notification:: → 66/66; both lint gates exit 0.",
+      "descriptionUpdatedAt": "2026-08-28T08:48:40.725Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "0b00bffd-412b-4557-8f78-efa680f56a3c-check-001-planned-done",
+          "date": "2026-08-28T08:48:40.724Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "COVERED by the existing notification.rs test suite (66 tests) — the store lifecycle is exercised end to end: push_allocates_an_id_and_promotes_into_a_vacant_slot, push_queues_after_all_stable_slots_are_occupied_without_an_expiry, dismiss_visible_archives_it_and_refills_only_its_slot, dismiss_pending_archives_without_changing_visible_slots, dismiss_unknown_or_persistent_notification_is_a_noop, expire_due_archives_due_visible_entries_and_promotes_pending, sticky_notifications_do_not_expire, auto_lifetime_expires_sticky_does_not, next_expiry_uses_only_the_earliest_visible_auto_deadline, first_auto_dismissible_visible_id_skips_sticky_and_persistent_cards. Plus the runtime layer: runtime_applies_the_configured_auto_dismiss_to_a_default_draft, runtime_leaves_a_sticky_draft_alone, set_auto_dismiss_affects_only_notifications_raised_afterwards.\nVERIFICATION: cargo test -p heca --bin heca notification:: → 66/66; both lint gates exit 0."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:48:40.724Z",
+      "completedAt": "2026-08-28T08:48:40.724Z",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-08-28T08:48:40.724Z",
+      "sessionInfo": []
     },
     {
       "id": "107ae543-0959-4d93-a867-fcfa7293be3b",
@@ -62,19 +82,32 @@
       "priority": 8,
       "shortName": "planner-docs",
       "title": "Update planner backlog with notification plan",
-      "status": "planned",
-      "description": "Copiare il piano notifiche approvato in BACKLOG.md sotto nuova sezione Notification System, con fasi, task e cross-ref agli originali (F*.P*.T*).",
+      "status": "done",
+      "description": "Copiare il piano notifiche approvato in BACKLOG.md sotto nuova sezione Notification System, con fasi, task e cross-ref agli originali (F*.P*.T*).\n\n---\n**Completion summary:**\nDONE — the planner IS the notification backlog now (per AGENTS.md \"Outstanding work lives in the planner\"). F009 is fully tracked: P056/P059/P060/P061/P062 done; P055 6/8 done (T222 deferred to a design call, T381 flagged for Antonio's decision on the handler-decline mechanism, T223 deferred — no provider error channel exists); P057 done; P063 deferred (OS backend). notification-system-plane.md is a pre-planner analysis snapshot (\"Status: draft plan / analysis only\", branch feature/notifications-analysis) and shows the superseded flat `[settings] notification_system = \"app\"` shape; it is not the live backlog and was left untouched (heca-57 maintains it). No BACKLOG.md entry needed — the planner covers it.\nVERIFICATION: n/a (planner state); planner-task-list F009 reflects the above.",
+      "descriptionUpdatedAt": "2026-08-28T08:49:25.040Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "107ae543-0959-4d93-a867-fcfa7293be3b-check-001-planned-done",
+          "date": "2026-08-28T08:49:25.039Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "DONE — the planner IS the notification backlog now (per AGENTS.md \"Outstanding work lives in the planner\"). F009 is fully tracked: P056/P059/P060/P061/P062 done; P055 6/8 done (T222 deferred to a design call, T381 flagged for Antonio's decision on the handler-decline mechanism, T223 deferred — no provider error channel exists); P057 done; P063 deferred (OS backend). notification-system-plane.md is a pre-planner analysis snapshot (\"Status: draft plan / analysis only\", branch feature/notifications-analysis) and shows the superseded flat `[settings] notification_system = \"app\"` shape; it is not the live backlog and was left untouched (heca-57 maintains it). No BACKLOG.md entry needed — the planner covers it.\nVERIFICATION: n/a (planner state); planner-task-list F009 reflects the above."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:49:25.039Z",
+      "completedAt": "2026-08-28T08:49:25.039Z",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-08-28T08:49:25.039Z",
+      "sessionInfo": []
     },
     {
       "id": "963b15c4-eb41-4f99-b1f2-0f9ee61665fb",
@@ -84,19 +117,32 @@
       "priority": 2,
       "shortName": "test-config-parsing",
       "title": "Config parsing tests for notification_system",
-      "status": "planned",
-      "description": "Test parsing dei tre modi (app/system/none), default mancante e unknown value con serde error.",
+      "status": "done",
+      "description": "Test parsing dei tre modi (app/system/none), default mancante e unknown value con serde error.\n\n---\n**Completion summary:**\nCOVERED: heca-config/src/settings.rs test test_notification_system_defaults_and_override — absent section → mode \"app\" + auto_dismiss_ms 4000; [notification_system] subtable with mode=\"none\" + auto_dismiss_ms=8000 overrides both; mode=\"system\" parses (reserved); the subtable is optional (unrelated settings parse without it). Plus config_default_toml_parses (loader.rs) proves the embedded [settings.notification_system] block in config.default.toml deserializes against the schema.\nVERIFICATION: cargo test -p heca-config settings:: → 6/6; config_default_toml_parses green; both lint gates exit 0.",
+      "descriptionUpdatedAt": "2026-08-28T08:48:57.031Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "963b15c4-eb41-4f99-b1f2-0f9ee61665fb-check-001-planned-done",
+          "date": "2026-08-28T08:48:57.030Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "COVERED: heca-config/src/settings.rs test test_notification_system_defaults_and_override — absent section → mode \"app\" + auto_dismiss_ms 4000; [notification_system] subtable with mode=\"none\" + auto_dismiss_ms=8000 overrides both; mode=\"system\" parses (reserved); the subtable is optional (unrelated settings parse without it). Plus config_default_toml_parses (loader.rs) proves the embedded [settings.notification_system] block in config.default.toml deserializes against the schema.\nVERIFICATION: cargo test -p heca-config settings:: → 6/6; config_default_toml_parses green; both lint gates exit 0."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:48:57.030Z",
+      "completedAt": "2026-08-28T08:48:57.030Z",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-08-28T08:48:57.030Z",
+      "sessionInfo": []
     },
     {
       "id": "9ce48992-789d-4ec2-ab17-29ff4c09fe65",
@@ -106,19 +152,32 @@
       "priority": 4,
       "shortName": "test-action-dispatch",
       "title": "Toast action dispatch test",
-      "status": "planned",
-      "description": "Verificare che NotificationAction event dispatchi WmAction tramite registry/policy path, non handler diretto.",
+      "status": "done",
+      "description": "Verificare che NotificationAction event dispatchi WmAction tramite registry/policy path, non handler diretto.\n\n---\n**Completion summary:**\nDONE — added a_visible_actions_intent_is_resolvable_for_the_relay_to_re_dispatch (heca/src/notification.rs): a visible card's action resolves by its intent name via NotificationRuntime::action_and_dismiss_after_for_visible → returns the real Intent (name + args) + the dismiss_after flag, so the relay can re-dispatch it through the router; an unknown key resolves to None, not a panic.\nThe registry/policy path (not a direct handler) is proven by: WmAction::NotificationActionRelay is classified in action_policy() (exhaustive match, action_policy_covers_all_variants test) as ActionPolicy::Global, so it MUST go through route_action; handle_notification_action_relay then re-fires via emit.fire(InteractionIntent::View(intent)) — another full router pass — never registry.execute directly.\nVERIFICATION: notification:: 66/66; both lint gates exit 0.\nFILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-28T08:49:04.024Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "9ce48992-789d-4ec2-ab17-29ff4c09fe65-check-001-planned-done",
+          "date": "2026-08-28T08:49:04.023Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "DONE — added a_visible_actions_intent_is_resolvable_for_the_relay_to_re_dispatch (heca/src/notification.rs): a visible card's action resolves by its intent name via NotificationRuntime::action_and_dismiss_after_for_visible → returns the real Intent (name + args) + the dismiss_after flag, so the relay can re-dispatch it through the router; an unknown key resolves to None, not a panic.\nThe registry/policy path (not a direct handler) is proven by: WmAction::NotificationActionRelay is classified in action_policy() (exhaustive match, action_policy_covers_all_variants test) as ActionPolicy::Global, so it MUST go through route_action; handle_notification_action_relay then re-fires via emit.fire(InteractionIntent::View(intent)) — another full router pass — never registry.execute directly.\nVERIFICATION: notification:: 66/66; both lint gates exit 0.\nFILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:49:04.023Z",
+      "completedAt": "2026-08-28T08:49:04.023Z",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-08-28T08:49:04.023Z",
+      "sessionInfo": []
     },
     {
       "id": "a18c6869-fa10-4528-a93e-143cf816b94b",
@@ -128,19 +187,32 @@
       "priority": 5,
       "shortName": "readme-docs",
       "title": "Add README notification system section",
-      "status": "planned",
-      "description": "Documentare in README: cosa sono le notifiche, come configurare backend, v1 usa in-app toasts, OS planned, azioni usano action registrate.",
+      "status": "done",
+      "description": "Documentare in README: cosa sono le notifiche, come configurare backend, v1 usa in-app toasts, OS planned, azioni usano action registrate.\n\n---\n**Completion summary:**\nDONE — added a \"### Notifications\" section to README.md under ## Configuration (after \"### Confirmation prompts\"): the [settings.notification_system] block (mode app/system/none + auto_dismiss_ms) with comments; \"severity is tone not importance\" (T503) and how auto-dismiss/sticky work; prefix+/ and prefix+n to interact (clicking is WIP); the notify action for keybindings/scripts/plugins and Notification::info(..).send() for Rust; and the list of what produces a toast today (new pane, pane process exit, config reload, spawn failure). The keybinding table's \"Reload config\" row and the earlier \"### Settings\" toml block were also updated for the notification_system config this session.\nVERIFICATION: doc-only; both lint gates exit 0.\nFILES: README.md.",
+      "descriptionUpdatedAt": "2026-08-28T08:49:17.960Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "a18c6869-fa10-4528-a93e-143cf816b94b-check-001-planned-done",
+          "date": "2026-08-28T08:49:17.959Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "DONE — added a \"### Notifications\" section to README.md under ## Configuration (after \"### Confirmation prompts\"): the [settings.notification_system] block (mode app/system/none + auto_dismiss_ms) with comments; \"severity is tone not importance\" (T503) and how auto-dismiss/sticky work; prefix+/ and prefix+n to interact (clicking is WIP); the notify action for keybindings/scripts/plugins and Notification::info(..).send() for Rust; and the list of what produces a toast today (new pane, pane process exit, config reload, spawn failure). The keybinding table's \"Reload config\" row and the earlier \"### Settings\" toml block were also updated for the notification_system config this session.\nVERIFICATION: doc-only; both lint gates exit 0.\nFILES: README.md."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:49:17.959Z",
+      "completedAt": "2026-08-28T08:49:17.959Z",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-08-28T08:49:17.959Z",
+      "sessionInfo": []
     },
     {
       "id": "b4d18180-bcb3-487d-8de8-324425c64408",
@@ -150,19 +222,32 @@
       "priority": 7,
       "shortName": "test-model-conversion",
       "title": "Model conversion tests",
-      "status": "planned",
-      "description": "Test AppNotification → ToastSpec: solo titolo, titolo+body, severity mapping, action label mapping.",
+      "status": "done",
+      "description": "Test AppNotification → ToastSpec: solo titolo, titolo+body, severity mapping, action label mapping.\n\n---\n**Completion summary:**\nCOVERED by notification.rs tests for AppNotification/NotificationDraft → ToastSpec and the severity adapter: notification_severity_maps_totally_to_toast_severity, notification_severity_from_matches_adapter, notification_severity_maps_each_variant, queued_and_history_notifications_do_not_project, visible_notification_projects_presentation_data_and_keyed_actions (id/title/body/severity/action key+label), same_id_payload_update_produces_a_different_spec, notification_action_serializes_as_data_without_callbacks + an_unknown_variant_name_degrades_to_the_default (ButtonVariant crosses as its name), notification_id_serializes_as_u64, source_serializes_with_snake_case_kind, lifecycle_serializes_with_snake_case.\nVERIFICATION: notification:: 66/66; both lint gates exit 0.",
+      "descriptionUpdatedAt": "2026-08-28T08:48:51.646Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "b4d18180-bcb3-487d-8de8-324425c64408-check-001-planned-done",
+          "date": "2026-08-28T08:48:51.645Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "COVERED by notification.rs tests for AppNotification/NotificationDraft → ToastSpec and the severity adapter: notification_severity_maps_totally_to_toast_severity, notification_severity_from_matches_adapter, notification_severity_maps_each_variant, queued_and_history_notifications_do_not_project, visible_notification_projects_presentation_data_and_keyed_actions (id/title/body/severity/action key+label), same_id_payload_update_produces_a_different_spec, notification_action_serializes_as_data_without_callbacks + an_unknown_variant_name_degrades_to_the_default (ButtonVariant crosses as its name), notification_id_serializes_as_u64, source_serializes_with_snake_case_kind, lifecycle_serializes_with_snake_case.\nVERIFICATION: notification:: 66/66; both lint gates exit 0."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:48:51.645Z",
+      "completedAt": "2026-08-28T08:48:51.645Z",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-08-28T08:48:51.645Z",
+      "sessionInfo": []
     },
     {
       "id": "cdbd9e92-f3ad-4c64-bb1e-7bb04c6af9ef",
@@ -172,19 +257,32 @@
       "priority": 3,
       "shortName": "test-reload-producer",
       "title": "Reload config success/failure smoke tests",
-      "status": "planned",
-      "description": "Test che reload config producer emetta notifiche corrette senza GPU/window; estrarre reload logic in funzione testabile se necessario.",
+      "status": "done",
+      "description": "Test che reload config producer emetta notifiche corrette senza GPU/window; estrarre reload logic in funzione testabile se necessario.\n\n---\n**Completion summary:**\nDONE — extracted notify_reload_outcome(Result<(), ConfigError>) from about_to_wait (heca/src/main.rs) and added mod reload_notification_tests:\n- a_successful_reload_raises_an_auto_dismissing_confirmation: Ok(()) → \"Configuration reloaded\", severity Success, dedup_key \"config-reload\", no actions, lifecycle.expires() true.\n- a_failed_reload_raises_a_sticky_danger_with_retry: Err(ConfigError::Invalid{..}) → \"Config reload failed\", severity Error, body carries the parse message, dedup_key \"config-reload\", NOT expiring (sticky), one action \"reload_config\" with dismiss_after true.\nThe config-parse side is covered by heca-config (config_default_toml_parses = good file → Ok; ConfigError has 4 variants for the failure modes). The deduped success-replaces-failure flow is covered by retry_dismisses_the_failure_toast_then_a_deduped_success_comes_back_fresh (notification.rs).\nVERIFICATION: cargo test -p heca --bin heca reload_notification_tests → 2/2; both lint gates exit 0; heca clippy-clean (test module moved to end of file per items-after-test-module lint).\nFILES: heca/src/main.rs.",
+      "descriptionUpdatedAt": "2026-08-28T08:49:11.348Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "cdbd9e92-f3ad-4c64-bb1e-7bb04c6af9ef-check-001-planned-done",
+          "date": "2026-08-28T08:49:11.346Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "DONE — extracted notify_reload_outcome(Result<(), ConfigError>) from about_to_wait (heca/src/main.rs) and added mod reload_notification_tests:\n- a_successful_reload_raises_an_auto_dismissing_confirmation: Ok(()) → \"Configuration reloaded\", severity Success, dedup_key \"config-reload\", no actions, lifecycle.expires() true.\n- a_failed_reload_raises_a_sticky_danger_with_retry: Err(ConfigError::Invalid{..}) → \"Config reload failed\", severity Error, body carries the parse message, dedup_key \"config-reload\", NOT expiring (sticky), one action \"reload_config\" with dismiss_after true.\nThe config-parse side is covered by heca-config (config_default_toml_parses = good file → Ok; ConfigError has 4 variants for the failure modes). The deduped success-replaces-failure flow is covered by retry_dismisses_the_failure_toast_then_a_deduped_success_comes_back_fresh (notification.rs).\nVERIFICATION: cargo test -p heca --bin heca reload_notification_tests → 2/2; both lint gates exit 0; heca clippy-clean (test module moved to end of file per items-after-test-module lint).\nFILES: heca/src/main.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:49:11.346Z",
+      "completedAt": "2026-08-28T08:49:11.346Z",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-08-28T08:49:11.346Z",
+      "sessionInfo": []
     },
     {
       "id": "d6be5a7c-a8e4-47cf-961b-bea43e90e686",
@@ -194,25 +292,57 @@
       "priority": 6,
       "shortName": "test-dedup",
       "title": "Dedup unit tests",
-      "status": "planned",
-      "description": "Test dedup: stessa chiave mantiene stesso id, body/title update, timeout resetta, notifica senza chiave non deduplica.",
+      "status": "done",
+      "description": "Test dedup: stessa chiave mantiene stesso id, body/title update, timeout resetta, notifica senza chiave non deduplica.\n\n---\n**Completion summary:**\nCOVERED by notification.rs tests: push_reuses_known_dedup_id_without_creating_a_duplicate, dedup_pending_moves_entry_to_fifo_front_without_displacing_visible, dedup_history_reactivates_the_same_id, history_limit_evicts_oldest_entry_and_its_dedup_key, dedup_segment_combines_kind_and_id, dedup_segment_falls_back_to_kind_when_id_missing_or_empty. Plus the real-world flow this session added: retry_dismisses_the_failure_toast_then_a_deduped_success_comes_back_fresh (dismiss → History → same dedup_key re-promotes as a fresh card).\nVERIFICATION: notification:: 66/66; both lint gates exit 0.",
+      "descriptionUpdatedAt": "2026-08-28T08:48:45.510Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "d6be5a7c-a8e4-47cf-961b-bea43e90e686-check-001-planned-done",
+          "date": "2026-08-28T08:48:45.509Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "COVERED by notification.rs tests: push_reuses_known_dedup_id_without_creating_a_duplicate, dedup_pending_moves_entry_to_fifo_front_without_displacing_visible, dedup_history_reactivates_the_same_id, history_limit_evicts_oldest_entry_and_its_dedup_key, dedup_segment_combines_kind_and_id, dedup_segment_falls_back_to_kind_when_id_missing_or_empty. Plus the real-world flow this session added: retry_dismisses_the_failure_toast_then_a_deduped_success_comes_back_fresh (dismiss → History → same dedup_key re-promotes as a fresh card).\nVERIFICATION: notification:: 66/66; both lint gates exit 0."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:48:45.509Z",
+      "completedAt": "2026-08-28T08:48:45.509Z",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-08-28T08:48:45.509Z",
+      "sessionInfo": []
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-07-27T11:40:15.533Z",
+  "updatedAt": "2026-08-28T08:49:25.039Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "8ac66f5e-12c6-4ff0-b7a4-8cbfc02ab4d8",
+      "date": "2026-08-28T08:48:40.752Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "0c8270e0-bb52-4d90-95ec-521647bec6ef",
+      "date": "2026-08-28T08:49:25.063Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
 }

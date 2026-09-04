@@ -7,12 +7,12 @@
 //! once on [`PaintCx`], so every component reuses it (DRY).
 
 use crate::color::Color;
-use crate::drag::{DragItemId, DropSide};
+use crate::drag::DropSide;
 use crate::hint::DeclaredAction;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{
-    Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, ScanlineCmd, Scene, Shadow, TextAlign,
-    TextCmd, TextStyle,
+    Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, RectCmd, ScanlineCmd, Scene,
+    Shadow, TextAlign, TextCmd, TextStyle,
 };
 use crate::style::Style;
 use crate::theme::Theme;
@@ -112,6 +112,39 @@ pub fn overlay_occluded_at(root: &dyn Component, pos: Point) -> bool {
         .any(|c| overlay_occluded_at(c.as_ref(), pos))
 }
 
+/// **Does any widget in this tree need laying out again?** Clears the flags as it walks.
+///
+/// The layout twin of [`collect_damage`], and the host calls it the same way — once a frame,
+/// before deciding whether to run [`LayoutEngine::compute`](crate::LayoutEngine::compute). It
+/// answers a question a repaint cannot: a widget that changed the *shape* of the tree has moved
+/// its siblings, and only a layout pass can put them right.
+///
+/// Unlike damage there is nothing to union — layout is a whole-tree pass, so the answer is a bool.
+/// Hidden subtrees are **not** skipped: a subtree that just became hidden is exactly the case that
+/// needs the pass, and its stale bounds are what the pass is about to fix.
+///
+/// ```ignore
+/// // In the host's frame, beside the existing damage call:
+/// if heca_grid_ui::needs_layout(&ui) {
+///     self.layout_dirty = true;
+/// }
+/// ```
+pub fn needs_layout(root: &dyn Component) -> bool {
+    fn walk(c: &dyn Component, found: &mut bool) {
+        let b = c.base();
+        if b.needs_layout() {
+            b.clear_needs_layout();
+            *found = true;
+        }
+        for child in &b.children {
+            walk(child.as_ref(), found);
+        }
+    }
+    let mut found = false;
+    walk(root, &mut found);
+    found
+}
+
 /// State shared by every component. Concrete widgets embed this.
 pub struct Base {
     /// Layout + visual style.
@@ -165,31 +198,101 @@ pub struct Base {
     /// Only the primary button, and only while enabled. Other buttons pass straight through to
     /// whatever wants them.
     pub one_click_target: bool,
+    /// **The pointer passes straight through this widget** (CSS `pointer-events: none`).
+    ///
+    /// For content that is *decoration standing in for something else*: a `Select`'s chosen option
+    /// is echoed inside the closed trigger, and while it stands there it is not an option you can
+    /// pick — the trigger is the control. Left as a target it hovered on its own, so the text lit
+    /// up and the chevron beside it did not: one control wearing two highlights.
+    ///
+    /// It is about **input, not paint** — the widget still draws — and it applies to the whole
+    /// subtree, because a decoration's children are decoration too.
+    pub pointer_transparent: bool,
     /// Explicit Tab-order index (like HTML `tabindex`). Focusables with an index
     /// are visited first in ascending order; those without (`None`) follow in
     /// tree position order. Set via [`LayoutExt::tab_index`](crate::builders::LayoutExt::tab_index).
     pub tab_index: Option<i32>,
     /// Child components, laid out by this component's flex container.
     pub children: Vec<Box<dyn Component>>,
-    /// If set, this widget is a **drag source**: a press inside its bounds can
-    /// begin a drag carrying this opaque id (the app maps it back to a pane /
-    /// column / etc.). Universal opt-in via [`ComponentExt::draggable`](crate::builders::ComponentExt::draggable);
-    /// resolved generically by [`drag::source_at`](crate::drag::source_at).
-    pub drag_source: Option<DragItemId>,
-    /// When set, this widget is a **drop target**: a drag released over its bounds
-    /// drops onto this opaque id. Universal opt-in via
-    /// [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target); resolved
-    /// generically by [`drag::resolve_at`](crate::drag::resolve_at).
-    pub drop_target: Option<DragItemId>,
-    /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
-    /// the right-click target and (later) drag are three readers of this one declaration.
+    /// This widget **can be dragged**, and what is dragged is [`key`](Self::key) — the identity it
+    /// already declares about itself. Universal opt-in via
+    /// [`ComponentExt::draggable`](crate::builders::ComponentExt::draggable); resolved generically
+    /// by [`drag::source_at`](crate::drag::source_at).
     ///
-    /// Unlike [`drag_source`](Self::drag_source) — a registry slot the app hands out — this is a
-    /// string the component chose about *itself*, so it
+    /// It used to carry an opaque id handed out by a host registry, and a closed list of which
+    /// surfaces were allowed to drag at all. Both are gone: a row said who it was twice, and a
+    /// plugin's row could say it neither time — it could not be added to a list that is an enum in
+    /// our source, so it could never be dragged (Antonio, 2026-09-01: *"hardcode smell?? what i
+    /// hate"*). A widget with no `key` is not a drag source, because there would be nothing to
+    /// name what was picked up.
+    pub draggable: bool,
+    /// **What this widget is, when it is dragged** — an opaque word its component chose
+    /// (`"pane"`, `"column"`, `"docker.container"`). Set with
+    /// [`ComponentExt::draggable_as`](crate::builders::ComponentExt::draggable_as); `None` means it
+    /// says nothing about itself and every target takes it.
+    ///
+    /// It is deliberately a free string and not a list the library knows: a closed set is one a
+    /// plugin cannot join, and the same shape a row already uses to say what its right-click menu
+    /// is about.
+    pub drag_kind: Option<String>,
+    /// This widget **accepts drops**, identified the same way — by its [`key`](Self::key).
+    /// Universal opt-in via [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target);
+    /// resolved generically by [`drag::resolve_at`](crate::drag::resolve_at).
+    pub drop_target: bool,
+    /// **What this widget takes**, by the same words. Empty means it takes anything, which is what
+    /// a target that says nothing gets. Set with
+    /// [`ComponentExt::accepts`](crate::builders::ComponentExt::accepts).
+    ///
+    /// A target that refuses is not offered: the walk skips it and keeps looking outward, so
+    /// nothing is drawn over something that would then do nothing. That mismatch is what this
+    /// exists to end — the line said yes and the release said no, because the drawing and the rule
+    /// lived in different places (Antonio, driving, 2026-09-01).
+    pub accepts: Vec<String>,
+    /// **Can a thing be dropped *onto* this widget, or only beside it?**
+    ///
+    /// `true` — the default — means the middle of the target is real: dropping a pane onto a pane
+    /// swaps or moves it there, so the target reads as three bands (before it, onto it, after it).
+    /// `false` says the target is a **sibling in an ordered list**, where "onto" means nothing: a
+    /// column dropped on a column is a reorder and can only land before or after, so the target
+    /// reads as two halves and the insertion line flips at the midpoint.
+    ///
+    /// Set by [`accepts`](crate::builders::ComponentExt::accepts) and
+    /// [`accepts_beside`](crate::builders::ComponentExt::accepts_beside). It exists because the
+    /// two are genuinely different and only the component knows which it is (Antonio, 2026-09-01:
+    /// *"a pane should be released above another pane because we want to move or swap; a column
+    /// above another column doesn't tell us if it is placed below or above"*).
+    pub accepts_onto: bool,
+    /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
+    /// the right-click target and the drag are three readers of this one declaration.
+    ///
+    /// A string the component chose about *itself*, so it
     /// survives a tree rebuild. Universal opt-in via [`ComponentExt::key`](crate::builders::ComponentExt::key);
     /// enumerated by [`nav::collect_keys`](crate::nav::collect_keys) and hit-tested by
     /// [`nav::key_at`](crate::nav::key_at). Opaque here — nothing in this library parses it.
     pub key: Option<String>,
+
+    /// **This node was seated as a surface** — placed above the page rather than laid out in it.
+    /// A host sets it when it seats one; no author ever writes it and no widget behaves
+    /// differently for having it.
+    ///
+    /// It buys one rule, and the rule is the browser's: a surface **passes the pointer through
+    /// where it covers nothing**, exactly as `pointer-events: none` on a positioned wrapper does,
+    /// while its children keep taking what lands on them. Right-click still opens the menu of
+    /// whatever is under the cursor.
+    ///
+    /// It exists because a surface's *box* is routinely much bigger than what it draws — a
+    /// notification stack spans the window so a corner can mean the screen's corner, and a
+    /// decorator wrapped around one hugs it and spans the window too. Left to the box, an empty
+    /// invisible surface swallows every press in the application and nothing anywhere fails
+    /// (Antonio, driving, 2026-09-01). Fixing the widgets one at a time does not end it: the next
+    /// surface, or the next decorator over one, brings it back, and its author had no way to know
+    /// they were meant to think about it.
+    ///
+    /// A surface that *wants* to swallow says so where it already says it —
+    /// [`overlay_occludes`](Component::overlay_occludes), which `Overlay::blocking(true)` answers
+    /// for the whole viewport. So the cost to an author is nothing, and the cost of forgetting is
+    /// nothing.
+    pub surface: bool,
     /// **Which enclosing region this subtree belongs to** — a panel, a dock, a tab group, whatever
     /// the host calls the thing that holds rows. Universal opt-in via
     /// [`ComponentExt::scope_key`](crate::builders::ComponentExt::scope_key); hit-tested by
@@ -204,6 +307,15 @@ pub struct Base {
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
     pub font: f32,
+    /// **The tree's own base font**, written by the layout pass — before any widget's size variant
+    /// scales it.
+    ///
+    /// [`font`](Self::font) is what this widget draws its *content* at, and a size variant is meant
+    /// to scale that. What a widget floats *beside* itself is different: a tooltip bubble is a small
+    /// panel belonging to the surface, not a part of the control, so an emphasized button was
+    /// getting an emphasized bubble — 1.25× the text of an identical tip on the button next to it
+    /// (Antonio, driving, 2026-09-03).
+    pub root_font: f32,
     /// The **viewport the tree was laid out against**, written by the layout pass.
     ///
     /// A widget that draws a floating panel has to clamp it on screen, and it used to learn the
@@ -259,6 +371,19 @@ pub struct Base {
     /// why sidebar letters kept failing with no error. `KeyHint` stays as a decorator for a
     /// **region that is not a widget you can put a builder on**, and nothing else.
     pub hint: Option<crate::hint::Hint>,
+    /// **What this widget says on hover.** `None` — the default — means it says nothing and costs
+    /// nothing.
+    ///
+    /// Declared with [`tooltip`](crate::builders::ComponentExt::tooltip), on **every** widget, and
+    /// the framework does the rest: the reveal is timed from the hover clock the pointer router
+    /// already keeps, and the bubble is drawn in [`paint_child`] beside the hint letter and the
+    /// drag feedback.
+    ///
+    /// It used to be a wrapper placed *around* a widget, so the rule lived in every caller's
+    /// discipline — and a widget held in a typed container could not be wrapped at all without
+    /// ceasing to be what the container accepts. The same move the pick declaration made when it
+    /// left [`KeyHint`](crate::widgets::KeyHint) for every widget.
+    pub tooltip: Option<crate::widgets::tooltip::Tip>,
     /// **May this widget be offered a letter at all?** `true` for everything, until a caller says
     /// otherwise with [`hintable(false)`](crate::builders::ComponentExt::hintable).
     ///
@@ -329,9 +454,48 @@ pub struct Base {
     /// changed and cleared once it's repainted. Starts `true` (everything paints
     /// on the first frame). The renderer repaints only widgets whose flag is set,
     /// and unions their bounds into the frame's damage region.
-    needs_paint: Cell<bool>}
+    needs_paint: Cell<bool>,
+    /// **Relayout flag: this widget's TREE changed, not just its pixels.**
+    ///
+    /// A widget that adds or removes children between frames — one that reconciles a host-owned
+    /// list, like [`ToastStack`](crate::widgets::ToastStack) — has changed the shape of the tree,
+    /// and a repaint cannot fix that: the siblings around it are still laid out where they were.
+    /// The host reads this through [`needs_layout`] and re-runs the layout pass.
+    ///
+    /// It is separate from [`needs_paint`](Base::needs_paint) because they cost different things:
+    /// a repaint is per-frame and cheap, a layout pass walks and re-measures the whole tree. A
+    /// widget that merely changed colour must not trigger one.
+    needs_layout: Cell<bool>}
 
 impl Base {
+    /// **The name this widget declares itself by** — its [`key`](Self::key), or its
+    /// [`scope_key`](Self::scope_key) when it names a region rather than a row.
+    ///
+    /// The two fields stay separate for the reasons given on each: one says *which row*, the other
+    /// *which region containing rows*, and only the first is a steppable cursor stop. But both are a
+    /// name the widget chose about itself, so **everything that names a widget asks here** and they
+    /// cannot disagree.
+    ///
+    /// This exists because they did disagree. [`nav::identity_of`](crate::nav::identity_of) read
+    /// only `key`, so a dock — which declares itself with `scope_key` — contributed nothing to its
+    /// children's names. Two docks holding the same rows produced two sets of identical identities,
+    /// and anything keyed on identity silently addressed the wrong one: a remembered hint letter
+    /// bounced between the two copies on every opening, and each dock's own name fell back to its
+    /// decorative drag grip and shifted whenever a row was added.
+    pub fn identity(&self) -> Option<&str> {
+        self.key.as_deref().or(self.scope_key.as_deref())
+    }
+
+    /// **Does this widget answer to `name`?** Either declaration counts, so a container can be
+    /// addressed by the region name it published without also inventing a row key.
+    ///
+    /// The lookup twin of [`identity`](Self::identity): that one asks what a widget is *called*,
+    /// this one asks whether a given name reaches it. Both live here so no caller writes the
+    /// `key`-or-`scope_key` test by hand and drifts from the other.
+    pub fn answers_to(&self, name: &str) -> bool {
+        self.key.as_deref() == Some(name) || self.scope_key.as_deref() == Some(name)
+    }
+
     /// A new base with default style and an empty child list.
     pub fn new() -> Self {
         Self {
@@ -345,18 +509,25 @@ impl Base {
             focusable: false,
             focus_barrier: false,
             one_click_target: false,
+            pointer_transparent: false,
             tab_index: None,
             children: Vec::new(),
-            drag_source: None,
-            drop_target: None,
+            draggable: false,
+            drag_kind: None,
+            drop_target: false,
+            accepts: Vec::new(),
+            accepts_onto: true,
             key: None,
             scope_key: None,
             font: 15.0,
+            root_font: 15.0,
             viewport: Size::new(f64::MAX, f64::MAX),
             pointer: crate::pointer::PointerState::new(),
             handlers: None,
             context_menu: None,
+            surface: false,
             hint: None,
+            tooltip: None,
             hintable: true,
             activatable: false,
             hint_label: crate::reactive::signal(None),
@@ -364,6 +535,8 @@ impl Base {
             actions: Vec::new(),
             mounted: Cell::new(false),
             needs_paint: Cell::new(true),
+            // A fresh widget is laid out by the pass that mounts it; it has nothing to re-request.
+            needs_layout: Cell::new(false),
         }
     }
 
@@ -395,6 +568,74 @@ impl Base {
         self.needs_paint.set(false);
     }
 
+    /// **Show or hide this widget — the one way to do it.**
+    ///
+    /// `hidden` is the engine's `display: none`: the widget leaves the layout entirely, and
+    /// everything after it moves. So flipping it is a **layout** change, not a paint one, and this
+    /// asks for the pass that re-places the siblings — which is why nothing should ever write
+    /// `style.layout.hidden` directly. Writing it by hand is how a dock's rows ended up painted on
+    /// top of each other and a sidebar row stayed collapsed with its content already arrived: the
+    /// value was right and nobody had moved anything.
+    ///
+    /// **It only asks when the value actually changes.** That is what makes it safe to call from
+    /// `remeasure`, which runs *inside* the layout pass: re-applying the same state there marks
+    /// nothing, so a widget that syncs itself every pass cannot request one every pass.
+    pub fn set_hidden(&mut self, hidden: bool) {
+        if self.style.layout.hidden != hidden {
+            self.style.layout.hidden = hidden;
+            // **Coming back, it has no box yet.** A hidden widget is `display: none`, so the layout
+            // gives it a zero rect at the origin; revealing it does not undo that, and the bounds it
+            // still carries say it is a nothing in the window's top-left corner. Most of a widget
+            // draws from those bounds and so draws nothing — but an icon is a glyph at the font's
+            // size, drawn wherever its box says it is, so a revealed button put its icon in the
+            // corner of the screen for the frame before the next layout reached it. During a drag
+            // that is continuous, and it is red when the button is a destructive one (Antonio,
+            // driving, 2026-09-04).
+            //
+            // Clearing the layout node says the truth — nothing has placed this yet — and
+            // [`paint_child`](crate::paint_child) already declines to draw what has never been
+            // placed. The layout this same call asks for supplies the box, and it draws from then
+            // on. One rule, rather than every widget learning to distrust its own bounds.
+            if !hidden {
+                self.node = None;
+            }
+            self.mark_needs_layout();
+        }
+    }
+
+    /// Whether this widget is out of the layout entirely (`display: none`).
+    pub fn is_hidden(&self) -> bool {
+        self.style.layout.hidden
+    }
+
+    /// **Say that this widget's tree changed and must be laid out again.**
+    ///
+    /// Call it when you add or remove children outside the layout pass — reconciling a host-owned
+    /// list, revealing a subtree, growing a row. A repaint is not enough: the widget's siblings are
+    /// still laid out around the shape the tree used to have.
+    ///
+    /// It also requests a frame, so a host that is otherwise idle wakes up to run the pass.
+    ///
+    /// **Why this exists.** A stacked notification removes its card only once the card's exit has
+    /// played — several frames after the click that dismissed it. Nothing re-laid-out at that
+    /// moment, so the cards below it kept their old positions until some unrelated click happened
+    /// to trigger a layout, and the gap where the card had been simply sat there
+    /// (Antonio, driving the showcase, F003/P096).
+    pub fn mark_needs_layout(&self) {
+        self.needs_layout.set(true);
+        request_frame();
+    }
+
+    /// Whether this widget's tree changed and wants a layout pass.
+    pub fn needs_layout(&self) -> bool {
+        self.needs_layout.get()
+    }
+
+    /// Clear the relayout flag — [`needs_layout`] does this as it walks.
+    pub fn clear_needs_layout(&self) {
+        self.needs_layout.set(false);
+    }
+
     /// The widget's size-variant **padding/dimension** multiplier — what widgets
     /// multiply their intrinsic padding / fixed dims by in `remeasure`. (The font is
     /// scaled separately, by [`WidgetSize::font_scale`], during layout.) At `Small`
@@ -412,6 +653,22 @@ impl Base {
     /// appears. Every widget gates its ring paint on this single definition
     /// (plus the theme's `show_focus_border` and its own disabled check).
     pub fn shows_focus_ring(&self) -> bool {
+        self.focused_by_keyboard()
+    }
+
+    /// **Did this widget's focus arrive from the keyboard?** — `focused && focus_visible`, CSS
+    /// `:focus-visible` semantics, and the one definition of that question.
+    ///
+    /// Two things read it, for the same reason, and neither should re-derive it:
+    ///
+    /// - [`shows_focus_ring`](Self::shows_focus_ring) — a click focuses without ringing.
+    /// - [`wants_visible`](Component::wants_visible) — **pointing at something never scrolls it.**
+    ///   A reveal exists to bring into view what the user cannot see, which is the keyboard's
+    ///   case; what the mouse is on is visible by definition, and scrolling it moves it out from
+    ///   under the pointer that asked. Clicking a row inside a scrolled region used to focus it,
+    ///   which asked for a reveal, which centred it — so the first click only scrolled and the
+    ///   second one did what you meant.
+    pub fn focused_by_keyboard(&self) -> bool {
         self.focused.get_untracked() && self.focus_visible.get_untracked()
     }
 
@@ -675,8 +932,29 @@ pub trait Component {
         false
     }
 
+    /// **Show only your icon, keeping your words** — or go back to showing both.
+    ///
+    /// A question a container asks a child it is short of room for, answered by whatever the child
+    /// happens to be. `false` by default: a widget with nothing to shorten simply ignores it, and a
+    /// widget with no icon must ignore it, since hiding its words would leave an empty box.
+    ///
+    /// It is a trait method for the same reason [`activate`](Self::activate) is: a container holds
+    /// `dyn Component`, so without one the only way to ask would be to know the child's concrete
+    /// type — which is exactly the coupling a container must not have. The container decides *what*
+    /// is shown; the widget owns *how it looks* when it is, including that a button with no words
+    /// is square and one with words is not.
+    fn set_icon_only(&mut self, _on: bool) {}
+
+    /// **Take this variant**, if you are the kind of widget that has one.
+    ///
+    /// A container asks a child it is styling as a group — a
+    /// [`ButtonGroup`](crate::widgets::ButtonGroup) does, so its own affordance reads the same as
+    /// the buttons beside it. `false` by default: a widget with no variant ignores it, and one that
+    /// was given its own keeps it (that is the widget's judgement, not the container's).
+    fn set_variant(&mut self, _variant: crate::widgets::ButtonVariant) {}
+
     fn wants_visible(&self) -> bool {
-        self.base().focused.get_untracked()
+        self.base().focused_by_keyboard()
     }
 
 
@@ -696,7 +974,7 @@ pub trait Component {
     /// Overlay widgets that paint **outside** their own bounds (a tooltip bubble, a command-palette
     /// panel) override it so a redraw covers what they actually drew.
     fn damage_bounds(&self) -> Rectangle {
-        self.base().bounds
+        crate::widgets::tooltip::damage(self.base())
     }
 
     /// `true` when this widget **clips** its children to its own bounds, so a press or a move
@@ -793,25 +1071,45 @@ pub trait Component {
     /// the soonest such time across the tree instead of redrawing continuously.
     /// `None` = no timed redraw pending. Default: the soonest across children.
     fn next_redraw(&self) -> Option<f32> {
-        let mut soonest = None;
+        let mut soonest = crate::widgets::tooltip::wake(self.base());
         for child in self.base().children.iter() {
             soonest = soonest_redraw(soonest, child.next_redraw());
         }
         soonest
     }
 
-    /// The opaque drag-source id if this widget is draggable (see
-    /// [`Base::drag_source`]). Default reads the base; widgets needing dynamic
-    /// behavior may override. Walked by [`drag::source_at`](crate::drag::source_at).
-    fn as_drag_source(&self) -> Option<DragItemId> {
-        self.base().drag_source
+    /// **Can this widget be dragged?** Default reads [`draggable`](Base::draggable); a widget whose
+    /// draggability changes may override.
+    ///
+    /// It answers only *whether*, never *what*: what gets dragged is the widget's identity, and an
+    /// identity is [`key`](Base::key) **when it declared one and derived from its content when it
+    /// did not** — the same string the keyboard cursor, the right-click target and a remembered
+    /// hint letter are filed under ([`nav::identity_of`](crate::nav::identity_of)). Asking for the
+    /// key here instead would make `.draggable()` silently do nothing on every widget that never
+    /// needed a name, and put an internal rule in front of the author (Antonio, 2026-09-01).
+    fn is_drag_source(&self) -> bool {
+        self.base().draggable
     }
 
-    /// The opaque drop-target id if this widget accepts drops (see
-    /// [`Base::drop_target`]). Default reads the base. Walked by
+    /// **Does this widget accept drops?** The same shape, reading
+    /// [`drop_target`](Base::drop_target). Walked by
     /// [`drag::resolve_at`](crate::drag::resolve_at).
-    fn as_drop_target(&self) -> Option<DragItemId> {
+    fn is_drop_target(&self) -> bool {
         self.base().drop_target
+    }
+
+    /// **Would this widget take what is being dragged?** A target that declared no
+    /// [`accepts`](Base::accepts) takes anything; one that did takes only what it named, and a
+    /// dragged widget that named nothing is taken by anyone.
+    ///
+    /// Asked during resolution, so a target that would refuse is never offered and never drawn on.
+    fn accepts_drag(&self, kind: Option<&str>) -> bool {
+        let want = &self.base().accepts;
+        match kind {
+            _ if want.is_empty() => true,
+            Some(k) => want.iter().any(|w| w == k),
+            None => true,
+        }
     }
 }
 
@@ -840,6 +1138,13 @@ pub fn soonest_redraw(a: Option<f32>, b: Option<f32>) -> Option<f32> {
 /// wheel or a release. That is not a mistake anyone makes on purpose; it is what a hand-written
 /// list does over time. Now there is no list.
 pub fn dispatch(node: &mut dyn Component, ev: &Event) -> Handled {
+    // **What is held down is remembered here, once.** It is an announcement about the device, so it
+    // is recorded before it is passed on and everything else reads it from
+    // [`event::modifiers`](crate::event::modifiers) — instead of each widget keeping a private copy
+    // of the same broadcast and each pointer call site remembering to attach it.
+    if let Event::ModifiersChanged(m) = ev {
+        crate::event::remember_modifiers(*m);
+    }
     // The raw pointer stream is not delivered: it is resolved, once, and what it *means* is
     // delivered instead — to the widget under the pointer and then up its ancestors.
     if let Event::Raw(raw) = ev {
@@ -988,7 +1293,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
 ///    button promises. Delivered as a real [`Event::Click`] at the widget's centre, through the
 ///    handlers it already registered — never a second path that could drift from what the mouse
 ///    does.
-fn run_pick(node: &mut dyn Component) {
+pub(crate) fn run_pick(node: &mut dyn Component) {
     if let Some(hint) = &node.base().hint {
         hint.run();
         return;
@@ -1066,8 +1371,74 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
     if c.base().style.layout.hidden {
         return;
     }
+    // **Nothing is painted before it has a box.** `Base::node` is written by the layout engine as
+    // it walks, so a widget the walk has never reached still holds `None` — it has no bounds, and
+    // its default ones put it at the window's origin. Painting it draws it there for one frame: a
+    // small thing flickering in the top-left corner of the scrolling area, which a resize produces
+    // continuously (Antonio, driving, 2026-09-03).
+    //
+    // A widget added *while* its tree is being laid out is exactly that case, and it happened three
+    // separate times in one session — the ⋮ built inside the decision, the ⋮ rebuilt on each
+    // arrangement, and a button's words put back when the room returned. Each was patched where it
+    // arose. This is the one rule underneath all three, in the one place every widget's paint
+    // passes through, so no widget opts in and a fourth cannot be written: the next layout reaches
+    // the new child, gives it a box, and it is drawn from then on.
+    if c.base().node.is_none() {
+        return;
+    }
     c.paint(cx);
     crate::widgets::key_hint::paint_hint_label(c, cx);
+    crate::widgets::tooltip::paint_tooltip(c, cx);
+    paint_drag_feedback(c, cx);
+}
+
+/// **What a drag looks like, drawn by the widgets taking part in it** — the target marks where the
+/// thing would land, and the source carries a picture of itself under the cursor.
+///
+/// It is here, beside the hint letter, because both are the same kind of thing: something the
+/// framework draws *over* any widget from state the framework already keeps, so no widget opts in
+/// and no host paints on their behalf. That is what every other drag-and-drop library settled on —
+/// Flutter's target rebuilds with what is over it, SwiftUI and the browser show a picture of the
+/// dragged view by default, and the thing that follows the cursor is drawn in a layer above
+/// everything so no scroll area clips it.
+///
+/// heca drew all of this centrally instead: the app read its own drag phases and painted the
+/// indicator and the chip for the whole window, so a new surface — a plugin's especially — got a
+/// drag that looked like nothing at all until the app was taught about it.
+///
+/// **What a widget may still decide** is what it *is*: `Onto` versus an insertion line comes from
+/// where the pointer sits in the target. Whether the drop moves or swaps is not the widget's to
+/// work out — it asks [`DropAction::held`](crate::drag::DropAction::held), the same answer the drop
+/// itself carries, so the outline never promises something the drop will not do.
+fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
+    let b = c.base();
+    if b.pointer.is_drag_over() {
+        let bounds = b.bounds;
+        match crate::drag::DropAction::held() {
+            crate::drag::DropAction::Swap => cx.swap_indicator(bounds),
+            crate::drag::DropAction::Move => cx.drop_indicator(bounds, b.pointer.drag_side()),
+        }
+    }
+    if b.pointer.is_dragging() {
+        // **What you are carrying is faded where it still sits.** Otherwise a container's highlight
+        // is drawn around a source that looks untouched, and the two read as both being
+        // highlighted — which is exactly the case of dropping a column into the workspace that
+        // holds it (Antonio, 2026-09-01). Faded here, outlined there, and the chip under the cursor
+        // says which is which.
+        let bg = cx.theme().colors.background;
+        cx.rect(b.bounds, bg.with_alpha(160), None, cx.theme().colors.border_radius, None);
+        // A picture of what was picked up, offset off the cursor and vertically centred on it, in
+        // the overlay band so nothing this widget sits inside can clip it.
+        let at = b.pointer.drag_pos();
+        let text = c.text_summary().unwrap_or_default();
+        let h = b.bounds.size.h.clamp(18.0, 28.0);
+        let w = (text.chars().count() as f64 * 7.5 + 20.0).clamp(48.0, 220.0);
+        let rect = Rectangle::new(
+            Point::new(at.x + 10.0, at.y - h / 2.0),
+            heca_core::layout::Size::new(w, h),
+        );
+        cx.drag_ghost(rect, &text, crate::drag::DropAction::held().is_swap());
+    }
 }
 
 /// Translate a component's whole subtree by `(dx, dy)` — bounds only, no re-layout.
@@ -1124,6 +1495,10 @@ pub struct PaintCx<'a> {
     /// The **inherited content color** for the subtree currently being painted — see
     /// [`with_content_color`](Self::with_content_color). `None` at the root.
     content_color: Option<Color>,
+    /// The inherited **control tone** for the subtree currently being painted — see
+    /// [`with_control_tone`](Self::with_control_tone). `None` at the root, and `None` almost
+    /// everywhere: a container has to say it wants the controls inside it to follow its hue.
+    control_tone: Option<Color>,
     content_glow: Option<Glow>,
     /// Translation applied to every draw emitted through this context — see
     /// [`with_translate`](Self::with_translate). `(0, 0)` normally: a widget paints at its bounds.
@@ -1177,6 +1552,12 @@ pub fn wrap_transparently(base: &mut Base, child: &dyn Component) {
     }
     base.style.layout.max_width = base.style.layout.max_width.or(child.max_width);
     base.style.layout.max_height = base.style.layout.max_height.or(child.max_height);
+    // **Whether it may be squeezed is the content's answer too.** Everything gives way by default,
+    // so a wrapper around something that refuses — a `StatusDot`, whose circle has no narrower
+    // version — gave way in its place, and the dot was drawn as a 3px sliver inside a box that had
+    // shrunk around it. The wrapper has no opinion of its own; it *is* the widget inside it
+    // (F003/P096/T483).
+    base.style.layout.flex_shrink = base.style.layout.flex_shrink.or(child.flex_shrink);
 }
 
 /// Scale every colour in a draw command by `a`, leaving its geometry alone.
@@ -1201,6 +1582,16 @@ fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangl
         ..s
     };
     match cmd {
+        DrawCommand::Host(h) => DrawCommand::Host(HostCmd {
+            rect: place(h.rect),
+            // A blur radius is a distance, so it scales with everything else; a surface id and an
+            // alpha are not distances.
+            draw: match h.draw {
+                HostDraw::Backdrop { radius } => HostDraw::Backdrop { radius: radius * k },
+                other => other,
+            },
+            ..h
+        }),
         DrawCommand::Rect(r) => DrawCommand::Rect(RectCmd {
             rect: place(r.rect),
             radius: r.radius * k,
@@ -1236,6 +1627,9 @@ fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangl
 fn fade_command(cmd: DrawCommand, a: f32) -> DrawCommand {
     let dim = |c: Color| c.with_alpha((c.a as f32 * a).round().clamp(0.0, 255.0) as u8);
     match cmd {
+        // Host work composites at its own strength times the context's opacity, so a surface or a
+        // frost inside a fading overlay fades with it.
+        DrawCommand::Host(h) => DrawCommand::Host(HostCmd { alpha: h.alpha * a, ..h }),
         DrawCommand::Rect(r) => DrawCommand::Rect(RectCmd {
             fill: dim(r.fill),
             border: r.border.map(|b| Border { color: dim(b.color), ..b }),
@@ -1270,6 +1664,7 @@ impl<'a> PaintCx<'a> {
             theme,
             viewport: Size::new(f64::MAX, f64::MAX),
             content_color: None,
+            control_tone: None,
             content_glow: None,
             offset: (0.0, 0.0),
             opacity: 1.0,
@@ -1502,6 +1897,37 @@ impl<'a> PaintCx<'a> {
         self.content_color
     }
 
+    /// Paint the closure's subtree with `tone` as the **inherited control tone** — the *chrome*
+    /// counterpart of [`with_content_color`](Self::with_content_color).
+    ///
+    /// Content colour is ink: it reaches text and glyphs. This reaches a control's own
+    /// **chrome** — a [`Button`](crate::widgets::Button)'s border and hover fill, an
+    /// [`IconButton`](crate::widgets::IconButton)'s hover tint — which is otherwise the theme
+    /// accent and nothing else. A composition that has a hue of its own needs both: a
+    /// notification card is severity-toned, and a `Retry` inside a *danger* card cannot be blue.
+    ///
+    /// **Why a second channel rather than widening the first**: `Item`, `Row`, `Choice`,
+    /// `ContextMenu`, `CommandPalette` and `Select` all publish a content colour today, and every
+    /// button composed inside one would have silently restyled. This one starts empty — nothing
+    /// publishes it — so a control looks exactly as it did unless a container asks otherwise
+    /// (F003/P096/T484).
+    ///
+    /// The tone is a **theme token resolved by the publisher at paint**, never a colour stored at
+    /// build time, so a theme reload re-tones what is already on screen. Nesting restores the
+    /// outer value on exit.
+    pub fn with_control_tone(&mut self, tone: Color, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = self.control_tone.replace(tone);
+        f(self);
+        self.control_tone = previous;
+    }
+
+    /// The inherited control tone, if a container published one via
+    /// [`with_control_tone`](Self::with_control_tone). A control resolves its hue as: **its own
+    /// explicit tone → this → the theme accent.**
+    pub fn control_tone(&self) -> Option<Color> {
+        self.control_tone
+    }
+
     /// Paint the closure's subtree with `glow` as the **inherited content glow** — the
     /// halo counterpart of [`with_content_color`](Self::with_content_color), and it
     /// exists for the same reason.
@@ -1529,6 +1955,41 @@ impl<'a> PaintCx<'a> {
     }
 
     /// Queue a rounded rectangle with optional border and glow.
+    /// **Place content something else rasterised** — a terminal, an image, a video, a plugin's own
+    /// canvas — in `rect`.
+    ///
+    /// This widget says where; the host owns the texture and does the drawing. `id` is opaque here:
+    /// nothing about textures, formats or devices crosses into this library. See
+    /// [`HostDraw`](crate::scene::HostDraw).
+    pub fn surface(&mut self, rect: Rectangle, id: u64) {
+        if self.culled(rect) {
+            return;
+        }
+        let rect = self.placed(rect);
+        self.emit(DrawCommand::Host(HostCmd {
+            draw: HostDraw::Surface { id },
+            rect,
+            alpha: 1.0,
+        }));
+    }
+
+    /// **Blur whatever is already drawn behind this widget**, within `rect`.
+    ///
+    /// Recorded in scene order, so it blurs exactly what came before it and nothing of what comes
+    /// after. `alpha` fades the blurred copy — a surface arriving fades its backdrop in with itself,
+    /// rather than holding the session out of focus and snapping sharp in one frame at the end.
+    pub fn backdrop_blur(&mut self, rect: Rectangle, radius: f32, alpha: f32) {
+        if radius <= 0.0 || alpha <= 0.0 || self.culled(rect) {
+            return;
+        }
+        let rect = self.placed(rect);
+        self.emit(DrawCommand::Host(HostCmd {
+            draw: HostDraw::Backdrop { radius },
+            rect,
+            alpha,
+        }));
+    }
+
     pub fn rect(
         &mut self,
         rect: Rectangle,

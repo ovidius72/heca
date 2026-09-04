@@ -610,9 +610,15 @@ fn label_decorations_follow_the_text_run_not_the_box() {
 
 #[test]
 fn paint_emits_background_rect_and_label_text() {
-    let root = Surface::new()
+    let mut root = Surface::new()
         .background(Color::rgb(10, 10, 10))
         .child(Label::new("HI"));
+    // Laid out before it is painted, because that is the only order the app ever paints in — and
+    // since `a_widget_that_has_never_been_laid_out_paints_nothing` a child with no box draws
+    // nothing at all, rather than drawing at the window's origin.
+    LayoutEngine::new()
+        .base_font(13.0)
+        .compute(&mut root, Size::new(300.0, 120.0));
 
     let theme = Theme::default();
     let mut scene = Scene::new();
@@ -657,7 +663,11 @@ fn surface_paints_styled_rect_with_border() {
 #[test]
 fn card_carries_title_label() {
     let theme = Theme::default();
-    let card = Card::new("UPLINK").child(Label::new("ONLINE"));
+    let mut card = Card::new("UPLINK").child(Label::new("ONLINE"));
+    // Laid out first — see `paint_emits_background_rect_and_label_text`.
+    LayoutEngine::new()
+        .base_font(13.0)
+        .compute(&mut card, Size::new(300.0, 120.0));
 
     let mut scene = Scene::new();
     {
@@ -1520,6 +1530,10 @@ fn meta_backspace_and_delete_clear_to_boundary() {
         pressed: true,
     });
     assert_eq!(a.value_str(), "beta", "meta+backspace deletes to start");
+    // **Meta comes back up.** Modifiers are device state the framework keeps once, not a copy each
+    // widget owns, so a second field built here still sees what is held — exactly as a second field
+    // in the real app does. Releasing is the host's next event, so the test sends it.
+    heca_grid_ui::dispatch(&mut a, &Event::ModifiersChanged(Modifiers::default()));
 
     // Meta+Delete deletes from the caret to the end.
     let mut b = Input::new().value("alpha beta");
@@ -1537,6 +1551,7 @@ fn meta_backspace_and_delete_clear_to_boundary() {
         pressed: true,
     });
     assert_eq!(b.value_str(), "alpha", "meta+delete deletes to end");
+    heca_grid_ui::dispatch(&mut b, &Event::ModifiersChanged(Modifiers::default()));
 }
 
 #[test]
@@ -3546,7 +3561,10 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
-            tip.paint(&mut cx);
+            // **Through `paint_child`, the way a host paints a tree** — the bubble is drawn by the
+            // framework from the declaration on the widget's base, beside the hint letter and the
+            // drag feedback, so a bare `.paint(cx)` shows the widget and none of the three.
+            heca_grid_ui::paint_child(tip, &mut cx);
         }
         scene.iter().any(|c| matches!(c, DrawCommand::Text(t) if t.text == "HELP"))
     };
@@ -3568,6 +3586,65 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     // Pointer leaves: hidden again immediately.
     heca_grid_ui::dispatch(&mut tip, &Event::pointer_moved(Point::new(-50.0, -50.0)));
     assert!(!shows_help(&mut tip), "hidden once the pointer leaves");
+}
+
+/// **A tooltip is a property of the widget, not a box around it** — declared with one builder on
+/// any widget, revealed and drawn by the framework.
+///
+/// This is the capability the wrapper used to be the only way to get, and it is what lets a widget
+/// held by a typed container (a `ButtonGroup` takes `Button` children) carry one at all: wrapping
+/// it would change what it is, so the container would refuse it.
+#[test]
+fn any_widget_declares_its_own_tooltip_without_being_wrapped() {
+    use heca_grid_ui::ComponentExt;
+
+    let mut button = Button::new("Close").tooltip("Close the pane").tooltip_delay(0.02);
+
+    let shows = |b: &mut Button| -> bool {
+        LayoutEngine::new().compute(b, Size::new(300.0, 200.0));
+        let theme = Theme::default();
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            heca_grid_ui::paint_child(b, &mut cx);
+        }
+        scene
+            .iter()
+            .any(|c| matches!(c, DrawCommand::Text(t) if t.text == "Close the pane"))
+    };
+
+    assert!(!shows(&mut button), "nothing is said before the pointer arrives");
+
+    LayoutEngine::new().compute(&mut button, Size::new(300.0, 200.0));
+    let b = button.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(center));
+    std::thread::sleep(std::time::Duration::from_millis(60));
+    assert!(shows(&mut button), "the bubble reveals once the pointer has rested");
+
+    heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(Point::new(-50.0, -50.0)));
+    assert!(!shows(&mut button), "and goes as soon as the pointer leaves");
+}
+
+/// **The host is woken to show a bubble the pointer is already resting on.** Without this the
+/// reveal waits for the next unrelated event — the user nudging the mouse a second time — because
+/// a still pointer produces no frames of its own.
+#[test]
+fn a_pending_tooltip_asks_the_host_to_wake_for_it() {
+    use heca_grid_ui::ComponentExt;
+
+    let mut button = Button::new("Close").tooltip("Close the pane");
+    LayoutEngine::new().compute(&mut button, Size::new(300.0, 200.0));
+    assert_eq!(button.next_redraw(), None, "nothing pending while unhovered");
+
+    let b = button.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(center));
+    let wake = button.next_redraw().expect("a pending reveal wakes the host");
+    assert!(
+        wake > 0.0 && wake <= 0.5,
+        "it wakes at the reveal, not sooner or later (got {wake})"
+    );
 }
 
 #[test]
@@ -3615,7 +3692,7 @@ fn tooltip_flips_to_fit_the_viewport() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
-        tip.paint(&mut cx);
+        heca_grid_ui::paint_child(&tip, &mut cx);
     }
     let bubble = scene
         .iter()
@@ -4590,6 +4667,94 @@ fn a_raw_char_key_is_a_shortcut_not_text() {
     assert_eq!(inp.value_str(), "hi!");
 }
 
+// --- A container tints the controls inside it (F003/P096/T484) ---------------
+
+/// Paint `w` inside a container that published `tone`, and report the hues it drew its chrome in.
+fn chrome_hues(w: &mut dyn heca_grid_ui::Component, tone: Option<heca_grid_ui::Color>) -> Vec<(u8, u8, u8)> {
+    use heca_grid_ui::{DrawCommand, PaintCx, Scene};
+    let theme = Theme::default();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        match tone {
+            Some(t) => cx.with_control_tone(t, |cx| w.paint(cx)),
+            None => w.paint(&mut cx),
+        }
+    }
+    scene
+        .base_layer()
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Rect(r) => r.border.map(|b| (b.color.r, b.color.g, b.color.b)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// **A control follows the hue its container published.** Without this a `Retry` inside a danger
+/// notification would be theme-accent blue: a card cannot pass a colour at build time, because the
+/// theme only exists at paint and changes on reload.
+#[test]
+fn a_button_takes_the_tone_its_container_published() {
+    use heca_grid_ui::{Button, Color, LayoutExt, Length};
+
+    // A Primary carries its accent border at rest; an Outline's is muted until hover, so it would
+    // show nothing to compare without driving an animation.
+    let mut plain = Button::primary("Retry").width(Length::Px(90.0)).height(Length::Px(28.0));
+    LayoutEngine::new().compute(&mut plain, Size::new(200.0, 60.0));
+    let rest = chrome_hues(&mut plain, None);
+
+    let tone = Color::rgb(240, 80, 60);
+    let toned = chrome_hues(&mut plain, Some(tone));
+
+    assert!(!rest.is_empty(), "a primary button draws a border to compare");
+    assert_ne!(rest, toned, "the published tone must reach the chrome");
+    assert!(
+        toned.iter().any(|&(r, g, b)| (r, g, b) == (tone.r, tone.g, tone.b)),
+        "and it is the tone that was published, not some blend of it: {toned:?}",
+    );
+}
+
+/// **Retro-compatibility, stated as a test.** Nothing publishes a control tone by default, so a
+/// control outside such a container paints exactly what it always did. This is what makes the
+/// channel safe to add to a library where six widgets already publish a *content* colour.
+#[test]
+fn a_control_outside_a_publishing_container_is_unchanged() {
+    use heca_grid_ui::{IconButton, Icon, Glyph, LayoutExt, Length};
+
+    let mut b = IconButton::new(Icon::new(Glyph::Close))
+        .active(true) // a held-on frame, so it draws chrome at rest
+        .width(Length::Px(28.0))
+        .height(Length::Px(28.0));
+    LayoutEngine::new().compute(&mut b, Size::new(60.0, 60.0));
+    let theme = Theme::default();
+    let accent = theme.colors.accent;
+    let hues = chrome_hues(&mut b, None);
+    assert!(
+        hues.iter().all(|&(r, g, b)| (r, g, b) == (accent.r, accent.g, accent.b)),
+        "with nothing published, the theme accent is still the hue: {hues:?}",
+    );
+}
+
+/// An explicit tone is the control's own decision and outranks the container's.
+#[test]
+fn an_explicit_tone_wins_over_the_container() {
+    use heca_grid_ui::{Color, Glyph, Icon, IconButton, LayoutExt, Length};
+
+    let own = Color::rgb(10, 200, 120);
+    let mut b = IconButton::new(Icon::new(Glyph::Close))
+        .tone(own)
+        .active(true)
+        .width(Length::Px(28.0))
+        .height(Length::Px(28.0));
+    LayoutEngine::new().compute(&mut b, Size::new(60.0, 60.0));
+    let hues = chrome_hues(&mut b, Some(Color::rgb(240, 80, 60)));
+    assert!(
+        hues.iter().all(|&(r, g, b)| (r, g, b) == (own.r, own.g, own.b)),
+        "the control's own tone must win: {hues:?}",
+    );
+}
+
 // --- Toast ------------------------------------------------------------------
 
 /// Lay a toast out as the root at its fixed width so `bounds` are set for
@@ -4603,9 +4768,11 @@ fn layout_toast(t: &mut heca_grid_ui::Toast) -> f64 {
 fn toast_height_grows_with_body_then_action() {
     use heca_grid_ui::Toast;
     let bare = layout_toast(&mut Toast::info("Saved"));
-    let with_body = layout_toast(&mut Toast::info("Saved").body("All files written"));
+    let with_body = layout_toast(&mut Toast::info("Saved").body_text("All files written"));
     let with_action =
-        layout_toast(&mut Toast::info("Saved").body("All files written").action("Undo", || {}));
+        layout_toast(&mut Toast::info("Saved")
+            .body_text("All files written")
+            .action(heca_grid_ui::Button::outline("Undo").on_click(|| {})));
     assert!(with_body > bare, "a body line adds height");
     assert!(with_action > with_body, "an action row adds further height");
 }
@@ -4621,8 +4788,12 @@ fn toast_dismiss_button_fires_on_dismiss_and_consumes() {
     let mut t = Toast::warning("Disk almost full").on_dismiss(move || d.set(d.get() + 1));
     layout_toast(&mut t);
 
-    // The × lives in the top-right gutter (width 320, ~21px square inset by 13).
-    let hit = heca_grid_ui::dispatch(&mut t, &Event::pointer_pressed(Point::new(296.0, 23.0), PointerButton::Left));
+    // The × is a real `IconButton` now, so it takes a **click** — press and release — like every
+    // other control, and it is wherever the engine placed it rather than at a remembered pixel.
+    let cross = t.base().children[2].base().bounds;
+    let centre = Point::new(cross.loc.x + cross.size.w / 2.0, cross.loc.y + cross.size.h / 2.0);
+    let _ = heca_grid_ui::dispatch(&mut t, &Event::pointer_pressed(centre, PointerButton::Left));
+    let hit = heca_grid_ui::dispatch(&mut t, &Event::pointer_released(centre, PointerButton::Left));
     assert_eq!(dismissed.get(), 1, "clicking × fires on_dismiss");
     assert!(matches!(hit, Handled::Yes), "the × consumes the click");
 }
@@ -4635,12 +4806,51 @@ fn toast_action_button_fires_on_action() {
 
     let acted = Rc::new(Cell::new(0u32));
     let a = acted.clone();
-    let mut t = Toast::info("File deleted").action("Undo", move || a.set(a.get() + 1));
+    let mut t = Toast::info("File deleted")
+        .action(heca_grid_ui::Button::outline("Undo").on_click(move || a.set(a.get() + 1)));
     layout_toast(&mut t);
 
     // Action row sits below the title, left-aligned in the text column.
     click_at(&mut t, Point::new(60.0, 50.0));
     assert_eq!(acted.get(), 1, "clicking the action button fires on_action");
+}
+
+/// **The action button is as wide as what it says.** A column stretches its children across the
+/// full width — right for the title and the body, wrong for a button: it filled the card edge to
+/// edge and read as a banner rather than something to press (F003/P082/T481).
+#[test]
+fn toast_action_button_hugs_its_label() {
+    use heca_grid_ui::{DrawCommand, PaintCx, Scene, Toast};
+
+    let mut t = Toast::info("File deleted").action(heca_grid_ui::Button::outline("Undo").on_click(|| {}));
+    layout_toast(&mut t);
+    let theme = Theme::default();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        t.paint(&mut cx);
+    }
+    // The action's face is the card's only bordered rect.
+    let card = t.base().bounds;
+    // The card's own bracket frame is drawn as bordered rects at the card's size; the action's
+    // face is the bordered rect that sits strictly inside it.
+    let face = scene
+        .base_layer()
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Rect(r) if r.border.is_some() && r.rect.size.w < card.size.w => {
+                Some(r.rect)
+            }
+            _ => None,
+        })
+        .next()
+        .expect("the action button paints a face");
+    assert!(
+        face.size.w < card.size.w / 2.0,
+        "the action button spans {:.0} of the card's {:.0} — it should hug its label",
+        face.size.w,
+        card.size.w,
+    );
 }
 
 #[test]
@@ -4665,6 +4875,103 @@ fn toast_body_click_fires_on_click_only_when_set() {
     let hit = heca_grid_ui::dispatch(&mut t, &Event::pointer_pressed(Point::new(160.0, 20.0), PointerButton::Left));
     assert_eq!(clicked.get(), 1, "body click fires on_click");
     assert!(matches!(hit, Handled::Yes), "a clickable toast consumes the body click");
+}
+
+/// **The body is whatever you composed** — the card gives it the column and the engine lays it out.
+/// It used to be a `String` the card turned into one `Label`, which is why a notification could
+/// never carry a row of stats or a small grid (F003/P096/T483).
+#[test]
+fn toast_body_takes_a_component_and_lays_it_out() {
+    use heca_grid_ui::{Component, Flex, Label, LayoutExt, Length, Parent, Toast};
+
+    let mut t = Toast::info("Backup finished").body(
+        Flex::row()
+            .gap(8.0)
+            .child(Label::new("142 files"))
+            .child(Label::new("3.2 GB")),
+    );
+    LayoutEngine::new().compute(&mut t, Size::new(400.0, 300.0));
+
+    let body = t.base().children[1].base().children[1].base();
+    assert_eq!(body.children.len(), 2, "the composed body is the card's body slot");
+    assert!(body.bounds.size.w > 0.0 && body.bounds.size.h > 0.0, "and it was laid out");
+    let _ = Length::Px(0.0); // keep the import honest
+}
+
+/// **Actions repeat, and they stay inside the card at any width.** One action was a widget limit
+/// that had been written into the app's notification model; a real notification offers a retry
+/// *and* a way to look at what failed.
+#[test]
+fn toast_actions_repeat_and_stay_inside_the_card() {
+    use heca_grid_ui::{Button, Component, Toast};
+
+    for width in [320.0f64, 120.0] {
+        let mut t = Toast::danger("Connection lost")
+            .action(Button::outline("Retry").on_click(|| {}))
+            .action(Button::ghost("Details").on_click(|| {}))
+            .action(Button::ghost("Ignore").on_click(|| {}));
+        t.base_mut().style.layout.width = heca_grid_ui::Length::Px(width as f32);
+        LayoutEngine::new().compute(&mut t, Size::new(width, 300.0));
+
+        let card = t.base().bounds;
+        let row = t.base().children[1].base().children[2].base();
+        assert_eq!(row.children.len(), 3, "three actions, three controls");
+        for action in &row.children {
+            let b = action.base().bounds;
+            assert!(
+                b.loc.x >= card.loc.x - 0.5 && b.loc.x + b.size.w <= card.loc.x + card.size.w + 0.5,
+                "an action spans {}..{} in a {width}px card",
+                b.loc.x,
+                b.loc.x + b.size.w,
+            );
+        }
+    }
+}
+
+/// **A position is auto margins, not pixels** — so a card lands at the named corner of a container
+/// of any size.
+#[test]
+fn a_positioned_toast_lands_at_the_named_corner() {
+    use heca_grid_ui::{Component, Flex, LayoutExt, Length, Parent, Toast, ToastPosition};
+
+    let mut host = Flex::row()
+        .width(Length::Px(800.0))
+        .height(Length::Px(600.0))
+        .child(Toast::info("Saved").position(ToastPosition::BottomRight));
+    LayoutEngine::new().compute(&mut host, Size::new(800.0, 600.0));
+
+    let card = host.base().children[0].base().bounds;
+    assert!(
+        (card.loc.x + card.size.w - 800.0).abs() < 0.5,
+        "pinned to the right edge, not at {}",
+        card.loc.x + card.size.w,
+    );
+    assert!(
+        (card.loc.y + card.size.h - 600.0).abs() < 0.5,
+        "and to the bottom edge, not at {}",
+        card.loc.y + card.size.h,
+    );
+}
+
+/// **An empty slot costs nothing — not even the row's gap.** A zero-sized placeholder still takes
+/// the gap beside it, which is why a card with no leading icon began its text a gap further in
+/// than a card with one.
+#[test]
+fn a_toast_without_an_icon_starts_its_text_where_the_padding_ends() {
+    use heca_grid_ui::{Component, Toast};
+
+    let mut with_icon = Toast::info("Saved");
+    LayoutEngine::new().compute(&mut with_icon, Size::new(400.0, 300.0));
+    let icon_left = with_icon.base().children[0].base().bounds.loc.x;
+
+    let mut bare = Toast::info("Saved").no_icon();
+    LayoutEngine::new().compute(&mut bare, Size::new(400.0, 300.0));
+    let text_left = bare.base().children[1].base().bounds.loc.x;
+
+    assert!(
+        (text_left - icon_left).abs() < 0.5,
+        "the text should start where the icon would have ({icon_left}), not at {text_left}",
+    );
 }
 
 #[test]
@@ -4983,7 +5290,7 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
 
     // Press the Retry action, then paint: the press flash must cover only the
     // action button, not the whole card (no "whole widget clicked" feedback).
-    let mut t = Toast::info("File deleted").action("Retry", || {});
+    let mut t = Toast::info("File deleted").action(heca_grid_ui::Button::outline("Retry").on_click(|| {}));
     layout_toast(&mut t);
     let card_w = t.base().bounds.size.w;
     click_at(&mut t, Point::new(60.0, 50.0));
@@ -5022,9 +5329,21 @@ fn toast_stack_is_overlay_active_only_when_it_has_toasts() {
     assert!(stack.overlay_active(), "a non-empty stack is overlay-active");
 }
 
+/// Lay a stack out the way a host does: settle its arrivals, then let the **engine** place the
+/// cards. Nothing here positions anything — that is the whole point of F003/P096/T486.
+fn settled_stack(stack: &mut heca_grid_ui::ToastStack, vp: Size) {
+    use heca_grid_ui::Component;
+    // Reconcile + play every arrival to its end.
+    stack.tick(0.0);
+    while stack.tick(1.0 / 60.0) {}
+    stack.base_mut().style.layout.width = Length::Px(vp.w as f32);
+    stack.base_mut().style.layout.height = Length::Px(vp.h as f32);
+    LayoutEngine::new().compute(stack, vp);
+}
+
 #[test]
 fn toast_stack_dismiss_reports_the_clicked_id() {
-    use heca_grid_ui::{Component, ToastCorner, ToastSpec, ToastStack};
+    use heca_grid_ui::{ToastPosition, ToastSpec, ToastStack};
     use std::cell::Cell;
     use std::rc::Rc;
 
@@ -5032,41 +5351,401 @@ fn toast_stack_dismiss_reports_the_clicked_id() {
     let d = dismissed.clone();
     let items = signal(vec![ToastSpec::new(7, "Connection lost").body("Retrying")]);
     let mut stack = ToastStack::new(items)
-        .corner(ToastCorner::TopLeft)
+        .position(ToastPosition::TopLeft)
         .on_dismiss(move |id| d.set(id));
+    settled_stack(&mut stack, Size::new(800.0, 600.0));
 
-    // Settle the slide-in, then paint to cache the viewport + lay the toast out.
-    stack.tick(1.0);
-    let theme = Theme::default();
-    let vp = Size::new(800.0, 600.0);
-    let mut scene = Scene::new();
-    {
-        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
-        stack.paint(&mut cx);
-    }
-
-    // Top-left toast sits at (16,16), width 320; its × is in the top-right gutter.
-    let hit = heca_grid_ui::dispatch(&mut stack, &Event::pointer_pressed(Point::new(310.0, 38.0), PointerButton::Left));
+    // The × is the card's last child. Ask the ENGINE where it landed rather than guessing a
+    // gutter: the card composes its content, so only the layout pass knows.
+    let card = stack.base().children[0].base();
+    let x_bounds = card.children[2].base().bounds;
+    let at = Point::new(
+        x_bounds.loc.x + x_bounds.size.w / 2.0,
+        x_bounds.loc.y + x_bounds.size.h / 2.0,
+    );
+    let _ = heca_grid_ui::dispatch(&mut stack, &Event::pointer_pressed(at, PointerButton::Left));
+    let hit = heca_grid_ui::dispatch(&mut stack, &Event::pointer_released(at, PointerButton::Left));
     assert!(matches!(hit, Handled::Yes), "a click on a toast's × is consumed");
     assert_eq!(dismissed.get(), 7, "the dismissed toast's id is reported to the host");
 }
 
 #[test]
 fn toast_stack_passes_through_clicks_that_miss_every_toast() {
-    use heca_grid_ui::{Component, ToastCorner, ToastSpec, ToastStack};
+    use heca_grid_ui::{ToastPosition, ToastSpec, ToastStack};
 
     let items = signal(vec![ToastSpec::new(1, "Hi")]);
-    let mut stack = ToastStack::new(items).corner(ToastCorner::TopLeft);
-    stack.tick(1.0);
-    let theme = Theme::default();
-    let mut scene = Scene::new();
-    {
-        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(800.0, 600.0));
-        stack.paint(&mut cx);
-    }
+    let mut stack = ToastStack::new(items).position(ToastPosition::TopLeft);
+    settled_stack(&mut stack, Size::new(800.0, 600.0));
     // Far from the top-left toast → not consumed, so the UI behind still gets it.
-    let hit = heca_grid_ui::dispatch(&mut stack, &Event::pointer_pressed(Point::new(700.0, 500.0), PointerButton::Left));
+    let hit = heca_grid_ui::dispatch(
+        &mut stack,
+        &Event::pointer_pressed(Point::new(700.0, 500.0), PointerButton::Left),
+    );
     assert!(matches!(hit, Handled::No), "clicks that miss every toast pass through");
+}
+
+/// **A stacked card's action is reachable by keyboard** — the whole reason the cards had to be in
+/// the tree. The picker walks the laid-out tree, so a card kept in a private list beside it could
+/// never be lettered, and a notification's action was a mouse-only gesture (F003/P096/T486).
+#[test]
+fn a_stacked_cards_action_is_a_pick_target() {
+    use heca_grid_ui::{ToastPosition, ToastSpec, ToastStack};
+
+    let items = signal(vec![ToastSpec::new(1, "Build failed").action("retry", "Retry")]);
+    let mut stack = ToastStack::new(items).position(ToastPosition::TopRight);
+    settled_stack(&mut stack, Size::new(800.0, 600.0));
+
+    let targets = heca_grid_ui::hint::collect_hints(&stack);
+    assert!(
+        !targets.is_empty(),
+        "nothing inside a stacked card can be picked — the cards are not in the tree",
+    );
+    // The action and the × are both real controls, so both are offered a letter, and both are
+    // inside the card rather than at the stack's own origin.
+    let card = stack.base().children[0].base().bounds;
+    assert!(
+        targets.iter().all(|(_, r)| card.contains(r.loc)),
+        "a pick target landed outside the card that holds it: {targets:?}",
+    );
+}
+
+/// **Hover reaches inside a stacked card**, and stops there. The framework marks hover along the
+/// hit-test target's ancestor chain; while the cards were hand-routed nothing was ever marked, so
+/// a stacked card's action and × stayed dark under the pointer (reported twice).
+#[test]
+fn hovering_a_stacked_cards_action_lights_it_and_claims_the_move() {
+    use heca_grid_ui::{ToastPosition, ToastSpec, ToastStack};
+
+    let items = signal(vec![ToastSpec::new(1, "Build failed").action("retry", "Retry")]);
+    let mut stack = ToastStack::new(items).position(ToastPosition::TopLeft);
+    settled_stack(&mut stack, Size::new(800.0, 600.0));
+
+    // The action lives in the card's text column, in the action row under the body.
+    let action = stack.base().children[0].base().children[1].base().children[2]
+        .base()
+        .children[0]
+        .base()
+        .bounds;
+    assert!(action.size.w > 0.0, "the action was never laid out");
+    let at = Point::new(
+        action.loc.x + action.size.w / 2.0,
+        action.loc.y + action.size.h / 2.0,
+    );
+
+    let hit = heca_grid_ui::dispatch(&mut stack, &Event::pointer_moved(at));
+    assert!(
+        matches!(hit, Handled::Yes),
+        "a move over a card is claimed, or the page behind lights up under a toast",
+    );
+    let action_widget = &stack.base().children[0].base().children[1].base().children[2]
+        .base()
+        .children[0];
+    assert!(action_widget.base().hovered(), "the action under the pointer is not lit");
+
+    // …and a move that misses every card is not claimed, so the page keeps hovering normally.
+    let miss = heca_grid_ui::dispatch(&mut stack, &Event::pointer_moved(Point::new(700.0, 560.0)));
+    assert!(matches!(miss, Handled::No), "a move between the cards must fall through");
+}
+
+/// **Pointing at something never scrolls it.** A reveal brings into view what the user cannot see
+/// — the keyboard's case. What the mouse is on is visible by definition, and scrolling it moves it
+/// out from under the pointer that asked: clicking a row in a scrolled region focused it, the
+/// focus asked for a reveal, the region centred it, and the click was spent — only the second one
+/// did what you meant (Antonio, driving the showcase, F003/P096).
+#[test]
+fn a_click_does_not_ask_to_be_scrolled_into_view_but_the_keyboard_does() {
+    use heca_grid_ui::{Component, FocusManager, Label, Parent as _, PointerButton};
+
+    let mut row = heca_grid_ui::Row::new().child(Label::new("pane-1")).on_activate(|| {});
+    row.base_mut().style.layout.width = Length::Px(200.0);
+    LayoutEngine::new().base_font(14.0).compute(&mut row, Size::new(200.0, 40.0));
+    assert!(!row.wants_visible(), "an untouched row asks for nothing");
+
+    // Clicking focuses it — but the mouse is already looking at it.
+    let b = row.base().bounds;
+    let at = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    let mut focus = FocusManager::new();
+    focus.dispatch(&mut row, &Event::pointer_pressed(at, PointerButton::Left));
+    focus.dispatch(&mut row, &Event::pointer_released(at, PointerButton::Left));
+    assert!(row.base().focused.get_untracked(), "the click should still focus it");
+    assert!(
+        !row.wants_visible(),
+        "a clicked row asked to be scrolled into view — the region centres it and eats the click",
+    );
+
+    // Tab is the case a reveal exists for: the cursor can go somewhere you cannot see. This is
+    // the hook `FocusManager::advance` calls — `visible: true` is what "the keyboard did it" means.
+    row.on_focus(true);
+    assert!(row.wants_visible(), "keyboard focus must still bring the row into view");
+}
+
+/// **Collapsing a dock or a group asks for the layout pass that re-places its rows.**
+///
+/// The toggle runs on a CLICK, outside any layout pass, so applying `hidden` moves nothing on its
+/// own — every row keeps the bounds it already had and is painted where it used to be. That is
+/// what put a dock's rows on top of each other, and left nothing on screen when it was reopened,
+/// until an unrelated window resize happened to run a pass (F003/P096).
+#[test]
+fn collapsing_a_dock_or_a_group_asks_for_a_layout() {
+    use heca_grid_ui::{Component, DockFrame, Item, ItemGroup, PointerButton};
+
+    // A dock and a group, each collapsed by the same gesture a user makes: a click on its header.
+    let mut dock = DockFrame::new("PANES").child(Item::new("zsh")).child(Item::new("nvim"));
+    dock.base_mut().style.layout.width = Length::Px(300.0);
+    LayoutEngine::new().base_font(14.0).compute(&mut dock, Size::new(300.0, 400.0));
+    let _ = heca_grid_ui::needs_layout(&dock);
+
+    let header = dock.base().children[0].base().bounds;
+    let at = Point::new(header.loc.x + header.size.w / 2.0, header.loc.y + header.size.h / 2.0);
+    heca_grid_ui::dispatch(&mut dock, &Event::pointer_pressed(at, PointerButton::Left));
+    heca_grid_ui::dispatch(&mut dock, &Event::pointer_released(at, PointerButton::Left));
+    assert!(
+        heca_grid_ui::needs_layout(&dock),
+        "a dock collapsed and nobody asked for a layout — its rows keep their old bounds",
+    );
+
+    let mut group = ItemGroup::new("COLUMN").child(Item::new("a")).child(Item::new("b"));
+    group.base_mut().style.layout.width = Length::Px(300.0);
+    LayoutEngine::new().base_font(14.0).compute(&mut group, Size::new(300.0, 400.0));
+    let _ = heca_grid_ui::needs_layout(&group);
+
+    let header = group.base().children[0].base().bounds;
+    let at = Point::new(header.loc.x + header.size.w / 2.0, header.loc.y + header.size.h / 2.0);
+    heca_grid_ui::dispatch(&mut group, &Event::pointer_pressed(at, PointerButton::Left));
+    heca_grid_ui::dispatch(&mut group, &Event::pointer_released(at, PointerButton::Left));
+    assert!(
+        heca_grid_ui::needs_layout(&group),
+        "a group collapsed and nobody asked for a layout — its rows keep their old bounds",
+    );
+}
+
+/// **Showing or hiding a wrapped child asks for a layout pass**, because `hidden` is the engine's
+/// `display: none` — flipping it moves every sibling, and a repaint alone redraws them all where
+/// they used to be.
+#[test]
+fn revealing_a_hidden_child_asks_for_the_layout_that_moves_its_siblings() {
+    use heca_grid_ui::{Component, Label, Visibility};
+
+    let row = Visibility::new(Label::new("~/projects/heca"), false);
+    let shown = row.visible_signal();
+    let mut page = Flex::column().child(Label::new("zsh")).child(row);
+    LayoutEngine::new().base_font(14.0).compute(&mut page, Size::new(300.0, 200.0));
+    let _ = heca_grid_ui::needs_layout(&page);
+
+    page.tick(1.0 / 60.0);
+    assert!(!heca_grid_ui::needs_layout(&page), "nothing changed, nothing to lay out");
+
+    // The path arrives.
+    shown.set(true);
+    page.tick(1.0 / 60.0);
+    assert!(
+        heca_grid_ui::needs_layout(&page),
+        "a row appeared and nobody asked for a layout — it stays collapsed until something else does",
+    );
+}
+
+/// **A widget that changes the shape of its own tree asks the host to lay it out again.**
+///
+/// A repaint cannot fix a structural change: the siblings are still laid out around the shape the
+/// tree used to have. The stack drops a card only once its exit has played — several frames after
+/// the click — and nothing re-laid-out at that moment, so the cards below kept their old positions
+/// until an unrelated click happened to trigger a pass (Antonio, driving the showcase, F003/P096).
+#[test]
+fn a_dismissed_card_asks_for_the_relayout_that_moves_the_others_up() {
+    use heca_grid_ui::{ToastSpec, ToastStack};
+
+    let items = signal(vec![ToastSpec::new(1, "one"), ToastSpec::new(2, "two"), ToastSpec::new(3, "three")]);
+    let mut stack = ToastStack::new(items);
+    settled_stack(&mut stack, Size::new(800.0, 600.0));
+    // Clear whatever the arrivals asked for; we are testing the dismissal.
+    let _ = heca_grid_ui::needs_layout(&stack);
+    assert!(!heca_grid_ui::needs_layout(&stack), "a settled stack keeps asking for layout");
+
+    // Drop the MIDDLE one — the case where the others must move.
+    items.set(vec![ToastSpec::new(1, "one"), ToastSpec::new(3, "three")]);
+    stack.tick(0.0);
+    assert_eq!(stack.base().children.len(), 3, "it should still be leaving");
+    assert!(
+        !heca_grid_ui::needs_layout(&stack),
+        "nothing structural has happened yet — the card is still on screen, playing its exit",
+    );
+
+    // Play the exit out. The frame the card actually leaves the tree is the frame that must ask.
+    while stack.tick(1.0 / 60.0) {}
+    assert_eq!(stack.base().children.len(), 2, "the card should be gone");
+    assert!(
+        heca_grid_ui::needs_layout(&stack),
+        "the card left the tree and nobody asked for a layout — the cards below it stay put",
+    );
+    assert!(!heca_grid_ui::needs_layout(&stack), "the flag is cleared as it is read");
+}
+
+/// **A corner means the WINDOW's corner, whatever slot a host gives the stack.**
+///
+/// A host mounts its layers however it likes — the showcase stacks them in a column, where
+/// viewport-sized siblings each get a share of the height. A stack that trusted its own box put
+/// "top right" two thirds of the way down the window (F003/P096/T486).
+#[test]
+fn the_cards_anchor_to_the_window_corner_not_to_the_slot_a_parent_gave() {
+    use heca_grid_ui::{Overlay, ToastPosition, ToastSpec, ToastStack};
+
+    let vp = Size::new(1000.0, 700.0);
+    let margin = 16.0;
+
+    for (corner, want) in [
+        (ToastPosition::TopRight, (true, true)),
+        (ToastPosition::BottomLeft, (false, false)),
+    ] {
+        let items = signal(vec![ToastSpec::new(1, "Saved").body("one")]);
+        let stack = ToastStack::new(items).position(corner);
+        // Two viewport-sized siblings above it, exactly as an overlay layer is mounted.
+        let mut overlays = Flex::column()
+            .child(Overlay::new())
+            .child(Overlay::new())
+            .child(stack);
+        overlays.base_mut().style.layout.width = Length::Px(vp.w as f32);
+        overlays.base_mut().style.layout.height = Length::Px(vp.h as f32);
+        overlays.tick(0.0);
+        while overlays.tick(1.0 / 60.0) {}
+        LayoutEngine::new().base_font(14.0).compute(&mut overlays, vp);
+
+        let card = overlays.base().children[2].base().children[0].base().bounds;
+        let (right, top) = want;
+        if right {
+            let gap = vp.w - (card.loc.x + card.size.w);
+            assert!((gap - margin).abs() < 1.0, "{corner:?}: {gap}px from the right edge");
+        } else {
+            assert!((card.loc.x - margin).abs() < 1.0, "{corner:?}: {} from the left", card.loc.x);
+        }
+        if top {
+            assert!((card.loc.y - margin).abs() < 1.0, "{corner:?}: {} from the top", card.loc.y);
+        } else {
+            let gap = vp.h - (card.loc.y + card.size.h);
+            assert!((gap - margin).abs() < 1.0, "{corner:?}: {gap}px from the bottom edge");
+        }
+    }
+}
+
+/// **A card offers as many actions as its spec lists, and says WHICH was pressed.** One action was
+/// a widget limitation written into the data: a notification that can be retried *and* inspected
+/// needs two, and "which card" alone cannot say what to do (F003/P096/T487).
+#[test]
+fn a_spec_with_two_actions_renders_two_and_reports_the_pressed_key() {
+    use heca_grid_ui::{ButtonVariant, ToastAction, ToastPosition, ToastSpec, ToastStack};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let pressed: Rc<RefCell<Vec<(u64, String)>>> = Rc::new(RefCell::new(Vec::new()));
+    let p = pressed.clone();
+    let items = signal(vec![
+        ToastSpec::new(9, "Build failed")
+            .action("rebuild", "Retry")
+            .action_with(ToastAction::new("open_log", "View log").variant(ButtonVariant::Ghost)),
+    ]);
+    let mut stack = ToastStack::new(items)
+        .position(ToastPosition::TopLeft)
+        .on_action(move |id, key| p.borrow_mut().push((id, key.to_string())));
+    settled_stack(&mut stack, Size::new(800.0, 600.0));
+
+    // The action row is the third child of the card's text column.
+    let row = &stack.base().children[0].base().children[1].base().children[2];
+    assert_eq!(row.base().children.len(), 2, "two actions in the spec, two controls on the card");
+
+    // Press the SECOND one — the point is that the key distinguishes them.
+    let b = row.base().children[1].base().bounds;
+    let at = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    let _ = heca_grid_ui::dispatch(&mut stack, &Event::pointer_pressed(at, PointerButton::Left));
+    let _ = heca_grid_ui::dispatch(&mut stack, &Event::pointer_released(at, PointerButton::Left));
+    assert_eq!(
+        pressed.borrow().as_slice(),
+        &[(9, "open_log".to_string())],
+        "the pressed action's own key comes back, not just the card id",
+    );
+}
+
+/// **No actions means no action row at all** — an unfilled slot leaves the layout rather than
+/// sitting empty, so a bare notification costs neither space nor a gap.
+#[test]
+fn a_spec_with_no_actions_renders_no_action_row() {
+    use heca_grid_ui::{ToastPosition, ToastSpec, ToastStack};
+
+    let items = signal(vec![ToastSpec::new(1, "Saved")]);
+    let mut stack = ToastStack::new(items).position(ToastPosition::TopLeft);
+    settled_stack(&mut stack, Size::new(800.0, 600.0));
+
+    let row = &stack.base().children[0].base().children[1].base().children[2];
+    assert!(row.base().children.is_empty(), "an empty action slot built controls");
+    assert_eq!(row.base().bounds.size.h, 0.0, "an empty action row still takes {}px", row.base().bounds.size.h);
+}
+
+/// **One vocabulary places the stack at every one of its members**, including the centres a
+/// four-member corner enum could not say (F003/P096/T487).
+#[test]
+fn the_position_vocabulary_places_the_stack_at_each_of_its_members() {
+    use heca_grid_ui::{ToastPosition, ToastSpec, ToastStack};
+
+    let vp = Size::new(1000.0, 700.0);
+    let margin = 16.0;
+    for pos in [
+        ToastPosition::TopRight,
+        ToastPosition::TopLeft,
+        ToastPosition::TopCenter,
+        ToastPosition::BottomRight,
+        ToastPosition::BottomLeft,
+        ToastPosition::BottomCenter,
+    ] {
+        let items = signal(vec![ToastSpec::new(1, "Saved")]);
+        let mut stack = ToastStack::new(items).position(pos);
+        settled_stack(&mut stack, vp);
+        let c = stack.base().children[0].base().bounds;
+
+        let top = c.loc.y;
+        let bottom = vp.h - (c.loc.y + c.size.h);
+        match pos {
+            ToastPosition::TopRight | ToastPosition::TopLeft | ToastPosition::TopCenter => {
+                assert!((top - margin).abs() < 1.0, "{pos:?}: {top} from the top")
+            }
+            _ => assert!((bottom - margin).abs() < 1.0, "{pos:?}: {bottom} from the bottom"),
+        }
+
+        let left = c.loc.x;
+        let right = vp.w - (c.loc.x + c.size.w);
+        match pos {
+            ToastPosition::TopRight | ToastPosition::BottomRight => {
+                assert!((right - margin).abs() < 1.0, "{pos:?}: {right} from the right")
+            }
+            ToastPosition::TopLeft | ToastPosition::BottomLeft => {
+                assert!((left - margin).abs() < 1.0, "{pos:?}: {left} from the left")
+            }
+            // Centred: equal slack on both sides, which is what a corner enum could not express.
+            _ => assert!(
+                (left - right).abs() < 1.0,
+                "{pos:?}: {left} left vs {right} right — not centred",
+            ),
+        }
+    }
+}
+
+/// **A card the host drops leaves, and is gone once its exit has played** — not the frame its id
+/// disappears, which would cut a notification off mid-gesture.
+#[test]
+fn a_dropped_card_plays_its_exit_before_it_goes() {
+    use heca_grid_ui::{ToastSpec, ToastStack};
+
+    let items = signal(vec![ToastSpec::new(1, "Saved"), ToastSpec::new(2, "Done")]);
+    let mut stack = ToastStack::new(items);
+    settled_stack(&mut stack, Size::new(800.0, 600.0));
+    assert_eq!(stack.base().children.len(), 2);
+
+    items.set(vec![ToastSpec::new(2, "Done")]);
+    stack.tick(0.0);
+    assert_eq!(
+        stack.base().children.len(),
+        2,
+        "the dropped card went the frame its id did — its exit had nothing to play over",
+    );
+    while stack.tick(1.0 / 60.0) {}
+    assert_eq!(stack.base().children.len(), 1, "…and once it has played, it is gone");
 }
 
 // --- viewport culling -------------------------------------------------------
@@ -5751,4 +6430,225 @@ fn a_scaled_subtree_shrinks_its_text_radius_and_border_with_its_box() {
 
     // Life size must be byte-for-byte what it always was: a zoom nobody asked for costs nothing.
     assert_eq!(life.len(), half.len());
+}
+
+
+/// **A closed select is one hover target, not two.** The chosen option is echoed inside the
+/// trigger, and while it stands there it is decoration: left hittable it hovered on its own, and
+/// its pill stops at the chevron gutter — so the text lit up and the caret beside it did not
+/// (F003/P096/T483).
+#[test]
+fn a_closed_select_hovers_as_one_control() {
+    use heca_grid_ui::{Component, DrawCommand, PaintCx, Scene, Select};
+
+    let mut sel = Select::new(["NORMAL", "PREFIX"]);
+    LayoutEngine::new().compute(&mut sel, Size::new(400.0, 200.0));
+    let trigger = sel.base().bounds;
+    heca_grid_ui::dispatch(
+        &mut sel,
+        &Event::pointer_moved(Point::new(trigger.loc.x + 8.0, trigger.loc.y + trigger.size.h / 2.0)),
+    );
+    assert!(sel.base().hovered(), "the trigger is what the pointer found");
+    for (i, option) in sel.base().children.iter().enumerate() {
+        assert!(
+            !option.base().hovered(),
+            "option {i} must not hover while it is standing in the trigger",
+        );
+    }
+
+    // And the highlight covers the whole control, chevron included.
+    let theme = Theme::default();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        sel.paint(&mut cx);
+    }
+    let widest = scene
+        .base_layer()
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Rect(r) if r.border.is_none() => Some(r.rect.size.w),
+            _ => None,
+        })
+        .fold(0.0_f64, f64::max);
+    assert!(
+        (widest - trigger.size.w).abs() < 0.5,
+        "the hover fill spans {widest} of the trigger's {}",
+        trigger.size.w,
+    );
+}
+
+/// **An open dropdown does not drag the row it sits in.** The row's baseline rule hunts for text
+/// inside each child so runs of different sizes line up; an open `Select` keeps its option rows in
+/// a panel *below* itself, and that text was being counted as the line's deepest baseline — so
+/// every label beside the select was dropped 40px to meet it, landing below the row and drawing
+/// over whatever was underneath (F003/P096/T483).
+#[test]
+fn an_open_select_leaves_the_row_around_it_alone() {
+    use heca_grid_ui::{Align, Component, Flex, Label, LayoutExt, Length, Parent, Select};
+
+    let mut row = Flex::row()
+        .width(Length::Px(900.0))
+        .gap(16.0)
+        .align(Align::Center)
+        .child(Label::new("MODE"))
+        .child(Select::new(["NORMAL", "PREFIX", "PASSTHROUGH"]))
+        .child(Label::new("WORKSPACE"));
+    LayoutEngine::new().compute(&mut row, Size::new(900.0, 400.0));
+    let closed: Vec<f64> = row.base().children.iter().map(|c| c.base().bounds.loc.y).collect();
+
+    let trigger = row.base().children[1].base().bounds;
+    click_at(
+        &mut row,
+        Point::new(trigger.loc.x + 20.0, trigger.loc.y + trigger.size.h / 2.0),
+    );
+    LayoutEngine::new().compute(&mut row, Size::new(900.0, 400.0));
+    let open: Vec<f64> = row.base().children.iter().map(|c| c.base().bounds.loc.y).collect();
+
+    for (i, (before, after)) in closed.iter().zip(open.iter()).enumerate() {
+        assert!(
+            (before - after).abs() < 1.5,
+            "child {i} moved from {before} to {after} when the select opened",
+        );
+    }
+}
+
+
+/// **A fixed-size box keeps its shape when the row runs out of room.** Everything gives way by
+/// default, which is right for text and for a card carrying a design width — and wrong for a
+/// circle: a 9px status dot in a tight sidebar row was squeezed to a 3px sliver, because there is
+/// no narrower version of a dot, only a deformed one (F003/P096/T483).
+#[test]
+fn a_dot_stays_round_in_a_row_too_narrow_for_it() {
+    use heca_grid_ui::{Component, DotStatus, Flex, Label, LayoutExt, Length, Parent, StatusDot};
+
+    let mut row = Flex::row()
+        .width(Length::Px(120.0))
+        .gap(8.0)
+        .child(StatusDot::new(DotStatus::Online))
+        .child(Label::new("~/projects/hype/HypeSiteNext"))
+        .child(Label::new("master"));
+    LayoutEngine::new().compute(&mut row, Size::new(120.0, 40.0));
+
+    let dot = row.base().children[0].base().bounds.size;
+    assert_eq!(dot.w, dot.h, "the dot is {dot:?} — round, or it is not a dot");
+}
+
+/// **A wrapper gives way exactly as much as what it wraps.** The app shows a pane's status through
+/// a `Visibility`, and the wrapper was squeezed where its content would not be — so the dot inside
+/// it was drawn as a sliver. A wrapper has no opinion of its own (F003/P096/T483).
+#[test]
+fn a_wrapped_dot_is_still_round() {
+    use heca_grid_ui::{Component, DotStatus, Flex, Label, LayoutExt, Length, Parent, StatusDot, Visibility};
+
+    let mut row = Flex::row()
+        .width(Length::Px(120.0))
+        .gap(8.0)
+        .child(Visibility::new(StatusDot::new(DotStatus::Online), true))
+        .child(Label::new("~/projects/hype/HypeSiteNext"))
+        .child(Label::new("master"));
+    LayoutEngine::new().compute(&mut row, Size::new(120.0, 40.0));
+
+    let dot = row.base().children[0].base().children[0].base().bounds.size;
+    assert_eq!(dot.w, dot.h, "the wrapped dot is {dot:?}");
+}
+
+/// **A hidden wrapper takes no space.** A sidebar row carries four status dots and shows one; a
+/// wrapper takes its size from what it wraps, so the three hidden ones went on occupying a dot's
+/// width each — four dots in a slot sized for one, and the visible dot drawn over the icon beside
+/// it (F003/P096/T483).
+#[test]
+fn a_hidden_wrapper_leaves_the_slot_to_the_visible_one() {
+    use heca_grid_ui::{Align, Component, DotStatus, Flex, LayoutExt, Length, Parent, StatusDot, Visibility};
+
+    let mut slot = Flex::row()
+        .align(Align::Center)
+        .width(Length::Px(12.0))
+        .child(Visibility::new(StatusDot::new(DotStatus::Offline), false))
+        .child(Visibility::new(StatusDot::new(DotStatus::Online), true))
+        .child(Visibility::new(StatusDot::new(DotStatus::Error), false));
+    LayoutEngine::new().compute(&mut slot, Size::new(200.0, 40.0));
+
+    let shown = slot.base().children[1].base().bounds;
+    assert_eq!(shown.size.w, shown.size.h, "the visible dot is {:?}", shown.size);
+    assert!(
+        shown.loc.x + shown.size.w <= 12.5,
+        "it spans {}..{} of a 12px slot — the hidden ones are still taking room",
+        shown.loc.x,
+        shown.loc.x + shown.size.w,
+    );
+}
+
+/// **A card arrives and leaves on its own** — the library's verbs, not a mechanism of its own, and
+/// a closed one takes no space rather than leaving a hole (F003/P096/T485).
+#[test]
+fn a_toast_opens_hides_and_takes_no_space_while_closed() {
+    use heca_grid_ui::{Component, Flex, LayoutExt, Length, Parent, Toast};
+
+    let mut page = Flex::column()
+        .width(Length::Px(400.0))
+        .child(Toast::info("Saved").opened(false))
+        .child(Toast::info("Also saved"));
+    LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
+    let closed = page.base().children[0].base().bounds.size.h;
+    assert_eq!(closed, 0.0, "a closed card still occupies {closed}px");
+
+    // Opening puts it back in the flow; hiding takes it out again.
+    page.base_mut().children[0].open();
+    LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
+    assert!(page.base().children[0].base().bounds.size.h > 0.0, "open, it is laid out");
+
+    // Hiding starts the exit. **It stays laid out while it plays** — that is what the gesture has
+    // to play over — and takes no space only once it has finished (the card's default is a slide).
+    page.base_mut().children[0].hide();
+    LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
+    assert!(
+        page.base().children[0].base().bounds.size.h > 0.0,
+        "a leaving card is still laid out, or its exit has nothing to play over",
+    );
+    while page.base_mut().children[0].tick(1.0 / 60.0) {}
+    LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
+    assert_eq!(page.base().children[0].base().bounds.size.h, 0.0, "gone, it is gone");
+}
+
+/// **Nothing is painted before the layout has given it a box.**
+///
+/// A widget's layout node is written by the engine as it walks, so one the walk has never reached
+/// still has none — and its default bounds sit at the window's origin with no size. Drawing it
+/// there is a real defect, not a theoretical one: a widget added *while* its tree is being laid out
+/// (a button's words put back when a pane widens, an overflow trigger built inside the decision that
+/// needed it) was drawn in the top-left corner of the screen for the frame before the next layout
+/// reached it — a red flicker in the corner throughout a divider drag (Antonio, driving,
+/// 2026-09-03).
+///
+/// The rule is in the one place every widget's paint passes through, so no widget opts in and none
+/// can forget it. The next layout gives the new child a box and it is drawn from then on.
+#[test]
+fn a_widget_that_has_never_been_laid_out_paints_nothing() {
+    let theme = Theme::default();
+
+    let painted = |laid_out: bool| -> usize {
+        let mut button = Button::new("Close").icon(Glyph::Minus);
+        if laid_out {
+            LayoutEngine::new()
+                .base_font(13.0)
+                .compute(&mut button, Size::new(300.0, 60.0));
+        }
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            heca_grid_ui::paint_child(&button, &mut cx);
+        }
+        scene.iter().count()
+    };
+
+    assert_eq!(
+        painted(false),
+        0,
+        "a widget the layout has never reached has no box, so it draws nothing"
+    );
+    assert!(
+        painted(true) > 0,
+        "…and the same widget draws normally once it has been laid out"
+    );
 }

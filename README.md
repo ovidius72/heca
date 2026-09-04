@@ -47,7 +47,7 @@ heca is a **workspace compositor** — not a traditional terminal emulator or wi
 **Why not tmux + a terminal?**
 
 | | tmux in a terminal | heca |
-|---|---|---|
+| --- | --- | --- |
 | Rendering | CPU text grid | GPU text atlas + primitives |
 | Fonts | Limited ligature support | Full HarfBuzz shaping, variable fonts |
 | Animations | None | Smooth scroll, zoom, slide |
@@ -69,7 +69,7 @@ heca is a **workspace compositor** — not a traditional terminal emulator or wi
 ## Tech Stack
 
 | Layer | Technology | Purpose |
-|-------|-----------|---------|
+| ------- | ----------- | --------- |
 | **Windowing** | [winit](https://github.com/rust-windowing/winit) | Cross-platform window creation, input events |
 | **GPU API** | [wgpu](https://wgpu.rs/) | Vulkan/Metal/DX12/WebGPU abstraction |
 | **Text** | [cosmic-text](https://github.com/pop-os/cosmic-text) | Font shaping, glyph atlas, ligatures |
@@ -143,7 +143,7 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 ### Navigation
 
 | Command | Default Binding | Description |
-|---------|----------------|-------------|
+| --------- | ---------------- | ------------- |
 | Focus left | `h` | Activate column left, scroll view |
 | Focus right | `l` | Activate column right, scroll view |
 | Focus up | `k` | Activate pane above in column |
@@ -158,7 +158,7 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 ### Pane Operations
 
 | Command | Default Binding | Description |
-|---------|----------------|-------------|
+| --------- | ---------------- | ------------- |
 | Split horizontal | `Enter` | New column to the right of active |
 | Split vertical | `v` | New pane below active in same column |
 | Close | `x` | Close active pane |
@@ -168,12 +168,12 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 | Swap and focus | `m` | Overlay letters; swap panes (follow to destination) |
 | Move column to workspace | `c` | Overlay letters on workspaces; press letter to move the active column there |
 | Move pane to workspace | `g` | Overlay letters on workspaces; press letter to move the active pane there |
-| Move pane to column | `Shift+C` | Overlay letters on columns (any workspace); press letter to stack the active pane into that column |
+| Move pane to column | `Ctrl+C` | Overlay letters on columns (any workspace); press letter to stack the active pane into that column |
 
 ### Resize
 
 | Command | Default Binding | Description |
-|---------|----------------|-------------|
+| --------- | ---------------- | ------------- |
 | Resize increase | `=` | Widen active column |
 | Resize decrease | `-` | Narrow active column |
 | Pane height increase | `Shift+=` | Grow active pane height |
@@ -189,7 +189,7 @@ that pane; over chrome/empty → whole app). (`Alt` is avoided: on macOS the Opt
 key rewrites the typed character, so `Alt+=` never matches.)
 
 | Command | Default Binding | Description |
-|---------|----------------|-------------|
+| --------- | ---------------- | ------------- |
 | App font bigger (everything) | `Ctrl+=` | Increase chrome/UI + every terminal pane |
 | App font smaller (everything) | `Ctrl+-` | Decrease chrome/UI + every terminal pane |
 | App font reset (everything) | `Ctrl+0` | Reset to the configured sizes |
@@ -205,7 +205,7 @@ mode (focused pane). Inside either mode: `k`/`↑` bigger, `j`/`↓` smaller, `0
 ### Move / Swap (adjacent)
 
 | Command | Default Binding | Description |
-|---------|----------------|-------------|
+| --------- | ---------------- | ------------- |
 | Move pane left | `Ctrl+[` | Move active pane to column on left |
 | Move pane right | `Ctrl+]` | Move active pane to column on right |
 | Swap left | `Ctrl+H` | Swap with pane to the left |
@@ -216,10 +216,11 @@ mode (focused pane). Inside either mode: `k`/`↑` bigger, `j`/`↓` smaller, `0
 ### Workspace & Sidebar
 
 | Command | Default Binding | Description |
-|---------|----------------|-------------|
+| --------- | ---------------- | ------------- |
 | Create workspace | `w` | Create new workspace with a pane |
 | Rename workspace | `Shift+W` | Rename the **active** workspace (a focused container's cursor row has its own key — see below) |
 | Rename pane | `$` | Rename the **focused** pane (likewise) |
+| Rename column | `Shift+C` | Rename the **active** column (likewise) |
 | Toggle left sidebar | `b` | Show/hide left sidebar |
 | Toggle right sidebar | `.` | Show/hide right sidebar |
 | Sidebar focus | `e` | Give the keyboard to the workspaces dock |
@@ -347,7 +348,7 @@ heca's own workspaces component ships these in `keybindings.default.toml`. They 
 that dock holds the keyboard** (`prefix+e`, or click it), so they need no prefix and no mode.
 
 | Key | Action | What it acts on |
-|-----|--------|-----------------|
+| ----- | -------- | ----------------- |
 | `k` / `j` (also `Up`/`Down`) | `cursor_up` / `cursor_down` | the dock's own cursor |
 | `h` (also `Left`) | `collapse_row` | fold the row, or step out to its parent |
 | `l` / `Enter` (also `Right`) | `activate_selected` | focus the row **and hand the keyboard back** |
@@ -398,7 +399,7 @@ docker.restart                r                plugin
 ```
 
 | Key | Action |
-|-----|--------|
+| ----- | -------- |
 | `PageUp` / `PageDown` | Scroll the focused dock one page up / down |
 | `Home` / `End` | Jump the focused dock to top / bottom |
 | `Alt+PageUp` / `Alt+PageDown` | Scroll the focused dock one page left / right |
@@ -447,7 +448,7 @@ automatically when you scroll up with the wheel at a non-grabbed prompt.
 Inside Selection mode:
 
 | Key | Action |
-|-----|--------|
+| ----- | -------- |
 | `h` / `l` / `j` / `k` or arrow keys | Move caret left / right / up / down (the viewport auto-scrolls at edges) |
 | `PageUp` / `PageDown` | Move caret up / down by one page |
 | `u` / `d` | Scroll viewport up / down by half-page |
@@ -463,6 +464,7 @@ Inside Selection mode:
 | `Esc` | Exit selection mode (snap to bottom + clear selection) |
 
 **Wheel:**
+
 - At a normal shell prompt → scrolls host scrollback viewport by
   `terminal_wheel_scroll_lines` rows per notch (configurable).
 - Over a mouse-grabbed TUI (vim, htop, less, etc.) → forwarded to the terminal
@@ -478,6 +480,7 @@ Inside Selection mode:
   not expose it while the alternate screen is active.
 
 **Relevant settings:**
+
 - `terminal_scrollback_lines` — total host-retained history capacity (rows above
   the live viewport).
 - `terminal_mouse` — when `true`, wheel input controls host scrollback unless
@@ -495,7 +498,7 @@ that work without the prefix key. These are intercepted before reaching the
 terminal:
 
 | Combo | Action |
-|-------|--------|
+| ------- | -------- |
 | `Shift+PageUp` | Scroll up by one page (repeatable, no selection mode entry) |
 | `Shift+PageDown` | Scroll down by one page (repeatable) |
 | `Shift+Up` | Scroll up by a few lines (repeatable) |
@@ -531,9 +534,9 @@ configurable under `[appearance.terminal] show_scrollbar`):
 ### System
 
 | Command | Default Binding | Description |
-|---------|----------------|-------------|
+| --------- | ---------------- | ------------- |
 | Command palette | `p` | Open command palette |
-| Reload config | `Shift+R` | Reload config.toml at runtime |
+| Reload config | `Shift+R` | Reload config.toml at runtime — a toast confirms success, or reports the parse error with a **Retry** button (the working config is kept on failure; the error also prints to stderr) |
 
 #### The command palette
 
@@ -572,6 +575,7 @@ heca loads config from `~/.config/heca/config.toml` (general settings) and
 `~/.config/heca/keybindings.toml` (keybindings) — `%APPDATA%\heca\…` on Windows.
 Both are optional and deep-merged over the built-in defaults, which live in two
 versioned, embedded files (the single source of truth — copy and edit them):
+
 - `config.default.toml` — default `[settings]`, `[appearance]`, `[font]`, `[program]`
 - `keybindings.default.toml` — default `[keys]` (prefix, bindings, modes)
 
@@ -608,9 +612,10 @@ swap_pane = "prefix+Shift+q"
 swap_and_focus_pane = "prefix+m"
 move_column_to_workspace_pick = "prefix+c"
 move_pane_to_workspace_pick = "prefix+g"
-move_pane_to_column_pick = "prefix+Shift+c"
+move_pane_to_column_pick = "prefix+Ctrl+c"
 rename_workspace = "prefix+Shift+w"
 rename_pane = "prefix+$"
+rename_column = "prefix+Shift+c"
 ```
 
 ### Config File Format
@@ -634,9 +639,33 @@ Alt+Enter = "spawn_lazygit"   # Requires [[keys.command]]
 "prefix+f" = true   # Remove float toggle
 ```
 
-### Planned parameterized keybindings contract
+### Asking heca from the command line
 
-The agreed next-step config shape for richer actions is:
+Every one of these answers and exits **before the window opens**, so a script can ask without a
+display:
+
+```bash
+heca -h  --help                    # these commands
+heca -k  --keys-show [--json]      # every binding name and the key it resolves to
+heca -a  --list-actions [--json]   # every action, its category, and how many arguments it takes
+heca -d  --describe-action resize  # one action in full: what it does, every argument, every value
+heca -d resize -j                  # the same, as JSON (-j is --json)
+```
+
+Each command has a one-letter form. One letter, not two: `-la` would read as the combined `-l -a`
+everywhere else on the machine, and a flag that looks like a convention it does not follow is worse
+than no short form at all.
+
+`--describe-action` is the reference for an action's arguments — including which are optional and
+what values an enum accepts — because the declaration lives beside the parser, so the two cannot
+drift. `--help` is rendered from the same table that dispatches, so it cannot list a command that
+does nothing or miss one that works.
+
+### Keybindings that carry arguments — `[[keys.bind]]`
+
+The flat form under `[keys]` is `action = "combo"` — a single string, so it carries no arguments.
+That is the **only** thing it cannot do, and `[[keys.bind]]` is the same normal-mode keymap written
+long-hand, with `args`:
 
 ```toml
 [[keys.bind]]
@@ -664,7 +693,7 @@ action = "float_active_at"
 args = { width = "95%", height = "95%" }
 ```
 
-Mode bindings should support the same action+args structure:
+Mode bindings take the same `action` + `keys` + `args` shape, inside a mode:
 
 ```toml
 [[keys.mode]]
@@ -679,6 +708,7 @@ args = { kind = "terminal", program = "btm", argv = [], float = true, width = "8
 ```
 
 Size parsing contract:
+
 - `800` → `800px`
 - `800px` → explicit pixels
 - `80%` → percentage of available content area
@@ -812,6 +842,11 @@ overlay_border_style = "bracketed"   # bracketed | bordered | none — the share
                                      # `bordered` = plain edge, `none` = no frame. Each widget's own
                                      # accent border/glow is separate and unaffected.
 
+# The `prefix+/` picker's letters
+hint_font_size = 12.0      # one size for EVERY letter in the app, in logical px. A letter is drawn
+                           # over whatever it points at, so it is not scaled by the size of that
+                           # thing — a header button and a whole pane wear the same letter.
+
 # Keyboard focus outline
 show_focus_border = true   # draw the focus ring at all
 # focus_ring = "#7fd3ff"   # focus-outline color; unset = the accent shifted toward `foreground`
@@ -866,6 +901,7 @@ show_scrolled_up_badge = true
 ```
 
 **How frost is produced:**
+
 - **Tiled panes** — set `background_blur > 0` (frosts the gradient) +
   `[appearance.terminal] transparency > 0` (lets it show through the terminal
   surface). There is **no per-terminal tiled blur knob** — the z=0 layer is the
@@ -912,6 +948,18 @@ pane_show_cwd = false         # Show each pane's cwd as a row in the sidebar car
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
+
+[settings.notification_system]
+mode = "app"                  # "app" (in-app toast stack) | "system" (OS notifications —
+                              # reserved, falls back to "app" until the backend exists) |
+                              # "none" (no notifications at all)
+auto_dismiss_ms = 4000        # How long an in-app toast stays before dismissing itself (ms).
+                              # A notification a producer marks sticky, or one with its own
+                              # lifetime, ignores this. Applies on prefix+Shift+r.
+                              # The countdown pauses while the pointer rests on a card.
+max_visible = 5               # How many toasts are on screen at once. The rest queue in the
+                              # order they were raised — nothing is dropped — and each takes
+                              # the slot that frees. Minimum 1.
 ```
 
 ### Confirmation prompts
@@ -941,6 +989,41 @@ action not listed uses its own declared default. Changes apply on
 > now — one word for the action, its key, its label and its dialog. **Close** is
 > for the pane you work in; **Delete** stays for a column or workspace, which
 > destroys everything inside it.
+
+### Notifications
+
+heca shows short **toast notifications** in the top-right corner — a pane was
+created, a process exited, the config reloaded, a command could not be run.
+
+```toml
+[settings.notification_system]
+mode = "app"          # "app" (in-app toast stack) | "system" (OS notifications —
+                      # reserved, falls back to "app" until that backend exists) |
+                      # "none" (no notifications at all — stderr logs are unaffected)
+auto_dismiss_ms = 4000 # how long a toast stays before dismissing itself
+max_visible = 5        # how many are on screen at once; the rest queue
+```
+
+- **Severity is tone, not importance.** `info` / `success` / `warning` / `danger`
+  change the accent colour; they do **not** change how long a toast stays. Every
+  toast auto-dismisses after `auto_dismiss_ms` unless the code that raised it
+  marked it sticky (a config-reload failure is sticky — you fix it and press
+  **Retry**).
+- **Interacting:** click a toast's × or one of its buttons; `prefix+/` puts pick
+  letters on the visible toasts' buttons and their × , and `prefix+n` dismisses.
+  **Resting the pointer on a card holds the whole stack still**, so nothing retires
+  from under the click you are aiming at — the time that costs is given back when
+  you move away, and each card resumes with what it had left.
+- **More than fits:** only `max_visible` cards show at once. The rest wait in the
+  order they were raised — nothing is dropped. Closing one slides the cards after it
+  up so the column never has a blank in it, and the next in line appears at the
+  bottom, where a card that has just arrived belongs.
+- **Raising one** — from a keybinding, a script, or a plugin — is the `notify`
+  action: `notify title="Build finished" body="3 warnings" severity=success`.
+  Rust code in the app uses `Notification::info("…").body("…").send()`.
+- What produces a toast today: a new pane, a pane whose process exited while the
+  pane stays open, `prefix+Shift+r` (success or the parse error), and a command
+  that fails to spawn.
 
 ### Fonts
 
@@ -1131,13 +1214,15 @@ Every WM command in heca is an **action**. Actions are the core abstraction — 
 ### Action Types
 
 **Unit actions** — Simple commands with no arguments:
+
 - `focus_left`, `focus_right`, `split_horizontal`, `close`, `float`
 
 **Parameterized actions** — Commands with arguments:
+
 - `FocusPane { pane_id }` — Focus a specific pane by ID
 - `FocusWorkspace { ws_idx }` — Focus a workspace by index
 - `Swap { a_id, b_id }` — Swap two panes
-- `Resize { target, axis, amount }` — Resize column or pane
+- `Resize { target, amount, edge }` — Move a boundary of the focused column or pane. The target decides the axis; `edge` picks which of its two edges moves (default: the one it already owned)
 - `SpawnCommand { command, kind, float, close_policy }` — Run an external command in a new pane
 
 **Name-keyed actions** — contributed at **runtime** by a provider or plugin, identified by a stable
@@ -1164,6 +1249,7 @@ arg-parsing errors as before), while a **name-keyed** id is resolved at **press*
 reads your config before any provider has registered its actions.
 
 This design means:
+
 - Every action is traceable and hookable, and is judged by the same interaction policy
 - Any action can be triggered **by name** — from a keybinding, a menu, a plugin, or RPC
 - Arguments take one path: a menu item, an RPC call and a config binding construct the identical action
@@ -1187,6 +1273,7 @@ door — so a menu item, a keybinding and an RPC call all reach either one ident
 Say you want `my_custom_action`.
 
 **1. Add the variant** — `heca/src/input.rs`:
+
 ```rust
 pub enum WmAction {
     // ... existing variants
@@ -1197,6 +1284,7 @@ pub enum WmAction {
 **2. Give it a name.** A unit action goes in `action_from_name()`; one that takes arguments goes in
 `build_action()` instead (that's what parses a binding's `args`, an `Intent`'s args, and RPC args —
 one constructor for all three):
+
 ```rust
 // unit:
 "my_custom_action" => Some(WmAction::MyCustomAction),
@@ -1208,14 +1296,17 @@ one constructor for all three):
 **3. Classify it — `action_policy()` in `heca/src/app/interaction.rs`.** This match is **exhaustive**:
 if you skip this step, **it will not compile.** That is deliberate — it forces you to answer "should
 this run while a floating pane owns the focus domain?"
+
 ```rust
 WmAction::MyCustomAction => ActionPolicy::TiledOnly,
 ```
+
 > ⚠️ `AlwaysAllowed` is a **misnomer** — the router *blocks* it when a floating pane is active.
 > `Global` is the only policy that is truly always allowed. See
 > [Interaction Policy](#interaction-policy) below.
 
 **4. Write the handler** — `heca/src/handlers.rs`:
+
 ```rust
 pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
     // Your logic here.
@@ -1224,6 +1315,7 @@ pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
 ```
 
 **5. Register the handler** in `build_registry()` — `heca/src/app/registry.rs`:
+
 ```rust
 registry.register(&WmAction::MyCustomAction, handle_my_custom_action);
 ```
@@ -1231,6 +1323,7 @@ registry.register(&WmAction::MyCustomAction, handle_my_custom_action);
 **6. Describe it** in `ActionRegistry::ALL` — `heca/src/actions.rs`. This is what gives the action its
 label, icon and category everywhere it is shown (context menu, tooltip, command palette), **and what
 says which arguments it takes**:
+
 ```rust
 ActionDescriptor {
     name: "my_custom_action",
@@ -1248,6 +1341,7 @@ answering the question. **Empty means it takes none**, and every argument handed
 argument nobody declared — which is reported, not ignored.
 
 An action that reads arguments in `build_action()` declares each one here, in the same order:
+
 ```rust
 args: &[
     ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to act on."),
@@ -1279,6 +1373,7 @@ someone later.
 **7. Bind it by default** in **`keybindings.default.toml`** — *not* in Rust. The embedded default
 files are the single source of truth for defaults; a default that lives only in code is invisible to
 users:
+
 ```toml
 [keys]
 my_custom_action = "prefix+y"
@@ -1286,6 +1381,7 @@ my_custom_action = "prefix+y"
 
 **8. Give it RPC parity** — `heca/src/rpc.rs`. A capability must not be trapped behind one surface: it
 should be reachable from **mouse/UI, keyboard, and RPC** whenever each is meaningful.
+
 ```rust
 "my-custom-action" => Ok(WmAction::MyCustomAction),
 ```
@@ -1363,17 +1459,19 @@ it just never fires. If a binding seems dead, check the name.
 
 A typo in an **argument** name is different: heca knows what each built-in action takes, so it says so
 at startup rather than leaving you to work it out from a key that does nothing.
+
 ```
 [heca] binding 'delete_workspace': unknown argument 'ws_idxx' — did you mean 'ws_idx'?
 [heca] binding 'delete_workspace': missing required argument 'ws_idx'
 [heca] binding 'delete_workspace' cannot be built and will do nothing when pressed
 ```
+
 The `describe-action <name>` introspection command lists an action's arguments, their types and which
 are required — including the ones a provider or plugin contributed. See
 **[docs/widgets.md → Discovering actions at runtime](docs/widgets.md#discovering-actions-at-runtime--introspection)**.
 
 **Running one over RPC — `action <name> [key=value …]`.** Every named built-in keeps its own RPC
-spelling (`focus-left`, `resize target=column axis=x amount=-50`), but a component's or plugin's
+spelling (`focus-left`, `resize target=column amount=-50`), but a component's or plugin's
 declared action has no such spelling and never can: it is not a variant of any enum. The generic
 verb takes any action **id** instead, so the whole catalog is reachable:
 
@@ -1514,6 +1612,7 @@ To remove a default keybinding, add it to `[keys.unbind]`:
 ```
 
 **Why unbind?**
+
 - Free up keys for custom bindings
 - Disable features you don't use
 - Resolve conflicts with custom bindings
@@ -1523,6 +1622,7 @@ The action still exists — you can rebind it to a different key in `[keys]`. Fo
 ### Zooming the active column
 
 By default, `prefix+z` toggles the active column between:
+
 - its normal stored width
 - a viewport-wide zoomed width
 
@@ -1536,8 +1636,9 @@ Modes are groups of bindings that stay active until `Escape` or `Enter` is press
 ```toml
 # Default built-in: prefix+r enters resize mode
 # In resize mode the key points the way the DIVIDER travels, whichever
-# column or pane is active — `amount` moves the boundary along the axis,
-# and +x is right, +y is down:
+# column or pane is active. The TARGET decides the axis — a column is
+# resized across, a pane down — so only `amount` and (optionally) `edge`
+# are needed. Positive is right / down:
 #   h / l  → move the column's right edge left / right (narrower / wider)
 #   j / k  → move the pane's divider down / up
 #   Arrow keys work too
@@ -1547,6 +1648,33 @@ Modes are groups of bindings that stay active until `Escape` or `Enter` is press
 # pane — so on the last pane `j` moves that divider down and the pane gets
 # shorter. `prefix+Shift+=` / `prefix+Shift+-` are the size verbs instead:
 # they grow / shrink the active pane whichever edge has to move.
+#
+# CHOOSING THE EDGE. A pane has two horizontal edges, and `edge` says which one
+# moves. Omit it and you get the one above — exactly as before. `edge = "top"`
+# takes the pane's upper edge instead, so the defaults are:
+#   Shift+j / Shift+k → move the pane's TOP edge down / up
+# Positive is still down the screen, so Shift+j shrinks the pane from above.
+# Nothing happens on the first pane, which has no edge above it.
+#
+#   [[keys.mode.bindings]]
+#   action = "resize"
+#   keys = "Shift+k"
+#   args = { target = "pane", amount = "-40", edge = "top" }
+#
+# The same holds on the x axis. A column's LEFT edge is where the column
+# before it ends, so `edge = "left"` moves that boundary:
+#   Shift+h / Shift+l → move the column's LEFT edge left / right
+# Positive is still right, so Shift+l shrinks the column from the left.
+# Nothing happens on the first column, which has nothing to its left.
+#
+# `edge` accepts "auto" (the default), "top", "bottom", "left" and "right".
+#
+# MOVING WHILE STILL RESIZING. The mode is sticky — it runs an action and stays
+# until Escape or Enter — so a focus action bound inside it moves the focus
+# without leaving:
+#   Ctrl+h/j/k/l (and Ctrl+arrows) → focus another column / pane, still resizing
+# Nothing special is needed for this: any action can be bound inside a mode, and
+# a sticky mode keeps running.
 
 # Custom modes
 [[keys.mode]]
@@ -1570,7 +1698,7 @@ you can add a key without redeclaring the whole mode — but the fields are not 
 the same way:
 
 | field | when you redefine a built-in mode |
-|---|---|
+| --- | --- |
 | `bindings` | **added** to the built-in ones — you keep every default key |
 | `trigger`, `sticky` | **replace** the built-in values |
 
@@ -1606,6 +1734,7 @@ bottom + clear selection). The trigger field is ignored because Selection mode
 is entered via actions, not a keybinding trigger.
 
 **Sticky vs Non-sticky modes:**
+
 - **Sticky** (`sticky = true`): Stay in mode until `Escape` or `Enter`. Resize mode is sticky.
 - **Non-sticky** (`sticky = false`, or chord): Execute one action then exit. Like `prefix+w` → `1` creates workspace 1.
 
@@ -1643,6 +1772,7 @@ command = "alacritty"
 ```
 
 Supported options today:
+
 - `kind = "terminal"` (default). `app` and `plugin` are reserved and currently report "not yet implemented".
 - `float = true` to open as a centered floating pane.
 - `close_pane = true` to close the pane when the command exits.
@@ -1665,6 +1795,7 @@ color = "#89b4fa"
 ```
 
 Rules:
+
 - `id` is your canonical app entry name; it does not need to match the detected process exactly.
 - `processes` lists raw foreground process names that should resolve to that entry.
 - All fields are optional. Partial overrides are merged over built-in defaults.
@@ -1866,7 +1997,7 @@ examples and the "Context menus & KeyHint" section:
 ## Roadmap
 
 | Phase | Status | Description |
-|-------|--------|-------------|
+| ------- | -------- | ------------- |
 | **1 — The Shell** | ✅ Complete | GPU window, text rendering, theme system |
 | **2 — The Workspace** | ✅ Complete | NIRI layout, animations, input, sidebar |
 | **3 — The Content** | 🔄 In Progress | Terminal backend, Neovim msgpack-RPC |

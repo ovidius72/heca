@@ -31,6 +31,22 @@ pub struct Theme {
     /// stay visible even with decorative borders turned off
     /// (`border_width == 0`).
     pub focus_border_width: f32,
+    /// **The picker's letter size, in logical px — one size for every letter in the app.**
+    ///
+    /// Not derived from the widget the letter sits on. A size variant scales what a widget draws as
+    /// its *own content*; a letter is chrome the framework stamps over it and belongs to the picker,
+    /// which is app-wide. Read from the target instead, an emphasized header button wore a letter a
+    /// quarter larger than the pane's own, in the same picker (Antonio, driving, 2026-09-03).
+    ///
+    /// Configurable as `[appearance] hint_font_size`.
+    pub hint_font_size: f32,
+    /// **The picker's letter colour — one colour for every letter in the app.**
+    ///
+    /// Deliberately its own token rather than the theme accent: a pane is drawn with its own theme,
+    /// whose accent differs between the active pane and the rest, so letters taken from the ambient
+    /// accent came out in two colours at once in a single picker. This one is not replaced when a
+    /// pane's theme is derived, so every letter matches.
+    pub hint_color: Color,
 }
 
 impl Default for Theme {
@@ -40,6 +56,8 @@ impl Default for Theme {
             font_family: DEFAULT_MONO_FAMILY.to_string(),
             font_size: 15.0,
             focus_border_width: 1.5,
+            hint_font_size: 12.0,
+            hint_color: heca_theme::Theme::default().accent,
         }
     }
 }

@@ -14,8 +14,15 @@ pub enum WorkspaceRowKind {
 
 #[derive(Debug, Clone)]
 pub enum WorkspaceRow {
-    Workspace { ws_idx: usize },
-    Column { ws_idx: usize, col_idx: usize },
+    Workspace {
+        ws_idx: usize,
+        ws_id: heca_core::layout::WorkspaceId,
+    },
+    Column {
+        ws_idx: usize,
+        col_idx: usize,
+        col_id: heca_core::layout::ColumnId,
+    },
     Pane { pane_id: PaneId },
     FloatingPane { pane_id: PaneId, ws_idx: usize },
 }
@@ -29,10 +36,18 @@ impl WorkspaceRow {
     /// — RPC/plugin reads).
     pub fn selection(&self) -> SidebarSelection {
         match *self {
-            WorkspaceRow::Workspace { ws_idx } => SidebarSelection::Workspace { ws_idx },
-            WorkspaceRow::Column { ws_idx, col_idx } => {
-                SidebarSelection::Column { ws_idx, col_idx }
+            WorkspaceRow::Workspace { ws_idx, ws_id } => {
+                SidebarSelection::Workspace { ws_idx, ws_id }
             }
+            WorkspaceRow::Column {
+                ws_idx,
+                col_idx,
+                col_id,
+            } => SidebarSelection::Column {
+                ws_idx,
+                col_idx,
+                col_id,
+            },
             WorkspaceRow::Pane { pane_id } => SidebarSelection::Pane { pane_id },
             WorkspaceRow::FloatingPane { pane_id, ws_idx } => {
                 SidebarSelection::FloatingPane { pane_id, ws_idx }
@@ -73,6 +88,9 @@ pub struct PaneEntry {
 #[derive(Debug, Clone)]
 pub struct ColumnEntry {
     pub col_idx: usize,
+    /// The column's **identity**, as opposed to its position. `col_idx` says where it sits today and
+    /// moves when a neighbour is inserted; this does not, which is why every key is built from it.
+    pub col_id: heca_core::layout::ColumnId,
     pub collapsed: bool,
     pub panes: Vec<PaneEntry>,
 }
@@ -81,6 +99,8 @@ pub struct ColumnEntry {
 #[derive(Debug, Clone)]
 pub struct WorkspaceEntry {
     pub ws_idx: usize,
+    /// The workspace's **identity**, as opposed to its position — see [`ColumnEntry::col_id`].
+    pub ws_id: heca_core::layout::WorkspaceId,
     /// The **displayed** label — the user's name if there is one, else the computed default.
     pub name: String,
     /// The user-set name, if any — `None` when `name` is the computed default.
@@ -186,6 +206,7 @@ impl WorkspaceTree {
 
             let mut ws_entry = WorkspaceEntry {
                 ws_idx,
+                ws_id: ws.id,
                 name: ws
                     .name
                     .clone()
@@ -212,6 +233,7 @@ impl WorkspaceTree {
                         .unwrap_or(false);
                     let mut col_entry = ColumnEntry {
                         col_idx,
+                        col_id: col.id,
                         collapsed: col_collapsed,
                         panes: Vec::with_capacity(col.panes.len()),
                     };
@@ -270,6 +292,7 @@ impl WorkspaceTree {
         for ws_entry in &self.workspaces {
             self.flat_items.push(WorkspaceRow::Workspace {
                 ws_idx: ws_entry.ws_idx,
+                ws_id: ws_entry.ws_id,
             });
 
             if !ws_entry.collapsed {
@@ -277,6 +300,7 @@ impl WorkspaceTree {
                     self.flat_items.push(WorkspaceRow::Column {
                         ws_idx: ws_entry.ws_idx,
                         col_idx: col_entry.col_idx,
+                        col_id: col_entry.col_id,
                     });
 
                     if !col_entry.collapsed {
@@ -413,7 +437,7 @@ impl WorkspaceTree {
 
     fn workspace_flat_index(&self, ws_idx: usize) -> Option<usize> {
         self.flat_items.iter().position(
-            |item| matches!(item, WorkspaceRow::Workspace { ws_idx: item_ws } if *item_ws == ws_idx),
+            |item| matches!(item, WorkspaceRow::Workspace { ws_idx: item_ws, .. } if *item_ws == ws_idx),
         )
     }
 
@@ -424,6 +448,7 @@ impl WorkspaceTree {
                 WorkspaceRow::Column {
                     ws_idx: item_ws,
                     col_idx: item_col,
+                    ..
                 } if *item_ws == ws_idx && *item_col == col_idx
             )
         })
@@ -431,7 +456,7 @@ impl WorkspaceTree {
 
     fn current_item_in_workspace(&self, ws_idx: usize) -> bool {
         match self.current_item() {
-            Some(WorkspaceRow::Workspace { ws_idx: item_ws }) => *item_ws == ws_idx,
+            Some(WorkspaceRow::Workspace { ws_idx: item_ws, .. }) => *item_ws == ws_idx,
             Some(WorkspaceRow::Column {
                 ws_idx: item_ws, ..
             }) => *item_ws == ws_idx,
@@ -447,10 +472,7 @@ impl WorkspaceTree {
 
     fn current_item_in_column(&self, ws_idx: usize, col_idx: usize) -> bool {
         match self.current_item() {
-            Some(WorkspaceRow::Column {
-                ws_idx: item_ws,
-                col_idx: item_col,
-            }) => *item_ws == ws_idx && *item_col == col_idx,
+            Some(WorkspaceRow::Column { ws_idx: item_ws, col_idx: item_col, .. }) => *item_ws == ws_idx && *item_col == col_idx,
             Some(WorkspaceRow::Pane { pane_id }) => self
                 .pane_location(*pane_id)
                 .is_some_and(|(item_ws, item_col)| item_ws == ws_idx && item_col == Some(col_idx)),
@@ -472,7 +494,7 @@ impl WorkspaceTree {
         let move_cursor_to_parent = changed_ws.is_some_and(|ws_idx| {
             set.contains(&ws_idx)
                 && self.current_item_in_workspace(ws_idx)
-                && !matches!(self.current_item(), Some(WorkspaceRow::Workspace { ws_idx: item_ws }) if *item_ws == ws_idx)
+                && !matches!(self.current_item(), Some(WorkspaceRow::Workspace { ws_idx: item_ws, .. }) if *item_ws == ws_idx)
         });
         for ws_entry in &mut self.workspaces {
             ws_entry.collapsed = set.contains(&ws_entry.ws_idx);
@@ -489,7 +511,7 @@ impl WorkspaceTree {
 
     pub fn toggle_column_collapsed(&mut self, ws_idx: usize, col_idx: usize) {
         let move_cursor_to_parent = self.current_item_in_column(ws_idx, col_idx)
-            && !matches!(self.current_item(), Some(WorkspaceRow::Column { ws_idx: item_ws, col_idx: item_col }) if *item_ws == ws_idx && *item_col == col_idx);
+            && !matches!(self.current_item(), Some(WorkspaceRow::Column { ws_idx: item_ws, col_idx: item_col, .. }) if *item_ws == ws_idx && *item_col == col_idx);
         if let Some(ws_entry) = self.workspaces.get_mut(ws_idx)
             && let Some(col_entry) = ws_entry.columns.get_mut(col_idx)
         {
@@ -519,7 +541,7 @@ impl WorkspaceTree {
 
     pub fn collapse_column(&mut self, ws_idx: usize, col_idx: usize) {
         let move_cursor_to_parent = self.current_item_in_column(ws_idx, col_idx)
-            && !matches!(self.current_item(), Some(WorkspaceRow::Column { ws_idx: item_ws, col_idx: item_col }) if *item_ws == ws_idx && *item_col == col_idx);
+            && !matches!(self.current_item(), Some(WorkspaceRow::Column { ws_idx: item_ws, col_idx: item_col, .. }) if *item_ws == ws_idx && *item_col == col_idx);
         if let Some(ws_entry) = self.workspaces.get_mut(ws_idx)
             && let Some(col_entry) = ws_entry.columns.get_mut(col_idx)
         {
@@ -540,14 +562,14 @@ impl WorkspaceTree {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 WorkspaceRowKind::Workspace => {
-                    if let WorkspaceRow::Workspace { ws_idx } = item {
+                    if let WorkspaceRow::Workspace { ws_idx, .. } = item {
                         chrome_state.toggle_ws_collapsed(ws_idx);
                         let set = chrome_state.with_collapsed_ws(|s| s.clone());
                         self.apply_ws_collapsed(&set, Some(ws_idx));
                     }
                 }
                 WorkspaceRowKind::Column => {
-                    if let WorkspaceRow::Column { ws_idx, col_idx } = item {
+                    if let WorkspaceRow::Column { ws_idx, col_idx, .. } = item {
                         self.toggle_column_collapsed(ws_idx, col_idx);
                     }
                 }
@@ -561,14 +583,14 @@ impl WorkspaceTree {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 WorkspaceRowKind::Workspace => {
-                    if let WorkspaceRow::Workspace { ws_idx } = item {
+                    if let WorkspaceRow::Workspace { ws_idx, .. } = item {
                         chrome_state.set_ws_collapsed(ws_idx, false);
                         let set = chrome_state.with_collapsed_ws(|s| s.clone());
                         self.apply_ws_collapsed(&set, Some(ws_idx));
                     }
                 }
                 WorkspaceRowKind::Column => {
-                    if let WorkspaceRow::Column { ws_idx, col_idx } = item {
+                    if let WorkspaceRow::Column { ws_idx, col_idx, .. } = item {
                         self.expand_column(ws_idx, col_idx);
                     }
                 }
@@ -582,14 +604,14 @@ impl WorkspaceTree {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 WorkspaceRowKind::Workspace => {
-                    if let WorkspaceRow::Workspace { ws_idx } = item {
+                    if let WorkspaceRow::Workspace { ws_idx, .. } = item {
                         chrome_state.set_ws_collapsed(ws_idx, true);
                         let set = chrome_state.with_collapsed_ws(|s| s.clone());
                         self.apply_ws_collapsed(&set, Some(ws_idx));
                     }
                 }
                 WorkspaceRowKind::Column => {
-                    if let WorkspaceRow::Column { ws_idx, col_idx } = item {
+                    if let WorkspaceRow::Column { ws_idx, col_idx, .. } = item {
                         self.collapse_column(ws_idx, col_idx);
                     }
                 }

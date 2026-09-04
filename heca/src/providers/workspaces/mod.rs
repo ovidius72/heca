@@ -13,6 +13,7 @@ mod column_group;
 mod dock_view;
 mod model;
 mod pane_row;
+pub(crate) use pane_row::dot_status;
 mod seams;
 mod workspace_frame;
 
@@ -475,7 +476,7 @@ impl WorkspacesContainerProvider {
                     cx.dispatch("unfocus_dock", PropMap::new());
                 }
             }
-            WorkspaceRow::Workspace { ws_idx } => {
+            WorkspaceRow::Workspace { ws_idx, .. } => {
                 let collapsed = {
                     let state = cx.state();
                     let ws = state.workspaces();
@@ -520,7 +521,7 @@ impl WorkspacesContainerProvider {
         let state = cx.state();
         let tree = state.workspaces().tree();
         match tree.current_item()? {
-            WorkspaceRow::Workspace { ws_idx }
+            WorkspaceRow::Workspace { ws_idx, .. }
             | WorkspaceRow::Column { ws_idx, .. }
             | WorkspaceRow::FloatingPane { ws_idx, .. } => Some(*ws_idx),
             WorkspaceRow::Pane { pane_id } => tree.locate_pane(*pane_id).map(|(ws, _)| ws),
@@ -533,7 +534,7 @@ impl WorkspacesContainerProvider {
         let state = cx.state();
         let tree = state.workspaces().tree();
         match tree.current_item()? {
-            WorkspaceRow::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
+            WorkspaceRow::Column { ws_idx, col_idx, .. } => Some((*ws_idx, *col_idx)),
             WorkspaceRow::Pane { pane_id } => tree.locate_pane(*pane_id),
             WorkspaceRow::Workspace { .. } | WorkspaceRow::FloatingPane { .. } => None,
         }
@@ -593,10 +594,10 @@ impl WorkspacesContainerProvider {
             | (RowVerb::Rename, Some(WorkspaceRow::FloatingPane { pane_id, .. })) => {
                 ("rename_pane_by_id", "pane_id", pane_id.0 as i64)
             }
-            (RowVerb::Delete, Some(WorkspaceRow::Workspace { ws_idx })) => {
+            (RowVerb::Delete, Some(WorkspaceRow::Workspace { ws_idx, .. })) => {
                 ("delete_workspace", "ws_idx", ws_idx as i64)
             }
-            (RowVerb::Rename, Some(WorkspaceRow::Workspace { ws_idx })) => {
+            (RowVerb::Rename, Some(WorkspaceRow::Workspace { ws_idx, .. })) => {
                 ("rename_workspace_by_idx", "ws_idx", ws_idx as i64)
             }
             (_, Some(WorkspaceRow::Column { .. })) | (_, None) => return Handled::No,
@@ -703,15 +704,20 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
 /// reads the pane's own identity rather than spelling a second copy (F011/P094/T451).
 pub(crate) use crate::chrome::pane_key;
 
-/// `ws:<idx>` — a workspace header.
-pub(crate) fn workspace_key(ws_idx: usize) -> String {
-    format!("ws:{ws_idx}")
+/// `ws:<id>` — a workspace header.
+///
+/// **Its identity, never its position.** A key is what the keyboard cursor, a right-click, a drag
+/// and a remembered hint letter are all kept on, so it has to survive the thing moving. These were
+/// built from indices, so inserting a workspace or a column renamed every row after it and each of
+/// those four silently reset — for rows that had not moved and had not changed.
+pub(crate) fn workspace_key(ws_id: heca_core::layout::WorkspaceId) -> String {
+    format!("ws:{}", ws_id.0)
 }
 
-/// `col:<ws>:<idx>` — a column group. Positional because a column has no id of its own; it is
-/// re-derived on rebuild like every other column reference in the app.
-pub(crate) fn column_key(ws_idx: usize, col_idx: usize) -> String {
-    format!("col:{ws_idx}:{col_idx}")
+/// `col:<id>` — a column group. No workspace prefix: a [`ColumnId`](heca_core::layout::ColumnId) is
+/// allocated from the session's counter, so it is unique across the whole session on its own.
+pub(crate) fn column_key(col_id: heca_core::layout::ColumnId) -> String {
+    format!("col:{}", col_id.0)
 }
 
 // ── What each row kind does when you press it (F003/P086/T365) ──
@@ -761,8 +767,8 @@ pub(crate) fn selection_key(selection: crate::chrome::SidebarSelection) -> Strin
     use crate::chrome::SidebarSelection as S;
     match selection {
         S::Pane { pane_id } | S::FloatingPane { pane_id, .. } => pane_key(pane_id),
-        S::Column { ws_idx, col_idx } => column_key(ws_idx, col_idx),
-        S::Workspace { ws_idx } => workspace_key(ws_idx),
+        S::Column { col_id, .. } => column_key(col_id),
+        S::Workspace { ws_id, .. } => workspace_key(ws_id),
     }
 }
 
@@ -943,8 +949,8 @@ mod tests {
 
         let declared = testing::declared_keys(&root);
         for expected in [
-            workspace_key(0),
-            column_key(0, 0),
+            workspace_key(heca_core::layout::WorkspaceId(0)),
+            column_key(heca_core::layout::ColumnId(0)),
             pane_key(PaneId(1)),
         ] {
             assert!(
@@ -960,12 +966,14 @@ mod tests {
         let mut tree = WorkspaceTree::new();
         tree.workspaces.push(WorkspaceEntry {
             ws_idx: 0,
+            ws_id: heca_core::layout::WorkspaceId(0),
             name: "ws1".into(),
             custom_name: None,
             collapsed: false,
             state: SidebarItemState::Active,
             columns: vec![ColumnEntry {
                 col_idx: 0,
+                col_id: heca_core::layout::ColumnId(0),
                 collapsed: false,
                 panes: vec![PaneEntry {
                     pane_id: PaneId(1),
@@ -1459,9 +1467,11 @@ mod tests {
         // Drag ids: the workspace (drop target), its column, its pane.
         assert_eq!(drag.items().len(), 3);
         // Pick targets: the pane card and the workspace dock each declared what `prefix+/` does to
-        // it. A column declares none — it only carries a pick-letter signal, stamped when it is a
-        // *destination* for a move/swap.
-        assert_eq!(heca_grid_ui::collect_hints(body.as_ref()).len(), 2);
+        // it, and the dock's own collapse control earns one for being a control — a thing you can
+        // click is a thing you can aim at, whatever it happens to sit inside (2026-09-04). A column
+        // has none: it declares nothing and does nothing on its own, only carrying a pick-letter
+        // signal stamped when it is a *destination* for a move/swap.
+        assert_eq!(heca_grid_ui::collect_hints(body.as_ref()).len(), 3);
         // The active pane's card bound its `active` signal for per-frame updates.
         assert_eq!(signals.pane_active.len(), 1);
     }
@@ -1504,6 +1514,65 @@ mod tests {
         }
     }
 
+    /// **No two pick targets in the sidebar answer to the same name** (Antonio, 2026-08-27:
+    /// `prefix+/`, Esc, `prefix+/` and the sidebar letters have moved, with nothing touched).
+    ///
+    /// A remembered letter is looked up by identity, so two targets sharing one identity both ask
+    /// for the same letter. The first takes it, the second is refused and draws a fresh one — and
+    /// the remember step then writes the loser's letter into the map, so the next opening trades
+    /// them back. The letters oscillate forever and nothing fails.
+    ///
+    /// A target with **no** identity is the same defect by another route: it can never be
+    /// remembered, so it takes a fresh letter every time.
+    #[test]
+    fn no_two_pick_targets_in_the_sidebar_share_an_identity() {
+        let p = WorkspacesContainerProvider::new();
+        let theme = GuiTheme::default();
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            move |_, _| {},
+        );
+        let store = store();
+        *store.workspaces.tree_mut() = tree();
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+        let c = container(&p, &ctx);
+        let mut signals = ChromeSignals::default();
+        let mut drag = DragItemRegistry::default();
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
+        let body = (c.build)(&ctx, &mut bx);
+
+        let targets = heca_grid_ui::collect_hints(body.as_ref());
+        assert!(!targets.is_empty(), "the sidebar declares pick targets");
+
+        let mut seen: std::collections::HashMap<String, Vec<usize>> =
+            std::collections::HashMap::new();
+        let mut anonymous = 0usize;
+        for (i, (path, _)) in targets.iter().enumerate() {
+            match heca_grid_ui::identity_of(body.as_ref(), path) {
+                Some(identity) => seen.entry(identity).or_default().push(i),
+                None => anonymous += 1,
+            }
+        }
+
+        let mut collisions: Vec<_> = seen
+            .iter()
+            .filter(|(_, which)| which.len() > 1)
+            .map(|(id, which)| format!("{id:?} claimed by {} targets", which.len()))
+            .collect();
+        collisions.sort();
+        assert!(
+            collisions.is_empty(),
+            "{} sidebar targets share a name, so their letters swap on every opening:\n  {}",
+            collisions.len(),
+            collisions.join("\n  "),
+        );
+        assert_eq!(
+            anonymous, 0,
+            "{anonymous} sidebar targets have no identity, so they cannot keep a letter",
+        );
+    }
+
     /// **Our own rows stay keyed** (F003/P082/T444) — the test half of the identity rule.
     ///
     /// The sidebar is heca's biggest collection: workspaces holding columns holding panes, rebuilt
@@ -1531,12 +1600,14 @@ mod tests {
         // told apart by its content, so only a declared key can tell it apart at all.
         let twins = |ws_idx: usize| WorkspaceEntry {
             ws_idx,
+            ws_id: heca_core::layout::WorkspaceId(ws_idx as u64),
             name: format!("ws{ws_idx}"),
             custom_name: None,
             collapsed: false,
             state: SidebarItemState::None,
             columns: vec![ColumnEntry {
                 col_idx: 0,
+                col_id: heca_core::layout::ColumnId(0),
                 panes: vec![pane(PaneId(1), "zsh"), pane(PaneId(2), "zsh")],
                 collapsed: false,
             }],
@@ -1596,18 +1667,20 @@ mod tests {
         let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
         let mut body = (c.build)(&ctx, &mut bx);
 
-        // Every pick declaration in the built body, run in document order.
+        // Every pick in the built body, run in document order.
         for (path, _) in heca_grid_ui::collect_hints(body.as_ref()) {
             assert!(heca_grid_ui::fire_hint(body.as_mut(), &path));
         }
+        // The ROWS' picks — the subject of this test. Controls *inside* a row also earn letters
+        // (see the assertion below) and fire their own actions, which are not row gestures.
         let declared: Vec<(String, Option<PropValue>)> = fired
             .borrow()
             .iter()
-            .map(|intent| match intent {
+            .filter_map(|intent| match intent {
                 InteractionIntent::View(vi) => {
-                    (vi.action.clone(), vi.args.get("key").cloned())
+                    Some((vi.action.clone(), vi.args.get("key").cloned()))
                 }
-                other => panic!("a row's gesture must be a named intent, got {other:?}"),
+                _ => None,
             })
             .collect();
         assert_eq!(
@@ -1624,6 +1697,18 @@ mod tests {
                 ),
             ],
             "each row aims the picker at its own row, by nav key",
+        );
+
+        // **A control inside a row is a thing of its own, and gets its own letter** (2026-09-04).
+        // The picker used to letter only what declared, so a row's own collapse control — a button
+        // like any other — was unreachable by `prefix+/` purely because of what it had been put
+        // inside. Where a widget sits does not decide what it can do.
+        assert!(
+            fired
+                .borrow()
+                .iter()
+                .any(|i| !matches!(i, InteractionIntent::View(_))),
+            "the row's collapse control was lettered too, and picking it ran its own action"
         );
     }
 
@@ -1661,14 +1746,18 @@ mod tests {
             for (path, _) in heca_grid_ui::collect_hints(body.as_ref()) {
                 assert!(heca_grid_ui::fire_hint(body.as_mut(), &path));
             }
+            // The ROWS' gestures. A control inside a row is lettered too and fires its own
+            // action, which is not a row gesture and names no seating — it acts on what it names.
             let seats: Vec<PropValue> = fired
                 .borrow()
                 .iter()
-                .map(|intent| match intent {
-                    InteractionIntent::View(vi) => vi.args.get(SEAT_ARG).cloned().unwrap_or_else(
-                        || panic!("a gesture must name its seating, got {:?}", vi.args),
+                .filter_map(|intent| match intent {
+                    InteractionIntent::View(vi) => Some(
+                        vi.args.get(SEAT_ARG).cloned().unwrap_or_else(|| {
+                            panic!("a gesture must name its seating, got {:?}", vi.args)
+                        }),
                     ),
-                    other => panic!("a row's gesture must be a named intent, got {other:?}"),
+                    _ => None,
                 })
                 .collect();
             assert!(!seats.is_empty(), "the body declared at least one gesture");

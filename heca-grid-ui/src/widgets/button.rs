@@ -153,7 +153,26 @@ pub struct Button {
     progress: f32,
     /// Press flash effect (brightens on press, fades out).
     flash: Flash,
-    on_click: Option<Box<dyn Fn()>>,
+    on_click: Option<std::rc::Rc<dyn Fn()>>,
+    /// **Held on** — a toggled *status*, not a transient hover. See [`active`](Self::active).
+    active: bool,
+    /// Showing only its icon. See [`icon_only`](Self::icon_only).
+    icon_only: bool,
+    /// **The words, kept whether or not they are being shown.** Held here rather than read back out
+    /// of the children, because showing only the icon **removes** the label from the tree — see
+    /// [`icon_only`](Self::icon_only).
+    label: String,
+    /// Overrides the hue this button reads in. See [`tone`](Self::tone).
+    tone: Option<Color>,
+    /// **This button is about something destructive.** Set by the `Destructive` variant, which
+    /// carries the whole look — hue and frame together — and a container never strips either.
+    /// What it decides beyond the variant's own painting is the hue of the held-on frame, so an
+    /// engaged destructive button reads in danger rather than in the accent.
+    dangerous: bool,
+    /// **The glyph this button was given**, if any. Recorded when [`icon`](Self::icon) inserts it,
+    /// so a container can ask what a button *is* without taking its content apart —
+    /// [`ButtonGroup`](super::ButtonGroup) does, to build the row a collapsed button becomes.
+    glyph: Option<Glyph>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -182,6 +201,12 @@ impl Button {
             progress: 0.0,
             flash: Flash::new(),
             on_click: None,
+            active: false,
+            icon_only: false,
+            dangerous: false,
+            label: String::new(),
+            tone: None,
+            glyph: None,
         };
         button.remeasure();
         button
@@ -190,15 +215,46 @@ impl Button {
     /// A primary button showing `label` — sugar for [`empty`](Self::empty) plus a bold
     /// [`Label`] child.
     pub fn new(label: impl Into<String>) -> Self {
-        Self::empty().child(Label::new(label).bold(true))
+        let label = label.into();
+        let mut b = Self::empty().child(Label::new(label.clone()).bold(true));
+        b.label = label;
+        b
     }
 
     /// Prepend a leading [`Icon`] — sugar for a child, so `Button::new("Save").icon(Glyph::Check)`
     /// holds `[Icon, Label]`. The icon inherits the button's state color and size variant.
     #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
+        self.glyph = Some(glyph);
         self.base.children.insert(0, Box::new(Icon::new(glyph)));
         self
+    }
+
+    /// **The button's own click, shareable.**
+    ///
+    /// A container that has to present this button as something else — a
+    /// [`ButtonGroup`](super::ButtonGroup) turning it into a menu row when there is no room for it —
+    /// runs *this*, so the two are not two paths over one action. It is a shared handle rather than
+    /// an owned box for exactly that reason.
+    pub fn click_handler(&self) -> Option<std::rc::Rc<dyn Fn()>> {
+        self.on_click.clone()
+    }
+
+    /// **What this button's icon is**, or `None` when it has only words.
+    ///
+    /// Read by a container that has to render the button as something else — a
+    /// [`ButtonGroup`](super::ButtonGroup) building the menu row a collapsed button becomes. It
+    /// asks rather than reaching into `children`, so the answer cannot depend on how the content
+    /// happens to be composed.
+    pub fn glyph(&self) -> Option<Glyph> {
+        self.glyph
+    }
+
+    /// **The words this button carries.** Every constructor takes them, so a button always has
+    /// some — which is what makes a [`ButtonGroup`](super::ButtonGroup) collapse readable. Answered
+    /// from its own field, so it is the same whether the words are being shown or not.
+    pub fn label(&self) -> String {
+        self.label.clone()
     }
 
     /// Append an already-boxed component — the seam for a subtree built by a mapper
@@ -230,10 +286,60 @@ impl Button {
         Self::new(label).variant(ButtonVariant::Link)
     }
 
+    /// Mark the button as **held on** (toggled). When `true` it paints a persistent tone-tinted
+    /// wash and a firm border under whatever its variant draws — the held version of a hover frame,
+    /// matching the [`Toggle`](super::Toggle) on-state — so it reads as an active *status* rather
+    /// than a button that merely exists. Hover and press still layer on top, so an engaged button
+    /// still brightens under the cursor.
+    ///
+    /// **The same state, and the same tokens, as [`IconButton::active`](super::IconButton::active)**
+    /// — a pane's zoom and float buttons look identical whether they are drawn as icons or as
+    /// icons with words, which is what lets a [`ButtonGroup`](super::ButtonGroup) hold them.
+    #[heca_grid_ui_macros::prop]
+    pub fn active(mut self, on: bool) -> Self {
+        self.active = on;
+        self
+    }
+
+    /// **Which variant this button is**, so a container can tell one that was left at the default
+    /// from one that named its own — see [`ButtonGroup::variant`](super::ButtonGroup::variant).
+    pub fn variant_of(&self) -> ButtonVariant {
+        self.variant
+    }
+
+    /// **The hue this button reads in**, overriding what its variant would use — its content, its
+    /// hover wash and its held-on frame.
+    ///
+    /// The same builder [`IconButton::tone`](super::IconButton::tone) has, and for the same reason:
+    /// a button can be *about* something dangerous without being drawn as a boxed destructive
+    /// control. In a row of quiet ghost buttons, a `Destructive` variant is the odd one out — it
+    /// carries a border the others do not — where a ghost button in the danger hue reads as a cue.
+    #[heca_grid_ui_macros::prop]
+    pub fn tone(mut self, c: Color) -> Self {
+        self.tone = Some(c);
+        self
+    }
+
+    /// **Show only the icon, keeping the words.** The label is not drawn and takes no space, and
+    /// the button becomes square — the horizontal room a `Button` reserves exists for text, so a
+    /// button with none is a button that is too wide by exactly that much.
+    ///
+    /// The words are still *carried*: they are what it says on hover, and what its row reads when a
+    /// [`ButtonGroup`](super::ButtonGroup) moves it into a menu. Nothing is lost by turning them
+    /// off, which is what makes this the cheapest thing a group can give up.
+    ///
+    /// A button with no icon ignores it — hiding the words would leave an empty box.
+    #[heca_grid_ui_macros::prop]
+    pub fn icon_only(mut self, on: bool) -> Self {
+        Component::set_icon_only(&mut self, on);
+        self
+    }
+
     /// Set the variant.
     #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: ButtonVariant) -> Self {
         self.variant = variant;
+        self.dangerous = variant == ButtonVariant::Destructive;
         self
     }
 
@@ -264,7 +370,7 @@ impl Button {
     /// Set the click callback.
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
-        self.on_click = Some(Box::new(f));
+        self.on_click = Some(std::rc::Rc::new(f));
         self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
         self
     }
@@ -376,6 +482,44 @@ impl Button {
 impl Component for Button {
     /// A caller with only a `dyn Component` can press this button — no synthetic keypress, no
     /// focus required, because an addressed call is not an event competing for a target.
+    /// Its own [`icon_only`](Self::icon_only), reachable through `dyn Component` so a container
+    /// short of room can ask without knowing what its children are.
+    /// A container styling a row as one group hands its variant down; a button that was given its
+    /// own keeps it, which is what lets a quiet toolbar still have a destructive button in it.
+    fn set_variant(&mut self, variant: ButtonVariant) {
+        // **A named variant is the whole look, frame included, and a container does not take it
+        // away.** A destructive button in a quiet row is the only framed one, and that is the
+        // style speaking: danger is boxed. Handing it the row's chrome and leaving it only the hue
+        // was tried and rejected — the variant is what the button looks like, not a colour a
+        // parent may restyle (Antonio, 2026-09-03).
+        if self.variant == ButtonVariant::default() {
+            self.variant = variant;
+        }
+    }
+
+    fn set_icon_only(&mut self, on: bool) {
+        let on = on && self.glyph.is_some();
+        if self.icon_only == on {
+            return;
+        }
+        self.icon_only = on;
+        if on {
+            // ⚠️ **Taken out of the tree, not hidden inside it.**
+            //
+            // `display: none` on the label leaves the button's box answered differently by the two
+            // passes taffy makes — it reported its full height and was then placed as though it had
+            // almost none, so the button (and anything holding it) sat low and hung out of its row.
+            // Reproduced with a plain `Flex` holding one icon-only button, which is how it was found
+            // (Antonio, driving, 2026-09-03). A child that is not there has no such disagreement.
+            self.base.children.retain(|c| c.text_summary().is_none());
+        } else if !self.label.is_empty() {
+            self.base
+                .children
+                .push(Box::new(Label::new(self.label.clone()).bold(true)));
+        }
+        self.remeasure();
+    }
+
     fn activate(&mut self) -> bool {
         self.fire();
         true
@@ -402,11 +546,39 @@ impl Component for Button {
         let fs = self.base.font;
         let pad = BASE_PAD * self.base.size_scale();
         self.base.style.layout.padding = pad;
-        self.base.style.layout.padding_x = Some(pad + fs * MONO_ADVANCE_RATIO);
+        // The extra horizontal room is there for **text**. With the words off it is padding around
+        // nothing, which is what made a group of icon-only buttons read as too big.
+        let side = if self.icon_only {
+            pad
+        } else {
+            pad + fs * MONO_ADVANCE_RATIO
+        };
+        self.base.style.layout.padding_x = Some(side);
         self.base.style.layout.padding_y = Some(pad);
         self.base.style.layout.gap = fs * GAP_RATIO;
         self.base.style.layout.width = Length::Auto;
         self.base.style.layout.height = Length::Auto;
+        // **Showing only an icon, it says it cannot give way** — CSS `flex-shrink: 0`.
+        //
+        // A row shares out a shortfall among whatever will take it, and a button carrying words can
+        // take some: its [`Label`] ellipses. One down to its icon has nothing left to give, so
+        // shrinking it only eats the control itself — the box narrows around a glyph that does not,
+        // and what is left is a sliver too thin to click. The same reasoning `IconButton` already
+        // states about its own size.
+        //
+        // It belongs here rather than in whatever container happens to hold the button, so a plain
+        // [`Flex`](crate::widgets::Flex) of icon buttons is right without its author knowing to ask
+        // — which is how the defect arrived: a container told its own children not to give way and
+        // could not tell the one control it had built itself (Antonio, driving, 2026-09-04).
+        //
+        // ⚠️ **It only ever tightens.** A container may have its own reason to hold a *worded*
+        // button rigid — [`ButtonGroup`](crate::widgets::ButtonGroup) does, because a row that
+        // fits by ellipsing its labels never reports the overflow that moves a button into the
+        // menu. Writing the relaxed value back here would undo that declaration on every layout
+        // pass, which is the one thing a re-measure must never do to a property it shares.
+        if self.icon_only {
+            self.base.style.layout.flex_shrink = Some(0.0);
+        }
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -428,18 +600,29 @@ impl Component for Button {
             on_danger,
             ia,
         ) = {
+            // **The hue a container published, if it published one** — a button composed inside a
+            // severity-toned card follows the card, the way a `Label`'s ink already follows its
+            // content colour. `None` unless a container asked, which is everywhere today, so a
+            // button on its own is the theme accent exactly as before (F003/P096/T484).
+            let tone = cx.control_tone();
             let t = cx.theme();
+            let accent = tone.unwrap_or(t.colors.accent);
             (
                 t.colors.surface,
-                t.colors.accent,
-                t.colors.glow,
+                accent,
+                tone.unwrap_or(t.colors.glow),
+                // **Destructive is not re-toned.** Its colour is what the variant *means*, not
+                // decoration a parent may restyle — a Delete inside a warning-toned panel is still
+                // a Delete. Same reasoning that keeps `Badge::danger` red inside a coloured parent.
                 t.colors.danger,
                 t.colors.foreground,
                 t.colors.muted,
                 t.colors.border,
                 t.colors.border_width,
                 t.colors.control_radius(),
-                t.colors.on(t.colors.accent),
+                // The label on a *filled* button has to contrast with the fill it actually gets,
+                // which is the effective hue and not necessarily the theme accent.
+                t.colors.on(accent),
                 t.colors.on(t.colors.danger),
                 t.colors.interaction,
             )
@@ -450,6 +633,18 @@ impl Component for Button {
         let disabled = self.base.disabled.get_untracked();
         let p = if disabled { 0.0 } else { self.progress.clamp(0.0, 1.0) };
         let (accent, danger) = if disabled { (muted, muted) } else { (accent, danger) };
+        // An explicit tone replaces the variant's hue wherever the variant would have used the
+        // accent — content, hover wash, held-on frame — without changing which variant this is.
+        let accent = if disabled {
+            accent
+        } else if let Some(tone) = self.tone {
+            tone
+        } else if self.dangerous {
+            // The theme's danger, read at paint, so it follows a reload like every other colour.
+            danger
+        } else {
+            accent
+        };
         let b = self.base.bounds;
 
         // Faint theme-driven REST glow (`PaintCx::rest_glow`) on the bordered
@@ -463,6 +658,26 @@ impl Component for Button {
             .flatten();
         let rest_i = base_rest.map_or(0.0, |g| g.intensity);
         let rest_glow = |color: Color| base_rest.map(|g| Glow { color, ..g });
+
+        // **Held on**, drawn once beneath whatever the variant draws — so every variant shows the
+        // state the same way and a new variant cannot forget it. The tone follows the ambient
+        // control tone exactly as `IconButton`'s does, and the border uses `focus_border_width` so
+        // a held button stays legible with decorative borders switched off: this is a status cue,
+        // not decoration.
+        if self.active && !disabled {
+            let tone = cx.control_tone().unwrap_or(accent);
+            let line_w = cx.theme().focus_border_width;
+            let frame = (line_w > 0.0).then_some(Border {
+                color: tone.with_alpha(ia.control_active_border),
+                width: line_w,
+            });
+            let g = self.show_glow.then_some(Glow {
+                color: glow_c,
+                radius: GLOW_RADIUS,
+                intensity: GLOW_INTENSITY,
+            });
+            cx.rect(b, tone.with_alpha(ia.control_active_fill), frame, radius, g);
+        }
 
         match self.variant {
             ButtonVariant::Primary => {

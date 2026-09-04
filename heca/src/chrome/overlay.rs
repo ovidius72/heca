@@ -163,13 +163,13 @@ impl OverlayHost {
 /// routes keyboard/pointer to its layer root (a self-contained [`Dialog`](heca_grid_ui::Dialog))
 /// and swallows everything else while it's up.
 pub(crate) fn top_modal(state: &AppState) -> Option<OverlayId> {
-    state.layers.top_modal_id().map(OverlayId)
+    state.layers.top_modal_id(&state.window_root).map(OverlayId)
 }
 
 /// Is the tiled area covered by an overlay? The one input `Domain::Overlay` needs
 /// (F003/P086/T371) — see [`DynamicLayer::covers_content`](crate::chrome::layers::DynamicLayer).
 pub(crate) fn content_covered(state: &AppState) -> bool {
-    state.layers.content_covered()
+    state.layers.content_covered(&state.window_root)
 }
 
 /// Open a modal: realize its body + inject id-carrying action buttons, push it as a
@@ -188,7 +188,7 @@ pub(crate) fn open_modal(
     // `AppEvent::ChromeIntent` stamped with the layer it was declared in, dispatched by the event
     // loop. This used to claim `MouseContent`, which was untrue of a button reached by keyboard and
     // said nothing about *which* surface acted (F003/P082/T416).
-    let emit = super::layer_emitter(&state.event_proxy, id.0);
+    let emit = super::layer_emitter(&state.event_proxy, super::surface_key_of(None, id.0));
 
     let mut forms = FormBindings::default();
     let root = build_modal_root(
@@ -204,13 +204,15 @@ pub(crate) fn open_modal(
     // A modal **covers the tiled area** by definition: it scrims the app and demands a decision,
     // so nothing may act on the panes behind it (F003/P086/T371). That is the same protection the
     // router's old blanket "a modal blocks everything" gave, said as a property of the overlay.
+    let parent = state.layers.current();
     state.layers.insert(
         id.0,
-        state.layers.current(),
+        parent,
         LayerKind::OnDemand,
         true,
         true,
         root,
+        &mut state.window_root,
     );
     state.overlays.completions.insert(id, Box::new(completion));
     state.overlays.forms.insert(id, forms);
@@ -243,7 +245,7 @@ pub(crate) fn open_view_layer(
     // Reserved before the tree is built, because the tree's intent sink names the layer it lives in
     // — a plugin's panel is judged by *which* surface acted, exactly as the exposé is.
     let id = state.layers.reserve_id();
-    let emit = super::layer_emitter(&state.event_proxy, id);
+    let emit = super::layer_emitter(&state.event_proxy, super::surface_key_of(None, id));
     // Same boundary as `build_modal_root`: `realize` speaks the model's own `Intent` and knows
     // nothing of `InteractionIntent`, so the carrier is put on here.
     let view_emit: super::IntentEmitter = {
@@ -258,7 +260,7 @@ pub(crate) fn open_view_layer(
     let realized = super::realize(&node, &theme, &view_emit, &mut forms);
     let id = state
         .layers
-        .add_view(id, parent, kind, modal, covers_content, node, realized);
+        .add_view(id, parent, kind, modal, covers_content, node, realized, &mut state.window_root);
     state.needs_redraw = true;
     id
 }
@@ -364,13 +366,15 @@ impl DropdownSpec {
 /// entry) reaches the router and runs — `prefix+x` with a menu open raised the close-pane confirm
 /// (found by the user, 2026-07-30).
 fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
+    let parent = state.layers.current();
     state.layers.insert(
         id.0,
-        state.layers.current(),
+        parent,
         LayerKind::OnDemand,
         true,
         true,
         Box::new(panel),
+        &mut state.window_root,
     );
 }
 
@@ -587,7 +591,7 @@ pub(crate) fn resolve(
 ) {
     let completion = state.overlays.completions.remove(&overlay);
     state.overlays.forms.remove(&overlay);
-    state.layers.remove(overlay.0);
+    state.layers.remove(&mut state.window_root, overlay.0);
     state.needs_redraw = true;
     // **No mode is restored** (F003/P086/T365). A container's keyboard focus is not a mode, an
     // overlay never takes it away, and it is simply still there when the overlay closes — so there

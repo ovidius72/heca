@@ -15,10 +15,10 @@ use heca_core::layout::PaneId;
 pub(crate) enum HintSurface {
     /// The chrome tree (top bar, sidebars and everything a container contributed).
     Chrome,
-    /// One pane's own shell tree — the frame that owns the pane's identity and its letter.
+    /// One pane's own tree — the frame that owns the pane's identity and its letter, and whatever
+    /// sits in its header slot. There used to be a second variant for the info bar; the bar is a
+    /// child of its pane now, so it is the same tree (F003/P097/T497).
     Pane(PaneId),
-    /// One pane's header tree.
-    PaneHeader(PaneId),
     /// A dynamically registered layer (an exposé, a modal, a plugin panel).
     Layer(LayerId),
 }
@@ -87,19 +87,12 @@ pub(super) fn hint_surface_root<'a>(
     surface: &HintSurface,
 ) -> Option<&'a dyn heca_grid_ui::Component> {
     match surface {
-        HintSurface::Chrome => state
-            .chrome_tree
-            .as_ref()
-            .map(|t| &t.root as &dyn heca_grid_ui::Component),
+        HintSurface::Chrome => Some(&state.window_root as &dyn heca_grid_ui::Component),
         HintSurface::Pane(pane_id) => state
             .panes
             .get(pane_id)
             .map(|p| &p.root as &dyn heca_grid_ui::Component),
-        HintSurface::PaneHeader(pane_id) => state
-            .pane_headers
-            .get(pane_id)
-            .map(|h| &h.root as &dyn heca_grid_ui::Component),
-        HintSurface::Layer(id) => state.layers.get(*id).map(|l| l.root()),
+        HintSurface::Layer(id) => crate::chrome::surface_node(&state.window_root, *id),
     }
 }
 
@@ -111,19 +104,14 @@ fn hint_surface_root_mut<'a>(
     surface: &HintSurface,
 ) -> Option<&'a mut (dyn heca_grid_ui::Component + 'static)> {
     match surface {
-        HintSurface::Chrome => state
-            .chrome_tree
-            .as_mut()
-            .map(|t| &mut t.root as &mut dyn heca_grid_ui::Component),
+        HintSurface::Chrome => Some(&mut state.window_root as &mut dyn heca_grid_ui::Component),
         HintSurface::Pane(pane_id) => state
             .panes
             .get_mut(pane_id)
             .map(|p| &mut p.root as &mut dyn heca_grid_ui::Component),
-        HintSurface::PaneHeader(pane_id) => state
-            .pane_headers
-            .get_mut(pane_id)
-            .map(|h| &mut h.root as &mut dyn heca_grid_ui::Component),
-        HintSurface::Layer(id) => state.layers.get_mut(*id).map(|l| l.root_mut().as_mut()),
+        HintSurface::Layer(id) => {
+            crate::chrome::surface_node_mut(&mut state.window_root, *id).map(|n| n.as_mut())
+        }
     }
 }
 
@@ -144,7 +132,6 @@ pub(crate) fn target_identity(
     let surface = match &target.surface {
         HintSurface::Chrome => "chrome".to_string(),
         HintSurface::Pane(id) => format!("pane:{}", id.0),
-        HintSurface::PaneHeader(id) => format!("pane-header:{}", id.0),
         HintSurface::Layer(id) => format!("layer:{id:?}"),
     };
     Some(format!("{surface}/{within}"))
@@ -175,19 +162,20 @@ pub(crate) fn fire_hint(state: &mut crate::app_state::AppState, target: &HintTar
 /// nothing, exactly as an unmounted provider's does.
 pub(crate) fn fire_widget_action(state: &crate::app_state::AppState, name: &str) -> bool {
     for layer in state.layers.visible_front_to_back() {
-        if heca_grid_ui::fire_action(layer.root(), name) {
+        let Some(node) = crate::chrome::surface_node(&state.window_root, layer.id) else {
+            continue;
+        };
+        if heca_grid_ui::fire_action(node, name) {
             return true;
         }
     }
-    if let Some(tree) = state.chrome_tree.as_ref()
-        && heca_grid_ui::fire_action(&tree.root, name)
-    {
+    if heca_grid_ui::fire_action(&state.window_root, name) {
         return true;
     }
     state
-        .pane_headers
+        .panes
         .values()
-        .any(|h| heca_grid_ui::fire_action(&h.root, name))
+        .any(|p| heca_grid_ui::fire_action(&p.root, name))
 }
 
 /// **Withdraw every letter**, from every retained tree — what closing the picker means.
@@ -196,16 +184,13 @@ pub(crate) fn fire_widget_action(state: &crate::app_state::AppState, name: &str)
 /// letters were up still loses its keycap. A stale letter left over a card is the failure this
 /// exists to stop.
 pub(crate) fn clear_hint_letters(state: &crate::app_state::AppState) {
-    if let Some(tree) = state.chrome_tree.as_ref() {
-        heca_grid_ui::clear_hints(&tree.root);
-    }
+    heca_grid_ui::clear_hints(&state.window_root);
     for shell in state.panes.values() {
         heca_grid_ui::clear_hints(&shell.root);
     }
-    for header in state.pane_headers.values() {
-        heca_grid_ui::clear_hints(&header.root);
-    }
     for layer in state.layers.visible_front_to_back() {
-        heca_grid_ui::clear_hints(layer.root());
+        if let Some(node) = crate::chrome::surface_node(&state.window_root, layer.id) {
+            heca_grid_ui::clear_hints(node);
+        }
     }
 }

@@ -41,7 +41,7 @@
 use std::rc::Rc;
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
-use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, KeyHintGroup, Label, LayoutExt, MarkerGroup, Overlay, Panel, PropInput, RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize};
+use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, KeyHintGroup, Label, LayoutExt, MarkerGroup, Overlay, Panel, PropInput, RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastPosition, ToastSeverity, Toggle, Track, WidgetSize};
 
 use heca_view::{
     Intent, PropMap, PropValue, ViewNode, ViewSize, ViewVariant, WidgetKind,
@@ -646,18 +646,58 @@ fn realize_kind(
             if let Some(glyph) = glyph_prop(node) {
                 toast = toast.icon(glyph);
             }
-            if let Some(body) = node.props.get("body").and_then(PropValue::as_text) {
-                toast = toast.body(body);
+            // `body_text` is applied first and a described `body` child overwrites the same slot
+            // below, so children win without the arm having to look ahead.
+            if let Some(body) = node.props.get("body_text").and_then(PropValue::as_text) {
+                toast = toast.body_text(body);
+            }
+            if let Some(opened) = node.props.get("opened").and_then(PropValue::as_bool) {
+                toast = toast.opened(opened);
+            }
+            if let Some(position) = node
+                .props
+                .get("position")
+                .and_then(PropValue::as_text)
+                .and_then(toast_position)
+            {
+                toast = toast.position(position);
             }
             toast = with_props(toast, node, theme);
-            // The inline action is a **labelled button**, not arbitrary content — so it is a prop
-            // (`action_text`) plus an `action` intent, not a slot. A slot would have promised
-            // composition the widget doesn't offer.
-            if let Some(label) = node.props.get("action_text").and_then(PropValue::as_text)
+
+            // ── Slots ────────────────────────────────────────────────────────────────────────
+            // `body` is the **default** slot, so an unslotted child is the body; `actions` are the
+            // controls under it, one per child. F003/P076/T284 recorded "no slots, deliberately"
+            // because the card hand-drew itself and could not hold arbitrary content — that reason
+            // died with F003/P082/T481, and this reverses it (F003/P096/T488).
+            //
+            // A described action is an **ordinary described `Button`** carrying its own `press`
+            // intent, which is what makes it a `prefix+/` target with nothing hint-related written:
+            // being pickable is not opt-in.
+            let mut described_actions = false;
+            for child in &node.children {
+                let realized = realize(child, theme, emit, forms);
+                match slot_of(child) {
+                    Some("actions") => {
+                        described_actions = true;
+                        toast = toast.action_boxed(realized);
+                    }
+                    Some("body") | None => toast = toast.body_boxed(realized),
+                    other => {
+                        warn_unknown_slot(node, child, other, &["body", "actions"]);
+                        toast = toast.body_boxed(realized);
+                    }
+                }
+            }
+
+            // **Children win over the text sugar**, the way a `Button`'s children win over its
+            // `text`/`icon`: one content model, two spellings, never two paint paths. The text
+            // props stay because they are the plain-data path a `ToastSpec` uses.
+            if !described_actions
+                && let Some(label) = node.props.get("action_text").and_then(PropValue::as_text)
                 && let Some(carrier) = intent_carrier(node, "action")
             {
                 let emit = emit.clone();
-                toast = toast.action(label, move || emit(carrier.clone()));
+                toast = toast.action(Button::new(label).on_click(move || emit(carrier.clone())));
             }
             if let Some(carrier) = intent_carrier(node, "press") {
                 let emit = emit.clone();
@@ -1029,6 +1069,21 @@ fn intent_carrier(node: &ViewNode, event: &str) -> Option<Intent> {
 }
 
 /// A `Toast`'s `"severity"` prop, by name. Unknown / absent → `Info` (the widget's own default).
+/// A described position name → [`ToastPosition`]. An unknown name is **not** an error: like every
+/// other named value a description carries, it degrades to the widget's default rather than
+/// failing a plugin's tree (F003/P096/T483).
+fn toast_position(name: &str) -> Option<ToastPosition> {
+    Some(match name {
+        "top-right" => ToastPosition::TopRight,
+        "top-left" => ToastPosition::TopLeft,
+        "top-center" => ToastPosition::TopCenter,
+        "bottom-right" => ToastPosition::BottomRight,
+        "bottom-left" => ToastPosition::BottomLeft,
+        "bottom-center" => ToastPosition::BottomCenter,
+        _ => return None,
+    })
+}
+
 fn severity_prop(node: &ViewNode) -> ToastSeverity {
     match node.props.get("severity").and_then(PropValue::as_text) {
         Some("success") => ToastSeverity::Success,
@@ -1258,6 +1313,49 @@ mod tests {
         cut.open();
         cut.hide();
         assert!(!cut.presence().is_some_and(|p| p.is_leaving()), "a cut, not a panic");
+    }
+
+    /// **A described surface can ask for the frost the exposé uses** — the plugin half of the
+    /// backdrop.
+    ///
+    /// It matters because the blur is GPU work: if a plugin could not *describe* it, frosting would
+    /// be reachable only from native code and every plugin overlay would sit flat over a sharp
+    /// session. It asks for the effect and never a radius — strength is the theme's, so one theme
+    /// answers for every surface at once.
+    #[test]
+    fn a_described_overlay_can_ask_for_the_frost_behind_it() {
+        let emit: IntentEmitter = Rc::new(|_| {});
+        let mut forms = FormBindings::default();
+        let theme = Theme::default();
+
+        let mut backdrops = |frosted: bool| {
+            let node = ViewNode::new(WidgetKind::Overlay)
+                .prop("frosted", PropValue::Bool(frosted))
+                .prop("opened", PropValue::Bool(true))
+                .child(ViewNode::new(WidgetKind::Label).text("MAP"));
+            let mut w = realize(&node, &theme, &emit, &mut forms);
+            heca_grid_ui::LayoutEngine::new()
+                .compute(w.as_mut(), heca_core::layout::Size::new(800.0, 600.0));
+            let mut scene = heca_grid_ui::Scene::new();
+            {
+                let mut cx = heca_grid_ui::PaintCx::new(&mut scene, &theme)
+                    .with_viewport(heca_core::layout::Size::new(800.0, 600.0));
+                w.paint(&mut cx);
+            }
+            scene
+                .iter()
+                .filter(|c| {
+                    matches!(
+                        c,
+                        heca_grid_ui::scene::DrawCommand::Host(h)
+                            if matches!(h.draw, heca_grid_ui::scene::HostDraw::Backdrop { .. })
+                    )
+                })
+                .count()
+        };
+
+        assert_eq!(backdrops(true), 1, "the described surface asked for its blur");
+        assert_eq!(backdrops(false), 0, "and one that did not ask pays for no pass");
     }
 
     /// A confirm-dialog-shaped tree: a column with a message label + a row of two action
@@ -2659,9 +2757,7 @@ mod tests {
         );
     }
 
-    /// `Toast` needs no slots: its inline action is a **labelled button**, not arbitrary content, so
-    /// it is a prop (`action_text`) + an `action` intent. A slot would have promised a composition
-    /// the widget does not offer.
+    /// The card's props and its three intents still work — the plain-data path a `ToastSpec` uses.
     #[test]
     fn toast_node_realizes_its_props_and_three_intents() {
         use std::cell::RefCell;
@@ -2673,16 +2769,13 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Toast)
             .text("Build failed")
             .prop("severity", PropValue::Text("danger".into()))
-            .prop("body", PropValue::Text("3 errors in heca-grid-ui".into()))
+            .prop("body_text", PropValue::Text("3 errors in heca-grid-ui".into()))
             .prop("action_text", PropValue::Text("RETRY".into()))
             .on("action", Intent::new("rebuild"))
             .on("dismiss", Intent::new("close_toast"));
 
         let toast = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
-        assert!(
-            toast.base().children.is_empty(),
-            "the Toast draws its own card — it takes no children",
-        );
+        assert_eq!(toast.base().children.len(), 3, "icon, text column, dismiss");
 
         // An unknown severity degrades to the widget's default rather than erroring.
         let bogus = ViewNode::new(WidgetKind::Toast)
@@ -2690,6 +2783,130 @@ mod tests {
             .prop("severity", PropValue::Text("catastrophic".into()));
         assert_eq!(severity_prop(&bogus), heca_grid_ui::ToastSeverity::Info);
         assert_eq!(severity_prop(&node), heca_grid_ui::ToastSeverity::Danger);
+    }
+
+    /// The card's text column: `[title, body, actions]`.
+    fn toast_column(toast: &dyn Component) -> &[Box<dyn Component>] {
+        &toast.base().children[1].base().children
+    }
+
+    /// **A described toast has slots again** — `body` (the default) and `actions`.
+    ///
+    /// F003/P076/T284 recorded "no slots, deliberately" because the card hand-drew itself and could
+    /// not hold arbitrary content. That reason died with F003/P082/T481, and this is the reversal
+    /// (F003/P096/T488). An unslotted child is the body, so the common case needs no slot name.
+    #[test]
+    fn a_described_toast_takes_a_body_and_several_actions() {
+        use heca_core::layout::Point;
+        use heca_grid_ui::Event;
+        use std::cell::RefCell;
+
+        let fired: Rc<RefCell<Vec<Intent>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = fired.clone();
+        let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+
+        let node = ViewNode::new(WidgetKind::Toast)
+            .text("Build failed")
+            // No slot named: the body is the DEFAULT slot.
+            .child(ViewNode::new(WidgetKind::Label).text("3 errors"))
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("Retry")
+                    .prop("slot", PropValue::Text("actions".into()))
+                    .on_press(Intent::new("rebuild")),
+            )
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("View log")
+                    .prop("slot", PropValue::Text("actions".into()))
+                    .on_press(Intent::new("open_log")),
+            );
+
+        let toast = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let column = toast_column(toast.as_ref());
+        assert_eq!(
+            column[1].text_summary().as_deref(),
+            Some("3 errors"),
+            "an unslotted child is the body",
+        );
+        let actions = &column[2].base().children;
+        assert_eq!(actions.len(), 2, "two described actions, two controls");
+
+        // Each action fires its OWN intent — a described action is an ordinary described Button,
+        // so a real click on it is the whole of the wiring.
+        for (i, want) in ["rebuild", "open_log"].iter().enumerate() {
+            fired.borrow_mut().clear();
+            let mut a = realize(
+                &node.children[i + 1],
+                &Theme::default(),
+                &emit,
+                &mut FormBindings::default(),
+            );
+            heca_grid_ui::LayoutEngine::new()
+                .base_font(14.0)
+                .compute(a.as_mut(), heca_core::layout::Size::new(200.0, 60.0));
+            let b = a.base().bounds;
+            let at = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+            heca_grid_ui::dispatch(
+                a.as_mut(),
+                &Event::pointer_pressed(at, heca_grid_ui::PointerButton::Left),
+            );
+            heca_grid_ui::dispatch(
+                a.as_mut(),
+                &Event::pointer_released(at, heca_grid_ui::PointerButton::Left),
+            );
+            assert_eq!(
+                fired.borrow().first().map(|i| i.action.as_str()),
+                Some(*want),
+                "action {i} fired the wrong intent",
+            );
+        }
+    }
+
+    /// **Children win over the text sugar** — one content model, two spellings, the way a
+    /// `Button`'s children win over its `text`/`icon`.
+    #[test]
+    fn a_described_toasts_children_win_over_its_text_props() {
+        let node = ViewNode::new(WidgetKind::Toast)
+            .text("Build failed")
+            .prop("body_text", PropValue::Text("the sugar body".into()))
+            .prop("action_text", PropValue::Text("SUGAR".into()))
+            .on("action", Intent::new("rebuild"))
+            .child(ViewNode::new(WidgetKind::Label).text("the composed body"))
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("Composed")
+                    .prop("slot", PropValue::Text("actions".into()))
+                    .on_press(Intent::new("composed")),
+            );
+
+        let toast = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let column = toast_column(toast.as_ref());
+        assert_eq!(
+            column[1].text_summary().as_deref(),
+            Some("the composed body"),
+            "the text sugar overwrote a composed body",
+        );
+        let actions = &column[2].base().children;
+        assert_eq!(actions.len(), 1, "action_text built a second control beside the composed one");
+        assert_eq!(actions[0].text_summary().as_deref(), Some("Composed"));
+    }
+
+    /// **An unknown slot name is logged and falls back to the body** — `realize` is total for
+    /// untrusted input, so a plugin's typo costs it a misplaced child, never a panic.
+    #[test]
+    fn a_described_toasts_unknown_slot_falls_back_to_the_body() {
+        let node = ViewNode::new(WidgetKind::Toast).text("t").child(
+            ViewNode::new(WidgetKind::Label)
+                .text("typo")
+                .prop("slot", PropValue::Text("bodyy".into())),
+        );
+        let toast = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        assert_eq!(
+            toast_column(toast.as_ref())[1].text_summary().as_deref(),
+            Some("typo"),
+            "an unknown slot should fall back to the body, not vanish",
+        );
     }
 
     // ── Vocabulary coverage (the guard that keeps this from rotting) ──
@@ -2860,38 +3077,29 @@ mod tests {
     /// with nobody remembering, and a plugin's tree is covered by construction: it is built from
     /// these kinds.
     ///
-    /// **Base layer only.** The overlay band exists precisely for things that must escape their
-    /// box — a dropdown panel opened inside a scroll region, a hint keycap on a half-visible row —
-    /// so asserting there would forbid the feature. What must stay inside is the widget's own
-    /// picture.
+    /// **The clip stack and the overlay band are the framework's answer**, not this test's:
+    /// `Scene::draws_outside` honours the clips in force and reads the base layer only, because
+    /// the overlay band exists precisely for what must escape its box — a dropdown opened inside a
+    /// scroll region, a hint keycap on a half-visible row. This sweep and the showcase catalog's
+    /// asked the same question with two copies of that arithmetic, and both copies were wrong the
+    /// same way (F003/P082/T481).
     ///
     /// The failure it exists for is invisible to every "was this drawn?" assertion: a name that is
     /// drawn *somewhere*, across its neighbour.
     #[test]
     fn no_kind_paints_outside_the_box_it_is_given() {
-        use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, Theme};
-        use heca_core::layout::Size;
-
-        /// Kinds that still put content past their edge, each with what does it. **An entry here
-        /// is a defect, not a licence** — the rule is `NO_HINT`'s: keep it short, and never add one
-        /// to make the test pass. Every one of these is a leading icon or drag handle placed before
-        /// the text without the row's own width being consulted.
-        const KNOWN_ESCAPES: &[(&str, &str)] = &[
-            ("ItemGroup", "the disclosure caret and its gap are placed before the header text"),
-            ("DockFrame", "drag handle + caret + gap: at 60px the title starts AT the right edge"),
-            ("Toast", "the severity icon's column is a constant, so it survives any squeeze"),
-            ("Item", "the leading slot is placed before the label, whatever room is left"),
-        ];
+        use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Theme};
+        use heca_core::layout::{Point, Rectangle, Size};
 
         let theme = Theme::default();
         let mut escapes: Vec<String> = Vec::new();
         for &kind in WidgetKind::ALL {
-            if KNOWN_ESCAPES.iter().any(|(k, _)| *k == format!("{kind:?}")) {
-                continue;
-            }
-            // Down to 24px: narrower than that is below a single control's own minimum (an icon
-            // plus its padding), where "stay inside the box" stops being a meaningful request.
-            for box_w in [400.0f64, 120.0, 60.0, 24.0] {
+            // Down to 32px. **A box is never narrower than its own padding** — that is the box
+            // model, not a defect: a card padded 13 a side has a 26px floor, and asking it to fit
+            // in 24 is asking it to have no box at all. Every escape this sweep exists for still
+            // shows at 32 — all five of the ones it was carrying did — so the floor costs it
+            // nothing (F003/P082/T481).
+            for box_w in [400.0f64, 120.0, 60.0, 32.0] {
                 // A parent that hands it a definite width: a kind sized as a share has nothing to
                 // be a share *of* at the root of a layout.
                 let node = ViewNode::new(WidgetKind::VStack).child(sample_node(kind));
@@ -2904,49 +3112,32 @@ mod tests {
                 root.base_mut().style.layout.width = heca_grid_ui::Length::Px(box_w as f32);
                 LayoutEngine::new().compute(root.as_mut(), Size::new(box_w, 200.0));
 
+                // **Do not ask a box to hold a control in less room than a control needs.** A card
+                // pads itself 13 a side, so at 32px it has six pixels of content space — narrower
+                // than the smallest thing that can stand in it (a glyph plus its padding). Below
+                // that, "keep your content inside" is not a defect report, it is the box model:
+                // something has to be cut, and which one is a design decision, not this sweep's.
+                // The kinds that escape all do so at widths where they *did* have room
+                // (F003/P096/T483).
+                // The kind itself, not the wrapper that hands it a definite width.
+                let pad = root
+                    .base()
+                    .children
+                    .first()
+                    .map_or(0.0, |kind| kind.base().style.layout.padding as f64);
+                let one_control = (theme.font_size * 2.0) as f64;
+                if box_w - 2.0 * pad < one_control {
+                    continue;
+                }
+
                 let mut scene = Scene::new();
                 {
                     let mut cx = PaintCx::new(&mut scene, &theme);
                     root.paint(&mut cx);
                 }
-                // **Honour the clip stack**: a draw scissored to a clip that is itself inside the
-                // window cannot escape it — that is what the clip is for. Ignoring them reports a
-                // scrolling page's content, which is exactly the case where overflow is the feature.
-                let mut clips: Vec<heca_core::layout::Rectangle> = Vec::new();
-                for cmd in scene.base_layer().iter() {
-                    match cmd {
-                        heca_grid_ui::DrawCommand::PushClip(r) => {
-                            let inner = clips.last().and_then(|c: &heca_core::layout::Rectangle| c.intersection(*r)).unwrap_or(*r);
-                            clips.push(inner);
-                            continue;
-                        }
-                        heca_grid_ui::DrawCommand::PopClip => {
-                            clips.pop();
-                            continue;
-                        }
-                        _ => {}
-                    }
-                    let (what, rect) = match cmd {
-                        DrawCommand::Text(t) if t.text.is_empty() => continue,
-                        DrawCommand::Text(t) => (format!("text {:?}", t.text), t.rect),
-                        DrawCommand::Rect(r) => ("rect".to_string(), r.rect),
-                        _ => continue,
-                    };
-                    // A box squeezed to nothing paints nothing, wherever its origin ended up.
-                    if rect.size.w <= 0.0 || rect.size.h <= 0.0 {
-                        continue;
-                    }
-                    let Some(rect) = clips.last().map_or(Some(rect), |c| c.intersection(rect)) else {
-                        continue; // entirely scissored away
-                    };
-                    let right = rect.loc.x + rect.size.w;
-                    if rect.loc.x < -0.5 || right > box_w + 0.5 {
-                        escapes.push(format!(
-                            "{kind:?} at {box_w}px: {what} spans {:.0}..{:.0}",
-                            rect.loc.x, right,
-                        ));
-                        break;
-                    }
+                let box_ = Rectangle::new(Point::default(), Size::new(box_w, 200.0));
+                if let Some(escape) = scene.draws_outside(box_).first() {
+                    escapes.push(format!("{kind:?} at {box_w}px: {escape}"));
                 }
             }
         }

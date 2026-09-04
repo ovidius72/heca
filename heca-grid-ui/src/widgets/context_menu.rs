@@ -971,7 +971,7 @@ impl Component for ContextMenu {
 
     /// The menu paints on the overlay layer, so overlay damage targets the panel rect.
     fn damage_bounds(&self) -> Rectangle {
-        self.base.bounds
+        crate::widgets::tooltip::damage(&self.base)
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {

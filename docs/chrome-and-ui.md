@@ -17,6 +17,101 @@ planner ids that own the work. Nothing was summarised away.
 | the formal contracts (ChromeHost, providers, overlays) | Part II §6–§11 |
 | the widget library's rules and boundary | Part II §13–§18 |
 | which planner phase owns what | Part III |
+| where the plugin story actually stands, on one page | the section right below this table |
+
+---
+
+## The plugin story on one page — the map, not the status
+
+*Written 2026-09-01, from the planner and this document. It is a **map of the pieces and what each
+one is for**; the planner remains the only record of what is done. Every id below was read, not
+recalled.*
+
+**Where this is going**, in `F003/P022`'s own words: a plugin author writes their interface the way
+they would in Flutter or SwiftUI — a tree of typed widgets, composed to any depth, behaviour
+attached to the widget — and gets **exactly what the app's own chrome gets**: the same widgets, the
+same `prefix+/` picker, the same menus, focus and policy. *If a plugin ends up with a poorer version
+of a shipped feature, that phase has failed regardless of what loads.*
+
+### The three ways a plugin puts something on screen
+
+Decided in §2.7 / R6 below, and it predates the one-tree work:
+
+| shape | who owns it | state |
+|---|---|---|
+| **Requested** — a modal or dropdown that asks a question and returns a typed answer | the host owns stacking, focus trap, Escape, click-outside, placement | `F003/P035/T065` |
+| **Contributed into a region** — a panel, toolbar or status segment seated in the chrome | the plugin offers, the host mounts | possible today; add/move is `F003/P035/T064` |
+| **Its own named surface** — a panel of its own design, addressed by name and opened by an action, the way `heca.expose` is | the plugin offers, the host attaches | **was unplanned**; folded into `F003/P035/T065` on 2026-09-01 |
+
+A plugin never puts a surface in the tree itself. It offers one, exactly as it offers a container.
+
+### What a named surface inherits, and therefore does not have to build
+
+Only *attaching* was ever missing. Everything after it already works, and the exposé is the proof:
+
+- **Opening** is an ordinary action carrying the surface's name — `toggle_layer { name = "heca.expose" }`,
+  bound in `keybindings.default.toml`. Rebindable by the user, and reachable from the palette and RPC,
+  which is the project rule that a capability must not be trapped behind one surface.
+- **Its own keys** are declared under its name in a `[[keys.surface]]` block, consulted *before* the
+  global map.
+- **The way out** is free and cannot be removed: the `layer` floor binds Escape — asserted,
+  unremovable — plus `q` / `Ctrl+q` to `close_overlay`, declared once for every layer rather than
+  copied per surface. Those keys do not exist while no layer is up, so `:q` still quits vim.
+- **Input, hint letters, layout, paint and z-order** follow from being a node in the one tree
+  (`F003/P097`). Z is tree position; a surface passes the pointer through where it covers nothing.
+
+### How a plugin writes what goes inside
+
+**Built, and the answer to "surely it isn't hand-written JSON":**
+
+```
+heca-view               the MODEL — serde and nothing else. A plugin depends on this alone.
+heca-view/src/build.rs  the TYPED SDK — one Rust type per kind, so the compiler refuses what the
+                        widget cannot do. This is what an author writes.
+heca-view-realize       the ONE bridge — realize(&ViewNode, theme, emit, forms), below `heca`.
+```
+
+The showcase renders a described tree beside its hand-built twin, which is what proves the bridge
+does not need the app.
+
+**Why it crosses as data at all** — not a limit of WASM, but of any sandbox: a plugin cannot hand us
+a closure, a signal or a pointer to a live widget, because those mean something only inside our
+memory. So the interface crosses as a description and a press comes back as an `Intent` — a name and
+arguments. The consequence to design around: our own chrome updates in place through signals, while
+a plugin's change is a new description. Fine for a panel or a dialog; not for something changing
+many times a second, which stays ours.
+
+### What is missing, and where it is tracked
+
+- **Other languages.** Generated type definitions from the same closed `WidgetKind::ALL` list —
+  `F003/P001/T006`. Today a Rust author gets editor help and a JavaScript or Python author gets
+  nothing. That is the gap between "a plugin *can* do this" and "anyone can write a plugin".
+- **The vocabulary's own holes.** 13 of 46 widgets have no described form, and a context menu has no
+  described declaration — `F003/P097/T501`. ⚠️ Corrected 2026-09-01: a menu is a **declaration
+  attached to a node**, the way a press or a hint is, never a widget kind an author assembles and
+  positions. The native side already proves the shape — one builder on any widget, no id, no path,
+  no anchor.
+- **The proof.** Rebuild one of our own overlays using only what a plugin can write —
+  `F003/P097/T502`. ⚠️ Its text still names `LayerContent`, deleted in `F003/P097/T494`; read it as
+  "the described path". Until this lands, "a plugin can add an overlay" is an intention, not a fact.
+- **No host-only exceptions.** The rule is compile-enforced per builder; the audit proving the
+  host-only list is *only* the legitimate cases has not been done — `F004/P084/T398`.
+- **The boundary itself.** Loading someone else's code, the event bus, region contributions and
+  action registration across it — `F003/P022`, which says outright it has no real spec yet and needs
+  a discovery pass before it can be planned. It is the least defined thing in the feature.
+
+### The plugin that needs no code at all
+
+`F003/P053` — plugins from `config.toml`. A large share of plugins add a command that runs a
+program, a panel in a region, a menu entry and a key. None of that is logic, and none of it should
+need a sandbox or a compiler: it is a text file declaring what exists and where it appears, in the
+same shapes our own defaults already use, merged by the same per-key rules so a user can override
+any of it. The compiled part joins only when there is behaviour to run.
+
+Two things follow from doing it this way. Declaring an action in that file makes it reachable by key,
+by mouse and by script at once, so a plugin cannot accidentally trap a feature behind its own button.
+And everything declared is known *before* the plugin is loaded — the palette can list it and the
+keymap can bind it without running anything.
 
 ---
 

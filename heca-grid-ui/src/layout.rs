@@ -145,6 +145,9 @@ impl LayoutEngine {
             }
         };
         c.base_mut().font = resolved;
+        // The tree's own base, unscaled by any size variant — what a widget floats *beside* itself
+        // is a small panel belonging to the surface, not a part of the control.
+        c.base_mut().root_font = self.base_font;
         // Resolve theme spacing tokens (font-relative) into concrete padding px, so a
         // container takes its padding from the theme instead of a hand-computed value.
         //
@@ -189,25 +192,45 @@ impl LayoutEngine {
         let child_count = c.base().children.len();
         let mut child_nodes = Vec::with_capacity(child_count);
         for i in 0..child_count {
-            let child = &mut c.base_mut().children[i];
             {
+                let child = &mut c.base_mut().children[i];
                 let s = &mut child.base_mut().style.layout;
                 if content_may_overflow {
                     s.flex_shrink = s.flex_shrink.or(Some(0.0));
-                } else if caps_children {
-                    // **Nothing is wider than what holds it** — CSS's `max-width: 100%`, applied
-                    // where the invariant lives rather than inside each widget that happens to
-                    // carry a design width. `Alert` is 360px, `Toast` 320, `Input` 240: in a
-                    // narrower panel they painted straight through its border and out the other
-                    // side, at *every* window size, because an intrinsic width never consults the
-                    // box it was given (F003/P082/T438).
+                } else {
+                    // **Giving way is not optional when the row has run out of room.**
                     //
-                    // Not inside a viewport: there, exceeding the box is the point, and the clip
-                    // plus the scrollbar are how you reach the rest.
-                    s.max_width = s.max_width.or(Some(crate::style::Length::Pct(1.0)));
+                    // Shrinking is already the default, but flexbox hands every item a floor it
+                    // never asked for — `min-width: auto`, its own content width — so a row whose
+                    // children *are* willing to shrink still cannot fit them, and lays the overflow
+                    // out past its own edge instead. That is one defect wearing four faces: a
+                    // disclosure caret, a drag handle, a severity icon and a leading slot, each
+                    // placed at its full size before the text, each leaving the text a start
+                    // position outside the box. `DockFrame` at 60px began its title AT the right
+                    // edge; the whole title was outside the frame.
+                    //
+                    // The floor is what has to go, and it goes here rather than in the four
+                    // widgets, because none of them is doing anything wrong: they compose a row and
+                    // let the engine place it. A widget that must keep a size still says so —
+                    // `min_width` set explicitly, or `flex_shrink(0.0)` — and this leaves it alone
+                    // (F003/P082/T481).
+                    //
+                    // Not inside a viewport: there, exceeding the box is the point, and the floor
+                    // is what keeps a 600px column 600px wide in a 100px scroll region.
+                    s.min_width = s.min_width.or(Some(crate::style::Length::Px(0.0)));
+                    if caps_children {
+                        // **Nothing is wider than what holds it** — CSS's `max-width: 100%`,
+                        // applied where the invariant lives rather than inside each widget that
+                        // happens to carry a design width. `Alert` is 360px, `Toast` 320, `Input`
+                        // 240: in a narrower panel they painted straight through its border and out
+                        // the other side, at *every* window size, because an intrinsic width never
+                        // consults the box it was given (F003/P082/T438).
+                        s.max_width = s.max_width.or(Some(crate::style::Length::Pct(1.0)));
+                    }
                 }
             }
             // Children inherit this node's effective variant unless they chose their own.
+            let child = &mut c.base_mut().children[i];
             child_nodes.push(self.build(child.as_mut(), size));
         }
         // A leaf that measures itself from the width it is offered gets taffy's node context; a
@@ -428,6 +451,106 @@ mod tests {
         let placed = root.base().children[0].base().bounds;
         assert_eq!(placed.loc, Point::new(200.0, 100.0));
         assert_eq!(placed.size, Size::new(400.0, 200.0));
+    }
+
+    /// **Placing something is not resizing it.** An axis left `Auto` in a placement is a question
+    /// the caller did not answer, so the widget's own size stands there — which is what lets a
+    /// host seat a surface at the window origin without also deciding how big it is.
+    ///
+    /// Reading `Auto` as "shrink to content" instead is how a menu seated as a surface ended up
+    /// stretched down the whole window: the seat handed it the viewport, and a menu is not a layer
+    /// — it *is* its panel. Both halves are here, because the trap is that one of them is silent:
+    /// a layer that declares its own `Pct(1.0)` must keep filling the window.
+    #[test]
+    fn a_placement_that_leaves_an_axis_auto_keeps_the_widgets_own_size() {
+        let mut root = Flex::row()
+            .width(Length::Px(800.0))
+            .height(Length::Px(400.0))
+            // Sizes itself, like a menu panel: the seat must not touch it.
+            .child(
+                Flex::row()
+                    .width(Length::Px(220.0))
+                    .height(Length::Px(90.0))
+                    .at_rect(
+                        Length::Pct(0.0),
+                        Length::Pct(0.0),
+                        Length::Auto,
+                        Length::Auto,
+                    ),
+            )
+            // Declares itself the whole window, like every layer-shaped surface.
+            .child(
+                Flex::row()
+                    .width(Length::Pct(1.0))
+                    .height(Length::Pct(1.0))
+                    .at_rect(
+                        Length::Pct(0.0),
+                        Length::Pct(0.0),
+                        Length::Auto,
+                        Length::Auto,
+                    ),
+            );
+        LayoutEngine::new().compute(&mut root, Size::new(800.0, 400.0));
+
+        assert_eq!(
+            root.base().children[0].base().bounds.size,
+            Size::new(220.0, 90.0),
+            "the panel kept the size it set on itself",
+        );
+        assert_eq!(
+            root.base().children[1].base().bounds.size,
+            Size::new(800.0, 400.0),
+            "and the layer still fills the window",
+        );
+    }
+
+    /// **A leading icon never pushes the text out of the row** (F003/P082/T481).
+    ///
+    /// The row is willing to shrink and the label is willing to be cut, and it still overflowed:
+    /// flexbox floors every item at its own content width, so the icon kept its 40px, the label
+    /// kept its text width, and the sum was laid out past the row's right edge. Four widgets — a
+    /// dock header, a group header, a toast, a list row — showed it as text drawn across whatever
+    /// sat beside them.
+    #[test]
+    fn a_leading_slot_never_pushes_the_text_past_the_rows_edge() {
+        use crate::widgets::{Ellipsis, Label};
+
+        let mut row = Flex::row()
+            .width(Length::Px(60.0))
+            .height(Length::Px(30.0))
+            .child(Flex::row().width(Length::Px(40.0)).height(Length::Px(20.0)))
+            .child(Label::new("a title far too long for this").truncate(Ellipsis::End));
+        LayoutEngine::new().compute(&mut row, Size::new(200.0, 100.0));
+
+        for child in &row.base().children {
+            let b = child.base().bounds;
+            assert!(
+                b.loc.x >= -0.5 && b.loc.x + b.size.w <= 60.5,
+                "content laid out at {}..{} in a 60px row",
+                b.loc.x,
+                b.loc.x + b.size.w,
+            );
+        }
+    }
+
+    /// **A widget that must keep its size still keeps it.** The floor is removed by default, not
+    /// forbidden: `flex_shrink(0.0)` is how a control opts out, and it must survive the rule above
+    /// — otherwise every icon in a tight row would be squeezed to a smear instead of the text
+    /// giving way.
+    #[test]
+    fn a_widget_that_refuses_to_shrink_is_left_alone() {
+        let mut row = Flex::row()
+            .width(Length::Px(60.0))
+            .height(Length::Px(30.0))
+            .child(
+                Flex::row()
+                    .width(Length::Px(40.0))
+                    .height(Length::Px(20.0))
+                    .shrink(0.0),
+            )
+            .child(Flex::row().width(Length::Px(40.0)).height(Length::Px(20.0)));
+        LayoutEngine::new().compute(&mut row, Size::new(200.0, 100.0));
+        assert_eq!(row.base().children[0].base().bounds.size.w, 40.0);
     }
 
     /// **A placed box is out of the flow** — it takes no space from its siblings and does not move

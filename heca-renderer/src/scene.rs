@@ -6,7 +6,7 @@
 
 use crate::grid::{GlowRect, GridRenderer};
 use crate::text::TextRenderer;
-use heca_grid_ui::scene::{BracketCmd, DrawCommand, FontRole, ScanlineCmd};
+use heca_grid_ui::scene::{BracketCmd, DrawCommand, FontRole, HostDraw, ScanlineCmd};
 use heca_grid_ui::{Rectangle, Scene};
 
 const NO_BORDER: [f32; 4] = [0.0; 4];
@@ -83,12 +83,71 @@ fn intersect_clip(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
     let y1 = (a[1] + a[3]).min(b[1] + b[3]);
     [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
 }
+/// **A request the scene recorded for the host to perform**, with its clip already resolved.
+///
+/// [`enqueue_scene`] cannot do this work itself: it feeds two renderers and holds no
+/// `wgpu::CommandEncoder` and no target view, and the work happens in the GPU pass rather than
+/// while the scene is being walked. So it **collects** these instead, in scene order, and the caller
+/// performs them where it owns the encoder.
+///
+/// That keeps this crate's boundary intact — the alternative, handing `enqueue_scene` an encoder and
+/// a target, would give a function that turns a scene into draw work a second job (owning GPU pass
+/// lifetime) and force every caller to supply one, including the showcase, which has no GPU pass of
+/// its own.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HostRequest {
+    pub draw: HostDraw,
+    /// Logical pixels, as the widget placed it.
+    pub rect: Rectangle,
+    /// The clip in force where it was recorded — `[x, y, w, h]` logical, already intersected with
+    /// every enclosing clip. `None` when nothing was clipping.
+    pub clip: Option<[f32; 4]>,
+    /// Composite strength, carrying the paint context's opacity.
+    pub alpha: f32,
+}
+
 
 /// Walk `scene` and enqueue its commands into the renderers.
 ///
 /// `glow_alpha_scale` selects the glow compositing strategy for this scene:
 /// `0.0` keeps additive-only glow (best on dark themes); non-zero emits glows
 /// as translucent tinted halos so they remain visible on light backgrounds.
+/// **Every host request in `scene`, in order, with its clip resolved.**
+///
+/// A pure read of the display list — it touches neither renderer and needs no GPU, which is what
+/// makes it testable and what makes it the caller's to perform. Walk it where you own the encoder.
+///
+/// The clip is the one in force where the request was recorded, already intersected with every
+/// enclosing clip, so a surface inside a `ScrollRegion` clips like anything else. Order is scene
+/// order, so a backdrop blurs exactly what came before it and nothing after.
+pub fn host_requests(scene: &Scene) -> Vec<HostRequest> {
+    let mut clip_stack: Vec<[f32; 4]> = Vec::new();
+    let mut out = Vec::new();
+    for cmd in scene.iter() {
+        match cmd {
+            DrawCommand::PushClip(r) => {
+                let (x, y, w, h) = xywh(r);
+                let rect = [x, y, w, h];
+                let eff = clip_stack
+                    .last()
+                    .map_or(rect, |&prev| intersect_clip(prev, rect));
+                clip_stack.push(eff);
+            }
+            DrawCommand::PopClip => {
+                clip_stack.pop();
+            }
+            DrawCommand::Host(h) => out.push(HostRequest {
+                draw: h.draw,
+                rect: h.rect,
+                clip: clip_stack.last().copied(),
+                alpha: h.alpha,
+            }),
+            _ => {}
+        }
+    }
+    out
+}
+
 pub fn enqueue_scene(
     grid: &mut GridRenderer,
     text: &mut TextRenderer,
@@ -175,6 +234,9 @@ pub fn enqueue_scene(
                     }),
                 );
             }
+            // Host work is not drawn here — `enqueue_scene` holds no encoder and no target, and
+            // the work happens in the GPU pass. `host_requests` collects it instead.
+            DrawCommand::Host(_) => {}
             DrawCommand::PushClip(r) => {
                 let (x, y, w, h) = xywh(r);
                 let rect = [x, y, w, h];
@@ -272,7 +334,62 @@ fn draw_scanlines(grid: &mut GridRenderer, s: &ScanlineCmd) {
 
 #[cfg(test)]
 mod tests {
-    use super::{LIGHT_BG_GLOW_ALPHA_SCALE, glow_alpha_scale_for_background, intersect_clip};
+    use super::{
+        LIGHT_BG_GLOW_ALPHA_SCALE, glow_alpha_scale_for_background, host_requests, intersect_clip,
+    };
+    use heca_grid_ui::scene::{DrawCommand, HostCmd, HostDraw, Scene};
+    use heca_grid_ui::Rectangle;
+    use heca_core::layout::{Point, Size};
+
+    fn rect(x: f64, y: f64, w: f64, h: f64) -> Rectangle {
+        Rectangle::new(Point::new(x, y), Size::new(w, h))
+    }
+
+    fn host(rect: Rectangle) -> DrawCommand {
+        DrawCommand::Host(HostCmd { draw: HostDraw::Surface { id: 1 }, rect, alpha: 1.0 })
+    }
+
+    /// **A surface inside a scroll region clips like anything else.**
+    ///
+    /// The clip carried is the one in force where the request was recorded, already intersected
+    /// with every enclosing clip — otherwise a terminal mounted in a scrolled panel would draw
+    /// over the panel's edge, which no other widget can do.
+    #[test]
+    fn a_host_request_carries_the_clip_in_force_where_it_was_recorded() {
+        let mut scene = Scene::new();
+        scene.push(host(rect(0.0, 0.0, 50.0, 50.0)));
+        scene.push(DrawCommand::PushClip(rect(10.0, 10.0, 100.0, 100.0)));
+        scene.push(DrawCommand::PushClip(rect(0.0, 0.0, 40.0, 200.0)));
+        scene.push(host(rect(0.0, 0.0, 50.0, 50.0)));
+        scene.push(DrawCommand::PopClip);
+        scene.push(host(rect(0.0, 0.0, 50.0, 50.0)));
+
+        let got = host_requests(&scene);
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[0].clip, None, "nothing was clipping");
+        assert_eq!(
+            got[1].clip,
+            Some([10.0, 10.0, 30.0, 100.0]),
+            "nested clips intersect, never exceed the outer one",
+        );
+        assert_eq!(got[2].clip, Some([10.0, 10.0, 100.0, 100.0]), "the inner clip was popped");
+    }
+
+    /// **Order is the meaning for a backdrop** — it blurs what came before it and nothing after.
+    #[test]
+    fn host_requests_come_back_in_scene_order() {
+        let mut scene = Scene::new();
+        scene.push(DrawCommand::Host(HostCmd {
+            draw: HostDraw::Backdrop { radius: 8.0 },
+            rect: rect(0.0, 0.0, 10.0, 10.0),
+            alpha: 1.0,
+        }));
+        scene.push(host(rect(0.0, 0.0, 10.0, 10.0)));
+
+        let got = host_requests(&scene);
+        assert!(matches!(got[0].draw, HostDraw::Backdrop { .. }));
+        assert!(matches!(got[1].draw, HostDraw::Surface { .. }));
+    }
 
     #[test]
     fn intersect_clip_returns_the_overlapping_region() {

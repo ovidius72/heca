@@ -39,6 +39,7 @@
 //! ├── mod.rs        the trait, the frame, the presence, shared easing, re-exports
 //! ├── fade.rs       Fade
 //! ├── zoom.rs       Zoom
+//! ├── slide.rs      Slide — a travel in from an edge, the notification gesture
 //! ├── sequence.rs   the composition — one animation riding another, the lag a SHARE
 //! ├── zoom_fade.rs   ZoomFade — the composed gesture, named once so no call site composes it
 //! ├── vocabulary.rs  Animation — the built-ins by NAME, which is what a caller passes
@@ -58,6 +59,7 @@
 mod fade;
 mod presence;
 mod sequence;
+mod slide;
 mod vocabulary;
 mod zoom;
 mod zoom_fade;
@@ -65,6 +67,7 @@ mod zoom_fade;
 pub use fade::Fade;
 pub use presence::Presence;
 pub use sequence::Sequence;
+pub use slide::{Slide, SlideFrom};
 pub use vocabulary::Animation;
 pub use zoom::Zoom;
 pub use zoom_fade::ZoomFade;

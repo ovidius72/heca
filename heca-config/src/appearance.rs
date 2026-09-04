@@ -175,6 +175,10 @@ fn default_terminal_bell_audible() -> bool {
     false
 }
 
+fn default_hint_font_size() -> f32 {
+    12.0
+}
+
 fn default_vibrancy() -> Vibrancy {
     Vibrancy::None
 }
@@ -456,6 +460,15 @@ pub struct AppearanceConfig {
     /// OS backdrop material ([`Vibrancy::None`] = off). Platform-dependent.
     #[serde(default = "default_vibrancy")]
     pub vibrancy: Vibrancy,
+
+    /// **The `prefix+/` picker's letter size, in logical px.** One size for every letter in the app.
+    ///
+    /// Fixed rather than derived from whatever a letter sits on: a size variant scales what a widget
+    /// draws as its own content, and a letter is chrome the framework stamps *over* a target — so
+    /// taking the target's size gave an emphasized header button a letter a quarter larger than the
+    /// pane's own, in the same picker.
+    #[serde(default = "default_hint_font_size")]
+    pub hint_font_size: f32,
 
     // ── z=0 background layer (compositor-blur refactor) ──
     /// z=0 background gradient *top* color override. `None` → inherits
@@ -840,6 +853,7 @@ impl Default for AppearanceConfig {
             transparency: default_transparency(),
             blur: default_blur(),
             vibrancy: default_vibrancy(),
+            hint_font_size: default_hint_font_size(),
             background_gradient_top: None,
             background_gradient_bottom: None,
             background_blur: default_background_blur(),

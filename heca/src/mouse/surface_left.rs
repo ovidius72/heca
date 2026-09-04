@@ -1,10 +1,8 @@
-//! Left sidebar drag surface implementation.
+//! What a click or a drop MEANS in the left sidebar.
 //!
-//! Implements all surface dispatch functions for `DragSurfaceId::LeftSidebar`:
-//! hit testing, click routing, hover updates, and drop acceptance.
-//!
-//! This module absorbs the former `sidebar.rs` (click routing) and
-//! `sidebar_drop.rs` (drop logic) into a single surface handler.
+//! Hit testing, click routing and drop acceptance. Every entry point here is *told* what it landed
+//! on: finding a target under the pointer was the old machine's job, and the framework resolves it
+//! now (F003/P097/T496).
 
 use crate::app::pane_ops::{insert_pane_at_position, remove_pane_by_id};
 use crate::app_state::{AppState, InteractiveMovePhase};
@@ -12,7 +10,7 @@ use crate::chrome::{ChromeDragItem, default_column_width};
 use crate::input::WmAction;
 use heca_core::layout::types::Point;
 use heca_core::layout::{ColumnId, ColumnWidth, PaneId};
-use heca_grid_ui::drag::{DragSurfaceId, DropSide};
+use heca_grid_ui::drag::DropSide;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Geometry
@@ -37,26 +35,6 @@ fn sidebar_bounds(state: &AppState) -> (f32, f32, f32, f32) {
 //  Click routing
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Handle a click (press+release without drag) in the left sidebar.
-///
-/// The press goes into the **retained** chrome tree, whose widgets route their own intents through
-/// the app event loop. Nothing here resolves a row: the tree knows where its rows are.
-pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
-    let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-
-    if pos.0 >= sx
-        && pos.0 <= sx + sw
-        && pos.1 >= sidebar_top
-        && pos.1 <= sidebar_bottom
-        // The sidebar is Expanded whenever it is visible (there is no collapsed rail).
-        && state.chrome_state.left_visible()
-    {
-        let _ = crate::chrome::chrome_dispatch_press(state, pos);
-    }
-
-    None
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Hover
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -73,31 +51,11 @@ pub(crate) fn accept_drop(
     pane_id: PaneId,
     original_ws: usize,
     swap: bool,
-    pos: (f32, f32),
+    target: Option<(crate::providers::workspaces::WorkspaceRow, DropSide)>,
 ) {
-    // Drop target + side resolved from the RETAINED chrome tree's bounds (F4.5), not
-    // the legacy fixed-row geometry. The side (Before/Onto/After, from vertical thirds)
-    // decides which edge of the target the source lands on. This is the PANE drop path,
-    // so only pane targets count; dropping a pane onto a column/workspace falls through
-    // to "re-add to the active workspace" (pane→column placement is a later enhancement).
-    //
-    let target =
-        crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Pane)
-            .and_then(|(item, side)| match item {
-                crate::chrome::ChromeDragItem::Pane(pid) => {
-                    Some((crate::providers::workspaces::WorkspaceRow::Pane { pane_id: pid }, side))
-                }
-                // Dropping a pane on a workspace's header/empty area moves it INTO that
-                // workspace — the only way to reach an *empty* workspace (which has no pane
-                // card to aim at). Columns can't be empty, so they need no pane-drop target.
-                crate::chrome::ChromeDragItem::Workspace { ws } => {
-                    Some((crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx: ws }, side))
-                }
-                crate::chrome::ChromeDragItem::Column { .. } => None,
-            });
-
-    // Now clear all drag state.
-    state.mouse.drag_ctx.cancel_all();
+    // **The target arrives resolved.** It used to be hunted for under the pointer here, at the
+    // moment of release — which is how the drop came to be tied to one sidebar: the hunt was keyed
+    // to it. The gesture now says what it landed on (F003/P097/T496).
     state.mouse.interactive_move = None;
 
     // Swap applies only to a pane-on-pane drop; a workspace target falls through to a
@@ -236,7 +194,7 @@ fn place_pane_at_sidebar_target(
             }
             state.focused_pane = Some(target_pid);
         }
-        crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx } => {
+        crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx, .. } => {
             let new_col_id = ColumnId(state.session.next_id());
             if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                 // Dropping a pane on a workspace makes a NEW column at the end (appending
@@ -253,7 +211,7 @@ fn place_pane_at_sidebar_target(
                 );
             }
         }
-        crate::providers::workspaces::WorkspaceRow::Column { ws_idx, col_idx } => {
+        crate::providers::workspaces::WorkspaceRow::Column { ws_idx, col_idx, .. } => {
             let new_col_id = ColumnId(state.session.next_id());
             if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                 let target_col = col_idx.min(ws.scrolling.columns.len().saturating_sub(1));
@@ -330,7 +288,8 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
     // Reset drag offset so layout positions are correct for removal.
     crate::mouse::interactive::reset_interactive_move_offset(state);
 
-    let shift_held = state.modifiers.shift_key();
+    // The same one answer the sidebar's own drops and the framework's outline use.
+    let shift_held = heca_grid_ui::drag::DropAction::held().is_swap();
 
     match item {
         ChromeDragItem::Pane(target_pid) if shift_held => {
@@ -386,13 +345,16 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
                     state.focused_pane = Some(target_pid);
                 }
                 ChromeDragItem::Workspace { ws: ws_idx } => {
+                    let width = state
+                        .session
+                        .options
+                        .default_column_width
+                        .unwrap_or(ColumnWidth::Proportion(0.85));
+                    // Allocated before the workspace is borrowed; dropping onto a workspace always
+                    // lands the pane in a column of its own.
+                    let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
                     if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-                        let width = state
-                            .session
-                            .options
-                            .default_column_width
-                            .unwrap_or(ColumnWidth::Proportion(0.85));
-                        ws.add_pane(pane, None, true, width);
+                        ws.add_pane(pane, None, true, width, new_column_id);
                     }
                 }
                 ChromeDragItem::Column { ws: ws_idx, col: col_idx } => {
@@ -406,12 +368,8 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
         }
     }
 
-    state.mouse.drag_ctx.cancel_all();
     state.mouse.interactive_move = None;
     state.mouse.insert_hint = None;
-    if let Some(s) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
-        s.hover_item = None;
-    }
     crate::app::mutations::after_layout_change(state);
     true
 }

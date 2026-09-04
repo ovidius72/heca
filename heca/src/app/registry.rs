@@ -921,8 +921,8 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(
         &WmAction::Resize {
             target: input::ResizeTarget::Column,
-            axis: input::ResizeAxis::X,
             amount: 0.0,
+            edge: input::ResizeEdge::Auto,
         },
         handle_resize,
     );
@@ -1082,6 +1082,13 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SidebarLeft, handle_sidebar_left);
     registry.register(&WmAction::SidebarRight, handle_sidebar_right);
     registry.register(&WmAction::FocusDock { dock: None }, handle_focus_dock);
+    registry.register(
+        &WmAction::CursorTo {
+            mount: String::new(),
+            key: String::new(),
+        },
+        handle_cursor_to,
+    );
     registry.register(&WmAction::ToggleDock { dock: None }, handle_toggle_dock);
     registry.register(
         &WmAction::ClearSearchHistory { scope: None },
@@ -1140,6 +1147,17 @@ pub fn build_registry() -> ActionRegistry {
         handle_spawn_command,
     );
     registry.register(&WmAction::ReloadConfig, handle_reload_config);
+    registry.register(
+        &WmAction::NotificationDismissOne { notification_id: 0 },
+        handle_notification_dismiss_one,
+    );
+    registry.register(&WmAction::NotificationDismissAll, handle_notification_dismiss_all);
+    registry.register(&WmAction::NotificationDismissLast, handle_notification_dismiss_last);
+    registry.register(&WmAction::NotificationPick, handle_notification_pick);
+    registry.register(
+        &WmAction::NotificationActionRelay { notification_id: 0, key: String::new() },
+        handle_notification_action_relay,
+    );
     registry.register(
         &WmAction::OpenLink {
             url: String::new(),

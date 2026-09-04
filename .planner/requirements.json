@@ -11,7 +11,37 @@
         "99d19246-1ba9-4720-9895-e70c66acf144"
       ],
       "createdAt": "2026-07-13T15:30:51.379Z",
-      "updatedAt": "2026-07-13T15:30:51.379Z"
+      "updatedAt": "2026-07-13T15:30:51.379Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:92c46b79-0bbe-4f73-ae60-b353614346c1",
+          "createdAt": "2026-09-03T19:29:47.689Z"
+        },
+        {
+          "sessionId": "mcp-process:71143b76-44da-44d9-983a-3d7cd3314804",
+          "createdAt": "2026-09-02T15:07:41.201Z"
+        },
+        {
+          "sessionId": "mcp-process:939eca9a-a26d-40ed-8a64-25c8c929cff9",
+          "createdAt": "2026-09-02T10:09:28.620Z"
+        },
+        {
+          "sessionId": "b8266d14-4bed-4222-afc6-25dbfe80885b",
+          "createdAt": "2026-09-01T13:34:46.915Z"
+        },
+        {
+          "sessionId": "81e7b61f-5fdc-4535-b72c-5a9c9468d452",
+          "createdAt": "2026-08-28T14:43:38.477Z"
+        },
+        {
+          "sessionId": "mcp-process:f2720c67-3db6-4507-82df-f5b669c10418",
+          "createdAt": "2026-08-28T08:38:27.542Z"
+        },
+        {
+          "sessionId": "01f86c94-7f92-4e8a-b8bd-b845e9032ae7",
+          "createdAt": "2026-08-27T09:54:28.651Z"
+        }
+      ]
     },
     {
       "id": "4f66a18a-8805-4dd1-a9d6-63f5c51e9be3",
@@ -21,7 +51,8 @@
       "macroTasks": [],
       "linkedPhaseIds": [],
       "createdAt": "2026-07-13T15:31:52.527Z",
-      "updatedAt": "2026-07-13T15:31:52.527Z"
+      "updatedAt": "2026-07-13T15:31:52.527Z",
+      "sessionInfo": []
     },
     {
       "id": "31551e80-42a5-4e36-ac31-a71594de2545",
@@ -33,7 +64,37 @@
         "8f760a9b-3ce8-4932-8286-67d742397f2e"
       ],
       "createdAt": "2026-07-13T15:33:25.808Z",
-      "updatedAt": "2026-07-13T15:33:25.808Z"
+      "updatedAt": "2026-07-13T15:33:25.808Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:92c46b79-0bbe-4f73-ae60-b353614346c1",
+          "createdAt": "2026-09-03T19:29:47.689Z"
+        },
+        {
+          "sessionId": "mcp-process:71143b76-44da-44d9-983a-3d7cd3314804",
+          "createdAt": "2026-09-02T15:07:41.201Z"
+        },
+        {
+          "sessionId": "mcp-process:939eca9a-a26d-40ed-8a64-25c8c929cff9",
+          "createdAt": "2026-09-02T10:09:28.620Z"
+        },
+        {
+          "sessionId": "b8266d14-4bed-4222-afc6-25dbfe80885b",
+          "createdAt": "2026-09-01T13:34:46.915Z"
+        },
+        {
+          "sessionId": "81e7b61f-5fdc-4535-b72c-5a9c9468d452",
+          "createdAt": "2026-08-28T14:43:38.477Z"
+        },
+        {
+          "sessionId": "mcp-process:f2720c67-3db6-4507-82df-f5b669c10418",
+          "createdAt": "2026-08-28T08:38:27.542Z"
+        },
+        {
+          "sessionId": "01f86c94-7f92-4e8a-b8bd-b845e9032ae7",
+          "createdAt": "2026-08-27T09:54:28.651Z"
+        }
+      ]
     },
     {
       "id": "2458a02c-31e2-4b09-9bdb-fe1e56d9d68e",
@@ -45,7 +106,8 @@
         "3bdc254b-4b5c-4f74-a783-8de4ae1628fa"
       ],
       "createdAt": "2026-07-13T15:33:50.370Z",
-      "updatedAt": "2026-07-13T15:33:50.370Z"
+      "updatedAt": "2026-07-13T15:33:50.370Z",
+      "sessionInfo": []
     },
     {
       "id": "7340431a-5569-4383-ab54-978c2b2b338f",
@@ -55,7 +117,8 @@
       "macroTasks": [],
       "linkedPhaseIds": [],
       "createdAt": "2026-07-13T15:33:58.204Z",
-      "updatedAt": "2026-07-13T15:33:58.204Z"
+      "updatedAt": "2026-07-13T15:33:58.204Z",
+      "sessionInfo": []
     },
     {
       "id": "de43129f-eb37-4e1a-bd7f-2ba52c5a9c99",
@@ -68,7 +131,8 @@
         "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09"
       ],
       "createdAt": "2026-07-13T15:34:04.707Z",
-      "updatedAt": "2026-07-13T15:34:04.707Z"
+      "updatedAt": "2026-07-13T15:34:04.707Z",
+      "sessionInfo": []
     }
   ]
 }

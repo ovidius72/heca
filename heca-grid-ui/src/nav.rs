@@ -1,20 +1,23 @@
 //! **Navigation keys** — a row's own identity, declared once and read by everything that has to
 //! name a row.
 //!
-//! A list-shaped component labels its rows with [`ComponentExt::key`]; the host then derives the
-//! keyboard cursor, the right-click target, and (later) the drag identity from that **one**
-//! declaration. Three readers, one thing said — instead of a closed enum of row kinds that only the
-//! app can extend, which is what made a plugin row impossible to point at.
+//! A list-shaped component labels its rows with [`ComponentExt::key`]; the keyboard cursor, the
+//! right-click target and the drag identity are all read off that **one** declaration. Three
+//! readers, one thing said — instead of a closed enum of row kinds that only the app can extend,
+//! which is what made a plugin row impossible to point at.
 //!
-//! # Why a string, when [`DragItemId`](crate::drag::DragItemId) is an opaque integer
+//! # Why a string, and not a token from a registry
 //!
-//! That one is a **registry slot**: the widget takes a token and the app keeps the map, valid for
-//! as long as the tree that registered it. A nav key is the opposite — it must **survive a tree
+//! A registry slot — the widget takes an opaque id and the app keeps the map — is valid only for as
+//! long as the tree that registered it. A nav key is the opposite: it must **survive a tree
 //! rebuild**, because a chrome tree is rebuilt for reasons that have nothing to do with navigation
 //! (a pane's git status changing is enough), and a cursor that resets every time is not a cursor.
 //! An index into a tree cannot do that; an identity the row asserts about itself can. This is also
 //! why a scoped [`FocusManager`](crate::focus::FocusManager) — a visit *index* — cannot be the
 //! cursor.
+//!
+//! A row need not be named at all: one that declares no key still has an identity derived from its
+//! **content**, so a capability is never gated on having been named.
 //!
 //! The key is **opaque to this library**: it is a string the component chose (`"pane:7"`,
 //! `"container:abc123"`), and nothing here parses it.
@@ -81,32 +84,6 @@ pub fn key_at(root: &dyn Component, point: Point) -> Option<String> {
         .filter(|_| root.base().bounds.contains(point))
 }
 
-/// The **innermost scope** under `point` — which enclosing region a press landed in.
-///
-/// The twin of [`key_at`] one level up: that answers *which row*, this answers *which region
-/// containing rows*. A host commonly needs both from one press — heca focuses the chrome container
-/// and moves its cursor to the clicked row.
-///
-/// Same walk, for the same reason: children last-added-first, descended into before the parent is
-/// tested, so a scope nested inside another resolves to the inner one. `None` means the point is
-/// outside every scope, which is a real answer a host acts on.
-///
-/// Deliberately independent of whether a widget *consumed* the press: a click on a scrollbar thumb
-/// is still a click inside the region that holds it.
-pub fn scope_at(root: &dyn Component, point: Point) -> Option<String> {
-    if skip(root) {
-        return None;
-    }
-    for child in root.base().children.iter().rev() {
-        if let Some(id) = scope_at(child.as_ref(), point) {
-            return Some(id);
-        }
-    }
-    root.base()
-        .scope_key
-        .clone()
-        .filter(|_| root.base().bounds.contains(point))
-}
 
 /// **What to call the widget at `path`, whether or not anyone named it** (F003/P082/T444).
 ///
@@ -146,8 +123,11 @@ pub fn identity_of(root: &dyn Component, path: &[usize]) -> Option<String> {
     let mut scope_root = root;
     let mut scope_depth = 0usize;
     for (depth, step) in path.iter().enumerate() {
-        if let Some(k) = node.base().key.as_ref() {
-            scope.push(k.clone());
+        // **Whatever the ancestor declared itself as** — `key` for a row, `scope_key` for a dock or
+        // panel that names a region. Reading only `key` here is what let two docks holding the same
+        // rows produce two sets of identical names (F003/P082).
+        if let Some(k) = node.base().identity() {
+            scope.push(k.to_string());
             scope_root = node;
             scope_depth = depth;
         }
@@ -160,8 +140,8 @@ pub fn identity_of(root: &dyn Component, path: &[usize]) -> Option<String> {
     // agree. Keying the wrapper instead was a call-site fix for a missing rule, and it would have
     // had to be repeated at every wrapped control in the app.
     let node = through_wrappers(node);
-    let own = match node.base().key.as_ref() {
-        Some(k) => k.clone(),
+    let own = match node.base().identity() {
+        Some(k) => k.to_string(),
         None => {
             let name = node.text_summary()?;
             match nth_named(scope_root, &path[scope_depth..], &name) {
@@ -194,8 +174,10 @@ fn nth_named(scope_root: &dyn Component, path: &[usize], name: &str) -> usize {
             *done = true;
             return;
         }
-        // A keyed node opens its own scope, so nothing inside it counts towards this one.
-        if !here.is_empty() && node.base().key.is_some() {
+        // A node that declares a name opens its own scope, so nothing inside it counts towards this
+        // one. Read through `identity` so this agrees with the scope `identity_of` builds — a dock
+        // naming itself with `scope_key` opens a scope there, and must open one here too.
+        if !here.is_empty() && node.base().identity().is_some() {
             return;
         }
         // **An ancestor of the target never counts towards its index.** `text_summary` is the
@@ -299,7 +281,8 @@ fn through_wrappers(node: &dyn Component) -> &dyn Component {
     let mut at = node;
     // Bounded by the depth walked; a wrapper chain is two or three deep in practice.
     loop {
-        if at.base().key.is_some() || at.base().activatable {
+        // A node that names itself is not a wrapper, whichever way it declared that name.
+        if at.base().identity().is_some() || at.base().activatable {
             return at;
         }
         match at.base().children.as_slice() {
@@ -321,15 +304,17 @@ fn item_of(child: &dyn Component) -> Option<&dyn Component> {
         return None;
     }
     let at = through_wrappers(child);
-    (at.base().key.is_none() && at.base().activatable).then_some(at)
+    (at.base().identity().is_none() && at.base().activatable).then_some(at)
 }
 
 fn walk_ambiguities(node: &dyn Component, scope: &str, out: &mut Vec<Ambiguity>) {
     if skip(node) {
         return;
     }
-    // This node's children live in this node's scope, so its own key joins the prefix first.
-    let scope = match node.base().key.as_deref() {
+    // This node's children live in this node's scope, so its own declared name joins the prefix
+    // first — the same scope `identity_of` builds, so a reported ambiguity names what the picker
+    // would name.
+    let scope = match node.base().identity() {
         Some(k) if scope.is_empty() => k.to_string(),
         Some(k) => format!("{scope}/{k}"),
         None => scope.to_string(),
@@ -389,54 +374,7 @@ mod tests {
         root
     }
 
-    /// A container wrapping rows: the press resolves to the **innermost** container, and to nothing
-    /// at all outside every one — which is what releases chrome focus (F003/P086/T365).
-    #[test]
-    fn a_press_resolves_to_the_innermost_container_it_landed_in() {
-        let mut root = Flex::column();
-        root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
 
-        let mut dock = Flex::column().scope_key("workspaces");
-        dock.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
-        dock.base_mut()
-            .children
-            .push(at(Surface::new().key("pane:7"), 0.0, 20.0));
-        // A container seated inside another — the inner one owns the point.
-        let mut inner = Flex::column().scope_key("notes");
-        inner.base_mut().bounds = Rectangle::new(Point::new(0.0, 20.0), Size::new(100.0, 20.0));
-        dock.base_mut().children.push(Box::new(inner));
-        root.base_mut().children.push(Box::new(dock));
-
-        assert_eq!(
-            scope_at(&root, Point::new(50.0, 10.0)),
-            Some("workspaces".to_string()),
-        );
-        assert_eq!(
-            scope_at(&root, Point::new(50.0, 30.0)),
-            Some("notes".to_string()),
-            "the innermost container wins, as the deepest row does",
-        );
-        assert_eq!(
-            scope_at(&root, Point::new(50.0, 80.0)),
-            None,
-            "outside every container — this is what releases focus",
-        );
-    }
-
-    /// A press on a widget that would consume it is still a press *in* that container.
-    #[test]
-    fn a_consumed_press_still_names_its_container() {
-        let mut dock = Flex::column().scope_key("workspaces");
-        dock.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
-        // Stand-in for a scrollbar thumb: a child with no container of its own.
-        dock.base_mut()
-            .children
-            .push(at(Surface::new(), 0.0, 40.0));
-        assert_eq!(
-            scope_at(&dock, Point::new(50.0, 20.0)),
-            Some("workspaces".to_string()),
-        );
-    }
 
     #[test]
     fn collects_declared_rows_in_document_order() {
@@ -582,6 +520,45 @@ mod identity_tests {
             Some("col:1/pane:9/×"),
             "not ×[1] — the keyed row above it is a new scope"
         );
+    }
+
+    /// **A container that names itself with `scope_key` scopes its rows too** (F003/P082).
+    ///
+    /// A dock declares itself with `scope_key` rather than `key` — it names a region holding rows,
+    /// not a row. Naming read only `key`, so the dock contributed nothing and two docks showing the
+    /// same workspace produced two sets of identical names. Everything keyed on identity then
+    /// addressed the wrong copy: a remembered hint letter bounced between the two on every opening.
+    #[test]
+    fn a_container_that_declares_a_scope_key_names_the_rows_inside_it() {
+        let dock = |mount: &str| {
+            Flex::column()
+                .scope_key(mount)
+                .child(Flex::column().key("pane:7").child(Label::new("×")))
+        };
+        let tree = Flex::column().child(dock("left")).child(dock("right"));
+
+        assert_eq!(identity_of(&tree, &[0, 0, 0]).as_deref(), Some("left/pane:7/×"));
+        assert_eq!(
+            identity_of(&tree, &[1, 0, 0]).as_deref(),
+            Some("right/pane:7/×"),
+            "the same row in a second dock is a different thing, and must be named differently",
+        );
+    }
+
+    /// …and the container itself is called what it declared, not what it happens to contain.
+    ///
+    /// With no name of its own a dock fell back to its text, which is its decorative drag grip — so
+    /// every dock was called `⠿`, and the index disambiguating them shifted whenever a row was
+    /// added or removed.
+    #[test]
+    fn a_container_is_named_by_its_scope_key_not_by_its_decoration() {
+        let tree = Flex::column().child(
+            Flex::column()
+                .scope_key("workspaces")
+                .child(Label::new("⠿")),
+        );
+
+        assert_eq!(identity_of(&tree, &[0]).as_deref(), Some("workspaces"));
     }
 
     /// Nothing to go on: no key anywhere above, and no text of its own.

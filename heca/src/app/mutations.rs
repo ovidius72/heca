@@ -57,7 +57,7 @@ fn after_mutation_change_inner(state: &mut AppState, kind: MutationKind) {
 /// action — it is a property of the session having changed, which is exactly what this hook means.
 /// Nothing happens when no host layer is visible, which is the ordinary case.
 fn refresh_visible_layers(state: &mut AppState) {
-    for name in state.layers.visible_host_layer_names() {
+    for name in state.layers.visible_host_layer_names(&state.window_root) {
         crate::chrome::rebuild_named_layer(state, &name);
     }
 }
@@ -263,12 +263,10 @@ pub(crate) fn move_pane_to_column(
         } else {
             col_count_now
         };
-        let need_new_column = target_pos >= col_count_now;
-        let new_col_id = if need_new_column {
-            Some(ColumnId(state.session.next_id()))
-        } else {
-            None
-        };
+        // Always allocated, spent only on the new-column branch. A derived fallback (the pane's own
+        // id) could name a column that already exists, and two columns with one id are two rows the
+        // cursor, the hint letters and a right-click cannot tell apart.
+        let new_col_id = ColumnId(state.session.next_id());
 
         if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
             if target_pos < ws.scrolling.columns.len() {
@@ -277,10 +275,9 @@ pub(crate) fn move_pane_to_column(
                     .add_pane_to_column(target_pos, None, pane, true);
             } else {
                 // Create a new column at target_pos (append if equal to current len)
-                let cid = new_col_id.unwrap_or(ColumnId(pane_id.0));
                 ws.scrolling.add_column(
                     Some(target_pos),
-                    Column::new(cid, pane, chrome::default_column_width()),
+                    Column::new(new_col_id, pane, chrome::default_column_width()),
                     true,
                 );
             }

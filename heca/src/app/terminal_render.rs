@@ -12,8 +12,8 @@ use heca_core::backend::{TerminalDamage, TerminalRowRange, TerminalSnapshot};
 use heca_core::layout::{PaneId, Point, Rectangle, Size};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::{
-    Color as GuiColor, Component, PaintCx, Point as GuiPoint,
-    Rectangle as GuiRectangle, Scene as GuiScene, Size as GuiSize,
+    Color as GuiColor, Component, PaintCx, Point as GuiPoint, Rectangle as GuiRectangle,
+    Scene as GuiScene, Size as GuiSize,
 };
 use heca_renderer::image::ImageLayer;
 use heca_renderer::primitive::PrimitiveRenderer;
@@ -159,7 +159,9 @@ pub(crate) fn sync_retained_terminal_layers(
     // Drop image textures not referenced for a while (panes scrolled past the
     // image or closed). Generous grace so re-scrolling to a recent image does not
     // re-upload it; the retained layer keeps showing on-screen images regardless.
-    state.image_renderer.evict_unused(IMAGE_TEXTURE_MAX_AGE_FRAMES);
+    state
+        .image_renderer
+        .evict_unused(IMAGE_TEXTURE_MAX_AGE_FRAMES);
 }
 
 /// Frames an unreferenced inline-image texture survives before eviction (~10s at
@@ -278,11 +280,7 @@ fn graphics_signature(graphics: &[heca_core::backend::GraphicsPlacement]) -> u64
         g.cols.hash(&mut hasher);
         g.rows.hash(&mut hasher);
         g.z_index.hash(&mut hasher);
-        for v in g
-            .src_top_left
-            .iter()
-            .chain(g.src_bottom_right.iter())
-        {
+        for v in g.src_top_left.iter().chain(g.src_bottom_right.iter()) {
             v.to_bits().hash(&mut hasher);
         }
     }
@@ -601,50 +599,22 @@ pub(crate) struct TerminalPaneShell {
     pub(crate) y: f32,
     pub(crate) w: f32,
     pub(crate) h: f32,
+    /// The pane's frame colour — its **identity** (active / floating / resting), which the pane's
+    /// accent is derived from. The frame itself is drawn by the retained shell from its own style,
+    /// so its width and radius are not carried here: they belong to that widget, not to a theme
+    /// every control inside the pane would then read as its own.
     pub(crate) border_color: [f32; 4],
-    pub(crate) border_width: f32,
-    pub(crate) border_radius: f32,
 }
 
-/// Approx `Tag` internal vertical padding (each side) — for bar height/centering.
-const BAR_TAG_VPAD: f32 = 5.0;
-/// Vertical margin above + below the bar within its reserved strip.
-const BAR_VMARGIN: f32 = 5.0;
-/// Monospace line-height ratio (matches `heca-grid-ui`'s `MONO_LINE_RATIO`).
-const BAR_LINE_RATIO: f32 = 1.4;
-
-/// The info bar's content height for the given `font`.
-fn title_bar_height(font: f32) -> f32 {
-    font * BAR_LINE_RATIO + 2.0 * BAR_TAG_VPAD
-}
-
-/// Total vertical strip the info bar reserves at the pane top.
-pub(crate) fn title_bar_reserve(font: f32) -> f32 {
-    title_bar_height(font) + 2.0 * BAR_VMARGIN
-}
-
-/// The info bar font — the chrome theme's base font, the same size the sidebar
-/// tree lays out with (`paint_chrome_root`), so the two read identically.
-fn bar_font(state: &AppState) -> f32 {
-    crate::chrome::chrome_gui_theme(state).font_size
-}
-
-/// Whether the pane info bar renders anything right now — segments **or** action
-/// buttons. Drives both the reserved top strip and the header band/paint.
-pub(crate) fn pane_info_bar_shown(state: &AppState) -> bool {
-    state.appearance.pane_info_bar_visible()
-}
-
-/// Extra **top** content padding (logical px) reserved for the pane info bar, so
-/// terminal content starts below it. Zero when the bar is hidden. Shared by the
-/// render path and the mouse→cell mapping so the rendered grid and pointer
-/// hit-testing use identical geometry.
-pub(crate) fn pane_title_top_inset(state: &AppState) -> f32 {
-    if pane_info_bar_shown(state) {
-        title_bar_reserve(bar_font(state))
-    } else {
-        0.0
-    }
+/// Extra **top** content padding (logical px) taken by the pane's header, so terminal content
+/// starts below it. Zero when the pane has no header. Shared by the render path and the mouse→cell
+/// mapping so the rendered grid and pointer hit-testing use identical geometry.
+///
+/// **Measured, never computed.** It used to be arithmetic — an approximation of `Tag`'s internal
+/// padding, plus a copy of the library's line-height ratio, plus a margin — which meant anything
+/// else put in a pane's header slot had to add up to the same three numbers or sit wrong.
+pub(crate) fn pane_title_top_inset(state: &AppState, pane_id: heca_core::layout::PaneId) -> f32 {
+    crate::chrome::pane_header_height(state, pane_id)
 }
 
 pub(crate) fn stable_tiled_content_rect(
@@ -723,19 +693,15 @@ pub(crate) fn paint_terminal_pane_shell(
         w,
         h,
         border_color,
-        border_width,
-        border_radius,
     } = shell;
-    let theme = terminal_pane_gui_theme(state, border_color, border_width, border_radius);
+    let theme = terminal_pane_gui_theme(state, border_color);
     // The frame is the pane's **retained** shell (`chrome::sync_panes`), not a tree built here and
     // thrown away: the picker writes a letter into it when it opens and reads it back a keystroke
     // later, so a tree that does not outlive the frame cannot carry one. That is why the pane
     // letters used to be stamped by a host paint pass in `render.rs` (F011/P094/T451).
     let retained_pane = state.panes.get(&pane_id);
 
-    let show_bar = pane_info_bar_shown(state);
     let bar_theme = crate::chrome::chrome_gui_theme(state);
-    let font = bar_theme.font_size;
 
     {
         let mut cx = PaintCx::new(scene, &theme);
@@ -743,23 +709,13 @@ pub(crate) fn paint_terminal_pane_shell(
         // the rounded border traces over it. Theme-driven from the dedicated
         // `top_bottom_pane_background` token rather than the generic sidebar/card
         // surface.
-        if show_bar {
-            cx.rect(
-                GuiRectangle::new(
-                    GuiPoint::new(x as f64, y as f64),
-                    GuiSize::new(w as f64, title_bar_reserve(font) as f64),
-                ),
-                to_gui_color(
-                    state
-                        .theme
-                        .effective_top_bottom_pane_background()
-                        .to_f32x4(),
-                ),
-                None,
-                border_radius,
-                None,
-            );
-        }
+        // **The info bar paints its own band.** It used to be drawn here, sized by arithmetic
+        // that guessed the bar's height — an approximation of `Tag`'s internal padding, plus a
+        // copy of the library's line-height ratio, plus a margin. Three numbers reconstructing
+        // what the layout already knew, and anything else put in a pane's header slot would have
+        // had to add up to them (Antonio, driving, 2026-09-02). The bar carries its own fill now,
+        // so the band is exactly as tall as whatever is in it, whoever put it there.
+
         // **Painted through `paint_child`, never `paint`** — `paint_child` is what draws a
         // widget's hint letter after painting it. A direct `.paint(cx)` here is exactly why a pane
         // could never show its own letter.
@@ -768,23 +724,9 @@ pub(crate) fn paint_terminal_pane_shell(
         }
     }
 
-    // Pane info-bar header (segments + action buttons): painted from the retained
-    // per-pane tree that `chrome::sync_pane_headers` built + positioned earlier this
-    // frame (before the GPU borrow). Clipped to the pane so the bar/buttons can't
-    // spill into a neighbor when the pane is narrow (e.g. after a resize). The clip
-    // is a *base-layer* scissor; a button's hover Tooltip draws on the **overlay**
-    // layer (rendered after the base PopClip in `render_chrome`), so it still escapes
-    // the pane and sits above neighbors. Interactivity is routed in `mouse.rs`.
-    if show_bar && let Some(header) = state.pane_headers.get(&pane_id) {
-        let clip = GuiRectangle::new(
-            GuiPoint::new(x as f64, y as f64),
-            GuiSize::new(w as f64, h as f64),
-        );
-        let mut cx = PaintCx::new(scene, &bar_theme);
-        // Through `paint_child` for the same reason the pane is: a header button carrying a hint
-        // letter cannot draw one when it is painted directly.
-        cx.with_clip(clip, |cx| heca_grid_ui::paint_child(&header.root, cx));
-    }
+    // The pane's info bar is **not painted here.** It is a child of the pane shell above, so
+    // `paint_child` on that tree draws it — clipped, letters and all — with everything else the
+    // pane carries (F003/P097/T497).
 
     if let Some(viewport) = state.pane_viewport_widgets.get(&pane_id) {
         let clip = GuiRectangle::new(
@@ -911,22 +853,74 @@ fn to_gui_color(color: [f32; 4]) -> GuiColor {
     )
 }
 
-fn terminal_pane_gui_theme(
-    state: &AppState,
+fn terminal_pane_gui_theme(state: &AppState, border_color: [f32; 4]) -> GuiTheme {
+    pane_gui_theme(
+        crate::chrome::chrome_gui_theme(state),
+        border_color,
+        to_gui_color(state.theme.background.to_f32x4()),
+    )
+}
+
+/// **What a pane changes about the theme its contents are drawn with** — and, just as much, what it
+/// leaves alone.
+///
+/// Takes the chrome theme rather than the app, so the rule can be stated as a test instead of only
+/// as a comment (`&AppState` needs a window, and a function that takes one is a function nobody can
+/// check).
+///
+/// - **`accent`** becomes the pane's frame colour, because an active pane really does mean to
+///   re-tint what it holds — that is its identity.
+/// - **`background`** becomes the real window backdrop, which is what sits behind a pane's reserved
+///   title strip; the `Cut` title style matches against it.
+/// - **`border`, `border_width` and `border_radius` are left exactly as they are.** They used to be
+///   overwritten with the frame's, and they are the tokens *every control inside the pane* reads for
+///   its own chrome — so each pane handed its frame's look to everything it contained. A frame is a
+///   strong accent on the active pane and nearly the background on the rest, which is why a header
+///   button drew a border on hover in the active pane and none anywhere else (Antonio, driving,
+///   2026-09-04). Nothing is lost: the shell states its frame as its own style
+///   (`chrome::pane::shell`), which is where a widget's own look belongs.
+fn pane_gui_theme(
+    mut theme: GuiTheme,
     border_color: [f32; 4],
-    border_width: f32,
-    border_radius: f32,
+    window_background: GuiColor,
 ) -> GuiTheme {
-    let mut theme = crate::chrome::chrome_gui_theme(state);
     theme.colors.accent = to_gui_color(border_color);
-    theme.colors.border = to_gui_color(border_color);
-    theme.colors.border_radius = border_radius;
-    theme.colors.border_width = border_width;
-    // The title's `Cut` style matches its surroundings against `theme.background`;
-    // for a pane that means the real app/window background sitting behind it (the
-    // reserved title strip shows the window backdrop, not the chrome grey).
-    theme.colors.background = to_gui_color(state.theme.background.to_f32x4());
+    theme.colors.background = window_background;
     theme
+}
+
+#[cfg(test)]
+mod pane_theme_tests {
+    use super::*;
+
+    /// **A pane re-tints what it holds; it does not redefine what a border is.**
+    ///
+    /// Verified by sabotage: writing the frame colour into `border` here makes this fail, which is
+    /// the state that shipped the hover-border difference between an active pane and every other.
+    #[test]
+    fn a_panes_frame_does_not_become_the_border_every_control_inside_it_reads() {
+        let chrome = GuiTheme::default();
+        let frame = [1.0, 0.0, 0.0, 1.0];
+        let themed = pane_gui_theme(chrome.clone(), frame, GuiColor::rgb(1, 2, 3));
+
+        assert_eq!(
+            themed.colors.accent,
+            to_gui_color(frame),
+            "the frame colour is the pane's accent — its identity, which its contents follow"
+        );
+        assert_eq!(
+            themed.colors.border, chrome.colors.border,
+            "…but the border token every control reads is the chrome's, whatever this pane's frame is"
+        );
+        assert_eq!(
+            themed.colors.border_width, chrome.colors.border_width,
+            "…and so is its width"
+        );
+        assert_eq!(
+            themed.colors.border_radius, chrome.colors.border_radius,
+            "…and its radius"
+        );
+    }
 }
 
 fn rect_to_text_box(rect: Rectangle) -> TextBox {
@@ -1019,8 +1013,8 @@ pub(super) fn build_selection_overlay(
             };
 
             let visible_start = snapshot.viewport_top_stable_row.max(start_stable);
-            let visible_end = (snapshot.viewport_top_stable_row + snapshot.rows as isize - 1)
-                .min(end_stable);
+            let visible_end =
+                (snapshot.viewport_top_stable_row + snapshot.rows as isize - 1).min(end_stable);
             let mut spans = Vec::new();
             if visible_start <= visible_end {
                 for stable_row in visible_start..=visible_end {
@@ -1063,9 +1057,9 @@ pub(super) fn build_selection_overlay(
 #[cfg(test)]
 mod tests {
     use super::{
-        TerminalCopyBand, build_selection_overlay, graphics_signature, image_row_ranges,
-        merge_row_ranges, ranges_overlap, retained_damage_to_apply, retained_terminal_texture_size,
-        terminal_damage_copy_bands, terminal_layer_render_key,
+        build_selection_overlay, graphics_signature, image_row_ranges, merge_row_ranges,
+        ranges_overlap, retained_damage_to_apply, retained_terminal_texture_size,
+        terminal_damage_copy_bands, terminal_layer_render_key, TerminalCopyBand,
     };
     use crate::app::selection_model::{
         SelectionOwner, SelectionRegion, SelectionSource, SelectionState,
@@ -1151,7 +1145,7 @@ mod tests {
                 anchor_col: 3,
                 focus_stable_row: 2,
                 focus_col: 3,
-        },
+            },
         );
         let accent = Color {
             r: 100,
@@ -1193,7 +1187,7 @@ mod tests {
                 anchor_col: 3,
                 focus_stable_row: 2,
                 focus_col: 3,
-        },
+            },
         );
         selection.update_focus(5, 9);
         let accent = Color {
@@ -1231,7 +1225,7 @@ mod tests {
                 anchor_col: 12,
                 focus_stable_row: 8,
                 focus_col: 12,
-        },
+            },
         );
         selection.update_focus(4, 3);
         let accent = Color {
@@ -1301,7 +1295,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 4,
                 focus_col: 5,
-        },
+            },
         );
         let accent = Color {
             r: 100,
@@ -1472,14 +1466,7 @@ mod tests {
         // Image appeared (graphics_changed) with no text damage: repaint just the
         // image rows (terminal-task-23), not the whole pane.
         assert_eq!(
-            retained_damage_to_apply(
-                false,
-                false,
-                true,
-                &TerminalDamage::None,
-                &[rng(3, 5)],
-                &[]
-            ),
+            retained_damage_to_apply(false, false, true, &TerminalDamage::None, &[rng(3, 5)], &[]),
             Some(TerminalDamage::Rows(vec![rng(3, 5)]))
         );
     }
@@ -1588,15 +1575,27 @@ mod tests {
         let empty = graphics_signature(&[]);
         let one = graphics_signature(std::slice::from_ref(&base));
         assert_ne!(empty, one, "presence of an image changes the signature");
-        assert_eq!(one, graphics_signature(std::slice::from_ref(&base)), "stable");
+        assert_eq!(
+            one,
+            graphics_signature(std::slice::from_ref(&base)),
+            "stable"
+        );
 
         let mut moved = base.clone();
         moved.col = 4;
-        assert_ne!(one, graphics_signature(&[moved]), "moving the image changes it");
+        assert_ne!(
+            one,
+            graphics_signature(&[moved]),
+            "moving the image changes it"
+        );
 
         let mut other_image = base.clone();
         other_image.image_id = 8;
-        assert_ne!(one, graphics_signature(&[other_image]), "new image id changes it");
+        assert_ne!(
+            one,
+            graphics_signature(&[other_image]),
+            "new image id changes it"
+        );
     }
 
     #[test]
@@ -1627,17 +1626,26 @@ mod tests {
 
     #[test]
     fn terminal_layer_render_key_is_stable_for_identical_style() {
-        assert_eq!(terminal_layer_render_key(&style(14.0, 0.8)), terminal_layer_render_key(&style(14.0, 0.8)));
+        assert_eq!(
+            terminal_layer_render_key(&style(14.0, 0.8)),
+            terminal_layer_render_key(&style(14.0, 0.8))
+        );
     }
 
     #[test]
     fn terminal_layer_render_key_changes_with_font_size() {
-        assert_ne!(terminal_layer_render_key(&style(14.0, 0.8)), terminal_layer_render_key(&style(15.0, 0.8)));
+        assert_ne!(
+            terminal_layer_render_key(&style(14.0, 0.8)),
+            terminal_layer_render_key(&style(15.0, 0.8))
+        );
     }
 
     #[test]
     fn terminal_layer_render_key_changes_with_surface_alpha() {
-        assert_ne!(terminal_layer_render_key(&style(14.0, 0.8)), terminal_layer_render_key(&style(14.0, 0.6)));
+        assert_ne!(
+            terminal_layer_render_key(&style(14.0, 0.8)),
+            terminal_layer_render_key(&style(14.0, 0.6))
+        );
     }
 
     #[test]

@@ -95,7 +95,7 @@ fn fitted_grid_units(extent: f32, approx_cell: f32) -> usize {
 }
 
 pub(crate) fn forward_mouse_move(state: &mut AppState, pos: (f32, f32)) {
-    if state.mouse.interactive_move.is_some() || state.mouse.drag_ctx.is_dragging() {
+    if state.mouse.interactive_move.is_some() || crate::chrome::drag_in_flight(state) {
         return;
     }
 
@@ -177,7 +177,7 @@ pub(crate) fn forward_mouse_button(
         state.needs_redraw = true;
     }
 
-    if started_interactive_move(state, button, button_state) || state.mouse.drag_ctx.is_dragging() {
+    if started_interactive_move(state, button, button_state) || crate::chrome::drag_in_flight(state) {
         return;
     }
 
@@ -263,7 +263,7 @@ pub(crate) fn forward_mouse_button(
 }
 
 pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: MouseScrollDelta) {
-    if state.mouse.interactive_move.is_some() || state.mouse.drag_ctx.is_dragging() {
+    if state.mouse.interactive_move.is_some() || crate::chrome::drag_in_flight(state) {
         return;
     }
 
@@ -407,11 +407,14 @@ pub(crate) fn notify_window_focus_changed(state: &mut AppState, focused: bool) {
 pub(crate) fn should_intercept_selection_gesture(
     state: &AppState,
     pos: (f32, f32),
-    button: MouseButton,
-    button_state: ElementState,
+    ev: &heca_grid_ui::Event,
 ) -> bool {
-    if button != MouseButton::Left
-        || button_state != ElementState::Pressed
+    use heca_grid_ui::event::RawPointerKind as Kind;
+    let heca_grid_ui::Event::Raw(raw) = ev else {
+        return false;
+    };
+    if raw.button != heca_grid_ui::PointerButton::Left
+        || raw.kind != Kind::Pressed
         || !state.modifiers.shift_key()
     {
         return false;
@@ -1137,7 +1140,7 @@ fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle>
             let w = float.size.w as f32;
             let h = float.size.h as f32;
             let inset = pane_content_inset(state);
-            let extra_top = crate::app::terminal_render::pane_title_top_inset(state);
+            let extra_top = crate::app::terminal_render::pane_title_top_inset(state, pane_id);
             return inset_content_rect(x, y, w, h, inset, extra_top);
         }
     }
@@ -1156,7 +1159,7 @@ fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle>
         let w = rect.size.w as f32;
         let h = rect.size.h as f32;
         let inset = pane_content_inset(state);
-        let extra_top = crate::app::terminal_render::pane_title_top_inset(state);
+        let extra_top = crate::app::terminal_render::pane_title_top_inset(state, pane_id);
         return inset_content_rect(x, y, w, h, inset, extra_top);
     }
 

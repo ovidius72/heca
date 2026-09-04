@@ -11,12 +11,12 @@ pub(crate) use theme::{
 pub(crate) mod signals;
 pub(crate) use signals::{sync_chrome_signals, sync_chrome_state, ChromeSignals};
 pub(crate) mod pane;
-pub(crate) use pane::{clear_panes, sync_panes, RetainedPane};
+pub(crate) use pane::{clear_panes, header_height as pane_header_height, sync_panes, RetainedPane};
 pub(crate) mod pane_header;
 pub(crate) use pane_header::{
-    action_tooltip, clear_pane_headers, home_relative_path, pane_info_view, sync_pane_headers,
+    action_tooltip, build_pane_headers, home_relative_path, pane_info_view,
     sync_pane_viewport_widgets, truncate_path_left, ActionShortcuts, PaneInfoSignals,
-    RetainedPaneHeader, RetainedPaneViewportWidgets, CARD_META_FONT_SCALE,
+    RetainedPaneViewportWidgets, CARD_META_FONT_SCALE,
 };
 pub(crate) mod drag;
 pub(crate) use drag::{ChromeDragItem, DragItemRegistry};
@@ -34,19 +34,30 @@ mod events;
 mod expose;
 pub(crate) use expose::register as register_expose;
 
-/// Re-register a **host-owned** named layer, so what it shows is current.
-///
-/// The one place a layer name maps to the code that rebuilds it. A layer whose content is derived
-/// from app state cannot be kept fresh by signals alone — those replace a prop, never a child — so
-/// it is rebuilt, and `add_named` replacing under the same name is what makes that safe.
-///
-/// An unknown name is a no-op: a plugin's layer is rebuilt by the plugin, not from here.
-pub(crate) fn rebuild_named_layer(state: &mut crate::app_state::AppState, name: &str) {
-    if Some(name) == layers::layer_name(layers::HOST_OWNER, "expose").as_deref() {
-        expose::register(state);
-    }
-}
 mod focus;
+mod dispatch;
+mod scene;
+#[allow(unused_imports)]
+use scene::{
+    build_region_content, build_sidebar_shell, pass_box_down, search_bar_tree, search_field_slot,
+    sidebar_toggle_button, with_share, ChromeFrame,
+};
+#[cfg(test)]
+use scene::chrome_scene;
+pub(crate) use scene::{
+    build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints, paint_search,
+};
+pub(crate) use dispatch::{
+    cancel_every_tree, deliver, deliver_to_pane_viewports, deliver_to_panes,
+    dispatch_surface_pointer, drag_in_flight, drain_pending_drops, drain_pending_menus,
+    next_redraw_across_trees, open_declared_menu_for_focus, pane_viewport_at,
+};
+mod layers_glue;
+pub(crate) use layers_glue::rebuild_named_layer;
+mod notification_layer;
+pub(crate) use notification_layer::{
+    mount_notification_stack, surface_key as notification_surface_key,
+};
 mod host;
 /// The identity rule's reporting half (F003/P082/T444) — see the module docs.
 mod identity;
@@ -58,9 +69,7 @@ mod state;
 // confirm dialog as a layer, plugins) — some names not yet referenced in-binary.
 #[allow(unused_imports)]
 pub(crate) use expose::record_expose_cursor;
-pub(crate) use layers::{
-    LayerBackdrop, LayerId, LayerKind, LayerRegistry,
-};
+pub(crate) use layers::{surface_key_of, LayerId, LayerKind, LayerRegistry};
 // Declarative UI model (plugin-task-ui-1); consumed by `realize` (ui-3) + Modal body (ui-4).
 // It lives in the `heca-view` crate since F003/P017/T009 — a plugin depends on that crate, and it
 // cannot depend on this binary. Re-exported here so the app keeps one path to the vocabulary.
@@ -206,14 +215,12 @@ use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::drag::{DragPhase, DragSurfaceId};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
     BadgeButton, Flex, FocusScope, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label, Pane,
     ScrollBar, Separator, Surface, Tag,
-    Tooltip,
     TooltipSide,
 };
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
@@ -230,182 +237,6 @@ pub(crate) fn translate_tree(c: &mut dyn Component, dx: f64, dy: f64) {
     }
 }
 
-/// Deliver a pointer event to the open modal layer — **the whole set, in one place**.
-///
-/// Returns `true` when a modal owns the pointer, so every caller stops there and nothing leaks to
-/// the page behind. There is deliberately **one** function rather than a branch per winit event:
-/// the input this tree needs is not a per-caller choice.
-///
-/// That choice is what kept breaking. A widget with a *gesture* needs the whole set or it fails in
-/// a way nothing catches — a [`ScrollRegion`](heca_grid_ui::ScrollRegion) that never receives the
-/// release leaves its thumb welded to the cursor, and one that never receives the wheel simply
-/// does not scroll. Both are silent: it lays out, paints and hit-tests perfectly. The modal path
-/// used to forward the move and the press only, so both happened, and the fix had already been
-/// written twice elsewhere without the hole here being visible from either.
-///
-/// Since F004/P084/T394 there is only one pointer event to forward — [`Event::Raw`] — and the
-/// framework resolves it into whatever it meant. The set cannot go missing a kind because there
-/// are no longer kinds to choose between.
-///
-/// So: a caller says *a pointer event happened*, not *which kinds this surface deigns to forward*.
-pub(crate) fn dispatch_modal_pointer(
-    state: &mut crate::app_state::AppState,
-    ev: &Event,
-) -> bool {
-    debug_assert!(
-        matches!(ev, Event::Raw(_)),
-        "dispatch_modal_pointer is the pointer path; keys go through the keymap",
-    );
-    if top_modal(state).is_none() {
-        return false;
-    }
-    if let Some(root) = state.layers.top_modal_root_mut() {
-        let _ = heca_grid_ui::dispatch(root, ev);
-    }
-    state.mark_full_redraw();
-    true
-}
-
-/// Dispatch a pointer press at `pos` into the retained pane headers. Returns
-/// `Some((pane_id, consumed))` when the press lands inside a header's bounds:
-/// `consumed = true` if an action button handled it (caller must not forward to
-/// the terminal); `false` for the header band's empty area (caller focuses the
-/// pane, treating the band as chrome — no terminal selection). `None` off any header.
-pub(crate) fn dispatch_pane_header_press(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) -> Option<(PaneId, bool)> {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    // Collect candidate ids first (avoid holding the map borrow across the dispatch).
-    let hit = state
-        .pane_headers
-        .iter()
-        .find(|(_, h)| rect_contains(h.root.base().bounds, point))
-        .map(|(id, _)| *id)?;
-    let header = state.pane_headers.get_mut(&hit)?;
-    let consumed =
-        heca_grid_ui::dispatch(&mut header.root, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
-            == heca_grid_ui::Handled::Yes;
-    Some((hit, consumed))
-}
-
-/// Dispatch a pointer move at `pos` into the retained pane headers so the action
-/// buttons' hover affordance updates. Returns `true` if the pointer is over any
-/// header (the caller requests a repaint). Does not discard the trees (hover is
-/// transient and must persist across moves).
-pub(crate) fn dispatch_pane_header_move(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) -> bool {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    let mut over = false;
-    for header in state.pane_headers.values_mut() {
-        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::pointer_moved(point));
-        if rect_contains(header.root.base().bounds, point) {
-            over = true;
-        }
-    }
-    over
-}
-
-/// Feed a pointer release into the retained pane headers, so a gesture that started on one can end.
-///
-/// The header seam had a press and a move and no release — the last of the four surfaces to be
-/// missing a kind. Nothing there grabs the pointer *today*, which is exactly why it went unnoticed:
-/// the first widget mounted here that does would have been broken on arrival, the same way a scroll
-/// region was in three other places. Not hit-tested, deliberately: a release ends the gesture
-/// wherever the cursor drifted to.
-pub(crate) fn dispatch_pane_header_release(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    for header in state.pane_headers.values_mut() {
-        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left));
-    }
-}
-
-/// Feed the wheel into the retained pane headers. Returns `true` when one consumed it.
-///
-/// Nothing in a header scrolls today. It is wired anyway, because "no widget here needs it yet" is
-/// the reasoning that produced every other missing kind.
-pub(crate) fn dispatch_pane_header_wheel(
-    state: &mut crate::app_state::AppState,
-    ev: &Event,
-) -> bool {
-    let mut handled = false;
-    for header in state.pane_headers.values_mut() {
-        handled |= heca_grid_ui::dispatch(&mut header.root, ev) == heca_grid_ui::Handled::Yes;
-    }
-    handled
-}
-
-/// Feed a pointer press into the retained terminal viewport widgets. Returns
-/// `true` when any widget consumed the press (badge click or scrollbar drag).
-pub(crate) fn dispatch_pane_viewport_press(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) -> bool {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    for widgets in state.pane_viewport_widgets.values_mut() {
-        if heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
-            == heca_grid_ui::Handled::Yes
-            || heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
-                == heca_grid_ui::Handled::Yes
-        {
-            return true;
-        }
-    }
-    false
-}
-
-/// Feed pointer motion into the retained terminal viewport widgets so hover and
-/// scrollbar drags update. Returns `true` if the pointer is over any widget.
-pub(crate) fn dispatch_pane_viewport_move(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) -> bool {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    let mut over = false;
-    for widgets in state.pane_viewport_widgets.values_mut() {
-        let badge_handled = heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_moved(point))
-            == heca_grid_ui::Handled::Yes;
-        let scrollbar_handled = heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_moved(point))
-            == heca_grid_ui::Handled::Yes;
-        if badge_handled || scrollbar_handled {
-            over = true;
-        }
-        if (widgets.badge.base().visible.get_untracked()
-            && rect_contains(widgets.badge.base().bounds, point))
-            || (widgets.scrollbar.base().visible.get_untracked()
-                && rect_contains(widgets.scrollbar.base().bounds, point))
-        {
-            over = true;
-        }
-    }
-    over
-}
-
-/// Feed a pointer release into the retained terminal viewport widgets so a
-/// scrollbar drag can end even when released outside its bounds.
-pub(crate) fn dispatch_pane_viewport_release(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) -> bool {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    let mut handled = false;
-    for widgets in state.pane_viewport_widgets.values_mut() {
-        handled |= heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left))
-            == heca_grid_ui::Handled::Yes;
-        handled |= heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left))
-            == heca_grid_ui::Handled::Yes;
-    }
-    handled
-}
-
-fn rect_contains(r: Rectangle, p: Point) -> bool {
-    p.x >= r.loc.x && p.x <= r.loc.x + r.size.w && p.y >= r.loc.y && p.y <= r.loc.y + r.size.h
-}
 
 pub(crate) fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option<PaneRuntime> {
     state.pane_runtime(pane_id)
@@ -491,11 +322,11 @@ impl ChromeIntentEmitter {
 /// has to be built before the layer is inserted, which is the usual case.
 pub(crate) fn layer_emitter(
     event_proxy: &winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
-    id: LayerId,
+    key: crate::app::interaction::SurfaceKey,
 ) -> ChromeIntentEmitter {
     ChromeIntentEmitter::new(
         event_proxy,
-        crate::app::interaction::InteractionSource::Surface(id),
+        crate::app::interaction::InteractionSource::Surface(key),
     )
 }
 
@@ -562,786 +393,6 @@ impl Component for RepaintWatch {
     }
 }
 
-/// Make a node take the box its parent gives it instead of the size of its own content.
-///
-/// A wrapper that hugs its child measures the child's *content*, and a flex item's automatic minimum
-/// size then stops it shrinking back — so a dock 1214px tall keeps all 1214px inside the 296px slot
-/// its share won and overflows the frame. The fix is CSS's `flex: 1 1 0`: a zero base size plus
-/// permission to shrink, so the parent's box is what there is to divide.
-///
-/// **Do not copy this trio into new code.** It is the same debt [`with_share`] carries and for the
-/// same reason — `Layout` has no `flex_basis`, so a zero base size has to be written as a height,
-/// which is a fixed measure standing in for a proportion. P052(F004)/T350 replaces both with one
-/// `share(n)` setter in the library; this exists so a *transparent* wrapper stays transparent until
-/// then, rather than each caller rediscovering the combination.
-fn pass_box_down(node: &mut dyn Component) {
-    let layout = &mut node.base_mut().style.layout;
-    layout.flex_grow = 1.0;
-    layout.height = heca_grid_ui::Length::Px(0.0);
-    layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
-    layout.flex_shrink = Some(1.0);
-}
-
-/// Give a container body its declared share of the region's **main axis**, as a flex grow factor
-/// (F003/P011/T021) — height in a sidebar, width in a bar, one number either way.
-///
-/// Applied to every container however many are seated, so the rule needs no special case: alone it
-/// takes the whole region, two equal shares take half each, `2.0` beside `1.0` takes two thirds,
-/// and `0.0` is content-sized.
-///
-/// Set by the region rather than by the container, because a share only means anything relative to
-/// its siblings — which a container cannot see and should not have to.
-fn with_share(mut body: WidgetModel, grow: f32) -> WidgetModel {
-    let layout = &mut body.base_mut().style.layout;
-    layout.flex_grow = grow;
-    if grow > 0.0 {
-        // A share has to be **of the region**, not of what is left over after the content.
-        //
-        // `flex_grow` alone distributes only *positive* free space, and a container's content is
-        // routinely taller than the sidebar — so two containers measured 1214px each inside a 600px
-        // body, overflowed the frame, and got no share at all. In CSS this is `flex: 1 1 0`; there
-        // is no `flex_basis` in this vocabulary, so the equivalent is a **zero base size** plus
-        // permission to shrink. Then the free space is the whole region and the shares divide it:
-        // 296px each, measured.
-        //
-        // Safe because a shared container is expected to scroll its own content — it nests its own
-        // scroll area, so being handed less height than its content is the normal case, not a
-        // squeeze. A container that asked for `0.0` is saying "size me to my content" and keeps its
-        // natural height.
-        layout.height = heca_grid_ui::Length::Px(0.0);
-        layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
-        layout.flex_shrink = Some(1.0);
-    }
-    body
-}
-
-/// Wrap a container body in the two things the **host** owns about it: whether it holds chrome
-/// keyboard focus, and its letter while a dock pick is open (F003/P011/T020).
-///
-/// Both are host state, not container state — a container cannot know that it is the focused one, or
-/// which letter it was given among its siblings — so they are applied here rather than left to each
-/// provider to remember. Both wrappers are transparent: they hug the body and route events, focus and
-/// drag straight through, so the container behaves exactly as it does unwrapped.
-///
-/// The focus signal is the **same one** the container's own scroll area binds as its keyboard target
-/// (`StateView::container_keyboard_target`), so the ring and the keys can never disagree about which
-/// dock has focus.
-fn focus_and_pick(
-    mut body: WidgetModel,
-    container: &str,
-    share: f32,
-    ctx: &crate::providers::ChromeCtx<'_>,
-) -> WidgetModel {
-    // The share lands on the outermost node, so every level below it has to pass the box down or the
-    // dock keeps its content height inside the slot its share won — measured 1214px inside 296px, the
-    // same failure F003/P011/T021 fixed one level up.
-    //
-    // Only when there *is* a share to pass: a container that asked for `0.0` is saying "size me to my
-    // content", and a zero base size inside a content-sized parent would collapse it to nothing.
-    if share > 0.0 {
-        pass_box_down(body.as_mut());
-    }
-    let mut picked = KeyHint::new_boxed(body)
-        // Top-centre over a tall dock. Outside a render pass there is no theme to tint it with, and
-        // there is no keycap to draw either (no pick is open while a host reads metadata), so the
-        // default accent stands.
-        .placement(HintPlacement::TopCenter);
-    if let Some(theme) = ctx.theme() {
-        // The theme's `warning` tone, so a dock letter reads distinctly from a pane pick (accent)
-        // and a column pick (success).
-        picked = picked.color(theme.colors.warning);
-    }
-    if share > 0.0 {
-        pass_box_down(&mut picked);
-    }
-    // Stamp the placement id on the outermost wrapper, so a press anywhere inside — including on a
-    // widget that consumes it — resolves back to this container (`nav::scope_at`,
-    // F003/P086/T365). It goes here because this is the one place the host already wraps every
-    // mount, so a container gets click-to-focus with nothing declared, a plugin's included.
-    Box::new(
-        FocusScope::new(picked)
-            .focus(ctx.state().container_keyboard_target(container))
-            .scope_key(container),
-    )
-}
-
-/// Build the body of a chrome **region** from whatever the [`ChromeHost`] has seated in
-/// it — the render half of the pluggable-chrome contract.
-///
-/// For each mounted container, in the host's order: ask its provider for a
-/// [`Contribution`] and call the container's `build` seam. The other contribution kinds
-/// belong to other hosts (bars take `ToolbarGroup`/`StatusSegment`, overlays go to the
-/// overlay host, §3.1.1), so a region ignores them rather than guessing.
-///
-/// `None` — not an empty widget — when nothing is mounted, so the shell can tell "no
-/// provider here" from "a provider that built an empty body".
-///
-/// Takes the three registries rather than a ready-made [`BuildCx`] because the context is **per
-/// container**, not per region: each build hook is told which mount it is building, so it can ask
-/// for state that is per mount (its own scroll offset). One `BuildCx` for a whole region could not
-/// carry that (F003/P011/T021).
-fn build_region_content(
-    host: &ChromeHost,
-    region: RegionId,
-    ctx: &crate::providers::ChromeCtx<'_>,
-    signals: &mut ChromeSignals,
-    drag: &mut DragItemRegistry,
-) -> Option<WidgetModel> {
-    let mut bodies = host
-        .contributions(region)
-        .iter()
-        .filter_map(|mounted| match mounted.provider().build_contribution(ctx) {
-            Contribution::Container(c) => {
-                let mut bx = BuildCx::new(&c.id, signals, drag);
-                let body = (c.build)(ctx, &mut bx);
-                // The share goes on the OUTERMOST node, so it has to be applied after the wrappers:
-                // a share set on the body would leave the wrapper content-sized and divide nothing
-                // (F003/P011/T021's lesson, one level up).
-                Some(with_share(
-                    focus_and_pick(body, &c.id, c.grow, ctx),
-                    c.grow,
-                ))
-            }
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    match bodies.len() {
-        0 => None,
-        // One container owns the region: its own share already makes it fill the region, so
-        // there is nothing to wrap it in.
-        1 => bodies.pop(),
-        // Several containers share a region: stack them in the host's order (the order
-        // `reorder`/`move_container` maintain), each keeping its own body and its own share. The
-        // stack itself must be allowed to shrink to the region, or it takes its content's height
-        // and overflows before the shares are ever divided.
-        _ => {
-            let mut stack = Flex::column().gap(8.0).grow(1.0);
-            {
-                let layout = &mut stack.base_mut().style.layout;
-                layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
-                layout.flex_shrink = Some(1.0);
-            }
-            // A rule between containers, so two of them read as two things rather than one long
-            // list. It takes no share: a `Separator` is a leaf with its own height, and `with_share`
-            // only touches the containers, so the rule keeps its natural 1px and the shares divide
-            // what is left. Its colour comes from the theme's border token, so it follows a reload.
-            let count = bodies.len();
-            Some(Box::new(bodies.into_iter().enumerate().fold(
-                stack,
-                |col, (i, body)| {
-                    let col = if i > 0 && i < count {
-                        col.child(Separator::horizontal())
-                    } else {
-                        col
-                    };
-                    col.child_boxed(body)
-                },
-            )))
-        }
-    }
-}
-
-/// Build a sidebar **SHELL** — a full-height, bracket-framed, frosted panel filling a
-/// sidebar column. This is **one component, two instances**: the left and right
-/// sidebars are the same shell differing only by width/position and the `content`
-/// mounted inside. Per the chrome plan (`pluggable-chrome-plugin-plan.md` §2.1 / §2.8,
-/// `docs/sidebar-provider-modes.md`) the sidebar is a *shell* that hosts a Provider's
-/// content — and that is now literally true: `content` is whatever
-/// [`ChromeHost::contributions`] seats in the region (see [`build_region_content`]), so
-/// the shell knows nothing about workspaces. A region with no provider mounted passes
-/// `None` and renders as an empty frame.
-///
-/// The body is a [`Box<dyn Component>`](heca_grid_ui::Component) — a provider's render
-/// seam returns a built subtree, not a concrete widget type — which is why it is mounted
-/// with [`Pane::child_boxed`] rather than `Parent::child`.
-#[allow(clippy::too_many_arguments)]
-fn build_sidebar_shell(
-    region_w: f32,
-    sidebar_h: f32,
-    shell_bg: Color,
-    sidebar_gap: f32,
-    border_style: heca_config::appearance::BorderStyle,
-    border_width: f32,
-    border_radius: f32,
-    content: Option<WidgetModel>,
-) -> Flex {
-    let inner_w = (region_w - sidebar_gap * 2.0).max(0.0);
-    let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
-    // The collapse toggle lives in the always-visible top bar (sidebar-fu-14), so the
-    // shell has no header row — the mounted content (if any) fills the body.
-    let mut body = apply_pane_frame(Pane::new(), border_style)
-        .border_width(border_width)
-        .radius(border_radius)
-        .width(Length::Px(inner_w))
-        .height(Length::Px(inner_h))
-        .padding(10.0)
-        .gap(8.0)
-        .background(shell_bg);
-    if let Some(content) = content {
-        // Mounted directly: **the shell does not scroll** (F003/P011/T021).
-        //
-        // Scrolling is per container. Each one nests its own scroll area and scrolls its own
-        // content, which is what makes two of them in a sidebar independent. A scroll viewport
-        // around the whole stack would defeat that twice over: it takes the wheel for the sidebar
-        // instead of the container under the cursor, and — because a viewport measures its content
-        // at its natural height, which is the whole point of one — it leaves the containers
-        // content-sized, so a fractional share has no height to divide and they bunch at the top.
-        //
-        // The shell's job is to give containers bounds. It hands them the region's height, they
-        // take their shares of it, and each scrolls inside what it got.
-        body = body.child_boxed(content);
-    }
-    Flex::column()
-        .width(Length::Px(region_w))
-        .height(Length::Px(sidebar_h))
-        .child(
-            Surface::column()
-                .width(Length::Px(region_w))
-                .height(Length::Px(sidebar_h))
-                .background(shell_bg)
-                .padding(sidebar_gap)
-                .child(body),
-        )
-}
-
-/// The chrome frame's geometry, colors, and status text — grouped so the assembly
-/// helpers stay under clippy's argument-count lint. Borrowed `status` keeps the
-/// caller's `String` in place.
-#[derive(Clone, Copy)]
-struct ChromeFrame<'a> {
-    w: f32,
-    h: f32,
-    tab_bar_height: f32,
-    status_bar_height: f32,
-    status: &'a str,
-    side_bg: Color,
-    fg: Color,
-}
-
-/// A sidebar collapse toggle for the **top bar** (sidebar-fu-14): a small arrow
-/// `IconButton` that emits `ActivateAction(action)` (expand↔rail for its region),
-/// wrapped in a tooltip carrying its keybind (resolved centrally by `action_name`
-/// — like every other chrome button). Lives in the always-visible top bar so it
-/// works in both expanded and collapsed states.
-#[allow(clippy::too_many_arguments)]
-fn sidebar_toggle_button(
-    glyph: Glyph,
-    action: crate::input::WmAction,
-    action_name: &str,
-    shortcuts: &ActionShortcuts,
-    catalog: &crate::actions::ActionCatalog,
-    emit: ChromeIntentEmitter,
-    color: Color,
-) -> Tooltip {
-    use crate::app::interaction::InteractionIntent;
-    // Label from the action descriptor (catalog-owned), never re-spelled here.
-    let label = catalog.label(action_name).unwrap_or(action_name);
-    // One gesture: a click and a `prefix+/` pick both fire the button's action.
-    let fire = {
-        let emit = emit.clone();
-        let action = action.clone();
-        move || emit.fire(InteractionIntent::ActivateAction(action.clone()))
-    };
-    let hint = fire.clone();
-    // Just pick the size variant — the widget derives icon px + padding from the
-    // theme font internally (`Icon` with no explicit px uses the variant-scaled font,
-    // `IconButton` scales its padding). No caller-side size math.
-    // **Its identity is the action it runs, not the arrow it shows.** Both toggles flip their
-    // glyph with the sidebar's state — left is `ArrowLineLeft` expanded and `ArrowLineRight`
-    // collapsed, right is the mirror — so a derived identity (the glyph's name) changes under the
-    // user every time they use the button, and the two buttons can even derive the *same* name at
-    // once (left expanded and right collapsed are both `arrow_line_left`), at which point document
-    // order decides which one wears the index. Either way the `prefix+/` letters moved on every
-    // pick (Antonio, driving, 2026-08-19). The action name is stable through both states.
-    let button = IconButton::new(Icon::new(glyph).color(color))
-        .key(action_name)
-        .size(WidgetSize::Small)
-        .on_click(fire);
-    action_tooltip(KeyHint::new(button).on_hint(hint), action_name, label, shortcuts)
-}
-
-/// Assemble the chrome root widget tree (no layout/paint): a transparent tab band
-/// (carrying the left/right sidebar collapse toggles at its outer corners), a middle
-/// row hosting the (optional) full-height sidebar shell + a transparent content spacer,
-/// and the opaque status bar at the bottom. Returns the concrete [`Flex`] so it can be
-/// **retained** across frames (see [`RetainedChrome`]).
-fn chrome_root(
-    frame: &ChromeFrame,
-    left_sidebar: Option<Flex>,
-    right_sidebar: Option<Flex>,
-    left_toggle: Option<Tooltip>,
-    right_toggle: Option<Tooltip>,
-    signals: &mut ChromeSignals,
-) -> Flex {
-    let ChromeFrame {
-        w,
-        h,
-        tab_bar_height,
-        status_bar_height,
-        status,
-        side_bg,
-        fg,
-    } = *frame;
-    let middle_h = (h - tab_bar_height - status_bar_height).max(0.0);
-
-    // Middle row: the full-height sidebar shell (when expanded) + a transparent
-    // spacer over the content area (panes are drawn by the hand-drawn path under
-    // this scene). The shell sizes its own width/height.
-    let mut middle = Flex::row()
-        .width(Length::Px(w))
-        .height(Length::Px(middle_h));
-    if let Some(shell) = left_sidebar {
-        middle = middle.child(shell);
-    }
-    middle = middle.child(Flex::row().grow(1.0));
-    if let Some(shell) = right_sidebar {
-        middle = middle.child(shell);
-    }
-
-    let mut root = Flex::column().width(Length::Px(w)).height(Length::Px(h));
-    // Transparent tab band — the hand-drawn tab bar paints underneath. Omitted
-    // entirely when the top bar is hidden (`show_top_bar = false`).
-    if tab_bar_height > 0.0 {
-        // Left toggle at the far-left corner, right toggle at the far-right, spacer
-        // between (over the hand-drawn tab bar). sidebar-fu-14.
-        // Edge inset from a theme spacing token (resolved from the font at layout — no
-        // hand-computed px). Vertical breathing room comes from centering a `Small` toggle.
-        let mut band = Flex::row()
-            .width(Length::Px(w))
-            .height(Length::Px(tab_bar_height))
-            .align(Align::Center)
-            .pad_x(Spacing::Sm);
-        if let Some(t) = left_toggle {
-            band = band.child(t);
-        }
-        band = band.child(Flex::row().grow(1.0));
-        if let Some(t) = right_toggle {
-            band = band.child(t);
-        }
-        root = root.child(band);
-    }
-    root = root.child(middle);
-    // Status (bottom) bar. Built only when shown — a zero-height `Surface` would
-    // still paint its overflowing `Label`, so when `show_bottom_bar = false` we drop
-    // the whole bar (and leave `signals.status` unset, which the per-frame updater
-    // already treats as "nothing to update").
-    if status_bar_height > 0.0 {
-        // The status label's text is bound so mode/focus changes update it in place.
-        let status_label = Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg);
-        let status_signal = status_label.text_signal();
-        let (status_watch, _status_repaint) = RepaintWatch::new(status_label);
-        signals.status = Some(status_signal);
-        root = root.child(
-            Surface::row()
-                .width(Length::Px(w))
-                .height(Length::Px(status_bar_height))
-                .background(side_bg)
-                .radius(0.0)
-                .align(Align::Center)
-                .padding_xy(8.0, 0.0)
-                .child(status_watch),
-        );
-    }
-    root
-}
-
-/// Layout + paint a (retained) chrome root tree into a [`Scene`] at the window size.
-/// Re-run every frame; cheap and creates no signals (those live in the retained tree).
-pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiTheme) -> Scene {
-    let mut scene = Scene::new();
-    LayoutEngine::new()
-        .base_font(theme.font_size)
-        .compute(root, Size::new(w as f64, h as f64));
-    {
-        let mut cx = PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
-        heca_grid_ui::paint_child(root, &mut cx);
-    }
-    scene
-}
-
-/// Paint the in-flight sidebar-drag overlay (drop indicator + ghost chip) into the
-/// chrome `scene`, on top of the **expanded** grid-ui sidebar (F4.5 1b). Driven by the
-/// retained-tree geometry (`resolve_at`) — not the legacy fixed-row hit-test — so the
-/// indicator tracks the real laid-out pane cards. No-op unless a sidebar drag is in its
-/// `Dragging` phase. The collapsed rail keeps its own hand-drawn ghost/highlight, so the
-/// caller only invokes this for the expanded sidebar.
-pub(crate) fn paint_drag_overlay(
-    state: &crate::app_state::AppState,
-    scene: &mut Scene,
-    w: f32,
-    h: f32,
-    theme: &GuiTheme,
-) {
-    let Some(surf) = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar) else {
-        return;
-    };
-    // During paint the drag is in flight (phase is still `Dragging`), so the live
-    // payload gives the source kind (for the source-aware filter) + the swap flag.
-    let (source, swap) = match &surf.phase {
-        DragPhase::Dragging { payload } => match payload {
-            crate::app_state::AppDragPayload::Pane { swap, .. } => (DragSourceKind::Pane, *swap),
-            crate::app_state::AppDragPayload::Column { swap, .. } => {
-                (DragSourceKind::Column, *swap)
-            }
-        },
-        _ => return,
-    };
-    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-
-    // Indicator on the hovered target, resolved with the *source-aware* filter (a
-    // column drag hints columns/workspaces, not the nested pane cards). A swap targets
-    // the WHOLE item (no before/after), so it uses the distinct swap indicator.
-    if let Some((_item, hit)) = resolve_sidebar_drop(state, state.mouse.pos, source) {
-        if swap {
-            cx.swap_indicator(hit.bounds);
-        } else {
-            cx.drop_indicator(hit.bounds, hit.side);
-        }
-    }
-
-    // Ghost chip following the cursor (offset off the pointer + vertically centered,
-    // mirroring the legacy hand-drawn ghost so the two paths look identical).
-    if let Some(label) = &surf.ghost_label {
-        let rect = Rectangle::new(
-            Point::new(
-                (label.x + 10.0) as f64,
-                (label.y - label.height / 2.0) as f64,
-            ),
-            Size::new(label.width as f64, label.height as f64),
-        );
-        cx.drag_ghost(rect, &label.text, swap);
-    }
-}
-
-/// Keycap glyph size (logical px) for follow-link hints — compact so a label sits
-/// legibly over a single terminal cell.
-const LINK_HINT_FONT: f32 = 13.0;
-
-
-/// Peak alpha of the visual-bell flash overlay (faded out over the flash window).
-const BELL_FLASH_MAX_ALPHA: u8 = 56;
-
-/// Paint the **visual-bell** flash: a brief accent-tinted overlay over the content
-/// area that fades out, while `state.bell_flash_until` is in the future. Drawn into
-/// the chrome scene (on top). No-op when no flash is active. terminal-task-17.
-pub(crate) fn paint_bell_flash(
-    state: &crate::app_state::AppState,
-    scene: &mut Scene,
-    content_rect: Rectangle,
-    w: f32,
-    h: f32,
-    theme: &GuiTheme,
-) {
-    let Some(deadline) = state.bell_flash_until else {
-        return;
-    };
-    let now = std::time::Instant::now();
-    if now >= deadline {
-        return;
-    }
-    let frac = deadline.saturating_duration_since(now).as_secs_f32()
-        / crate::app::lifecycle::BELL_FLASH_DURATION.as_secs_f32();
-    let alpha = (frac.clamp(0.0, 1.0) * BELL_FLASH_MAX_ALPHA as f32).round() as u8;
-    if alpha == 0 {
-        return;
-    }
-    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    cx.rect(content_rect, theme.colors.accent.with_alpha(alpha), None, 0.0, None);
-}
-
-/// Paint follow-link keycaps over the focused terminal's hyperlinks while
-/// [`InputMode::FollowLink`](crate::app_state::InputMode::FollowLink) is active.
-/// Drawn into the chrome scene (painted last, on top of pane content) so the
-/// letters sit above the terminal text, reusing the shared
-/// [`paint_keycap`](heca_grid_ui::paint_keycap) visual. terminal-task-18.
-pub(crate) fn paint_link_hints(
-    state: &crate::app_state::AppState,
-    scene: &mut Scene,
-    w: f32,
-    h: f32,
-    theme: &GuiTheme,
-) {
-    let crate::app_state::InputMode::FollowLink { candidates } = &state.input_mode else {
-        return;
-    };
-    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    for hint in candidates {
-        let Some((x, y)) = crate::app::terminal_host::cell_screen_pos(
-            state,
-            hint.pane_id,
-            hint.row,
-            hint.start_col,
-        ) else {
-            continue;
-        };
-        let label = hint.label.to_string();
-        let size = heca_grid_ui::keycap_size(LINK_HINT_FONT, &label);
-        // Anchor the keycap's top-left at the link's first cell.
-        let cap = Rectangle::new(Point::new(x as f64, y as f64), size);
-        heca_grid_ui::paint_keycap(
-            &mut cx,
-            cap,
-            &label,
-            LINK_HINT_FONT,
-            None,
-            heca_grid_ui::KeycapVariant::Filled,
-        );
-    }
-}
-
-/// Lay out every visible dynamically-registered layer (an overlay dialog, a plugin panel)
-/// at full viewport size. Mutable pass, run before the scene-texture borrow so
-/// [`paint_layers`] can take a shared `&AppState`. Each layer's root is a self-centering /
-/// self-positioning tree (e.g. a [`Dialog`](heca_grid_ui::Dialog) fills the viewport and
-/// centers its panel). No-op when the registry is empty. This is the generic replacement for
-/// the per-overlay `layout_*` passes (`docs/surface-compositor.md` §9).
-pub(crate) fn layout_layers(state: &mut crate::app_state::AppState, w: f32, h: f32) {
-    let font = chrome_gui_theme(state).font_size;
-    for root in state.layers.visible_roots_mut() {
-        LayoutEngine::new()
-            .base_font(font)
-            .compute(root.as_mut(), Size::new(w as f64, h as f64));
-    }
-}
-
-/// Paint every visible dynamically-registered layer, **back → front** by band (so a Modal
-/// paints over an Overlay paints over Content), on top of the chrome scene. Each layer's root
-/// paints itself (overlay widgets draw their own scrim on `cx.with_overlay`). Run
-/// [`layout_layers`] first. Generic replacement for the per-overlay `paint_*` passes.
-pub(crate) fn paint_layers(
-    state: &crate::app_state::AppState,
-    scene: &mut Scene,
-    w: f32,
-    h: f32,
-    theme: &GuiTheme,
-) {
-    let layers = state.layers.visible_back_to_front();
-    if layers.is_empty() {
-        return;
-    }
-    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    for layer in layers {
-        // **A surface's arrival and exit are its own** — an `Overlay` paints itself under its
-        // `Animation`'s frame, about its own centre, so this pass simply draws each layer. The
-        // host used to apply the opacity and the scale here, which is why the capability was
-        // reachable only through the registry and never from a widget (F003/P082/T459).
-        heca_grid_ui::paint_child(layer.root(), &mut cx);
-    }
-}
-
-/// Peak alpha for a non-current search-match highlight; the current match is bolder.
-const SEARCH_HL_ALPHA: u8 = 64;
-const SEARCH_HL_CURRENT_ALPHA: u8 = 150;
-
-/// Paint the scrollback-search overlay: a highlight rect over every visible match
-/// (the focused one bolder) plus a `/query` bar anchored to the searched pane's
-/// bottom-right. Drawn into the chrome scene (on top). No-op when no search is
-/// active. terminal-task-19.
-pub(crate) fn paint_search(
-    state: &crate::app_state::AppState,
-    scene: &mut Scene,
-    w: f32,
-    h: f32,
-    theme: &GuiTheme,
-) {
-    if state.searches.is_empty() {
-        return;
-    }
-    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    // Every pane that has a search draws its own highlights and bar. They are
-    // independent, so a search in one pane never disturbs another's.
-    for (&pane_id, search) in &state.searches {
-        paint_pane_search(state, &mut cx, pane_id, search, theme, Size::new(w as f64, h as f64));
-    }
-}
-
-/// Match highlights + query bar for one pane's search.
-fn paint_pane_search(
-    state: &crate::app_state::AppState,
-    cx: &mut PaintCx,
-    pane_id: PaneId,
-    search: &crate::app_state::SearchState,
-    theme: &GuiTheme,
-    viewport: Size,
-) {
-    let Some(snapshot) = state
-        .backends
-        .get(pane_id)
-        .and_then(|b| b.terminal_snapshot())
-    else {
-        return;
-    };
-    let (cell_w, cell_h) = state
-        .backends
-        .get(pane_id)
-        .map(|b| b.cell_size())
-        .unwrap_or((8.0, 16.0));
-    let top = snapshot.viewport_top_stable_row;
-    let rows = snapshot.rows as isize;
-
-    // Match highlights over the visible viewport.
-    for (i, m) in search.matches.iter().enumerate() {
-        let visible = m.stable_row - top;
-        if visible < 0 || visible >= rows {
-            continue;
-        }
-        let Some((x, y)) = crate::app::terminal_host::cell_screen_pos(
-            state,
-            pane_id,
-            visible as usize,
-            m.start_col,
-        ) else {
-            continue;
-        };
-        let width = m.end_col.saturating_sub(m.start_col) as f32 * cell_w;
-        let rect = Rectangle::new(
-            Point::new(x as f64, y as f64),
-            Size::new(width as f64, cell_h as f64),
-        );
-        let alpha = if Some(i) == search.current {
-            SEARCH_HL_CURRENT_ALPHA
-        } else {
-            SEARCH_HL_ALPHA
-        };
-        // A match highlight tracks terminal cells, not chrome, so it stays a painted
-        // rect rather than a widget — but its corner still comes from the theme.
-        cx.rect(
-            rect,
-            theme.colors.accent.with_alpha(alpha),
-            None,
-            theme.colors.control_radius(),
-            None,
-        );
-    }
-
-    paint_search_bar(state, cx, pane_id, search, theme, viewport);
-}
-
-/// Build the search bar's widget tree, positioned at `pane`'s bottom-right corner.
-///
-/// `field` is the size the query [`Input`] measured to — the tree reserves a slot of
-/// exactly that size and the caller paints the retained field into it. The size is
-/// measured by the layout engine, never derived from a character count.
-///
-/// Pure so it can be tested without a GPU or an `AppState`, which is how its
-/// placement is covered.
-fn search_bar_tree(
-    field: Size,
-    count: Option<String>,
-    pane: Rectangle,
-    theme: &GuiTheme,
-) -> Flex {
-    // The query slot, then the match position as a separate chip so it reads as
-    // distinct information rather than as part of what was typed.
-    let mut row = Flex::row()
-        .align(Align::Center)
-        .gap_spacing(Spacing::Sm)
-        .child(
-            Flex::row()
-                .width(Length::Px(field.w as f32))
-                .height(Length::Px(field.h as f32)),
-        );
-    if let Some(count) = count {
-        row = row.child(Tag::new(count).color(theme.colors.accent));
-    }
-
-    // A box the size of the pane, offset to the pane's origin, with the bar pushed
-    // into its bottom-right corner. The engine does the positioning; nothing here
-    // measures text or computes a coordinate.
-    Flex::row()
-        .justify(Justify::End)
-        .align(Align::End)
-        .width(Length::Px(pane.size.w as f32))
-        .height(Length::Px(pane.size.h as f32))
-        .margin_left(pane.loc.x as f32)
-        .margin_top(pane.loc.y as f32)
-        .padding(Spacing::Sm.scale() * theme.font_size)
-        .child(row)
-}
-
-/// The query field + match counter at the searched pane's bottom-right corner.
-///
-/// The query is a real [`Input`], so its caret, selection and the whole editing model
-/// are the library's rather than reimplemented here. It is retained in [`SearchState`]
-/// (a field must keep its caret across frames) and therefore cannot be moved into the
-/// per-frame tree — so the tree reserves a slot and the field is painted into it, the
-/// same arrangement [`CommandPalette`](heca_grid_ui::widgets::CommandPalette) uses for
-/// its own query line.
-fn paint_search_bar(
-    state: &crate::app_state::AppState,
-    cx: &mut PaintCx,
-    pane_id: PaneId,
-    search: &crate::app_state::SearchState,
-    theme: &GuiTheme,
-    viewport: Size,
-) {
-    let Some((_, px, py, pw, ph)) = crate::app::terminal_host::pane_outer_frames(state)
-        .into_iter()
-        .find(|(id, ..)| *id == pane_id)
-    else {
-        return;
-    };
-
-    let query = search.input.borrow().value_str();
-    let count = (!query.is_empty()).then(|| {
-        if search.matches.is_empty() {
-            "no matches".to_string()
-        } else {
-            let pos = search.current.map(|i| i + 1).unwrap_or(0);
-            format!("{}/{}", pos, search.matches.len())
-        }
-    });
-
-    // Measure the field on its own first: the engine sizes it, so the bar reserves
-    // exactly what it needs without anyone estimating a width from the query length.
-    let field_size = {
-        let mut field = search.input.borrow_mut();
-        LayoutEngine::new()
-            .base_font(theme.font_size)
-            .compute(&mut *field, viewport);
-        field.base().bounds.size
-    };
-
-    let pane = Rectangle::new(
-        Point::new(px as f64, py as f64),
-        Size::new(pw as f64, ph as f64),
-    );
-    let mut root = search_bar_tree(field_size, count, pane, theme);
-    LayoutEngine::new()
-        .base_font(theme.font_size)
-        .compute(&mut root, viewport);
-    heca_grid_ui::paint_child(&root, cx);
-
-    // Draw the retained field into the slot the tree reserved for it.
-    let Some(slot) = search_field_slot(&root) else {
-        return;
-    };
-    let mut field = search.input.borrow_mut();
-    field.base_mut().bounds = slot;
-    field.base_mut().font = theme.font_size;
-    field.paint(cx);
-}
-
-/// Bounds of the slot [`search_bar_tree`] reserved for the query field:
-/// pane box → row → first child.
-fn search_field_slot(root: &Flex) -> Option<Rectangle> {
-    let row = root.base().children.first()?;
-    Some(row.base().children.first()?.base().bounds)
-}
-
-/// Test helper: build + layout + paint in one shot. Runtime uses the retained tree
-/// ([`build_chrome_root`] + [`paint_chrome_root`]) instead.
-#[cfg(test)]
-fn chrome_scene(
-    frame: &ChromeFrame,
-    theme: &GuiTheme,
-    left_sidebar: Option<Flex>,
-    right_sidebar: Option<Flex>,
-) -> Scene {
-    let mut signals = ChromeSignals::default();
-    let mut root = chrome_root(frame, left_sidebar, right_sidebar, None, None, &mut signals);
-    paint_chrome_root(&mut root, frame.w, frame.h, theme)
-}
 
 /// A **retained** chrome tree + the signature of the state that produced it. The
 /// tree is rebuilt only when [`chrome_signature`] changes; otherwise it is just
@@ -1349,14 +400,14 @@ fn chrome_scene(
 /// frames (no per-frame signal churn) and gives a live tree to dispatch events into
 /// (F4.2). The collapsed sidebar rail is still hand-drawn in `render.rs`.
 pub(crate) struct RetainedChrome {
-    pub(crate) root: Flex,
     pub(crate) sig: u64,
     /// Handles to the tree's **value** signals (selection + status), so they update
     /// in place via [`sync_chrome_signals`] instead of forcing a rebuild.
     pub(crate) signals: ChromeSignals,
-    /// Maps each draggable/droppable widget's opaque [`DragItemId`] back to *what it
-    /// is* (pane / column / workspace). Populated during [`build_chrome_root`] and
-    /// queried by [`sidebar_drag_source`]/[`sidebar_drop_target`].
+    /// Maps each draggable/droppable row's **own name** back to *what it is* (pane / column /
+    /// workspace) — the component's own knowledge, kept beside the tree that wrote it. Populated
+    /// during [`build_chrome_root`] and queried by [`sidebar_drag_source`], [`sidebar_item_at`]
+    /// and the drop the framework hands back. A name is never parsed here.
     pub(crate) drag_items: DragItemRegistry,
     /// **The [`InteractionSource`](crate::app::interaction::InteractionSource) every intent from
     /// this tree is dispatched with** — taken from the emitter that built it, never restated.
@@ -1368,6 +419,137 @@ pub(crate) struct RetainedChrome {
     /// nothing (Antonio, driving 2026-08-21). Guessing the source in the filter was the bug; there
     /// is one authority and this is a copy of it, made at construction.
     pub(crate) intent_source: crate::app::interaction::InteractionSource,
+}
+
+/// **A fresh, empty window root** — what [`AppState::window_root`](crate::app_state::AppState)
+/// starts as, before any chrome has been built or any surface placed.
+///
+/// It fills the window and imposes nothing else: the chrome subtree sizes itself in real pixels and
+/// a surface placed beside it takes itself out of the flow, so this level changes no geometry. It
+/// exists to **outlive** the chrome, not to lay anything out.
+pub(crate) fn new_window_root() -> Flex {
+    Flex::column()
+        .width(Length::Pct(1.0))
+        .height(Length::Pct(1.0))
+}
+
+/// **The chrome subtree's identity in the window root.** Its slot is found by this, never by
+/// position — a surface may be placed before the first chrome is ever built (the toast stack is,
+/// at startup), and a positional "child 0" would then seat the chrome *over* it.
+pub(crate) const CHROME_KEY: &str = "heca.chrome";
+
+/// **Seat a freshly built chrome subtree in the window root**, keeping every surface beside it.
+///
+/// Doing it this way rather than replacing the retained tree is the whole point of the extra level.
+/// The chrome is rebuilt on a resize, a sidebar toggle and a theme reload — and dropped outright by
+/// `reload_config` — all of which happen while an overlay is open. None of them may take it with
+/// them.
+///
+/// It goes **first**, so every surface placed beside it paints and hit-tests above it: child order
+/// is z-order in one tree, which is what replaces the layer stack's separate sort
+/// (`docs/surface-compositor.md` § 0.6).
+pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
+    let chrome = Box::new(chrome.key(CHROME_KEY));
+    let children = &mut root.base_mut().children;
+    match children
+        .iter()
+        .position(|c| c.base().key.as_deref() == Some(CHROME_KEY))
+    {
+        Some(at) => children[at] = chrome,
+        None => children.insert(0, chrome),
+    }
+}
+
+/// **A registry-owned surface's key in the window root.**
+///
+/// One scheme, derived from the id the registry already allocates, so the tree and the registry
+/// cannot disagree about which node is which layer. A surface that has left the registry entirely
+/// (the toast stack) declares its own name instead.
+pub(crate) fn surface_slot(id: LayerId) -> String {
+    format!("surface:{}", id.raw())
+}
+
+/// The live tree of a registry-owned surface, if it is placed.
+pub(crate) fn surface_node(root: &Flex, id: LayerId) -> Option<&dyn Component> {
+    let key = surface_slot(id);
+    root.base()
+        .children
+        .iter()
+        .find(|c| c.base().key.as_deref() == Some(key.as_str()))
+        .map(|c| c.as_ref())
+}
+
+/// The same, mutably — for a caller that must drive the surface (open it, tick it, fire a pick in
+/// it) rather than only read it.
+pub(crate) fn surface_node_mut(root: &mut Flex, id: LayerId) -> Option<&mut Box<dyn Component>> {
+    let key = surface_slot(id);
+    root.base_mut()
+        .children
+        .iter_mut()
+        .find(|c| c.base().key.as_deref() == Some(key.as_str()))
+}
+
+/// **Take a surface out of the window root.** The counterpart of [`place_surface`]; an unknown key
+/// is a no-op, so removing twice is safe.
+pub(crate) fn remove_surface(root: &mut Flex, key: &str) {
+    root.base_mut()
+        .children
+        .retain(|c| c.base().key.as_deref() != Some(key));
+}
+
+/// **Place a surface in the window root** — the whole of "how do I put something on screen"
+/// (`docs/surface-compositor.md` § 0.3).
+///
+/// It is a child, like any widget: the one walk lays it out, paints it, delivers its pointer events
+/// and collects its hint letters, with nothing registered and no dispatch function added for it.
+///
+/// Positioned out of the flow at the full viewport, so it takes no space from the chrome beside it
+/// and places its own content within itself — which is what `at_rect` means and why layers needed
+/// no new layout capability to become children.
+///
+/// Re-placing under the same `key` **replaces** that surface, so a rebuild is a swap rather than a
+/// second copy accumulating behind the first.
+pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: Box<dyn Component>) {
+    let mut surface = surface;
+    surface.base_mut().key = Some(key.to_string());
+    // Seated above the page, so it answers the pointer the way a positioned wrapper does in a
+    // browser: through, except where it covers something. The author of the surface writes nothing
+    // for this and cannot get it wrong.
+    surface.base_mut().surface = true;
+    // **The seat says where, the surface says how big.** Out of the flow at the window's origin,
+    // with both sizes left to the surface: every layer-shaped one already declares itself
+    // full-viewport (`Overlay`, `ToastStack`, `CommandPalette` all set `Pct(1.0)` in their own
+    // constructors), so they are unchanged — while a surface that is *not* a layer keeps the size
+    // it gives itself. A `ContextMenu` is the case: the widget **is** its panel, so being handed
+    // the viewport stretched it down the whole window and made every point in the window
+    // clickable as the menu (F003/P097/T495).
+    surface.base_mut().style.layout.placement = Some(heca_grid_ui::style::Placement {
+        left: Length::Pct(0.0),
+        top: Length::Pct(0.0),
+        width: Length::Auto,
+        height: Length::Auto,
+    });
+    let children = &mut root.base_mut().children;
+    match children
+        .iter()
+        .position(|c| c.base().key.as_deref() == Some(key))
+    {
+        Some(at) => children[at] = surface,
+        None => children.push(surface),
+    }
+}
+
+/// `pane:<id>` — **a pane's identity**, declared by the pane itself.
+///
+/// Whoever owns the thing declares its identity; anything else showing it is a view. A pane owns
+/// `pane:7`; the sidebar row and the exposé card that show that pane are second views of it. This
+/// lives here rather than in a provider so the pane and every view of it read the SAME string
+/// instead of keeping two copies in step (it was defined twice before F011/P094/T451).
+///
+/// It is never a position and never a counter: a `PaneId` survives every tree rebuild, which is
+/// what lets a hint letter stay with the same pane between openings of the picker.
+pub(crate) fn pane_key(pane: heca_core::layout::PaneId) -> String {
+    format!("pane:{}", pane.0)
 }
 
 /// **Fire a named gesture**: the closure that emits `intent` through this surface's chrome sink.
@@ -1401,19 +583,6 @@ pub(crate) struct RetainedChrome {
 /// `prefix+/` pick. Those are different gestures — a click on a sidebar row means *go there and
 /// leave*, a pick means *look at that one* — and serving both from one declaration is what made
 /// `prefix+/` walk out of the sidebar (F004/P084/T399).
-/// `pane:<id>` — **a pane's identity**, declared by the pane itself.
-///
-/// Whoever owns the thing declares its identity; anything else showing it is a view. A pane owns
-/// `pane:7`; the sidebar row and the exposé card that show that pane are second views of it. This
-/// lives here rather than in a provider so the pane and every view of it read the SAME string
-/// instead of keeping two copies in step (it was defined twice before F011/P094/T451).
-///
-/// It is never a position and never a counter: a `PaneId` survives every tree rebuild, which is
-/// what lets a hint letter stay with the same pane between openings of the picker.
-pub(crate) fn pane_key(pane: heca_core::layout::PaneId) -> String {
-    format!("pane:{}", pane.0)
-}
-
 pub(crate) fn fires(
     mount: &str,
     intent: Intent,
@@ -1458,352 +627,7 @@ fn seated(mount: &str, mut intent: Intent) -> Intent {
     intent
 }
 
-/// Build the chrome root tree from app state (the expensive part — creates the
-/// widget tree and its signals). Call only when [`chrome_signature`] changes.
-pub(crate) fn build_chrome_root(
-    state: &crate::app_state::AppState,
-    chrome: ChromeConfig,
-) -> (Flex, ChromeSignals, DragItemRegistry, crate::app::interaction::InteractionSource) {
-    let phys = state.window.inner_size();
-    let scale = state.scale_factor as f32;
-    let w = phys.width as f32 / scale;
-    let h = phys.height as f32 / scale;
-    let (side_bg, _sidebar_bg, fg) = chrome_colors(state);
-    let theme = chrome_gui_theme(state);
-    let status = chrome_status(state);
-    let mut signals = ChromeSignals::default();
-    let mut drag_items = DragItemRegistry::default();
-    let emit_intent = ChromeIntentEmitter::new(
-        &state.event_proxy,
-        crate::app::interaction::InteractionSource::MouseLeftSidebar,
-    );
 
-    // Expanded ⇄ Hidden: width is 0 when the region is Hidden (no icon rail — see
-    // `docs/sidebar-provider-modes.md`), so a positive width means Expanded.
-    // Left and right are two instances of the SAME `build_sidebar_shell` (one
-    // component), differing only by width and mounted content: the left hosts the
-    // `WorkspacesContainer`, the right is an empty placeholder until it gains a Provider.
-    let sidebar_gap = state.appearance.effective_sidebar_gap(&state.theme);
-    let border_style = state.appearance.effective_sidebar_border_style();
-    let border_width = state.appearance.effective_sidebar_border_width(&state.theme);
-    let border_radius = state.appearance.effective_sidebar_border_radius(&state.theme);
-    let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
-
-    // The region body is whatever the `ChromeHost` has seated in that region — the app
-    // no longer knows that the left sidebar happens to hold the workspace tree. Moving
-    // the `workspaces` container to the right region (`ChromeHost::move_container`) moves
-    // its UI with it, with no change here.
-    //
-    // The context carries only what every component needs — the frame's theme and the intent sink
-    // (F003/P086/T367). A component's own model is its own to read, so the host no longer borrows
-    // one component's tree here on everybody's behalf.
-    let ctx = crate::providers::ChromeCtx::for_build(
-        crate::host::App::new(&state.chrome_state),
-        &theme,
-        &emit_intent,
-        &state.action_catalog,
-    );
-
-    let left_w = chrome.left_sidebar_width;
-    let left_sidebar = (left_w > 0.0).then(|| {
-        let content = build_region_content(
-            &state.chrome_host,
-            RegionId::LeftSidebar,
-            &ctx,
-            &mut signals,
-            &mut drag_items,
-        );
-        build_sidebar_shell(
-            left_w,
-            sidebar_h,
-            left_sidebar_shell_background_color(state),
-            sidebar_gap,
-            border_style,
-            border_width,
-            border_radius,
-            content,
-        )
-    });
-    let right_w = chrome.right_sidebar_width;
-    let right_sidebar = (right_w > 0.0).then(|| {
-        let content = build_region_content(
-            &state.chrome_host,
-            RegionId::RightSidebar,
-            &ctx,
-            &mut signals,
-            &mut drag_items,
-        );
-        build_sidebar_shell(
-            right_w,
-            sidebar_h,
-            right_sidebar_shell_background_color(state),
-            sidebar_gap,
-            border_style,
-            border_width,
-            border_radius,
-            content,
-        )
-    });
-
-    // Top-bar collapse toggles (sidebar-fu-14): shown for each mounted sidebar so the
-    // expand/collapse control is always visible (works in both expanded + collapsed).
-    // The arrow flips with the state: expanded → point at the edge (collapse); collapsed
-    // → point away from the edge (expand).
-    let left_toggle = state.show_left_sidebar.then(|| {
-        let glyph = if state.chrome_state.left_visible() {
-            Glyph::ArrowLineLeft
-        } else {
-            Glyph::ArrowLineRight
-        };
-        sidebar_toggle_button(
-            glyph,
-            crate::input::WmAction::SidebarLeft,
-            "sidebar_left",
-            &state.action_shortcuts,
-            &state.action_catalog,
-            emit_intent.clone(),
-            theme.colors.muted,
-        )
-    });
-    let right_toggle = state.show_right_sidebar.then(|| {
-        let glyph = if state.chrome_state.right_visible() {
-            Glyph::ArrowLineRight
-        } else {
-            Glyph::ArrowLineLeft
-        };
-        sidebar_toggle_button(
-            glyph,
-            crate::input::WmAction::SidebarRight,
-            "sidebar_right",
-            &state.action_shortcuts,
-            &state.action_catalog,
-            emit_intent.clone(),
-            theme.colors.muted,
-        )
-    });
-
-    let root = chrome_root(
-        &ChromeFrame {
-            w,
-            h,
-            tab_bar_height: chrome.tab_bar_height,
-            status_bar_height: chrome.status_bar_height,
-            status: &status,
-            side_bg,
-            fg,
-        },
-        left_sidebar,
-        right_sidebar,
-        left_toggle,
-        right_toggle,
-        &mut signals,
-    );
-    // The identity rule's warning half (F003/P082/T444): a collection of ours whose items were
-    // never keyed loses its cursor position and its hint letters on the next rebuild, and nothing
-    // fails when it does. Said once per distinct finding, in debug builds only.
-    identity::report_ambiguous_widgets("chrome", &root);
-    let source = emit_intent.source();
-    (root, signals, drag_items, source)
-}
-
-/// Feed a pointer-press into the retained chrome tree so widget callbacks can route
-/// sidebar intents through the app event loop.
-///
-/// **The tree is kept.** It used to be dropped here (`chrome_tree = None`) to stop incidental
-/// widget-local state drifting from the canonical store — but that is a rebuild used as a reset,
-/// and it takes everything else with it. Nothing that spans two events can survive: a scrollbar
-/// grab, a scroll position, a hover. A scroll region in the sidebar was impossible for exactly this
-/// reason, not for any reason to do with scrolling.
-///
-/// The drift it guarded against is already handled properly, twice over: the tree is rebuilt
-/// whenever `chrome_signature` changes (which is what a press that alters canonical state does),
-/// and `sync_chrome_signals` pushes value-state into the tree's bound signals every frame. State
-/// that must not drift belongs in one of those — in the store, read through a signal — which is the
-/// read-via-signals/write-via-actions rule this codebase already runs on.
-/// Returns `true` when a widget consumed the press — the caller must then treat it as spoken for
-/// and not also resolve it by geometry. That gate is what stops a press on the sidebar's scrollbar
-/// thumb being read as a press on the pane card behind it.
-pub(crate) fn chrome_dispatch_press(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) -> bool {
-    chrome_dispatch_button_press(state, pos, heca_grid_ui::PointerButton::Left)
-}
-
-/// The same, for a **named button** — so a right-press reaches the tree instead of being read off
-/// it from the outside.
-///
-/// A press carries its button now, which is what makes a widget able to answer a right-click at
-/// all. The app still has its own menu path behind this (F004/P084/T395 is what removes it); this
-/// is the door that lets a widget claim the press before any of that runs.
-pub(crate) fn chrome_dispatch_button_press(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-    button: heca_grid_ui::PointerButton,
-) -> bool {
-    state
-        .chrome_tree
-        .as_mut()
-        .map(|tree| {
-            heca_grid_ui::dispatch(
-                &mut tree.root,
-                &Event::pointer_pressed(Point::new(pos.0 as f64, pos.1 as f64), button),
-            ) == heca_grid_ui::Handled::Yes
-        })
-        .unwrap_or(false)
-}
-
-/// Deliver a **button release** to the chrome tree.
-///
-/// The other half of [`chrome_dispatch_button_press`], and not optional: the framework synthesises
-/// `Click` / `RightClick` from a press **and** a release on the same widget, so a host that
-/// delivers only presses produces no clicks at all — a declared context menu would never open, and
-/// a widget that captured the press would never learn the gesture ended.
-pub(crate) fn chrome_dispatch_button_release(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-    button: heca_grid_ui::PointerButton,
-) -> bool {
-    state
-        .chrome_tree
-        .as_mut()
-        .map(|tree| {
-            heca_grid_ui::dispatch(
-                &mut tree.root,
-                &Event::pointer_released(Point::new(pos.0 as f64, pos.1 as f64), button),
-            ) == heca_grid_ui::Handled::Yes
-        })
-        .unwrap_or(false)
-}
-
-/// **Open the menu declared nearest the focused widget**, bubbling outwards — the keyboard
-/// counterpart of an unclaimed right-click (F004/P084/T395).
-///
-/// Returns whether anything declared one. The action that calls this used to mean "the focused
-/// pane's menu"; it now means "the focused widget's", which is what makes one binding work for a
-/// pane, a column, a workspace and a plugin's own row without the host knowing any of them exist.
-pub(crate) fn open_declared_menu_for_focus(state: &mut crate::app_state::AppState) -> bool {
-    // **Where the keyboard is, in a chrome surface, is the focused container's cursor** — the
-    // `key` of the row it sits on. That is the half only the host knows, so it is the half the
-    // host passes; `open_for_keyboard` owns the rest, including falling back to a genuinely focused
-    // widget (a plugin's input) when the cursor names nothing.
-    let cursor = {
-        use heca_grid_ui::reactive::SignalGet as _;
-        state
-            .chrome_state
-            .focused_container()
-            .and_then(|mount| state.chrome_state.container_cursor(&mount).get())
-    };
-    let Some(tree) = state.chrome_tree.as_ref() else {
-        return false;
-    };
-    heca_grid_ui::open_for_keyboard(&tree.root, cursor.as_deref())
-}
-
-/// Mount every menu a widget declared and asked to open since the last frame.
-///
-/// The other half of the sink installed at startup: the widget layer cannot reach a layer, so it
-/// queues, and the host drains. One place, called once a frame, so a menu opened from a click, from
-/// a key, or from a widget's own timer all arrive the same way.
-pub(crate) fn drain_pending_menus(state: &mut crate::app_state::AppState) {
-    let queued: Vec<_> = state.pending_menus.borrow_mut().drain(..).collect();
-    for (menu, anchor) in queued {
-        overlay::present_menu(state, menu, anchor);
-    }
-}
-
-/// Tell every retained tree the pointer is gone: hover clears, any capture or drag ends.
-///
-/// One call per tree the host mounts, because each keeps its own hover — that is the point of the
-/// state living on the widgets rather than in one router the host would have to own.
-pub(crate) fn chrome_dispatch_cancelled(state: &mut crate::app_state::AppState, ev: &Event) {
-    if let Some(tree) = state.chrome_tree.as_mut() {
-        let _ = heca_grid_ui::dispatch(&mut tree.root, ev);
-    }
-    for header in state.pane_headers.values_mut() {
-        let _ = heca_grid_ui::dispatch(&mut header.root, ev);
-    }
-}
-
-/// Which container a point is inside, or `None` when it is outside every one (F003/P086/T365).
-///
-/// Read off the **retained tree's real laid-out bounds**, so it costs nothing to keep in step with
-/// what is on screen and works for any container — a plugin's included — without the host knowing
-/// anything about it.
-pub(crate) fn container_at(state: &crate::app_state::AppState, pos: (f32, f32)) -> Option<String> {
-    let tree = state.chrome_tree.as_ref()?;
-    heca_grid_ui::nav::scope_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))
-}
-
-/// Which **row** a point is on, by the nav key its component gave it — `None` when the point is on
-/// no row (F003/P086/T365).
-///
-/// Read off the retained tree's real laid-out bounds, the same walk the right-click target and the
-/// drag source use, so all three agree about what a point is pointing at.
-pub(crate) fn key_at(state: &crate::app_state::AppState, pos: (f32, f32)) -> Option<String> {
-    let tree = state.chrome_tree.as_ref()?;
-    heca_grid_ui::key_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))
-}
-
-/// Feed a pointer-release into the retained chrome tree, so a gesture that started there can end.
-///
-/// Without it a scrollbar thumb grabbed in the sidebar stays welded to the cursor — the widget is
-/// still waiting for the end of a gesture nobody told it about. Deliberately not hit-tested: a
-/// release ends the gesture wherever the cursor drifted to.
-pub(crate) fn chrome_dispatch_release(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
-    if let Some(tree) = state.chrome_tree.as_mut() {
-        heca_grid_ui::dispatch(&mut tree.root, &Event::pointer_released(Point::new(pos.0 as f64, pos.1 as f64), heca_grid_ui::PointerButton::Left));
-    }
-}
-
-/// Feed the wheel into the retained chrome tree. Returns `true` when it was consumed — a hovered
-/// scroll region took it — so the caller leaves the terminal alone.
-pub(crate) fn chrome_dispatch_wheel(
-    state: &mut crate::app_state::AppState,
-    ev: &Event,
-) -> bool {
-    state
-        .chrome_tree
-        .as_mut()
-        .map(|tree| heca_grid_ui::dispatch(&mut tree.root, ev) == heca_grid_ui::Handled::Yes)
-        .unwrap_or(false)
-}
-
-/// Feed a semantic [`WidgetIntent`](heca_grid_ui::WidgetIntent) into the retained chrome tree.
-///
-/// One intent goes to the **root**, not to a container the host picked: every mounted container sits
-/// inside a [`FocusScope`](heca_grid_ui::FocusScope), and only the focused one lets a
-/// `Event::Widget` into its subtree (F003/P085/T351). So the host says *what*, and the tree decides
-/// *where* — which is what keeps this working when a second dock is mounted, or the same dock is
-/// placed twice.
-///
-/// Returns `true` when something acted on it. A `false` is a legitimate answer, not a failure: a
-/// container with nothing scrollable **declines**, and the caller must not then fall through to the
-/// pane — the pane is not an outer scroll area of the sidebar.
-pub(crate) fn chrome_dispatch_widget(
-    state: &mut crate::app_state::AppState,
-    intent: heca_grid_ui::WidgetIntent,
-) -> bool {
-    state
-        .chrome_tree
-        .as_mut()
-        .map(|tree| {
-            heca_grid_ui::dispatch(&mut tree.root, &Event::Widget(intent)) == heca_grid_ui::Handled::Yes
-        })
-        .unwrap_or(false)
-}
-
-/// Feed a pointer-move into the retained chrome tree so its **hover affordances**
-/// update in the real app — the `MarkerGroup` grip brightening (the column's "grab
-/// me" cue) and `Row` hover. The app otherwise only dispatches `PointerPressed`, so
-/// these were inert in the sidebar though they work in the showcase. Unlike
-/// [`chrome_dispatch_press`] this does **not** discard the tree — hover is transient
-/// and must persist across moves; the caller already requests a repaint.
-pub(crate) fn chrome_dispatch_move(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
-    if let Some(tree) = state.chrome_tree.as_mut() {
-        heca_grid_ui::dispatch(&mut tree.root, &Event::pointer_moved(Point::new(pos.0 as f64, pos.1 as f64)));
-    }
-}
 
 /// The pane a press at `pos` (logical window coords) would start dragging, found by
 /// hit-testing the **retained** chrome tree's real laid-out bounds (F4.5) — replaces
@@ -1813,8 +637,9 @@ pub(crate) fn sidebar_drag_source(
     pos: (f32, f32),
 ) -> Option<ChromeDragItem> {
     let tree = state.chrome_tree.as_ref()?;
-    let id = heca_grid_ui::drag::source_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))?;
-    tree.drag_items.get(id).cloned()
+    let key =
+        heca_grid_ui::drag::source_at(&state.window_root, Point::new(pos.0 as f64, pos.1 as f64))?;
+    tree.drag_items.get(&key).cloned()
 }
 
 /// The deepest sidebar item (pane → column → workspace) under `pos`, regardless of
@@ -1830,80 +655,35 @@ pub(crate) fn sidebar_item_at(
 ) -> Option<ChromeDragItem> {
     let tree = state.chrome_tree.as_ref()?;
     let hit = heca_grid_ui::drag::resolve_at_filtered(
-        &tree.root,
+        &state.window_root,
         Point::new(pos.0 as f64, pos.1 as f64),
         &|_| true,
     )?;
-    tree.drag_items.get(hit.id).cloned()
+    tree.drag_items.get(&hit.key).cloned()
 }
 
-/// The kind of thing being dragged — passed **explicitly** by the caller so drop
-/// resolution never depends on the live drag payload, which is already wiped to
-/// `Idle` by the time the release handler runs (`mouse.rs` `mem::replace`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum DragSourceKind {
-    /// A pane is being dragged.
-    Pane,
-    /// A column is being dragged.
-    Column,
-}
-
-/// Which drop-target kinds a given drag source may land on (F4.5 scope C). A pane
-/// drag targets panes **and workspaces** — a workspace is only the resolved target
-/// when the cursor is over its header/empty area (a pane card under the cursor is the
-/// deeper hit and wins), which is the one way to move a pane into an *empty* workspace
-/// (empty columns can't exist, so columns need no pane-drop target). A column drag
-/// targets columns + workspaces — **never** the nested pane cards, or the deepest hit
-/// would always be a pane and a column could never be dropped on another column.
-fn target_accepted_by(source: DragSourceKind, item: &ChromeDragItem) -> bool {
-    match source {
-        DragSourceKind::Pane => {
-            matches!(
-                item,
-                ChromeDragItem::Pane(_) | ChromeDragItem::Workspace { .. }
-            )
+/// **What a pane can be dropped onto**, as the workspaces component names it.
+///
+/// One translation, so the two callers that need it — the pointer path and the drop the framework
+/// hands back — cannot disagree about what a pane landing on a workspace means. A column is not a
+/// pane target: pane-into-column placement does not exist yet, and a pane dropped there falls
+/// through to "re-add to the active workspace".
+pub(crate) fn pane_drop_row(
+    state: &crate::app_state::AppState,
+    item: ChromeDragItem,
+) -> Option<crate::providers::workspaces::WorkspaceRow> {
+    match item {
+        ChromeDragItem::Pane(pane_id) => {
+            Some(crate::providers::workspaces::WorkspaceRow::Pane { pane_id })
         }
-        DragSourceKind::Column => {
-            matches!(
-                item,
-                ChromeDragItem::Column { .. } | ChromeDragItem::Workspace { .. }
-            )
+        // Dropping a pane on a workspace's header or empty area moves it INTO that workspace — the
+        // only way to reach an *empty* one, which has no pane card to aim at.
+        ChromeDragItem::Workspace { ws } => {
+            let ws_id = state.session.workspaces.get(ws).map(|w| w.id)?;
+            Some(crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx: ws, ws_id })
         }
+        ChromeDragItem::Column { .. } => None,
     }
-}
-
-/// Resolve the drop a drag of `source` kind would land on at `pos`, filtered to the
-/// target kinds it accepts (see [`target_accepted_by`]). `None` when no acceptable
-/// target is under the cursor.
-fn resolve_sidebar_drop(
-    state: &crate::app_state::AppState,
-    pos: (f32, f32),
-    source: DragSourceKind,
-) -> Option<(ChromeDragItem, heca_grid_ui::drag::DropHit)> {
-    let tree = state.chrome_tree.as_ref()?;
-    let accept = |id| {
-        tree.drag_items
-            .get(id)
-            .is_some_and(|it| target_accepted_by(source, it))
-    };
-    let hit = heca_grid_ui::drag::resolve_at_filtered(
-        &tree.root,
-        Point::new(pos.0 as f64, pos.1 as f64),
-        &accept,
-    )?;
-    let item = tree.drag_items.get(hit.id).cloned()?;
-    Some((item, hit))
-}
-
-/// The drop target + [`DropSide`](heca_grid_ui::drag::DropSide) a drag of `source`
-/// kind at `pos` lands on, source-aware (see [`resolve_sidebar_drop`]). `None` off
-/// any acceptable item.
-pub(crate) fn sidebar_drop_target(
-    state: &crate::app_state::AppState,
-    pos: (f32, f32),
-    source: DragSourceKind,
-) -> Option<(ChromeDragItem, heca_grid_ui::drag::DropSide)> {
-    resolve_sidebar_drop(state, pos, source).map(|(item, hit)| (item, hit.side))
 }
 
 /// Hash of everything the chrome tree displays (window size, theme, status text,
@@ -2512,12 +1292,14 @@ mod tests {
         let mut tree = WorkspaceTree::new();
         tree.workspaces.push(WorkspaceEntry {
             ws_idx: 0,
+            ws_id: heca_core::layout::WorkspaceId(0),
             name: "ws1".into(),
             custom_name: None,
             collapsed: false,
             state: SidebarItemState::Active,
             columns: vec![ColumnEntry {
                 col_idx: 0,
+                col_id: heca_core::layout::ColumnId(0),
                 collapsed: false,
                 panes: vec![PaneEntry {
                     pane_id: heca_core::layout::PaneId(pane_id),
@@ -2815,6 +1597,7 @@ mod tests {
                 None,
                 true,
                 ColumnWidth::Proportion(0.5),
+                heca_core::layout::ColumnId(10),
             );
             ws.floating_panes
                 .push(heca_core::layout::workspace::FloatingPane {
@@ -2896,6 +1679,7 @@ mod tests {
                 None,
                 true,
                 ColumnWidth::Proportion(0.5),
+                heca_core::layout::ColumnId(10),
             );
         }
 
@@ -3078,7 +1862,7 @@ mod tests {
     }
 
     #[test]
-    fn pane_header_key_changes_on_content_and_width() {
+    fn pane_header_key_changes_on_content_but_never_on_width() {
         use heca_config::appearance::{PaneAction, PaneSegment};
         let programs = ProgramsConfig::default();
         let segments = [PaneSegment::AppName, PaneSegment::GitBranch];
@@ -3156,23 +1940,23 @@ mod tests {
                 300.0
             )
         );
-        // A large width change ⇒ different key (re-truncate); tiny jitter ⇒ same bucket.
-        assert_ne!(
-            base,
-            super::pane_header::pane_header_key(
-                &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
-                15.0,
-                120.0
-            )
-        );
-        assert_eq!(
-            base,
-            super::pane_header::pane_header_key(
-                &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
-                15.0,
-                295.0
-            )
-        );
+        // **A width change ⇒ the SAME key.** A pane's width is a per-frame layout input, not part of
+        // what the header is — the same rule the pane shell states for its own rect. The bar used to
+        // re-run width arithmetic of its own, so a resize had to rebuild it; `Label` truncates
+        // itself, so nothing does now. Keying on width meant every step of a drag threw the header
+        // away and built a new one: a burst of CPU and a visible flicker in the buttons (Antonio,
+        // driving, 2026-09-03). It re-lays out instead.
+        for w in [120.0, 295.0, 1600.0] {
+            assert_eq!(
+                base,
+                super::pane_header::pane_header_key(
+                    &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
+                    15.0,
+                    w
+                ),
+                "a resize to {w} rebuilt the header instead of re-laying it out"
+            );
+        }
     }
 
 }

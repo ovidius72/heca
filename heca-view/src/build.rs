@@ -761,6 +761,25 @@ impl Button {
     pub fn bordered(self, on: bool) -> Self {
         self.prop("bordered", on)
     }
+    /// **Held on** — a toggled status rather than a transient hover, painted as a persistent
+    /// tone-tinted wash and a firm border under whatever the variant draws. The same state, and the
+    /// same look, as an icon button's.
+    pub fn active(self, on: bool) -> Self {
+        self.prop("active", on)
+    }
+    /// **Show only the icon, keeping the words** — the label is not drawn and takes no space, and
+    /// the button becomes square, since the horizontal room a button reserves exists for text. The
+    /// words are still carried: they are what it says on hover, and what its row reads if a button
+    /// group moves it into a menu. A button with no icon ignores it.
+    pub fn icon_only(self, on: bool) -> Self {
+        self.prop("icon_only", on)
+    }
+    /// **The hue this button reads in**, overriding what its variant would use — a theme token name
+    /// or a literal. A button can be *about* something dangerous without being drawn as a boxed
+    /// destructive control, which in a row of quiet buttons is the odd one out.
+    pub fn tone(self, colour: &str) -> Self {
+        self.prop("tone", colour)
+    }
 }
 
 impl IconButton {
@@ -915,9 +934,22 @@ impl Toast {
     pub fn icon(self, glyph: ViewGlyph) -> Self {
         self.prop("icon", glyph)
     }
-    /// The supporting line under the title.
-    pub fn body(self, text: impl Into<String>) -> Self {
-        self.prop("body", PropValue::Text(text.into()))
+    /// The supporting line under the title — the common body, said in one string.
+    ///
+    /// A body that is more than a line of text is composed instead: give the card children in the
+    /// `body` slot and they become its body.
+    pub fn body_text(self, text: impl Into<String>) -> Self {
+        self.prop("body_text", PropValue::Text(text.into()))
+    }
+    /// Whether it starts on screen. A described card that is closed takes no space until something
+    /// opens it.
+    pub fn opened(self, open: bool) -> Self {
+        self.prop("opened", open)
+    }
+    /// Where the card sits in the box that holds it: `"top-right"` (the default), `"top-left"`,
+    /// `"top-center"`, `"bottom-right"`, `"bottom-left"`, `"bottom-center"`.
+    pub fn position(self, position: impl Into<String>) -> Self {
+        self.prop("position", PropValue::Text(position.into()))
     }
     /// Whether it can be dismissed.
     pub fn dismissible(self, on: bool) -> Self {
@@ -1094,6 +1126,14 @@ impl Overlay {
     /// that *becomes* open arrives.
     pub fn opened(self, on: bool) -> Self {
         self.prop("opened", PropValue::Bool(on))
+    }
+    /// **Blur what is behind it.** The scrim's counterpart: a scrim tints what is underneath, a
+    /// frost takes its detail away, and a surface may want either, both or neither.
+    ///
+    /// Strength is the theme's `overlay_frost_radius` — a described surface asks for the effect,
+    /// never a number, so a theme that wants a flat backdrop answers for every surface at once.
+    pub fn frosted(self, on: bool) -> Self {
+        self.prop("frosted", PropValue::Bool(on))
     }
 }
 

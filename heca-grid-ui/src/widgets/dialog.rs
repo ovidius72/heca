@@ -38,7 +38,7 @@
 
 use crate::builders::{LayoutExt, Parent};
 use crate::component::{
-    Base, Component, Event, GridKey, Handled, Modifiers, WidgetIntent,
+    Base, Component, Event, GridKey, Handled, WidgetIntent,
 };
 use crate::focus::FocusManager;
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
@@ -72,9 +72,6 @@ pub struct Dialog {
     /// Fired when Esc or a scrim click requests dismissal (only if `dismissible`). The host
     /// points this at its overlay-close path (e.g. emit `CloseOverlay`).
     on_dismiss: Option<Box<dyn Fn()>>,
-    /// Live modifier state (from the broadcast [`Event::ModifiersChanged`]) — needed so the
-    /// widget can tell Tab from Shift+Tab for its classic, always-on focus traversal.
-    mods: Modifiers,
     /// Whether an action row exists yet (created lazily on the first [`action`](Dialog::action)).
     has_actions: bool,
 }
@@ -108,7 +105,6 @@ impl Dialog {
             dismissible: true,
             focus: FocusManager::new(),
             on_dismiss: None,
-            mods: Modifiers::default(),
             has_actions: false,
         }
     }
@@ -388,11 +384,6 @@ impl Component for Dialog {
             // it, and the blocking `Overlay` inside this dialog swallows whatever nothing took —
             // which is what keeps the page behind a modal still.
             _ if ev.pointer().is_some() => Handled::No,
-            // Track modifiers (for Shift+Tab); the broadcast reaches the panel on its own.
-            Event::ModifiersChanged(m) => {
-                self.mods = *m;
-                Handled::No
-            }
             _ => Handled::No,
         }
     }
@@ -432,7 +423,7 @@ impl Component for Dialog {
             // Classic, always-on focus traversal: Tab / Shift+Tab move focus within the modal.
             // Universal widget behaviour, not a rebindable `[keys.widgets]` binding.
             Event::Key { key: GridKey::Tab, pressed: true } => {
-                if self.mods.shift {
+                if crate::event::modifiers().shift {
                     self.focus_prev();
                 } else {
                     self.focus_next();

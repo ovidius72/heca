@@ -20,7 +20,7 @@
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent};
+use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, TextAlign, TextStyle};
@@ -60,8 +60,6 @@ pub struct Input {
     /// Caret visibility at the last paint, so `tick` damages the field only when the
     /// caret actually toggles (not every frame).
     last_caret: std::cell::Cell<bool>,
-    /// Latest modifier state (tracked via [`Event::ModifiersChanged`]).
-    mods: Modifiers,
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
@@ -81,7 +79,6 @@ impl Input {
             anchor: None,
             blink_origin: Instant::now(),
             last_caret: std::cell::Cell::new(false),
-            mods: Modifiers::default(),
             on_change: None,
         }
     }
@@ -245,9 +242,9 @@ impl Input {
     /// Granularity for delete keys: Meta (Cmd) → to start/end, Ctrl/Alt → word,
     /// otherwise a single character.
     fn delete_granularity(&self) -> Granularity {
-        if self.mods.meta {
+        if crate::event::modifiers().meta {
             Granularity::Line
-        } else if self.mods.ctrl || self.mods.alt {
+        } else if crate::event::modifiers().ctrl || crate::event::modifiers().alt {
             Granularity::Word
         } else {
             Granularity::Char
@@ -328,9 +325,9 @@ impl Input {
     /// Movement granularity from the current modifiers: Ctrl/Cmd → to start/end,
     /// Alt → by word, otherwise by character.
     fn granularity(&self) -> Granularity {
-        if self.mods.ctrl || self.mods.meta {
+        if crate::event::modifiers().ctrl || crate::event::modifiers().meta {
             Granularity::Line
-        } else if self.mods.alt {
+        } else if crate::event::modifiers().alt {
             Granularity::Word
         } else {
             Granularity::Char
@@ -343,7 +340,7 @@ impl Input {
     fn move_caret(&mut self, left: bool, gran: Granularity) {
         self.blink_origin = Instant::now();
 
-        if self.mods.shift {
+        if crate::event::modifiers().shift {
             // Begin anchoring at the caret if no selection is active yet.
             if self.anchor.is_none() {
                 self.anchor = Some(self.cursor);
@@ -546,11 +543,6 @@ impl Component for Input {
     /// mounted-but-unfocused field is silent without saying so, and a focused one hears everything
     /// without asking.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        // Track modifiers even when disabled is irrelevant; observe, don't consume.
-        if let Event::ModifiersChanged(m) = ev {
-            self.mods = *m;
-            return Handled::No;
-        }
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }
@@ -633,8 +625,11 @@ impl Component for Input {
     }
 
     fn next_redraw(&self) -> Option<f32> {
+        // Its own tooltip is still pending whether or not the caret is blinking — an unfocused
+        // field with a tip would otherwise never wake to show it.
+        let tip = crate::widgets::tooltip::wake(&self.base);
         if !self.base.focused.get_untracked() {
-            return None;
+            return tip;
         }
         // Time until the caret flips: the next half-`BLINK_PERIOD` boundary.
         let phase = self
@@ -643,11 +638,12 @@ impl Component for Input {
             .as_secs_f32()
             .rem_euclid(BLINK_PERIOD);
         let half = BLINK_PERIOD / 2.0;
-        Some(if phase < half {
+        let caret = if phase < half {
             half - phase
         } else {
             BLINK_PERIOD - phase
-        })
+        };
+        crate::component::soonest_redraw(tip, Some(caret))
     }
 }
 

@@ -176,12 +176,18 @@ impl Workspace {
     }
 
     /// Add a pane to the scrolling layout.
+    ///
+    /// `new_column_id` is spent only when a column is actually created (`column_idx` is `None`).
+    /// It is handed in rather than derived here because a [`ColumnId`] must be **allocated**: see
+    /// [`Session::next_id`](super::session::Session::next_id), the one counter panes and workspaces
+    /// already draw from.
     pub fn add_pane(
         &mut self,
         pane: super::column::Pane,
         column_idx: Option<usize>,
         activate: bool,
         width: ColumnWidth,
+        new_column_id: ColumnId,
     ) {
         use super::column::Column;
 
@@ -190,11 +196,7 @@ impl Workspace {
             self.scrolling.add_pane_to_column(idx, None, pane, activate);
         } else {
             // Create new column.
-            let col = Column::new(
-                ColumnId(self.id.0 * 1000 + self.scrolling.columns.len() as u64),
-                pane,
-                width,
-            );
+            let col = Column::new(new_column_id, pane, width);
             self.scrolling.add_column(None, col, activate);
         }
     }
@@ -273,7 +275,46 @@ impl Workspace {
 mod tests {
     use super::*;
     use crate::layout::column::Pane;
+    use crate::layout::session::Session;
     use crate::layout::types::LayoutOptions;
+
+    /// **A column id is allocated, never derived — so it is never reused.**
+    ///
+    /// It used to be computed from the column *count* (`ws.id * 1000 + columns.len()`), so closing
+    /// a column and opening another handed the new one an id that was still in use: three columns
+    /// gave `[0, 1, 2]`, and after that round trip `[0, 2, 2]`. Nothing looked a column up by id at
+    /// the time, so nothing failed — but identity is what the keyboard cursor, a right-click, a drag
+    /// and a remembered hint letter are all kept on, and two columns answering to one id are two
+    /// rows none of them can tell apart.
+    #[test]
+    fn a_closed_column_never_hands_its_id_to_the_next_one() {
+        let mut session = Session::new(
+            SessionId(1),
+            Size::new(1280.0, 800.0),
+            1.0,
+            LayoutOptions::default(),
+        );
+        for i in 1..=3u64 {
+            session.add_pane(Pane::new(PaneId(i), format!("p{i}")), None, true);
+        }
+        if let Some(ws) = session.active_workspace_mut() {
+            ws.scrolling.remove_column(1);
+        }
+        session.add_pane(Pane::new(PaneId(9), "p9".to_string()), None, true);
+
+        let ids: Vec<u64> = session
+            .active_workspace()
+            .expect("a workspace")
+            .scrolling
+            .columns
+            .iter()
+            .map(|c| c.id.0)
+            .collect();
+        let mut unique = ids.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), ids.len(), "a column id was reused: {ids:?}");
+    }
 
     /// Helper: create a workspace with a single column and pane.
     fn workspace_with_pane(pane_id: u64) -> Workspace {
@@ -284,7 +325,7 @@ mod tests {
             LayoutOptions::default(),
         );
         let pane = Pane::new(PaneId(pane_id), format!("pane{}", pane_id));
-        ws.add_pane(pane, None, true, ColumnWidth::Proportion(0.5));
+        ws.add_pane(pane, None, true, ColumnWidth::Proportion(0.5), ColumnId(pane_id));
         ws
     }
 

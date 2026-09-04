@@ -18,7 +18,7 @@
 
 use crate::builders::{LayoutExt, Parent};
 use crate::style::WidgetSize;
-use crate::component::{Base, Component, Event, Handled, Modifiers, PaintCx, WidgetIntent};
+use crate::component::{Base, Component, Event, Handled, PaintCx, WidgetIntent};
 use crate::font::MONO_LINE_RATIO;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::search::{Ranked, SearchAction, SearchModel};
@@ -241,7 +241,6 @@ pub struct CommandPalette {
     /// `[settings] command_palette_size`.
     panel_size: WidgetSize,
     open: Signal<bool>,
-    modifiers: Modifiers,
     viewport: Cell<Size>,
     /// Panel rect cached at paint, so the caret blink can damage just the panel
     /// (the palette paints on the overlay layer, away from its layout `bounds`).
@@ -296,7 +295,6 @@ impl CommandPalette {
             placeholder: "Type a command…".to_string(),
             panel_size: WidgetSize::Normal,
             open,
-            modifiers: Modifiers::default(),
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
             panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
             search: SearchModel::detached("command"),
@@ -1174,7 +1172,9 @@ impl Component for CommandPalette {
         if self.is_open() {
             self.panel.get()
         } else {
-            self.base.bounds
+            // Closed, it damages like any other widget — its own box plus its bubble, which draws
+            // on the overlay layer outside that box.
+            crate::widgets::tooltip::damage(&self.base)
         }
     }
 
@@ -1188,13 +1188,6 @@ impl Component for CommandPalette {
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        // Track modifiers even while closed; keep the query field's copy in sync
-        // (it needs them for word/line delete). Observe, don't consume.
-        if let Event::ModifiersChanged(m) = ev {
-            self.modifiers = *m;
-            crate::component::dispatch(&mut *self.query.borrow_mut(), ev);
-            return Handled::No;
-        }
         if !self.is_open() {
             return Handled::No;
         }
@@ -1356,10 +1349,12 @@ impl Component for CommandPalette {
     /// While open, wake the host for the query caret's next blink (instead of
     /// redrawing every frame). Closed: nothing pending.
     fn next_redraw(&self) -> Option<f32> {
+        // Its own tooltip wakes it whether the panel is open or shut — the trigger can carry one.
+        let tip = crate::widgets::tooltip::wake(&self.base);
         if self.is_open() {
-            self.query.borrow().next_redraw()
+            crate::component::soonest_redraw(tip, self.query.borrow().next_redraw())
         } else {
-            None
+            tip
         }
     }
 

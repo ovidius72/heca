@@ -41,16 +41,37 @@ pub(crate) struct ActionConflict {
     pub(crate) shadows_builtin: bool,
 }
 
+/// **One modifier asked to mean two things at once.**
+///
+/// A drag has a modifier that *starts* it and a modifier that decides what it *does* (move or
+/// swap). Both are configurable, and nothing stops a config naming the same key for both — at
+/// which point every content-area drag is a swap, with no way left to express a plain move.
+///
+/// Same family as a key bound twice, so it is reported the same way rather than rejected: a config
+/// that parses should start the app.
+#[derive(Debug)]
+pub(crate) struct ModifierConflict {
+    /// The key both settings named.
+    pub(crate) modifier: String,
+    /// The setting that keeps it.
+    pub(crate) kept: String,
+    /// The setting that loses it, and what it falls back to.
+    pub(crate) rejected: String,
+    /// What the losing setting does instead.
+    pub(crate) fallback: String,
+}
+
 /// Everything that collided while the app was being assembled.
 #[derive(Debug, Default)]
 pub(crate) struct Conflicts {
     pub(crate) keys: Vec<BindingConflict>,
     pub(crate) actions: Vec<ActionConflict>,
+    pub(crate) modifiers: Vec<ModifierConflict>,
 }
 
 impl Conflicts {
     pub(crate) fn is_empty(&self) -> bool {
-        self.keys.is_empty() && self.actions.is_empty()
+        self.keys.is_empty() && self.actions.is_empty() && self.modifiers.is_empty()
     }
 
     /// A key bound to something else in the same layer.
@@ -61,6 +82,11 @@ impl Conflicts {
     /// An id two declarers both wanted.
     pub(crate) fn action(&mut self, conflict: ActionConflict) {
         self.actions.push(conflict);
+    }
+
+    /// One modifier two settings both claimed.
+    pub(crate) fn modifier(&mut self, conflict: ModifierConflict) {
+        self.modifiers.push(conflict);
     }
 
     /// Print the one report — at startup, and again after a config reload.
@@ -80,8 +106,16 @@ impl Conflicts {
         eprintln!(
             "[heca] {} keybinding/action conflict(s) — the last declaration wins unless stated \
              otherwise:",
-            self.keys.len() + self.actions.len()
+            self.keys.len() + self.actions.len() + self.modifiers.len()
         );
+
+        for c in &self.modifiers {
+            eprintln!(
+                "[heca]   modifier '{}' is set for both {} and {} — {} keeps it, {} falls back to \
+                 {}. Give one of them a different key.",
+                c.modifier, c.kept, c.rejected, c.kept, c.rejected, c.fallback,
+            );
+        }
 
         for c in &self.actions {
             if c.shadows_builtin {
@@ -114,6 +148,42 @@ impl Conflicts {
     }
 }
 
+/// **Settle the two drag modifiers and tell the drag API which one means swap.**
+///
+/// A drag has a modifier that starts it and a modifier that says what it does. Both are user
+/// settings, so both can name the same key — and then every content-area drag is a swap, with no
+/// way left to express a plain move, while Shift+drag also stops selecting text in a terminal.
+///
+/// **The start modifier wins.** A gesture that cannot be started is useless; losing swap costs one
+/// of two drop meanings, and the report says so. Called at startup and again after a reload, so a
+/// config edit is answered the same way both times.
+pub(crate) fn settle_drag_modifiers(
+    settings: &heca_config::settings::SettingsConfig,
+    conflicts: &mut Conflicts,
+) {
+    use heca_config::settings::ModifierKey;
+
+    let start = settings.interactive_move_modifier;
+    let swap = settings.swap_modifier;
+    if start == swap {
+        conflicts.modifier(ModifierConflict {
+            modifier: format!("{swap:?}"),
+            kept: "settings.interactive_move_modifier".to_string(),
+            rejected: "settings.swap_modifier".to_string(),
+            fallback: "no swap — every drag is a plain move".to_string(),
+        });
+        // Nothing means swap, rather than everything meaning it.
+        heca_grid_ui::drag::set_swap_rule(|_| false);
+        return;
+    }
+    heca_grid_ui::drag::set_swap_rule(move |m| match swap {
+        ModifierKey::Super => m.meta,
+        ModifierKey::Alt => m.alt,
+        ModifierKey::Ctrl => m.ctrl,
+        ModifierKey::Shift => m.shift,
+    });
+}
+
 /// A combo as a user would write it in config — the form they have to search for to fix it.
 pub(crate) fn format_combo(combo: &KeyCombo) -> String {
     let mut parts = Vec::new();
@@ -136,6 +206,76 @@ pub(crate) fn format_combo(combo: &KeyCombo) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **The two drag modifiers must not be the same key.**
+    ///
+    /// `interactive_move_modifier` accepts `Shift`, and swap means Shift by default — so a config
+    /// naming Shift for the start of a drag makes every content-area drag a swap, with no way left
+    /// to express a plain move, and Shift+drag stops selecting text in a terminal as well. It
+    /// parses, so it must start; it is wrong, so it must be said out loud.
+    #[test]
+    fn one_modifier_cannot_both_start_a_drag_and_change_what_it_means() {
+        use heca_config::settings::{ModifierKey, SettingsConfig};
+
+        let mut agreeing = Conflicts::default();
+        let settings = SettingsConfig {
+            interactive_move_modifier: ModifierKey::Super,
+            ..Default::default()
+        };
+        settle_drag_modifiers(&settings, &mut agreeing);
+        assert!(
+            agreeing.modifiers.is_empty(),
+            "Super to start and Shift to swap are two different keys",
+        );
+
+        let mut colliding = Conflicts::default();
+        let settings = SettingsConfig {
+            interactive_move_modifier: ModifierKey::Shift,
+            ..Default::default()
+        };
+        settle_drag_modifiers(&settings, &mut colliding);
+        assert_eq!(
+            colliding.modifiers.len(),
+            1,
+            "Shift for both is a collision and has to be reported, not silently obeyed",
+        );
+        assert!(
+            !colliding.is_empty(),
+            "a modifier collision is a conflict like any other"
+        );
+    }
+
+    /// **The start modifier wins.** A drag that cannot be started is useless; a drag that cannot
+    /// swap still moves. So when they collide, swap is what gives way — and it gives way to
+    /// *nothing meaning swap*, not to everything meaning it.
+    #[test]
+    fn when_the_modifiers_collide_the_gesture_survives_and_swap_gives_way() {
+        use heca_config::settings::{ModifierKey, SettingsConfig};
+        use heca_grid_ui::drag::DropAction;
+        use heca_grid_ui::event::Modifiers;
+
+        let mut conflicts = Conflicts::default();
+        let settings = SettingsConfig {
+            interactive_move_modifier: ModifierKey::Shift,
+            ..Default::default()
+        };
+        settle_drag_modifiers(&settings, &mut conflicts);
+
+        let mut root = heca_grid_ui::widgets::Flex::column();
+        heca_grid_ui::dispatch(
+            &mut root,
+            &heca_grid_ui::Event::ModifiersChanged(Modifiers {
+                shift: true,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(
+            DropAction::held(),
+            DropAction::Move,
+            "Shift starts the drag here, so it cannot also mean swap — a plain move must stay \
+             reachable",
+        );
+    }
 
     #[test]
     fn a_combo_reads_back_the_way_a_user_writes_it() {

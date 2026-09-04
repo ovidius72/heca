@@ -3,24 +3,44 @@
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 61,
   "shortId": "WEGDL",
-  "priority": 5,
+  "priority": 1,
   "slug": "notification-01-model-config",
   "title": "notification-01: Model + Config",
-  "discussedAt": "",
-  "contextReady": false,
-  "contextReadyReason": "",
-  "summary": "Tipi core delle notifiche, mapping ToastSpec e schema config `notification_system`.",
-  "description": "Definire i tipi app-owned del dominio notifiche (`NotificationSystem`, severity, lifecycle, source, action, AppNotification), l'adapter verso `ToastSpec` e la configurazione `[settings].notification_system`. V1 usa in-app notifications come default; `system` e `none` devono essere parseable e deterministici.",
-  "notes": "",
-  "goals": [],
-  "nonGoals": [],
-  "dependencies": [],
+  "discussedAt": "2026-08-27T09:17:52.866Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Tipi core del dominio notifiche, adapter verso ToastSpec, e schema config notification_system.",
+  "description": "NotificationSource, NotificationSeverity (+ EnumArg/FromStr per l'azione notify), NotificationLifecycle, AppNotification, NotificationAction (Vec, keyed dal nome del proprio intent), NotificationDraft builder, project_visible_toast/to_toast_spec verso ToastSpec::action(key,label)/ToastPosition.",
+  "descriptionUpdatedAt": "2026-08-27T09:17:52.866Z",
+  "notes": "**Handoff context update:**\nDomain model + the full raising-API redesign are the bulk of this phase's current work. T188/T189/T190/T192/T193/T184/T185 (core model) are done and verified by cargo check + tests. T493 (the public Notification builder, replacing pass 1's state.notifications.push shape entirely) is the current, unfinished task — see the phase handoff for the settled API, what's built, and what's explicitly not.\n\n**Remaining work:**\nT493: pane-creation producer, a test proving Notification::send() is the only public raise door, re-run the full lint-changed.sh gates after this session's changes, then the closure action form as its own piece of work. T186/T191 (config schema) remain untouched. Nothing in this phase has been visually verified by Antonio.\n\n---\n**Handoff context update:**\nCore model + store + dispatch + mount done (P055/T491, P056 all, P059 all, P060 mount/bridge/state, P061 core model). This session: T493 (public Notification builder + single raise door notification::raise + pane-creation producer with a Focus action + tests) code-complete and green; auto_dismiss_ms config ([settings.notification_system], T186/T187/T191 in effect) done; both lint gates exit 0. None driven by Antonio.\n\n**Remaining work:**\nT493 drive-through + Antonio's call on pane-id-vs-name. T503 (wire or delete the per-severity lifetime). T191's history_limit knob (hardcoded 50). Closure action form (deferred). Formal closure of T186/T187/T191. Then P057 (tests/README), P062 (reload producer), P055's other producers. The toast pointer bug is NOT this phase — it is P097 (One Tree).",
+  "goals": [
+    "Definire AppNotification/NotificationDraft/NotificationAction come modello app-owned, text-only, mai con Component/ViewNode, e l'adapter che li proietta su ToastSpec/ToastAction del widget grid-ui."
+  ],
+  "nonGoals": [
+    "Contenuto ricco (ViewNode body/actions): deliberatamente fuori scope, il modello resta text-only anche dopo che il percorso ricco esistera altrove (host-side builder sullo ToastStack, non un campo qui).",
+    "Config schema completo di [settings].notification_system (T186/T191): oggi un placeholder hardcoded."
+  ],
+  "dependencies": [
+    "heca-grid-ui ToastSpec/ToastAction/ToastPosition (T486-488 su origin/feat/hint-anything-actionable, gia atterrati)."
+  ],
   "dependsOn": [],
-  "risks": [],
+  "risks": [
+    "Nessuno noto: il gap di crate-graph (ToastSpec non puo contenere un ViewNode) e stato chiuso spostando il contenuto ricco a un builder host-side, non a un campo sul modello."
+  ],
   "openQuestions": [],
-  "decisions": [],
+  "decisions": [
+    "Notification::send() is the only public raise door; NotificationRuntime::push AND NotificationStore::push are pub(crate); notification::raise is the single Instant::now() site.",
+    "The pane-creation producer identifies the pane by id, not name (pane_name() is empty by design). Antonio to decide program-name / per-workspace-number.",
+    "auto_dismiss_ms at [settings.notification_system], default 4000ms, applied at the NotificationRuntime boundary to any Auto(_) lifetime; Sticky/explicit untouched; re-applied on reload.",
+    "default_lifetime_for_severity is designed but unwired — every notification auto-dismisses today including errors; T503 owns the wire-or-delete decision.",
+    "The toast pointer bug is an input-architecture problem, split to P097(F009) with docs/input-architecture.md as the contract; rejected a second dispatcher and a host-maintained surface list."
+  ],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "notification.rs riscritto e verificato con cargo check (fatto)",
+    "AppNotification/NotificationAction/NotificationDraft text-only con actions: Vec (fatto)",
+    "project_visible_toast mappa su ToastSpec::action(key,label)/ToastPosition (fatto, verificato dopo il rebase su 94d837e)"
+  ],
   "taskIds": [
     "208ad51d-2f42-436e-83c7-69af2c350b6d",
     "2167fa5e-750b-42b1-be11-1658c13913b6",
@@ -31,7 +51,9 @@
     "ae6aecf5-b9dd-4327-9cb6-0306aa40551d",
     "b2319f2a-2902-4235-adbe-26d64149910c",
     "b5a302b6-06ed-4409-b3f2-3a857b410cb0",
-    "f11023cb-6ce5-4962-a971-23d14a858f9e"
+    "f11023cb-6ce5-4962-a971-23d14a858f9e",
+    "ccbe6b40-87ee-4e40-bdbe-e3362fca0da9",
+    "899620d6-ff17-40e4-b67a-218209ed6113"
   ],
   "tasks": [
     {
@@ -42,19 +64,45 @@
       "priority": 3,
       "shortName": "notification-source",
       "title": "Define notification source model",
-      "status": "planned",
-      "description": "Definire `NotificationSource` per System, Config, Action, Pane, Workspace, ChromeProvider e Agent; solo metadata/debug/dedup, non routing.",
+      "status": "done",
+      "description": "Definire `NotificationSource` per System, Config, Action, Pane, Workspace, ChromeProvider e Agent; solo metadata/debug/dedup, non routing.\n\n---\n**Completion summary:**\nSHIPPED (pre-existing in the ported heca/src/notification.rs, from origin/feature/notification-system): NotificationSourceKind { App, Config, Pane, Provider, Plugin } — metadata/debug/dedup only, no routing/policy semantics. DEVIATION from this task's original text (\"System, Config, Action, Pane, Workspace, ChromeProvider e Agent\"): the actual shipped vocabulary is App/Config/Pane/Provider/Plugin — narrower, and the module doc explicitly records deciding AGAINST an Agent variant (\"belongs to a separate feature, adding it here would be a proposal not a commit\"). This looks like the real decision superseding this task's original (pre-discussion) wording, not an oversight. VERIFICATION: cargo check -p heca clean; has unit test coverage in the same file. FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:52:17.068Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "208ad51d-2f42-436e-83c7-69af2c350b6d-check-001-planned-in-progress",
+          "date": "2026-08-27T09:52:09.242Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "208ad51d-2f42-436e-83c7-69af2c350b6d-check-002-in-progress-done",
+          "date": "2026-08-27T09:52:17.067Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED (pre-existing in the ported heca/src/notification.rs, from origin/feature/notification-system): NotificationSourceKind { App, Config, Pane, Provider, Plugin } — metadata/debug/dedup only, no routing/policy semantics. DEVIATION from this task's original text (\"System, Config, Action, Pane, Workspace, ChromeProvider e Agent\"): the actual shipped vocabulary is App/Config/Pane/Provider/Plugin — narrower, and the module doc explicitly records deciding AGAINST an Agent variant (\"belongs to a separate feature, adding it here would be a proposal not a commit\"). This looks like the real decision superseding this task's original (pre-discussion) wording, not an oversight. VERIFICATION: cargo check -p heca clean; has unit test coverage in the same file. FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:52:09.242Z",
+      "completedAt": "2026-08-27T09:52:17.067Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "updatedAt": "2026-08-27T09:52:17.067Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:52:09.158Z"
+        }
+      ]
     },
     {
       "id": "2167fa5e-750b-42b1-be11-1658c13913b6",
@@ -64,19 +112,45 @@
       "priority": 2,
       "shortName": "lifecycle-defaults",
       "title": "Define notification lifecycle defaults",
-      "status": "planned",
-      "description": "Definire `NotificationLifecycle::AutoDismiss(Duration)` / `Sticky` e policy default per severity: info 4s, success 3s, warning 6s, danger sticky.",
+      "status": "done",
+      "description": "Definire `NotificationLifecycle::AutoDismiss(Duration)` / `Sticky` e policy default per severity: info 4s, success 3s, warning 6s, danger sticky.\n\n---\n**Completion summary:**\nSHIPPED (pre-existing in the ported heca/src/notification.rs): NotificationLifetime::Auto(Duration)/Sticky, NotificationLifecycle (lifetime + dismissible), default_lifetime_for_severity(). DEVIATION from this task's original numbers (\"info 4s, success 3s, warning 6s, danger sticky\"): what actually shipped is success=4s, info=5s, warning=Sticky, error/danger=Sticky (not warning=6s) — errors AND warnings are both sticky so the user acknowledges them, only success/info auto-dismiss. Superseded by the real decision, has unit test coverage asserting exactly these values (default_lifetime_for_severity_maps_each_variant). VERIFICATION: cargo check -p heca clean. FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:52:39.699Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "2167fa5e-750b-42b1-be11-1658c13913b6-check-001-planned-in-progress",
+          "date": "2026-08-27T09:52:32.864Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "2167fa5e-750b-42b1-be11-1658c13913b6-check-002-in-progress-done",
+          "date": "2026-08-27T09:52:39.698Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED (pre-existing in the ported heca/src/notification.rs): NotificationLifetime::Auto(Duration)/Sticky, NotificationLifecycle (lifetime + dismissible), default_lifetime_for_severity(). DEVIATION from this task's original numbers (\"info 4s, success 3s, warning 6s, danger sticky\"): what actually shipped is success=4s, info=5s, warning=Sticky, error/danger=Sticky (not warning=6s) — errors AND warnings are both sticky so the user acknowledges them, only success/info auto-dismiss. Superseded by the real decision, has unit test coverage asserting exactly these values (default_lifetime_for_severity_maps_each_variant). VERIFICATION: cargo check -p heca clean. FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:52:32.864Z",
+      "completedAt": "2026-08-27T09:52:39.698Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "updatedAt": "2026-08-27T09:52:39.698Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:52:32.777Z"
+        }
+      ]
     },
     {
       "id": "5e0face8-7901-4eba-ac34-12fc1b9e26ad",
@@ -86,19 +160,32 @@
       "priority": 9,
       "shortName": "config-default",
       "title": "Add notification_system config default",
-      "status": "planned",
-      "description": "Aggiungere `notification_system = \"app\"` a `config.default.toml` con commento conciso e senza promettere OS notifications v1.",
+      "status": "done",
+      "description": "Aggiungere `notification_system = \"app\"` a `config.default.toml` con commento conciso e senza promettere OS notifications v1.\n\n---\n**Completion summary:**\n[settings.notification_system] auto_dismiss_ms added: NotificationSystemConfig on SettingsConfig (default 4000ms), written into config.default.toml and README.md, threaded to NotificationRuntime at startup and on prefix+Shift+r reload, applied at the runtime boundary to any Auto(_) lifetime. 3 runtime tests + 1 settings parse test.\n\n**Verification:**\nheca-config settings tests 5/5, config_default_toml_parses green, both lint gates exit 0.\n\n**Remaining or unverified:**\nFormal task closure. The history_limit knob (T191) is still a hardcoded placeholder of 50. Not verified by Antonio.\n\n---\n**Completion summary:**\nSHIPPED: config.default.toml gained `[settings.notification_system]` with `mode = \"app\"` and `auto_dismiss_ms = 4000`, each with a concise comment. mode comment states `system` is reserved / falls back to `app` until the OS backend exists (no v1 OS-notification promise). Backed by NotificationSystemConfig (heca-config/src/settings.rs, #[serde(default)] fields, Default impl), so the section is optional and the embedded default is the single source. config_default_toml_parses test green.\n\nDEVIATION: the task said `notification_system = \"app\"` as a flat key; it is `[settings.notification_system] mode = \"app\"` because the subtable name is taken by the notification knobs table (see T191).\n\nVERIFICATION: ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh exit 0; heca-config tests pass. Not driven by Antonio.\nFILES: config.default.toml, heca-config/src/settings.rs.",
+      "descriptionUpdatedAt": "2026-08-27T19:58:32.134Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "5e0face8-7901-4eba-ac34-12fc1b9e26ad-check-001-planned-done",
+          "date": "2026-08-27T19:58:32.132Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SHIPPED: config.default.toml gained `[settings.notification_system]` with `mode = \"app\"` and `auto_dismiss_ms = 4000`, each with a concise comment. mode comment states `system` is reserved / falls back to `app` until the OS backend exists (no v1 OS-notification promise). Backed by NotificationSystemConfig (heca-config/src/settings.rs, #[serde(default)] fields, Default impl), so the section is optional and the embedded default is the single source. config_default_toml_parses test green.\n\nDEVIATION: the task said `notification_system = \"app\"` as a flat key; it is `[settings.notification_system] mode = \"app\"` because the subtable name is taken by the notification knobs table (see T191).\n\nVERIFICATION: ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh exit 0; heca-config tests pass. Not driven by Antonio.\nFILES: config.default.toml, heca-config/src/settings.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T19:58:32.132Z",
+      "completedAt": "2026-08-27T19:58:32.132Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "updatedAt": "2026-08-27T19:58:32.132Z",
+      "sessionInfo": []
     },
     {
       "id": "64b075f7-f924-4811-9e5a-30e3aee7ff42",
@@ -108,19 +195,32 @@
       "priority": 10,
       "shortName": "config-docs",
       "title": "Document notification_system setting",
-      "status": "planned",
-      "description": "Documentare in README i valori `app`, `system`, `none`; chiarire che `system` è riservato/fallback finché il backend OS non atterra.",
+      "status": "done",
+      "description": "Documentare in README i valori `app`, `system`, `none`; chiarire che `system` è riservato/fallback finché il backend OS non atterra.\n\n---\n**Completion summary:**\nSHIPPED: README.md `### Settings` block now documents `[settings.notification_system]` with both keys:\n- `mode = \"app\"` — \"app\" (in-app toast stack) | \"system\" (OS notifications — RESERVED, falls back to \"app\" until the backend exists) | \"none\" (no notifications at all).\n- `auto_dismiss_ms = 4000` — how long an in-app toast stays; a sticky or explicit-lifetime notification ignores it; applies on prefix+Shift+r.\nThe reserved/fallback nature of `system` is stated in both README and config.default.toml.\n\nVERIFICATION: doc-only; both lint gates exit 0. Not driven by Antonio.\nFILES: README.md (and config.default.toml comments cover the same).",
+      "descriptionUpdatedAt": "2026-08-27T19:58:36.767Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "64b075f7-f924-4811-9e5a-30e3aee7ff42-check-001-planned-done",
+          "date": "2026-08-27T19:58:36.765Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SHIPPED: README.md `### Settings` block now documents `[settings.notification_system]` with both keys:\n- `mode = \"app\"` — \"app\" (in-app toast stack) | \"system\" (OS notifications — RESERVED, falls back to \"app\" until the backend exists) | \"none\" (no notifications at all).\n- `auto_dismiss_ms = 4000` — how long an in-app toast stays; a sticky or explicit-lifetime notification ignores it; applies on prefix+Shift+r.\nThe reserved/fallback nature of `system` is stated in both README and config.default.toml.\n\nVERIFICATION: doc-only; both lint gates exit 0. Not driven by Antonio.\nFILES: README.md (and config.default.toml comments cover the same)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T19:58:36.765Z",
+      "completedAt": "2026-08-27T19:58:36.765Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "updatedAt": "2026-08-27T19:58:36.765Z",
+      "sessionInfo": []
     },
     {
       "id": "7dfd4996-aceb-4501-8670-9d7da7c11025",
@@ -130,19 +230,45 @@
       "priority": 6,
       "shortName": "app-notification-model",
       "title": "Define AppNotification canonical model",
-      "status": "planned",
-      "description": "Definire `AppNotification` come source of truth runtime con id, severity, title/body, source, lifecycle, action, dedup_key, created_at/expires_at.",
+      "status": "done",
+      "description": "Definire `AppNotification` come source of truth runtime: id, severity, title: String, body: Option<String>, source, lifecycle, actions: Vec<NotificationAction>, dedup_key, created_at/expires_at. Nessun `Component`/`ViewNode` nel modello, mai — nè come Option nè per i soli caller interni: il comportamento attraversa il confine come `Intent`, mai una closure, cosi che RPC, keybinding e un futuro plugin WASM possano tutti generare/agire su una notifica. Contenuto ricco: risolto altrove (vedi P060) — un content-builder host-side sullo `ToastStack`, non un campo su questo modello; resta text-only qui, sempre.\n\n---\n**Completion summary:**\nSHIPPED: heca/src/notification.rs rewritten — AppNotification { id, dedup_key, source, severity, title: String, body: Option<String>, lifecycle, actions: Vec<NotificationAction>, created_at, placement } with builder methods (dedup_key/body/lifecycle/action). No Component/ViewNode field, ever. VERIFICATION: cargo check -p heca compiles clean against origin/feat/hint-anything-actionable@94d837e (T486-488 landed). NOT verified: no running app yet, nothing on screen — that's T203/P060, in progress. FILES: heca/src/notification.rs. DECISIONS: actions is Vec not Option (T487 lifted the one-action widget limit); no separate \"key\" field on NotificationAction — intent.action IS the key on_action(id,key) resolves against.",
+      "descriptionUpdatedAt": "2026-08-27T09:48:35.069Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "7dfd4996-aceb-4501-8670-9d7da7c11025-check-001-planned-in-progress",
+          "date": "2026-08-27T09:48:26.433Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Mount ToastStack as a persistent overlay layer."
+        },
+        {
+          "id": "7dfd4996-aceb-4501-8670-9d7da7c11025-check-002-in-progress-done",
+          "date": "2026-08-27T09:48:35.067Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: heca/src/notification.rs rewritten — AppNotification { id, dedup_key, source, severity, title: String, body: Option<String>, lifecycle, actions: Vec<NotificationAction>, created_at, placement } with builder methods (dedup_key/body/lifecycle/action). No Component/ViewNode field, ever. VERIFICATION: cargo check -p heca compiles clean against origin/feat/hint-anything-actionable@94d837e (T486-488 landed). NOT verified: no running app yet, nothing on screen — that's T203/P060, in progress. FILES: heca/src/notification.rs. DECISIONS: actions is Vec not Option (T487 lifted the one-action widget limit); no separate \"key\" field on NotificationAction — intent.action IS the key on_action(id,key) resolves against."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:48:26.433Z",
+      "completedAt": "2026-08-27T09:48:35.067Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "updatedAt": "2026-08-27T09:48:35.067Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:47:52.866Z"
+        }
+      ]
     },
     {
       "id": "994de278-bc6a-4744-8865-d0e0f1fb0876",
@@ -152,19 +278,45 @@
       "priority": 5,
       "shortName": "notification-action",
       "title": "Define notification action model",
-      "status": "planned",
-      "description": "Definire `NotificationAction { label, action: WmAction, dismiss_after }`; vietate closure e mutazioni dirette di AppState.",
+      "status": "done",
+      "description": "Definire `NotificationAction { label, intent: Intent, dismiss_after }` — mai `WmAction`: deve poter nominare anche un'azione name-keyed di un plugin, e non un closure. `AppNotification.actions: Vec<NotificationAction>` (non più singolare — il widget supporta più azioni per card, T487). Vietate closure e mutazioni dirette di AppState.\n\n---\n**Completion summary:**\nSHIPPED: NotificationAction { label: String, intent: Intent, dismiss_after: bool } in heca/src/notification.rs — intent is a heca_view::Intent (name-keyed + args), never a WmAction, never a closure. AppNotification.actions/NotificationDraft.actions are Vec<NotificationAction> (not Option) since T487 lifted the widget's one-action-per-card limit. No separate \"key\": on_action(id,key)'s key is matched against intent.action directly (AppNotification::action_for_visible). VERIFICATION: cargo check -p heca clean. NOT verified: nothing on screen yet (needs T203's mount). FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:49:36.414Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "994de278-bc6a-4744-8865-d0e0f1fb0876-check-001-planned-in-progress",
+          "date": "2026-08-27T09:49:27.447Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "994de278-bc6a-4744-8865-d0e0f1fb0876-check-002-in-progress-done",
+          "date": "2026-08-27T09:49:36.413Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: NotificationAction { label: String, intent: Intent, dismiss_after: bool } in heca/src/notification.rs — intent is a heca_view::Intent (name-keyed + args), never a WmAction, never a closure. AppNotification.actions/NotificationDraft.actions are Vec<NotificationAction> (not Option) since T487 lifted the widget's one-action-per-card limit. No separate \"key\": on_action(id,key)'s key is matched against intent.action directly (AppNotification::action_for_visible). VERIFICATION: cargo check -p heca clean. NOT verified: nothing on screen yet (needs T203's mount). FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:49:27.447Z",
+      "completedAt": "2026-08-27T09:49:36.413Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "updatedAt": "2026-08-27T09:49:36.413Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:49:27.358Z"
+        }
+      ]
     },
     {
       "id": "ae6aecf5-b9dd-4327-9cb6-0306aa40551d",
@@ -174,19 +326,45 @@
       "priority": 1,
       "shortName": "severity-mapping",
       "title": "Define app notification severity and ToastSeverity mapping",
-      "status": "planned",
-      "description": "Definire `NotificationSeverity` app-owned e mapping completo verso `ToastSeverity`, senza colori o stile nel modello app.",
+      "status": "done",
+      "description": "Definire `NotificationSeverity` app-owned e mapping completo verso `ToastSeverity`, senza colori o stile nel modello app.\n\n---\n**Completion summary:**\nSHIPPED (pre-existing in the ported heca/src/notification.rs, extended this session): NotificationSeverity { Error, Warning, Success, Info(default) }, exhaustive as_toast_severity() mapping to ToastSeverity (Error->Danger, Warning->Warning, Success->Success, Info->Info), no colors/style in the app model. Extended this session with EnumArg+FromStr (accepts \"danger\"/\"error\" for Error, matching the wire vocabulary the notify action's severity argument uses). VERIFICATION: cargo check -p heca clean; unit test coverage on the mapping. FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:52:55.295Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "ae6aecf5-b9dd-4327-9cb6-0306aa40551d-check-001-planned-in-progress",
+          "date": "2026-08-27T09:52:48.875Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "ae6aecf5-b9dd-4327-9cb6-0306aa40551d-check-002-in-progress-done",
+          "date": "2026-08-27T09:52:55.294Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED (pre-existing in the ported heca/src/notification.rs, extended this session): NotificationSeverity { Error, Warning, Success, Info(default) }, exhaustive as_toast_severity() mapping to ToastSeverity (Error->Danger, Warning->Warning, Success->Success, Info->Info), no colors/style in the app model. Extended this session with EnumArg+FromStr (accepts \"danger\"/\"error\" for Error, matching the wire vocabulary the notify action's severity argument uses). VERIFICATION: cargo check -p heca clean; unit test coverage on the mapping. FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:52:48.875Z",
+      "completedAt": "2026-08-27T09:52:55.294Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "updatedAt": "2026-08-27T09:52:55.294Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:52:48.778Z"
+        }
+      ]
     },
     {
       "id": "b2319f2a-2902-4235-adbe-26d64149910c",
@@ -196,19 +374,32 @@
       "priority": 4,
       "shortName": "notification-system-enum",
       "title": "Define NotificationSystem config enum",
-      "status": "planned",
-      "description": "Aggiungere `NotificationSystem { App, System, None }` in `heca-config/src/settings.rs`, serde snake_case, default App e test parsing.",
+      "status": "done",
+      "description": "Aggiungere `NotificationSystem { App, System, None }` in `heca-config/src/settings.rs`, serde snake_case, default App e test parsing.\n\n---\n**Completion summary:**\nSHIPPED (code-complete, gates green, not driven by Antonio):\n- heca-config/src/settings.rs: `NotificationSystem { App, System, None }` enum, #[serde(rename_all = \"snake_case\")], #[derive(Default)] with App as #[default]. Doc: `system` is reserved (OS backend not built — P063), falls back to `app`; `none` suppresses everything.\n- `NotificationSystemConfig` gained a `mode: NotificationSystem` field (#[serde(default)]) alongside auto_dismiss_ms; Default impl updated.\n- Wired: NotificationRuntime holds `mode`, `new()` takes it, `set_mode()` for the prefix+Shift+r reload path, `suppressed()` returns true for None. notification::raise() early-returns when suppressed — nothing queues, no timer scheduled. App and System both deliver to the in-app toast stack today.\n- heca/src/app/startup.rs + heca/src/main.rs pass/re-apply the mode.\n- Tests: mode_none_suppresses_and_mode_change_is_live (heca notification), test_notification_system_defaults_and_override extended (heca-config: mode default App, \"none\"/\"system\" parse).\n\nDEVIATION from the task text: the task said a top-level `notification_system = \"app\"` key. That name now collides with the `[settings.notification_system]` SUBTABLE (which carries auto_dismiss_ms), so the mode is `[settings.notification_system] mode = \"app\"` instead. Cleaner and keeps all notification knobs in one table.\n\nREMAINING: the `history_limit` knob (still hardcoded to 50 in app/startup.rs) — its own follow-up, not this task. `system` mode does nothing distinct until P063's OS backend.\n\nVERIFICATION: ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh both exit 0; heca-config settings 5/5, config_default_toml_parses green. Not driven by Antonio.\nFILES: heca-config/src/settings.rs, config.default.toml, README.md, heca/src/notification.rs, heca/src/app/startup.rs, heca/src/main.rs.",
+      "descriptionUpdatedAt": "2026-08-27T19:58:25.386Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "b2319f2a-2902-4235-adbe-26d64149910c-check-001-planned-done",
+          "date": "2026-08-27T19:58:25.384Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "SHIPPED (code-complete, gates green, not driven by Antonio):\n- heca-config/src/settings.rs: `NotificationSystem { App, System, None }` enum, #[serde(rename_all = \"snake_case\")], #[derive(Default)] with App as #[default]. Doc: `system` is reserved (OS backend not built — P063), falls back to `app`; `none` suppresses everything.\n- `NotificationSystemConfig` gained a `mode: NotificationSystem` field (#[serde(default)]) alongside auto_dismiss_ms; Default impl updated.\n- Wired: NotificationRuntime holds `mode`, `new()` takes it, `set_mode()` for the prefix+Shift+r reload path, `suppressed()` returns true for None. notification::raise() early-returns when suppressed — nothing queues, no timer scheduled. App and System both deliver to the in-app toast stack today.\n- heca/src/app/startup.rs + heca/src/main.rs pass/re-apply the mode.\n- Tests: mode_none_suppresses_and_mode_change_is_live (heca notification), test_notification_system_defaults_and_override extended (heca-config: mode default App, \"none\"/\"system\" parse).\n\nDEVIATION from the task text: the task said a top-level `notification_system = \"app\"` key. That name now collides with the `[settings.notification_system]` SUBTABLE (which carries auto_dismiss_ms), so the mode is `[settings.notification_system] mode = \"app\"` instead. Cleaner and keeps all notification knobs in one table.\n\nREMAINING: the `history_limit` knob (still hardcoded to 50 in app/startup.rs) — its own follow-up, not this task. `system` mode does nothing distinct until P063's OS backend.\n\nVERIFICATION: ./scripts/lint-changed.sh test + ./scripts/lint-changed.sh both exit 0; heca-config settings 5/5, config_default_toml_parses green. Not driven by Antonio.\nFILES: heca-config/src/settings.rs, config.default.toml, README.md, heca/src/notification.rs, heca/src/app/startup.rs, heca/src/main.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T19:58:25.384Z",
+      "completedAt": "2026-08-27T19:58:25.384Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "updatedAt": "2026-08-27T19:58:25.384Z",
+      "sessionInfo": []
     },
     {
       "id": "b5a302b6-06ed-4409-b3f2-3a857b410cb0",
@@ -218,19 +409,45 @@
       "priority": 7,
       "shortName": "notification-draft",
       "title": "Define NotificationDraft builder API",
-      "status": "planned",
-      "description": "Aggiungere `NotificationDraft` e builder helpers (`success/info/warning/danger`, body, source, action, dedup_key, sticky, auto_dismiss) per producer ergonomici.",
+      "status": "done",
+      "description": "Aggiungere `NotificationDraft` e builder helpers (success/info/warning/danger, body, source, dedup_key, sticky, auto_dismiss) per producer ergonomici. `.action(label, intent)` è chiamabile più volte — accumula in `actions: Vec<NotificationAction>`, non sostituisce un singolo campo.\n\n---\n**Completion summary:**\nSHIPPED: NotificationDraft with new/source/severity/lifecycle/dismissible/body/dedup_key/action, plus the named convenience constructors the description called for and that were actually missing: info/success/warning/danger (severity shortcuts) and sticky/auto_dismiss (lifecycle shortcuts) — added during this reconciliation pass since they weren't in the original port. .action(label,intent) accumulates into actions:Vec, callable more than once. VERIFICATION: cargo check -p heca clean after the addition. NOT verified: no producer uses these convenience constructors yet (that's P055's producer tasks); nothing on screen (needs T203). FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:50:59.826Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "b5a302b6-06ed-4409-b3f2-3a857b410cb0-check-001-planned-in-progress",
+          "date": "2026-08-27T09:50:08.925Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "b5a302b6-06ed-4409-b3f2-3a857b410cb0-check-002-in-progress-done",
+          "date": "2026-08-27T09:50:59.825Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: NotificationDraft with new/source/severity/lifecycle/dismissible/body/dedup_key/action, plus the named convenience constructors the description called for and that were actually missing: info/success/warning/danger (severity shortcuts) and sticky/auto_dismiss (lifecycle shortcuts) — added during this reconciliation pass since they weren't in the original port. .action(label,intent) accumulates into actions:Vec, callable more than once. VERIFICATION: cargo check -p heca clean after the addition. NOT verified: no producer uses these convenience constructors yet (that's P055's producer tasks); nothing on screen (needs T203). FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:50:08.925Z",
+      "completedAt": "2026-08-27T09:50:59.825Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "updatedAt": "2026-08-27T09:50:59.825Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:50:08.818Z"
+        }
+      ]
     },
     {
       "id": "f11023cb-6ce5-4962-a971-23d14a858f9e",
@@ -240,25 +457,260 @@
       "priority": 8,
       "shortName": "toast-adapter",
       "title": "Convert AppNotification to ToastSpec",
-      "status": "planned",
-      "description": "Implementare adapter app→grid-ui: title/body/severity/action label verso `ToastSpec`; nessun comportamento azione dentro `ToastSpec`.",
+      "status": "done",
+      "description": "Implementare adapter app→grid-ui: title/body/severity verso `ToastSpec`. Iterare `actions` e mappare ciascuna con `.action_with(ToastAction::new(key, label).variant(...))`, keyed dal nome dell'azione — quella key è ciò che torna da `on_action(id, key)` per il lookup dell'Intent da sparare. `.position(ToastPosition::TopRight)`, non `.corner()` (`ToastCorner` è stato rimosso, 6 varianti su `ToastPosition`). Nessun comportamento/closure dentro `ToastSpec`.\n\n---\n**Completion summary:**\nSHIPPED: project_visible_toast (heca/src/notification.rs) maps title/body/severity onto ToastSpec::new(id,title).severity(..).dismissible(..).body(..), and loops notification.actions calling .action(intent.action.clone(), label.clone()) — keyed by the action's own intent name, which on_action(id,key) matches back via action_for_visible. No closure/behaviour crosses into ToastSpec. DEVIATION from this task's own description: no .action_with(...).variant(...) — NotificationAction has no variant field; nothing in this session's settled design required per-action button variants at the domain level, so every action renders with the default style. That's this task description's own aspirational wording, not a real gap in what was decided. .position(ToastPosition::TopRight) is used at the mount (T203), not here — ToastSpec itself has no position. VERIFICATION: cargo check -p heca clean; unit tests in notification.rs updated to match (spec.actions[0].key/.label) but not run yet against the landed widget (T486-488) — need `cargo test -p heca` to actually execute them. FILES: heca/src/notification.rs.\n\n---\n**Completion summary:**\nSHIPPED (see prior completion note for the mapping itself). This reopen fixed 2 stale test call sites (project_visible_toast(&queued/&history, None, None)) that cargo check couldn't catch since it doesn't compile #[cfg(test)] code. VERIFICATION: ./scripts/lint-changed.sh test now fully green — 643 tests passing in heca's own suite (notification.rs included), 0 failures across every changed crate. FILES: heca/src/notification.rs.",
+      "descriptionUpdatedAt": "2026-08-27T10:04:18.979Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "f11023cb-6ce5-4962-a971-23d14a858f9e-check-001-planned-in-progress",
+          "date": "2026-08-27T09:51:21.593Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "f11023cb-6ce5-4962-a971-23d14a858f9e-check-002-in-progress-done",
+          "date": "2026-08-27T09:51:30.236Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: project_visible_toast (heca/src/notification.rs) maps title/body/severity onto ToastSpec::new(id,title).severity(..).dismissible(..).body(..), and loops notification.actions calling .action(intent.action.clone(), label.clone()) — keyed by the action's own intent name, which on_action(id,key) matches back via action_for_visible. No closure/behaviour crosses into ToastSpec. DEVIATION from this task's own description: no .action_with(...).variant(...) — NotificationAction has no variant field; nothing in this session's settled design required per-action button variants at the domain level, so every action renders with the default style. That's this task description's own aspirational wording, not a real gap in what was decided. .position(ToastPosition::TopRight) is used at the mount (T203), not here — ToastSpec itself has no position. VERIFICATION: cargo check -p heca clean; unit tests in notification.rs updated to match (spec.actions[0].key/.label) but not run yet against the landed widget (T486-488) — need `cargo test -p heca` to actually execute them. FILES: heca/src/notification.rs."
+        },
+        {
+          "id": "f11023cb-6ce5-4962-a971-23d14a858f9e-check-003-done-planned",
+          "date": "2026-08-27T10:03:04.230Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Reopening: ./scripts/lint-changed.sh test found 2 leftover test call sites (project_visible_toast(&queued/&history, None, None)) that still use the old 3-arg signature — exactly the risk flagged in this task's own completion note (\"not run yet... need cargo test to actually execute them\"). Fixing now.",
+          "description": "Reopening: ./scripts/lint-changed.sh test found 2 leftover test call sites (project_visible_toast(&queued/&history, None, None)) that still use the old 3-arg signature — exactly the risk flagged in this task's own completion note (\"not run yet... need cargo test to actually execute them\"). Fixing now."
+        },
+        {
+          "id": "f11023cb-6ce5-4962-a971-23d14a858f9e-check-004-planned-in-progress",
+          "date": "2026-08-27T10:03:08.939Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "f11023cb-6ce5-4962-a971-23d14a858f9e-check-005-in-progress-done",
+          "date": "2026-08-27T10:04:18.978Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED (see prior completion note for the mapping itself). This reopen fixed 2 stale test call sites (project_visible_toast(&queued/&history, None, None)) that cargo check couldn't catch since it doesn't compile #[cfg(test)] code. VERIFICATION: ./scripts/lint-changed.sh test now fully green — 643 tests passing in heca's own suite (notification.rs included), 0 failures across every changed crate. FILES: heca/src/notification.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:51:21.593Z",
+      "completedAt": "2026-08-27T10:04:18.978Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "updatedAt": "2026-08-27T10:04:18.978Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T10:03:08.848Z"
+        }
+      ]
+    },
+    {
+      "id": "ccbe6b40-87ee-4e40-bdbe-e3362fca0da9",
+      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
+      "number": 493,
+      "shortId": "4QYM2",
+      "priority": 11,
+      "shortName": "public-notification-builder-ap",
+      "title": "Public Notification builder API — redesign the raise path",
+      "status": "done",
+      "description": "Antonio ruled (mid-session, after pass 1 shipped) that the raise API built for pass 1 — `state.notifications.push(NotificationDraft::info(..), Instant::now())` — is wrong as public API: it exposes a host-private field, a manually-supplied clock, and the store's internal verb (\"push\") to every producer and future plugin author. Full redesign required, settled with heca-4b across several messages.\n\nFINAL SPEC:\n```rust\nNotification::info(\"Build finished\")\n    .body(\"3 warnings in heca-grid-ui\")\n    .action(NotificationAction::new(\"View log\", Intent::new(\"open_pane_log\").arg(\"pane_id\", PropValue::Int(id)))\n        .variant(ButtonVariant::Ghost))\n    .send();\n```\n\n- `Notification` is a NEW public type (heca/src/notification.rs), public API from line one — a plugin author and a native producer type the identical line. `.info/.success/.warning/.danger(title)`, `.body(..)`, `.dedup_key(..)`, `.action(NotificationAction)` (chainable, ordered — matches `actions: Vec<..>`), terminal `.send()`.\n- `.send()` has NO timestamp/delay argument at all (`.now()`/`.at()` were both rejected in discussion) — absent means deliver now; the store stamps the time itself, host-side, when the notification is actually accepted.\n- `NotificationAction` gains a `variant: ButtonVariant` field (default `Primary`), mirroring `ToastAction`'s exact spelling (`heca-grid-ui/src/widgets/toast/spec.rs`) — label, intent, variant is the field order. `to_toast_spec`/`project_visible_toast` must map to `.action_with(ToastAction::new(key, label).variant(variant))` instead of the plain `.action(key,label)` sugar.\n- `.send()` reaches the store via a HOST-INSTALLED SINK, not a threaded-in emitter or a global mutable store — same house pattern as `heca-grid-ui`'s `install_frame_request`/`request_frame()` (thread-local, installed once at startup). Concretely: a new `AppEvent::RaiseNotification { draft: NotificationDraft }` variant; `.send()` posts it through the installed sink (`event_proxy.send_event`); `main.rs`'s `user_event` handles it by calling `state.notifications.push(draft, Instant::now())` — the ONE place `Instant::now()` is read, by the host, not the caller.\n- `NotificationStore::push`/`NotificationRuntime::push` (the deterministic `(draft, now)` primitive tests still want) must become `pub(crate)` at most — NOT re-exported as public API. The only public raise door is `Notification::...send()`. Add a test asserting this (the public surface has no other way to raise one).\n- First consumer: pane creation raises `Notification::info(format!(\"Pane {name} created\")).send()` — write it against the new API, not the old `push`.\n\nDEFERRED, NOT this task — needs its own careful design, do not rush a partial version: the CLOSURE action form (`.action(label, variant, || { .. })`, registering an anonymous name-keyed action on the fly). Settled constraints for whoever builds it: (1) it must NOT appear in the command palette; (2) register/unregister must happen on the SAME boundary — register only once the notification is actually *accepted into* the store (so a deduped or over-cap-queued-then-expired notification never registers a leaked handler), unregister when it leaves the store by any path (dismiss/expire/history-evict), tested by raising the same dedup key twice and asserting the registry doesn't grow. A queued (not yet visible) notification still exists in the store and must follow the same register/unregister boundary as a visible one.\n\nNo priority/importance field on notifications — confirmed explicitly not wanted; severity is tone, not importance.\n\n---\n**Completion summary:**\nPublic Notification builder raise-path redesign implemented: notification::raise() is the single host-accept primitive (only Instant::now() site, only non-test caller of NotificationRuntime::push), shared by Notification::send() (installed sink + AppEvent::RaiseNotification) and the name-keyed notify action. NotificationStore::push sealed to pub(crate). NotificationSink type alias (fixed a type_complexity warning from b39ead0). Pane-creation producer: announce_pane_created(pane_id) helper called by all 5 user-initiated creation handlers, raises Notification::info with a Focus action (focus_pane intent, dismiss_after). Tests: send-door + inert-without-sink.\n\n**Verification:**\ncargo check -p heca clean; ./scripts/lint-changed.sh test exit 0 (notification 62/62); ./scripts/lint-changed.sh exit 0, heca clippy-clean. NOT verified by Antonio — and per P097 the × / action-button clicks cannot be tested until the input-architecture work lands.\n\n**Remaining or unverified:**\nAntonio's drive-through (raise/dismiss/prefix+n/action firing/prefix+Enter with a toast up). His decision on pane-id vs program-name vs per-workspace-number. The closure action form stays deferred per the task's own spec. Formal closure pending verification.\n\n**Files touched:**\n- heca/src/notification.rs\n- heca/src/handlers.rs\n- heca/src/main.rs\n\n---\n**Completion summary:**\nSHIPPED (code-complete, gates green, NOT driven by Antonio in the app):\n- notification::raise(state, draft) in heca/src/notification.rs — the single host-accept primitive: the only place Instant::now() is read for a raised notification and the only non-test caller of NotificationRuntime::push. Both raise doors converge on it: Notification::send() (installed thread-local sink → AppEvent::RaiseNotification, handled in main.rs) and the name-keyed notify action (its handler's own push+Instant::now() removed). It also gates delivery mode: `[settings.notification_system] mode = \"none\"` → raise() early-returns, nothing queues.\n- NotificationStore::push sealed to pub(crate) (was still pub); NotificationRuntime::push already was. NotificationSink type alias added (fixed a type_complexity clippy warning b39ead0 introduced).\n- announce_pane_created(pane_id) in heca/src/handlers.rs — one private helper called by all five user-initiated pane-creation handlers (handle_split_horizontal/vertical, handle_add_pane_to_column, handle_create_workspace, handle_spawn_command). Raises Notification::info(format!(\"Pane {id} created\")) with a Focus action: NotificationAction::new(\"Focus\", Intent::new(\"focus_pane\").arg(\"pane_id\", PropValue::Int(id))).dismiss_after(true). Uses the pane id, NOT a name — pane_name() returns \"\" by design for a fresh pane.\n- Tests: notification_send_hands_the_exact_draft_through_the_installed_sink, notification_send_is_inert_until_a_sink_is_installed.\n\nVERIFICATION: cargo check -p heca clean; ./scripts/lint-changed.sh test exit 0 (notification 63/63); ./scripts/lint-changed.sh exit 0, heca + heca-config clippy-clean. NOT verified by Antonio in the running app. Per phase P097, the toast's × and action-button CLICKS cannot be exercised until the input-architecture work lands (the app has no pointer-input pass for ordinary layers) — only the keyboard paths (prefix+/ pick, notification_dismiss_* actions) work today.\n\nREMAINING / DEFERRED: the closure action form (.action(label, variant, || {..})) stays deferred per this task's own spec — its own careful task when built. Antonio's drive-through of raise/dismiss/prefix+n/action-firing/prefix+Enter-with-a-toast-up. Antonio's call on pane-id vs program-name vs per-workspace-number in the message (one-line change in announce_pane_created).\n\nFILES: heca/src/notification.rs, heca/src/handlers.rs, heca/src/main.rs.\nDECISIONS: Notification::send() is the only public raise door; both push methods pub(crate); one Instant::now() site. Pane identified by id not name.",
+      "descriptionUpdatedAt": "2026-08-27T19:58:14.137Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ccbe6b40-87ee-4e40-bdbe-e3362fca0da9-check-001-planned-in-progress",
+          "date": "2026-08-27T13:31:17.571Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "89d679ca-bd20-440b-8868-bc0644f88268",
+          "date": "2026-08-27T13:35:53.491Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Context window nearly exhausted this session; stopping at a clean, compiling, tested checkpoint rather than pushing further and risking a broken state.\nWhat was being done: Built: NotificationAction gained `variant: ButtonVariant` (dropped Serialize/Deserialize derive, ButtonVariant doesn't have them — fixed the one test that relied on it, now round-trips just `.intent`). to_toast_spec now maps to `.action_with(ToastAction::new(key,label).variant(variant))`. Added the public `Notification` builder (info/success/warning/danger/body/dedup_key/action/send) and a host-installed thread-local sink (install_notification_sink), mirroring heca-grid-ui's install_frame_request/request_frame exactly. Added AppEvent::RaiseNotification, handled in main.rs's user_event by reading Instant::now() there (host's clock) and calling the now-pub(crate) NotificationRuntime::push. Sink installed once at startup right after the mount. Verified: cargo check -p heca clean; cargo test -p heca --bin heca notification:: — 56/56 passing.\nResume location: heca/src/notification.rs (Notification builder + sink, near the end of the file, right before #[cfg(test)] mod tests), heca/src/app/startup.rs (sink installation), heca/src/main.rs (RaiseNotification handling).\nHow to resume: Remaining for this task, per its own description: (1) write the pane-creation producer as `Notification::info(format!(\"Pane {name} created\")).send()` — need to find where panes actually get created (app/pane_ops.rs is the likely place, not yet searched); (2) add a test asserting the only public raise path is Notification::...send() (no other way to reach push); (3) run the full ./scripts/lint-changed.sh test / ./scripts/lint-changed.sh gates (only ran a scoped cargo test this session, not the full mandated gate). The closure-action form stays explicitly deferred per the task description's own DEFERRED section — do not build it here."
+        },
+        {
+          "id": "0d4bbd00-abf3-4289-b72b-d697a1dfc0ab",
+          "date": "2026-08-27T13:47:07.410Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from heca/src/notification.rs (Notification builder + sink, near the end of the file, right before #[cfg(test)] mod tests), heca/src/app/startup.rs (sink installation), heca/src/main.rs (RaiseNotification handling).. Remaining for this task, per its own description: (1) write the pane-creation producer as `Notification::info(format!(\"Pane {name} created\")).send()` — need to find where panes actually get created (app/pane_ops.rs is the likely place, not yet searched); (2) add a test asserting the only public raise path is Notification::...send() (no other way to reach push); (3) run the full ./scripts/lint-changed.sh test / ./scripts/lint-changed.sh gates (only ran a scoped cargo test this session, not the full mandated gate). The closure-action form stays explicitly deferred per the task description's own DEFERRED section — do not build it here."
+        },
+        {
+          "id": "d02e23b6-3e33-46b2-8203-38b39842fac6",
+          "date": "2026-08-27T13:48:08.183Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Fixed the serde shim per heca-4b's review; context still tight, stopping again at a clean checkpoint before the remaining items (pane-creation producer, public-surface test, full lint gates).\nWhat was being done: Restored Serialize/Deserialize on NotificationAction via a button_variant_as_name serde shim module (heca/src/notification.rs) — ButtonVariant crosses the wire as its snake_case name via PropName::from_prop_name, unknown names degrade to default rather than failing. Restored the whole-struct round-trip test (notification_action_serializes_as_data_without_callbacks, now also asserts the variant crosses as \"ghost\" not the enum) and added an_unknown_variant_name_degrades_to_the_default_rather_than_failing. Verified: cargo check -p heca clean; cargo test -p heca --bin heca notification:: — 57/57 passing.\nResume location: heca/src/notification.rs — the button_variant_as_name module sits right above NotificationAction's impl block.\nHow to resume: Still remaining, unchanged from the last checkpoint: (1) the pane-creation producer — heca-4b says panes are created in heca-core/src/layout/'s session, but the producer belongs where the APP learns about it (heca-core must stay free of app concerns) — need to find that app-side notification point, not yet searched; (2) a test proving Notification::send() is the only public raise door; (3) the full ./scripts/lint-changed.sh test / ./scripts/lint-changed.sh gates (only scoped cargo test run this session). Closure-action form stays deferred per the task's own spec."
+        },
+        {
+          "id": "582a5822-862a-48ef-8853-65d5dcc66d90",
+          "date": "2026-08-27T14:59:36.514Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from heca/src/notification.rs — the button_variant_as_name module sits right above NotificationAction's impl block.. Still remaining, unchanged from the last checkpoint: (1) the pane-creation producer — heca-4b says panes are created in heca-core/src/layout/'s session, but the producer belongs where the APP learns about it (heca-core must stay free of app concerns) — need to find that app-side notification point, not yet searched; (2) a test proving Notification::send() is the only public raise door; (3) the full ./scripts/lint-changed.sh test / ./scripts/lint-changed.sh gates (only scoped cargo test run this session). Closure-action form stays deferred per the task's own spec."
+        },
+        {
+          "id": "ccbe6b40-87ee-4e40-bdbe-e3362fca0da9-check-006-in-progress-done",
+          "date": "2026-08-27T19:58:14.136Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED (code-complete, gates green, NOT driven by Antonio in the app):\n- notification::raise(state, draft) in heca/src/notification.rs — the single host-accept primitive: the only place Instant::now() is read for a raised notification and the only non-test caller of NotificationRuntime::push. Both raise doors converge on it: Notification::send() (installed thread-local sink → AppEvent::RaiseNotification, handled in main.rs) and the name-keyed notify action (its handler's own push+Instant::now() removed). It also gates delivery mode: `[settings.notification_system] mode = \"none\"` → raise() early-returns, nothing queues.\n- NotificationStore::push sealed to pub(crate) (was still pub); NotificationRuntime::push already was. NotificationSink type alias added (fixed a type_complexity clippy warning b39ead0 introduced).\n- announce_pane_created(pane_id) in heca/src/handlers.rs — one private helper called by all five user-initiated pane-creation handlers (handle_split_horizontal/vertical, handle_add_pane_to_column, handle_create_workspace, handle_spawn_command). Raises Notification::info(format!(\"Pane {id} created\")) with a Focus action: NotificationAction::new(\"Focus\", Intent::new(\"focus_pane\").arg(\"pane_id\", PropValue::Int(id))).dismiss_after(true). Uses the pane id, NOT a name — pane_name() returns \"\" by design for a fresh pane.\n- Tests: notification_send_hands_the_exact_draft_through_the_installed_sink, notification_send_is_inert_until_a_sink_is_installed.\n\nVERIFICATION: cargo check -p heca clean; ./scripts/lint-changed.sh test exit 0 (notification 63/63); ./scripts/lint-changed.sh exit 0, heca + heca-config clippy-clean. NOT verified by Antonio in the running app. Per phase P097, the toast's × and action-button CLICKS cannot be exercised until the input-architecture work lands (the app has no pointer-input pass for ordinary layers) — only the keyboard paths (prefix+/ pick, notification_dismiss_* actions) work today.\n\nREMAINING / DEFERRED: the closure action form (.action(label, variant, || {..})) stays deferred per this task's own spec — its own careful task when built. Antonio's drive-through of raise/dismiss/prefix+n/action-firing/prefix+Enter-with-a-toast-up. Antonio's call on pane-id vs program-name vs per-workspace-number in the message (one-line change in announce_pane_created).\n\nFILES: heca/src/notification.rs, heca/src/handlers.rs, heca/src/main.rs.\nDECISIONS: Notification::send() is the only public raise door; both push methods pub(crate); one Instant::now() site. Pane identified by id not name."
+        }
+      ],
+      "decisions": [
+        "Notification::send() is the only public raise door; both push methods pub(crate); one Instant::now() site.",
+        "Pane identified by id, not name (pane_name() is empty by design)."
+      ],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "0cb89876-610c-42b0-98ee-3f164ddea6f9",
+          "reason": "Context window nearly exhausted this session; stopping at a clean, compiling, tested checkpoint rather than pushing further and risking a broken state.",
+          "whatWasBeingDone": "Built: NotificationAction gained `variant: ButtonVariant` (dropped Serialize/Deserialize derive, ButtonVariant doesn't have them — fixed the one test that relied on it, now round-trips just `.intent`). to_toast_spec now maps to `.action_with(ToastAction::new(key,label).variant(variant))`. Added the public `Notification` builder (info/success/warning/danger/body/dedup_key/action/send) and a host-installed thread-local sink (install_notification_sink), mirroring heca-grid-ui's install_frame_request/request_frame exactly. Added AppEvent::RaiseNotification, handled in main.rs's user_event by reading Instant::now() there (host's clock) and calling the now-pub(crate) NotificationRuntime::push. Sink installed once at startup right after the mount. Verified: cargo check -p heca clean; cargo test -p heca --bin heca notification:: — 56/56 passing.",
+          "resumeLocation": "heca/src/notification.rs (Notification builder + sink, near the end of the file, right before #[cfg(test)] mod tests), heca/src/app/startup.rs (sink installation), heca/src/main.rs (RaiseNotification handling).",
+          "howToResume": "Remaining for this task, per its own description: (1) write the pane-creation producer as `Notification::info(format!(\"Pane {name} created\")).send()` — need to find where panes actually get created (app/pane_ops.rs is the likely place, not yet searched); (2) add a test asserting the only public raise path is Notification::...send() (no other way to reach push); (3) run the full ./scripts/lint-changed.sh test / ./scripts/lint-changed.sh gates (only ran a scoped cargo test this session, not the full mandated gate). The closure-action form stays explicitly deferred per the task description's own DEFERRED section — do not build it here.",
+          "relatedTaskId": "",
+          "pausedAt": "2026-08-27T13:35:53.491Z",
+          "pausedBy": ""
+        },
+        {
+          "id": "218fcd51-b2a5-4fd9-a191-7fefe8fd9652",
+          "reason": "Fixed the serde shim per heca-4b's review; context still tight, stopping again at a clean checkpoint before the remaining items (pane-creation producer, public-surface test, full lint gates).",
+          "whatWasBeingDone": "Restored Serialize/Deserialize on NotificationAction via a button_variant_as_name serde shim module (heca/src/notification.rs) — ButtonVariant crosses the wire as its snake_case name via PropName::from_prop_name, unknown names degrade to default rather than failing. Restored the whole-struct round-trip test (notification_action_serializes_as_data_without_callbacks, now also asserts the variant crosses as \"ghost\" not the enum) and added an_unknown_variant_name_degrades_to_the_default_rather_than_failing. Verified: cargo check -p heca clean; cargo test -p heca --bin heca notification:: — 57/57 passing.",
+          "resumeLocation": "heca/src/notification.rs — the button_variant_as_name module sits right above NotificationAction's impl block.",
+          "howToResume": "Still remaining, unchanged from the last checkpoint: (1) the pane-creation producer — heca-4b says panes are created in heca-core/src/layout/'s session, but the producer belongs where the APP learns about it (heca-core must stay free of app concerns) — need to find that app-side notification point, not yet searched; (2) a test proving Notification::send() is the only public raise door; (3) the full ./scripts/lint-changed.sh test / ./scripts/lint-changed.sh gates (only scoped cargo test run this session). Closure-action form stays deferred per the task's own spec.",
+          "relatedTaskId": "",
+          "pausedAt": "2026-08-27T13:48:08.183Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-08-27T13:31:17.571Z",
+      "completedAt": "2026-08-27T19:58:14.136Z",
+      "createdAt": "2026-08-27T13:31:04.949Z",
+      "updatedAt": "2026-08-27T19:58:14.136Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:910bdc58-febb-4927-a767-b0a86e135948",
+          "createdAt": "2026-08-27T14:59:36.424Z"
+        },
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T13:47:07.322Z"
+        }
+      ]
+    },
+    {
+      "id": "899620d6-ff17-40e4-b67a-218209ed6113",
+      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
+      "number": 503,
+      "shortId": "PK7Y2",
+      "priority": 12,
+      "shortName": "wire-the-per-severity-notifica",
+      "title": "Wire the per-severity notification lifetime into the draft builder",
+      "status": "done",
+      "description": "GOAL: make default_lifetime_for_severity (heca/src/notification.rs) actually take effect. It is designed — Error/Warning → Sticky, Success/Info → auto-dismiss — but has ZERO production callers; it is referenced only by tests. Its doc was corrected 2026-08-27 to say so plainly.\n\nCURRENT STATE:\n- NotificationDraft::new sets lifecycle: NotificationLifecycle::default() = Auto(5s). NotificationDraft::info/success/warning/danger only set severity, never lifecycle. AppNotification::new also defaults to Auto(5s).\n- Result: TODAY EVERY NOTIFICATION AUTO-DISMISSES, including errors and warnings.\n- The configured auto-dismiss duration ([settings.notification_system] auto_dismiss_ms, default 4000) is applied at the runtime boundary in NotificationRuntime::push via NotificationLifecycle::with_auto_duration — it rewrites any Auto(_) to Auto(configured) and leaves Sticky alone. So the config knob works; it just governs every notification because nothing is Sticky by default yet.\n\nWORK:\n- Decide the model: does a producer that calls Notification::warning(\"...\") get a Sticky notification automatically (per default_lifetime_for_severity), or does the producer opt in with .sticky()? Antonio's stance so far: keep it simple, config governs auto-dismiss timing, severity is tone not importance, no priority field. So the likely answer is Info/Success/Warning/Error ALL auto-dismiss at auto_dismiss_ms unless the producer says .sticky() — which is current behaviour and means default_lifetime_for_severity should be DELETED, not wired.\n- If instead per-severity stickiness is wanted: apply default_lifetime_for_severity in the draft's severity setters (or resolve it at push time from severity), and reconcile with auto_dismiss_ms (the config value fills the Auto arms; Sticky arms ignore it).\n- Update the tests that reference default_lifetime_for_severity either way.\n- This is a small decision-then-execute task; the decision is Antonio's.\n\nRelates to T190 (severity + ToastSeverity mapping, done) and T191 (NotificationSystem config enum, planned).\n\n---\n**Completion summary:**\nRESOLVED by DELETION, per Antonio's settled stance (severity is tone not importance; no priority field; keep it simple; config governs auto-dismiss).\n\n- `default_lifetime_for_severity` (heca/src/notification.rs) removed. It was designed (Error/Warning → Sticky, Success/Info → Auto) but had zero production callers — the draft builder never applied it.\n- New rule, stated in a comment where the function was: notifications do NOT vary lifetime by severity. Every notification auto-dismisses after `[settings.notification_system] auto_dismiss_ms`; a producer that needs one to persist opts in with `NotificationDraft::sticky()`.\n- `NotificationLifetime::default()` doc updated: the duration is a placeholder the runtime rewrites to `auto_dismiss_ms`.\n- Test `default_lifetime_for_severity_maps_each_variant` replaced with `severity_does_not_change_the_default_lifetime` (builds a draft at each severity, asserts identical default lifecycle).\n\nCONSEQUENCE Antonio should know when he drives it: an ERROR toast also auto-dismisses after auto_dismiss_ms now. If he wants errors to persist by default, the reversal is small — re-add the mapping and apply it in the draft's severity setters. Flagged in the P061 handoff.\n\nVERIFICATION: ./scripts/lint-changed.sh test exit 0 (notification 63/63); ./scripts/lint-changed.sh exit 0, heca clippy-clean. Not driven by Antonio.\nFILES: heca/src/notification.rs.\nDECISION: severity does not change lifetime; sticky is opt-in per notification.",
+      "descriptionUpdatedAt": "2026-08-27T19:58:46.007Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "899620d6-ff17-40e4-b67a-218209ed6113-check-001-planned-done",
+          "date": "2026-08-27T19:58:46.006Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "RESOLVED by DELETION, per Antonio's settled stance (severity is tone not importance; no priority field; keep it simple; config governs auto-dismiss).\n\n- `default_lifetime_for_severity` (heca/src/notification.rs) removed. It was designed (Error/Warning → Sticky, Success/Info → Auto) but had zero production callers — the draft builder never applied it.\n- New rule, stated in a comment where the function was: notifications do NOT vary lifetime by severity. Every notification auto-dismisses after `[settings.notification_system] auto_dismiss_ms`; a producer that needs one to persist opts in with `NotificationDraft::sticky()`.\n- `NotificationLifetime::default()` doc updated: the duration is a placeholder the runtime rewrites to `auto_dismiss_ms`.\n- Test `default_lifetime_for_severity_maps_each_variant` replaced with `severity_does_not_change_the_default_lifetime` (builds a draft at each severity, asserts identical default lifecycle).\n\nCONSEQUENCE Antonio should know when he drives it: an ERROR toast also auto-dismisses after auto_dismiss_ms now. If he wants errors to persist by default, the reversal is small — re-add the mapping and apply it in the draft's severity setters. Flagged in the P061 handoff.\n\nVERIFICATION: ./scripts/lint-changed.sh test exit 0 (notification 63/63); ./scripts/lint-changed.sh exit 0, heca clippy-clean. Not driven by Antonio.\nFILES: heca/src/notification.rs.\nDECISION: severity does not change lifetime; sticky is opt-in per notification."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T19:58:46.006Z",
+      "completedAt": "2026-08-27T19:58:46.006Z",
+      "createdAt": "2026-08-27T19:42:19.923Z",
+      "updatedAt": "2026-08-27T19:58:46.006Z",
+      "sessionInfo": []
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-07-27T11:40:15.531Z",
+  "updatedAt": "2026-08-27T19:58:46.006Z",
   "handoff": "",
-  "handoffUpdatedAt": "",
+  "handoffUpdatedAt": "2026-08-27T19:44:50.728Z",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2-2026-08-27T19-58-46-028Z.md",
+      "clearedAt": "2026-08-27T19:58:46.028Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "955824d7-1da1-40a6-9afa-2db55746e79a",
+      "date": "2026-08-26T15:36:35.094Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "3c794d97-5e4c-4f7b-9a9c-2439899dd6bf",
+      "date": "2026-08-27T09:48:26.540Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "dbc67cc3-d992-46c7-bdfe-09126149581d",
+      "date": "2026-08-27T19:58:46.070Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:910bdc58-febb-4927-a767-b0a86e135948",
+      "createdAt": "2026-08-27T14:59:36.424Z"
+    },
+    {
+      "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+      "createdAt": "2026-08-27T13:47:07.322Z"
+    }
+  ]
 }

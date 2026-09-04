@@ -19,7 +19,7 @@
 use std::path::{Path, PathBuf};
 
 /// The single funnel: it takes a pointer event and gives it to whatever tree owns the pointer.
-const FUNNEL: &str = "dispatch_modal_pointer";
+const FUNNEL: &str = "dispatch_surface_pointer";
 
 /// The winit branches that carry pointer input. Each must reach the funnel.
 const POINTER_BRANCHES: &[(&str, &str)] = &[
@@ -75,25 +75,25 @@ fn the_chrome_tree_gets_the_release_and_the_wheel_too() {
     for (head, call, why) in [
         (
             "WindowEvent::MouseInput",
-            "chrome_dispatch_release",
+            "crate::chrome::deliver(",
             "a gesture started in the sidebar has to be able to end — a thumb grabbed there stays \
              welded to the cursor otherwise",
         ),
         (
             "WindowEvent::MouseInput",
-            "dispatch_pane_header_release",
-            "the pane headers were the last seam missing a kind — the first widget mounted there \
-             with a gesture would have been broken on arrival",
+            "crate::chrome::deliver_to_panes(",
+            "a pane's own tree carries its info bar now, so a bar button that captured a press has \
+             to learn the gesture ended",
         ),
         (
             "WindowEvent::MouseWheel",
-            "dispatch_pane_header_wheel",
+            "crate::chrome::deliver_to_panes(",
             "nothing in a header scrolls yet, and \"nothing needs it yet\" is the reasoning that \
              produced every other missing kind",
         ),
         (
             "WindowEvent::MouseWheel",
-            "chrome_dispatch_wheel",
+            "crate::chrome::deliver(",
             "a scroll region in the sidebar scrolls on the wheel, and the terminal must not also \
              scroll when it takes it",
         ),
@@ -143,24 +143,34 @@ fn the_button_branch_feeds_the_funnel_both_press_and_release() {
 /// A lint, like its neighbours above: what it guards is *absence*, which no behaviour test can see.
 #[test]
 fn the_mouse_layer_sends_a_release_for_every_press_it_sends() {
-    let src = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"),
-    )
-    .expect("read the mouse layer");
+    let src = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"))
+        .expect("read the mouse layer");
 
-    assert!(
-        src.contains("chrome_dispatch_button_press"),
-        "the mouse layer no longer presses into the chrome tree — if that moved, move this guard \
-         with it rather than deleting it",
-    );
-    assert!(
-        src.contains("chrome_dispatch_button_release"),
-        "the mouse layer dispatches a button PRESS to the chrome tree and never a RELEASE.\n\
-         A press with no release is not a click: `Click` and `RightClick` are synthesised from the \
-         pair, so nothing that depends on a click happens at all — a widget's declared context \
-         menu never opens, and a widget that captured the press never learns the gesture ended.\n\
-         This is not caught by any behaviour test: they dispatch both halves themselves.",
-    );
+    // The two arms that hand a right button to the tree. Named by their match pattern, because the
+    // point is that BOTH halves of the gesture are handed over — not that the file mentions the
+    // call somewhere.
+    for arm in [
+        "(Btn::Right, Kind::Pressed) =>",
+        "(Btn::Right, Kind::Released) =>",
+    ] {
+        let at = src
+            .find(arm)
+            .unwrap_or_else(|| panic!("the mouse layer no longer has a `{arm}` arm — if that moved, move this guard with it rather than deleting it"));
+        let body = &src[at..];
+        let end = body[arm.len()..]
+            .find("\n        (")
+            .map(|i| i + arm.len())
+            .unwrap_or(body.len());
+        assert!(
+            body[..end].contains("crate::chrome::deliver("),
+            "the mouse layer's `{arm}` arm does not hand the event to the tree.\n\
+             A press with no release is not a click: `Click` and `RightClick` are synthesised from \
+             the pair, so nothing that depends on a click happens at all — a widget's declared \
+             context menu never opens, and a widget that captured the press never learns the \
+             gesture ended.\n\
+             This is not caught by any behaviour test: they dispatch both halves themselves.",
+        );
+    }
 }
 
 /// **A divider resize must end at the same level its press started it.**
@@ -189,13 +199,12 @@ fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
             "the button branch no longer ends the divider resize. It must: the press starts the \
              drag here, so the release has to end it here too, or the drag outlives the button.",
         );
-    let swallows = body
-        .find("dispatch_pane_viewport_release")
-        .expect("the viewport release moved — move this guard with it rather than deleting it");
-
+    // Searched FORWARD from where the resize ends, not from the top of the branch: the viewport
+    // widgets are given the press too, further up, and that call cannot swallow a release. What
+    // has to hold is that the swallowing call comes after the resize has been told.
     assert!(
-        ends < swallows,
-        "the divider resize is ended AFTER a branch that can return early and swallow the \
+        body[ends..].contains("crate::chrome::deliver_to_pane_viewports("),
+        "the divider resize is ended AFTER the branch that can return early and swallow the \
          release.\nA resize that is never told the button came up keeps resizing on every cursor \
          move, with nothing held down, until the pane is gone.",
     );
@@ -226,5 +235,182 @@ fn the_key_funnel_delivers_releases_and_not_only_presses() {
          `ComponentExt::on_key_up` then exists but can never fire, so a widget that declares one \
          is silently dead in the real app.\n\
          This is not caught by any behaviour test: they dispatch both halves themselves.",
+    );
+}
+
+/// **The move that drives a drag must not be gated on a drag being in flight.**
+///
+/// A drag is not a state the host maintains alongside the pointer — it is a thing the framework
+/// runs *out of* pointer moves. Each move that reaches the tree is what moves the picture under the
+/// cursor, re-runs `DragEnter`/`DragOver` to mark the target and pick before/after/onto, and
+/// re-reads the modifiers that decide move versus swap. Withhold the move and the gesture freezes:
+/// the one move that crosses the threshold gets through — the gate was still false when it was
+/// tested — and nothing after it does.
+///
+/// It shipped exactly that way. The guard had asked whether the app's own drag machine was running,
+/// and that machine had stopped being set the moment rows took over their own dragging, so the
+/// answer was always "no" and the dispatch always ran. Re-pointing the same question at the tree
+/// made it truthful, and truthful is what broke it: the preview stuck where it was picked up and
+/// the target marks stopped moving, with the whole suite green.
+///
+/// Hover was the reason the gate was written, and it is not a reason any more: the framework lights
+/// nothing under a drag (`a_drag_in_flight_clears_hover`). A lint, like its neighbours: what it
+/// guards is *absence*, and the absence is of an event nobody sent.
+#[test]
+fn the_move_that_drives_a_drag_is_not_withheld_while_dragging() {
+    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let body = branch_body(&src, "WindowEvent::CursorMoved").expect("the move branch");
+
+    let call = body
+        .find("crate::chrome::deliver(")
+        .expect("the move branch no longer feeds the window tree — move this guard with it");
+
+    // Everything the call is nested inside: the last `if` opened before it still decides whether it
+    // runs, so that is the condition to read.
+    let guard = body[..call]
+        .rfind("if ")
+        .map(|i| &body[i..call])
+        .unwrap_or("");
+
+    assert!(
+        !guard.contains("drag_in_flight"),
+        "the move into the window tree is gated on a drag being in flight.\n\
+         That is backwards: the move is what DRIVES the drag. Withholding it freezes the picture \
+         under the cursor where it was picked up, stops `DragOver` so the insertion line and the \
+         swap outline never move, and stops the modifiers being re-read so Shift no longer switches \
+         move to swap.\n\
+         Hover is not a reason to hold it back — the framework lights nothing under a drag \
+         (`a_drag_in_flight_clears_hover`). Gate the OTHER trees if they need it; this one must \
+         always be fed.",
+    );
+}
+
+/// **The tree is told what is held before anyone is asked what it means.**
+///
+/// The framework records the modifier state from the `ModifiersChanged` broadcast, and the app's
+/// own reaction to that same event asks it what a drag now means (`DropAction::held`). Reacting
+/// before announcing asks the question before the answer exists, so the answer is the *previous*
+/// one: a drag's move-versus-swap trails one event behind and flips when the key comes up instead
+/// of when it goes down.
+///
+/// A lint, like its neighbours, and for the same reason — what it guards is an *ordering*, and the
+/// symptom is a value that is merely stale rather than an event that is missing.
+#[test]
+fn the_tree_learns_the_modifiers_before_the_app_reacts_to_them() {
+    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let body = branch_body(&src, "WindowEvent::ModifiersChanged").expect("the modifiers branch");
+
+    // The *call*, not the event name: `WindowEvent::ModifiersChanged` — the branch head itself —
+    // ends with the string `Event::ModifiersChanged`, so matching on that finds position zero and
+    // the check passes whatever the order is. It did, until the guard was run against the bug it
+    // was written for.
+    let announced = body
+        .find("heca_grid_ui::dispatch(")
+        .expect("the modifiers branch no longer announces to the tree — move this guard with it");
+    let reacted = body
+        .find("on_modifiers_changed")
+        .expect("the modifiers branch no longer reacts — move this guard with it");
+
+    assert!(
+        announced < reacted,
+        "the app reacts to a modifier change BEFORE telling the tree about it.\n\
+         Everything that asks what a modifier means now reads the framework's record of what is \
+         held, so asking before announcing returns the state from the previous event: a drag \
+         switches between move and swap one keystroke late, on the release rather than the press.",
+    );
+}
+
+/// **One door into the window tree, and no growing a second set beside it.**
+///
+/// There were eight `chrome_dispatch_*` functions, one per event kind, each rebuilding from a
+/// position what the event loop had just been told — and a caller then chose which to call.
+/// Choosing is how a kind goes missing: the chrome tree got the press and the move for years and
+/// neither the release nor the wheel, so a scrollbar grabbed in the sidebar could never be let go
+/// and the wheel did nothing there at all. Every guard above this one exists because of a kind
+/// somebody did not think to pass on.
+///
+/// So the kinds are gone and there is one `deliver`, taking whatever the loop built. This fails if
+/// a per-kind wrapper comes back — that is the shape to reject, before it has callers.
+#[test]
+fn the_window_tree_has_one_door_and_not_a_function_per_kind() {
+    let src = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/chrome/dispatch.rs"),
+    )
+    .expect("read the chrome dispatch module");
+
+    assert!(
+        src.contains("pub(crate) fn deliver("),
+        "`deliver` is gone — if the one door moved, move this guard with it rather than deleting it",
+    );
+
+    // Every tree the host mounts: the window root, the pane headers, the pane viewports. Each gets
+    // the event the loop built; none gets a function per kind. The header and viewport sets were
+    // the last per-kind survivors, and each spelled `PointerButton::Left` into every call — so a
+    // right-click could not reach a pane header at all.
+    let per_kind: Vec<_> = ["press", "release", "move", "wheel", "cancelled"]
+        .iter()
+        .flat_map(|kind| {
+            [
+                "chrome_dispatch_",
+                "dispatch_pane_header_",
+                "dispatch_pane_viewport_",
+            ]
+            .iter()
+            .map(move |prefix| format!("fn {prefix}{kind}("))
+        })
+        .filter(|sig| src.contains(sig.as_str()))
+        .collect();
+    assert!(
+        per_kind.is_empty(),
+        "a per-kind dispatch function is back in the chrome module: {per_kind:?}.\n\
+         The window tree takes the event the loop already built. A function per kind puts the \
+         caller in charge of which kinds get through, and the caller is where kinds go missing — \
+         silently, because a widget that never receives one lays out, paints and hit-tests \
+         perfectly while being dead.",
+    );
+}
+
+/// **The loop wakes for what the widgets are waiting for.**
+///
+/// Some behaviour is due at a *time* rather than on an event: a tooltip revealing once the pointer
+/// has rested, a caret blinking. A still pointer produces no events, so unless the loop asks, the
+/// frame that would draw it never happens — and the reveal waits for whatever the user does next.
+///
+/// The library has always had the answer (`Component::next_redraw`, folded down a whole tree and
+/// guarded by `a_pending_tooltip_asks_the_host_to_wake_for_it`). **The host simply never asked**, so
+/// a tooltip stayed hidden under a resting pointer and appeared the moment the mouse moved by a
+/// pixel — the nudge being what produced the frame (Antonio, driving, 2026-09-04). Only the showcase
+/// read it, which is why the widget's own tests were green throughout.
+///
+/// A lint, like the rest of this file: what it guards against is *absence*, and nothing fails when
+/// a question is not asked.
+#[test]
+fn the_loop_wakes_for_what_the_widgets_are_waiting_for() {
+    let lifecycle = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/app/lifecycle.rs");
+    let src = std::fs::read_to_string(&lifecycle).expect("lifecycle.rs is readable");
+    assert!(
+        src.contains("next_redraw_across_trees"),
+        "the frame loop decides when to wake without asking the widgets what they are waiting for; \
+         a tooltip under a resting pointer will never be drawn ({})",
+        lifecycle.display()
+    );
+    assert!(
+        src.contains("ControlFlow::WaitUntil"),
+        "…and it must schedule that wake, not merely compute it"
+    );
+    // **Scheduling is only half of it, and the half that is easy to think is the whole.** Arriving
+    // at the deadline, every reason-to-draw is false — the widget no longer reports a pending wake,
+    // because it is due *now* — so the loop wakes and goes straight back to sleep. The first attempt
+    // at this fix scheduled the wake correctly and changed nothing on screen for exactly that
+    // reason.
+    let needs_frame = src
+        .split_once("let needs_frame")
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .map(|(decl, _)| decl)
+        .expect("the frame loop decides with a `needs_frame`");
+    assert!(
+        needs_frame.contains("widget_due"),
+        "reaching a widget's wake is not itself a reason to draw, so the loop wakes for it and \
+         then does nothing"
     );
 }

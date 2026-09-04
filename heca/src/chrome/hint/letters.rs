@@ -74,14 +74,14 @@ fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> V
         out.extend(
             cands
                 .iter()
-                .map(|(ch, ws)| (Offer::ByKey(workspace_key(*ws)), *ch)),
+                .map(|(ch, _ws_idx, ws_id)| (Offer::ByKey(workspace_key(*ws_id)), *ch)),
         );
     }
     if let Some(cands) = mode.col_candidates() {
         out.extend(
             cands
                 .iter()
-                .map(|(ch, ws, col)| (Offer::ByKey(column_key(*ws, *col)), *ch)),
+                .map(|(ch, _ws_idx, _col_idx, col_id)| (Offer::ByKey(column_key(*col_id)), *ch)),
         );
     }
     // A dock names itself with `scope_key` rather than `key` — a container's identity, not a
@@ -192,7 +192,10 @@ fn offer_in_every_tree(
         }
     };
     for layer in state.layers.visible_front_to_back() {
-        if heca_grid_ui::offer_hint_by_key(layer.root(), key, label.clone()) {
+        let Some(node) = crate::chrome::surface_node(&state.window_root, layer.id) else {
+            continue;
+        };
+        if heca_grid_ui::offer_hint_by_key(node, key, label.clone()) {
             return true;
         }
     }
@@ -202,9 +205,7 @@ fn offer_in_every_tree(
     // early return here is what made a pane listed in BOTH sidebars get lettered in only one of
     // them (F003/P082, found by tracing `nodes naming it: chrome=2` while one letter went out).
     let mut offered = false;
-    if let Some(tree) = state.chrome_tree.as_ref() {
-        offered |= heca_grid_ui::offer_hint_by_key(&tree.root, key, label.clone());
-    }
+    offered |= heca_grid_ui::offer_hint_by_key(&state.window_root, key, label.clone());
     // **A pane behind a sidebar loses its letter — the pane, not the pick.** Its keycap draws on
     // the overlay layer, so it would land on top of the very thing covering it (Antonio, driving,
     // 2026-08-19). Its sidebar row is a second view of the same pane and IS visible, so it still
@@ -219,13 +220,6 @@ fn offer_in_every_tree(
             &shell.root,
             key,
             for_view(HintSurface::Pane(*pane_id)),
-        );
-    }
-    for (pane_id, header) in state.pane_headers.iter() {
-        offered |= heca_grid_ui::offer_hint_by_key(
-            &header.root,
-            key,
-            for_view(HintSurface::PaneHeader(*pane_id)),
         );
     }
     offered

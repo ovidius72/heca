@@ -150,6 +150,29 @@ show_top_bar = true    # the tab bar
 show_bottom_bar = true # the status bar
 
 # ─────────────────────────────────────────────────────────────────────────────
+[settings.notification_system]
+# ─────────────────────────────────────────────────────────────────────────────
+# In-app toast notifications (pane created, config reloaded, …).
+
+# Where a notification goes:
+#   "app"    (default) the in-app toast stack
+#   "system" OS / desktop notifications — RESERVED, falls back to "app" until the
+#            OS backend is built
+#   "none"   no notifications at all
+mode = "app"
+
+# How long a notification stays on screen before it dismisses itself, in
+# milliseconds. Applies to every notification that auto-dismisses; one a
+# producer marks sticky (e.g. an error you must acknowledge) ignores this, and
+# a notification that sets its own lifetime still wins.
+auto_dismiss_ms = 4000
+
+# How many notification cards are on screen at once. Further notifications queue in
+# the order they were raised — nothing is dropped. Closing one slides the cards
+# after it up so there is never a blank slot, and the next in line joins at the end.
+max_visible = 5
+
+# ─────────────────────────────────────────────────────────────────────────────
 [confirm]
 # ─────────────────────────────────────────────────────────────────────────────
 # Per-action confirmation prompts, keyed by action name. `true` pops a
@@ -223,6 +246,12 @@ background_transparency = 0
 # One of: none (default) | sidebar | hud_window | under_window_background |
 #         popover | menu | full_screen_ui | window_background
 # vibrancy = "under_window_background"
+
+# The `prefix+/` picker's letter size, in logical px. ONE size for every letter in
+# the app: a letter is drawn *over* whatever it points at, so it is not scaled by
+# the size of that thing — an emphasized header button and a whole pane wear the
+# same letter. Raise it if the letters read small at your font size.
+hint_font_size = 12.0
 
 # Effect tokens — override the theme; unset → inherit the theme value.
 # glow_size         : owns glow presence + halo radius + strength — including the

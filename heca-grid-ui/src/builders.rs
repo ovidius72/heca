@@ -11,7 +11,6 @@
 
 use crate::color::Color;
 use crate::component::Component;
-use crate::drag::DragItemId;
 use crate::reactive::SignalUpdate;
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify, Length, WidgetSize};
@@ -103,7 +102,9 @@ pub trait LayoutExt: Component + Sized {
     ///   (`layout::tests::a_percentage_margin_resolves_against_the_parents_width_on_both_axes`).
     ///
     /// The rect **overrides** [`width`](Self::width) / [`height`](Self::height): it names both, and
-    /// a leftover size beside it would draw a different rect than the one asked for.
+    /// a leftover size beside it would draw a different rect than the one asked for. **Except
+    /// where it says `Auto`** — an axis left auto has said *where*, not *how big*, so the widget's
+    /// own size stands there. That is what lets a caller place something without also resizing it.
     fn at_rect(
         mut self,
         left: impl Into<crate::style::Length>,
@@ -243,6 +244,16 @@ pub trait LayoutExt: Component + Sized {
     /// `flex_grow` distributes only *positive* free space, so growing alone never divides a region:
     /// a child keeps its content size and the row overflows. A true share is grow + a zero base
     /// size + this (CSS `flex: 1 1 0`).
+    /// **Let children that do not fit start a new line** (CSS `flex-wrap: wrap`).
+    ///
+    /// Off by default: most rows are a slot, a label and a slot, where a second line would be
+    /// nonsense. Turn it on for a row of *peers* — a set of action buttons, a tag list — where
+    /// the alternative when the box gets narrow is squeezing every one of them to an ellipsis.
+    fn wrap(mut self, wrap: bool) -> Self {
+        self.base_mut().style.layout.wrap = wrap;
+        self
+    }
+
     fn shrink(mut self, s: f32) -> Self {
         self.base_mut().style.layout.flex_shrink = Some(s);
         self
@@ -450,16 +461,71 @@ impl<F: Fn() -> crate::widgets::ContextMenu> IntoContextMenu for F {
 /// only (a `Label` has no `.child()`).
 pub trait ComponentExt: Component + Sized {
 
-    /// Make this widget a **drag source** carrying `id`. A press inside its bounds
-    /// can begin a drag; the app maps `id` back to the dragged thing.
-    fn draggable(mut self, id: DragItemId) -> Self {
-        self.base_mut().drag_source = Some(id);
+    /// **This widget can be dragged**, and what gets dragged is the identity it already declares
+    /// with [`key`](ComponentExt::key) — the same one the keyboard cursor and the right-click
+    /// target read.
+    ///
+    /// ```ignore
+    /// Row::new().key("pane:7").draggable().drop_target()
+    /// ```
+    ///
+    /// One declaration, and nothing to hand out: it took an opaque id from a host registry before,
+    /// beside a closed list of which surfaces were even allowed to drag — so a row named itself
+    /// twice and a plugin's row could not be named at all. A widget with no `key` is not a drag
+    /// source; there would be nothing to say about what was picked up.
+    fn draggable(mut self) -> Self {
+        self.base_mut().draggable = true;
         self
     }
-    /// Make this widget a **drop target** identified by `id`. A drag released over
-    /// its bounds drops onto `id`.
-    fn drop_target(mut self, id: DragItemId) -> Self {
-        self.base_mut().drop_target = Some(id);
+    /// **This widget can be dragged, and it says what it is** — an opaque word its component
+    /// chose (`"pane"`, `"column"`, `"docker.container"`), so a target can take some things and
+    /// refuse others.
+    ///
+    /// ```ignore
+    /// Row::new().key("col:3").draggable_as("column").drop_target().accepts(["column"])
+    /// ```
+    ///
+    /// Say nothing and every target takes it, which is what [`draggable`](Self::draggable) alone
+    /// means. The word is never interpreted by the library, and it is not from a list the library
+    /// knows — a closed set is one a plugin cannot join.
+    fn draggable_as(mut self, kind: impl Into<String>) -> Self {
+        let b = self.base_mut();
+        b.draggable = true;
+        b.drag_kind = Some(kind.into());
+        self
+    }
+    /// **This widget accepts drops**, identified the same way — by its
+    /// [`key`](ComponentExt::key). A drag released over its bounds drops onto it, with the side
+    /// (before / onto / after) computed from where in its bounds the pointer sits.
+    fn drop_target(mut self) -> Self {
+        self.base_mut().drop_target = true;
+        self
+    }
+    /// **What this target takes**, by the words a drag source names itself with
+    /// ([`draggable_as`](Self::draggable_as)). Anything else is refused *before* it is drawn on, so
+    /// a line never appears over something that would then do nothing.
+    ///
+    /// Declaring nothing takes anything. Implies [`drop_target`](Self::drop_target), because a
+    /// widget saying what it takes has said it takes something.
+    fn accepts(mut self, kinds: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let b = self.base_mut();
+        b.drop_target = true;
+        b.accepts = kinds.into_iter().map(Into::into).collect();
+        b.accepts_onto = true;
+        self
+    }
+    /// **What this target takes *beside* itself** — for a sibling in an ordered list, where being
+    /// dropped *onto* it means nothing.
+    ///
+    /// A column dropped on a column is a reorder: it can only land before or after, so the target
+    /// reads as two halves and the line flips at the midpoint — never a third band that silently
+    /// picks one for you. Use [`accepts`](Self::accepts) where the middle is real, as a pane is for
+    /// another pane, which it swaps or moves onto.
+    fn accepts_beside(mut self, kinds: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let b = self.base_mut();
+        b.drop_target = true;
+        b.accepts = kinds.into_iter().map(Into::into).collect();
+        b.accepts_onto = false;
         self
     }
 
@@ -469,6 +535,17 @@ pub trait ComponentExt: Component + Sized {
     /// drag identity. The string is **opaque to the library** — only the component that wrote it
     /// and the host routing back to that component ever interpret it — and it must be stable across
     /// tree rebuilds, which is what lets a cursor survive one. See [`crate::nav`].
+    /// **Let the pointer pass through this widget** — it draws, but it is not a target, and nor is
+    /// anything inside it (CSS `pointer-events: none`).
+    ///
+    /// For decoration that stands in for something else: an echo of a value shown inside the
+    /// control that owns it. Without it the echo hovers and clicks in its own right, and the
+    /// control ends up wearing two highlights.
+    fn pointer_transparent(mut self, transparent: bool) -> Self {
+        self.base_mut().pointer_transparent = transparent;
+        self
+    }
+
     fn key(mut self, key: impl Into<String>) -> Self {
         self.base_mut().key = Some(key.into());
         self
@@ -772,6 +849,58 @@ pub trait ComponentExt: Component + Sized {
     #[heca_grid_ui_macros::prop]
     fn hintable(mut self, yes: bool) -> Self {
         self.base_mut().hintable = yes;
+        self
+    }
+
+    /// **What this widget says on hover.**
+    ///
+    /// ```ignore
+    /// Button::new("Close").icon(Glyph::Minus).tooltip("Close the pane")
+    /// ```
+    ///
+    /// One line, on the widget, on **every** widget — and the framework owns the rest: the reveal
+    /// delay is timed off the hover clock the pointer router already keeps, and the bubble is drawn
+    /// in the one place every widget passes through, beside the hint letter and the drag feedback.
+    ///
+    /// It used to be a wrapper you put *around* the widget
+    /// ([`Tooltip`](crate::widgets::Tooltip)), which put the rule in every caller's discipline —
+    /// the showcase wraps four buttons in four tooltips in a row — and made a tooltip impossible on
+    /// a widget held by a typed container, because wrapping it changes what it is. The wrapper
+    /// survives only for a region that is not a widget you can put a builder on, exactly as
+    /// [`KeyHint`](crate::widgets::KeyHint) did when the pick declaration moved onto every widget.
+    #[heca_grid_ui_macros::prop]
+    fn tooltip(mut self, text: impl Into<String>) -> Self {
+        self.base_mut().tooltip = Some(crate::widgets::tooltip::Tip::new(text));
+        self
+    }
+
+    /// **A tooltip whose words are live** — an action's current keybinding, a changing status — so
+    /// the bubble follows the signal without the widget being rebuilt.
+    fn tooltip_signal(mut self, text: crate::reactive::Signal<String>) -> Self {
+        self.base_mut().tooltip = Some(crate::widgets::tooltip::Tip::from_signal(text));
+        self
+    }
+
+    /// Which side of this widget its tooltip anchors to (default `Top`). Flipped automatically
+    /// when there is no room on that side, so this is a preference, not a placement.
+    ///
+    /// No-op when the widget has declared no tooltip — the side is part of the tip, not a style of
+    /// its own.
+    #[heca_grid_ui_macros::prop]
+    fn tooltip_side(mut self, side: crate::widgets::tooltip::TooltipSide) -> Self {
+        if let Some(tip) = self.base_mut().tooltip.as_mut() {
+            tip.side = side;
+        }
+        self
+    }
+
+    /// Seconds the pointer must rest before this widget's tooltip appears (default `0.5`).
+    /// No-op when the widget has declared no tooltip.
+    #[heca_grid_ui_macros::prop]
+    fn tooltip_delay(mut self, seconds: f32) -> Self {
+        if let Some(tip) = self.base_mut().tooltip.as_mut() {
+            tip.delay = seconds.max(0.0);
+        }
         self
     }
 

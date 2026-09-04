@@ -140,6 +140,33 @@ pub fn handle_focus_workspace(state: &mut AppState, action: &WmAction) {
 
 // ── Layout ──
 
+/// Announce a freshly created pane — F009/T493, the first real producer on the public
+/// [`Notification`](crate::notification::Notification) builder.
+///
+/// Every user-initiated creation path (horizontal / vertical split, add-to-column, new
+/// workspace, spawn-command) calls this once, so the message and the decision to raise it live
+/// in one place rather than five. A just-spawned pane has no name until the user renames it
+/// (`pane_name` is empty by design), so it is identified by its id — the same monotonic id the
+/// pane selector and RPC use.
+///
+/// Carries a **Focus** action: its [`Intent`](heca_view::Intent) is `focus_pane` keyed to this
+/// id, so a `prefix+/` pick (or a click, once the toast layer is wired for the pointer — F009/
+/// T207) moves focus to the new pane and dismisses the toast.
+fn announce_pane_created(pane_id: u64) {
+    use crate::notification::{Notification, NotificationAction};
+    use heca_view::{Intent, PropValue};
+
+    Notification::info(format!("Pane {pane_id} created"))
+        .action(
+            NotificationAction::new(
+                "Focus",
+                Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane_id as i64)),
+            )
+            .dismiss_after(true),
+        )
+        .send();
+}
+
 pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
     let active_ws = state.session.active_workspace_idx;
     let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
@@ -152,6 +179,7 @@ pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
@@ -173,6 +201,7 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 pub fn handle_resize_increase(state: &mut AppState, _action: &WmAction) {
@@ -349,8 +378,10 @@ pub fn handle_move_pane_left(state: &mut AppState, action: &WmAction) {
     if let WmAction::MovePaneLeft { pane_id: Some(id) } = action {
         focus_pane_by_id(state, *id);
     }
+    // Allocated before the workspace is borrowed; spent only if the move creates a column.
+    let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
     if let Some(ws) = state.session.active_workspace_mut() {
-        ws.scrolling.move_active_pane_left();
+        ws.scrolling.move_active_pane_left(new_column_id);
     }
     after_layout_change(state);
 }
@@ -359,8 +390,9 @@ pub fn handle_move_pane_right(state: &mut AppState, action: &WmAction) {
     if let WmAction::MovePaneRight { pane_id: Some(id) } = action {
         focus_pane_by_id(state, *id);
     }
+    let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
     if let Some(ws) = state.session.active_workspace_mut() {
-        ws.scrolling.move_active_pane_right();
+        ws.scrolling.move_active_pane_right(new_column_id);
     }
     after_layout_change(state);
 }
@@ -567,28 +599,49 @@ pub fn handle_move_pane_to_column(state: &mut AppState, action: &WmAction) {
 pub fn handle_resize(state: &mut AppState, action: &WmAction) {
     let WmAction::Resize {
         target,
-        axis,
         amount,
+        edge,
     } = action
     else {
         return;
     };
     if let Some(ws) = state.session.active_workspace_mut() {
-        match (target, axis) {
-            (crate::input::ResizeTarget::Column, crate::input::ResizeAxis::X) => {
+        // **The target decides the axis.** A column is resized across, a pane down — there was an
+        // `axis` argument saying so as well, and it could only ever repeat the target or name a
+        // combination that silently did nothing (`column`+`y`, `pane`+`x`). A key that quietly does
+        // nothing is worse than one that is refused, and the argument was never a choice
+        // (Antonio, 2026-09-04).
+        match target {
+            crate::input::ResizeTarget::Column => {
                 let delta_f = *amount / 1000.0;
-                ws.scrolling.resize_active_column(delta_f);
+                // **Which of the column's two edges**, the same question a pane answers. A column's
+                // left edge is the right edge of the column before it, so `Left` moves that
+                // boundary; the scrolling space owns what each edge means.
+                match edge {
+                    crate::input::ResizeEdge::Left => {
+                        ws.scrolling.move_active_column_left_boundary(delta_f)
+                    }
+                    _ => ws.scrolling.resize_active_column(delta_f),
+                }
             }
-            (crate::input::ResizeTarget::Pane, crate::input::ResizeAxis::Y) => {
+            crate::input::ResizeTarget::Pane => {
                 let h = ws.scrolling.working_area.size.h;
                 let gaps = ws.scrolling.options.gaps;
                 if let Some(col) = ws.scrolling.active_column_mut() {
                     // A boundary and a direction, not "grow me": positive is down, whichever pane
                     // is active. `resize` is a *directional* verb — see `move_pane_boundary`.
-                    col.move_active_pane_boundary(*amount, h, gaps);
+                    //
+                    // **Which of the pane's two edges** is the caller's to say. `Auto` is the edge
+                    // the pane already owned. The column owns what each edge *means*; this only
+                    // names one.
+                    match edge {
+                        crate::input::ResizeEdge::Top => {
+                            col.move_active_pane_top_boundary(*amount, h, gaps)
+                        }
+                        _ => col.move_active_pane_boundary(*amount, h, gaps),
+                    }
                 }
             }
-            _ => {} // Column-Y and Pane-X are not yet implemented
         }
     }
     state.needs_redraw = true;
@@ -665,6 +718,9 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
         None => return,
     };
     let is_flt = pane_is_floating(&state.session, pane_id);
+    // Allocated before the workspace is borrowed; spent only if unfloating has to rebuild the
+    // column this pane came from. A derived id could collide with a column that still exists.
+    let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
 
     if let Some(ws) = state.session.active_workspace_mut() {
         let wa = ws.scrolling.working_area;
@@ -690,7 +746,7 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                         ws.scrolling.add_column(
                             None,
                             Column::new(
-                                ColumnId(pane_id.0),
+                                new_column_id,
                                 float.pane,
                                 chrome::default_column_width(),
                             ),
@@ -701,7 +757,7 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                     ws.scrolling.add_column(
                         None,
                         Column::new(
-                            ColumnId(pane_id.0),
+                            new_column_id,
                             float.pane,
                             chrome::default_column_width(),
                         ),
@@ -1008,6 +1064,18 @@ pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction)
     }
 }
 
+/// **Move a mounted container's cursor to the row named by `key`** — the generic form of a click
+/// on a row, and of any other gesture that means "the cursor belongs here now".
+///
+/// It moves the cursor and nothing else. Activating the row, focusing a pane or handing the
+/// keyboard back are separate acts with separate names; a gesture that wants one of those says so.
+pub fn handle_cursor_to(state: &mut AppState, action: &WmAction) {
+    let WmAction::CursorTo { mount, key } = action else {
+        return;
+    };
+    crate::providers::move_provider_cursor(state, mount, key);
+}
+
 /// Apply a rename to `target`: an empty `new_name` clears the custom override (the item goes
 /// back to its default / process-tracked name). Searches all workspaces so a by-id pane rename
 /// works regardless of the active workspace.
@@ -1307,6 +1375,7 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 /// Add a new column to a specific workspace (sidebar right-click context menu).
@@ -1583,6 +1652,7 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
         state.expose_cursor_per_ws.push(None);
     }
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 /// Open the rename dialog for workspace `ws_idx`, pre-filled with its current name. Shared by
@@ -2174,8 +2244,10 @@ pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &Wm
 ///
 /// No overlay up is a no-op, which is what makes binding Escape to it harmless.
 pub fn handle_close_overlay(state: &mut AppState, _action: &WmAction) {
-    let Some(id) = state.layers.top_modal_id() else { return };
-    state.layers.hide(id);
+    let Some(id) = state.layers.top_modal_id(&state.window_root) else {
+        return;
+    };
+    state.layers.hide(&mut state.window_root, id);
     state.needs_redraw = true;
 }
 
@@ -2195,10 +2267,10 @@ pub fn handle_layer_visibility(state: &mut AppState, action: &WmAction) {
         crate::chrome::rebuild_named_layer(state, name);
     }
     let Some(id) = state.layers.by_name(name) else { return };
-    let show = show.unwrap_or(!state.layers.is_visible_named(name));
+    let show = show.unwrap_or(!state.layers.is_visible_named(&state.window_root, name));
     match show {
-        true => state.layers.show(id),
-        false => state.layers.hide(id),
+        true => state.layers.show(&mut state.window_root, id),
+        false => state.layers.hide(&mut state.window_root, id),
     }
     state.needs_redraw = true;
 }
@@ -2233,6 +2305,21 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
 
     let active_ws = state.session.active_workspace_idx;
     let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
+
+    // Build the backend before touching the layout — a spawn that fails (F009/P055/T225)
+    // should not leave an empty pane behind.
+    let backend = match create_command_backend_for_state(state, cols, rows, command) {
+        Ok(backend) => backend,
+        Err(e) => {
+            crate::notification::Notification::danger(format!("Couldn't run '{command}'"))
+                .body(e)
+                .dedup_key(format!("spawn.failed:{command}"))
+                .sticky()
+                .send();
+            return;
+        }
+    };
+
     let next_id = state.session.next_id();
     let mut pane = LayoutPane::new(PaneId(next_id), command.clone());
     pane.close_policy = *close_policy;
@@ -2259,11 +2346,9 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     } else {
         state.session.add_pane(pane, None, true);
     }
-    state.backends.insert_for_pane(
-        PaneId(next_id),
-        create_command_backend_for_state(state, cols, rows, command),
-    );
+    state.backends.insert_for_pane(PaneId(next_id), backend);
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 // ── Mode ──
@@ -2652,7 +2737,7 @@ fn scroll_focused_dock(state: &mut AppState, intent: heca_grid_ui::WidgetIntent)
     if state.chrome_state.focused_container().is_none() {
         return false;
     }
-    crate::chrome::chrome_dispatch_widget(state, intent);
+    crate::chrome::deliver(state, &heca_grid_ui::Event::Widget(intent));
     state.needs_redraw = true;
     true
 }
@@ -2772,6 +2857,67 @@ pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) {
 
 pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {
     state.pending_reload = true;
+}
+
+// ── Notifications (F009) ──
+
+/// Dismiss one notification by id — the toast's own × (a real, automatically-pickable
+/// `Button`), or RPC/a plugin naming a specific id. No default keybinding: a keypress cannot
+/// supply an id.
+pub fn handle_notification_dismiss_one(state: &mut AppState, action: &WmAction) {
+    let WmAction::NotificationDismissOne { notification_id } = action else {
+        return;
+    };
+    let id = crate::notification::NotificationId::from_raw(*notification_id);
+    state.notifications.dismiss_one(id, std::time::Instant::now());
+    state.needs_redraw = true;
+}
+
+/// Dismiss every currently visible notification — no on-screen control; reachable from the
+/// command palette, a keybinding, and RPC.
+pub fn handle_notification_dismiss_all(state: &mut AppState, _action: &WmAction) {
+    state.notifications.dismiss_all(std::time::Instant::now());
+    state.needs_redraw = true;
+}
+
+/// Dismiss the first eligible visible notification in stable toast order.
+pub fn handle_notification_dismiss_last(state: &mut AppState, _action: &WmAction) {
+    state.notifications.dismiss_last(std::time::Instant::now());
+    state.needs_redraw = true;
+}
+
+/// Toggle the scoped picker over the visible toast actions/×, in addition to (never instead
+/// of) their global `prefix+/` letters. `KeyHintGroup::open_when` reads this signal directly.
+pub fn handle_notification_pick(state: &mut AppState, _action: &WmAction) {
+    use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
+    let open = state.notification_pick_open.get_untracked();
+    state.notification_pick_open.set(!open);
+    state.needs_redraw = true;
+}
+
+/// Resolve `ToastStack::on_action(id, key)` (relayed as this action by the mount, since a
+/// notification's real Intent cannot be known until the notification exists — see
+/// chrome::notification_layer) into the notification's real `Intent` and fire it through the
+/// same layer_emitter the mount built, landing on the event loop's next turn.
+pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction) {
+    let WmAction::NotificationActionRelay { notification_id, key } = action else {
+        return;
+    };
+    let id = crate::notification::NotificationId::from_raw(*notification_id);
+    let Some((intent, dismiss_after)) = state.notifications.action_and_dismiss_after_for_visible(id, key) else {
+        return;
+    };
+    // Fired **as the stack**, so the relayed intent is judged exactly as the click that asked for
+    // it was — the surface's identity comes from its own constant, not from an id someone kept.
+    let emit = crate::chrome::layer_emitter(
+        &state.event_proxy,
+        crate::chrome::notification_surface_key(),
+    );
+    emit.fire(crate::app::interaction::InteractionIntent::View(intent));
+    if dismiss_after {
+        state.notifications.dismiss_one(id, std::time::Instant::now());
+        state.needs_redraw = true;
+    }
 }
 
 /// Resolve a [`FontZoomStep`] into a signed point delta using the configured step
@@ -3018,7 +3164,8 @@ pub fn handle_set_chrome_region_shown(state: &mut AppState, action: &WmAction) {
         Region::Bottom => state.show_bottom_bar = new_val,
     }
     // Geometry changed → recompute the real viewport + force a full chrome rebuild
-    // (mirrors the reload path in `main.rs`).
+    // (mirrors the reload path in `main.rs`). Drops the build, never the window root, so any
+    // surface that is up rides through it.
     crate::app::render::update_session_viewport(state);
     state.chrome_tree = None;
     state.needs_redraw = true;
@@ -3228,6 +3375,38 @@ mod letter_memory_tests {
         let remembered = remember(&[("dup", 'a')]);
         let got = assign_letters(&ids(&["dup", "dup"]), &remembered);
         assert_eq!(got, vec![Some('a'), Some('s')]);
+    }
+
+    /// **Open the picker, close it, open it again: the same letters.**
+    ///
+    /// This walks the full round `handle_hint_pick` performs — assign, then remember — twice over
+    /// an unchanged set of targets, which is exactly what two presses do. The single-pass tests
+    /// above cannot see this: the defect only appears once the remember step has written back.
+    ///
+    /// **It holds only while every target has a distinct name, and that is not this function's to
+    /// guarantee.** Given two targets with one name, both ask for the same remembered letter, the
+    /// first takes it, the second is refused and draws a fresh one — and the remember step then
+    /// saves the loser's letter, so the next opening trades them back, forever. That is why the
+    /// invariant is enforced where names are built (`heca_grid_ui::nav::identity_of`) rather than
+    /// patched here: no assignment rule can tell apart two things that claim to be the same thing.
+    #[test]
+    fn two_openings_of_an_unchanged_picker_hand_out_the_same_letters() {
+        let identities = ids(&["ws:0", "ws:0/pane:2", "ws:0/pane:3"]);
+        let mut remembered: HashMap<String, char> = HashMap::new();
+
+        // Press 1 — assign, then remember, the way `handle_hint_pick` does.
+        let first = assign_letters(&identities, &remembered);
+        remembered.extend(
+            identities
+                .iter()
+                .zip(first.iter())
+                .filter_map(|(id, ch)| Some((id.clone()?, (*ch)?))),
+        );
+
+        // Esc, then press 2 — nothing about the targets has changed.
+        let second = assign_letters(&identities, &remembered);
+
+        assert_eq!(second, first, "a second opening must repeat the first's letters");
     }
 
     /// A target with no identity cannot be remembered, but still gets a letter — it just gets a

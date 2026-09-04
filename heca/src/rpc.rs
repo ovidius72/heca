@@ -360,17 +360,6 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
                     });
                 }
             };
-            let axis_arg = expect_arg!("axis");
-            let axis = match axis_arg.to_lowercase().as_str() {
-                "x" | "horizontal" | "width" => crate::input::ResizeAxis::X,
-                "y" | "vertical" | "height" => crate::input::ResizeAxis::Y,
-                _ => {
-                    return Err(RpcError::ParseInt {
-                        cmd: cmd.clone(),
-                        value: axis_arg.to_string(),
-                    });
-                }
-            };
             let amount_arg = expect_arg!("amount");
             let amount = amount_arg
                 .parse::<f64>()
@@ -378,10 +367,22 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
                     cmd: cmd.clone(),
                     value: amount_arg.to_string(),
                 })?;
+            // **Optional, and trailing** — every existing `resize` call keeps working, and one that
+            // wants a particular edge names it. An unknown value is a mistake, not a default.
+            let edge = match parts.next() {
+                Some(raw) => {
+                    raw.parse::<crate::input::ResizeEdge>()
+                        .map_err(|_| RpcError::ParseInt {
+                            cmd: cmd.clone(),
+                            value: raw.to_string(),
+                        })?
+                }
+                None => crate::input::ResizeEdge::Auto,
+            };
             Ok(WmAction::Resize {
                 target,
-                axis,
                 amount,
+                edge,
             })
         }
         "resize-column" => {
@@ -555,6 +556,25 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         }),
         // …and the way back: the keyboard returns to the focused pane.
         "unfocus-dock" => Ok(WmAction::UnfocusDock),
+        // Put a container's cursor on a named row. Both arguments are REQUIRED — a cursor move
+        // with no target is not a cursor move, and an omitted mount would silently pick nothing.
+        "cursor-to" => {
+            let mount = parts
+                .next()
+                .ok_or_else(|| RpcError::MissingArgument {
+                    cmd: "cursor-to".into(),
+                    arg: "mount".into(),
+                })?
+                .to_string();
+            let key = parts
+                .next()
+                .ok_or_else(|| RpcError::MissingArgument {
+                    cmd: "cursor-to".into(),
+                    arg: "key".into(),
+                })?
+                .to_string();
+            Ok(WmAction::CursorTo { mount, key })
+        }
         // Forget a search memory. The scope is optional in the same way: omitted, every search
         // surface is forgotten.
         "clear-search-history" => Ok(WmAction::ClearSearchHistory {
@@ -998,20 +1018,44 @@ mod tests {
     #[test]
     fn test_resize() {
         assert_eq!(
-            parse_rpc_command("resize column x 50"),
+            parse_rpc_command("resize column 50"),
             Ok(WmAction::Resize {
                 target: ResizeTarget::Column,
-                axis: crate::input::ResizeAxis::X,
                 amount: 50.0,
+                edge: crate::input::ResizeEdge::Auto,
             }),
         );
         assert_eq!(
-            parse_rpc_command("resize pane y -25"),
+            parse_rpc_command("resize pane -25"),
             Ok(WmAction::Resize {
                 target: ResizeTarget::Pane,
-                axis: crate::input::ResizeAxis::Y,
                 amount: -25.0,
+                edge: crate::input::ResizeEdge::Auto,
             }),
+        );
+
+        // **Which edge moves is reachable over RPC too**, as a trailing argument — so a script can
+        // do everything a key can, which is the rule for every capability here. Omitting it is what
+        // the two calls above do, and they keep the behaviour they always had.
+        assert_eq!(
+            parse_rpc_command("resize pane -40 top"),
+            Ok(WmAction::Resize {
+                target: ResizeTarget::Pane,
+                amount: -40.0,
+                edge: crate::input::ResizeEdge::Top,
+            }),
+        );
+        assert_eq!(
+            parse_rpc_command("resize column 50 left"),
+            Ok(WmAction::Resize {
+                target: ResizeTarget::Column,
+                amount: 50.0,
+                edge: crate::input::ResizeEdge::Left,
+            }),
+        );
+        assert!(
+            parse_rpc_command("resize column 50 sideways").is_err(),
+            "an edge nobody has heard of is a mistake, not a silent default"
         );
     }
 

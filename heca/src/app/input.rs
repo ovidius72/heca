@@ -128,9 +128,9 @@ pub(crate) fn handle_keyboard_input(
             {
                 // A layer's intents are stamped with the surface that owns them, which is what lets
                 // the policy tell the map acting on itself from the app being driven behind it.
-                let source = match state.layers.top_modal_id() {
+                let source = match state.layers.top_modal_id(&state.window_root) {
                     Some(id) if matches!(surface, FocusedSurface::Layer { .. }) => {
-                        InteractionSource::Surface(id)
+                        InteractionSource::Surface(state.layers.surface_key(id))
                     }
                     _ => InteractionSource::Keyboard,
                 };
@@ -342,7 +342,7 @@ fn floor_action(
 /// Which surface holds the keyboard, read off the session — the whole of [`AppState`] this rule
 /// needs, so [`surface_action`] can stay a pure function of plain data.
 pub(crate) fn focused_surface(state: &AppState) -> FocusedSurface {
-    if let Some(id) = state.layers.top_modal_id() {
+    if let Some(id) = state.layers.top_modal_id(&state.window_root) {
         return FocusedSurface::Layer {
             name: state.layers.name_of(id),
         };
@@ -714,7 +714,7 @@ fn handle_pane_take_mode(
 fn handle_workspace_pick_mode(
     registry: &ActionRegistry,
     state: &mut AppState,
-    candidates: &[(char, usize)],
+    candidates: &[(char, usize, heca_core::layout::WorkspaceId)],
     target: WorkspacePickTarget,
     ctx: KeyInputContext<'_>,
 ) {
@@ -723,7 +723,7 @@ fn handle_workspace_pick_mode(
 
     let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
-        && let Some((_, target_ws)) = candidates.iter().find(|(c, _)| *c == ch)
+        && let Some((_, target_ws, _)) = candidates.iter().find(|(c, ..)| *c == ch)
     {
         let target_ws = *target_ws;
         let action = match target {
@@ -759,7 +759,7 @@ fn handle_workspace_pick_mode(
 fn handle_column_pick_mode(
     registry: &ActionRegistry,
     state: &mut AppState,
-    candidates: &[(char, usize, usize)],
+    candidates: &[(char, usize, usize, heca_core::layout::ColumnId)],
     pane_id: PaneId,
     ctx: KeyInputContext<'_>,
 ) {
@@ -768,7 +768,7 @@ fn handle_column_pick_mode(
 
     let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
-        && let Some((_, ws_idx, col_idx)) = candidates.iter().find(|(c, _, _)| *c == ch)
+        && let Some((_, ws_idx, col_idx, _)) = candidates.iter().find(|(c, ..)| *c == ch)
     {
         dispatch_action(
             state,

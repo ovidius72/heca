@@ -46,6 +46,34 @@ use heca_core::layout::{FocusDomain, PaneId};
 // Interaction source
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// **Which surface an intent was declared on** — the identity
+/// [`InteractionSource::Surface`] carries.
+///
+/// Derived from the surface's own **key**, never handed out. That matters because a surface is
+/// moving from the layer registry into the one retained tree (`docs/surface-compositor.md` § 0.8):
+/// a `LayerId` stops existing the moment it is a node, while the key it declares on itself survives
+/// the move — and is the same identity the picker, the drag registry and a row's `key` already use.
+///
+/// **Nobody constructs one to get a capability.** The host derives it when it builds a surface's
+/// emitter, exactly as it stamped the id before, so a plugin declares a handler on its widget and
+/// the framework says where the intent came from (⭐⭐ RULE ZERO).
+///
+/// A `u64` rather than the string so [`InteractionSource`] stays `Copy` — it is stored on the
+/// retained chrome and copied through 170-odd call sites, and making it allocate to answer "who
+/// asked" would be a heavy price for an equality check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct SurfaceKey(u64);
+
+impl SurfaceKey {
+    /// The key a surface declares on itself, reduced to the value the policy compares.
+    pub(crate) fn of(key: &str) -> Self {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        key.hash(&mut h);
+        Self(h.finish())
+    }
+}
+
 /// Where did the interaction come from?
 ///
 /// Different sources may have different policy for the same action.
@@ -82,10 +110,14 @@ pub(crate) enum InteractionSource {
     /// own `x` must still delete the card the cursor is on. Both arrive as keys; only the surface
     /// they were declared on separates them.
     ///
-    /// The host stamps this when it builds a layer's emitter, so a plugin's layer is judged the
+    /// The host stamps this when it builds a surface's emitter, so a plugin's surface is judged the
     /// same way without constructing anything: it declares a handler on its widget and the
     /// framework says where the intent came from.
-    Surface(crate::chrome::LayerId),
+    ///
+    /// It carries the surface's [`SurfaceKey`] rather than a registry id, because a surface that
+    /// has moved into the one retained tree has no registry id to be named by — only the key it
+    /// declares on itself.
+    Surface(SurfaceKey),
     // Future sources — not implemented yet:
     // MouseRightSidebar,
     // MouseTopMenu,
@@ -224,7 +256,7 @@ pub(crate) enum Domain {
 /// - otherwise the session's own `Tiled | Floating`.
 pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain {
     if base_context_is_dormant(
-        state.layers.top_modal_id(),
+        state.layers.top_modal_id(&state.window_root).map(|id| state.layers.surface_key(id)),
         crate::chrome::content_covered(state),
         source,
     ) {
@@ -245,7 +277,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
     // in the wrong place: it also ate `q` and `Esc`, which are catalogued actions the host resolves
     // (F004/P084/T400). Here the layer claims only the keyboard, and `ActionPolicy` decides the
     // rest — `Global` actions still run, `ContainerFocused` ones do not.
-    let modal_holds_keyboard = state.layers.top_modal_id().is_some();
+    let modal_holds_keyboard = state.layers.top_modal_id(&state.window_root).is_some();
     if keyboard_driven
         && !modal_holds_keyboard
         && state.chrome_state.focused_container().is_some()
@@ -280,7 +312,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
 /// the point (Antonio: *"each overlay might use its own actions and keybindings so we risk blocking
 /// future actions"*).
 fn base_context_is_dormant(
-    active_context: Option<crate::chrome::LayerId>,
+    active_context: Option<SurfaceKey>,
     content_covered: bool,
     source: InteractionSource,
 ) -> bool {
@@ -483,6 +515,13 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // ReloadConfig reloads config from disk — no tiled/floating layout impact,
         // so it must stay reachable while a floating pane is active (hot-reload).
         WmAction::ReloadConfig => ActionPolicy::Global,
+        // Dismissing/picking a notification touches no layout and no pane — a toast can be up
+        // over a floating pane just as easily as a tiled one, and must stay reachable (F009).
+        WmAction::NotificationDismissOne { .. }
+        | WmAction::NotificationDismissAll
+        | WmAction::NotificationDismissLast
+        | WmAction::NotificationPick
+        | WmAction::NotificationActionRelay { .. } => ActionPolicy::Global,
         // Forgetting a search memory touches no layout and no pane, so there is no domain in which
         // it should be refused.
         WmAction::ClearSearchHistory { .. } | WmAction::ClearSearchRanking { .. } => {
@@ -517,6 +556,25 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // **Releasing** chrome focus is always allowed, in every domain. It is the way back to the
         // main region, and a way out that can be blocked is not a way out — the same reason `Esc`
         // is a guarantee rather than a default (F003/P086/T363).
+        // **The container-cursor family** — permitted only while a dock is being driven
+        // (`Domain::Container`), which is what keeps "put the cursor on that row" out of the
+        // command palette and RPC while nobody is in a dock. A click on a row emits
+        // [`WmAction::FocusDock`] first, so the domain is `Container` by the time this runs.
+        // **Moving a container's cursor is the container's own state, not an act on anything.**
+        // It was `ContainerFocused`, which exists to stop "delete the row my cursor is on" being
+        // asked from the palette or over RPC while the dock is not being driven. This is not that
+        // kind of request: it changes no pane, no column and no layout — it only records which row
+        // the cursor is on, so there is nothing for a focus domain to protect.
+        //
+        // The gate had a real cost. Clicking a sidebar row focuses the *pane*, so by the time the
+        // cursor move was judged the container no longer held the keyboard and it was refused —
+        // the click focused the pane but left the cursor behind, and arrowing afterwards resumed
+        // from wherever it had been. A row should behave like a file manager's: click it, then go
+        // up and down from there (Antonio, driving, 2026-09-02).
+        //
+        // `Global`, not `AlwaysAllowed`: a floating pane is no reason to refuse moving a dock's
+        // cursor, and `AlwaysAllowed` is refused while something covers the content.
+        WmAction::CursorTo { .. } => ActionPolicy::Global,
         WmAction::UnfocusDock => ActionPolicy::Global,
         // Horizontal scroll reaches a chrome container's scroll area only — chrome state, no pane
         // layout impact — so it stays reachable while a floating pane is active, unlike the vertical
@@ -888,7 +946,7 @@ pub(crate) fn dispatch_intent(
         // resolved as a dismissal, which is what pops it and runs its completion.
         let overlay = match overlay {
             Some(id) => id,
-            None => match state.layers.top_modal_id() {
+            None => match state.layers.top_modal_id(&state.window_root) {
                 Some(id) => crate::chrome::OverlayId(id),
                 None => return,
             },
@@ -917,6 +975,10 @@ pub(crate) fn dispatch_intent(
         );
         return;
     }
+    // Kept for the debug line below: routing consumes the intent, and a refusal that cannot name
+    // what was refused is not actionable.
+    #[cfg(debug_assertions)]
+    let refused = intent.clone();
     let decision = route_interaction(state, source, intent);
 
     match decision {
@@ -959,8 +1021,12 @@ pub(crate) fn dispatch_intent(
             dispatch_view_intent(state, registry, source, &vi);
         }
         RouteDecision::Block => {
+            // **Say WHAT was refused, not only who asked.** The source alone cannot be acted on: a
+            // single click can send more than one intent, so identical lines may be different
+            // refusals — and one of them being correct says nothing about the others
+            // (Antonio, driving, 2026-09-02).
             #[cfg(debug_assertions)]
-            eprintln!("[heca] interaction: blocked intent from {:?}", source);
+            eprintln!("[heca] interaction: blocked {refused:?} from {source:?}");
         }
     }
 }
@@ -1559,9 +1625,11 @@ mod tests {
         ));
     }
 
-    /// A layer id for the tests. Ids are opaque and this module only needs two that differ.
-    fn layer(n: u64) -> crate::chrome::LayerId {
-        crate::chrome::LayerId::for_test(n)
+    /// A surface identity for the tests, from a name the way a real one is. This module only needs
+    /// two that differ — and naming them is the point: a surface is known by the key it declares,
+    /// so a test says `surface("expose")`, not an id it had to be handed.
+    fn surface(name: &str) -> SurfaceKey {
+        SurfaceKey::of(name)
     }
 
     /// **The exposé's defect, as a rule.** The map declares `covers_content: false` — you can see
@@ -1571,7 +1639,7 @@ mod tests {
     #[test]
     fn a_surface_that_took_the_keyboard_makes_the_base_context_dormant_even_if_it_covers_nothing() {
         assert!(base_context_is_dormant(
-            Some(layer(1)),
+            Some(surface("heca.expose")),
             false, // covers nothing — a map of the panes is not a lid over them
             InteractionSource::Keyboard,
         ));
@@ -1583,9 +1651,9 @@ mod tests {
     #[test]
     fn the_active_surface_acting_on_itself_is_not_refused() {
         assert!(!base_context_is_dormant(
-            Some(layer(1)),
+            Some(surface("heca.expose")),
             false,
-            InteractionSource::Surface(layer(1)),
+            InteractionSource::Surface(surface("heca.expose")),
         ));
     }
 
@@ -1594,9 +1662,9 @@ mod tests {
     #[test]
     fn a_surface_underneath_the_active_one_gets_no_reach() {
         assert!(base_context_is_dormant(
-            Some(layer(2)),
+            Some(surface("heca.confirm")),
             false,
-            InteractionSource::Surface(layer(1)),
+            InteractionSource::Surface(surface("heca.expose")),
         ));
     }
 
@@ -1770,6 +1838,9 @@ mod tests {
             WmAction::RenameWorkspace,
             WmAction::CommandPalette { mode: None, query: None },
             WmAction::ReloadConfig,
+            WmAction::NotificationDismissAll,
+            WmAction::NotificationDismissLast,
+            WmAction::NotificationPick,
             // Scrollback
             WmAction::ScrollbackPageUp,
             WmAction::ScrollbackPageDown,
@@ -1809,6 +1880,8 @@ mod tests {
         }
 
         let param_actions = [
+            WmAction::NotificationDismissOne { notification_id: 0 },
+            WmAction::NotificationActionRelay { notification_id: 0, key: String::new() },
             WmAction::FocusPane { pane_id: PaneId(0) },
             WmAction::FocusWorkspace { ws_idx: 0 },
             WmAction::Swap {
@@ -1835,8 +1908,8 @@ mod tests {
             },
             WmAction::Resize {
                 target: crate::input::ResizeTarget::Column,
-                axis: crate::input::ResizeAxis::X,
                 amount: 0.0,
+                edge: crate::input::ResizeEdge::Auto,
             },
             WmAction::ResizeColumnBy {
                 col_idx: 0,

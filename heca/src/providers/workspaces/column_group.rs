@@ -33,15 +33,19 @@ impl ColumnGroup<'_> {
             .panes
             .iter()
             .any(|p| seams.active_pane == Some(p.pane_id));
-        // The MarkerGroup is a column drag source + drop target (F4.5 step 2).
-        let drag_id = reg.drag.register(ChromeDragItem::Column {
-            ws: ws_idx,
-            col: column.col_idx,
-        });
+        // The MarkerGroup is a column drag source + drop target, and what it drags is the name it
+        // declares below — the same one its cursor and its right-click read.
+        reg.drag.register(
+            column_key(column.col_id),
+            ChromeDragItem::Column {
+                ws: ws_idx,
+                col: column.col_idx,
+            },
+        );
         let mut col = MarkerGroup::new()
             .active(active)
             .gap(3.0)
-            .key(column_key(ws_idx, column.col_idx))
+            .key(column_key(column.col_id))
             .context_menu({
                 let menu = crate::chrome::context_menu::menu_from_items(
                     "Column",
@@ -53,8 +57,9 @@ impl ColumnGroup<'_> {
                 );
                 heca_grid_ui::widgets::ContextMenu::new(MENU_COLUMN).child(menu)
             })
-            .draggable(drag_id)
-            .drop_target(drag_id);
+            .draggable_as("column")
+            // A column beside a column is a reorder — before or after, never "onto".
+            .accepts_beside(["column"]);
         for pane in &column.panes {
             col = col.child(
                 PaneRow {
@@ -69,7 +74,7 @@ impl ColumnGroup<'_> {
         reg.signals.col_active.push((pane_ids, col.state()));
         reg.signals.row_nav.push((
             seams.mount.to_string(),
-            column_key(ws_idx, column.col_idx),
+            column_key(column.col_id),
             col.nav_state(),
         ));
         // Wrap the column in the universal `KeyHint` so a "move pane → column" pick can stamp this
@@ -107,7 +112,7 @@ mod tests {
 
         let declared = testing::declared_keys(&group);
         assert!(
-            declared.contains(&column_key(0, 0)),
+            declared.contains(&column_key(heca_core::layout::ColumnId(0))),
             "the column names itself: {declared:?}",
         );
         assert!(

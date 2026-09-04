@@ -51,14 +51,14 @@ impl Panel {
         // has been attached.
         let mut header = Label::new(String::new()).font_scale(TITLE_SCALE).bold(true);
         let title = header.text_signal();
-        header.base_mut().style.layout.hidden = true;
+        header.base_mut().set_hidden(true);
         base.children.push(Box::new(header));
 
         // The rule under the heading is what makes the title read as a header band rather than
         // the first line of the content. It takes the theme's border colour, like every other
         // separator, so it follows a theme change without the panel knowing anything about it.
         let mut rule = Separator::horizontal();
-        rule.base_mut().style.layout.hidden = true;
+        rule.base_mut().set_hidden(true);
         base.children.push(Box::new(rule));
 
         Self { base, title }
@@ -77,7 +77,7 @@ impl Panel {
         // rather than a bare rule across the top of its content.
         let hidden = title.is_empty();
         for part in self.base.children.iter_mut().take(HEADER_PARTS) {
-            part.base_mut().style.layout.hidden = hidden;
+            part.base_mut().set_hidden(hidden);
         }
         self.title.set(title);
         self

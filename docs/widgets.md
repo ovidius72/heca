@@ -21,7 +21,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
-  - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
+  - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
@@ -119,6 +119,18 @@ heca_renderer::scene::enqueue_scene(&mut grid_renderer, &mut text_renderer, &sce
 
 See [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs) for a
 complete winit + wgpu host (`cargo run -p heca-renderer --example showcase`).
+
+**Layout comes first, and nothing is painted before it has a box.** A widget's layout node is
+written as the engine walks, so one the walk has never reached has no bounds — and its default ones
+sit at the window's origin with no size. The paint pass skips such a widget entirely rather than
+drawing it there. You get this without asking for it, in both directions:
+
+- **Building a tree, then painting it without laying it out, draws nothing.** That is the order the
+  app always uses, and a test that paints must compute layout first.
+- **A widget added to a tree *while* that tree is being laid out** — a container putting a child
+  back once the room returns, say — is simply not drawn until the next layout reaches it. Without
+  the rule it appeared in the top-left corner of the window for one frame, which during a drag is a
+  continuous flicker.
 
 ### 4. Wire input
 
@@ -309,7 +321,7 @@ a closed [`Overlay`](#overlay) returns `None`, which takes its whole subtree out
 reach while leaving it laid out. It is the input twin of `damage_bounds`, for the same reason: what
 a widget draws, what it damages and where it can be clicked are three questions.
 
-> These two are still here, and T400 means to remove them: a floating widget should *place* itself
+> These two are still here, and are meant to go: a floating widget should *place* itself
 > (bake its offset into its own bounds) rather than describe a second rect. The first attempt at
 > that overwrote `base.bounds` in `on_layout`, which fights every other reader of bounds — paint,
 > damage, placement — and produced ghosting and stray hit targets. Doing it properly means the
@@ -387,7 +399,7 @@ which made every event kind depend on that container forwarding it correctly, fo
 
 **There are no exceptions left.** `Select`, `Dialog`, `Overlay`, `CommandPalette`, `ContextMenu` and
 `FocusScope` each used to declare `routes_own_subtree` and walk their own children for the events
-that have no position to route by. That predicate is **gone** (F004/P084/T400): keys route by focus,
+that have no position to route by. That predicate is **gone**: keys route by focus,
 which is the same statement said in the vocabulary the rest of the framework already used, so there
 is nothing left for those widgets to gate. **No container forwards any event any more.**
 `tests/pointer_delivery.rs` mounts a probe inside each container and fails if a pointer kind goes
@@ -544,7 +556,7 @@ let row = Row::new()
 `EventCx` answers `event()`, `pointer()`, `drag()`, `pos()`, `modifiers()` — and
 `stop_propagation()`.
 
-> **Nothing is consumed for you** (changed in F004/P084/T400 — the DOM's rule). The named builders
+> **Nothing is consumed for you** (the DOM's rule). The named builders
 > used to consume the event whether or not you wanted it, so anything that needed to *watch* a click
 > without claiming it had to drop to the differently-shaped `.on(kind, |cx| …)`, which was the only
 > form able to say `stop_propagation`. Two spellings over one input; now there is one. **A handler
@@ -600,7 +612,7 @@ takes no argument and there is no event to carry.
 |--------|--------|
 | `.hintable(bool)` | Keep this widget **out of the picker**, however actionable it is. Default `true`. |
 
-**Being pickable is not opt-in** (F003/P082/T441). A widget you can act on — a click, a double click,
+**Being pickable is not opt-in**. A widget you can act on — a click, a double click,
 a key — is offered a letter by `prefix+/` and by any enclosing [`KeyHintGroup`](#keyhintgroup) with
 nothing declared, and picking it does what clicking it does. So the only thing left to say is
 "not me":
@@ -614,14 +626,14 @@ nothing for the letter to run.
 
 **And a widget nobody can see gets no letter.** A target scrolled out of a clipping ancestor — a
 sidebar row past the fold — is dropped by the candidacy walk, through the same
-`Component::clips_children` that paint and input already honour (F003/P082/T438). Nothing to write:
+`Component::clips_children` that paint and input already honour. Nothing to write:
 put a widget in a `ScrollRegion` and its letters follow the fold. **A row you can half see keeps
 its letter**, and the keycap is drawn whole rather than cut, so you can still read what to press.
 
 | what you write | what happens |
 |---|---|
 | nothing | actionable → gets a letter; picking it does what clicking it does |
-| `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays). On **every** widget since F003/P082/T432 — it was a `KeyHint` builder before |
+| `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays). On **every** widget — it was a `KeyHint` builder before |
 | `.hintable(false)` | never gets a letter, however actionable it is |
 
 **"Actionable" is `Base::activatable`**, set wherever an action is wired: once in `ComponentExt::on`
@@ -644,10 +656,9 @@ dense surface keeps them for the targets that matter.
 |--------|--------|
 | `.key(impl Into<String>)` | The identity of **this item**, when it is one of a collection you are iterating. |
 
-> **`key` replaced `nav_key`** (F003/P082/T444, decided 2026-08-17, renamed in `0a06ef5`). The
-> declarative form and the enforcement landed with the rest of T444. `scope_key` is **still here**:
+> **`key` replaced `nav_key`** — do not reintroduce the old name. `scope_key` is **still here**:
 > folding it into `key` turned out to change behaviour — see the note at the end of
-> [Nesting](#nesting-is-structure-not-a-second-concept) — and it moved to its own task.
+> [Nesting](#nesting-is-structure-not-a-second-concept) — and it is tracked in the planner.
 
 #### The rule: two cases, and only two
 
@@ -668,9 +679,8 @@ That is the whole surface. No role to declare, no region to name, nothing to rem
 widget.
 
 **Why the old names went.** `nav_key` and `scope_key` described *how the framework used the string*
-rather than what it was, so a developer adding a widget had no reason to guess either existed.
-Antonio, 2026-08-17: *"i don't want plugin authors or developers to have to add this strange and
-confusing name… if i were a developer adding a button i will forget to add that."*
+rather than what it was, so a developer adding a widget had no reason to guess either existed. A
+plugin author should not have to carry a strange, confusing name they will forget to add.
 
 #### `key` is React's `key`, and means the same thing
 
@@ -681,8 +691,7 @@ navigation — a pane's git status changing is enough — and a cursor, a letter
 that resets every rebuild is not one.
 
 **You never count.** `key` is never a position and never a counter; it comes from the data you are
-already iterating. Antonio, 2026-08-17: *"what does it mean `pane:7`? Should the developer count the
-number of panes they are adding?"* No. If you are reaching for a counter the key is wrong — an index
+already iterating. A key like `pane:7` should never mean "count the panes you are adding". If you are reaching for a counter the key is wrong — an index
 is exactly the thing that changes when the list changes, which is what identity is for.
 
 **Where it is required:** in a collection, and nowhere else — the same rule React uses, and the same
@@ -814,7 +823,7 @@ The string is **opaque to the library** — nothing here parses it — and must 
 >
 > ```rust
 > for pane in panes {
->     Row::new().key(pane.id).on_press(Intent::new("focus_pane").arg("pane_id", pane.id))
+>     Row::new().key(pane.id).on_press(Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane.id as i64)))
 > }
 > ```
 >
@@ -838,6 +847,56 @@ distinction here. The declarative boundary just falls on the same line.
 `gap_spacing`), `margin` (+ per-side overrides), `padding` (+ per-axis + spacing tokens),
 `width`/`height` (`Length`), min/max sizes, `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`,
 `size`. `to_taffy()` lives here, because these are the fields it reads.
+
+**Two rules the layout pass applies for you, so no widget has to.** A child of a container that is
+*not* a scroll viewport gets, unless it said otherwise:
+
+- **`max_width: 100%` — nothing is wider than what holds it.** A widget carrying a design width
+  (`Alert` 360, `Toast` 320, `Input` 240) is capped against the box it was given instead of painting
+  through its parent's border.
+- **`min_width: 0` — giving way is not optional once the row is out of room.** Flexbox otherwise
+  floors every item at its own content width, so a row whose children *are* willing to shrink still
+  cannot fit them and lays the overflow past its own edge — which is how a leading icon, a caret or
+  a drag handle pushed a title clean outside its frame at narrow widths.
+
+A widget that must keep its size still says so — an explicit `min_width`, or `flex_shrink(0.0)` —
+and both rules leave it alone. Inside a **viewport** (anything that clips its children) neither
+applies: there, exceeding the box is the feature, and the floor is what keeps a 600px column 600px
+wide in a 100px scroll region.
+
+#### Two things a container publishes to what it holds — content colour, and control tone
+
+A container cannot style its children: they arrive as `impl Component`, so it does not know their
+types, and the `Theme` is only reachable at paint. So instead of assigning, it **publishes one
+value per frame and the children pull it**. There are two such channels, and they are deliberately
+separate:
+
+| | publishes | who pulls it | resolves as |
+|---|---|---|---|
+| **content colour** | `PaintCx::with_content_color(c, …)` | bare text and glyphs — an unstyled `Label`, an `Icon` | own explicit colour → published colour → a theme token (usually `foreground`) |
+| **control tone** | `PaintCx::with_control_tone(c, …)` | **controls**, for their own chrome — a `Button`, an `IconButton` | own `.tone(..)` → published tone → `theme.accent` |
+
+**Why not one channel.** Content colour is what a glyph is *painted in*; a control's tone is the
+hue it derives a whole state machine from — its border, its hover sweep, its press flash, its focus
+ring. Six widgets already publish a content colour today, and widening that one channel to also
+mean "and re-tint every control inside me" would have changed all six at once. A separate channel
+is retro-compatible **by construction**: nothing publishes a tone unless it says so.
+
+The case it was built for is a [`Toast`](#toast): a danger card wants its buttons in the danger
+hue, without the caller passing a colour to each one and without the card painting their faces
+itself. The card publishes its severity; the controls tone themselves; each keeps its own hover,
+press and focus ring, because they are real controls rather than something the card drew.
+
+```rust
+// A container publishing both: its content reads in `tone`, and controls inside it take it too.
+cx.with_control_tone(tone, |cx| {
+    cx.with_content_color(tone, |cx| paint_child(&self.base.children[ICON], cx));
+    // …a Button in here resolves its chrome hue as: own tone → this → theme.accent
+});
+```
+
+A control with an intrinsic semantic hue ignores both — a `Destructive` button stays danger-toned
+inside a success card, the same way `Badge::danger` keeps its colour inside a tinted parent.
 
 **`Style.visual` — appearance.** `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
 A description may **never** set these: it carries semantic intent (a variant, a `size`, a colour
@@ -1074,13 +1133,92 @@ stay DRY):
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
 | `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. Re-entrant: an overlay painted **inside** another overlay's paint (a `Select` in a `Dialog` body) records a **deeper segment**, and `Scene::overlay_segments()` yields segments depth-ordered — the nested panel composites above everything its parent draws, including what the parent paints *after* it. |
 | `.with_content_color(color, \|cx\| …)` | Paint the closure's subtree with `color` as the **inherited content color** — `color` inheritance in the CSS sense. A control that *composes* its content (`Button`, `Item`) cannot set its children's colors (they are `impl Component`, so it doesn't know their types, and the `Theme` is only reachable in `paint`), so it publishes one state-derived value per frame and the children pull it. Because the control repaints while its hover eases, **the content animates with no per-child wiring**. |
+| `.with_control_tone(color, \|cx\| …)` | The **chrome** counterpart of the line above: publish a hue that **controls** inside the closure derive their own chrome from — border, hover sweep, press flash, focus ring. A [`Button`](#button)/[`IconButton`](#iconbutton) resolves own `.tone(..)` → this → `theme.accent`. Separate from content colour on purpose: six widgets publish a content colour already, and widening that one channel to also re-tint every control would have changed all six at once. **Nothing publishes a tone by default**, so it is retro-compatible by construction. See [the two channels](#two-things-a-container-publishes-to-what-it-holds--content-colour-and-control-tone). |
+| `.control_tone() -> Option<Color>` | The inherited control tone, if a parent published one. A control with an intrinsic semantic hue (a `Destructive` button) ignores it. |
 | `.content_color() -> Option<Color>` | The inherited content color, if a parent published one. Widgets that render bare text/glyphs resolve: **own explicit color → this → a theme token** (usually `foreground`). A widget with an intrinsic semantic color (`Badge::danger`) ignores it. |
 | `.with_translate(dx, dy, \|cx\| …)` | Paint the closure's subtree **translated** — the same components, drawn somewhere else. Deliberately narrow: a component is laid out in exactly one place, and its bounds are the contract for drawing *and* hit-testing alike. But a control occasionally has to render content it owns but does not hold — a [`Select`](#select) shows the chosen option in its trigger while that option is away in the open list. Nothing can be in two places, so the trigger draws a second **image** of it. What is drawn this way is **not interactive** (no bounds of its own ⇒ not hit-tested, focusable or hoverable); the control's own bounds are the click target. Never use it to *move* a widget — that is `shift_subtree` + `on_layout`, which keeps bounds honest. |
+| `.surface(rect, id)` | Place content **something else rasterised** — a terminal, an image, a video, a plugin's own canvas — in `rect`. The widget says where; the host owns the texture. `id` is opaque here: nothing about textures, formats or devices crosses into this crate. See [`Host`](#host--work-only-the-host-can-do). |
+| `.backdrop_blur(rect, radius, alpha)` | **Blur whatever is already drawn behind this widget**, within `rect`. Recorded in scene order, so it blurs what came before it and nothing after. `alpha` fades the blurred copy, so a surface arriving fades its backdrop in with itself. A zero radius or alpha records nothing — a host asked to do no work still pays for a full-screen pass. |
 
-`DrawCommand` variants: `Rect`, `Brackets`, `Text`, `Scanline`, `Gradient`, `PushClip`/`PopClip`
-(clip is currently a renderer no-op — embeddable scroll regions wait on it), `Custom`. `Scene`:
-`new()`, `push`, `clear`, `len`, `is_empty`, `iter`, plus the overlay layer
+`DrawCommand` variants: `Rect`, `Brackets`, `Text`, `Scanline`, `PushClip`/`PopClip`, `Host`.
+`Scene`: `new()`, `push`, `clear`, `len`, `is_empty`, `iter`, plus the overlay layer
 (`begin_overlay`/`end_overlay`, `base_layer`/`overlay_layer`).
+
+#### `Host` — work only the host can do
+
+Some content cannot be expressed as rectangles and text, and must not be forced into them. A
+**terminal** is rasterised into a texture because its cell glyphs are the hottest path in the app —
+drawing them as ordinary commands is rejected. A **frosted backdrop** is the frame so far, blurred,
+which is a pass over what is already drawn rather than a shape.
+
+Neither is a special case in this crate. A widget says *what it wants* and where; the host owns the
+GPU and does it — the same bargain `Text` already makes, where the scene names a role and the
+renderer owns the atlas.
+
+Requests are recorded **in scene order with the clip stack resolved**, so a surface inside a
+`ScrollRegion` clips like anything else, and a backdrop blurs exactly what was drawn before it and
+nothing after. They carry the paint context's opacity like every other command, so a surface inside a
+fading overlay fades with it — and a frost fades in with the surface that asked for it, instead of
+holding the session out of focus and snapping sharp in one frame at the end of the fade.
+
+**Native:**
+
+```rust
+// Place content something else rasterised. `id` is opaque here — no texture,
+// format or device crosses into this crate.
+cx.surface(self.base.bounds, self.surface_id);
+
+// Blur whatever is already behind this widget.
+cx.backdrop_blur(self.base.bounds, theme.colors.overlay_frost_radius, 1.0);
+```
+
+**Declarative:** neither is describable, and deliberately so — a described tree names widgets, and
+both of these are a widget's own paint. A plugin rendering its own content gets a surface id from the
+host and places it with one builder on its own widget; it never names a `DrawCommand`.
+
+### Asking the host to lay the tree out again — `needs_layout`
+
+**A repaint cannot fix a structural change.** When a widget adds or removes children between
+frames — reconciling a host-owned list, revealing a subtree — the widgets *around* it are still
+laid out around the shape the tree used to have. Marking it dirty repaints the same wrong
+positions.
+
+So a widget says so, and the host runs the pass:
+
+**Showing and hiding is the common case, and it has its own setter.** `hidden` is the engine's
+`display: none`, so flipping it moves every sibling — never write `style.layout.hidden` yourself:
+
+```rust
+self.base.set_hidden(true);        // sets it AND asks, in one call
+```
+
+It asks **only when the value actually changed**, which is what makes it safe to call from
+`remeasure` (that runs *inside* the layout pass, so a widget syncing itself every pass cannot
+request one every pass). A test fails the build if anything writes the field directly.
+
+```rust
+// For a tree that changed some other way — children added or removed:
+self.base.children.remove(i);
+self.base.mark_needs_layout();
+
+// In the host's frame, BEFORE it decides whether to lay out:
+if heca_grid_ui::needs_layout(&root) {
+    layout_dirty = true;
+}
+```
+
+`needs_layout(root)` walks the tree, clears the flags as it reads them, and answers a **bool** —
+there is nothing to union, because layout is a whole-tree pass. It is the layout twin of the damage
+walk, and a host calls it the same way, once a frame.
+
+**Keep the two apart.** They cost different things: a repaint is per-frame and cheap, a layout pass
+re-measures the whole tree. A widget that only changed colour must call `mark_needs_paint` and
+nothing else.
+
+> The case that asked for it: a [`ToastStack`](#toaststack) drops a dismissed card only once its
+> exit has **played**, which is several frames after the click. Nothing re-laid-out at that moment,
+> so the cards below kept their old positions — and the gap where the card had been simply sat
+> there until an unrelated click happened to trigger a layout.
 
 ### `Flash`
 
@@ -1110,14 +1248,15 @@ Overlay::new().panel(body).animation(Animation::of(MyWhirl::new())) // …or one
 
 | | |
 |---|---|
-| `Animation` | The vocabulary: `None` (the default — a cut) · `Fade` · `Zoom` · `ZoomFade` · `Custom`, built with **`Animation::of(impl Animate)`**. Tuners: `.from(scale)` (how far away it starts — below `1.0` grows in from smaller, above it pulls back from larger) and `.seconds(s)`; a built-in with no such dimension, and a `Custom` one, are returned unchanged. The variants are also the **names a description writes** (`"zoom_fade"`) — one builder, both authors |
+| `Animation` | The vocabulary: `None` (the default — a cut) · `Fade` · `Zoom` · `Slide` · `ZoomFade` · `Custom`, built with **`Animation::of(impl Animate)`**. Tuners: `.from(scale)` (how far away it starts — below `1.0` grows in from smaller, above it pulls back from larger) and `.seconds(s)`; a built-in with no such dimension, and a `Custom` one, are returned unchanged. The variants are also the **names a description writes** (`"zoom_fade"`, `"slide"`) — one builder, both authors |
 | `Animate` | The **trait**, and the extension point: `enter()` / `leave()` begin an arrival and an exit · `cancel()` settles fully present · `tick(dt) -> bool` advances it · `is_leaving() -> bool` says whether the surface may be taken away yet · `frame() -> AnimationFrame` is what to draw · `duration() -> f32` (default `0.0`) is how long one gesture takes |
 | `AnimationFrame` | `{ opacity, scale, offset }` — the whole vocabulary a surface's presentation needs, plus `IDENTITY`, `over(other)` (compose: multiply, and add the offsets) and `apply(cx, origin, f)`, **the one place a frame becomes a picture** |
 | `Presence` | Whether a surface is up, plus the **`Option<Box<dyn Animate>>`** carrying it — `enter()` / `leave()` (which own the two rules below), `follow(open)` for a signal-driven surface, `assume_open(open)` (adopt without playing — a surface born open, or one carried across a rebuild), `is_open()`, `is_animated()`, `is_leaving()`, `tick(dt)`, `frame()`. **No animation is an absence, not a null object**: nothing is ever mid-gesture, so nothing waits for it |
 
 The parts behind the names are public too — `Fade` (`new()` both ways, `out()` for a cut in and a
-dissolve out, `.seconds`), `Zoom` (`.from`, `.seconds`), `Sequence::new(lead, follow).lag(share)`
-and `ZoomFade` — but reach for them only to build a gesture the vocabulary does not have. `Sequence`
+dissolve out, `.seconds`), `Zoom` (`.from`, `.seconds`), `Slide` (`.from(SlideFrom)` for the edge,
+`.distance(px)`, `.seconds`), `Sequence::new(lead, follow).lag(share)` and `ZoomFade` — but reach
+for them only to build a gesture the vocabulary does not have. `Sequence`
 is where "the dissolve **rides** the movement, lagging by a *share* of it" lives: a share, never a
 second duration, so tuning the lead keeps the sequencing.
 
@@ -1128,7 +1267,7 @@ it (a re-open mid-exit made the map snap back to full opacity and start leaving 
 free.
 
 **Writing one is a single new file.** `heca-grid-ui/src/animation/` is one file per animation
-(`fade.rs`, `zoom.rs`, `sequence.rs`, `zoom_fade.rs`, and `vocabulary.rs` for the names). A **third party** adds nothing
+(`fade.rs`, `zoom.rs`, `slide.rs`, `sequence.rs`, `zoom_fade.rs`, and `vocabulary.rs` for the names). A **third party** adds nothing
 anywhere: they implement `Animate` in their own crate and pass `Animation::of(..)`. A built-in
 shipped *by this library* is a new file plus one arm in `Animation` — the name is the only thing
 written down. Either way nothing in the painter, the widgets or any host changes:
@@ -1363,8 +1502,10 @@ including form fields (see below), so most layouts need no dedicated widget.
   `.pad_x(Spacing)` / `.pad_y(Spacing)` (same font-relative scaling as `gap_spacing`).
 - **Sizing** (from `LayoutExt`, shared by every widget): `.width(Length)` / `.height(Length)`
   (`Auto` / `Px` / `Pct`), `.grow(f32)` (flex-grow, absorb leftover space), `.margin*`.
-- **Traits**: `LayoutExt`, `Parent`. (No `StyleExt` — it's purely arrangement; use
-  [`Surface`](#surface) when you need a background/border/glow.)
+- **Traits**: `LayoutExt`, `Parent`. **No `StyleExt`, deliberately** — a `Flex` arranges, it does
+  not paint, so `.background(..)` on one is a compile error rather than a missing feature. Put the
+  colour on a [`Surface`](#surface) and the `Flex` inside it. See
+  [Surface or Flex?](#surface-or-flex--decoration-vs-arrangement).
 
 ```rust
 Flex::row().gap(12.0).align(Align::Center)
@@ -1393,10 +1534,52 @@ A [`Dialog`](#dialog) body already defaults its own children to `gap_spacing(Md)
 
 ### Surface
 
-A styled box: the base building block for backgrounds/borders/glow.
+**The generic container — the `div`.** A box that both *decorates* and *arranges*: background,
+border, glow and radius, plus padding, gap, direction and children. Reach for it whenever something
+needs a background or padding around its content.
 
-- **Construct**: `Surface::new()`, `Surface::row()`, `Surface::column()`.
+- **Construct**: `Surface::new()` / `Surface::column()` (a column), `Surface::row()` (a row).
+- **Decoration** (`StyleExt`): `.background(Color)`, `.border(Color, width)`, `.radius(px)`,
+  `.glow(Color)` / `.glow_with(..)`.
+- **Arrangement** (`LayoutExt`, `Parent`): the same `.padding*` / `.pad_*(Spacing)` / `.gap*` /
+  `.width` / `.height` / `.grow` / `.child(..)` as [`Flex`](#flex--container).
 - **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
+
+#### Surface or Flex? — decoration vs arrangement
+
+They are the same box split by job, and the split is **enforced**, not merely advised: `Flex` has no
+`StyleExt`, so `.background(..)` on one does not compile. That error is the rule doing its work —
+it is not a missing feature, and the answer is never to add the colour somewhere else.
+
+| you need | reach for |
+|---|---|
+| arrange children — direction, justify, align, gap | **`Flex`** |
+| a background, border, radius or glow behind content | **`Surface`** |
+| both | a **`Surface`** with a `Flex` inside it |
+
+The last row is the common shape, and it composes exactly like HTML: the surface is the painted
+box, the flex is how its contents line up.
+
+```rust
+// A strip with its own background, contents pushed to either end.
+Surface::new()
+    .background(theme.colors.surface)
+    .pad_y(Spacing::Xs)                       // token, not px — see Flex
+    .width(Length::Pct(1.0))
+    .child(
+        Flex::row()
+            .justify(Justify::SpaceBetween)
+            .align(Align::Center)
+            .child(Tag::new("~").segment_text(Glyph::Terminal, "zsh"))
+            .child(Flex::row().gap_spacing(Spacing::Xs).child(close_button)),
+    );
+```
+
+**Do not give the box a height to make it fill a strip.** Let it size to its content and let the
+parent give it the space — a height computed from the font is a measurement standing in for "as
+tall as what is in me", and anything else placed in the same slot then has to reproduce the same
+arithmetic. If something outside needs to know how tall it came out, **measure the laid-out tree**
+rather than recomputing it.
 
 ```rust
 Surface::column().padding(16.0).gap(8.0)
@@ -1451,10 +1634,6 @@ ViewNode::new(WidgetKind::Panel)
 The heading is a real `Label` child, created up front and hidden until a title is set — so `title`
 works whether it is applied before or after the children, which is what a description needs since
 properties are applied after children are attached.
-
-> Until F003/P017/T008 there was **no** `Panel` widget: `WidgetKind::Panel` realized to a bare
-> `Surface`, which has no title. The published plugin examples showed `Panel::new().title("Hello")`
-> against it, and nothing in the docs let a reader tell that the title did not exist.
 
 ### Pane
 
@@ -1692,8 +1871,7 @@ vector, nothing to keep in sync with the children.
 
 ### ScrollRegion
 
-An embeddable **scroll viewport**: children laid out at their natural size (the
-layout engine never shrinks them, so they overflow), clipped to the region's own
+An embeddable **scroll viewport**: children laid out at their natural size (the layout engine never shrinks them, so they overflow), clipped to the region's own
 bounds. The visible window is the `ScrollRegion` itself; content beyond it is
 clipped (`PushClip`). It is a **dumb viewport** — it owns no selection state;
 selection/cursor is the host container's concern, and the region just scrolls
@@ -1756,8 +1934,7 @@ content shifted past the edge with no scrollbar to bring it back.
   across 16, so 9px of lane sat on the row beside it and one pixel belonged to two widgets. A host
   cannot arbitrate that: a press there was both "grab the thumb" and "start dragging this row", and
   the workaround (let whichever widget consumes the press win) stopped rows being draggable at all.
-  If you add a hit area wider than what your widget drew, widen the reservation with it
-  (F003/P085/T368).
+  If you add a hit area wider than what your widget drew, widen the reservation with it.
 - **The bar takes layout space, it is not drawn over content.** When an axis overflows, the region
   reserves the bar's lane as padding on that side, so a child is laid out **beside** the bar and
   keeps its rounded corner. Clipping alone was not enough and looked wrong: a card laid out full
@@ -1781,7 +1958,7 @@ content shifted past the edge with no scrollbar to bring it back.
   underlying app (terminal/editor), so the widget must not swallow them. Keyboard
   scrolling is a **host** concern — the app dispatches **prefix-gated, configurable
   scroll actions** (`WmAction` → `ActionRegistry`, RPC-ready) that call
-  `scroll_to`/`scroll_by`/`ensure_visible`. (App action layer: F003/P011/T012.)
+  `scroll_to`/`scroll_by`/`ensure_visible`.
 - **Whole-page scroll**: size a `.both()` region to the window and put the page
   inside it — that IS the page scroll (the showcase does exactly this; no manual
   bounds-shifting). Lay the page child at its **natural width** (don't stretch it:
@@ -1866,8 +2043,8 @@ relative to siblings, which a container cannot see and should not have to.
 > `flex: 1 1 0`); then the free space is the whole region, and the two measure 296px
 > each. `Layout` has no `flex_basis`, so that zero is written as a height today.
 > **Do not copy that into new code** — expressing a proportion by writing a fixed
-> measure is wrong, and **P052(F004)/T350** exists to give the library one `share(n)`
-> setter with the trio behind it.
+> measure is wrong. Giving the library one `share(n)` setter with the trio behind it
+> is tracked in the planner.
 
 ### Using one — the whole surface
 
@@ -2077,6 +2254,14 @@ its children, which paint themselves. So a button can hold a label, an icon + a 
 arbitrary tree of any depth. The convenience forms are **sugar that builds those same children**;
 there is no separate "simple mode".
 
+**Sizing: it hugs its content, and once it is down to its icon it refuses to give way** (CSS
+`flex-shrink: 0`). A row shares a shortfall among whatever will take it, and a button carrying words
+can take some — its `Label` ellipses. One showing only an icon has nothing left to give, so
+shrinking it just eats the control: the box narrows around a glyph that does not, leaving a sliver
+too thin to click. You get this wherever the button is put, including a plain `Flex` — the author
+does not have to know to ask. A container may hold a *worded* button rigid for its own reasons
+(`ButtonGroup` does), and the button never writes that declaration back.
+
 #### The two ways to build a Button — same widget, same retained tree
 
 Native code (chrome/sidebar) uses the **builder API** because it needs closures and signals;
@@ -2221,6 +2406,132 @@ ViewNode::new(WidgetKind::Button)
 
 Both spellings produce the **same retained tree** — see
 [the declarative UI model](#declarative-ui-model-viewnode).
+
+### ButtonGroup
+
+**A row of related actions that fits the space it is given.**
+
+A toolbar is not a `Flex` of buttons, because a `Flex` has no answer for the moment the room runs
+out. Left alone, a row of icon buttons is **squashed to slivers** — the layout makes every child
+willing to give way once its row is short, which is what stops a long title shoving a caret outside
+its frame. Told not to shrink, the same row **overflows its container** instead. Neither is a design;
+both are the layout doing exactly what it was asked. `ButtonGroup` owns that question.
+
+As the space narrows it gives things up in the order that costs least:
+
+| stage | what goes | what stays |
+| --- | --- | --- |
+| 1 | the **words** | the icons — and the words become what the button says on hover |
+| 2 | the **buttons that no longer fit** | a single trailing `⋮`, whose menu reads their words again |
+
+Nothing is ever squashed, and nothing is ever silently unreachable.
+
+```rust
+ButtonGroup::new()
+    .size(WidgetSize::Header)                       // one size for every button in the group
+    .variant(ButtonVariant::Ghost)                  // …and one variant
+    .gap_spacing(Spacing::Xs)                       // a token, never a pixel count
+    .child(Button::new("Split").icon(Glyph::Plus).on_click(split))
+    .child(Button::new("Zoom").icon(Glyph::FrameCorners).on_click(zoom))
+    .child(Button::new("Close").icon(Glyph::Minus).on_click(close))
+```
+
+#### Its children are `Button`s, and that is the point
+
+Typed to `Button` deliberately — the same way [`Select`](#select) types its options to
+[`Choice`](#choice). **Every `Button` constructor takes its text**, so a button in a group cannot be
+built without words. That is what makes a collapsed row readable, with nothing required of the
+author and no runtime check anyone can forget.
+
+The alternative was forcing text with a typestate builder, which this library
+[considered and rejected](#forcing-a-key--a-warning-not-a-type) for `key`: noise on every widget, and
+meaningless to a plugin sending JSON. The type does it instead.
+
+#### A collapsed button runs its own click
+
+There is no handler on the group. Each button keeps its `on_click`, and a menu row runs **that same
+button** through [`Component::activate`] — the one entry every way of pressing a button already goes
+through (pointer, keyboard, a caller invoking it). So the visible button and the collapsed row do
+not merely agree: they are the same handler, and cannot drift.
+
+#### Builders
+
+| builder | what it does |
+| --- | --- |
+| `.child(Button)` | add an action. Its text is its menu label and its hover words; its icon is what it shows once there is no room for words. |
+| `.display(Display)` | `IconOnly` (default) — always icons, words kept for hover and the menu · `Full` — always words · `Auto` — words while they fit. ⚠️ **`Auto` is not settled**: taking the words off makes the row narrower, so it then fits, which is the condition for putting them back; at some widths it still alternates. Use `IconOnly` or `Full`. |
+| `.variant(ButtonVariant)` | the variant the group's buttons take. **A button that named its own keeps it** — which is what lets a toolbar be uniformly quiet while its close button still reads as destructive, without either fact being written twice. |
+| `.size(WidgetSize)` | from [`LayoutExt`](#builder-traits), and it cascades: children inherit their parent's size variant. |
+| `.gap_spacing(Spacing)` / `.gap(px)` | from `LayoutExt`, applied to the row inside. **Prefer the token.** |
+| `.shown_count()` / `.is_collapsed()` | what the group decided, for a caller that needs to know. |
+
+> ⚠️ **`display` governs stages 1 and 2 only.** Collapsing into the menu still happens whenever the
+> buttons genuinely do not fit, whichever display is pinned — otherwise pinning `Full` would bring
+> back the squashing this widget exists to end.
+
+#### How it decides — it reads the layout, it does not measure
+
+**Nothing here measures a button or works out a budget.** The group takes the room that is left and
+lays its buttons out at their own size, aligned to the **end** of it. Anything too wide for that room
+is placed *outside* the box — off the left, exactly as an end-aligned row overflows in a browser —
+and the group counts those and drops the same number from the trailing end. All of it is read off the
+finished layout, the way the pane header reads its own height.
+
+Two things make it stable:
+
+1. **It grows into the room it is given.** A group that hugs its content is as wide as whatever it
+   decided to show, so asking it how much room there is returns the answer it just produced — hide a
+   button and the room shrinks, which is the reading that hid it. It costs nothing visually, because
+   the buttons sit at the end of that room.
+2. **The buttons are built in the mode they will be shown in.** Otherwise the first layout is of
+   buttons with their words whatever the mode says, and the first decision is made from an
+   arrangement that was never going to be drawn.
+
+#### The ⋮ is one of the row's own buttons
+
+It is a `Button` like the rest, not an icon button — a different control has different padding and a
+different height, and a group's own affordance has to be one of the things the group arranges.
+
+**It declares nothing about picking, and does not need to.** It is a button, so it wears a `prefix+/`
+letter for that reason alone, and picking it runs its click. Where it sits does not come into it.
+
+That was not always true. The picker used to switch letters off for anything inside something that
+had declared a pick of its own — so every button in a pane's bar repeated its own click as a hint to
+win its letter back, and this one control, which the widget builds for itself, had no author to do
+that for it and silently wore none. See [the picker's rule](#which-widgets-get-a-letter).
+
+#### Composition, and where it sits in a header
+
+It **arranges with a `Flex`**, like anything else would — the group decides *what* is in the row and
+`Flex` decides where those things sit. A widget that sets direction, align and justify on its own
+base has quietly re-implemented a row, and then owns every question a row already answers.
+
+**It hugs its buttons and gives way when the row is short** — it does not fill the space it is
+offered. That is what lets it be one end of a header:
+
+```rust
+Flex::row().justify(Justify::SpaceBetween).align(Align::Center)
+    .child(title)
+    .child(ButtonGroup::new().display(Display::IconOnly) /* … */)
+```
+
+A group that filled the row would leave `SpaceBetween` nothing to distribute, and the title and the
+actions would sit side by side at the left. Hugging while remaining **shrinkable** is also what makes
+the decision well founded: a flex item that may shrink is laid out at `min(its content, the room
+there is)`, so when the buttons do not fit, the group's own width *is* the room available.
+
+#### Its first caller — the pane header
+
+heca's in-pane header is a `ButtonGroup`. It replaced a hand-built row of icon buttons plus a second
+throwaway layout pass whose only job was to measure that row, so the title's width budget could be
+guessed from a character count and two font multiples — with the per-pane render clip named in the
+code as the backstop for when the guess was wrong. The bar is a child of its pane now, so that clip
+is gone and nothing was catching it. The row divides the space instead.
+
+#### Declarative (`ViewNode`)
+
+`display` and `variant` are ordinary props. `child` is **host-only**: a description adds actions
+through `children`, like every other container.
 
 ### IconButton
 
@@ -2391,8 +2702,7 @@ tallest tab + the band" without anyone computing a height.
   in place.
 - **Builders**: `.selected(index)` (initial, clamped — call it **after** the tabs), `.font_size(f32)`
   (else inherits), `.on_change(impl Fn(Action))`, plus `LayoutExt`.
-- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> String` (the
-  selected tab's [text summary](#component-trait)).
+- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> String` (the selected tab's [text summary](#component-trait)).
 - **Emits**: `"tab-change"` / `SignalData::Usize` (the index — unchanged).
 - **Keys** (`widget-keys-config`): navigation is host-configured, not hardcoded. As a **horizontal**
   selector the widget moves selection on the semantic `Event::Widget(WidgetIntent::{ItemPrevious,
@@ -2756,12 +3066,10 @@ Enter/Space, **and** to a KeyHint target, so `prefix+/` reaches the row like any
 node. With no `press` intent the row is deliberately inert: not focusable, no hover — a described
 row that nothing can activate should not look like a control.
 
-> **`Row` is not `HStack`.** Until F003/P017/T6, `WidgetKind::Row` meant the plain horizontal box
-> and this widget had no declarative spelling at all. The boxes are now `HStack` / `VStack`, and
-> `Row` means the same thing in the model as it does in `heca-grid-ui`. `.highlight(Color)` and
-> `.attention_color(Color)` are still host-only; they become props with F003/P017/T7.
+> **`Row` is not `HStack`.** The plain horizontal and vertical boxes are `HStack` / `VStack`;
+> `Row` means the same thing in the model as it does in `heca-grid-ui` — the selectable row.
 
-> **A native row's click is a NAME too (F003/P086/T365).** `.on_activate` takes a closure, so it is
+> **A native row's click is a NAME too.** `.on_activate` takes a closure, so it is
 > tempting for host code to write one that does the thing directly — and then that gesture is
 > reachable from the click and from nowhere else: not the `prefix+/` picker, not a menu entry, not a
 > keybinding, not RPC, and never a plugin. **A component declares its rows' gestures as `Intent`s,
@@ -2774,7 +3082,7 @@ row that nothing can activate should not look like a control.
 > node.on_hint(intent)                            row.on_hint(picks(mount, intent, emit))
 > ```
 >
-> **The click and the pick are two declarations, not one** (F004/P084/T399). A click on a sidebar
+> **The click and the pick are two declarations, not one**. A click on a sidebar
 > row means *go there and leave*; a `prefix+/` pick means *look at that one* and stays in the dock.
 > Serving both from one intent is what made the picker walk out of the sidebar. A described node
 > that binds only `press` still gets a pick for free — `hint` falls back to it.
@@ -2865,11 +3173,33 @@ Tiny glowing status dot in a semantic color (display-only).
 
 - **Construct**: `StatusDot::new(DotStatus)` or `StatusDot::{online,warning,error,offline}()`.
 - **`DotStatus`**: `Online` (success), `Warning`, `Error` (danger), `Offline` (muted, no glow).
+- **Builders**: `.status(Signal<DotStatus>)` — drive it from state the host already keeps.
+- **Change it**: `dot.set(DotStatus::Warning)` — the pip changes in place, nothing rebuilt.
+- **Signals**: `.status_signal()` — the same value `set` writes, for a host that binds rather than calls.
 
 ```rust
 Flex::row().gap(8.0).align(Align::Center)
     .child(StatusDot::online()).child(Label::new("UPLINK"));
 ```
+
+**One dot that changes, not one dot per state.** A retained tree — the sidebar's pane rows — writes
+the status into the signal when a process changes. Building one dot per state and revealing one of
+them costs a slot four times too wide and four signals to keep in step, and it only ever looked
+right because the hidden ones were being squeezed to nothing by a row out of room.
+
+```rust
+let dot = StatusDot::new(DotStatus::Idle);
+dot.set(DotStatus::Warning);               // say it directly…
+dot.set(DotStatus::Error);
+
+let status = dot.status_signal();          // …or bind the signal the host already keeps
+status.set(DotStatus::Online);
+```
+
+**It never gives way.** Everything shrinks by default (see the two layout rules above), which is
+right for text and for a card carrying a design width and wrong for a circle: squeezing one axis of
+a dot flattens it rather than making it smaller. So it declares `flex_shrink(0.0)` for itself, and a
+transparent wrapper around it inherits that refusal.
 
 ### Separator
 
@@ -2938,18 +3268,69 @@ component (not overlay-drawn), so it is equally usable **inline** — e.g. a not
 sidebar. Severity maps to theme tokens, never literals.
 
 - **Construct**: `Toast::new(title)` (= info) or `Toast::{info,success,warning,danger}(title)`.
-- **Builders**: `.severity(ToastSeverity)`, `.icon(Glyph)` / `.no_icon()`, `.body(text)`,
-  `.action(label, on_click)`, `.dismissible(bool)` (default `true`).
-- **Callbacks** (the host removes the toast / runs the effect): `.on_dismiss(f)` (×),
-  `.on_action(f)` (via `.action(..)`), `.on_click(f)` (whole card — also makes it focusable;
-  Enter/Space activates).
+- **Look**: `.severity(ToastSeverity)` (default `Info` — sets the hue *and* the default leading
+  glyph), `.icon(Glyph)` to override that glyph / `.no_icon()` to drop it, `.dismissible(bool)`
+  (default `true` — the × affordance).
+- **Content is slots, and each takes any component**:
+  - `.body(impl Component)` — the column under the title. `.body_boxed(Box<dyn Component>)` is the
+    same slot for an already-realized subtree (the host-mapper seam, as
+    [`Dialog::body_boxed`](#dialog) is). `.body_text(text)` is **sugar** that builds the small
+    ellipsised `Label` you would have built — one code path, not two.
+  - `.action(impl Component)` — **repeatable**; call it again for a second action and they sit in a
+    row that **wraps** when the card is too narrow. `.action_boxed(..)` is the realized-subtree
+    form. The caller says *what* the action is; the card says where it sits and what hue it takes.
+- **Placement**: `.position(ToastPosition)` — `TopRight`/`TopLeft`/`TopCenter`/`BottomRight`/
+  `BottomLeft`/`BottomCenter`, resolved to **auto margins**, never pixels, so it lands correctly in
+  a container of any size. Unset, it sits wherever its parent puts it. The same vocabulary places a
+  [`ToastStack`](#toaststack).
+- **How it arrives and leaves**: `.animation(Animation)`, `.opened(bool)`, and the verbs
+  `open()` / `hide()` / `toggle()`. **A card slides in by default** — that is what a notification
+  does, it arrives from the edge it lives on rather than materialising in place — and any other
+  gesture is one builder away (`Animation::Fade`, `Animation::of(mine)`, `Animation::None` for a
+  cut). A card stays laid out while it *leaves*, which is what the exit plays over; once it has
+  gone it takes no space at all.
+- **Callbacks** (the host removes the toast / runs the effect): `.on_dismiss(f)` — the ×;
+  `.on_click(f)` — the whole card, which also makes it focusable so Enter/Space activate it. There
+  is **no `on_action`**: an action is a real control you passed in, so its own `on_click` is its
+  callback.
+- **Accessors**: `.title_signal() -> Signal<String>`, `.open_signal() -> Signal<bool>`,
+  `.is_showing() -> bool` (true **including while leaving**, which is when it is still drawn and no
+  longer interactive).
+> The title child owns the text, so setting `title_signal` retitles a live card with no rebuild.
+
+**Its content is children, and the engine places them.** The card paints only its own chrome — the
+tinted surface, the bracket frame, the action's face, the press flash, the focus ring — while the
+leading icon, the text column (title / body / action) and the × are real components laid out by the
+layout engine. It measured and placed them itself until F003/P082/T481, and a card squeezed
+narrower than its own icon column then laid its title out past its right edge, because a constant
+column cannot consult the width the card was actually given. What follows from that:
+
+- **Narrow it and the text is cut, not moved.** The title and body carry an end ellipsis.
+- **The action button hugs its label**; the title and body fill the column.
+- **The severity tone is published, not painted on**: the icon and the title inherit it (the same
+  mechanism `Item` uses for its row colour), so anything composed into the card follows it. The
+  body line is the theme `muted` token, and the × is `muted` at rest, `foreground` under the pointer.
+- **The action and the × take their own press** and stop it there; `on_click` fires for a press they
+  declined, which is what "the whole card" means.
 
 **Native:**
 
 ```rust
+// Sugar — one line of body text, one action.
 Toast::danger("Connection lost")
-    .body("Reconnecting to the grid…")
-    .action("Retry", || retry())
+    .body_text("Reconnecting to the grid…")
+    .action(Button::outline("Retry").on_click(|| retry()))
+    .on_dismiss(|| dismiss(id));
+
+// Composed — the body is anything, and actions repeat. Neither Button carries a colour:
+// the card publishes its severity as a control tone and they take it.
+Toast::danger("Build failed")
+    .body(Flex::column().gap_spacing(Spacing::Xs)
+        .child(Label::new("3 errors in heca-grid-ui"))
+        .child(Label::new("cargo check exited 1").font_scale(0.85)))
+    .action(Button::new("Retry").on_click(|| rebuild()))
+    .action(Button::ghost("View log").on_click(|| open_log()))
+    .animation(Animation::Fade)        // it slides in unless you say otherwise
     .on_dismiss(|| dismiss(id));
 ```
 
@@ -2971,9 +3352,40 @@ ViewNode::new(WidgetKind::Toast)
 - **Props**: `text` (title), `severity` (`Text` — an unknown name degrades to `info`), `icon`
   (Glyph name), `body`, `action_text`, `dismissible` (Bool).
 - **Events**: `press` (the whole card), `dismiss` (the ×), `action` (the inline button — only wired
-  when `action_text` is set).
-- **No slots.** The inline action is a *labelled button*, not arbitrary content, so it is a prop plus
-  an intent. A slot would have promised a composition the widget does not offer.
+  when `action_text` is set **and** no `actions` child was given).
+- **Slots**: **`body`** — the **default** slot, so an unslotted child is the body — and
+  **`actions`**, one control per child. A described action is an ordinary described
+  [`Button`](#button) carrying its own `press` intent, which is what makes it a `prefix+/` target
+  with nothing hint-related written: being pickable is not opt-in. An unknown slot name is
+  debug-logged and falls back to the body, never an error.
+- **Precedence: children win** over `body_text` / `action_text`, the way a `Button`'s children win
+  over its `text`/`icon`. One content model, two spellings — the text props remain because they are
+  the plain-data path a [`ToastSpec`](#toaststack) uses.
+
+> The catalog said **"no slots, deliberately"** until F003/P096/T488. The reason was the widget's
+> own limitation — it hand-drew its card and could not hold arbitrary content — and that limitation
+> is gone. Do not restore the old rule.
+
+**Declarative, composed** — a rich body and two actions, each firing its own intent:
+
+```rust
+ViewNode::new(WidgetKind::Toast)
+    .text("Build failed")
+    .prop("severity", ViewSeverity::Danger.into())
+    // No slot named: the body is the DEFAULT slot.
+    .child(ViewNode::new(WidgetKind::VStack)
+        .child(ViewNode::new(WidgetKind::Label).text("3 errors in heca-grid-ui"))
+        .child(ViewNode::new(WidgetKind::Label).text("cargo check exited 1")))
+    .child(ViewNode::new(WidgetKind::Button)
+        .text("Retry")
+        .prop("slot", PropValue::Text("actions".into()))
+        .on_press(Intent::new("rebuild")))
+    .child(ViewNode::new(WidgetKind::Button)
+        .text("View log")
+        .prop("variant", PropValue::Variant(ViewVariant::Ghost))
+        .prop("slot", PropValue::Text("actions".into()))
+        .on_press(Intent::new("open_log")));
+```
 
 > **A declarative `Toast` is for INLINE use** — a notification row inside a panel. It is **not** how
 > you fire an app notification: the host owns the queue and lifecycle through
@@ -3178,8 +3590,7 @@ ViewNode::new(WidgetKind::ItemGroup)
     .child(ViewNode::new(WidgetKind::Item).text("lib.rs"));
 ```
 
-Props `realize` reads: `text` (header), `expanded` (Bool, default `true`). Children: the rows (the
-group's own header is prepended by the widget). Event: **`toggle`** — the intent carries the state it
+Props `realize` reads: `text` (header), `expanded` (Bool, default `true`). Children: the rows (the group's own header is prepended by the widget). Event: **`toggle`** — the intent carries the state it
 moved to in `args["expanded"]`, so one binding tells you which way it went.
 
 ### MarkerGroup
@@ -3235,8 +3646,7 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   `Theme::active_wash_alpha` — to mark it as the current/active dock, e.g. the active workspace),
   `.nav_selected(bool)` (a hollow accent **border** marking the sidebar-nav cursor on a
   workspace frame — distinct from the filled active wash).
-- **Accessors**: `.state() -> Signal<bool>` (expanded), `.active_state() -> Signal<bool>` (the
-  wash flag), `.nav_state() -> Signal<bool>` (the nav-cursor outline flag) — bind them to flip
+- **Accessors**: `.state() -> Signal<bool>` (expanded), `.active_state() -> Signal<bool>` (the wash flag), `.nav_state() -> Signal<bool>` (the nav-cursor outline flag) — bind them to flip
   the look in place without rebuilding the tree.
 
 > **The drag-handle grip is drawn but wired to nothing.** If you see it on a workspace header in
@@ -3245,17 +3655,13 @@ away to a single centered `Icon` while the region is collapsed to a rail.
 >
 > - the frame as a **container** — drag the whole dock into another chrome region. The actions for
 >   this already exist (`chrome.container.move_to_region` and friends); only the mouse surface is
->   missing. **`P079(F004)`**, task `J5592` ("DockFrame gets the drag handle it was specified with").
+>   missing.
 > - the frame as a **row inside** a container — reorder it in the list. heca mounts one frameless
->   `DockFrame` per workspace row, so this is the drag the grip actually sits beside.
->   **`P030(F006)`** (app-05, workspace drag-to-reorder), which still needs its own action and drop
->   logic.
+>   `DockFrame` per workspace row, so this is the drag the grip actually sits beside. This one still
+>   needs its own action and drop logic.
 >
-> The grip is left in place deliberately as a placeholder for those two (user, 2026-07-30).
->
-> **Phase ids in prose are worth distrusting.** Phase numbers are global, not per-feature — F004's
-> phases are `P019`, `P052`, `P079` — so a hand-written `F004/P009` names nothing. Every id in this
-> paragraph came from asking the planner; do the same rather than inferring one.
+> Both are tracked in the planner, and the grip is left in place deliberately as a placeholder for
+> them.
 
 **Native:**
 
@@ -3308,8 +3714,7 @@ Per the chrome plan's *read-via-signals, write-via-actions* rule, it reacts to a
 - **Accessors / intents**: `.mode_signal() -> Signal<RegionMode>` (binding point — share it with
   rail-aware Docks before `.dock(...)`), `.toggle()` (flip Expanded ⇄ CollapsedRail).
 - **`RegionMode`**: `Expanded`, `CollapsedRail` (thin icon rail), `Hidden` (`display: none`). The
-  library supports all three; **the heca app currently uses only `Expanded` and `Hidden`** (the
-  collapsed rail was dropped — see [`../docs/sidebar-provider-modes.md`](../docs/sidebar-provider-modes.md)).
+  library supports all three; **the heca app currently uses only `Expanded` and `Hidden`** (the collapsed rail was dropped — see [`../docs/sidebar-provider-modes.md`](../docs/sidebar-provider-modes.md)).
 
 ```rust
 let sidebar = ChromeRegion::vertical().expanded_size(320.0).rail_size(64.0)
@@ -3333,7 +3738,7 @@ publish/pull mechanism [content color](#scene--drawcommand--paintcx-for-building
 Hover and active already have their own lit chrome, so they do not double it, and the glyph keeps
 ownership of the halo's *reach* — only it knows how big it is.
 
-> **Not currently mounted in the app (2026-07-11).** The heca sidebar collapsed rail was dropped
+> **Not currently mounted in the app.** The heca sidebar collapsed rail was dropped
 > (a region is Expanded ⇄ Hidden), so nothing in the app builds `RailCell`s today. It remains a
 > supported library widget, reserved for a future generic Provider icon rail — see
 > [`../docs/sidebar-provider-modes.md`](../docs/sidebar-provider-modes.md) §4. If a future rail needs
@@ -3375,9 +3780,8 @@ A **transparent wrapper that carries a hint letter on behalf of a region** — a
 something that is not a widget you can put a builder on. It is transparent to focus, layout and
 events (the wrapped widget stays clickable and focusable); it only adds a declaration.
 
-> ⚠️ **It no longer draws the letter, and it is no longer how a widget becomes pickable.** Both
-> changed on 2026-08-17 (F003/P082/T431 and T441). Reach for it only when there is nothing to hang a
-> declaration on.
+> ⚠️ **It no longer draws the letter, and it is no longer how a widget becomes pickable.** Reach
+> for it only when there is nothing to hang a declaration on.
 
 **What replaced it, and why.** Two rules used to live here and now live in the framework:
 
@@ -3400,13 +3804,16 @@ with no downcasting.
   (`TopCenter` for compact square targets | `Center` for large panes | `CenterRight`
   for wide list rows — keycap pinned to the right edge | `TopRight` for tall targets like a
   workspace dock — right-aligned but anchored to the top edge, pair with `.offset_y` to land
-  on the header row),
+  on the header row | `TopLeft` for a large target whose picture the letter must stay clear of —
+  a card in the exposé, a content pane — pinned just inside the top-left and centred within a
+  shallow band from the top edge, so it lands on the card's top line rather than floating in the
+  middle of it),
   `.size(px)`, `.color(Color)` (override the keycap tint — default theme `accent`; lets a
   host distinguish target *kinds*, e.g. workspace picks tinted `warning` vs pane picks),
   `.offset_y(px)` (nudge the cap down after placement — e.g. drop a `TopCenter` cap onto a
   tall target's header row). The wrapper is **transparent to a stretching parent**: a wide
   child row fills its column instead of shrinking to content width.
-  **`on_hint` is no longer here** (F003/P082/T432) — it is
+  **`on_hint` is no longer here** — it is
   [`ComponentExt::on_hint`](#componentext--what-every-widget-gets), on every widget, so the two
   facts about a target (who it is, and what picking it does) stop living on two different nodes.
   A `KeyHint::new(row).on_hint(…)` call reads exactly the same; what changed is that a widget which
@@ -3440,6 +3847,32 @@ Row::new()
 
 Bind neither and the node is not a pick target; bind only `press` and a pick does what a click does.
 
+#### Which widgets get a letter
+
+**Anything you can act on, wherever it is.** A button is a pick target because it is a button. Put it
+in a pane's bar, a sidebar row, a plugin's panel or on its own — same button, same letter, and its
+author never has to know which. Declaring a pick is for saying a pick means something *other* than
+the click, never for winning back a letter.
+
+**One letter per thing, not per layer.** The one case needing care is a wrapper: a node that exists
+only to hold one other node. A decorator saying what picking does, around a card that can itself be
+activated, is two nodes and one card. So:
+
+- a wrapper and the single node it holds are **one thing** and share one letter — and if either of
+  them *declared* a pick, that is the layer the letter runs, because a declaration is precisely the
+  statement that a pick is not the click;
+- a node holding **more than one** child is a real container, and what is inside it are separate
+  things: each keeps its letter, and so does the container if it is a target itself.
+
+A pane holds a bar and its content, so it is a container: the pane keeps its letter and every button
+in its bar keeps one too.
+
+> ⚠️ **The rule this replaced, so it is not reinstated.** A declared hint used to silence mere
+> actionability *anywhere* beneath it. That silenced layers, and could not tell a decorator speaking
+> for one card from a pane that merely contains buttons — so a button's letter depended on what it
+> had been put inside. Every button in a pane's bar had to repeat its own click as a hint, and the
+> `⋮` a [`ButtonGroup`](#buttongroup) builds for itself wore no letter at all.
+
 **How the framework uses it** (`heca_grid_ui::hint`): `collect_hints(root)` walks the laid-out tree
 and returns every declaration in document order with the rect its letter goes over; `fire_hint(root,
 &path)` **delivers the pick as an `Event::Hint`** on the walk every other event uses, answering
@@ -3455,7 +3888,7 @@ nothing to ask about and is always offered. **Nothing is
 registered** — a target is addressed by its path for exactly as long as the letters are up, so there
 is no allocator to keep in step with three rebuild cadences and nothing to un-register. This
 replaced an opaque `HintTargetId` the host mapped back to a `pub(crate)` enum, which a plugin could
-not construct (F004/P084/T399).
+not construct.
 
 #### Standalone keycap — `paint_keycap` / `keycap_size` / `KeycapVariant`
 
@@ -3534,8 +3967,7 @@ asdfghjklbceimnopqrtuvwxyzASDFGHJKLBCEIMNOPQRTUVWXYZ
 **Home row first**, so the targets a picker finds first get the keys your fingers rest on; lower case
 before capitals because they are one keystroke on every layout. **One letter per pick, always, and 52
 is the cap** — past the end of the sequence a target simply gets no letter. Two-key sequences were
-raised and refused (Antonio, 2026-08-17: *"typing 2 letters is not an option. always 1. stay with
-52."*): anything needing more than 52 at once is a picker covering too much, and the answer is a
+raised and refused — one letter, always, and 52 is the cap: anything needing more than 52 at once is a picker covering too much, and the answer is a
 smaller picker, never a longer keystroke.
 
 The app reads the same constant, so `prefix+/`, the pane / column / workspace / dock picks and a
@@ -3557,7 +3989,7 @@ Note neither item declares anything to be pickable: both are actionable, so both
 [`.hintable`](#hintable-and-being-pickable).
 
 **Declarative** — a described tree opens a picker over its own subtree the same way, and binds the
-key through `[[keys.surface]]` on the name it declares (F003/P082/T436):
+key through `[[keys.surface]]` on the name it declares:
 
 ```json
 { "kind": "KeyHintGroup",
@@ -3628,7 +4060,7 @@ elsewhere is worse than no ring.
 - **Routing**: none of its own. `.focus(sig)` binds that signal to `Base::focused`, and the
   framework delivers keyboard events to the focus owner's chain — so an unfocused scope is simply
   not on the path, and the focused one is, with nothing gated, declined or forwarded. It used to
-  claim `routes_own_subtree` and skip the walk per event kind; that predicate is gone (T400).
+  claim `routes_own_subtree` and skip the walk per event kind; that predicate is gone.
 - **Theme**: the outline is [`PaintCx::focus_ring`] — the same primitive every control's ring uses,
   at `focus_border_width`, offset outside the bounds like a CSS `outline`. A theme with
   `show_focus_border = false` hides this one too: whether focus outlines are drawn is the theme's
@@ -3651,9 +4083,49 @@ container's scroll area binds as its keyboard target. See
 
 ### Tooltip
 
-A transparent wrapper that reveals a floating label when the pointer rests over its child past a
-short delay. The bubble is drawn on the **overlay layer** so it sits above siblings. It captures
-**no** input — the wrapped widget stays fully interactive (forwards events + focus).
+**A tooltip is a property of a widget, not a box around it.** Every widget takes one, on the same
+terms, with one builder:
+
+```rust
+Button::new("Close").icon(Glyph::Minus).tooltip("Close the pane")
+IconButton::new(Icon::new(Glyph::Gear)).tooltip("Settings").tooltip_side(TooltipSide::Bottom)
+```
+
+The framework owns everything behind it. The reveal is timed from the hover clock the **pointer
+router already keeps** (`PointerState::hovered_for`), and the bubble is drawn in `paint_child` — the
+one place every widget passes through — beside the hint letter and the drag feedback. Those three
+are the same kind of thing: something the framework draws *over* any widget from state it already
+has, so **no widget opts in and no host paints on their behalf**.
+
+| builder | what it does |
+| --- | --- |
+| `.tooltip(text)` | what this widget says on hover. Unset = it says nothing, and costs nothing. |
+| `.tooltip_signal(Signal<String>)` | the same, from a live signal — an action's current keybinding, a changing status — so the bubble follows without the widget being rebuilt. |
+| `.tooltip_side(TooltipSide)` | which side to prefer (`Top` default). Flipped automatically when there is no room, so it is a preference, not a placement. No-op with no tooltip declared. |
+| `.tooltip_delay(seconds)` | how long the pointer must rest (default `0.5`). No-op with no tooltip declared. |
+
+> ⚠️ **The bubble is drawn by `paint_child`, not by the widget's own `paint`.** Anything that paints
+> a tree with a bare `.paint(cx)` shows the widget and none of the three things the framework draws
+> over it — no tooltip, no hint letter, no drag feedback. Hosts and tests must go through
+> `paint_child`, exactly as the letter already requires.
+
+#### The wrapper — for a region that is not a widget
+
+`Tooltip::new(child, text)` still exists, and is now **implemented in terms of the property**: it is
+a transparent wrapper carrying a tip on its own base, so there is one reveal, one placement and one
+bubble rather than two that can drift.
+
+Reach for it only when there is no widget to declare the tooltip on. That is exactly the role
+[`KeyHint`](#keyhint) kept when the pick declaration moved onto every widget, and it is kept here
+for the same reason.
+
+**Why the property had to exist**, beyond the wrapping being noise: a widget held by a **typed**
+container cannot be wrapped. [`ButtonGroup`](#buttongroup) takes `Button` children, and
+`Tooltip::new(button, …)` is a `Tooltip`, not a `Button` — so under the old design a grouped button
+could not carry a tip at all.
+
+The bubble is drawn on the **overlay layer** so it sits above siblings. It captures **no** input —
+the widget stays fully interactive (events + focus pass through untouched).
 
 **It hand-rolls neither its placement nor its surface** — both come from the shared authorities,
 so a tooltip cannot drift away from the rest of the overlay family:
@@ -3670,10 +4142,11 @@ so a tooltip cannot drift away from the rest of the overlay family:
   and `PanelElevation::Hover` — the shared shadow at a quarter depth, because the full panel
   shadow is larger than a ~30px bubble.
 
-- **Construct**: `Tooltip::new(child, text)`, or `Tooltip::new_signal(child, Signal<String>)` for
-  a reactive label.
-- **Builders**: `.side(TooltipSide)` (`Top` | `Bottom` | `Left` | `Right`, default `Top`),
-  `.delay(seconds)` (hover delay before reveal, default `0.5`).
+- **Construct the wrapper**: `Tooltip::new(child, text)`, or
+  `Tooltip::new_signal(child, Signal<String>)` for a reactive label.
+- **Wrapper builders**: `.side(TooltipSide)` (`Top` | `Bottom` | `Left` | `Right`, default `Top`),
+  `.delay(seconds)` (hover delay before reveal, default `0.5`) — the same two values the
+  `.tooltip_side` / `.tooltip_delay` builders set on any widget.
 - **`TooltipSide` is `BesideSide`** — the same type, re-exported under the name that reads better
   at a call site. There is one four-sided vocabulary, not two.
 
@@ -3727,7 +4200,7 @@ row.child(action_tooltip(KeyHint::new(button).on_hint(hint), "close", "Close", &
 
 ### Overlay
 
-The **base overlay surface** every overlay widget shares (T009 overlay rework): a
+The **base overlay surface** every overlay widget shares: a
 viewport-filling, centering layer that decorates its single **panel** child with the common
 overlay chrome — optional dimming scrim, drop shadow, theme surface fill, and the bracket
 reticle. **Blocking is a property of this layer, not a per-widget reimplementation**: a
@@ -3752,9 +4225,43 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   the chrome around it. `.panel_boxed(Box<dyn Component>)` takes a mapper-produced panel (e.g.
   `heca`'s `realize(ViewNode)`).
 - **Builders**: `.blocking(bool)` (default `true` — scrim + swallow outside input; `false` = no
-  scrim, outside input falls through), `.opened(bool)` (the **initial** state — see *Showing and
+  scrim, outside input falls through), `.frosted(bool)` (default `false` — see *The frosted
+  backdrop* below), `.opened(bool)` (the **initial** state — see *Showing and
   hiding* below), `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
   policy instead).
+
+#### The frosted backdrop — `.frosted(true)`
+
+**Blur what is behind the surface.** The scrim's counterpart: a scrim *tints* what is underneath,
+a frost takes its *detail* away, and a surface may want either, both or neither.
+
+```rust
+Overlay::new().blocking(true).frosted(true).panel(map)   // the exposé's backdrop
+```
+
+```json
+{"kind": "overlay", "props": {"blocking": true, "frosted": true}}
+```
+
+- **Strength is the theme's**, never the caller's — `overlay_frost_radius`, beside the scrim alpha
+  it is the counterpart of. A theme that wants a flat backdrop sets it to `0` and every frosted
+  surface answers together. A described surface asks for the *effect*, never a radius.
+- **It blurs exactly what it occludes** — the viewport when `blocking`, the panel alone when not.
+  The same reach [`overlay_occludes`](#component-trait) reports, read from one place, so the frost
+  and the input policy can never disagree about how far a surface goes.
+- **It fades with the surface that asked for it.** Left at full strength it holds the whole session
+  out of focus for the length of the fade and then snaps sharp in one frame — the exact pop the
+  fade exists to remove. It takes the animation's *opacity* and nothing else: a blurred **region**
+  that also zoomed would be blurring somewhere the surface is not.
+- **It is recorded, not performed.** A blur is GPU work, so the widget emits a
+  [`backdrop_blur`](#painting--paintcx) request at its place in the drawing order and the host
+  performs it (`docs/surface-compositor.md` § 0.5). The request goes into the **base** band, not
+  the deferred overlay band the surface's own visuals use — the host flushes the base, performs the
+  requests, then flushes the overlay bands, which is what "after everything beneath me, before me"
+  means in one pass order.
+
+A frosted surface therefore needs **nothing** from whoever places it: no registration, no host pass
+keyed on it, no declaration outside the tree.
 - **Positioning**: `.position(OverlayPosition)` picks how the panel is placed —
   `OverlayPosition::Center` (default: fill the viewport, taffy-center the panel — the modal
   [`Dialog`](#dialog) case) or `OverlayPosition::Anchored { anchor, gap }` (dropdown/popover:
@@ -4076,7 +4583,7 @@ Centering is real taffy layout, owned by the composed [`Overlay`](#overlay) (it 
 viewport and centers the panel), so every descendant gets true bounds (which the hint picker +
 hit-testing need).
 
-**Nested overlays work** (T009 step 4): a [`Select`](#select) opened inside the body composites
+**Nested overlays work**: a [`Select`](#select) opened inside the body composites
 **above** the dialog's action buttons (its dropdown records a deeper scene segment) and captures
 hover/wheel/keys over them — the dialog offers pointer moves, `Scroll`, and the semantic
 `Widget*` intents to an overlay-active descendant first, so `Dismiss` closes the *dropdown* (not
@@ -4089,7 +4596,7 @@ the dialog) and `Activate` commits its row.
 > in-flow `.child(...)` of a scrolled column instead, its box is that slot and the panel centers
 > off-screen once the page scrolls (and a self-recentering `on_layout` cannot fix it — inside a
 > scrolled subtree bounds are in scrolled-tree coordinates, not screen coordinates; this was
-> tried and reverted, see F003/P011/T009 BUG B).
+> tried and reverted).
 
 - **Construct**: `Dialog::new(title)`, then `.body(impl Component)` and `.action(impl Component)`
   (a wired `Button`), in that order. Buttons sit in a right-aligned row in call order.
@@ -4111,8 +4618,7 @@ the dialog) and `Activate` commits its row.
       .body(ScrollRegion::new().child(long_list))       // only this scrolls
       .action(Button::secondary("Cancel"))
   ```
-  A [`Select`](#select) inside a scrolled body still composites **above** the action buttons (the
-  nested-overlay routing from the T009 rework), so overlay-in-scrolled-overlay is supported.
+  A [`Select`](#select) inside a scrolled body still composites **above** the action buttons (the nested-overlay routing above), so overlay-in-scrolled-overlay is supported.
 - **Accessor**: `.open_signal() -> Signal<bool>`.
 
 ```rust
@@ -4442,22 +4948,66 @@ owns a `Signal<Vec<ToastSpec>>` (its render list); the stack reconciles cached [
 widgets by **id** (each keeps its hover/flash state), corner-anchors them on the overlay layer,
 slides new ones in, routes events to the toast under the cursor, and reports
 `on_dismiss(id)`/`on_action(id)` back — the host then removes the id (which reflows the rest). It is
-overlay-active only while it has toasts, and **passes through** clicks that miss every toast.
+overlay-active only while it has toasts, and **passes through** what misses every toast.
 Its `overlay_occludes(pos)` reports the **cards'** rects (not the whole corner), so a host gate
 like "right-click opens the page menu" skips points a toast covers while staying live elsewhere
 (see [`Component` trait](#component-trait)).
 
-- **Construct**: `ToastStack::new(items: Signal<Vec<ToastSpec>>)`; `.corner(ToastCorner)`,
+**A card occludes hover too.** A pointer *move* over a card is consumed, so controls behind it stop
+lighting up while a toast is over them; moves between and outside the cards still fall through, and
+a button next to the stack keeps hovering as it always did.
+
+**The cards are real children, and the engine lays them out.** The stack is a viewport-sized box
+whose `justify`/`align` come from its corner, with its gap between the cards and its margin as
+padding — it measures, positions, hit-tests and routes nothing. That is what makes a notification's
+action **reachable by keyboard at all**: the picker walks the laid-out tree, so a card kept beside
+it in a private list could never be lettered, and hover never reached inside one (the framework
+marks hover along the hit-test target's ancestor chain, and a hand-delivered move marks nothing).
+
+**A corner means the window's corner.** A host mounts its layers however it likes — a column of
+viewport-sized siblings gives each one a *share* of the height — so the stack anchors the finished
+group against the viewport the layout pass stamped on it, in `on_layout`. The arrangement is still
+entirely the engine's; only which corner meets which corner is left.
+
+- **Construct**: `ToastStack::new(items: Signal<Vec<ToastSpec>>)`; `.position(ToastPosition)`,
   `.gap(px)`, `.margin(px)`.
-- **Intents**: `.on_dismiss(|id| …)` (× clicked), `.on_action(|id| …)` (inline action clicked).
-- **`ToastSpec`**: `ToastSpec::new(id, title).severity(..).icon(..)?.body(..)?.action(label)?.dismissible(bool)` — plain data the host owns.
+- **Intents**: `.on_dismiss(|id| …)` (× clicked), `.on_action(|id, key| …)` (an action clicked —
+  `key` is that action's own name, because a card may offer several and "which card" alone would
+  not say what to do).
+- **`ToastSpec`**: `ToastSpec::new(id, title).severity(..).icon(..)?.body(..)?.action(key, label)*.dismissible(bool)`
+  — plain data the host owns, with **no closures**: an action is a `key` the host maps back, which
+  is the only form that also survives an RPC call or a plugin.
+- **Several actions, each a real control.** `actions: Vec<ToastAction>` where
+  `ToastAction { key, label, variant }`. `.action(key, label)` appends one in the default variant;
+  `.action_with(ToastAction::new(..).variant(..))` is the full form and the sugar builds it, so
+  there is one path and not two. A notification that can be retried *and* inspected needs two, and
+  "one action" was a widget limit rather than a real rule.
+- **The stack never chooses how an action looks.** The variant rides on each `ToastAction` (default
+  `Primary`), so a card can carry a primary "Retry" beside a ghost "Dismiss". One face hardcoded in
+  the widget is wrong for somebody every time.
+- **One position vocabulary for the card and the stack.** [`ToastPosition`](#toast) places both —
+  `TopRight`/`TopLeft`/`TopCenter`/`BottomRight`/`BottomLeft`/`BottomCenter` — so "top right" means
+  the same thing said either way. It replaced a separate four-member `ToastCorner`, which said the
+  same thing in a second spelling and could not express the centres.
+- **A dropped card leaves before it goes.** Remove its id and the stack plays that card's exit,
+  keeping it in place until the gesture has finished — so a notification is never cut off
+  mid-dismissal.
 
 ```rust
 let toasts = signal(Vec::<ToastSpec>::new());            // the app's render list
 let stack = ToastStack::new(toasts)
-    .corner(ToastCorner::TopRight)
-    .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)));
-// app pushes:  toasts.update(|v| v.push(ToastSpec::new(1, "Saved").severity(ToastSeverity::Success)));
+    .position(ToastPosition::TopRight)
+    .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)))
+    .on_action(move |id, key| run(id, key));             // `key` says WHICH action
+
+// The app pushes plain data — two actions, each with its own face:
+toasts.update(|v| v.push(
+    ToastSpec::new(1, "Build failed")
+        .severity(ToastSeverity::Danger)
+        .body("3 errors in heca-grid-ui")
+        .action("rebuild", "Retry")
+        .action_with(ToastAction::new("open_log", "View log").variant(ButtonVariant::Ghost)),
+));
 ```
 
 > Same host wiring as `Dialog` (route pointer to the overlay first). Auto-dismiss/timers live in the
@@ -4502,8 +5052,8 @@ either and a description can set it with **no change to the mapper**.
 
 #### Appearance: the theme is the default, not a wall
 
-Changed 2026-07-27. `Visual` used to be deliberately unserializable, so appearance was unreachable
-from a description by construction. It is now an ordinary property, on every widget.
+Appearance is an ordinary property, on every widget. `Visual` used to be deliberately
+unserializable, putting it out of a description's reach by construction; it no longer is.
 
 **Set nothing and you follow the theme** — which is what most widgets should do. That is not a new
 behaviour bolted on: `fill` / `border` / `glow` are `Option`, and `radius` / `font_size` use a
@@ -4629,7 +5179,7 @@ and a bad value costs only itself: the good props on the same node still apply.
 | `Surface` | (container — children only) | — |
 | `Panel` | `text` (the heading; omit it and no header row is drawn) + children | — |
 | `Scroll` | `axes` (`vertical` / `horizontal` / `both`, default vertical) + children | — |
-| **`Overlay`** | `blocking` (Bool, default `true`), `open` (Bool), `animation` (`none` / `fade` / `zoom` / `zoom_fade`), **+ children** = the panel (one child *is* the panel; several are stacked into one) | — (dismissal is the host's) |
+| **`Overlay`** | `blocking` (Bool, default `true`), `frosted` (Bool, default `false` — blur what is behind it, at the theme's radius), `open` (Bool), `animation` (`none` / `fade` / `zoom` / `zoom_fade`), **+ children** = the panel (one child *is* the panel; several are stacked into one) | — (dismissal is the host's) |
 | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 | `Badge` / `Tag` / `Alert` | `text` | — |
 | **`Button`** | `variant`, `size`, **+ children** (the content); `text`, `icon` = the **childless sugar** | `press` |
@@ -4759,6 +5309,34 @@ ViewNode::new(WidgetKind::VStack)
 - **Extending the vocabulary is host-side** (never a plugin): add a `WidgetKind` variant + a
   `realize` arm + the widget's showcase demo + its entry here. Plugins compose from existing kinds.
 
+#### Arguments — what an `Intent` may carry
+
+An argument is added with `.arg(name, PropValue)`, and the value is an **explicit `PropValue`**
+rather than anything convertible. That is deliberate: an argument crosses to RPC and to a WASM
+plugin as data, so what it *is* should be readable at the call site instead of inferred from
+whatever numeric type happened to be in scope.
+
+```rust
+Intent::new("focus_pane").arg("pane_id", PropValue::Int(7));
+Intent::new("rename").arg("name", PropValue::Text("scratch".into()));
+Intent::new("expand").arg("open", PropValue::Bool(true));
+```
+
+⚠️ **Integers are `i64`, and most ids here are `u64`.** `PropValue::Int` is an `i64`, because that
+is what JSON and the RPC wire carry. A pane id, a notification id and `ToastSpec::id` are all
+`u64`, and there is deliberately **no `From<u64>`** — the conversion is lossy above `i64::MAX`, and
+a silently wrapped id would arrive as a *negative* number that nothing could diagnose from the UI.
+So cast at the call site, where the choice is visible:
+
+```rust
+Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane_id as i64));
+```
+
+An intent may carry anything `PropValue` holds — `Bool`, `Int`, `Float`, `Text`, a colour or glyph
+**name**, a `List`, or a `Map` for a named group of values. It may **never** carry a closure or a
+widget: an intent is the one form behaviour takes when it has to survive being sent by RPC, named
+in a keybinding, or raised by a plugin.
+
 ### The other half of an `Intent` — the action it names
 
 Every `.on_press(Intent::new("rename"))` above is half a contract. The other half is the **action**
@@ -4823,9 +5401,7 @@ treats it like a built-in: it has a label and an icon, it shows up in menus and 
 be bound in `config.toml`, and it is judged by the same interaction policy.
 
 Metadata and handler live in two places for a borrow reason, not a design one: an action handler is
-`fn(&mut AppState, …)` and gets no registry, so **metadata** must be reachable from `AppState` (the
-`ActionCatalog`) while the **handler** table must be borrowable alongside `&mut AppState` (the
-`ActionRegistry`). One call registers both.
+`fn(&mut AppState, …)` and gets no registry, so **metadata** must be reachable from `AppState` (the `ActionCatalog`) while the **handler** table must be borrowable alongside `&mut AppState` (the `ActionRegistry`). One call registers both.
 
 ```rust
 use crate::actions::{

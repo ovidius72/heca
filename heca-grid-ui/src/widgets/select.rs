@@ -364,6 +364,15 @@ impl Select {
     /// re-running it never compounds an offset.
     fn place_options(&mut self) {
         let mut moved = false;
+        // **While the list is closed the chosen option is an echo, not a target.** It stands inside
+        // the trigger so the control shows real content — an icon, a badge, whatever the option
+        // composes — but it is not something you can pick: the trigger is the control. Left
+        // hittable it hovered on its own, and its pill stops at the chevron gutter, so the text lit
+        // up and the caret beside it did not (F003/P096/T483).
+        let echo = !self.open;
+        for child in self.base.children.iter_mut() {
+            child.base_mut().pointer_transparent = echo;
+        }
         for (i, target) in self.option_targets().into_iter().enumerate() {
             let Some(target) = target else {
                 // Not shown: collapse it, so no stale rect is left behind to swallow a click.
@@ -605,6 +614,15 @@ impl Component for Select {
         };
         let glow = if disabled { None } else { cx.rest_glow(GLOW_RADIUS) };
         cx.rect(b, surface, Some(border), radius, glow);
+
+        // **One control, one highlight.** The whole trigger lights under the pointer — the chosen
+        // option's text and the chevron together — in the same interaction token an `Item` and a
+        // `Choice` use, so a control and a list row read as the same family. It used to be the
+        // echoed option that hovered, and its pill stops at the chevron gutter, which is why the
+        // caret stayed dark while the text lit up (F003/P096/T483).
+        if !disabled && !self.open && self.base.hovered() {
+            cx.rect(b, foreground.with_alpha(ia.row_hover_fill), None, radius, None);
+        }
 
         // What the trigger shows: the **chosen option**, content and all — its icon, its badge,
         // whatever it composes — never just words about it.

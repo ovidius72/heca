@@ -201,7 +201,7 @@ impl PaneCard<'_> {
                     .child(
                         crate::components::PaneName {
                             text: self.name,
-                            color: theme.colors.foreground,
+                            color: Some(theme.colors.foreground),
                             bold: false,
                             font_scale: 1.0,
                             theme,

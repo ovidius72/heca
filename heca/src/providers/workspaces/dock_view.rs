@@ -98,6 +98,10 @@ mod tests {
         let mut tree = testing::tree();
         let mut second = tree.workspaces[0].clone();
         second.ws_idx = 1;
+        // Its own identity, not just its own position — a clone that keeps the original's id is two
+        // rows answering to one name, which is what the keys are built from.
+        second.ws_id = heca_core::layout::WorkspaceId(1);
+        second.columns[0].col_id = heca_core::layout::ColumnId(1);
         second.name = "ws2".into();
         tree.workspaces.push(second);
 
@@ -114,7 +118,7 @@ mod tests {
         let declared = testing::declared_keys(&root);
         for ws_idx in [0, 1] {
             assert!(
-                declared.contains(&super::super::workspace_key(ws_idx)),
+                declared.contains(&super::super::workspace_key(heca_core::layout::WorkspaceId(ws_idx as u64))),
                 "workspace {ws_idx} has no frame: {declared:?}",
             );
         }

@@ -213,6 +213,11 @@ pub(crate) fn map(
     Box::new(
         Overlay::new()
             .blocking(true)
+            // **The session stays there underneath, legibly out of focus.** A flat fill made the
+            // map a different screen; the blur makes it a lens. One builder on the widget — the
+            // surface asks and the host performs it, so this travels with the tree instead of
+            // being a fact the registry held about it (F003/P097/T494).
+            .frosted(true)
             // **The map names how it comes and goes, exactly as a plugin's surface would.**
             //
             // It opens by pulling back, the way niri's overview does — the same session seen from
@@ -227,8 +232,8 @@ pub(crate) fn map(
             // user who wants the literal reading sets 2.0.
             .animation(Animation::ZoomFade.from(geometry.overview_zoom_from as f32))
             .panel_size(Length::Pct(1.0), Length::Pct(1.0))
-            // **The panel is the frost's tint, not a lid.** The host stamps the blurred frame
-            // under this layer (`LayerBackdrop::Frosted`), so the surface here is the background
+            // **The panel is the frost's tint, not a lid.** The blurred frame is stamped under this
+            // surface (`.frosted(true)` above), so the surface here is the background
             // colour at the theme's scrim strength: enough to hold the cards' contrast, thin
             // enough that the session reads behind them as a blurred wash. Painted opaque it hid
             // the blur completely; left at heca's own window colour — translucent by design, for
@@ -342,8 +347,8 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     // map's own deletes with them (F003/P082/T416). A re-registration keeps the layer's id, so the
     // one already registered under this name is the one to name.
     let id = state.layers.slot_for_name(&name);
-    let emit = super::layer_emitter(&state.event_proxy, id);
-    let already_up = state.layers.is_visible_named(&name);
+    let emit = super::layer_emitter(&state.event_proxy, super::surface_key_of(Some(&name), id));
+    let already_up = state.layers.is_visible_named(&state.window_root, &name);
     let here = open_on(
         &state.session,
         already_up,
@@ -370,7 +375,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
         .flatten()
         .filter(|id| crate::app::focus::find_pane_workspace(&state.session, *id).is_some());
     let root = map(&rows, &theme, emit, here, &state.session.options, &keys, previous);
-    let was_visible = state.layers.is_visible_named(&name);
+    let was_visible = state.layers.is_visible_named(&state.window_root, &name);
     let id = state.layers.add_named(
         id,
         name.clone(),
@@ -385,15 +390,16 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
         // intents were arranged. A dialog covers. A map does not.
         false,
         root,
+        &mut state.window_root,
     );
-    // The map floats **over** the session, so the session has to still be there underneath — but
-    // legibly out of focus. A flat fill made it a different screen; the blur makes it a lens.
-    state.layers.set_backdrop(id, super::LayerBackdrop::Frosted);
+    // **The frost is declared on the surface too, in `map`** — `.frosted(true)`, beside the
+    // animation, for the same reason.
+    //
     // **The animation is declared on the surface, in `map`** — one builder on the widget, exactly
     // what a plugin writes. It used to be two `pub(crate)` calls on the registry here, holding a
     // `LayerId` and knowing the sequencing rule; a plugin could reach none of it (F003/P082/T459).
     if was_visible {
-        state.layers.show(id);
+        state.layers.show(&mut state.window_root, id);
     }
     state.needs_redraw = true;
     Some(id)
@@ -577,15 +583,23 @@ mod tests {
         );
         assert!(seen.iter().any(|t| t == "a"), "the pane names are still there: {seen:?}");
 
-        // **The whole map lives in the scene's OVERLAY layer**, because `Overlay` paints through
-        // `PaintCx::with_overlay`. A host deciding whether to flush the layer pass by asking "did
-        // the base layer draw anything" gets `no` and skips it, and `prefix+Tab` shows nothing at
-        // all — which is exactly what happened.
+        // **Everything the map DRAWS lives in the scene's OVERLAY layer**, because `Overlay` paints
+        // through `PaintCx::with_overlay`. A host deciding whether to flush the layer pass by
+        // asking "did the base layer draw anything" gets `no` and skips it, and `prefix+Tab` shows
+        // nothing at all — which is exactly what happened.
+        //
+        // The one thing in the base layer is the **frost request**, and it is there on purpose: the
+        // host performs the requests between flushing the base and flushing the overlay bands, so a
+        // backdrop recorded with the visuals would blur the frame *after* the surface it is meant
+        // to sit under. Nothing is drawn there — the blur is GPU work the host does, not a shape.
         assert!(
-            scene.base_layer().is_empty(),
+            scene
+                .base_layer()
+                .iter()
+                .all(|c| matches!(c, heca_grid_ui::DrawCommand::Host(_))),
             "the map draws nothing into the base layer — do not gate its flush on that",
         );
-        assert!(scene.has_overlay(), "it is all in the overlay layer");
+        assert!(scene.has_overlay(), "and everything it draws is in the overlay layer");
     }
 
     /// **The map opens on the pane the session is focused on** — not where it was last browsed.

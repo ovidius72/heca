@@ -45,9 +45,10 @@
 //! position welds a thumb to the cursor. The rule is here, once, instead of in each of them.
 
 use crate::component::{Base, Component};
-use crate::drag::{DropSide, resolve_at};
+use crate::drag::DropSide;
 use crate::event::{
-    DragEvent, Event, EventKind, Handled, PointerButton, PointerEvent, RawPointer, RawPointerKind,
+    DragEvent, Event, EventKind, Handled, PointerButton, PointerEvent, RawPointer,
+    RawPointerKind,
 };
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_core::layout::{Point, Rectangle};
@@ -85,6 +86,14 @@ pub struct PointerState {
     /// [`Row`](crate::widgets::Row) hands it to a list's cursor, a
     /// [`Button`](crate::widgets::Button) eases its fill toward it.
     pub hovered: Signal<bool>,
+    /// **When the pointer arrived**, or `None` while it is elsewhere. Stamped on the same
+    /// transition that sets [`hovered`](Self::hovered), so the two cannot disagree.
+    ///
+    /// It exists because "how long has this been hovered" is not a question any one widget should
+    /// answer for itself — a tooltip's reveal delay reads it, and before this the tooltip wrapper
+    /// kept a private clock started from its own capture handler, which is the same shape as the
+    /// six widgets that each tested `bounds.contains(pos)` before this module existed.
+    hovered_since: Cell<Option<Instant>>,
     /// Set on the widget that consumed a [`PointerDown`](Event::PointerDown): moves and the
     /// release route here until the button comes up.
     capture: Cell<bool>,
@@ -97,6 +106,13 @@ pub struct PointerState {
     dragging: Cell<bool>,
     /// `true` while a drag in flight is over this drop target.
     drag_over: Cell<bool>,
+    /// Where in this target the drag currently sits — before it, onto it, or after it — so the
+    /// widget can draw the insertion line without measuring anything.
+    drag_side: Cell<DropSide>,
+    /// **Where the pointer is, while this widget is the source of a drag.** The one thing the
+    /// picture that follows the cursor needs and layout cannot give: the source is still laid out
+    /// where it was, and what follows the cursor is drawn somewhere else entirely.
+    drag_pos: Cell<Point>,
 }
 
 impl PointerState {
@@ -104,17 +120,36 @@ impl PointerState {
     pub fn new() -> Self {
         Self {
             hovered: signal(false),
+            hovered_since: Cell::new(None),
             capture: Cell::new(false),
             press: Cell::new(None),
             run: Cell::new(None),
             dragging: Cell::new(false),
             drag_over: Cell::new(false),
+            drag_side: Cell::new(DropSide::Onto),
+            drag_pos: Cell::new(Point::new(0.0, 0.0)),
         }
     }
 
     /// Whether the pointer is over this widget or a descendant.
     pub fn is_hovered(&self) -> bool {
         self.hovered.get_untracked()
+    }
+
+    /// **How long the pointer has rested here**, in seconds, or `None` if it is not hovering.
+    ///
+    /// The one clock, read by anything whose behaviour is "after the pointer has been still for a
+    /// while" — the tooltip reveal today.
+    pub fn hovered_for(&self) -> Option<f32> {
+        self.hovered_since
+            .get()
+            .map(|since| since.elapsed().as_secs_f32())
+    }
+
+    /// Start or clear the hover clock. Called by the hover walk on the same transition that sets
+    /// [`hovered`](Self::hovered) — never by a widget.
+    pub(crate) fn set_hovered_since(&self, now: Option<Instant>) {
+        self.hovered_since.set(now);
     }
 
     /// Whether this widget is dragging (it is the source of a drag in flight).
@@ -125,6 +160,17 @@ impl PointerState {
     /// Whether a drag in flight is currently over this drop target.
     pub fn is_drag_over(&self) -> bool {
         self.drag_over.get()
+    }
+
+    /// Where in this target the drag sits — meaningful only while
+    /// [`is_drag_over`](Self::is_drag_over).
+    pub fn drag_side(&self) -> DropSide {
+        self.drag_side.get()
+    }
+
+    /// Where the pointer is — meaningful only while [`is_dragging`](Self::is_dragging).
+    pub fn drag_pos(&self) -> Point {
+        self.drag_pos.get()
     }
 }
 
@@ -145,6 +191,15 @@ type Path = Vec<usize>;
 /// host reads to decide whether the input also belongs to whatever sits behind the tree (in heca,
 /// the terminal).
 pub fn route(root: &mut dyn Component, raw: &RawPointer) -> Handled {
+    // **The framework fills in what is held down; the caller never does.** Modifiers are device
+    // state, not a property of this event, and a host has more than one place it feeds a tree from
+    // — so "attach the modifiers here" is a rule some call site always forgets, silently, because
+    // "nothing held" is indistinguishable from "nobody asked". Read from the one place that is
+    // told (F003/P097/T496).
+    let raw = &RawPointer {
+        modifiers: crate::event::modifiers(),
+        ..*raw
+    };
     match raw.kind {
         RawPointerKind::Moved => route_move(root, raw),
         RawPointerKind::Pressed => route_press(root, raw),
@@ -161,7 +216,18 @@ pub fn route(root: &mut dyn Component, raw: &RawPointer) -> Handled {
 /// to do anything), then the move itself, then whatever the drag machinery makes of it.
 fn route_move(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     let target = hit_test(root, raw.pos);
-    update_hover(root, target.as_deref(), raw);
+    // **A drag owns the pointer, so nothing hovers under it.** Hover says "the pointer is on you
+    // and a click would land here", which is false mid-drag: what a release will do is decided by
+    // the drop rules, not by what happens to be beneath the cursor. Leaving it on lit a pane card
+    // as a column was dragged across it, which reads as "you may drop here" — and the drop then
+    // went somewhere else entirely (Antonio, driving, 2026-09-01). Passing `None` also clears
+    // whatever was lit when the drag began. The drop mark stays: that one is drawn from the
+    // resolved target and is the only truthful feedback while a drag is in flight.
+    let hover = match dragging_path(root).is_some() {
+        true => None,
+        false => target.as_deref(),
+    };
+    update_hover(root, hover, raw);
 
     let capture = capture_path(root);
     let mut handled = Handled::No;
@@ -175,6 +241,11 @@ fn route_move(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     // control that took the press can still be the thing being dragged.
     if let Some(path) = capture.or_else(|| press_path(root)) {
         handled = or(handled, drive_drag(root, &path, raw));
+    }
+    // And again after, because the move that *starts* a drag arrives while nothing is dragging yet:
+    // the check above cannot know, so the row under the cursor would stay lit until the next move.
+    if dragging_path(root).is_some() {
+        update_hover(root, None, raw);
     }
     handled
 }
@@ -309,7 +380,7 @@ fn route_wheel(root: &mut dyn Component, raw: &RawPointer) -> Handled {
 fn cancel(root: &mut dyn Component, raw: &RawPointer) {
     update_hover(root, None, raw);
     if let Some(path) = dragging_path(root) {
-        let item = node_at(root, &path).base().drag_source;
+        let item = drag_identity(root, &path);
         clear_drag_over(root);
         if let Some(item) = item {
             let ev = Event::DragEnd(DragEvent {
@@ -370,13 +441,28 @@ pub fn hit_test(root: &dyn Component, pos: Point) -> Option<Path> {
             return Some(sub);
         }
     }
+    // **A surface passes the pointer through where it covers nothing** — the browser's
+    // `pointer-events: none` on a positioned wrapper, and the reason an author seats a surface and
+    // writes nothing else. Its children have already had their turn above and keep everything that
+    // lands on them; what is left is the surface's own box, and a surface's box is routinely much
+    // bigger than what it draws (a notification stack spans the window so a corner means the
+    // *screen's* corner). Claiming that box is how an empty, invisible surface came to swallow
+    // every press in the app with nothing failing anywhere. A surface that means to swallow says so
+    // in `overlay_occludes` — which is what `Overlay::blocking(true)` answers for the whole
+    // viewport, so a modal is unaffected.
+    if root.base().surface {
+        return root.overlay_occludes(pos).then(Path::new);
+    }
     rect.contains(pos).then(Path::new)
 }
 
 /// Hidden and invisible subtrees have stale bounds and take no input — the same filter paint,
 /// focus and drag resolution use.
 fn skip(c: &dyn Component) -> bool {
-    !c.base().visible.get_untracked() || c.base().style.layout.hidden
+    !c.base().visible.get_untracked()
+        || c.base().style.layout.hidden
+        // Decoration the pointer passes through — see `Base::pointer_transparent`.
+        || c.base().pointer_transparent
 }
 
 // ─────────────────────────────── hover ───────────────────────────────
@@ -398,6 +484,11 @@ fn hover_walk(node: &mut dyn Component, target: Option<&[usize]>, e: &PointerEve
     let was = node.base().pointer.hovered.get_untracked();
     if was != on_path {
         node.base().pointer.hovered.set(on_path);
+        // The clock starts and stops with the hover itself, so nothing downstream has to observe
+        // enter/leave to keep its own copy in step.
+        node.base()
+            .pointer
+            .set_hovered_since(on_path.then(Instant::now));
         node.base().mark_needs_paint();
         let ev = if on_path {
             Event::PointerEnter(*e)
@@ -522,17 +613,29 @@ fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPointer) -> Ha
             return Handled::No;
         }
         node_at(root, &source_path).base().pointer.dragging.set(true);
-        let ev = Event::DragStart(drag_event(item, raw, DropSide::Onto));
+        let ev = Event::DragStart(drag_event(&item, raw, DropSide::Onto));
         let _ = deliver_path(root, &source_path, &ev);
     }
 
-    let hit = resolve_at(root, raw.pos);
-    update_drag_over(root, hit.map(|h| (h.id, h.side)), item, raw);
-    let side = hit.map_or(DropSide::Onto, |h| h.side);
+    let kind = node_at(root, &source_path).base().drag_kind.clone();
+    let hit = crate::drag::resolve_at_for(root, raw.pos, kind.as_deref());
+    {
+        // The source draws what follows the cursor, so it is the source that must know where the
+        // cursor is: its own bounds still say where it was picked up from.
+        let p = &node_at(root, &source_path).base().pointer;
+        p.drag_pos.set(raw.pos);
+    }
+    let side = hit.as_ref().map_or(DropSide::Onto, |h| h.side);
+    update_drag_over(
+        root,
+        hit.as_ref().map(|h| (h.path.clone(), h.side)),
+        &item,
+        raw,
+    );
     deliver_path(
         root,
         &source_path,
-        &Event::Drag(drag_event(item, raw, side)),
+        &Event::Drag(drag_event(&item, raw, side)),
     )
 }
 
@@ -543,32 +646,49 @@ fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     let Some(source_path) = dragging_path(root) else {
         return Handled::No;
     };
-    let Some(item) = node_at(root, &source_path).base().drag_source else {
+    let Some(item) = drag_identity(root, &source_path) else {
         return Handled::No;
     };
-    let hit = resolve_at(root, raw.pos);
+    let kind = node_at(root, &source_path).base().drag_kind.clone();
+    let hit = crate::drag::resolve_at_for(root, raw.pos, kind.as_deref());
     let mut handled = Handled::No;
-    if let Some(hit) = hit
-        && let Some(path) = path_of_drop_target(root, hit.id)
-    {
-        let ev = Event::Drop(drag_event(item, raw, hit.side));
-        handled = deliver_path(root, &path, &ev);
+    if let Some(hit) = hit.as_ref() {
+        let ev = Event::Drop(drag_event(&item, raw, hit.side));
+        handled = deliver_path(root, &hit.path, &ev);
+        // **What happens to a drop nobody took is the host's**, the same way an unclaimed
+        // right-click with a declared menu is. A row can say it accepts drops; it cannot move a
+        // pane into another workspace. So this crosses back once, with both identities already
+        // resolved — and a row that wants to answer for itself still wins, because it consumed the
+        // event above and never reaches here.
+        if handled == Handled::No {
+            crate::drag::sink::present(crate::drag::Dropped {
+                source: item.clone(),
+                target: hit.key.clone(),
+                side: hit.side,
+                action: crate::drag::DropAction::held(),
+                modifiers: raw.modifiers,
+            });
+            handled = Handled::Yes;
+        }
     }
     clear_drag_over(root);
     node_at(root, &source_path).base().pointer.dragging.set(false);
-    let ev = Event::DragEnd(drag_event(item, raw, hit.map_or(DropSide::Onto, |h| h.side)));
+    let side = hit.as_ref().map_or(DropSide::Onto, |h| h.side);
+    let ev = Event::DragEnd(drag_event(&item, raw, side));
     or(handled, deliver_path(root, &source_path, &ev))
 }
 
 /// Move the "a drag is over me" flag to `now`, emitting enter/leave/over as it goes.
 fn update_drag_over(
     root: &mut dyn Component,
-    now: Option<(crate::drag::DragItemId, DropSide)>,
-    item: crate::drag::DragItemId,
+    now: Option<(Path, DropSide)>,
+    item: &str,
     raw: &RawPointer,
 ) {
     let previous = drag_over_path(root);
-    let current = now.and_then(|(id, _)| path_of_drop_target(root, id));
+    // **The node the walk found, not a second search for its name.** Two seatings of one container
+    // give their rows the same name, so a search lights whichever comes first — the other sidebar.
+    let current = now.as_ref().map(|(path, _)| path.clone());
     if previous != current
         && let Some(path) = previous.clone()
     {
@@ -578,6 +698,7 @@ fn update_drag_over(
     }
     if let Some(path) = current {
         let side = now.map_or(DropSide::Onto, |(_, s)| s);
+        node_at(root, &path).base().pointer.drag_side.set(side);
         if previous.as_ref() != Some(&path) {
             node_at(root, &path).base().pointer.drag_over.set(true);
             let ev = Event::DragEnter(drag_event(item, raw, side));
@@ -589,14 +710,11 @@ fn update_drag_over(
 }
 
 /// The innermost drag source at or above the pressed widget, and its path.
-fn drag_source_on(
-    root: &dyn Component,
-    press: &[usize],
-) -> Option<(Path, crate::drag::DragItemId)> {
+fn drag_source_on(root: &dyn Component, press: &[usize]) -> Option<(Path, String)> {
     let mut node = root;
-    let mut best: Option<(Path, crate::drag::DragItemId)> = None;
+    let mut best: Option<(Path, String)> = None;
     let mut here = Path::new();
-    if let Some(id) = node.as_drag_source() {
+    if let Some(id) = drag_identity(root, &here) {
         best = Some((here.clone(), id));
     }
     for i in press {
@@ -605,7 +723,7 @@ fn drag_source_on(
         };
         node = child.as_ref();
         here.push(*i);
-        if let Some(id) = node.as_drag_source() {
+        if let Some(id) = drag_identity(root, &here) {
             best = Some((here.clone(), id));
         }
     }
@@ -624,6 +742,16 @@ fn press_path(root: &dyn Component) -> Option<Path> {
     find(root, &|c| c.base().pointer.press.get().is_some())
 }
 
+/// **Is a drag in flight anywhere in this tree?**
+///
+/// The one question a host asks about a drag it does not own: while something is being carried, the
+/// cursor changes shape, nothing hovers, and a move must not reach the program in a pane. The app
+/// used to answer it from a drag machine of its own; the framework runs the gesture, so the
+/// framework answers (F003/P097/T496).
+pub fn dragging(root: &dyn Component) -> bool {
+    dragging_path(root).is_some()
+}
+
 /// The path to the widget currently dragging, if any.
 fn dragging_path(root: &dyn Component) -> Option<Path> {
     find(root, &|c| c.base().pointer.dragging.get())
@@ -635,9 +763,20 @@ fn drag_over_path(root: &dyn Component) -> Option<Path> {
 }
 
 /// The path to the drop target registered under `id`.
-fn path_of_drop_target(root: &dyn Component, id: crate::drag::DragItemId) -> Option<Path> {
-    find(root, &|c| c.as_drop_target() == Some(id))
+/// The dragged identity of the widget at `path`, when it is a drag source at all — the same
+/// answer [`drag::source_at`](crate::drag::source_at) gives, so the gesture and the resolution
+/// cannot disagree about what is being carried.
+fn drag_identity(root: &dyn Component, path: &[usize]) -> Option<String> {
+    let node = node_at(root, path);
+    if !node.is_drag_source() {
+        return None;
+    }
+    node.base()
+        .key
+        .clone()
+        .or_else(|| crate::nav::identity_of(root, path))
 }
+
 
 /// Depth-first search for the first node satisfying `f`, returning its path.
 fn find(node: &dyn Component, f: &dyn Fn(&dyn Component) -> bool) -> Option<Path> {
@@ -734,9 +873,9 @@ fn deliver_targeted(root: &mut dyn Component, path: &[usize], ev: Event) -> Hand
     deliver_path(root, path, &ev)
 }
 
-fn drag_event(item: crate::drag::DragItemId, raw: &RawPointer, side: DropSide) -> DragEvent {
+fn drag_event(item: &str, raw: &RawPointer, side: DropSide) -> DragEvent {
     DragEvent {
-        item,
+        item: item.to_string(),
         pos: raw.pos,
         modifiers: raw.modifiers,
         side,

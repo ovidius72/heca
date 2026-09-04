@@ -11,6 +11,7 @@
   "contextReadyReason": "",
   "summary": "Host API per actions dispatch, overlay/modal/dropdown e region container management.",
   "description": "The host API a provider or plugin reaches for: action dispatch, overlays/modals/dropdowns, and region/container management.\n\n═══ THE ONE RULE THIS PHASE IS JUDGED BY ═══\n\n`AGENTS.md` ⭐⭐ RULE ZERO: **a capability is one builder on the widget, or one named action.**\nEverything this phase exposes is, by definition, host API — so it is exactly where the wrong shape\ngets built. The test, before adding anything:\n\n> Write the line a **plugin author** would type. If it needs a registry, an id, a `pub(crate)` type,\n> or a rule they must remember, **the API is the bug** — not their code.\n\nTwo shapes already tried and reverted, both of which would naturally have landed here:\n\n- **A registry the caller pre-registers with, handing back an opaque id.** That was the KeyHint pick\n  target: `hints.register(intent)` + `.hint_target(id)`, with the registry app-side and the intent a\n  `pub(crate)` enum — so a plugin reached a *different*, poorer seam and its rows were refused by\n  `ActionPolicy::ContainerFocused`. Deleted 2026-08-11 (F004/P084/T399): the widget declares the\n  behaviour and the framework collects it out of the laid-out tree.\n- **A host-private composite for \"…and do X first\"** (`FocusPaneThenAction`,\n  `FocusContainerThenAction`). A plugin cannot construct a `pub(crate)` variant. If the behaviour is\n  needed it gets a **name** a plugin can name, the way `focus_pane` and `unfocus_dock` do.\n\n═══ WHAT ALREADY EXISTS — build on it, do not reinvent ═══\n\n- **Actions**: `ActionRegistry` + `ActionCatalog` with runtime registration\n  (`register_dynamic(registry, catalog, meta, handler)`); `ActionMeta` carries label, description,\n  category, icon, **declared `args`**, `policy` and an optional `confirm`, so a declared action is\n  argument-checked, policy-routed and confirm-gated identically to a built-in (F003/P039).\n- **Overlays**: host-owned. A caller *requests* one (`ModalSpec` → `open_modal` → `ModalResult`),\n  never mounts it; the body is a `ViewNode` realized through the one bridge, and named fields come\n  back as form data (F003/P068, F003/P082).\n- **Regions/containers**: `ChromeHost`, `Contribution`, `BuildCx` (drag ids and per-frame signals),\n  and per-mount state (`container_cursor`, `container_scroll`, `container_keyboard_target`).\n- **A gesture names its seating** (F004/P084/T399): a widget built inside a mounted container\n  carries that mount on the intent it emits, so a container mounted twice has rows that each answer\n  for themselves. `owning_mount` resolves only calls with no element behind them — a keybinding, a\n  palette entry, RPC without `--dock`. **Any new host API that acts \"on the current container\" must\n  take the seating, not guess it.**\n\nDesign record: `docs/chrome-and-ui.md` §2.7 (overlays), §3.1–3.5 (the formal contracts), Part I §0\n(the intent) · F003's description.",
+  "descriptionUpdatedAt": "2026-07-01T18:09:59.861Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -24,7 +25,8 @@
   "taskIds": [
     "51341729-d992-4d6b-bce2-63645b48847e",
     "7b0dbfb8-3b85-4622-ab7d-80878166e953",
-    "e74dca51-0219-4881-929c-53d94682ffa2"
+    "e74dca51-0219-4881-929c-53d94682ffa2",
+    "4b833d2e-bddc-4744-94e9-c46e7490abe0"
   ],
   "tasks": [
     {
@@ -37,6 +39,7 @@
       "title": "Add app.actions.dispatch to host",
       "status": "planned",
       "description": "Esporre dispatch di azioni dinamiche via host API.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:25.304Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -44,10 +47,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:25.304Z",
-      "updatedAt": "2026-07-01T18:12:25.304Z"
+      "updatedAt": "2026-07-01T18:12:25.304Z",
+      "sessionInfo": []
     },
     {
       "id": "7b0dbfb8-3b85-4622-ab7d-80878166e953",
@@ -59,6 +65,7 @@
       "title": "Add app.regions add and move container",
       "status": "planned",
       "description": "Aggiungere container e spostarli via host API.",
+      "descriptionUpdatedAt": "2026-07-01T18:12:25.316Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -66,10 +73,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:25.316Z",
-      "updatedAt": "2026-07-01T18:12:25.316Z"
+      "updatedAt": "2026-07-01T18:12:25.316Z",
+      "sessionInfo": []
     },
     {
       "id": "e74dca51-0219-4881-929c-53d94682ffa2",
@@ -78,9 +88,10 @@
       "shortId": "GKVDS",
       "priority": 2,
       "shortName": "host-overlay-open",
-      "title": "Add app.overlay open modal and dropdown",
+      "title": "Host API: a plugin asks for a modal or dropdown, and offers a surface of its own",
       "status": "planned",
-      "description": "Host API per modal/dropdown con risultato async.",
+      "description": "Host API per modal/dropdown con risultato async — WIDENED 2026-09-01 (Antonio) to cover the third shape, which nothing else plans.\n\n═══ THE THREE SHAPES, AND WHICH ARE COVERED ═══\n\n`docs/chrome-and-ui.md` R6 already decides the split, and it predates P097:\n  \"A modal, dropdown or context menu is not something a plugin puts in its tree. It asks the host\n   and waits for a typed answer. The host owns stacking, focus trapping, Escape, click-outside and\n   placement. Panels, toolbars and status segments go INTO a region. Modals and dropdowns are\n   REQUESTED.\"\n\n1. REQUESTED, transient, returns an answer — modal + dropdown. This task's original scope\n   (app.overlay.openModal / openDropdown, async result). The host owns z-order, focus trap,\n   keyboard routing, Escape, click-outside and positioning.\n2. CONTRIBUTED INTO A REGION — a panel/toolbar/status segment seated in the chrome. Already\n   possible: a Provider offers a container and the host mounts it (P035(F003)/T064 covers add/move).\n3. ⚠️ A PLUGIN'S OWN NAMED SURFACE — its own panel, of its own design, addressed by NAME and driven\n   by the ordinary action system the way `heca.expose` is. NOT a transient dialog, NOT seated in a\n   sidebar region. NOTHING PLANNED THIS. It is the gap found on 2026-09-01 while finishing\n   P097(F003)/T495, and Antonio decided it lands here rather than as a new task.\n\n═══ WHY THE GAP IS NARROW — MOST OF IT IS ALREADY BUILT ═══\n\nOnly ATTACHING is missing. Everything that happens afterwards already works and is proven by the\nexposé:\n- OPENING is an ordinary action carrying the surface's name: keybindings.default.toml binds\n  prefix+Tab to `toggle_layer` with args { name = \"heca.expose\" }. So the user can rebind it, and it\n  is reachable from the palette and RPC — which is the project rule that a capability must not be\n  trapped behind one surface.\n- THE SURFACE'S OWN KEYS are declared under its name: `[[keys.surface]] name = \"heca.expose\"` carries\n  its deletes and its `pick`, consulted BEFORE the global map.\n- THE WAY OUT is free and cannot be removed: the `layer` floor binds Escape (asserted, unremovable)\n  plus q / Ctrl+q to `close_overlay`, declared once for every layer rather than copied per surface —\n  and those keys do not exist while no overlay is up, so `:q` still quits vim.\n- INPUT, HINTS, LAYOUT, PAINT, Z-ORDER all follow from being a node in the one tree (P097/T494-T495).\n  Z is tree position; a surface passes the pointer through where it covers nothing.\n\nSo a plugin's surface needs a NAME and a TREE, and it inherits the rest.\n\n═══ THE SHAPE TO BUILD ═══\n\n⭐⭐ RULE ZERO governs this task — P035's own description says it is \"exactly where the wrong shape\ngets built\". Write the line a plugin author types. It must NOT be a plugin reaching into the app:\n`place_surface(&mut state.window_root, key, Box::new(..))` takes a host-private handle and fails the\ntest in its first three words. R6 forbids the plugin mounting it too.\n\nThe shape that matches what already exists: a plugin OFFERS a surface and the host attaches it —\nthe same way a Provider already offers a container through `build_contribution` and never touches\nthe tree. The host decides where it is seated and under which parent; the plugin declares a name\nand its content, and can neither get the order wrong nor hold a handle it should not have.\n\n- Native and described must be ONE door, not two. A described surface is a `ViewNode` realized\n  through the single bridge and placed by the host; a native one is the same call with a component.\n  Two doors over one capability drift, and the plugin one is always the poorer.\n- The attach must answer WHICH PARENT: a surface opened from another surface belongs under it, so it\n  sits above it and goes away with it. From a click the triggering event knows; from a keybinding or\n  RPC there is no widget, and the answer is the surface that currently holds the keyboard, else the\n  root — which `app::input::focused_surface` already computes.\n\n═══ RELATED, AND WHAT THEY DO NOT COVER ═══\n- P097(F003)/T501 — the declarative building blocks (13 of 46 widgets have no described form, and\n  the right-click menu is a declaration on a node, not a widget kind). Says what a plugin can put\n  INSIDE a panel. Does not attach one.\n- P097(F003)/T502 — the acceptance test: rebuild one real overlay the way a plugin must. It ASSUMES\n  this door exists (\"mounted from the described path\") and would only discover its absence as a\n  finding. ⚠️ Its text still names `LayerContent`, deleted in T494 — read it as \"the described path\",\n  which is add_view + place_surface.\n- P035(F003)/T064 — add/move a container in a region. Shape 2, not shape 3.",
+      "descriptionUpdatedAt": "2026-09-01T13:13:59.680Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -88,17 +99,56 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:25.316Z",
-      "updatedAt": "2026-07-01T18:12:25.316Z"
+      "updatedAt": "2026-09-01T13:13:59.678Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "4b833d2e-bddc-4744-94e9-c46e7490abe0",
+      "phaseId": "74abdac5-8a35-4e5f-a82f-3abb9bb0b738",
+      "number": 506,
+      "shortId": "V86VM",
+      "priority": 4,
+      "shortName": "a-component-declares-what-can",
+      "title": "A component declares what can be read of it — app.state stops being a hand-written list",
+      "status": "planned",
+      "description": "⭐⭐ RULE ZERO, applied to the READ half of the host API. This phase's own description says it is \"exactly where the wrong shape gets built\" — this is that shape, already built.\n\n═══ THE DEFECT ═══\n\n`heca/src/host.rs` `StateView<'a>` (:82) is a **hand-written list of 20 selectors** over `SharedChromeState` (`heca/src/chrome/state.rs:705`): `active_pane`, `pane_runtime`, `pane_status`, `pane_custom_name`, `terminal_viewport`, `pending_pick`, `sidebar_selection`, `focused_container`, `container_cursor`, `container_scroll`, `container_keyboard_target`, `is_workspace_collapsed`, `left_sidebar_visible`, `right_sidebar_visible`, …\n\n**A plugin can read only what somebody remembered to add**, and adding a component means hand-adding its selectors here. That is \"a rule every caller must remember\", which RULE ZERO names as the bug — the same shape as the deleted `HintTargetRegistry` (a hand-maintained middle layer between the thing and whoever wants it).\n\nIt is actively growing the wrong way. These planned tasks each add MORE selectors to the same list:\n- P085(F003) \"Hooks: what is focused, what is selected, what was dispatched\" — adds `container_selection(mount)`\n- P085(F003) \"A component's own signals: a per-mount value store a plugin can write\" — adds two more \"beside `container_scroll` / `container_keyboard_target`\"\n- P085(F003) \"Provider gains kind(), actions() and perform()\" — reads through `state()`\n\nSo every new component pays the same tax, and a plugin's component pays it and CANNOT — a plugin cannot edit `host.rs`. A third-party component therefore has **no way to expose its own state at all**, which makes the read half strictly first-party. That is the second-class-plugin failure RULE ZERO exists to forbid.\n\n═══ THE PATTERN THAT IS ALREADY RIGHT ═══\n\n`StateView::workspaces() -> &WorkspacesContainerState` (`heca/src/host.rs:198`) hands back the workspaces container's **whole namespaced state**, read-only, in one call. Its doc already frames it as the namespaced form (§2.4) and notes the per-value selectors above it are the re-reading alternative.\n\nThat is the shape to generalise: a component owns a **namespace** in the shared store and the facade serves the namespace, rather than the host publishing one accessor per value.\n\n═══ WHAT TO BUILD (design to be agreed before code — this is host API, per the phase rule) ═══\n\nThe test, before adding anything: write the line a plugin author would type to read another component's state, and the line that component's author writes to expose it. Neither may involve editing `host.rs`.\n\nSketch, NOT decided:\n- A component declares its readable state once — beside `Provider::kind()`/`actions()` (P085), so declaring what you are, what you do and what can be read of you sit together.\n- `app.state.of(\"workspaces\")` / a typed accessor resolves a namespace by the component's `kind()`, the same owner-stamped id `ActionMeta.owner` and `layer_name` already use — so a plugin cannot claim `heca.*` or another component's namespace.\n- Values cross as the serializable vocabulary already in use (`PropValue` / a snapshot type), so the same read works in-process, over RPC and across the WASM boundary. `docs/chrome-and-ui.md` R4: behaviour crosses as a reference, never a function — reads must be data for the same reason.\n- The built-in selectors either become thin conveniences over the namespace or go. Do not leave both — two paths over one read is what this task exists to remove.\n\n═══ PRESERVE ═══\n\n- **Read-only stays read-only.** `StateView`'s doc: \"they never mutate through here.\" Every mutation keeps going through the store's write path, which is what emits the `ChromeEvent`s providers subscribe to via `App::on` (`host.rs:65`). §2.3 of `docs/chrome-and-ui.md`: the app owns canonical state; a plugin owns only derived state.\n- The **per-mount** reads are keyed by mount id on purpose (`container_scroll`, `container_cursor`, `container_keyboard_target`) — two placements of one container answer independently. A namespace API must keep the mount as an argument and must not collapse the two placements into one answer.\n- `App` stays cheap to clone (`Rc`/signal-backed) so every provider can hold its own.\n\n═══ NOTES ═══\n\n- `heca/src/host.rs:5` carries `#![allow(dead_code)]` because the facade is a seam consumed later. AGENTS \"When Writing Code\" #7 says never add that without a clear reason; the reason is stated there and stays valid, but re-check it when this lands.\n- Raised while filing the read/write split for a plugin author (Antonio, 2026-08-31): reading app state through the facade is the expected and supported path, and the facade is what makes it safe. The complaint is the hardcoding, not the reading.\n\n═══ VERIFY ═══\n\nA drift test in the spirit of `heca-view-realize`'s `every_widget_property_is_reachable_from_the_sdk` and `heca-grid-ui/tests/prop_drift.rs`: a component that declares readable state is reachable through the facade without anyone editing `host.rs`, and the build fails if a component's namespace can only be reached by a hand-written selector.",
+      "descriptionUpdatedAt": "2026-08-31T09:53:31.988Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-31T09:53:31.939Z",
+      "updatedAt": "2026-08-31T09:53:31.939Z",
+      "sessionInfo": []
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-08-11T06:58:02.033Z",
+  "updatedAt": "2026-09-01T13:13:59.678Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": []
+  "statusLog": [
+    {
+      "id": "843c8db9-36ab-45ee-84fe-052b69eae63d",
+      "date": "2026-09-01T13:13:59.707Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
 }

@@ -129,7 +129,7 @@ impl Component for MarkerGroup {
     /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
     /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
     fn wants_visible(&self) -> bool {
-        self.nav.get_untracked() || self.base.focused.get_untracked()
+        self.nav.get_untracked() || self.base.focused_by_keyboard()
     }
 
     fn base(&self) -> &Base {

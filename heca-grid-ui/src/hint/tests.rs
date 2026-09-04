@@ -112,6 +112,80 @@ mod declarations {
         assert_eq!(*log.borrow(), vec!["second"]);
     }
 
+    /// **A button gets its letter for being a button — whatever it was put inside.**
+    ///
+    /// Where a widget sits must never decide what it can do (AGENTS § 0d). The picker used to break
+    /// that: a container saying what picking *it* did switched off letters for everything beneath,
+    /// so a button in a pane's bar had to repeat its own click as a hint to win one back, and the
+    /// control the bar builds for itself had nobody to do that and silently wore none (Antonio,
+    /// driving, 2026-09-04).
+    #[test]
+    fn a_button_inside_a_declaring_container_still_gets_its_own_letter() {
+        use crate::widgets::Button;
+
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let mut region = Flex::column();
+        region.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 100.0));
+        // The container says what picking IT does — a sidebar row, a pane's shell.
+        let tag = "region";
+        let seen = log.clone();
+        region = region.on_hint(move || seen.borrow_mut().push(tag));
+        // …and it holds two things of its own, one of which is an ordinary button.
+        let mut label = Surface::new();
+        label.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 40.0));
+        let mut button = Button::new("Close").on_click(|| {});
+        button.base_mut().bounds = Rectangle::new(Point::new(0.0, 50.0), Size::new(40.0, 40.0));
+        region.base_mut().children.push(Box::new(label));
+        region.base_mut().children.push(Box::new(button));
+
+        let targets = collect_hints(&region);
+        assert_eq!(
+            targets.len(),
+            2,
+            "the container and the button are two different things, so two letters"
+        );
+        assert!(
+            targets.iter().any(|(path, _)| path == &vec![1]),
+            "the button is one of them, having declared nothing at all"
+        );
+    }
+
+    /// **A wrapper and the one thing it holds are one thing, and share one letter.**
+    ///
+    /// The case the old rule existed for, and the only one it was right about: a decorator saying
+    /// what picking does, around a card that can itself be activated, produced two letters for one
+    /// card. Counting things keeps that fixed while leaving real containers alone.
+    #[test]
+    fn a_wrapper_and_the_one_thing_it_holds_share_a_letter() {
+        use crate::widgets::Button;
+
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let seen = log.clone();
+        let mut card = Button::new("Card").on_click(|| {});
+        card.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(80.0, 40.0));
+        let mut wrapper = KeyHint::new(card).on_hint(move || seen.borrow_mut().push("wrapper"));
+        wrapper.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(80.0, 40.0));
+
+        let targets = collect_hints(&wrapper);
+        assert_eq!(
+            targets.len(),
+            1,
+            "one card, one letter — not one per layer wrapping it"
+        );
+        // The wrapper is the layer that *declared*, and a declaration is the statement that a pick
+        // is not the click — so it is the one the letter must run.
+        assert!(
+            targets[0].0.is_empty(),
+            "the declaring layer keeps it, since it is what says a pick differs from a click"
+        );
+        assert!(fire_hint(&mut wrapper, &targets[0].0));
+        assert_eq!(
+            *log.borrow(),
+            vec!["wrapper"],
+            "and picking runs what it said"
+        );
+    }
+
     #[test]
     fn skips_hidden_subtrees_and_silent_nodes() {
         let log = Rc::new(RefCell::new(Vec::new()));

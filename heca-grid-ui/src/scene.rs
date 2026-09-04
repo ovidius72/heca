@@ -196,6 +196,64 @@ impl Scene {
         }
     }
 
+    /// **What this scene draws outside `within`** — the framework's own answer to "does anything
+    /// paint past the box it was given?", so a sweep asks it instead of re-implementing the walk.
+    ///
+    /// Two crates asked it, each with its own copy of the clip arithmetic, and both copies carried
+    /// the same defect: a clip that lies **entirely outside** the clip already open has an empty
+    /// intersection, and treating that as "no clip at all" reports every draw inside it as an
+    /// escape. It is the opposite — nothing inside such a clip reaches the screen at all. That
+    /// alone accounted for five phantom escapes in the catalog sweep, which is why it was
+    /// committed `#[ignore]`d (F003/P082/T481).
+    ///
+    /// **Base layer only, by design.** The overlay band exists precisely for what must leave its
+    /// box — a dropdown opened inside a scroll region, a hint keycap on a half-visible row — so
+    /// asking this of it would forbid the feature.
+    ///
+    /// Rects and text runs only: those carry the widget's picture. A zero-sized draw is skipped —
+    /// a box squeezed to nothing paints nothing, wherever its origin ended up.
+    pub fn draws_outside(&self, within: Rectangle) -> Vec<Escape> {
+        let mut out = Vec::new();
+        // `None` = an empty clip: everything inside it is scissored away.
+        let mut clips: Vec<Option<Rectangle>> = Vec::new();
+        for cmd in &self.commands {
+            let (what, rect) = match cmd {
+                DrawCommand::PushClip(r) => {
+                    let inner = match clips.last() {
+                        Some(Some(open)) => open.intersection(*r),
+                        Some(None) => None,
+                        None => Some(*r),
+                    };
+                    clips.push(inner);
+                    continue;
+                }
+                DrawCommand::PopClip => {
+                    clips.pop();
+                    continue;
+                }
+                DrawCommand::Text(t) if t.text.is_empty() => continue,
+                DrawCommand::Text(t) => (format!("text {:?}", t.text), t.rect),
+                DrawCommand::Rect(r) => ("rect".to_string(), r.rect),
+                _ => continue,
+            };
+            if rect.size.w <= 0.0 || rect.size.h <= 0.0 {
+                continue;
+            }
+            let visible = match clips.last() {
+                Some(Some(clip)) => clip.intersection(rect),
+                Some(None) => None,
+                None => Some(rect),
+            };
+            let Some(rect) = visible else { continue };
+            if rect.loc.x < within.loc.x - 0.5
+                || rect.loc.x + rect.size.w > within.loc.x + within.size.w + 0.5
+            {
+                out.push(Escape { what, rect });
+            }
+        }
+        out
+    }
+
     /// One sub-scene per overlay, in paint (z) order, each holding that overlay's
     /// commands in the base slot so a host renders it as a single rects→text pass.
     /// Segments are yielded **depth-first ascending** (stable within a depth):
@@ -217,6 +275,29 @@ impl Scene {
     }
 }
 
+/// One draw that fell outside the box it was measured against — see
+/// [`Scene::draws_outside`](Scene::draws_outside). Carries **what** was drawn, not just where, so a
+/// failing sweep names the content that escaped instead of an anonymous rectangle.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Escape {
+    /// The draw, described the way a reader can find it: `text "item 04"`, or `rect`.
+    pub what: String,
+    /// Where it landed, already intersected with the clips in force.
+    pub rect: Rectangle,
+}
+
+impl std::fmt::Display for Escape {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} spans {:.0}..{:.0}",
+            self.what,
+            self.rect.loc.x,
+            self.rect.loc.x + self.rect.size.w,
+        )
+    }
+}
+
 /// One drawable element. Adding a new effect is one variant here plus one branch
 /// in the renderer — component code is untouched.
 #[derive(Debug, Clone, PartialEq)]
@@ -233,6 +314,54 @@ pub enum DrawCommand {
     PushClip(Rectangle),
     /// Pop the most recent clip rectangle.
     PopClip,
+    /// **Work only the host can do, recorded in scene order.** See [`HostDraw`].
+    Host(HostCmd),
+}
+
+/// **A request the drawing pass records and the host performs.**
+///
+/// Some content cannot be expressed as rectangles and text, and must not be forced into them:
+///
+/// - a **terminal** is rasterised into a texture, because its cell glyphs are the hottest path in
+///   the app — drawing them as ordinary commands is rejected;
+/// - a **frosted backdrop** is the frame so far, blurred, which is a pass over what is already
+///   drawn rather than a shape.
+///
+/// Neither is a special case in this crate. A widget says *what it wants* and where; the host owns
+/// the GPU and does it. That keeps this library free of graphics types — the same bargain
+/// [`Text`](DrawCommand::Text) already makes, where the scene names a role and the renderer owns the
+/// atlas.
+///
+/// **Recorded in scene order, with the clip stack resolved**, so a surface inside a scroll region
+/// clips like anything else and a backdrop blurs exactly what was drawn before it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HostDraw {
+    /// **Put the surface `id` here.** The host holds the texture and knows nothing else is needed;
+    /// this crate never sees a texture, a format or a device.
+    ///
+    /// Who allocates the id is the host's business. A plugin rendering its own content places it
+    /// with one builder on its own widget — no host-private type, no registry.
+    Surface {
+        /// Opaque to this crate: the host maps it to whatever it rasterised.
+        id: u64,
+    },
+    /// **Blur whatever has been drawn behind me, here.** `radius` is in logical pixels.
+    Backdrop {
+        radius: f32,
+    },
+}
+
+/// A [`HostDraw`] and the box it applies to.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HostCmd {
+    pub draw: HostDraw,
+    /// Where it goes, in logical pixels, already placed by the paint context.
+    pub rect: Rectangle,
+    /// How strongly it composites, `0.0..=1.0`. Carries the paint context's
+    /// [opacity](crate::PaintCx::with_opacity) like every other command, so a surface inside a
+    /// fading overlay fades with it — and a frost fades in with the surface that asked for it,
+    /// rather than holding the session out of focus and snapping sharp in one frame.
+    pub alpha: f32,
 }
 
 /// A filled/rounded rectangle.
@@ -433,6 +562,66 @@ mod tests {
             glow: None,
             shadow: None,
         })
+    }
+
+    fn at(x: f64, w: f64) -> DrawCommand {
+        DrawCommand::Rect(RectCmd {
+            rect: Rectangle::new(Point::new(x, 0.0), Size::new(w, 10.0)),
+            fill: Color::rgb(1, 2, 3),
+            border: None,
+            radius: 0.0,
+            glow: None,
+            shadow: None,
+        })
+    }
+
+    fn window() -> Rectangle {
+        Rectangle::new(Point::default(), Size::new(320.0, 900.0))
+    }
+
+    /// **A draw the clips have already thrown away is not an escape** (F003/P082/T481).
+    ///
+    /// A widget laid out past a scroll viewport's edge opens its own clip out there, entirely
+    /// outside the viewport's. Intersecting the two gives nothing — nothing inside reaches the
+    /// screen — but both sweeps read "no intersection" as "no clip in force" and reported every
+    /// draw inside it at its raw position. Five phantom escapes, and the reason the catalog sweep
+    /// was committed ignored rather than passing.
+    #[test]
+    fn a_draw_inside_a_clip_that_is_itself_clipped_away_is_not_an_escape() {
+        let mut scene = Scene::new();
+        scene.push(DrawCommand::PushClip(Rectangle::new(
+            Point::default(),
+            Size::new(304.0, 900.0),
+        )));
+        scene.push(DrawCommand::PushClip(Rectangle::new(
+            Point::new(536.0, 473.0),
+            Size::new(19.0, 19.0),
+        )));
+        scene.push(at(536.0, 16.0));
+        assert!(scene.draws_outside(window()).is_empty());
+    }
+
+    /// The other half: an unclipped draw past the edge **is** reported, and it says what it was.
+    #[test]
+    fn a_draw_past_the_edge_is_reported_with_what_it_drew() {
+        let mut scene = Scene::new();
+        scene.push(at(300.0, 40.0));
+        let escapes = scene.draws_outside(window());
+        assert_eq!(escapes.len(), 1);
+        assert_eq!(escapes[0].to_string(), "rect spans 300..340");
+    }
+
+    /// A clip that only **narrows** a draw is honoured, not ignored: the visible part is what is
+    /// judged, so a row cut off at a viewport's edge is inside its box, not outside it.
+    #[test]
+    fn a_clip_that_narrows_a_draw_leaves_it_inside_the_box() {
+        let mut scene = Scene::new();
+        scene.push(DrawCommand::PushClip(Rectangle::new(
+            Point::default(),
+            Size::new(320.0, 900.0),
+        )));
+        scene.push(at(300.0, 100.0));
+        assert!(scene.draws_outside(window()).is_empty());
     }
 
     /// **Regression guard.** A nested overlay splits the parent's segment, and

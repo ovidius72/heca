@@ -49,7 +49,6 @@
 //! }
 //! ```
 
-use crate::drag::DragItemId;
 use heca_core::layout::{Point, Rectangle};
 /// **The answer every widget gives to every event: "was this mine?"**
 ///
@@ -200,6 +199,36 @@ pub struct Modifiers {
     pub meta: bool,
 }
 
+thread_local! {
+    /// What is held down right now. Updated from the [`Event::ModifiersChanged`] broadcast, which
+    /// every host already sends, and read by everything that needs to know.
+    static HELD: std::cell::Cell<Modifiers> = const {
+        std::cell::Cell::new(Modifiers { ctrl: false, alt: false, shift: false, meta: false })
+    };
+}
+
+/// **What is held down right now.**
+///
+/// The modifiers are *device* state, not a property of each event, so the framework keeps them in
+/// one place and fills them in on every event it delivers. Nothing has to carry them, and nothing
+/// has to remember them.
+///
+/// It was the other way round and it was wrong twice over. A pointer event carried its own
+/// modifiers, which meant every host call site had to remember to attach them — and a host has more
+/// than one call site, so the ones that forgot sent "nothing held" with no way to tell: a drop
+/// resolved as a plain move however hard Shift was pressed. Meanwhile three widgets each kept a
+/// private copy of the same broadcast, which is the same rule written four times counting the
+/// plugin that comes next (F003/P097/T496).
+pub fn modifiers() -> Modifiers {
+    HELD.with(|m| m.get())
+}
+
+/// Record what the host just announced. Called by `dispatch` for every
+/// [`Event::ModifiersChanged`], so a widget never has to track this itself.
+pub(crate) fn remember_modifiers(m: Modifiers) {
+    HELD.with(|c| c.set(m));
+}
+
 /// Which pointer button an event is about.
 ///
 /// A press used to carry none, so a widget could not tell a right-click from a left one — which is
@@ -303,13 +332,14 @@ impl PointerEvent {
 /// What a drag event carries: the dragged item, where the pointer is, and — on a drop — which
 /// half of the target it landed on.
 ///
-/// The **item** is a [`DragItemId`], the opaque registry slot the app already hands a draggable
-/// widget ([`ComponentExt::draggable`](crate::builders::ComponentExt::draggable)). The library moves it
-/// around and hands it back; only the host knows what it means.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// The **item** is the dragged widget's own name — what it declared with
+/// [`ComponentExt::key`](crate::builders::ComponentExt::key), the same identity the keyboard cursor
+/// and the right-click target read. The library moves it around and hands it back; only the host
+/// knows what it means.
+#[derive(Debug, Clone, PartialEq)]
 pub struct DragEvent {
-    /// What is being dragged — the source's [`Base::drag_source`](crate::component::Base::drag_source).
-    pub item: DragItemId,
+    /// What is being dragged — the source's own [`Base::key`](crate::component::Base::key).
+    pub item: String,
     /// Where the pointer is, in logical pixels.
     pub pos: Point,
     /// The modifier keys held (a copy-drag is `alt` in most conventions; the library has no

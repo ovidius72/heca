@@ -171,7 +171,7 @@ pub fn open_for_keyboard(root: &dyn Component, cursor: Option<&str>) -> bool {
 /// The path to the widget that declared `key`.
 fn key_path(root: &dyn Component, key: &str) -> Option<Vec<usize>> {
     fn walk(node: &dyn Component, want: &str, at: &mut Vec<usize>) -> bool {
-        if node.base().key.as_deref() == Some(want) {
+        if node.base().answers_to(want) {
             return true;
         }
         for (i, child) in node.base().children.iter().enumerate() {
