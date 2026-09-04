@@ -162,6 +162,23 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.bell_flash_until = None;
     }
 
+    // **What the widgets themselves are waiting for.** A tooltip revealing under a resting pointer,
+    // a caret blinking — behaviour due at a time rather than on an event, so nothing would draw it.
+    // The widget says when; one question covers every tree the app draws.
+    //
+    // ⚠️ **Scheduling the wake is only half of it.** Arriving at the deadline, every reason-to-draw
+    // above is false — the widget no longer reports a pending wake, because it is due *now* — so the
+    // loop would wake and go straight back to sleep, and the bubble would still be waiting for the
+    // user to nudge the mouse. The deadline is remembered, and reaching it is itself a reason to
+    // draw.
+    let widget_wake = crate::chrome::next_redraw_across_trees(state);
+    let widget_due = state
+        .widget_frame_due
+        .is_some_and(|due| Instant::now() >= due);
+    if widget_due {
+        state.widget_frame_due = None;
+    }
+
     let terminal_animating = backend_poll.terminal_animating;
     // An animated inline image (GIF/APNG) keeps the loop ticking so frames advance.
     let image_animating = state.has_animated_images;
@@ -173,7 +190,8 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         || state.session.are_animations_ongoing()
         || terminal_animating
         || image_animating
-        || chrome_animating;
+        || chrome_animating
+        || widget_due;
     if needs_frame {
         state.window.request_redraw();
     }
@@ -186,6 +204,11 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             Instant::now() + crate::chrome::FRAME_INTERVAL,
         ));
+    } else if let Some(secs) = widget_wake {
+        // Wake once, when it comes due — not every frame while the pointer rests.
+        let at = Instant::now() + std::time::Duration::from_secs_f32(secs.max(0.0));
+        state.widget_frame_due = Some(at);
+        event_loop.set_control_flow(ControlFlow::WaitUntil(at));
     // **Nothing to wake for while the pointer rests on the stack.** The deadlines are frozen, so
     // waking at one would find nothing due and re-arm at the same instant — a spin, for as long as
     // the pointer stayed. What ends the hold is a pointer event, which wakes the loop on its own.

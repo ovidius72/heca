@@ -757,7 +757,6 @@ pub(crate) fn build_pane_header(
                     intent: InteractionIntent::ActivateAction(wm_action.clone()),
                 });
             };
-            let hint = fire.clone();
             // **Its words are carried even while only its icon shows** — they are what it says on
             // hover, and what its row reads in the menu once the pane is too narrow to hold it.
             // Every `Button` constructor takes them, which is what makes a collapsed group
@@ -769,9 +768,6 @@ pub(crate) fn build_pane_header(
                 .variant(variant)
                 .active(spec.is_active)
                 .on_click(fire);
-            // **What a pick does to this button**, declared on the button itself: no id, no
-            // registry, and nothing for a config-added or plugin-added button to forget — the
-            // picker collects the declaration out of the laid-out tree.
             // **The button's identity, from its data — the action it runs.**
             //
             // Without it the identity is DERIVED from the button's content, and a derived identity
@@ -784,9 +780,13 @@ pub(crate) fn build_pane_header(
             // The action name is exactly what a key should be — from the data, never a counter —
             // and it is unique WITHOUT the pane id in it, because each pane's header is its own
             // hint surface: `target_identity` prefixes it, giving `pane-header:7/zoom` and
-            // `pane-header:9/zoom`. It goes **on the button**, because every widget takes both
-            // builders — the decorator is for a region that is not a widget you can put one on.
-            let button = button.key(spec.action_name).on_hint(hint);
+            // `pane-header:9/zoom`.
+            //
+            // **Nothing is declared about picking.** These buttons used to repeat their own click
+            // as a hint, purely to win back a letter the picker was withholding from anything
+            // inside a pane. The picker counts things now, so a button gets its letter for being a
+            // button (Antonio, 2026-09-04: *"Users/Developers MUST not think where a widget is"*).
+            let button = button.key(spec.action_name);
             // Tooltip = label + the action's current keybind(s), resolved centrally
             // by name (never hand-picked here); the leader renders via PREFIX_SYMBOL. It is a
             // property now, so what comes back is still a `Button` and the group will take it.

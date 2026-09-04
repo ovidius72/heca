@@ -610,9 +610,15 @@ fn label_decorations_follow_the_text_run_not_the_box() {
 
 #[test]
 fn paint_emits_background_rect_and_label_text() {
-    let root = Surface::new()
+    let mut root = Surface::new()
         .background(Color::rgb(10, 10, 10))
         .child(Label::new("HI"));
+    // Laid out before it is painted, because that is the only order the app ever paints in — and
+    // since `a_widget_that_has_never_been_laid_out_paints_nothing` a child with no box draws
+    // nothing at all, rather than drawing at the window's origin.
+    LayoutEngine::new()
+        .base_font(13.0)
+        .compute(&mut root, Size::new(300.0, 120.0));
 
     let theme = Theme::default();
     let mut scene = Scene::new();
@@ -657,7 +663,11 @@ fn surface_paints_styled_rect_with_border() {
 #[test]
 fn card_carries_title_label() {
     let theme = Theme::default();
-    let card = Card::new("UPLINK").child(Label::new("ONLINE"));
+    let mut card = Card::new("UPLINK").child(Label::new("ONLINE"));
+    // Laid out first — see `paint_emits_background_rect_and_label_text`.
+    LayoutEngine::new()
+        .base_font(13.0)
+        .compute(&mut card, Size::new(300.0, 120.0));
 
     let mut scene = Scene::new();
     {
@@ -6599,4 +6609,46 @@ fn a_toast_opens_hides_and_takes_no_space_while_closed() {
     while page.base_mut().children[0].tick(1.0 / 60.0) {}
     LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
     assert_eq!(page.base().children[0].base().bounds.size.h, 0.0, "gone, it is gone");
+}
+
+/// **Nothing is painted before the layout has given it a box.**
+///
+/// A widget's layout node is written by the engine as it walks, so one the walk has never reached
+/// still has none — and its default bounds sit at the window's origin with no size. Drawing it
+/// there is a real defect, not a theoretical one: a widget added *while* its tree is being laid out
+/// (a button's words put back when a pane widens, an overflow trigger built inside the decision that
+/// needed it) was drawn in the top-left corner of the screen for the frame before the next layout
+/// reached it — a red flicker in the corner throughout a divider drag (Antonio, driving,
+/// 2026-09-03).
+///
+/// The rule is in the one place every widget's paint passes through, so no widget opts in and none
+/// can forget it. The next layout gives the new child a box and it is drawn from then on.
+#[test]
+fn a_widget_that_has_never_been_laid_out_paints_nothing() {
+    let theme = Theme::default();
+
+    let painted = |laid_out: bool| -> usize {
+        let mut button = Button::new("Close").icon(Glyph::Minus);
+        if laid_out {
+            LayoutEngine::new()
+                .base_font(13.0)
+                .compute(&mut button, Size::new(300.0, 60.0));
+        }
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            heca_grid_ui::paint_child(&button, &mut cx);
+        }
+        scene.iter().count()
+    };
+
+    assert_eq!(
+        painted(false),
+        0,
+        "a widget the layout has never reached has no box, so it draws nothing"
+    );
+    assert!(
+        painted(true) > 0,
+        "…and the same widget draws normally once it has been laid out"
+    );
 }

@@ -269,7 +269,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .appearance
         .effective_pane_floating_border_color(&state.theme)
         .to_f32x4();
-    let pane_border_width = state.appearance.effective_pane_border_width(&state.theme);
     let pane_border_radius = state.appearance.effective_pane_border_radius(&state.theme);
     let pane_content_inset = state.appearance.effective_pane_padding(&state.theme);
     let pane_positions = state
@@ -700,8 +699,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     w: pane.w,
                     h: pane.h,
                     border_color: bcolor,
-                    border_width: pane_border_width,
-                    border_radius: pane_border_radius,
                 },
             );
         }
@@ -909,8 +906,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     w: pane.w,
                     h: pane.h,
                     border_color: fborder,
-                    border_width: pane_border_width,
-                    border_radius: pane_border_radius,
                 },
             );
             float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);

@@ -35,25 +35,59 @@ impl std::str::FromStr for ResizeTarget {
     }
 }
 
-/// Axis for resize actions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ResizeAxis {
-    X,
-    Y,
+/// **Which edge of the target a resize moves.**
+///
+/// A pane has two horizontal edges and a resize has to move one of them. Until now it was always
+/// the one below (the one above for the last pane, which has nothing below it) — so `j`/`k` in
+/// resize mode could grow a pane downwards but never move its top edge (Antonio, 2026-09-03:
+/// *"so he can choose which edge moves"*).
+///
+/// It is an **argument on the existing `resize` action**, not four new actions. `resize_top` and
+/// friends would each re-state what `resize` already does and then diverge; one action with an edge
+/// keeps a single code path, and a binding says which edge it wants:
+///
+/// ```toml
+/// [[keys.mode.bindings]]
+/// action = "resize"
+/// keys = "Shift+k"
+/// args = { target = "pane", axis = "y", amount = "-50", edge = "top" }
+/// ```
+///
+/// Omit it and nothing changes — [`Auto`](Self::Auto) is what every existing binding gets.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ResizeEdge {
+    /// The edge the target already owned: for a pane, the one below it — or above, when it is last
+    /// and has nothing below. The default, so an unchanged binding behaves exactly as before.
+    #[default]
+    Auto,
+    /// The pane's **upper** edge. Positive is still *down the screen*, so a positive amount shrinks
+    /// the pane from the top and a negative one grows it upwards. No-op for the first pane.
+    Top,
+    /// The pane's **lower** edge — the same boundary [`Auto`](Self::Auto) takes, said explicitly,
+    /// and without the last pane's fallback to the edge above.
+    Bottom,
+    /// The target's **left** edge. A column's left edge is the right edge of the column before it,
+    /// so this moves that boundary: positive is still *right*, shrinking the active column from the
+    /// left. No-op for the first column, which has nothing to its left.
+    Left,
+    /// The target's **right** edge — a column's own, which is the one [`Auto`](Self::Auto) moves.
+    Right,
 }
 
-impl EnumArg for ResizeAxis {
-    const VALUES: &'static [&'static str] =
-        &["x", "horizontal", "width", "y", "vertical", "height"];
+impl EnumArg for ResizeEdge {
+    const VALUES: &'static [&'static str] = &["auto", "top", "bottom", "left", "right"];
 }
 
-impl std::str::FromStr for ResizeAxis {
+impl std::str::FromStr for ResizeEdge {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "x" | "horizontal" | "width" => Ok(ResizeAxis::X),
-            "y" | "vertical" | "height" => Ok(ResizeAxis::Y),
-            _ => Err(format!("unknown resize axis: {}", s)),
+            "auto" => Ok(ResizeEdge::Auto),
+            "top" | "up" => Ok(ResizeEdge::Top),
+            "bottom" | "down" => Ok(ResizeEdge::Bottom),
+            "left" => Ok(ResizeEdge::Left),
+            "right" => Ok(ResizeEdge::Right),
+            _ => Err(format!("unknown resize edge: {}", s)),
         }
     }
 }
@@ -232,8 +266,10 @@ pub enum WmAction {
     /// `amount` is logical px for a pane and thousandths of the working width for a column.
     Resize {
         target: ResizeTarget,
-        axis: ResizeAxis,
         amount: f64,
+        /// **Which edge moves.** Defaults to [`ResizeEdge::Auto`] — the edge the target already
+        /// owned — so every binding written before this existed behaves exactly as it did.
+        edge: ResizeEdge,
     },
     /// Resize a **specific** column's width by `delta` (a proportion delta /
     /// fraction of the working width). Mouse divider-drag + RPC; the keyboard
@@ -899,6 +935,17 @@ fn get_enum<T: std::str::FromStr>(
 ) -> Option<T> {
     args.get(key)?.parse().ok()
 }
+/// An **optional** vocabulary argument: absent means the default, and a value that does not parse
+/// is a mistake worth failing on rather than silently becoming the default.
+fn get_enum_or_default<T: std::str::FromStr + Default>(
+    args: &std::collections::HashMap<String, String>,
+    key: &str,
+) -> Option<T> {
+    match args.get(key) {
+        Some(raw) => raw.parse().ok(),
+        None => Some(T::default()),
+    }
+}
 
 /// Build a `WmAction` from a name and its arguments as text — the one constructor a `config.toml`
 /// binding, a menu entry's `Intent`, a plugin and RPC all reach.
@@ -988,8 +1035,8 @@ pub fn build_action(
         }),
         "resize" => Some(WmAction::Resize {
             target: get_enum(args, "target")?,
-            axis: get_enum(args, "axis")?,
             amount: get_f64(args, "amount")?,
+            edge: get_enum_or_default(args, "edge")?,
         }),
         "resize_to" => Some(WmAction::ResizeTo {
             target: get_enum(args, "target")?,
@@ -1674,8 +1721,8 @@ mod tests {
             },
             WmAction::Resize {
                 target: ResizeTarget::Column,
-                axis: ResizeAxis::X,
                 amount: 0.0,
+                edge: ResizeEdge::Auto,
             },
             WmAction::ResizeColumnBy {
                 col_idx: 0,
@@ -1763,7 +1810,6 @@ mod tests {
             }
         }
         check::<ResizeTarget>("ResizeTarget");
-        check::<ResizeAxis>("ResizeAxis");
         check::<FontZoomStep>("FontZoomStep");
         check::<SpawnKind>("SpawnKind");
         check::<crate::chrome::RegionId>("RegionId");
@@ -1874,8 +1920,8 @@ mod tests {
         let _ = WmAction::ZoomColumn;
         let _ = WmAction::Resize {
             target: ResizeTarget::Column,
-            axis: ResizeAxis::X,
             amount: 10.0,
+            edge: ResizeEdge::Auto,
         };
         let _ = WmAction::ResizeTo {
             target: ResizeTarget::Pane,

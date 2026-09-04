@@ -599,28 +599,49 @@ pub fn handle_move_pane_to_column(state: &mut AppState, action: &WmAction) {
 pub fn handle_resize(state: &mut AppState, action: &WmAction) {
     let WmAction::Resize {
         target,
-        axis,
         amount,
+        edge,
     } = action
     else {
         return;
     };
     if let Some(ws) = state.session.active_workspace_mut() {
-        match (target, axis) {
-            (crate::input::ResizeTarget::Column, crate::input::ResizeAxis::X) => {
+        // **The target decides the axis.** A column is resized across, a pane down — there was an
+        // `axis` argument saying so as well, and it could only ever repeat the target or name a
+        // combination that silently did nothing (`column`+`y`, `pane`+`x`). A key that quietly does
+        // nothing is worse than one that is refused, and the argument was never a choice
+        // (Antonio, 2026-09-04).
+        match target {
+            crate::input::ResizeTarget::Column => {
                 let delta_f = *amount / 1000.0;
-                ws.scrolling.resize_active_column(delta_f);
+                // **Which of the column's two edges**, the same question a pane answers. A column's
+                // left edge is the right edge of the column before it, so `Left` moves that
+                // boundary; the scrolling space owns what each edge means.
+                match edge {
+                    crate::input::ResizeEdge::Left => {
+                        ws.scrolling.move_active_column_left_boundary(delta_f)
+                    }
+                    _ => ws.scrolling.resize_active_column(delta_f),
+                }
             }
-            (crate::input::ResizeTarget::Pane, crate::input::ResizeAxis::Y) => {
+            crate::input::ResizeTarget::Pane => {
                 let h = ws.scrolling.working_area.size.h;
                 let gaps = ws.scrolling.options.gaps;
                 if let Some(col) = ws.scrolling.active_column_mut() {
                     // A boundary and a direction, not "grow me": positive is down, whichever pane
                     // is active. `resize` is a *directional* verb — see `move_pane_boundary`.
-                    col.move_active_pane_boundary(*amount, h, gaps);
+                    //
+                    // **Which of the pane's two edges** is the caller's to say. `Auto` is the edge
+                    // the pane already owned. The column owns what each edge *means*; this only
+                    // names one.
+                    match edge {
+                        crate::input::ResizeEdge::Top => {
+                            col.move_active_pane_top_boundary(*amount, h, gaps)
+                        }
+                        _ => col.move_active_pane_boundary(*amount, h, gaps),
+                    }
                 }
             }
-            _ => {} // Column-Y and Pane-X are not yet implemented
         }
     }
     state.needs_redraw = true;

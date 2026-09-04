@@ -120,6 +120,18 @@ heca_renderer::scene::enqueue_scene(&mut grid_renderer, &mut text_renderer, &sce
 See [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs) for a
 complete winit + wgpu host (`cargo run -p heca-renderer --example showcase`).
 
+**Layout comes first, and nothing is painted before it has a box.** A widget's layout node is
+written as the engine walks, so one the walk has never reached has no bounds — and its default ones
+sit at the window's origin with no size. The paint pass skips such a widget entirely rather than
+drawing it there. You get this without asking for it, in both directions:
+
+- **Building a tree, then painting it without laying it out, draws nothing.** That is the order the
+  app always uses, and a test that paints must compute layout first.
+- **A widget added to a tree *while* that tree is being laid out** — a container putting a child
+  back once the room returns, say — is simply not drawn until the next layout reaches it. Without
+  the rule it appeared in the top-left corner of the window for one frame, which during a drag is a
+  continuous flicker.
+
 ### 4. Wire input
 
 The host maps platform keys onto the renderer-agnostic `GridKey`/`Modifiers` and drives
@@ -2242,6 +2254,14 @@ its children, which paint themselves. So a button can hold a label, an icon + a 
 arbitrary tree of any depth. The convenience forms are **sugar that builds those same children**;
 there is no separate "simple mode".
 
+**Sizing: it hugs its content, and once it is down to its icon it refuses to give way** (CSS
+`flex-shrink: 0`). A row shares a shortfall among whatever will take it, and a button carrying words
+can take some — its `Label` ellipses. One showing only an icon has nothing left to give, so
+shrinking it just eats the control: the box narrows around a glyph that does not, leaving a sliver
+too thin to click. You get this wherever the button is put, including a plain `Flex` — the author
+does not have to know to ask. A container may hold a *worded* button rigid for its own reasons
+(`ButtonGroup` does), and the button never writes that declaration back.
+
 #### The two ways to build a Button — same widget, same retained tree
 
 Native code (chrome/sidebar) uses the **builder API** because it needs closures and signals;
@@ -2472,12 +2492,13 @@ Two things make it stable:
 It is a `Button` like the rest, not an icon button — a different control has different padding and a
 different height, and a group's own affordance has to be one of the things the group arranges.
 
-**It declares its own pick.** A widget that is merely actionable wears a `prefix+/` letter for free,
-but only where nothing above it has already declared one: a declaration shadows the actionability
-beneath it, so that a card declaring a pick does not also letter every button inside it. A pane
-declares a pick, so everything in its header is shadowed — and the ⋮ would wear no letter at all
-unless it says what picking it does. It says the same thing its click does, anchored under itself,
-because a pick carries no pointer.
+**It declares nothing about picking, and does not need to.** It is a button, so it wears a `prefix+/`
+letter for that reason alone, and picking it runs its click. Where it sits does not come into it.
+
+That was not always true. The picker used to switch letters off for anything inside something that
+had declared a pick of its own — so every button in a pane's bar repeated its own click as a hint to
+win its letter back, and this one control, which the widget builds for itself, had no author to do
+that for it and silently wore none. See [the picker's rule](#which-widgets-get-a-letter).
 
 #### Composition, and where it sits in a header
 
@@ -3825,6 +3846,32 @@ Row::new()
 ```
 
 Bind neither and the node is not a pick target; bind only `press` and a pick does what a click does.
+
+#### Which widgets get a letter
+
+**Anything you can act on, wherever it is.** A button is a pick target because it is a button. Put it
+in a pane's bar, a sidebar row, a plugin's panel or on its own — same button, same letter, and its
+author never has to know which. Declaring a pick is for saying a pick means something *other* than
+the click, never for winning back a letter.
+
+**One letter per thing, not per layer.** The one case needing care is a wrapper: a node that exists
+only to hold one other node. A decorator saying what picking does, around a card that can itself be
+activated, is two nodes and one card. So:
+
+- a wrapper and the single node it holds are **one thing** and share one letter — and if either of
+  them *declared* a pick, that is the layer the letter runs, because a declaration is precisely the
+  statement that a pick is not the click;
+- a node holding **more than one** child is a real container, and what is inside it are separate
+  things: each keeps its letter, and so does the container if it is a target itself.
+
+A pane holds a bar and its content, so it is a container: the pane keeps its letter and every button
+in its bar keeps one too.
+
+> ⚠️ **The rule this replaced, so it is not reinstated.** A declared hint used to silence mere
+> actionability *anywhere* beneath it. That silenced layers, and could not tell a decorator speaking
+> for one card from a pane that merely contains buttons — so a button's letter depended on what it
+> had been put inside. Every button in a pane's bar had to repeat its own click as a hint, and the
+> `⋮` a [`ButtonGroup`](#buttongroup) builds for itself wore no letter at all.
 
 **How the framework uses it** (`heca_grid_ui::hint`): `collect_hints(root)` walks the laid-out tree
 and returns every declaration in document order with the rect its letter goes over; `fire_hint(root,

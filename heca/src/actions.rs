@@ -1858,13 +1858,13 @@ impl ActionRegistry {
         ActionDescriptor {
             name: "resize",
             label: "Resize",
-            description: "Move the boundary the focused column or pane owns, along one axis.",
+            description: "Move a boundary of the focused column or pane. The target decides the axis: a column is resized across, a pane down.",
             category: ActionCategory::Layout,
             icon: None,
             args: &[
                 ArgDescriptor::required_enum("target", <crate::input::ResizeTarget as crate::input::EnumArg>::VALUES, "What to resize."),
-                ArgDescriptor::required_enum("axis", <crate::input::ResizeAxis as crate::input::EnumArg>::VALUES, "Which axis to resize along."),
-                ArgDescriptor::required("amount", ArgKind::Float, "How far to move the boundary, along the axis: +x is right, +y is DOWN. A pane's boundary is the one below it, or the one above when it is last — so the divider moves the same way whichever pane is active."),
+                ArgDescriptor::required("amount", ArgKind::Float, "How far to move the boundary, and which way: positive is right for a column, down for a pane. A pane's boundary is the one below it, or the one above when it is last — so the divider moves the same way whichever pane is active. Thousandths of the working width for a column; logical pixels for a pane."),
+                ArgDescriptor::optional_enum("edge", <crate::input::ResizeEdge as crate::input::EnumArg>::VALUES, "Which of the target's edges moves. Omit it for the edge the target already owned. 'top' takes a pane's upper edge instead, so a positive amount shrinks it from the top and a negative one grows it upwards; it does nothing on the first pane, which has no edge above."),
             ],
         },
         ActionDescriptor {
@@ -2771,7 +2771,7 @@ mod tests {
         // An enum lists what it will accept, so the reader does not have to go looking.
         let specs = builtin_args("resize").unwrap();
         let mut bad = sample_args(&specs);
-        bad.insert("axis".to_string(), "sideways".to_string());
+        bad.insert("edge".to_string(), "sideways".to_string());
         let message = check_args(&specs, &bad)
             .iter()
             .map(|p| p.to_string())
@@ -2779,7 +2779,7 @@ mod tests {
             .join("; ");
         assert_eq!(
             message,
-            "argument 'axis' expected one of x, horizontal, width, y, vertical, height, got 'sideways'",
+            "argument 'edge' expected one of auto, top, bottom, left, right, got 'sideways'",
         );
     }
 
@@ -2790,12 +2790,20 @@ mod tests {
         let catalog = ActionCatalog::with_builtins();
         let info = catalog.describe("resize").unwrap();
         let names: Vec<&str> = info.args.iter().map(|a| a.name.as_str()).collect();
-        assert_eq!(names, ["target", "axis", "amount"]);
+        assert_eq!(names, ["target", "amount", "edge"]);
 
         let target = &info.args[0];
         assert_eq!(target.kind, ArgKind::Enum);
         assert!(target.values.contains(&"column".to_string()));
         assert!(target.required);
+
+        // **An optional argument says so, and still lists its vocabulary.** `edge` chooses which of
+        // a pane's two boundaries a resize moves; omitting it keeps the one the target already
+        // owned, so every binding written before it existed is unaffected.
+        let edge = info.args.last().expect("resize declares an edge");
+        assert_eq!(edge.kind, ArgKind::Enum);
+        assert!(!edge.required, "omitting it is what every old binding does");
+        assert!(edge.values.contains(&"top".to_string()));
 
         let json = serde_json::to_string(&info).unwrap();
         let back: ActionInfo = serde_json::from_str(&json).unwrap();

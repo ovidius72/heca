@@ -6,31 +6,14 @@
 //! never answer "what runs this action"; only the built keymaps can, and this prints them.
 //!
 //! It runs **before the window**, so it is also the answer for a script: no GPU, no event loop.
+//! The flag itself is dispatched by [`crate::app::cli`], which owns every command line heca answers
+//! and renders `--help` from the same table — so a flag cannot exist without being documented. This
+//! module keeps what is its own: how the listing is built.
 
 use crate::keymap::BindingIndex;
 
 /// The flag that selects this mode.
 pub(crate) const FLAG: &str = "--keys-show";
-
-/// The flag that switches the output to JSON, for scripting.
-const JSON_FLAG: &str = "--json";
-
-/// Print the bindings and exit, if the arguments asked for it.
-///
-/// Returns `true` when it handled the invocation and the caller should not open a window.
-pub(crate) fn run_if_requested(args: &[String]) -> bool {
-    if !args.iter().any(|a| a == FLAG) {
-        return false;
-    }
-    let config = heca_config::loader::AppConfig::load();
-    // Conflicts are reported by the app proper; here they would be noise on stdout a script has to
-    // filter, and the question asked is "what is bound", not "what collided".
-    let mut conflicts = crate::app::conflicts::Conflicts::default();
-    let keymaps = crate::app::registry::build_keymaps(&config.config, &mut conflicts);
-    let json = args.iter().any(|a| a == JSON_FLAG);
-    print!("{}", render(&keymaps.by_action, json));
-    true
-}
 
 /// The listing, as text — separated from the printing so it can be tested without a process.
 pub(crate) fn render(index: &BindingIndex, json: bool) -> String {

@@ -1467,9 +1467,11 @@ mod tests {
         // Drag ids: the workspace (drop target), its column, its pane.
         assert_eq!(drag.items().len(), 3);
         // Pick targets: the pane card and the workspace dock each declared what `prefix+/` does to
-        // it. A column declares none — it only carries a pick-letter signal, stamped when it is a
-        // *destination* for a move/swap.
-        assert_eq!(heca_grid_ui::collect_hints(body.as_ref()).len(), 2);
+        // it, and the dock's own collapse control earns one for being a control — a thing you can
+        // click is a thing you can aim at, whatever it happens to sit inside (2026-09-04). A column
+        // has none: it declares nothing and does nothing on its own, only carrying a pick-letter
+        // signal stamped when it is a *destination* for a move/swap.
+        assert_eq!(heca_grid_ui::collect_hints(body.as_ref()).len(), 3);
         // The active pane's card bound its `active` signal for per-frame updates.
         assert_eq!(signals.pane_active.len(), 1);
     }
@@ -1665,18 +1667,20 @@ mod tests {
         let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
         let mut body = (c.build)(&ctx, &mut bx);
 
-        // Every pick declaration in the built body, run in document order.
+        // Every pick in the built body, run in document order.
         for (path, _) in heca_grid_ui::collect_hints(body.as_ref()) {
             assert!(heca_grid_ui::fire_hint(body.as_mut(), &path));
         }
+        // The ROWS' picks — the subject of this test. Controls *inside* a row also earn letters
+        // (see the assertion below) and fire their own actions, which are not row gestures.
         let declared: Vec<(String, Option<PropValue>)> = fired
             .borrow()
             .iter()
-            .map(|intent| match intent {
+            .filter_map(|intent| match intent {
                 InteractionIntent::View(vi) => {
-                    (vi.action.clone(), vi.args.get("key").cloned())
+                    Some((vi.action.clone(), vi.args.get("key").cloned()))
                 }
-                other => panic!("a row's gesture must be a named intent, got {other:?}"),
+                _ => None,
             })
             .collect();
         assert_eq!(
@@ -1693,6 +1697,18 @@ mod tests {
                 ),
             ],
             "each row aims the picker at its own row, by nav key",
+        );
+
+        // **A control inside a row is a thing of its own, and gets its own letter** (2026-09-04).
+        // The picker used to letter only what declared, so a row's own collapse control — a button
+        // like any other — was unreachable by `prefix+/` purely because of what it had been put
+        // inside. Where a widget sits does not decide what it can do.
+        assert!(
+            fired
+                .borrow()
+                .iter()
+                .any(|i| !matches!(i, InteractionIntent::View(_))),
+            "the row's collapse control was lettered too, and picking it ran its own action"
         );
     }
 
@@ -1730,14 +1746,18 @@ mod tests {
             for (path, _) in heca_grid_ui::collect_hints(body.as_ref()) {
                 assert!(heca_grid_ui::fire_hint(body.as_mut(), &path));
             }
+            // The ROWS' gestures. A control inside a row is lettered too and fires its own
+            // action, which is not a row gesture and names no seating — it acts on what it names.
             let seats: Vec<PropValue> = fired
                 .borrow()
                 .iter()
-                .map(|intent| match intent {
-                    InteractionIntent::View(vi) => vi.args.get(SEAT_ARG).cloned().unwrap_or_else(
-                        || panic!("a gesture must name its seating, got {:?}", vi.args),
+                .filter_map(|intent| match intent {
+                    InteractionIntent::View(vi) => Some(
+                        vi.args.get(SEAT_ARG).cloned().unwrap_or_else(|| {
+                            panic!("a gesture must name its seating, got {:?}", vi.args)
+                        }),
                     ),
-                    other => panic!("a row's gesture must be a named intent, got {other:?}"),
+                    _ => None,
                 })
                 .collect();
             assert!(!seats.is_empty(), "the body declared at least one gesture");

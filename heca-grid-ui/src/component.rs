@@ -583,6 +583,22 @@ impl Base {
     pub fn set_hidden(&mut self, hidden: bool) {
         if self.style.layout.hidden != hidden {
             self.style.layout.hidden = hidden;
+            // **Coming back, it has no box yet.** A hidden widget is `display: none`, so the layout
+            // gives it a zero rect at the origin; revealing it does not undo that, and the bounds it
+            // still carries say it is a nothing in the window's top-left corner. Most of a widget
+            // draws from those bounds and so draws nothing — but an icon is a glyph at the font's
+            // size, drawn wherever its box says it is, so a revealed button put its icon in the
+            // corner of the screen for the frame before the next layout reached it. During a drag
+            // that is continuous, and it is red when the button is a destructive one (Antonio,
+            // driving, 2026-09-04).
+            //
+            // Clearing the layout node says the truth — nothing has placed this yet — and
+            // [`paint_child`](crate::paint_child) already declines to draw what has never been
+            // placed. The layout this same call asks for supplies the box, and it draws from then
+            // on. One rule, rather than every widget learning to distrust its own bounds.
+            if !hidden {
+                self.node = None;
+            }
             self.mark_needs_layout();
         }
     }
@@ -1277,7 +1293,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
 ///    button promises. Delivered as a real [`Event::Click`] at the widget's centre, through the
 ///    handlers it already registered — never a second path that could drift from what the mouse
 ///    does.
-fn run_pick(node: &mut dyn Component) {
+pub(crate) fn run_pick(node: &mut dyn Component) {
     if let Some(hint) = &node.base().hint {
         hint.run();
         return;
@@ -1353,6 +1369,21 @@ pub(crate) fn reveal_target_in(children: &[Box<dyn Component>]) -> Option<Rectan
 /// [`key_hint::paint_hint_label`](crate::widgets::key_hint::paint_hint_label).
 pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
     if c.base().style.layout.hidden {
+        return;
+    }
+    // **Nothing is painted before it has a box.** `Base::node` is written by the layout engine as
+    // it walks, so a widget the walk has never reached still holds `None` — it has no bounds, and
+    // its default ones put it at the window's origin. Painting it draws it there for one frame: a
+    // small thing flickering in the top-left corner of the scrolling area, which a resize produces
+    // continuously (Antonio, driving, 2026-09-03).
+    //
+    // A widget added *while* its tree is being laid out is exactly that case, and it happened three
+    // separate times in one session — the ⋮ built inside the decision, the ⋮ rebuilt on each
+    // arrangement, and a button's words put back when the room returned. Each was patched where it
+    // arose. This is the one rule underneath all three, in the one place every widget's paint
+    // passes through, so no widget opts in and a fourth cannot be written: the next layout reaches
+    // the new child, gives it a box, and it is drawn from then on.
+    if c.base().node.is_none() {
         return;
     }
     c.paint(cx);

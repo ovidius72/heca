@@ -777,6 +777,19 @@ pub struct AppState {
     /// terminal bell when `[appearance.terminal] bell_visual` is on; the render pass
     /// draws a fading content-area overlay until `Instant::now()` reaches it.
     pub bell_flash_until: Option<std::time::Instant>,
+    /// **When a widget asked to be drawn again**, with no event coming to prompt it.
+    ///
+    /// Some behaviour is due at a *time*: a tooltip revealing once the pointer has rested, a caret
+    /// blinking. A resting pointer produces no events, so the frame that would draw it never
+    /// happens on its own. The widget says how long it needs (`Component::next_redraw`, folded down
+    /// a whole tree), the loop sleeps until then, and **this is what makes the loop actually draw
+    /// when it gets there** — without it, waking finds every reason-to-draw false and goes straight
+    /// back to sleep, which is a tooltip that appears only when you nudge the mouse (Antonio,
+    /// driving, 2026-09-04).
+    ///
+    /// Same shape as [`bell_flash_until`](Self::bell_flash_until): a deadline the frame loop reads,
+    /// never a per-widget timer the host would have to keep in step.
+    pub widget_frame_due: Option<std::time::Instant>,
     /// Active scrollback searches, **one per pane**. Drives each pane's query bar,
     /// its match highlights, and `n`/`N` navigation. terminal-task-19.
     ///

@@ -164,9 +164,10 @@ pub struct Button {
     label: String,
     /// Overrides the hue this button reads in. See [`tone`](Self::tone).
     tone: Option<Color>,
-    /// **This button is about something destructive.** Set by the `Destructive` variant and kept
-    /// even when a container hands the button its own chrome — being dangerous is what the button
-    /// *is*, while the frame around it is how the row it sits in is styled.
+    /// **This button is about something destructive.** Set by the `Destructive` variant, which
+    /// carries the whole look — hue and frame together — and a container never strips either.
+    /// What it decides beyond the variant's own painting is the hue of the held-on frame, so an
+    /// engaged destructive button reads in danger rather than in the accent.
     dangerous: bool,
     /// **The glyph this button was given**, if any. Recorded when [`icon`](Self::icon) inserts it,
     /// so a container can ask what a button *is* without taking its content apart —
@@ -486,11 +487,12 @@ impl Component for Button {
     /// A container styling a row as one group hands its variant down; a button that was given its
     /// own keeps it, which is what lets a quiet toolbar still have a destructive button in it.
     fn set_variant(&mut self, variant: ButtonVariant) {
-        // **The row's chrome, the button's own hue.** A destructive button in a quiet toolbar was
-        // the only framed one, because `Destructive` decides both — and a frame is about the row,
-        // not about the act. It takes the container's chrome and keeps reading as dangerous
-        // (Antonio, driving, 2026-09-03).
-        if self.variant == ButtonVariant::default() || self.dangerous {
+        // **A named variant is the whole look, frame included, and a container does not take it
+        // away.** A destructive button in a quiet row is the only framed one, and that is the
+        // style speaking: danger is boxed. Handing it the row's chrome and leaving it only the hue
+        // was tried and rejected — the variant is what the button looks like, not a colour a
+        // parent may restyle (Antonio, 2026-09-03).
+        if self.variant == ButtonVariant::default() {
             self.variant = variant;
         }
     }
@@ -556,6 +558,27 @@ impl Component for Button {
         self.base.style.layout.gap = fs * GAP_RATIO;
         self.base.style.layout.width = Length::Auto;
         self.base.style.layout.height = Length::Auto;
+        // **Showing only an icon, it says it cannot give way** — CSS `flex-shrink: 0`.
+        //
+        // A row shares out a shortfall among whatever will take it, and a button carrying words can
+        // take some: its [`Label`] ellipses. One down to its icon has nothing left to give, so
+        // shrinking it only eats the control itself — the box narrows around a glyph that does not,
+        // and what is left is a sliver too thin to click. The same reasoning `IconButton` already
+        // states about its own size.
+        //
+        // It belongs here rather than in whatever container happens to hold the button, so a plain
+        // [`Flex`](crate::widgets::Flex) of icon buttons is right without its author knowing to ask
+        // — which is how the defect arrived: a container told its own children not to give way and
+        // could not tell the one control it had built itself (Antonio, driving, 2026-09-04).
+        //
+        // ⚠️ **It only ever tightens.** A container may have its own reason to hold a *worded*
+        // button rigid — [`ButtonGroup`](crate::widgets::ButtonGroup) does, because a row that
+        // fits by ellipsing its labels never reports the overflow that moves a button into the
+        // menu. Writing the relaxed value back here would undo that declaration on every layout
+        // pass, which is the one thing a re-measure must never do to a property it shares.
+        if self.icon_only {
+            self.base.style.layout.flex_shrink = Some(0.0);
+        }
     }
 
     fn paint(&self, cx: &mut PaintCx) {

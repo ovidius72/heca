@@ -11,8 +11,8 @@
   "contextReadyReason": "",
   "startDate": "",
   "endDate": "",
-  "workDone": "F003's priority-0 input work is essentially complete: P097 has collapsed the 16 hand-written per-surface pointer dispatch functions into one door per retained tree family, each taking the single Event::Raw the event loop builds. The framework now owns the pointer gesture end to end — the drag identity a row already declares, the modifier state, and what a drop means — and the app's parallel drag machine is deleted. The pane info bar has become a child of its pane through a generic header slot, the first real demonstration that a component can own its own input.",
-  "workRemaining": "P097's T497 has two unverified gaps to drive, then T499, T500 and the plugin-capability half (T501/T502). Elsewhere in F003: P035's host-API namespaces and StateView (T506, T058, T064, T065), P082's five open bugs, and P096's two card defects.",
+  "workDone": "F003's priority-0 phase P097 has delivered its core: pointer input reaches every surface through one tree walk instead of 16 hand-written per-surface functions, and the picker now letters anything actionable wherever it sits. T494, T495, T496 and T497 are closed; T498 canceled as a duplicate.",
+  "workRemaining": "P097 still owes T499 (the picker's app half — deleting the HintSurface enum that enumerates surfaces), T500 (Antonio driving every surface as a regression pass) and T501/T502 (the plugin-capability half: a described plugin overlay gets input for free, but still cannot build what the expose builds). Elsewhere in F003: P082's five open bugs and its file-split tasks, P096's T504/T505, and P035's StateView and host-API namespace work.",
   "acceptedDecisions": [],
   "phaseIds": [
     "09bcb3cf-f8ea-454a-913e-ea377c53d37e",
@@ -44,8 +44,8 @@
   "dependsOn": [],
   "statusLog": [
     {
-      "id": "0c184e39-9c7e-4b5f-93c6-caad13370ab9",
-      "date": "2026-09-01T15:40:31.641Z",
+      "id": "48b1361e-0938-45f0-9f67-9055a132106f",
+      "date": "2026-09-04T13:52:47.937Z",
       "fromStatus": "planned",
       "toStatus": "in-progress",
       "title": "planned → in-progress",
@@ -53,15 +53,6 @@
     }
   ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-09-03T19:26:25.823Z",
-  "sessionInfo": [
-    {
-      "sessionId": "mcp-process:71143b76-44da-44d9-983a-3d7cd3314804",
-      "createdAt": "2026-09-02T15:07:41.201Z"
-    },
-    {
-      "sessionId": "mcp-process:939eca9a-a26d-40ed-8a64-25c8c929cff9",
-      "createdAt": "2026-09-02T10:09:28.620Z"
-    }
-  ]
+  "updatedAt": "2026-09-04T14:27:10.452Z",
+  "sessionInfo": []
 }

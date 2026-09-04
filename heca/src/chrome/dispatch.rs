@@ -218,6 +218,33 @@ pub(crate) fn drag_in_flight(state: &crate::app_state::AppState) -> bool {
     heca_grid_ui::dragging(&state.window_root)
 }
 
+/// **When does anything on screen next need a frame of its own?** Seconds from now, or `None` when
+/// nothing is waiting.
+///
+/// Some behaviour is "after the pointer has been still for a while" — a tooltip revealing, a caret
+/// blinking — and a still pointer produces no events, so nothing would draw the moment it comes due.
+/// The widget knows when that is and says so through `Component::next_redraw`, which the framework
+/// already folds down a whole tree. **The host's only job is to ask, and to ask every tree it
+/// draws**, which is why this sits beside [`cancel_every_tree`] and not in the event loop: a fourth
+/// tree family is added here, once, rather than in each caller.
+///
+/// Until this existed the app never asked at all. The library had the answer and the wake was
+/// guarded (`a_pending_tooltip_asks_the_host_to_wake_for_it`), but only the showcase read it — so in
+/// heca a tooltip stayed hidden under a resting pointer and appeared the instant you nudged the
+/// mouse by a pixel, because the nudge was what produced the frame (Antonio, driving, 2026-09-04).
+pub(crate) fn next_redraw_across_trees(state: &crate::app_state::AppState) -> Option<f32> {
+    use heca_grid_ui::component::soonest_redraw;
+    let mut soonest = state.window_root.next_redraw();
+    for pane in state.panes.values() {
+        soonest = soonest_redraw(soonest, pane.root.next_redraw());
+    }
+    for widgets in state.pane_viewport_widgets.values() {
+        soonest = soonest_redraw(soonest, widgets.badge.next_redraw());
+        soonest = soonest_redraw(soonest, widgets.scrollbar.next_redraw());
+    }
+    soonest
+}
+
 /// Tell every retained tree the pointer is gone: hover clears, any capture or drag ends.
 ///
 /// One call per tree the host mounts, because each keeps its own hover — that is the point of the

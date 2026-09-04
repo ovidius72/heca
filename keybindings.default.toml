@@ -95,9 +95,14 @@ sidebar_left          = "prefix+b"    # Toggle left sidebar
 sidebar_right         = "prefix+."    # Toggle right sidebar
 # Chrome keyboard focus is a DOCK, not a side: the letters go over every dock on screen and the
 # one you pick takes focus (a focus ring shows where the keyboard is). `focus_dock` also accepts a
-# `dock` id, which skips the pick — that is how RPC and menu entries focus a specific dock. No flat
-# binding form carries args yet, so to aim a key at one dock, use a mode block (as with
-# `scroll_to_offset` further down).
+# `dock` id, which skips the pick — that is how RPC and menu entries focus a specific dock. To aim a
+# key at one dock, write it as a `[[keys.bind]]` entry, which is this same normal-mode keymap with
+# `args` (see the block below `scroll_line_down`):
+#
+#   [[keys.bind]]
+#   keys   = "prefix+e"
+#   action = "focus_dock"
+#   args   = { dock = "left" }
 focus_dock            = "prefix+Shift+e"  # Letters on every dock, pick one to focus
 # Sidebar-tree UI collapse state (works even when the sidebar is hidden):
 toggle_current_workspace_collapsed = "prefix+<"
@@ -225,9 +230,17 @@ keys   = "prefix+Tab"
 action = "toggle_layer"
 args   = { name = "heca.expose" }
 
-# GUI/RPC-only by default (used by the terminal scrollbar): no flat keybinding
-# form supports args yet, but the action is still configurable in custom modes.
-# Example fixed jump in a user-defined mode:
+# GUI/RPC-only by default (used by the terminal scrollbar). It takes args, so bind it with
+# `[[keys.bind]]` for a global key or `[[keys.mode.bindings]]` inside a mode — the flat
+# `action = "combo"` form above is a single string and carries none, which is the only thing that
+# form cannot do.
+#
+# [[keys.bind]]
+# keys   = "prefix+Shift+j"
+# action = "scroll_to_offset"
+# args   = { rows = "200" }
+#
+# The same, inside a user-defined mode:
 # [[keys.mode]]
 # name = "scroll-jump"
 # trigger = "prefix+Shift+j"
@@ -449,8 +462,9 @@ edit_select_all           = ["Ctrl+a", "Super+a"]    # Input: select the whole f
 
 # ── resize ── (prefix+r → sticky resize mode)
 #
-# `amount` moves the boundary ALONG THE AXIS: +x is right, +y is DOWN. So the key
-# points the way the divider travels — h/Left move it left, j/Down move it down —
+# `amount` moves the boundary the way the key points: a column is resized across and a pane down,
+# so the target decides the axis and nothing has to say it. +right and +down are positive —
+# h/Left move the boundary left, j/Down move it down —
 # whichever column or pane is active. A pane's boundary is the one below it, or the
 # one above when it is the last pane; moving that one down shrinks the last pane,
 # which is the same divider going the same way (F004/P084/T414).
@@ -461,35 +475,84 @@ sticky = true
 [[keys.mode.bindings]]
 action = "resize"
 keys = "h"
-args = { target = "column", axis = "x", amount = "-50" }
+args = { target = "column", amount = "-50" }
 [[keys.mode.bindings]]
 action = "resize"
 keys = "l"
-args = { target = "column", axis = "x", amount = "50" }
+args = { target = "column", amount = "50" }
+# A column has two vertical edges too. Plain h/l move its RIGHT edge; Shift takes the LEFT one,
+# which is where the column before it ends. Positive is still right, so Shift+l shrinks the column
+# from the left. Nothing happens on the first column, which has nothing to its left.
+[[keys.mode.bindings]]
+action = "resize"
+keys = "Shift+h"
+args = { target = "column", amount = "-50", edge = "left" }
+[[keys.mode.bindings]]
+action = "resize"
+keys = "Shift+l"
+args = { target = "column", amount = "50", edge = "left" }
 [[keys.mode.bindings]]
 action = "resize"
 keys = "j"
-args = { target = "pane", axis = "y", amount = "40" }
+args = { target = "pane", amount = "40" }
 [[keys.mode.bindings]]
 action = "resize"
 keys = "k"
-args = { target = "pane", axis = "y", amount = "-40" }
+args = { target = "pane", amount = "-40" }
+# A pane has two horizontal edges. Plain j/k move the one BELOW it; Shift takes the one ABOVE.
+# Positive is still down the screen, so Shift+j pushes the top edge down (shrinking the pane from
+# above) and Shift+k pulls it up. Nothing happens on the first pane, which has no edge above it.
+[[keys.mode.bindings]]
+action = "resize"
+keys = "Shift+j"
+args = { target = "pane", amount = "40", edge = "top" }
+[[keys.mode.bindings]]
+action = "resize"
+keys = "Shift+k"
+args = { target = "pane", amount = "-40", edge = "top" }
+# Move the focus WITHOUT leaving resize mode, so you can size one pane, step to the next and size
+# that one too. The mode is sticky: it runs the action and stays until Escape or Enter, so this is
+# the ordinary focus action bound inside the mode — nothing special about it.
+[[keys.mode.bindings]]
+action = "focus_left"
+keys = "Ctrl+h"
+[[keys.mode.bindings]]
+action = "focus_right"
+keys = "Ctrl+l"
+[[keys.mode.bindings]]
+action = "focus_up"
+keys = "Ctrl+k"
+[[keys.mode.bindings]]
+action = "focus_down"
+keys = "Ctrl+j"
+[[keys.mode.bindings]]
+action = "focus_left"
+keys = "Ctrl+Left"
+[[keys.mode.bindings]]
+action = "focus_right"
+keys = "Ctrl+Right"
+[[keys.mode.bindings]]
+action = "focus_up"
+keys = "Ctrl+Up"
+[[keys.mode.bindings]]
+action = "focus_down"
+keys = "Ctrl+Down"
 [[keys.mode.bindings]]
 action = "resize"
 keys = "Left"
-args = { target = "column", axis = "x", amount = "-50" }
+args = { target = "column", amount = "-50" }
 [[keys.mode.bindings]]
 action = "resize"
 keys = "Right"
-args = { target = "column", axis = "x", amount = "50" }
+args = { target = "column", amount = "50" }
 [[keys.mode.bindings]]
 action = "resize"
 keys = "Down"
-args = { target = "pane", axis = "y", amount = "40" }
+args = { target = "pane", amount = "40" }
 [[keys.mode.bindings]]
 action = "resize"
 keys = "Up"
-args = { target = "pane", axis = "y", amount = "-40" }
+args = { target = "pane", amount = "-40" }
 
 # ── focus ── (entered by focusing a DOCK — focus_dock / a click; no trigger of its own)
 #

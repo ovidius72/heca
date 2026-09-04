@@ -369,3 +369,48 @@ fn the_window_tree_has_one_door_and_not_a_function_per_kind() {
          perfectly while being dead.",
     );
 }
+
+/// **The loop wakes for what the widgets are waiting for.**
+///
+/// Some behaviour is due at a *time* rather than on an event: a tooltip revealing once the pointer
+/// has rested, a caret blinking. A still pointer produces no events, so unless the loop asks, the
+/// frame that would draw it never happens — and the reveal waits for whatever the user does next.
+///
+/// The library has always had the answer (`Component::next_redraw`, folded down a whole tree and
+/// guarded by `a_pending_tooltip_asks_the_host_to_wake_for_it`). **The host simply never asked**, so
+/// a tooltip stayed hidden under a resting pointer and appeared the moment the mouse moved by a
+/// pixel — the nudge being what produced the frame (Antonio, driving, 2026-09-04). Only the showcase
+/// read it, which is why the widget's own tests were green throughout.
+///
+/// A lint, like the rest of this file: what it guards against is *absence*, and nothing fails when
+/// a question is not asked.
+#[test]
+fn the_loop_wakes_for_what_the_widgets_are_waiting_for() {
+    let lifecycle = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/app/lifecycle.rs");
+    let src = std::fs::read_to_string(&lifecycle).expect("lifecycle.rs is readable");
+    assert!(
+        src.contains("next_redraw_across_trees"),
+        "the frame loop decides when to wake without asking the widgets what they are waiting for; \
+         a tooltip under a resting pointer will never be drawn ({})",
+        lifecycle.display()
+    );
+    assert!(
+        src.contains("ControlFlow::WaitUntil"),
+        "…and it must schedule that wake, not merely compute it"
+    );
+    // **Scheduling is only half of it, and the half that is easy to think is the whole.** Arriving
+    // at the deadline, every reason-to-draw is false — the widget no longer reports a pending wake,
+    // because it is due *now* — so the loop wakes and goes straight back to sleep. The first attempt
+    // at this fix scheduled the wake correctly and changed nothing on screen for exactly that
+    // reason.
+    let needs_frame = src
+        .split_once("let needs_frame")
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .map(|(decl, _)| decl)
+        .expect("the frame loop decides with a `needs_frame`");
+    assert!(
+        needs_frame.contains("widget_due"),
+        "reaching a widget's wake is not itself a reason to draw, so the loop wakes for it and \
+         then does nothing"
+    );
+}

@@ -141,6 +141,47 @@ impl Column {
         self.pane_sizes.clear(); // Invalidate cache
     }
 
+    /// **Make room for a pane that is about to exist.**
+    ///
+    /// A height a pane was dragged to is a *preference*. Two panes dragged to fill the column
+    /// between them hold the whole of it, and a third arriving has nothing left: it was assigned a
+    /// single pixel, and the pass that scales the column to fit shaved barely one per cent off the
+    /// other two. The pane was there, in the column, and could not be seen — which is what
+    /// "splitting a third time pushes the last pane off the screen" actually was (Antonio, driving,
+    /// 2026-09-03/04). Nothing was pushed anywhere, so checking that the heights summed to the
+    /// column found nothing: they always did.
+    ///
+    /// ⚠️ **This is the ADD, not the distribution.** It would be simpler to reserve a floor for
+    /// every pane inside `compute_pane_sizes`, and it is wrong there: that runs on every drag too,
+    /// and a boundary must move space between its own two panes and *nothing else* — held by
+    /// `a_resize_leaves_every_other_pane_where_it_was`. Making room is something a new pane does,
+    /// once, at the moment it arrives.
+    ///
+    /// The preferences are scaled rather than dropped, so the proportions the user dragged survive
+    /// as far as the column still allows.
+    pub fn make_room_for_one_more(&mut self, working_height: f64, gaps: f64) {
+        let after = self.panes.len() + 1;
+        let available = working_height - gaps * (after as f64 + 1.0);
+        let floor = MIN_PANE_HEIGHT.min(available / after as f64).max(1.0);
+        let pinned: f64 = self.panes.iter().filter_map(|p| p.preferred_height).sum();
+        // What the pinned panes may hold and still leave every other pane its floor.
+        let unpinned = self
+            .panes
+            .iter()
+            .filter(|p| p.preferred_height.is_none())
+            .count();
+        let ceiling = available - floor * (unpinned + 1) as f64;
+        if pinned <= ceiling || pinned <= 0.0 {
+            return;
+        }
+        let scale = (ceiling / pinned).max(0.0);
+        for pane in &mut self.panes {
+            if let Some(h) = pane.preferred_height {
+                pane.preferred_height = Some((h * scale).max(floor));
+            }
+        }
+    }
+
     /// Remove a pane by index.
     pub fn remove_pane(&mut self, idx: usize) -> Option<Pane> {
         if idx >= self.panes.len() {
@@ -254,8 +295,28 @@ impl Column {
     /// Move the **boundary the active pane owns** by `delta` logical px **along the axis**, so
     /// positive is *down the screen*. The direction is the whole point: see
     /// [`move_pane_boundary`](Self::move_pane_boundary).
+    ///
+    /// A pane has two edges, and this is the one *below* it — except for the last pane, which has
+    /// none and trades with the one above instead. To aim at the other edge deliberately, use
+    /// [`move_active_pane_top_boundary`](Self::move_active_pane_top_boundary).
     pub fn move_active_pane_boundary(&mut self, delta: f64, working_height: f64, gaps: f64) {
         self.move_pane_boundary(self.active_pane_idx, delta, working_height, gaps);
+    }
+
+    /// Move the boundary **above** the active pane by `delta` logical px, positive being *down the
+    /// screen* like every other resize verb — so a positive delta here **shrinks** the active pane
+    /// from the top, and a negative one grows it upwards.
+    ///
+    /// The counterpart to [`move_active_pane_boundary`](Self::move_active_pane_boundary), which
+    /// takes the edge below. Which of a pane's two edges moves is the column's own business: a
+    /// caller says *which edge*, never which pane index the divider happens to be named by.
+    ///
+    /// **No-op for the first pane**, which has nothing above it to trade with.
+    pub fn move_active_pane_top_boundary(&mut self, delta: f64, working_height: f64, gaps: f64) {
+        let Some(above) = self.active_pane_idx.checked_sub(1) else {
+            return;
+        };
+        self.move_pane_boundary(above, delta, working_height, gaps);
     }
 
     /// Move the boundary pane `pane_idx` owns — the one **below** it, or the one **above** when it

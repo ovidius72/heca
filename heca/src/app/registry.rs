@@ -921,8 +921,8 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(
         &WmAction::Resize {
             target: input::ResizeTarget::Column,
-            axis: input::ResizeAxis::X,
             amount: 0.0,
+            edge: input::ResizeEdge::Auto,
         },
         handle_resize,
     );

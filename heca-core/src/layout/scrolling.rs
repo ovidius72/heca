@@ -328,6 +328,9 @@ impl ScrollingSpace {
         let col = &mut self.columns[col_idx];
         let idx = pane_idx.unwrap_or(col.panes.len());
 
+        // **Room first.** A pane that is about to exist needs somewhere to be, and heights other
+        // panes were dragged to are preferences that give way to that.
+        col.make_room_for_one_more(self.working_area.size.h, self.options.gaps);
         col.add_pane_at(idx, pane);
 
         if activate {
@@ -583,8 +586,78 @@ impl ScrollingSpace {
     /// Resize the active column by a delta (positive = wider, negative = narrower).
     /// NIRI behavior: only the active column changes. Other columns keep their widths.
     /// If the total exceeds the viewport, the view scrolls horizontally.
+    ///
+    /// This moves the column's **right** edge — its left one is where the column before it ends.
+    /// To move that boundary instead, use
+    /// [`move_active_column_left_boundary`](Self::move_active_column_left_boundary).
     pub fn resize_active_column(&mut self, delta: f64) {
         self.resize_column(self.active_column_idx, delta);
+    }
+
+    /// Move the boundary **to the left of** the active column by `delta`, positive being *right*
+    /// like every other resize verb — so a positive delta shrinks the active column from the left
+    /// and a negative one grows it leftwards.
+    ///
+    /// # A boundary moves space between its OWN two columns
+    ///
+    /// The same rule [`Column::resize_pane_height`] states for panes, and for the same reason: the
+    /// boundary belongs to *both* the column before it and the one after, so both change by equal
+    /// and opposite amounts and the active column's far edge stays exactly where it was.
+    ///
+    /// Resizing only the column on the left is **not** this: that widens the neighbour and shoves
+    /// the active column sideways without changing it at all — which is what the first version did,
+    /// and it reads as resizing the wrong column (Antonio, driving, 2026-09-04).
+    ///
+    /// The transfer is clamped **once, by whichever side runs out first**, so the two can never
+    /// disagree: if the neighbour cannot grow any further, the boundary simply stops.
+    ///
+    /// **No-op for the first column**, which has nothing to its left to trade with.
+    pub fn move_active_column_left_boundary(&mut self, delta: f64) {
+        let Some(left) = self.active_column_idx.checked_sub(1) else {
+            return;
+        };
+        let active = self.active_column_idx;
+        // What each side can actually take. The boundary moves by the smaller of the two, so
+        // neither column is asked for room it does not have.
+        let grow = self.achievable_width_delta(left, delta);
+        let shrink = self.achievable_width_delta(active, -delta);
+        let moved = if delta >= 0.0 {
+            grow.min(-shrink)
+        } else {
+            grow.max(-shrink)
+        };
+        if moved == 0.0 {
+            return;
+        }
+        self.resize_column(left, moved);
+        self.resize_column(active, -moved);
+    }
+
+    /// **How much of `delta` column `idx` can actually take**, as a proportion delta — the same
+    /// clamp [`resize_column`](Self::resize_column) applies, asked in advance.
+    ///
+    /// It exists so a two-sided move can be clamped **once** rather than applied twice and left
+    /// inconsistent when only one side hits its limit.
+    fn achievable_width_delta(&self, idx: usize, delta: f64) -> f64 {
+        let Some(col) = self.columns.get(idx) else {
+            return 0.0;
+        };
+        let working_w = self.working_area.size.w;
+        let gaps = self.options.gaps;
+        let available_width = (working_w - gaps * 2.0).max(MIN_COLUMN_WIDTH);
+        let min_prop = ((MIN_COLUMN_WIDTH + gaps) / (working_w - gaps)).clamp(0.01, 1.0);
+        let base_width = if col.is_zoomed() {
+            ColumnWidth::Fixed(available_width)
+        } else {
+            col.width
+        };
+        match base_width {
+            ColumnWidth::Proportion(p) => (p + delta).clamp(min_prop, 1.0) - p,
+            ColumnWidth::Fixed(w) => {
+                let target = (w + delta * working_w).clamp(MIN_COLUMN_WIDTH, available_width);
+                (target - w) / working_w
+            }
+        }
     }
 
     /// Resize column `idx` by `delta` (a proportion delta for `Proportion` widths,
@@ -1519,5 +1592,146 @@ mod tests {
             space.view_offset.is_static(),
             "ensure-visible snaps the view statically"
         );
+    }
+
+    /// **Splitting a column a third time gives the new pane a real pane's worth of room.**
+    ///
+    /// Drag a divider and both panes carry the height you dragged them to, which between them is the
+    /// whole column. Split again and there is nothing left — so the newcomer used to be assigned a
+    /// single pixel, and the pass that scales everything to fit took barely one per cent off the
+    /// other two. The pane existed, in the column, and could not be seen: what that looks like is
+    /// "the third pane went off the screen" (Antonio, driving, 2026-09-03/04).
+    ///
+    /// ⚠️ **Asserting that the heights sum to the column proves nothing here** — they always did,
+    /// which is why an earlier look at this concluded the arithmetic was correct and stopped. The
+    /// assertion that catches it is that every pane is big enough to be a pane.
+    #[test]
+    fn a_pane_added_to_a_column_that_was_dragged_full_still_gets_room() {
+        let opts = LayoutOptions {
+            gaps: 8.0,
+            ..Default::default()
+        };
+        let area = Rectangle::from_size(Size::new(1000.0, 800.0));
+        let mut space = ScrollingSpace::new(area, 1.0, opts);
+        space.add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
+        // Drag the divider well off centre, so the two of them fill the column between them.
+        space.resize_pane_height(0, 0, 120.0);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
+
+        let panes = space.panes_with_positions();
+        assert_eq!(panes.len(), 3, "three panes in the column");
+        for (id, rect) in &panes {
+            assert!(
+                rect.size.h >= crate::layout::column::MIN_PANE_HEIGHT - 0.5,
+                "pane {id:?} came out {}px tall — a pane nobody can see \
+                 ({:?})",
+                rect.size.h,
+                panes.iter().map(|(_, r)| r.size.h).collect::<Vec<_>>()
+            );
+        }
+        let last = panes.last().expect("three panes").1;
+        assert!(
+            last.loc.y + last.size.h <= area.size.h,
+            "and the column still ends inside its own area"
+        );
+    }
+
+    /// **Both of a column's edges can be moved, and moving one is a transfer, not a shove.**
+    ///
+    /// A column's left edge is the right edge of the column before it, so moving it takes width
+    /// from one and gives it to the other — the active column's *far* edge does not budge. Resizing
+    /// only the neighbour would widen it and push the active column sideways unchanged, which reads
+    /// as resizing the wrong column (Antonio, driving, 2026-09-04).
+    #[test]
+    fn moving_a_columns_left_edge_trades_width_with_the_column_before_it() {
+        let mut space = space_with_columns(3);
+        space.activate_column(1);
+        let widths = |s: &ScrollingSpace| s.column_widths.clone();
+
+        let before = widths(&space);
+        space.resize_active_column(0.1);
+        let after_right = widths(&space);
+        assert!(
+            after_right[1] > before[1],
+            "its own right edge widens it ({before:?} → {after_right:?})"
+        );
+        assert!(
+            (after_right[0] - before[0]).abs() < 0.5,
+            "and leaves the column beside it alone"
+        );
+
+        space.move_active_column_left_boundary(0.1);
+        let after_left = widths(&space);
+        assert!(
+            after_left[0] > after_right[0],
+            "the neighbour gains ({after_right:?} → {after_left:?})"
+        );
+        assert!(
+            after_left[1] < after_right[1],
+            "…and the ACTIVE column gives it up — a transfer, not a shove"
+        );
+        let gained = after_left[0] - after_right[0];
+        let given = after_right[1] - after_left[1];
+        assert!(
+            (gained - given).abs() < 0.5,
+            "equal and opposite, so the active column's far edge stays put ({gained} vs {given})"
+        );
+
+        // The first column has nothing to its left, so there is no boundary to move.
+        space.activate_column(0);
+        let pinned = widths(&space);
+        space.move_active_column_left_boundary(0.1);
+        assert_eq!(widths(&space), pinned, "no edge to the left of the first column");
+    }
+
+    /// **Both of a pane's edges can be moved.** The counterpart of the column test above: plain
+    /// `j`/`k` move the boundary below the active pane, `edge = "top"` the one above it.
+    #[test]
+    fn a_pane_can_be_resized_from_either_of_its_edges() {
+        let opts = LayoutOptions {
+            gaps: 8.0,
+            ..Default::default()
+        };
+        let area = Rectangle::from_size(Size::new(1000.0, 800.0));
+        let mut space = ScrollingSpace::new(area, 1.0, opts);
+        space.add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
+        let heights = |s: &ScrollingSpace| -> Vec<f64> {
+            s.panes_with_positions().iter().map(|(_, r)| r.size.h).collect()
+        };
+
+        // The middle pane: moving its BOTTOM edge down trades with the pane below.
+        let col = space.columns[0].active_pane_idx;
+        assert_eq!(col, 2, "the last added pane is active");
+        space.columns[0].activate_pane(1);
+
+        let before = heights(&space);
+        let h = space.working_area.size.h;
+        let gaps = space.options.gaps;
+        space.columns[0].move_active_pane_boundary(40.0, h, gaps);
+        let after_bottom = heights(&space);
+        assert!(
+            (after_bottom[0] - before[0]).abs() < 0.5,
+            "the pane ABOVE is untouched by the bottom edge ({before:?} → {after_bottom:?})"
+        );
+
+        space.columns[0].move_active_pane_top_boundary(40.0, h, gaps);
+        let after_top = heights(&space);
+        assert!(
+            (after_top[2] - after_bottom[2]).abs() < 0.5,
+            "and the pane BELOW is untouched by the top edge ({after_bottom:?} → {after_top:?})"
+        );
+        assert!(
+            after_top[0] > after_bottom[0],
+            "moving the top edge down grows the pane above it"
+        );
+
+        // The first pane has nothing above it.
+        space.columns[0].activate_pane(0);
+        let pinned = heights(&space);
+        space.columns[0].move_active_pane_top_boundary(40.0, h, gaps);
+        assert_eq!(heights(&space), pinned, "no edge above the first pane");
     }
 }

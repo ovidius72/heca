@@ -241,6 +241,15 @@ impl KeyHintGroup {
         }
         Some(node)
     }
+
+    /// The same walk, for running a pick — which needs the node itself, not a look at it.
+    fn at_mut(&mut self, path: &[usize]) -> Option<&mut dyn Component> {
+        let mut node: &mut dyn Component = self.base.children.get_mut(*path.first()?)?.as_mut();
+        for step in &path[1..] {
+            node = node.base_mut().children.get_mut(*step)?.as_mut();
+        }
+        Some(node)
+    }
 }
 
 fn collect(
@@ -312,11 +321,13 @@ impl Component for KeyHintGroup {
                 self.open.set(false);
                 self.seen = false;
                 self.set_letters(false);
+                // **Through the one definition of what a pick does**, so this picker and the
+                // app-wide one cannot answer the same declaration differently — including a
+                // declaration that says picking is clicking.
                 if let Some(path) = picked
-                    && let Some(node) = self.at(&path)
-                    && let Some(hint) = &node.base().hint
+                    && let Some(node) = self.at_mut(&path)
                 {
-                    hint.run();
+                    crate::component::run_pick(node);
                 }
                 Handled::Yes
             }

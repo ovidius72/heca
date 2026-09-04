@@ -77,7 +77,13 @@
     "651a5f5e-5c44-47db-82f8-6cb32865db19",
     "04ff12a9-ccd2-4aeb-ba7e-416ef8ebb9bf",
     "9f47e368-e39a-4f2b-a5b7-6ecd79eb00c5",
-    "599c8f7e-52d3-4d18-95cc-aaa13d67e374"
+    "599c8f7e-52d3-4d18-95cc-aaa13d67e374",
+    "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b",
+    "7e82071b-f110-4e9e-9ec0-884e79a401c1",
+    "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b",
+    "736a6912-1297-48b3-89c1-e32559a024d9",
+    "073f4e71-0b10-4a50-9e42-66eafdf4de7d",
+    "92358ff7-5c34-441b-aed0-fa803f0d9486"
   ],
   "tasks": [
     {
@@ -1472,8 +1478,8 @@
       "shortName": "split-the-files-that-are-doing",
       "title": "Split the files that are doing several jobs — the ones found while building T432",
       "status": "deferred",
-      "description": "Found while building F003/P082/T432 (2026-08-21) and reported to Antonio, who asked for them to be filed rather than left in a message. AGENTS § 0 rule 4: aim under 400 lines, **above 600 stop and agree a split** — and the line count is the smoke alarm, not the rule: **the defect is always the second job**.\n\nTwo were already split in T432 and are NOT in scope here:\n- `heca-grid-ui/src/hint.rs` (807) → `hint/` — `declaration.rs` 75 · `collect.rs` 89 · `fire.rs` 51 · `actions.rs` 61 · `offer.rs` 175 · `tests.rs` 370 · `mod.rs` 30.\n- `heca/src/chrome/hint.rs` (759) → `hint/` — `letters.rs` 235 · `surfaces.rs` 191 · `visibility.rs` 139 · `targets.rs` 212 · `mod.rs` 40.\n\nMeasured 2026-08-21 (code lines exclude `#[cfg(test)]` modules). Split each by **job**, one file per member, same shape as `widgets/overlay/`, `chrome/layers/` and the two above.\n\n| code / test | file | the jobs in it |\n|---|---|---|\n| 1899 / 21 | `heca-grid-ui/src/component.rs` | `Base` · the `Component` trait · the whole router (`dispatch`, `deliver`, `focus_path`, `deliver_to_path`, `broadcast`, `run_pick`) · painting (`paint_child`, `shift_subtree`) |\n| 1938 / 1267 | `heca/src/chrome/mod.rs` | host logic + UI composition — **already T439** |\n| 1296 / 1318 | `heca/src/app/interaction.rs` | policy classification (`action_policy`) · domain computation (`domain_for`, `session_domain`) · routing (`route_in_domain`, `policy_allows`) · dispatch (`dispatch_intent`, `dispatch_action`, `dispatch_view_intent`) · view-intent resolution (`builtin_of`, `view_intent_allowed`) |\n| 1157 / 2138 | `heca-view-realize/src/lib.rs` | every kind's realize arm, plus a 2138-line test module in the same file |\n| 895 / 764 | `heca/src/providers/workspaces/mod.rs` | the provider · its action table · `perform` · key helpers · menus |\n| 973 / 0 | `heca-grid-ui/src/event.rs` | `Event` · `EventKind` · `EventCx` · `Handled` · `GridKey` · `Modifiers` · `PointerEvent` · `RawPointer` · `WidgetIntent` |\n| 827 / 0 | `heca-grid-ui/src/builders.rs` | `ComponentExt` + `LayoutExt` + `StyleExt` + `Parent` — a **family**, which § 0.4 says is a folder, one file per member |\n| 608 / 89 | `heca/src/chrome/overlay.rs` | `ModalSpec`/`ModalAction`/`ModalResult` · `OverlayHost` · `open_modal` · the dropdown/context-menu builders · `resolve` |\n\n`heca/src/app/registry.rs` (~2600) is already **T466**.\n\n## Order, and why\n\n1. **`heca-grid-ui/src/builders.rs` → `builders/`** — the one with no judgement call in it: a family, one file per trait (`component_ext.rs`, `layout.rs`, `style.rs`, `parent.rs`, `mod.rs`). Do it first as the worked example.\n2. **`heca-grid-ui/src/component.rs`** → `base.rs` / `component.rs` (the trait) / `dispatch.rs` (the router — `dispatch`, `deliver`, `broadcast`, `focus_path`, `deliver_to_path`, `run_pick`) / `paint.rs` (`paint_child`, `shift_subtree`). The biggest file in the library and essentially untested in-file; the router is a whole job that reads as an appendix to `Base`.\n3. **`heca/src/app/interaction.rs`** → `policy.rs` / `domain.rs` / `route.rs` / `dispatch.rs`. Watch the pure/unit-tested boundary: `route_in_domain` and `policy_allows` are pure and must stay so.\n4. **`heca-view-realize/src/lib.rs`** — at minimum the test module moves to `tests.rs`; the realize arms then group by kind family.\n5. **`heca/src/chrome/overlay.rs`**, **`heca/src/providers/workspaces/mod.rs`**, **`heca-grid-ui/src/event.rs`**.\n\n## Rules for the work\n\n- **Agree each split with Antonio before doing it** (AGENTS § 0 rule 4) — a large file quietly rearranged is a diff nobody can review. This task is the list, not a licence.\n- **A move, never a rewrite.** No behaviour change in the same commit; the test counts before and after must match.\n- Watch for the trap hit twice while splitting the two hint files: a doc comment left at the end of a segment documents the *next* file's first item, and a helper used by two of the new modules (`skip`, `is_target`, `hint_surface_root`, `HintLayer`) needs `pub(super)` and one owner — put it with the job that defines it, not in the module root.\n- Gates: `cargo test -p <crate>` and `./scripts/lint-changed.sh` per split, never `--workspace` in the edit loop.",
-      "descriptionUpdatedAt": "2026-08-21T13:58:02.250Z",
+      "description": "Split the files that are doing several jobs. AGENTS § 0 rule 4: aim under 400 lines, **above 600 stop and agree a split** — the line count is the smoke alarm, not the rule: **the defect is always the second job**.\n\n⚠️ FULL DESCRIPTION: `.planner/docs/t468-oversized-files.md`. It holds what used to be inline here, unchanged: the 2026-08-21 table of files found while building T432 with the jobs inside each, the order to do them in and why, and the rules for the work (a move never a rewrite; agree each split first; the doc-comment and shared-helper traps hit while splitting the two hint files). Moved out because `descriptionRef` refuses every path spelling and a description this size is silently dropped.\n\n⚠️ CENSUS REFRESHED 2026-09-04: `.planner/docs/oversized-files-2026-09-04.md` — a full sweep, not just the files T432 happened to touch. **65 files are over 600 lines, twelve of them over 2000.** Read it rather than re-measuring.\n\nSIX OF THE TWELVE LARGEST HAVE NO TASK AT ALL, which is the gap the census exists to close: `heca/src/handlers.rs` (3430), `heca/src/actions.rs` (3282), `heca/src/notification.rs` (3147), `heca-core/src/backend/terminal/engine.rs` (2249), `heca/src/input.rs` (2126), `heca-grid-ui/tests/phase_a.rs` (6654). The census carries a proposed split for the first three. **They are proposals — filing is Antonio's call (AGENTS § 0), never something to create while passing through.**\n\nAlready filed elsewhere: `app/registry.rs` is T466, `showcase.rs` T470, `scroll_region.rs` T471, `heca-view/src/lib.rs` T472.\n\nRaised because P097/T497 touched nineteen files that were already over the limit; AGENTS § 0 says to say so rather than quietly reorganise (Antonio, 2026-09-04: *\"do we have a task already in the planner that aims to rewrite large files? If so add those large files to the task description\"*).\n\n⚠️ MUST NOT be interleaved with P097 — these files are the same ones P097 is changing.",
+      "descriptionUpdatedAt": "2026-09-04T13:59:25.864Z",
       "notes": "",
       "statusLog": [
         {
@@ -1495,7 +1501,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-21T13:58:02.209Z",
-      "updatedAt": "2026-08-28T08:22:54.306Z",
+      "updatedAt": "2026-09-04T13:59:25.862Z",
       "sessionInfo": []
     },
     {
@@ -2031,12 +2037,223 @@
       "createdAt": "2026-08-26T14:38:26.210Z",
       "updatedAt": "2026-08-26T14:38:26.210Z",
       "sessionInfo": []
+    },
+    {
+      "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 509,
+      "shortId": "FQTZ4",
+      "priority": 50,
+      "shortName": "split-heca-src-handlers-rs-343",
+      "title": "Split heca/src/handlers.rs (3430) — every action's handler in one file",
+      "status": "deferred",
+      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. AGENTS § 0 rule 4: above 600 lines stop and agree a split. This is the largest non-test source file in the app.\n\nCURRENT STATE. `heca/src/handlers.rs` is 3430 lines of `pub fn handle_*(state: &mut AppState, action: &WmAction)` — one per action, flat, in no particular order. `handle_focus_left` at :33, `handle_split_horizontal` at :170, `handle_resize` at :599, and so on for every action heca has. There is no second job hiding in it: it is one job repeated a hundred times, which is the rarer case where the line count alone is the problem — nobody can hold it, and finding a handler means grepping.\n\nDESIRED STATE. `heca/src/handlers/` — one file per action CATEGORY, and the categories already exist: `ActionCategory` in `heca/src/actions.rs:19` (Navigation, Layout, Pane, Workspace, System, …). Splitting by that makes the file layout and the action catalog agree, so \"where does this handler live\" is answered by the same word that already classifies the action for the command palette.\n\n  handlers/\n  ├── mod.rs          re-exports, so `crate::handlers::handle_x` still resolves for `build_registry`\n  ├── navigation.rs   focus_*, next/prev pane, workspace next/prev, focus toggles\n  ├── layout.rs       split_*, resize*, move_*, swap_*, zoom\n  ├── pane.rs         close, float, rename, take, per-pane font zoom\n  ├── workspace.rs    create/rename/delete workspace, move column to workspace\n  └── system.rs       reload_config, command_palette, spawn, selection, scrollback\n\nSTEPS. (1) Read `ActionCategory` and `ActionRegistry::ALL` in `actions.rs` — the descriptor for each action already names its category, so the mapping is data, not judgement. (2) Move each handler into the file its own descriptor names. (3) `mod.rs` re-exports everything so `heca/src/app/registry.rs`'s `build_registry` needs no edit. (4) Shared helpers used by more than one category (`after_layout_change`, `switch_workspace_tracked`, `find_pane_location`, `move_pane_to_column`) get one owner — put each with the category that defines it, `pub(super)`, never a grab-bag in `mod.rs`.\n\nEDGE CASES. A handler whose action spans categories (`handle_focus_pane` is Navigation but is called by Layout handlers) — the caller crosses a module boundary, which is fine and is exactly the seam the split exposes. Watch for a doc comment left at the end of a segment documenting the NEXT file's first item; that trap was hit twice while splitting the two hint files (see T468).\n\nRULES. A move, never a rewrite: no behaviour change in the same commit, and the test count must match before and after. Agree the shape with Antonio first. Gates `cargo test -p heca` then `./scripts/lint-changed.sh`, never `--workspace`.\n\n⚠️ MUST NOT be interleaved with P097(F003) or P094(F011) — same reason T468 is deferred.",
+      "descriptionUpdatedAt": "2026-09-04T14:01:39.920Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-001-planned-deferred",
+          "date": "2026-09-04T14:28:59.808Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Parked on creation (2026-09-04), for the same reason T466/T468/T470/T471/T472 are: these splits carve up the exact files P097(F003) and P094(F011) are reshaping. `handlers.rs` holds every action handler, and P097's work has been adding to and changing them all session. Split first and P097 immediately re-carves freshly split files — the work is done twice and the second diff is unreviewable. Split after and it is a pure move over settled code, which is what AGENTS § 0 rule 4 asks for. Resume once P097 lands. Nothing here is a defect; no user-visible behaviour waits on it.",
+          "description": "Parked on creation (2026-09-04), for the same reason T466/T468/T470/T471/T472 are: these splits carve up the exact files P097(F003) and P094(F011) are reshaping. `handlers.rs` holds every action handler, and P097's work has been adding to and changing them all session. Split first and P097 immediately re-carves freshly split files — the work is done twice and the second diff is unreviewable. Split after and it is a pure move over settled code, which is what AGENTS § 0 rule 4 asks for. Resume once P097 lands. Nothing here is a defect; no user-visible behaviour waits on it."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-04T14:01:39.862Z",
+      "updatedAt": "2026-09-04T14:28:59.808Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 510,
+      "shortId": "7S3TE",
+      "priority": 51,
+      "shortName": "split-heca-src-actions-rs-3282",
+      "title": "Split heca/src/actions.rs (3282) — the registry, the catalog and the argument model are three things",
+      "status": "deferred",
+      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. Unlike `handlers.rs`, this file genuinely holds several jobs — which AGENTS § 0 calls the real defect, the line count being only the smoke alarm.\n\nCURRENT STATE, and the three jobs in it (line numbers 2026-09-04):\n\n1. **The argument model** — `ArgKind` :74, `ArgDescriptor` :99, `ArgSpec` :147, `ArgProblem` :199 and its `Display` :209, `check_args` :236, `nearest_name` :281. This is \"how does anything in heca declare and check its arguments\". It is no longer action-specific: `heca/src/app/cli.rs` now declares the command line's own arguments with the same `ArgDescriptor` and checks them with the same `check_args`, which is what makes `heca --describe-action` and a bad keybinding produce the same sentence. A thing two unrelated callers share is a module, not an appendix.\n2. **The catalog** — `ActionCategory` :19, `ActionDescriptor` :312, `ActionRegistry::ALL` (the static table of every built-in), `ActionCatalog`, `describe`/`describe_all`, `ActionInfo`. This is \"what actions exist and what do they say about themselves\" — read by the command palette, RPC introspection, the CLI, and every surface that renders an action's icon or label.\n3. **The registry and its dispatch** — `ActionRegistry` :347, `Dispatch` :363, `DuplicateAction` :388, `register`, `register_dynamic`, `execute`. This is \"what runs when an action fires\".\n\nDESIRED STATE. `heca/src/actions/` — `args.rs` (1), `catalog.rs` (2), `registry.rs` (3), `mod.rs` re-exporting so no caller changes. Consider whether `args.rs` belongs beside actions at all or one level up, since the CLI is now a peer consumer; that is the one judgement call in this split and it is Antonio's.\n\nSTEPS. (1) Move the argument model first — it is self-contained and has its own tests (`check_args_names_what_is_wrong`, `a_problem_reads_as_a_sentence`, `every_declared_argument_is_read_by_the_action`). (2) Then the catalog, which depends on the argument model but not on the registry. (3) The registry last. (4) `mod.rs` re-exports everything currently `pub`, so `heca/src/app/registry.rs`, `heca/src/rpc.rs`, `heca/src/app/cli.rs` and the chrome need no edit.\n\nEDGE CASES. `ActionRegistry::ALL` is a `const` slice referencing `ArgDescriptor::required*` constructors — those must stay `const fn`. The `every_declared_argument_is_read_by_the_action` test crosses all three jobs (it reads the catalog and calls into `build_action` in `input.rs`); it belongs with the catalog.\n\nRULES. A move, never a rewrite; the test count must match before and after. Agree the shape first — particularly where the argument model lands. Gates `cargo test -p heca` then `./scripts/lint-changed.sh`.\n\n⚠️ MUST NOT be interleaved with P097(F003).",
+      "descriptionUpdatedAt": "2026-09-04T14:01:58.445Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1-check-001-planned-deferred",
+          "date": "2026-09-04T14:29:05.056Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Parked on creation (2026-09-04), same reason as T466/T468 and its five siblings: `actions.rs` is one of the files P097(F003) is actively changing — the `edge` argument and its descriptor landed there this session, and the argument model it holds is now shared with the new command line. Split first and P097 re-carves freshly split files; split after and it is a pure move over settled code (AGENTS § 0 rule 4). Resume once P097 lands.",
+          "description": "Parked on creation (2026-09-04), same reason as T466/T468 and its five siblings: `actions.rs` is one of the files P097(F003) is actively changing — the `edge` argument and its descriptor landed there this session, and the argument model it holds is now shared with the new command line. Split first and P097 re-carves freshly split files; split after and it is a pure move over settled code (AGENTS § 0 rule 4). Resume once P097 lands."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-04T14:01:58.389Z",
+      "updatedAt": "2026-09-04T14:29:05.056Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 511,
+      "shortId": "N7MAB",
+      "priority": 52,
+      "shortName": "split-heca-src-input-rs-2126-t",
+      "title": "Split heca/src/input.rs (2126) — the vocabulary, the action and the parsers",
+      "status": "deferred",
+      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request.\n\nCURRENT STATE, and the jobs in it (line numbers 2026-09-04):\n\n1. **The small argument vocabularies and their parsers** — `EnumArg` :11, then a repeating trio per type: `ResizeTarget` :18 + its `EnumArg` + its `FromStr`; `ResizeEdge` :58; `FontZoomStep` :97; `SpawnKind` :124; and more below. Each is an enum, its `VALUES` list, and its `FromStr` — the pattern AGENTS § 0.4 calls a family, which is a folder with one file per member.\n2. **`WmAction`** :155 — the action enum itself, ~100 variants with their doc comments. This is the app's vocabulary and is read far more often than it is changed.\n3. **The builders and classifiers** — `action_from_name`, `build_action` (the one constructor a config binding, a menu entry, a plugin and RPC all reach), `action_priority`, and the `get_*` argument helpers.\n\nDESIRED STATE. `heca/src/input/` — `action.rs` (the `WmAction` enum alone), `build.rs` (`action_from_name`, `build_action`, `action_priority`, the `get_*` helpers), `args/` or `vocabulary.rs` (the enums with their `EnumArg` and `FromStr`), `mod.rs` re-exporting. A reader wanting \"what actions exist\" then opens a file that is only that.\n\nSTEPS. (1) Move the vocabularies first — each is three items with no dependency on anything else in the file, and the `enum_arg_values_match_their_parser` style tests move with them. (2) `WmAction` next, alone. (3) The builders last, since they depend on both. (4) `mod.rs` re-exports; `heca/src/keymap.rs`, `handlers.rs`, `rpc.rs`, `actions.rs`, `app/registry.rs` and the chrome all import from `crate::input::` and must keep working untouched.\n\nEDGE CASES. `action_priority()` must stay exhaustive with no `_ =>` catch-all (AGENTS: adding a variant without classifying it should be a compile error) — verify that property survives the move. `build_action` and the `ArgDescriptor` declarations in `actions.rs` are checked against each other by `every_declared_argument_is_read_by_the_action`; that test spans both files either way.\n\nRULES. A move, never a rewrite; test count matches before and after. Agree the shape first. Gates `cargo test -p heca` then `./scripts/lint-changed.sh`.\n\n⚠️ MUST NOT be interleaved with P097(F003) — `input.rs` carries the action vocabulary that phase is changing.",
+      "descriptionUpdatedAt": "2026-09-04T14:02:14.871Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-001-planned-deferred",
+          "date": "2026-09-04T14:29:09.866Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Parked on creation (2026-09-04), same reason as T466/T468 and its siblings: `input.rs` carries the `WmAction` vocabulary P097(F003) is changing — `ResizeEdge` was added and `ResizeAxis` deleted from it this session. Split first and P097 re-carves freshly split files; split after and it is a pure move over settled code (AGENTS § 0 rule 4). Resume once P097 lands.",
+          "description": "Parked on creation (2026-09-04), same reason as T466/T468 and its siblings: `input.rs` carries the `WmAction` vocabulary P097(F003) is changing — `ResizeEdge` was added and `ResizeAxis` deleted from it this session. Split first and P097 re-carves freshly split files; split after and it is a pure move over settled code (AGENTS § 0 rule 4). Resume once P097 lands."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-04T14:02:14.825Z",
+      "updatedAt": "2026-09-04T14:29:09.866Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "736a6912-1297-48b3-89c1-e32559a024d9",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 512,
+      "shortId": "MUVUC",
+      "priority": 53,
+      "shortName": "split-heca-src-notification-rs",
+      "title": "Split heca/src/notification.rs (3147) — the model, the store and the host seam",
+      "status": "deferred",
+      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. F009's work left one file holding the whole subsystem.\n\nCURRENT STATE, and the jobs in it (line numbers 2026-09-04):\n\n1. **The vocabulary** — `NotificationSourceKind` :60, `NotificationSource` :129, `NotificationLifetime` :197, `NotificationLifecycle` :224, `NotificationSeverity` :316 (which also implements `crate::input::EnumArg`, so it is an action argument as well as a model type). Each with its `Default` and `impl`. The same enum-plus-parser family shape as `input.rs`.\n2. **The draft and the notification itself** — `NotificationDraft`, `NotificationId`, and what a notification *is*.\n3. **The store** — the visible list, expiry, `next_expiry` (read by the frame loop in `app/lifecycle.rs` to decide when to wake), hover suppression, dismissal, the eligibility rules.\n4. **The host seam** — `install_notification_sink` and the emitting helpers the rest of the app calls.\n\nDESIRED STATE. `heca/src/notification/` — `model.rs` (1 and 2), `store.rs` (3), `sink.rs` (4), `mod.rs` re-exporting. The store is the part with real logic and real tests; today it is buried among type definitions.\n\nSTEPS. (1) Move the vocabulary first — self-contained, and its `EnumArg`/`FromStr` impls travel with it. (2) The draft and id. (3) The store, with its tests. (4) The sink. (5) `mod.rs` re-exports; `heca/src/app/lifecycle.rs` (which reads `next_expiry` and `is_hovered`), `heca/src/main.rs` (reload notifications), the chrome's toast surface and `heca/src/handlers.rs` must all keep compiling untouched.\n\nEDGE CASES. `NotificationSeverity` is an action argument (`EnumArg`), so it is referenced from `heca/src/actions.rs`'s descriptors — keep it exported at the same path. The store's expiry interacts with the frame loop's wake decision (`app/lifecycle.rs`), which also now consults `chrome::next_redraw_across_trees`; do not disturb that ordering while moving code.\n\nRULES. A move, never a rewrite; test count matches before and after. Agree the shape first. Gates `cargo test -p heca` then `./scripts/lint-changed.sh`.\n\n⚠️ Check F009's open work first (`P055(F009)` handoff, `T381`, `P063`) — if any is mid-flight in this file, defer as T468 is.",
+      "descriptionUpdatedAt": "2026-09-04T14:02:30.015Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "736a6912-1297-48b3-89c1-e32559a024d9-check-001-planned-deferred",
+          "date": "2026-09-04T14:29:16.375Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Parked on creation (2026-09-04). Two reasons: its store feeds the frame loop's wake decision in `app/lifecycle.rs`, which P097(F003) changed this session to also consult the widget trees — splitting the notification side while that seam is still moving invites a merge nobody can review. And F009 has open work of its own (T381, P063) that may sit in this file. Resume once P097 lands and F009's open items are settled. Nothing here is a defect.",
+          "description": "Parked on creation (2026-09-04). Two reasons: its store feeds the frame loop's wake decision in `app/lifecycle.rs`, which P097(F003) changed this session to also consult the widget trees — splitting the notification side while that seam is still moving invites a merge nobody can review. And F009 has open work of its own (T381, P063) that may sit in this file. Resume once P097 lands and F009's open items are settled. Nothing here is a defect."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-04T14:02:29.970Z",
+      "updatedAt": "2026-09-04T14:29:16.375Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "073f4e71-0b10-4a50-9e42-66eafdf4de7d",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 513,
+      "shortId": "8WE77",
+      "priority": 54,
+      "shortName": "split-heca-core-src-backend-te",
+      "title": "Split heca-core/src/backend/terminal/engine.rs (2249) — one impl block is 970 lines",
+      "status": "deferred",
+      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request.\n\nCURRENT STATE (line numbers 2026-09-04). The file is five small trait adapters and then one enormous impl:\n\n- `SharedWriter` :31 with its `Write` :48 — the PTY write half.\n- `BellHandler` :71 implementing `AlertHandler` — the visual/audible bell.\n- `OscClipboard` :91 implementing `Clipboard` — OSC 52.\n- `HecaTerminalConfig` :112 implementing `TerminalConfiguration` — the palette and options handed to wezterm-term.\n- **`impl TerminalEngine` :186 — running to :1156, about 970 lines in one block.**\n- `GraphicsCollector` :1156 — inline images.\n\nThe four adapters at the top are each one job and one page; they are already separable with no judgement required. The `TerminalEngine` impl is the real subject: it holds spawning and the PTY, feeding bytes to the parser, the snapshot the renderer reads, damage tracking, resize/reflow, scrollback and search, selection, and config reload.\n\nDESIRED STATE. `heca-core/src/backend/terminal/engine/` — `mod.rs` (the struct and its construction), `adapters.rs` (`SharedWriter`, `BellHandler`, `OscClipboard`, `HecaTerminalConfig`), `snapshot.rs` (what the renderer reads, plus damage), `resize.rs`, `scrollback.rs` (search included), `graphics.rs` (`GraphicsCollector`).\n\nSTEPS. (1) Move the four adapters out first — the no-judgement part, and it takes ~150 lines off immediately. (2) `GraphicsCollector` next, also self-contained. (3) Then carve the impl block by job, one `impl TerminalEngine` per file (Rust allows several impl blocks for one type across a module's files, which is what makes this a pure move).\n\nEDGE CASES. ⚠️ Known trap in this file, recorded under the `terminal-theming` requirement: wezterm-term's `set_config` swaps the config Arc but does NOT reset a FORKED palette, so a theme reload leaves `palette()` returning the stale fork for any program that used a dynamic-colour escape. Whatever `reload_config` does about that must move intact — do not tidy it. Also `retained_damage_to_apply` in `heca/src/app/terminal_render.rs` depends on this file's damage reporting; the contract between them is what the retained-layer optimisation rests on.\n\nRULES. A move, never a rewrite; test count matches before and after. Agree the shape first. Gates `cargo test -p heca-core` then `./scripts/lint-changed.sh`.\n\n⚠️ Check `P094(F011)` first — the Terminal-as-a-component work (`T449`) reshapes this area.",
+      "descriptionUpdatedAt": "2026-09-04T14:02:46.235Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "073f4e71-0b10-4a50-9e42-66eafdf4de7d-check-001-planned-deferred",
+          "date": "2026-09-04T14:29:21.241Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Parked on creation (2026-09-04). P094(F011)/T449 — the terminal becoming a component — reshapes exactly this area, and its damage contract is what `heca/src/app/terminal_render.rs` depends on. Splitting the engine first means P094 re-carves freshly split files. Resume once P094's terminal work lands. Nothing here is a defect.",
+          "description": "Parked on creation (2026-09-04). P094(F011)/T449 — the terminal becoming a component — reshapes exactly this area, and its damage contract is what `heca/src/app/terminal_render.rs` depends on. Splitting the engine first means P094 re-carves freshly split files. Resume once P094's terminal work lands. Nothing here is a defect."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-04T14:02:46.187Z",
+      "updatedAt": "2026-09-04T14:29:21.241Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "92358ff7-5c34-441b-aed0-fa803f0d9486",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 514,
+      "shortId": "297DW",
+      "priority": 55,
+      "shortName": "split-heca-grid-ui-tests-phase",
+      "title": "Split heca-grid-ui/tests/phase_a.rs (6654) — the library's whole behaviour in one file",
+      "status": "deferred",
+      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. The largest file in the workspace by a wide margin, and a test file — which is why it has escaped notice.\n\nCURRENT STATE. 6654 lines, **432 test functions**, named `phase_a` after a development phase that ended long ago. Its own section comments show it has grown by accretion, each era appending rather than filing:\n\n  :642  `// ── Phase C: surface components ──`\n  :1745 `// ── Phase C: display widgets ──`\n  :2566 `// ── Item (generic list row) ──`\n  :5873 `// ── Button: content is composed from children (viewnode-all-widgets) ──`\n  :6015 `// ── Choice: the value-carrying, content-composable option primitive ──`\n\nThe cost is real, not cosmetic. A test for a widget is not where anyone would look for it — `heca-grid-ui/tests/button_group.rs` exists beside it holding only `ButtonGroup`, which is the shape the rest should have. And a file this size is the one most likely to collect a duplicate of a test already in it.\n\nDESIRED STATE. `heca-grid-ui/tests/` — one file per subject, following the existing `button_group.rs` and `pointer_routing.rs` / `pointer_delivery.rs` precedent:\n\n  reactive.rs · layout.rs · paint.rs (the `Scene`/`DrawCommand` assertions) ·\n  focus.rs · widgets_input.rs · widgets_button.rs · widgets_item.rs ·\n  widgets_select.rs · widgets_overlay.rs · tooltip.rs · …\n\nplus a shared `common/mod.rs` for the helpers every file needs (`fixed_box`, `click_at`, `type_text`, the focus helper) — Rust's integration-test convention, so the helpers are not copied five ways.\n\nSTEPS. (1) Read the section comments and the test names; the grouping is already visible. (2) Move helpers to `tests/common/mod.rs` FIRST, so each subsequent move is a straight cut. (3) One subject per commit, checking the total test count each time. (4) The name `phase_a` retires with the last test in it.\n\nEDGE CASES. ⚠️ The count is the guard here and it must be exact: 432 today. An integration test file gets its own crate, so a helper that was private and shared becomes `pub` in `common` — do not let that quietly widen anything else. ⚠️ `#[cfg(test)]` does NOT enable in the library from an integration test, so a probe guarded that way silently never compiles; anything relying on it must use `cfg(debug_assertions)` (recorded under P097).\n\nRULES. A move, never a rewrite: no test's body changes in the same commit as its move. Agree the grouping first. Gates `cargo test -p heca-grid-ui` then `./scripts/lint-changed.sh`.\n\n⚠️ MUST NOT be interleaved with P097(F003) — that phase is actively adding to this file.",
+      "descriptionUpdatedAt": "2026-09-04T14:03:05.237Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-001-planned-deferred",
+          "date": "2026-09-04T14:29:26.834Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Parked on creation (2026-09-04), same reason as its siblings: P097(F003) is actively adding tests to `phase_a.rs` — two landed this session and two existing ones were changed. The only guard on this split is that the total test count matches before and after, and that count cannot be a fixed target while a phase is still writing into the file. Resume once P097 lands. Nothing here is a defect.",
+          "description": "Parked on creation (2026-09-04), same reason as its siblings: P097(F003) is actively adding tests to `phase_a.rs` — two landed this session and two existing ones were changed. The only guard on this split is that the total test count matches before and after, and that count cannot be a fixed target while a phase is still writing into the file. Resume once P097 lands. Nothing here is a defect."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-04T14:03:05.191Z",
+      "updatedAt": "2026-09-04T14:29:26.834Z",
+      "sessionInfo": []
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-08-31T16:14:48.165Z",
+  "updatedAt": "2026-09-04T14:29:26.834Z",
   "handoff": "# P082 — 37 of 48 done; five bugs open, five splits deferred behind P097\n\nCreated at: 2026-08-27\nUpdated at: 2026-08-31\nReason: **The previous handoff was stale in three ways and would have misdirected a resume.** It said\n\"next work is § 4's table, starting at **T479**\" — T479 is **done**. It said the tree was \"clean and\npushed at `ed6edd5`\" — that commit is now 33 behind, and the branch is **not pushed**. And it\npredated `P097(F003)` landing the one-tree migration, which is what the deferred splits are waiting\non. Rewritten, and shortened: its § 0 restated AGENTS.md § 0, and a second copy of a rule is the\nthing this phase exists to stop.\n\n## Current focus\n\n**Nothing is in progress.** The phase's framework work is **finished** — `T479` and `T481` both\nclosed on Antonio's visual verification. What is left is five bugs and five deferred splits.\n\n⚠️ **`P097(F003)` is F003's priority 0 and is mid-flight** (T494 done, T495 next). If you are picking\nup F003 work at all, read **`P097`'s handoff first** — it is current as of 2026-08-31.\n\n## What was being done\n\nThis phase carried two things: layer content from a `ViewNode` (done), and **how code must be written\nhere** — the rule that a fix belongs in the model, not at the call site.\n\n**That rule now lives in `AGENTS.md` § 0 (the PRE-FLIGHT) and § 0b/0b-bis.** It is not restated here;\nthe previous handoff duplicated it, and a duplicated rule drifts. What is worth keeping is *why it was\nwritten*, in Antonio's words, 2026-08-27:\n\n> *\"Why after every fix/implementation do I have to ask always the same thing, discovering you\n> didn't? That's annoying and embarrassing.\"*\n\n**The failure is the timing, not the rule.** The pattern was: fix the reported instance → report it →\nhe asks *\"is this at the call site or centralised?\"* → only then grep → discover the real shape.\n**Decide where the fix belongs before writing the first line**, and name the one owner.\n\n## How to resume\n\n1. Read **AGENTS.md in full**, then **F003**, then this phase, then the task. All of it, before\n   starting.\n2. **Read `P097(F003)`'s handoff** — it is F003's priority 0 and it is where the live work is.\n3. Pick a bug from the list below. **`T477`'s entry in my old notes carried two wrong diagnoses of\n   mine — use the task's own description, not any summary of it.**\n4. **Do not start any of the five splits** — see Blockers.\n5. Gates: `./scripts/lint-changed.sh test`, then `./scripts/lint-changed.sh`. **Never `--workspace`.**\n   Two clippy warnings are expected (the pre-existing `heca-grid-ui/src/widgets/toast/stack.rs:80`\n   callback type, counted for lib and lib-test).\n6. **Antonio drives every visual check.** Every one of the open bugs below is a visual or input\n   defect; green tests prove nothing about them.\n\n## Files touched\n\nNothing new in this phase since `ed6edd5` (2026-08-27). Its framework work is committed and closed.\n\nThe branch has moved a long way since: **81 commits ahead of `main`, not pushed**, with `P097`'s\none-tree migration landing in `f5f2262` … `a34ca0b`. If you are reasoning about what a file looks\nlike, read it — do not trust a path from this phase's earlier notes.\n\n## Blockers\n\n**The five splits are DEFERRED, and this is the reason** — `T466` (`app/registry.rs`), `T468` (the\nmulti-job files), `T470` (`heca-renderer/examples/showcase.rs`, 3254 lines), `T471`\n(`heca-grid-ui/src/widgets/scroll_region.rs`, 2565), `T472` (`heca-view/src/lib.rs`, 1423).\n\n`P097(F003)` is rewriting several of the same files. A split landing mid-migration produces a diff\nnobody can review, and the two would conflict continuously. **Do them after P097 finishes**, not\nbefore.\n\nNothing blocks the five bugs.\n\n## Next steps\n\n**Five open bugs**, none started:\n\n| task | what |\n|---|---|\n| `T474` | the column in the scrolling area does not own its identity |\n| `T475` | a pick with no candidates dies silently — the key looks broken |\n| `T477` | a sidebar pane row built without a cwd can never show one. ⚠️ **read the task, not my old notes** |\n| `T478` | a zero-width pane still gets a letter, drawn outside itself |\n| `T491` | the showcase teaches developers to hand-roll a row the app has as a component |\n\n**Five deferred splits**: `T466`, `T468`, `T470`, `T471`, `T472` — after `P097`.\n\n⚠️ **`T491` is bigger than a tidy-up.** AGENTS § 1 tells every developer the showcase is \"the living\nreference — look at it before hand-rolling anything\", and the showcase currently demonstrates exactly\nthe hand-rolling the project forbids. `T332` (\"the showcase stops hardcoding 2.0\") is the same shape.\nUntil both land, the showcase is a place to *see a widget run*, not authority on how to compose one —\nand it is worth saying so to anyone who cites it.\n\n## Recent decisions\n\n- **The five splits wait for `P097(F003)`.** Same files, and a reorganisation landing mid-migration is\n  unreviewable.\n- **`T479` and `T481` are done**, both verified on screen by Antonio. The phase's framework half is\n  finished; only bugs and splits remain.\n- **The \"how code must be written here\" rule lives in AGENTS.md § 0**, not in this handoff. It was\n  duplicated here and that duplication is the same defect the rule itself describes.\n- **`T477`'s analysis in my notes is wrong — twice.** The task's own description is correct. This is\n  recorded because a wrong diagnosis left lying around costs more than no diagnosis.",
   "handoffUpdatedAt": "2026-08-31T16:14:48.165Z",
+  "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [
     {

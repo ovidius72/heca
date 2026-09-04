@@ -1908,8 +1908,8 @@ mod tests {
             },
             WmAction::Resize {
                 target: crate::input::ResizeTarget::Column,
-                axis: crate::input::ResizeAxis::X,
                 amount: 0.0,
+                edge: crate::input::ResizeEdge::Auto,
             },
             WmAction::ResizeColumnBy {
                 col_idx: 0,

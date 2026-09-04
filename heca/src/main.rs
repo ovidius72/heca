@@ -483,10 +483,11 @@ impl ApplicationHandler<AppEvent> for HecaApp {
 /// Edge scroll: auto-scroll the layout when the pointer is near the left/right
 /// edge of the content area. Returns true if scrolling is active.
 fn main() {
-    // `--keys-show` answers "what key runs this action" and exits — before the window, so a script
-    // can ask without a GPU (F003/P086/T366).
+    // Command-line questions — `--help`, `--keys-show`, `--list-actions`, `--describe-action` —
+    // are answered and exited before the window, so a script can ask heca anything without a GPU
+    // (F003/P086/T366). One table dispatches and documents them; see `app::cli`.
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if crate::app::keys_show::run_if_requested(&args) {
+    if crate::app::cli::run_if_requested(&args) {
         return;
     }
     let event_loop = EventLoop::<AppEvent>::with_user_event()

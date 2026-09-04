@@ -26,7 +26,6 @@ use crate::reactive::SignalGet;
 use crate::style::{Align, Direction, Justify};
 use crate::widgets::button::ButtonVariant;
 use crate::widgets::{Button, ContextMenu, Glyph, Menu, MenuItem};
-use heca_core::layout::Rectangle;
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -61,6 +60,22 @@ const STICKY_MARGIN: f64 = 12.0;
 /// What the ⋮ is called — on hover, and as the title of the menu it opens.
 const OVERFLOW_LABEL: &str = "More actions";
 
+/// **Nothing this group holds gives way** — every button it arranges, including its own ⋮.
+///
+/// Shrinking a button has no answer: once it is an icon there is no label left to ellipse, so the
+/// layout takes the room out of the box itself and the control becomes a sliver. Giving way is
+/// precisely what this widget exists to replace — it hides what does not fit instead.
+///
+/// ⚠️ **It has to be every child, not just the ones an author adds.** The ⋮ was left shrinkable, and
+/// so was the *only* thing in the row that could give: with a title beside the group competing for
+/// the room, the layout squeezed the ⋮ rather than pushing a button out of the box — so the group
+/// never saw an overflow, never moved anything into the menu, and the ⋮ absorbed the entire
+/// shortfall. Measured at four to eight pixels wide beside a twenty-four pixel sibling, and barely
+/// clickable (Antonio, driving, 2026-09-04). Stated here once so a future child cannot miss it.
+fn never_gives_way(button: Button) -> Button {
+    button.shrink(0.0)
+}
+
 /// A row of related actions that fits the space it is given.
 pub struct ButtonGroup {
     base: Base,
@@ -90,10 +105,6 @@ pub struct ButtonGroup {
     /// **The menu of whatever did not fit**, refreshed when the arrangement changes and read by the
     /// ⋮ when it is opened — so the ⋮ itself is built once and never replaced.
     menu: Rc<std::cell::RefCell<ContextMenu>>,
-    /// **Where the ⋮ is**, so a keyboard pick can open the menu under it. A pick carries no
-    /// pointer, and an anchor is never chosen by an author — a pointer event gives the cursor, a
-    /// keyboard one gives the target's bounds, and this is that bounds.
-    trigger_at: Rc<Cell<Rectangle>>,
 }
 
 struct Entry {
@@ -150,10 +161,6 @@ impl ButtonGroup {
             menu: Rc::new(std::cell::RefCell::new(
                 ContextMenu::new("button-group-overflow").child(Menu::new(OVERFLOW_LABEL, "")),
             )),
-            trigger_at: Rc::new(Cell::new(Rectangle::new(
-                heca_core::layout::Point::new(0.0, 0.0),
-                crate::Size::new(0.0, 0.0),
-            ))),
         };
         // The ⋮ exists from the start, hidden until something needs it — never added mid-layout.
         g.build_trigger();
@@ -180,15 +187,12 @@ impl ButtonGroup {
         } else {
             button
         };
-        // A button never gives way: shrinking one has no answer — there is no label left to
-        // ellipse once it is an icon — and giving way is exactly what this widget replaces.
-        // **The group's variant, through the one rule.** It used to test the button's variant here
-        // and skip anything that had named its own — which meant a destructive button kept the whole
-        // destructive look, frame included, and was the only boxed thing in a quiet row. The widget
-        // decides what to keep and what to take (`Component::set_variant`): a button left at the
-        // default takes the group's, and one that is *about* something dangerous takes the group's
-        // chrome while going on reading in danger.
-        let mut button = button.shrink(0.0);
+        // **The group's variant, through the one rule.** The widget decides what to keep and what
+        // to take (`Component::set_variant`), so the group asks the same question of a child as it
+        // does of its own ⋮ rather than testing a variant here: a button left at the default takes
+        // the group's, and one that named its own keeps it whole — a destructive button in a quiet
+        // row stays framed, because that is what the style says danger looks like.
+        let mut button = never_gives_way(button);
         if let Some(v) = self.variant {
             Component::set_variant(&mut button, v);
         }
@@ -295,17 +299,6 @@ impl Component for ButtonGroup {
         }
         // The left edge of the box the parent gave this group.
         let left = self.base.bounds.loc.x;
-
-        // **Where the ⋮ is, every pass** — the anchor a keyboard pick opens its menu under.
-        //
-        // A pick carries no pointer, so unlike a click it cannot read a position out of its event;
-        // it needs the trigger's own bounds, and they are only known once the layout has placed it.
-        // Left unwritten, the menu opened at the window's top-left corner while the same menu opened
-        // correctly under the mouse — one gesture reading a live position and the other a rectangle
-        // nobody was filling in (Antonio, driving, 2026-09-03).
-        if let Some(t) = self.row().base().children.get(count) {
-            self.trigger_at.set(t.base().bounds);
-        }
 
         // **Words first, and from the same question**: with words on, does anything land outside?
         // A button with no icon has nothing to fall back to, so its words stay whatever the room.
@@ -495,24 +488,23 @@ impl ButtonGroup {
         // below its button. A group's own affordance has to be one of the things the group
         // arranges, on the same terms.
         let menu = self.menu.clone();
-        let trigger = Button::empty()
-            .icon(Glyph::DotsThreeVertical)
-            .variant(self.variant.unwrap_or_default())
-            .icon_only(true)
-            .tooltip(OVERFLOW_LABEL);
-        // **The anchor comes out of the gesture, never chosen by an author** — a click carries a
-        // cursor, and a `prefix+/` pick carries no pointer at all, so it opens under the ⋮.
+        // **The group's own affordance is one of the things it arranges, on the same terms** — so
+        // it goes through the same rule its children do and never gives way either.
+        let trigger = never_gives_way(
+            Button::empty()
+                .icon(Glyph::DotsThreeVertical)
+                .variant(self.variant.unwrap_or_default())
+                .icon_only(true)
+                .tooltip(OVERFLOW_LABEL),
+        );
+        // **The anchor comes out of the gesture, never chosen by an author** — the event carries
+        // where it happened, and the menu reads it from there.
         let trigger = ComponentExt::on_click(trigger, {
             let menu = menu.clone();
             move |ev| menu.borrow().show(ev.event())
         });
-        let at = self.trigger_at.clone();
-        let trigger = trigger.on_hint(move || {
-            crate::menu::show(
-                menu.borrow().clone(),
-                crate::widgets::MenuAnchor::Under(at.get()),
-            );
-        });
+        // Nothing is declared about picking it. It is a button: a letter reaches it for that
+        // reason alone, and picking it runs this same click.
         self.base.children.push(Box::new(trigger));
     }
 
