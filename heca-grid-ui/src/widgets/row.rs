@@ -243,6 +243,15 @@ impl Row {
 }
 
 impl Component for Row {
+    /// **A row is the thing a cursor lands on**, so it answers this: the nav signal it already
+    /// holds is what its look is bound to. A grid moving a cursor over rows lights the one it is on
+    /// through this, and the caller connects nothing.
+    fn set_selected(&self, on: bool) -> bool {
+        use crate::reactive::SignalUpdate as _;
+        self.nav.set(on);
+        true
+    }
+
     /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
     /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
     ///

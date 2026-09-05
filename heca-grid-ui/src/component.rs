@@ -991,6 +991,18 @@ pub trait Component {
     /// was given its own keeps it (that is the widget's judgement, not the container's).
     fn set_variant(&mut self, _variant: crate::widgets::ButtonVariant) {}
 
+    /// **The cursor is on you** — if you are the kind of widget that shows that.
+    ///
+    /// `false` by default: a widget with no such state ignores it. A container that moves a cursor
+    /// over its children uses this to light the one it is on, addressed by the child's own key —
+    /// so a caller wires nothing and the container's answer cannot disagree with the child's look.
+    ///
+    /// Takes `&self` because the state is a signal: this is a write to reactive state, not a
+    /// structural change, so nothing is rebuilt, re-laid-out or re-keyed.
+    fn set_selected(&self, _on: bool) -> bool {
+        false
+    }
+
     /// **Show these words instead**, if you are the kind of widget that shows words.
     ///
     /// `false` by default: a widget with no text ignores it. A host uses this to change what a

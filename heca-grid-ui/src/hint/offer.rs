@@ -257,3 +257,36 @@ pub fn set_text_by_key(root: &dyn Component, key: &str, text: &str) -> bool {
     walk(root, key, text)
 }
 
+/// **Light the named node, and darken every other one it knows about** (F003/P097/T501).
+///
+/// A container that moves a cursor over its children says which one it is on by that child's own
+/// key — the same addressing [`offer_hint_by_key`] and [`set_text_by_key`] use, and for the same
+/// reason: nothing is registered, so nothing has to be released when the tree is rebuilt.
+///
+/// It replaces the caller wiring the two together. A grid used to be handed each card's own state
+/// signal (`GridCell::new(key, card.nav_state())`), which works but means every caller has to know
+/// the connection exists and make it — and a *described* card cannot make it at all, because a
+/// description has no way to name another node's signal. Addressing by key is something both
+/// authoring paths can do.
+///
+/// `keys` is every key the container owns, so exactly one ends lit and the rest are cleared in the
+/// same walk — a cursor is single-valued, and clearing separately is how two claims survive at once.
+pub fn set_selected_by_key(root: &dyn Component, keys: &[String], lit: Option<&str>) -> bool {
+    fn walk(node: &dyn Component, keys: &[String], lit: Option<&str>, any: &mut bool) {
+        if skip(node) {
+            return;
+        }
+        if let Some(k) = node.base().key.as_deref()
+            && keys.iter().any(|owned| owned == k)
+        {
+            *any |= node.set_selected(Some(k) == lit);
+        }
+        for child in node.base().children.iter() {
+            walk(child.as_ref(), keys, lit, any);
+        }
+    }
+    let mut any = false;
+    walk(root, keys, lit, &mut any);
+    any
+}
+

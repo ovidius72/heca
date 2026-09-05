@@ -17,7 +17,7 @@ use crate::chrome::{open_dropdown, DropdownItem, DropdownSpec, Intent, PropValue
 use crate::host::App;
 use crate::providers::ChromeCtx;
 use heca_core::layout::{PaneId, Point};
-use heca_grid_ui::widgets::{Menu, MenuItem};
+use heca_grid_ui::widgets::Menu;
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Context model
@@ -306,26 +306,23 @@ pub(crate) fn menu_from_items(
     catalog: &crate::actions::ActionCatalog,
     emit: &crate::chrome::ChromeIntentEmitter,
 ) -> Menu {
-    let mut menu = Menu::new(title, description);
-    if !name.is_empty() {
-        menu = menu.name(name);
-    }
-    for it in items {
-        let intent = it.intent.clone();
-        let emit_e = emit.clone();
-        let mut row = MenuItem::new()
-            .label(it.label.clone())
-            .danger(it.danger)
-            .enabled(it.enabled)
-            .on_click(move || {
-                emit_e.fire(crate::app::interaction::InteractionIntent::View(intent.clone()))
-            });
-        if let Some(glyph) = catalog.icon(&it.id) {
-            row = row.icon(glyph);
-        }
-        menu = menu.child(row);
-    }
-    menu
+    // **One conversion, two authoring paths** (F003/P097/T501). The body moved to
+    // `heca_view_realize::menu_from_items` so a *described* node can declare a menu and get the
+    // identical one — this is the app's half, supplying the two things only it knows: an entry's
+    // icon, from the action catalog, and how a choice is dispatched.
+    heca_view_realize::menu_from_items(
+        title,
+        description,
+        name,
+        items,
+        &|id| catalog.icon(id),
+        &|intent| {
+            let emit = emit.clone();
+            Box::new(move || {
+                emit.fire(crate::app::interaction::InteractionIntent::View(intent.clone()))
+            })
+        },
+    )
 }
 
 /// A `usize` argument as the `PropValue` an [`Intent`] carries — the form every `ws_idx` /

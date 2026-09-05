@@ -49,6 +49,18 @@ pub enum WidgetKind {
     /// that cannot do it.
     Row,
     Grid,
+    /// **A grid of cards with a cursor** — the shape a picker surface is: an exposé, a palette of
+    /// tiles, a plugin's chooser (F003/P097/T501).
+    ///
+    /// Each child is one card, in reading order, and its own `key` is what activation hands back.
+    /// The cursor is the widget's — arrow keys move it, hovering moves it, Enter activates, Escape
+    /// dismisses — and a described grid gets all of that with nothing declared but the cards.
+    ///
+    /// **The lit card is not something a description wires.** Natively a caller hands the grid each
+    /// card's own state signal; a description cannot name another node's signal, so the realizer
+    /// makes that connection itself — it is the one building both the card and the cell. That is
+    /// why this can be described at all while a `ScrollBar` cannot.
+    CardGrid,
     Card,
     Scroll,
     Panel,
@@ -145,6 +157,7 @@ impl WidgetKind {
         WidgetKind::RailCell,
         WidgetKind::Item,
         WidgetKind::Separator,
+        WidgetKind::CardGrid,
     ];
 
     /// This kind's position in [`ALL`](Self::ALL).
@@ -195,6 +208,7 @@ impl WidgetKind {
             WidgetKind::RailCell => 31,
             WidgetKind::Item => 32,
             WidgetKind::Separator => 33,
+            WidgetKind::CardGrid => 34,
         }
     }
 }
@@ -940,6 +954,25 @@ pub struct ViewNode {
     /// changed). The *only* way a node carries behaviour — an action id, not a closure.
     #[serde(default, skip_serializing_if = "Events::is_empty")]
     pub events: Events,
+    /// **The menu this node opens on a right-click** — a declaration, exactly as `press` is
+    /// (F003/P097/T501).
+    ///
+    /// ⚠️ **A menu is not a widget kind, and must not become one.** Natively it is one builder on
+    /// *any* widget (`ComponentExt::context_menu`) — no row identity, no path string, no registered
+    /// builder, no anchor: the framework takes the anchor from whatever triggered it, and owns the
+    /// dismissal and the keyboard half. A described node says the same thing the same way, so the
+    /// two authoring paths converge instead of drifting. A plugin made to assemble a menu out of
+    /// parts is writing the second path by hand, and will get the anchor, the dismissal and the
+    /// keys only approximately right (⭐⭐ RULE ZERO — one door, never two).
+    ///
+    /// Each entry carries an [`Intent`], so a plugin's menu dispatches **its own** registered
+    /// actions and not only heca's — and every entry goes through the one dispatch door, so the
+    /// interaction policy and the confirm gate apply exactly as they would for a keypress.
+    ///
+    /// Empty means no menu, which is also what "nothing declared" means natively: a right-click
+    /// with nothing declared opens nothing, and bubbling stops at the nearest declaration.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub menu: Vec<DropdownItem>,
     /// This node's **own** named verbs (`name` → [`Intent`]) — the declarative spelling of
     /// `ComponentExt::on_action`, and how a described surface owns a verb of its own instead of
     /// borrowing one the app already compiled in (F003/P082/T436).
@@ -961,6 +994,25 @@ pub struct ViewNode {
 }
 
 impl ViewNode {
+    /// **Open this menu when the node is right-clicked** — the described spelling of
+    /// `ComponentExt::context_menu`, and available on every kind for the same reason it is on every
+    /// widget (F003/P097/T501).
+    ///
+    /// ```ignore
+    /// ViewNode::new(WidgetKind::Row)
+    ///     .menu([
+    ///         DropdownItem::with_intent("close", "Close", Intent::new("docker.stop").arg("id", id)),
+    ///         DropdownItem::new("rename", "Rename").danger(false),
+    ///     ])
+    /// ```
+    ///
+    /// The framework anchors it where the click landed, dismisses it, and gives it the keyboard —
+    /// an author writes none of that, exactly as a native caller does not.
+    pub fn menu(mut self, items: impl IntoIterator<Item = DropdownItem>) -> Self {
+        self.menu = items.into_iter().collect();
+        self
+    }
+
     /// A new node of `kind` with no props/events/children. (The ergonomic SwiftUI-style
     /// builder is a separate task, plugin-task-ui-2; these are the minimal constructors.)
     pub fn new(kind: WidgetKind) -> Self {
@@ -968,6 +1020,7 @@ impl ViewNode {
             kind,
             props: PropMap::new(),
             events: Events::new(),
+            menu: Vec::new(),
             actions: Events::new(),
             children: Vec::new(),
         }
@@ -1171,6 +1224,73 @@ fn walk_unkeyed(node: &ViewNode, path: &mut Vec<usize>, out: &mut Vec<UnkeyedIte
     }
 }
 
+
+/// One entry of a dropdown / context menu. The author supplies id/label/action; the host resolves
+/// the icon from the action registry (`ActionCatalog::icon`) and wires the intent + quick-pick —
+/// the same centralized path as [`ModalAction`], with **no hand-picked glyph and no `prefix+X`
+/// label** (the leader doesn't work while the menu is open; a host-assigned single-letter quick-pick
+/// that *does* work replaces it).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DropdownItem {
+    /// Stable id returned in [`ModalResult::Action`]; also the **catalog name** the icon and label
+    /// resolve from — the entry's visual identity (e.g. `"close"`).
+    ///
+    /// It is deliberately **not** the same thing as what the entry runs: a sidebar "Close pane"
+    /// entry has id `close` (so it shows the close icon) but dispatches `close_pane_by_id` with the
+    /// row's pane. Identity and behaviour are separate fields.
+    pub id: String,
+    pub label: String,
+    /// What the entry dispatches when chosen: an [`Intent`] — an action **name + args** — routed
+    /// through the one dispatch door, so the interaction policy and the confirm gate apply exactly
+    /// as they would for a keypress.
+    ///
+    /// An `Intent` rather than a `WmAction` because `WmAction` is a **closed enum**: a plugin cannot
+    /// add a variant, so a menu entry carrying one could only ever run actions heca already has —
+    /// which is precisely what blocked plugin-contributed menus (context-menu-5). A name resolves to
+    /// a built-in *or* to a plugin's own registered action, indifferently.
+    pub intent: Intent,
+    pub danger: bool,
+    pub enabled: bool,
+}
+
+impl DropdownItem {
+    /// An enabled, non-destructive entry whose id is also the action it runs (the common case: the
+    /// entry's catalog identity and its behaviour coincide, e.g. `zoom_column`).
+    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+        let id = id.into();
+        let intent = Intent::new(id.clone());
+        Self {
+            id,
+            label: label.into(),
+            intent,
+            danger: false,
+            enabled: true,
+        }
+    }
+
+    /// An entry whose behaviour differs from its visual identity — the id keeps the icon/label
+    /// (`close`), while the intent carries the action actually run, with its args
+    /// (`close_pane_by_id` + `pane_id`).
+    pub fn with_intent(id: impl Into<String>, label: impl Into<String>, intent: Intent) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            intent,
+            danger: false,
+            enabled: true,
+        }
+    }
+    /// Tint destructive (red) — the confirm gate still applies on dispatch.
+    pub fn danger(mut self, on: bool) -> Self {
+        self.danger = on;
+        self
+    }
+    /// Enable/disable (a disabled entry is dimmed + unselectable).
+    pub fn enabled(mut self, on: bool) -> Self {
+        self.enabled = on;
+        self
+    }
+}
 
 #[cfg(test)]
 mod tests {

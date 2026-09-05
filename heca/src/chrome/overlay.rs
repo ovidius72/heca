@@ -27,7 +27,6 @@ use crate::host::App;
 use crate::providers::ChromeCtx;
 use crate::actions::ActionRegistry;
 use crate::app::interaction::{InteractionIntent, InteractionSource};
-use heca_view::Intent;
 use crate::app_state::AppState;
 use crate::input::WmAction;
 
@@ -282,60 +281,10 @@ pub(crate) fn collect_form(state: &AppState, overlay: OverlayId) -> PropMap {
         .unwrap_or_default()
 }
 
-/// One entry of a dropdown / context menu. The author supplies id/label/action; the host resolves
-/// the icon from the action registry (`ActionCatalog::icon`) and wires the intent + quick-pick —
-/// the same centralized path as [`ModalAction`], with **no hand-picked glyph and no `prefix+X`
-/// label** (the leader doesn't work while the menu is open; a host-assigned single-letter quick-pick
-/// that *does* work replaces it).
-#[derive(Clone)]
-pub struct DropdownItem {
-    /// Stable id returned in [`ModalResult::Action`]; also the **catalog name** the icon and label
-    /// resolve from — the entry's visual identity (e.g. `"close"`).
-    ///
-    /// It is deliberately **not** the same thing as what the entry runs: a sidebar "Close pane"
-    /// entry has id `close` (so it shows the close icon) but dispatches `close_pane_by_id` with the
-    /// row's pane. Identity and behaviour are separate fields.
-    pub id: String,
-    pub label: String,
-    /// What the entry dispatches when chosen: an [`Intent`] — an action **name + args** — routed
-    /// through the one dispatch door, so the interaction policy and the confirm gate apply exactly
-    /// as they would for a keypress.
-    ///
-    /// An `Intent` rather than a `WmAction` because `WmAction` is a **closed enum**: a plugin cannot
-    /// add a variant, so a menu entry carrying one could only ever run actions heca already has —
-    /// which is precisely what blocked plugin-contributed menus (context-menu-5). A name resolves to
-    /// a built-in *or* to a plugin's own registered action, indifferently.
-    pub intent: Intent,
-    pub danger: bool,
-    pub enabled: bool,
-}
-
-impl DropdownItem {
-    /// An enabled, non-destructive entry whose id is also the action it runs (the common case: the
-    /// entry's catalog identity and its behaviour coincide, e.g. `zoom_column`).
-    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
-        let id = id.into();
-        let intent = Intent::new(id.clone());
-        Self { id, label: label.into(), intent, danger: false, enabled: true }
-    }
-
-    /// An entry whose behaviour differs from its visual identity — the id keeps the icon/label
-    /// (`close`), while the intent carries the action actually run, with its args
-    /// (`close_pane_by_id` + `pane_id`).
-    pub fn with_intent(id: impl Into<String>, label: impl Into<String>, intent: Intent) -> Self {
-        Self { id: id.into(), label: label.into(), intent, danger: false, enabled: true }
-    }
-    /// Tint destructive (red) — the confirm gate still applies on dispatch.
-    pub fn danger(mut self, on: bool) -> Self {
-        self.danger = on;
-        self
-    }
-    /// Enable/disable (a disabled entry is dimmed + unselectable).
-    pub fn enabled(mut self, on: bool) -> Self {
-        self.enabled = on;
-        self
-    }
-}
+// `DropdownItem` lives in `heca-view` now (F003/P097/T501): a menu entry is pure data carrying an
+// `Intent`, and a **described** tree must be able to declare one. Re-exported here so the app-side
+// name a hundred call sites already use keeps working — one type, not a second one beside it.
+pub use heca_view::DropdownItem;
 
 /// A cursor-anchored dropdown / context menu spec — the pointer / `OpenContextMenu` counterpart to
 /// [`ModalSpec`]. A data description a native handler **or** a plugin submits to [`open_dropdown`].
@@ -607,6 +556,7 @@ pub(crate) fn resolve(
 
 #[cfg(test)]
 mod tests {
+    use heca_view::Intent;
     use super::*;
     use heca_view::PropValue;
 

@@ -478,6 +478,11 @@ builder!(
     /// child (`area`, or `col`/`row`).
     Grid => Grid
 );
+builder!(
+    /// A grid of cards with a cursor: arrow keys move it, hovering moves it, Enter activates and
+    /// Escape dismisses. Each child is a card, and its own `key` is what activation hands back.
+    CardGrid => CardGrid
+);
 builder_text!(
     /// A titled card.
     Card => Card
@@ -678,6 +683,7 @@ with_event!(
     VStack { on_hint => "hint" }
     HStack { on_hint => "hint" }
     Grid { on_hint => "hint" }
+    CardGrid { on_hint => "hint" }
     Card { on_hint => "hint" }
     Scroll { on_hint => "hint" }
     Panel { on_hint => "hint" }

@@ -41,6 +41,7 @@
 use std::rc::Rc;
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
+use heca_grid_ui::widgets::{CardGrid, ContextMenu, GridCell, Menu, MenuItem};
 use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, KeyHintGroup, Label, LayoutExt, MarkerGroup, Overlay, Panel, PropInput, RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastPosition, ToastSeverity, Toggle, Track, WidgetSize};
 
 use heca_view::{
@@ -101,6 +102,43 @@ impl FormBindings {
 /// [`kind`](WidgetKind). NB: `Box<dyn Component>` is **not** itself `Component`, so a
 /// container can't take it via `Parent::child` (which boxes an `impl Component`); realized
 /// children are pushed straight onto `base_mut().children` (the `Vec<Box<dyn Component>>`).
+/// **Entries into a menu — the one conversion, for both authoring paths** (F003/P097/T501).
+///
+/// A menu entry is data carrying an [`Intent`]; this is what turns a list of them into the widget.
+/// It lives here rather than in the app because a **described** node declares a menu too, and two
+/// converters over one input is the drift this project forbids — the same pair drifted once before,
+/// leaving heca's own menus with quick-pick keycaps and the declared ones without.
+///
+/// `icon_for` is passed in because resolving an entry's glyph from its id is the *host's*
+/// judgement — the app asks its action catalog, and a caller with no catalog passes `|_| None`.
+/// That is the only thing the two callers do differently.
+pub fn menu_from_items(
+    title: &str,
+    description: &str,
+    name: &str,
+    items: Vec<heca_view::DropdownItem>,
+    icon_for: &dyn Fn(&str) -> Option<Glyph>,
+    on_choose: &dyn Fn(Intent) -> Box<dyn Fn()>,
+) -> Menu {
+    let mut menu = Menu::new(title, description);
+    if !name.is_empty() {
+        menu = menu.name(name);
+    }
+    for it in items {
+        let run = on_choose(it.intent.clone());
+        let mut row = MenuItem::new()
+            .label(it.label.clone())
+            .danger(it.danger)
+            .enabled(it.enabled)
+            .on_click(run);
+        if let Some(glyph) = icon_for(&it.id) {
+            row = row.icon(glyph);
+        }
+        menu = menu.child(row);
+    }
+    menu
+}
+
 pub fn realize(
     node: &ViewNode,
     theme: &Theme,
@@ -124,6 +162,43 @@ pub fn realize(
     if let Some(merged) = merge_style_half(node, theme, visual) {
         base.style.visual = merged;
     }
+    // **The menu this node opens**, read once here for every kind — like style and like the hint
+    // below it (F003/P097/T501).
+    //
+    // Natively this is one builder on any widget, so the described form is one declaration on any
+    // node: never a `ContextMenu` kind an author constructs, sizes and anchors. The framework takes
+    // the anchor from whatever triggered the menu, dismisses it and gives it the keyboard, so a
+    // plugin's row gets the identical menu heca's own rows get with nothing written — which is the
+    // whole of ⭐⭐ RULE ZERO here. Building it from parts would be the second path, and it would
+    // get the anchor, the dismissal and the keys only approximately right.
+    if !node.menu.is_empty() {
+        let items = node.menu.clone();
+        let emit = emit.clone();
+        // Entries carry an `Intent`, so a plugin's menu runs its OWN registered actions and every
+        // choice goes through the one dispatch door — the interaction policy and the confirm gate
+        // apply exactly as they would for a keypress.
+        let menu = menu_from_items(
+            "",
+            "",
+            "",
+            items,
+            // A described tree names its icons as glyphs on its own nodes; an entry's icon is the
+            // host's judgement from its action catalog, which this side has no access to. Passing
+            // none is honest — the app's own path supplies them.
+            &|_| None,
+            &|intent| {
+                let emit = emit.clone();
+                Box::new(move || emit(intent.clone()))
+            },
+        );
+        // **Set on the node itself, exactly as the native builder does** — not wrapped around it.
+        // A wrapper would be a second widget in the tree the description never asked for, sitting
+        // between a node and its parent with its own layout, and the framework's right-click walk
+        // would then find the wrapper rather than the row.
+        let panel = ContextMenu::new("").child(menu);
+        realized.base_mut().context_menu = Some(Box::new(move || panel.clone()));
+    }
+
     // **What a leader-key pick does to this node**, read once here for every kind, like style.
     //
     // Written into the widget's own [`Base::hint`] slot. The native authoring surface is
@@ -616,6 +691,7 @@ fn realize_kind(
 
         // ── Layout ──
         WidgetKind::Grid => realize_grid(node, theme, emit, forms),
+        WidgetKind::CardGrid => realize_card_grid(node, theme, emit, forms),
 
         WidgetKind::DockFrame => {
             // Everything DockFrame exposes arrives through the surface, at the widget's own
@@ -940,6 +1016,63 @@ fn option_change(node: &ViewNode, emit: &IntentEmitter) -> Option<impl Fn(Action
 /// name from the template) *or* `col`/`row` (+ optional `col_span`/`row_span`); a child with neither
 /// gets taffy's auto-placement. This keeps `ViewNode`'s shape flat — no second child vector, no
 /// placement table to keep in sync with the children.
+/// **A grid of cards with a cursor**, described (F003/P097/T501).
+///
+/// Each child is one card, and its own `key` is what activation hands back — the same key the
+/// caller reads in `on_activate`, so a plugin's grid answers in its own vocabulary.
+///
+/// ⚠️ **The realizer makes the connection a description cannot.** Natively a caller hands the grid
+/// each card's own state signal (`GridCell::new(key, card.nav_state())`), which a description has
+/// no way to express: it cannot name another node's signal. This side *builds both halves*, so it
+/// takes each card's signal itself and wires the cell. That is the whole reason a `CardGrid` can be
+/// described while a `ScrollBar` cannot — there, the signal genuinely comes from outside.
+///
+/// Every card is wrapped in a `Row`, which is what holds the cursor state and the hover a grid
+/// moves its cursor with. A card that is already a `Row` keeps its own behaviour: the wrapper is
+/// transparent to layout and passes focus and drag straight through, the same trade the exposé's
+/// own cards make.
+fn realize_card_grid(
+    node: &ViewNode,
+    theme: &Theme,
+    emit: &IntentEmitter,
+    forms: &mut FormBindings,
+) -> Box<dyn Component> {
+    use heca_grid_ui::builders::Parent as _;
+    let mut grid = with_props(CardGrid::new(), node, theme);
+    let mut cells = Vec::new();
+    let mut layout = Flex::row();
+    for child in &node.children {
+        let body = realize(child, theme, emit, forms);
+        // The card's own key is the grid's handle for it: one identity, named by the author, handed
+        // back on activation. A card with no key gets none, and the grid simply never reports it —
+        // the same as a native cell nobody named.
+        let key = child.declared_key().unwrap_or_default();
+        let card = GridRow::new().child_boxed(body);
+        cells.push(GridCell::new(key.to_string(), card.nav_state()).hovered(card.hovered()));
+        layout = layout.child(card);
+    }
+    grid = grid.row(vec![cells], layout);
+    // Behaviour is an Intent, as everywhere: the chosen card's key travels as an argument, so one
+    // described action serves every card rather than a binding per card.
+    if let Some(intent) = node.events.get("activate") {
+        let (intent, emit) = (intent.clone(), emit.clone());
+        grid = grid.on_activate(move |key| {
+            emit(intent.clone().arg("key", PropValue::Text(key.to_string())))
+        });
+    }
+    if let Some(intent) = node.events.get("move") {
+        let (intent, emit) = (intent.clone(), emit.clone());
+        grid = grid.on_move(move |key| {
+            emit(intent.clone().arg("key", PropValue::Text(key.to_string())))
+        });
+    }
+    if let Some(intent) = node.events.get("dismiss") {
+        let (intent, emit) = (intent.clone(), emit.clone());
+        grid = grid.on_dismiss(move || emit(intent.clone()));
+    }
+    Box::new(grid)
+}
+
 fn realize_grid(
     node: &ViewNode,
     theme: &Theme,
@@ -2923,6 +3056,7 @@ mod tests {
             // Containers: give them a child, which a correct arm attaches.
             WidgetKind::VStack
             | WidgetKind::HStack
+            | WidgetKind::CardGrid
             | WidgetKind::Card
             | WidgetKind::Scroll
             | WidgetKind::Panel
@@ -3315,6 +3449,39 @@ mod tests {
     /// widget can be told what a pick does to it; this holds the described side to the same reach.
     ///
     /// `ScrollBar` is the one exception, and the same one everywhere else: it is host-only, its
+    /// **A menu declared on ANY kind reaches the node itself** (F003/P097/T501).
+    ///
+    /// A menu is a declaration, not a widget an author assembles — natively it is one builder on
+    /// any widget, so the described form is one field on any node. Until this, a plugin building
+    /// its UI as a described tree could not attach a menu to its own row at all, while heca's own
+    /// rows did it in a line: a second-class version of a shipped feature, which ⭐⭐ RULE ZERO
+    /// exists to forbid.
+    ///
+    /// It asserts the declaration lands **on the node**, never on a wrapper around it: a wrapper is
+    /// a widget the description never asked for, and the right-click walk would find it instead of
+    /// the row.
+    #[test]
+    fn a_menu_declared_on_any_kind_lands_on_the_node_itself() {
+        let mut missing: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            let (emit, _fired) = recording_emitter();
+            let node = sample_node(kind).menu([heca_view::DropdownItem::with_intent(
+                "close",
+                "Close",
+                Intent::new("plugin.close"),
+            )]);
+            let widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+            if widget.base().context_menu.is_none() {
+                missing.push(format!("{kind:?}"));
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "a menu declared on these kinds never reached the widget, so a described row cannot \
+             have one while a native row can: {missing:#?}",
+        );
+    }
+
     /// state is a live host signal, and `realize` refuses it rather than producing a dead control.
     #[test]
     fn a_hint_written_into_any_kind_is_found_by_the_picker() {
