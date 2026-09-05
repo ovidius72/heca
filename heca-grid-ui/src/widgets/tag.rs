@@ -110,7 +110,25 @@ impl Tag {
         label: impl Into<String>,
         leading: Option<Box<dyn Component>>,
     ) -> Self {
-        let mut seg = segment().child(Label::new(label).font_scale(FONT_SCALE));
+        self.segment_text_keyed(label, leading, None)
+    }
+
+    /// The same, **naming the words** so a host can change them later without rebuilding the tag
+    /// (`set_text_by_key`). A pane header does this: the program it shows changes twice per
+    /// command, and rebuilding for it blinks the whole bar out.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
+    pub fn segment_text_keyed(
+        self,
+        label: impl Into<String>,
+        leading: Option<Box<dyn Component>>,
+        key: Option<&str>,
+    ) -> Self {
+        use crate::builders::ComponentExt as _;
+        let mut text = Label::new(label).font_scale(FONT_SCALE);
+        if let Some(k) = key {
+            text = text.key(k);
+        }
+        let mut seg = segment().child(text);
         if let Some(icon) = leading {
             seg.base_mut().children.insert(0, icon);
         }
@@ -131,6 +149,14 @@ impl Tag {
 }
 
 impl Component for Tag {
+    /// **A tag's first segment is its own words**, so it answers a text write in place — the same
+    /// as a `Label`. Later segments are child labels and answer for themselves.
+    fn set_text(&self, text: String) -> bool {
+        use crate::reactive::SignalUpdate as _;
+        self.label.set(text);
+        true
+    }
+
     fn base(&self) -> &Base {
         &self.base
     }

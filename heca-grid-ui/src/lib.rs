@@ -76,7 +76,8 @@ pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use drag::{DropAction, DropHit, DropSide, resolve_at, source_at};
 pub use hint::{
     clear_hints, collect_actions, collect_hints, fire_action, fire_hint, hint_intent, offer_hint,
-    hint_targets_of, offer_hint_by_key, collect_hints_by_surface, DeclaredAction, Hint,
+    hint_targets_of, offer_hint_by_key, set_text_by_key, collect_hints_by_surface,
+    DeclaredAction, Hint,
     SurfaceHints,
 };
 pub use nav::{collect_keys, identity_of, key_at};

@@ -611,3 +611,31 @@ fn a_button_the_room_brings_back_paints_nothing_until_it_has_a_box() {
         "a widget with no box yet drew in the window corner: {corner:?}"
     );
 }
+
+/// **A group is right on the FIRST frame it is laid out** (F003/P097/T500).
+///
+/// It decides what fits by reading the room it was given, and that answer only exists once the
+/// layout has run — so the decision lands in `on_layout`, *after* the pass that informed it. Left
+/// there, the arrangement being replaced is what gets painted and the corrected one appears a frame
+/// later: a visible flash on every rebuild.
+///
+/// No caller can prevent that or is even in a position to know about it, which is why the layout
+/// settles before anything is painted rather than every host learning to re-run it. Antonio,
+/// driving (2026-09-05): the pane header's buttons blinked on every terminal command, on a focus
+/// change, on a split, and when the working directory was detected — four symptoms, one widget.
+///
+/// ⚠️ **The helper above lays out FOUR times**, which is this defect written into the tests: they
+/// could not see it because they always gave the group the extra passes a real frame never does.
+#[test]
+fn a_group_holds_its_final_arrangement_after_a_single_layout() {
+    for w in [90.0, 120.0, 149.0, 200.0] {
+        let once = lay_n(group(), w, 1);
+        let settled = lay_n(group(), w, 4);
+        assert_eq!(
+            (visible(&once), widths(&once)),
+            (visible(&settled), widths(&settled)),
+            "at {w}px the first frame showed a different row than the settled one — that \
+             difference IS the flash",
+        );
+    }
+}

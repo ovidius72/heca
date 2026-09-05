@@ -449,6 +449,15 @@ impl Label {
 }
 
 impl Component for Label {
+    /// **A label is what shows words**, so it answers this: the text is a signal, and writing it
+    /// updates in place. This is what lets a host change what a retained tree says — a pane's
+    /// foreground program, its git branch — without throwing the tree away and rebuilding it.
+    fn set_text(&self, text: String) -> bool {
+        use crate::reactive::SignalUpdate as _;
+        self.text_signal().set(text);
+        true
+    }
+
     fn base(&self) -> &Base {
         &self.base
     }

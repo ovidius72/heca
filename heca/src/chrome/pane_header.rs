@@ -152,22 +152,21 @@ pub(crate) fn home_relative_path(path: &std::path::Path) -> String {
 
 /// Build the pane info bar's segmented [`Tag`] from the configured `segments` and
 /// the pane's runtime, reusing the same catalog projection as the sidebar card.
-/// Segments with no data (e.g. git outside a repo) are skipped; returns `None`
-/// when nothing is produced. Used by the terminal pane shell (`app::terminal_render`).
-#[expect(
-    clippy::too_many_arguments,
-    reason = "pane-info projection threads program/name/runtime + layout context explicitly; grouping into a struct is a later chrome refactor"
-)]
-pub(crate) fn build_pane_info_bar(
+/// **What each segment has to say right now** — the one derivation, read three times.
+///
+/// The builder turns these into a tag, the header's identity reads only *which kinds* came back
+/// (that is its shape), and the per-frame update writes the texts into the tree that is already on
+/// screen. Three readers, one answer, so a segment cannot be built from one thing and rewritten
+/// from another.
+pub(crate) fn segment_items(
     programs: &ProgramsConfig,
     fallback_name: &str,
     custom_name: Option<&str>,
     runtime: Option<&PaneRuntime>,
     segments: &[heca_config::appearance::PaneSegment],
-    theme: &GuiTheme,
     max_width: f32,
     font: f32,
-) -> Option<Tag> {
+) -> Vec<(heca_config::appearance::PaneSegment, Glyph, String)> {
     use heca_config::appearance::PaneSegment;
 
     // The info bar never renders the `(process)` suffix — that's a sidebar-card affordance
@@ -177,7 +176,7 @@ pub(crate) fn build_pane_info_bar(
 
     // Collect the produced (icon, text) segments, noting the location (the long,
     // truncatable one), so we can fit the bar to `max_width` before building it.
-    let mut items: Vec<(Glyph, String)> = Vec::new();
+    let mut items: Vec<(PaneSegment, Glyph, String)> = Vec::new();
     let mut location_idx: Option<usize> = None;
     for seg in segments {
         let item = match seg {
@@ -217,10 +216,7 @@ pub(crate) fn build_pane_info_bar(
                 (Glyph::GitCommit, parts.join(" "))
             }
         };
-        items.push(item);
-    }
-    if items.is_empty() {
-        return None;
+        items.push((*seg, item.0, item.1));
     }
 
     // Fit to width: if the bar would overflow the pane, shrink the location
@@ -228,28 +224,101 @@ pub(crate) fn build_pane_info_bar(
     // hard backstop; this keeps it readable instead of a hard cut.
     let char_w = (font * 0.6).max(1.0);
     let per_segment_overhead = font * 2.5; // icon + gaps + segment padding + divider
-    let text_chars: usize = items.iter().map(|(_, text)| text.chars().count()).sum();
+    let text_chars: usize = items.iter().map(|(_, _, text)| text.chars().count()).sum();
     let estimated = text_chars as f32 * char_w + items.len() as f32 * per_segment_overhead;
     if estimated > max_width
         && let Some(idx) = location_idx
     {
         let overflow_chars = ((estimated - max_width) / char_w).ceil() as usize;
-        let loc_chars = items[idx].1.chars().count();
+        let loc_chars = items[idx].2.chars().count();
         let keep = loc_chars.saturating_sub(overflow_chars).max(1);
-        items[idx].1 = truncate_path_left(&items[idx].1, keep);
+        items[idx].2 = truncate_path_left(&items[idx].2, keep);
+    }
+
+    items
+}
+
+/// Segments with no data (e.g. git outside a repo) are skipped; returns `None`
+/// when nothing is produced. Used by the terminal pane shell (`app::terminal_render`).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "pane-info projection threads program/name/runtime + layout context explicitly; grouping into a struct is a later chrome refactor"
+)]
+pub(crate) fn build_pane_info_bar(
+    programs: &ProgramsConfig,
+    fallback_name: &str,
+    custom_name: Option<&str>,
+    runtime: Option<&PaneRuntime>,
+    segments: &[heca_config::appearance::PaneSegment],
+    theme: &GuiTheme,
+    max_width: f32,
+    font: f32,
+) -> Option<Tag> {
+    let items = segment_items(programs, fallback_name, custom_name, runtime, segments, max_width, font);
+    if items.is_empty() {
+        return None;
     }
 
     let mut tag: Option<Tag> = None;
-    for (glyph, text) in items {
+    for (seg, glyph, text) in items {
         // No explicit size → the icon inherits the bar's base font, so glyph and
         // label stay balanced when the bar font changes.
         let leading = Icon::new(glyph).color(theme.colors.foreground);
+        // **Each segment is named by what it is**, so its words can be rewritten without the bar
+        // being rebuilt (F003/P097/T500). The first segment is the tag's own label; the rest are
+        // child labels. Both answer `set_text`.
+        let key = segment_text_key(seg);
         tag = Some(match tag.take() {
-            None => Tag::new(text).leading(leading),
-            Some(existing) => existing.segment_text(text, Some(Box::new(leading))),
+            None => {
+                use heca_grid_ui::builders::ComponentExt as _;
+                Tag::new(text).leading(leading).key(key)
+            }
+            Some(existing) => existing.segment_text_keyed(text, Some(Box::new(leading)), Some(&key)),
         });
     }
     tag
+}
+
+/// **A freshly built header**: its tree, the identity that says when it must be rebuilt, and the
+/// words to write into it this frame — which are deliberately not part of that identity.
+pub(crate) type BuiltPaneHeader = (
+    Surface,
+    String,
+    Vec<(heca_config::appearance::PaneSegment, String)>,
+);
+
+/// One per pane that has a header.
+pub(crate) type BuiltPaneHeaders = std::collections::HashMap<PaneId, BuiltPaneHeader>;
+
+/// **What a segment's words are called**, so they can be rewritten in place.
+///
+/// One derivation, read by the builder and by the update pass, so the two cannot address different
+/// nodes. Keyed by the segment *kind* rather than its position: which segments have data changes
+/// (a pane outside a repository has no branch), and a positional name would then follow whichever
+/// segment happened to take that slot.
+fn segment_text_key(seg: heca_config::appearance::PaneSegment) -> String {
+    format!("hdr.seg:{seg:?}")
+}
+
+/// **Write the current words into a header that is already on screen** (F003/P097/T500).
+///
+/// The words a header shows — the foreground program, the working directory, the branch — are a
+/// *per-frame input*, not part of what the header is. This is the same rule the pane's own rect
+/// already follows: written onto the retained tree rather than built into it, so a change moves
+/// nothing else.
+///
+/// It matters because a rebuild is visible. A freshly built widget has no layout node until the
+/// walk reaches it, and nothing is painted before it has a box — so the frame after a rebuild
+/// draws nothing where the bar was. While these words were part of the header's identity, running
+/// one command rebuilt it twice (the command starting, and finishing), and the buttons blinked out
+/// and back both times (Antonio, driving, 2026-09-05).
+///
+/// A segment that has *appeared or gone* is a different matter and does rebuild: that is a change
+/// of shape, and it stays in the key.
+pub(crate) fn refresh_pane_header_text(root: &dyn heca_grid_ui::Component, texts: &[(heca_config::appearance::PaneSegment, String)]) {
+    for (seg, text) in texts {
+        heca_grid_ui::set_text_by_key(root, &segment_text_key(*seg), text);
+    }
 }
 
 // ── In-pane info-bar header: segments (left) + interactive action buttons (right) ──
@@ -666,16 +735,38 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
         .iter()
         .map(|&a| content.shortcuts.get(pane_action_name(a)).unwrap_or_default())
         .collect();
+    // **The words are NOT part of this key** (F003/P097/T500). What a header *shows* — the
+    // foreground program, the branch, the working directory — changes constantly and changes
+    // nothing about the header's shape, so it is written into the retained tree each frame
+    // (`refresh_pane_header_text`) instead. Keying on it rebuilt the whole bar twice per command,
+    // and a rebuilt widget paints nothing until the layout walk reaches it, so the buttons blinked
+    // out and back both times.
+    //
+    // ⚠️ **`view.status` never belonged here at all** — it is carried on the view and rendered
+    // nowhere in this bar, so Idle → Running → Success churned the identity while changing nothing
+    // a user could see.
+    //
+    // What stays is what changes the SHAPE: which segments have data at all (a pane outside a
+    // repository has no branch segment), and the icon, since a glyph is not text.
+    // Which segments have data at all — the shape. `max_width` is passed as unbounded because
+    // truncation changes a segment's *words*, never whether it exists, and the words are not here.
+    let present: Vec<_> = segment_items(
+        content.programs,
+        content.fallback_name,
+        content.custom_name,
+        content.runtime,
+        content.segments,
+        f32::INFINITY,
+        font,
+    )
+    .into_iter()
+    .map(|(seg, glyph, _)| (seg, glyph))
+    .collect();
+    let _ = (&view.title, &cwd);
     format!(
-        "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{}|{:?}",
+        "{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{}|{:?}",
         view.icon,
-        view.title,
-        view.status,
-        view.git_branch,
-        view.git_added,
-        view.git_modified,
-        view.git_deleted,
-        cwd,
+        present,
         content.segments,
         content.actions,
         content.ws_idx,
@@ -1026,9 +1117,7 @@ pub(crate) fn sync_pane_viewport_widgets(
 /// them read-only and `mouse.rs` dispatches pointer events into them. Rebuilds a
 /// pane's tree only when its content key changes; re-lays-out + repositions every
 /// frame; prunes panes that disappeared.
-pub(crate) fn build_pane_headers(
-    state: &crate::app_state::AppState,
-) -> std::collections::HashMap<PaneId, (Surface, String)> {
+pub(crate) fn build_pane_headers(state: &crate::app_state::AppState) -> BuiltPaneHeaders {
     let mut built = std::collections::HashMap::new();
     let segments = state.appearance.pane.title_segments.clone();
     let actions = state.appearance.pane.title_actions.clone();
@@ -1132,7 +1221,22 @@ pub(crate) fn build_pane_headers(
             // under Antonio while he was driving (F011/P094/T451). They carry `.key(action_name)`
             // now, and this is what says so if that ever goes.
             super::identity::report_ambiguous_widgets("pane-header", &root);
-            built.insert(input.pane_id, (root, key));
+            // **The words travel beside the tree, not inside its identity.** Whoever holds the
+            // retained header writes these in each frame, so a command changing the program it
+            // shows moves the words and nothing else (F003/P097/T500).
+            let texts: Vec<_> = segment_items(
+                content.programs,
+                content.fallback_name,
+                content.custom_name,
+                content.runtime,
+                content.segments,
+                input.avail_w,
+                font,
+            )
+            .into_iter()
+            .map(|(seg, _, text)| (seg, text))
+            .collect();
+            built.insert(input.pane_id, (root, key, texts));
         }
     }
     built

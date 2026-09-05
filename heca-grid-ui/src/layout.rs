@@ -65,6 +65,43 @@ impl LayoutEngine {
     /// Lay out `root` within `available` (logical pixels) and write the computed
     /// absolute bounds into every component's `Base.bounds`.
     pub fn compute(&mut self, root: &mut dyn Component, available: Size) {
+        // **Settle before anyone paints.** A widget may only be able to decide its content once it
+        // knows the room it got — a row of actions deciding how many fit, a panel deciding whether
+        // it needs its scrollbar — and it says so from `on_layout`, which runs *after* the pass
+        // that told it. Left to the host's own `needs_layout` check, that answer lands on the NEXT
+        // frame, so the arrangement being replaced is painted once first. That is a visible flash,
+        // and no caller can prevent it or is even in a position to know about it (Antonio, driving,
+        // 2026-09-05: the pane header's buttons blinked on every command, on a focus change, on a
+        // split, and when the working directory was detected — four symptoms, one widget).
+        //
+        // So the pass repeats here until nothing asks again. The host's check still exists and is
+        // still right: it catches a layout asked for by something *other* than a layout — a signal
+        // firing, a widget revealed. This only closes the case where the layout is what prompted it.
+        //
+        // ⚠️ **Bounded, because a widget may genuinely never settle.** `Display::Auto` is the known
+        // case: taking the words off makes the row narrower, so it then fits, which is the condition
+        // for putting them back. A cap turns that into a fixed cost per frame instead of a hang, and
+        // leaves it looking exactly as it does today.
+        for _ in 0..Self::SETTLE_PASSES {
+            self.compute_once(root, available);
+            if !crate::component::needs_layout(root) {
+                return;
+            }
+        }
+        // Out of passes: lay out once more so what is painted matches the last decision made,
+        // rather than the arrangement that decision was about to replace.
+        self.compute_once(root, available);
+    }
+
+    /// How many times a single [`compute`](Self::compute) will re-run for widgets that change what
+    /// they hold in response to the room they were given.
+    ///
+    /// Two is enough for the shapes here — decide, then lay the decision out — and the third is
+    /// headroom for one widget's decision changing another's. It is a cap, not a target: the common
+    /// case settles on the first pass and never runs a second.
+    const SETTLE_PASSES: usize = 3;
+
+    fn compute_once(&mut self, root: &mut dyn Component, available: Size) {
         self.tree.clear();
         // The root has no parent to inherit a size variant from — start at the default.
         let node = self.build(root, WidgetSize::default());

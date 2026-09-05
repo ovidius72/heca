@@ -1862,7 +1862,7 @@ mod tests {
     }
 
     #[test]
-    fn pane_header_key_changes_on_content_but_never_on_width() {
+    fn pane_header_key_tracks_its_shape_never_its_words_or_width() {
         use heca_config::appearance::{PaneAction, PaneSegment};
         let programs = ProgramsConfig::default();
         let segments = [PaneSegment::AppName, PaneSegment::GitBranch];
@@ -1926,19 +1926,55 @@ mod tests {
                 300.0
             )
         );
-        // A different branch ⇒ different key (rebuild).
+        // **A different branch ⇒ the SAME key** (F003/P097/T500). A branch is *words*, and words are
+        // a per-frame input written into the retained tree, not part of what the header is. While
+        // they were part of its identity, every command rebuilt the whole bar — twice, at the
+        // command's start and finish — and a rebuilt widget paints nothing until the layout walk
+        // gives it a box, so the buttons blinked out and back both times (Antonio, driving,
+        // 2026-09-05).
         let mut other = runtime.clone();
         other.git = Some(GitInfo {
             branch: Some("dev".into()),
             ..GitInfo::default()
         });
-        assert_ne!(
+        assert_eq!(
             base,
             super::pane_header::pane_header_key(
                 &content(&programs, &segments, &actions, &other, &hints, &catalog, 0),
                 15.0,
                 300.0
-            )
+            ),
+            "changing a segment's words rebuilt the header instead of rewriting them",
+        );
+
+        // **A segment that GOES ⇒ a different key.** That is a change of shape, not of words: the
+        // bar has one section fewer, so it genuinely is a different header. This is the other half
+        // of the rule, and without it "words never rebuild" would be satisfied by never rebuilding.
+        let mut no_branch = runtime.clone();
+        no_branch.git = None;
+        assert_ne!(
+            base,
+            super::pane_header::pane_header_key(
+                &content(&programs, &segments, &actions, &no_branch, &hints, &catalog, 0),
+                15.0,
+                300.0
+            ),
+            "a segment disappearing must rebuild — it changes what the bar IS",
+        );
+
+        // **And the status changes nothing at all.** It is carried on the projection and rendered
+        // nowhere in this bar, so Idle → Running → Success used to churn the identity while
+        // changing nothing a user could see. That was half of every command's rebuilds.
+        let mut running = runtime.clone();
+        running.status = heca_core::runtime::ProcessStatus::Running;
+        assert_eq!(
+            base,
+            super::pane_header::pane_header_key(
+                &content(&programs, &segments, &actions, &running, &hints, &catalog, 0),
+                15.0,
+                300.0
+            ),
+            "a status this bar does not render must not rebuild it",
         );
         // **A width change ⇒ the SAME key.** A pane's width is a per-frame layout input, not part of
         // what the header is — the same rule the pane shell states for its own rect. The bar used to

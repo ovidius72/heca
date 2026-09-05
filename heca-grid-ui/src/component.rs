@@ -991,6 +991,22 @@ pub trait Component {
     /// was given its own keeps it (that is the widget's judgement, not the container's).
     fn set_variant(&mut self, _variant: crate::widgets::ButtonVariant) {}
 
+    /// **Show these words instead**, if you are the kind of widget that shows words.
+    ///
+    /// `false` by default: a widget with no text ignores it. A host uses this to change what a
+    /// retained tree *says* without rebuilding it — see
+    /// [`set_text_by_key`](crate::set_text_by_key).
+    ///
+    /// Takes `&self` because the text is a signal, so this is a write to reactive state and not a
+    /// structural change: nothing above it has to be rebuilt, re-laid-out or re-keyed.
+    ///
+    /// It is a trait method for the same reason [`set_icon_only`](Self::set_icon_only) is: a
+    /// container holds `dyn Component`, so without one the only way to ask would be to know the
+    /// child's concrete type.
+    fn set_text(&self, _text: String) -> bool {
+        false
+    }
+
     fn wants_visible(&self) -> bool {
         self.base().focused_by_keyboard()
     }

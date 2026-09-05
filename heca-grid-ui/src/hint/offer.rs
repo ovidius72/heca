@@ -213,3 +213,47 @@ pub fn clear_hints(root: &dyn Component) {
         clear_hints(child.as_ref());
     }
 }
+
+/// **Change what a named node says, without rebuilding anything** (F003/P097/T500).
+///
+/// The text is a signal, so this is a write to reactive state: the tree keeps its identity, its
+/// layout and every widget inside it. That matters because a rebuild is not free and not invisible
+/// — a freshly built widget has no layout node until the walk reaches it, and **nothing is painted
+/// before it has a box**, so the frame after a rebuild draws nothing where the old tree was.
+///
+/// The case it was written for: a pane's header shows the foreground program and whether the last
+/// command succeeded. Both change twice per command, and while they were part of the header's
+/// *identity* every command threw the whole header away and built a new one — the buttons blinked
+/// out and back twice, which is what a user sees as a flash (Antonio, driving, 2026-09-05).
+///
+/// Addressed by the node's own declared key, exactly as [`offer_hint_by_key`] is, so there is
+/// nothing to register and nothing to release when the tree does change for a real reason.
+/// Answers `true` if anything took it. Every matching node is written, because one thing may be
+/// shown in more than one place.
+pub fn set_text_by_key(root: &dyn Component, key: &str, text: &str) -> bool {
+    fn walk(node: &dyn Component, key: &str, text: &str) -> bool {
+        if skip(node) {
+            return false;
+        }
+        let mut wrote = false;
+        if node.base().key.as_deref() == Some(key) {
+            wrote |= node.set_text(text.to_string());
+            // A named wrapper is allowed to hold the words rather than be them — the same shape
+            // `offer_hint_by_key` handles, where the named node's own answer may live just beneath
+            // it. Only the nearest one, so a panel with a name does not rewrite every label in it.
+            if !wrote {
+                for child in node.base().children.iter() {
+                    if child.set_text(text.to_string()) {
+                        return true;
+                    }
+                }
+            }
+        }
+        for child in node.base().children.iter() {
+            wrote |= walk(child.as_ref(), key, text);
+        }
+        wrote
+    }
+    walk(root, key, text)
+}
+

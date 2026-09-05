@@ -358,6 +358,10 @@ impl Component for ButtonGroup {
             self.words.set(words);
             self.set_words(words);
             self.base.mark_needs_paint();
+            // **Ask for the pass this decision needs, and get it before anything is painted.** The
+            // engine settles a layout that prompted a change rather than leaving it to the next
+            // frame, so what appears is the arrangement decided here — never the one it replaced.
+            self.base.mark_needs_layout();
             // The widths have changed, so what fits must be read from the layout that follows —
             // deciding it now would be deciding it from the arrangement being replaced.
             return;
@@ -411,6 +415,11 @@ impl Component for ButtonGroup {
             self.shown.set(fits);
             self.apply();
             self.base.mark_needs_paint();
+            // The row now holds different buttons, so it must be placed again before it is drawn —
+            // the engine settles it in this same pass. Without it the row was painted once with the
+            // arrangement this line just replaced, which is the flash a caller kept seeing on every
+            // rebuild and could do nothing about.
+            self.base.mark_needs_layout();
         }
     }
 }

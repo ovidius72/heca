@@ -160,7 +160,7 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
         // ONE key for the pane and what it carries, so they rebuild together or not at all. Two
         // keys would let a bar go stale inside a pane that had no reason to rebuild.
         let key = match &header {
-            Some((_, header_key)) => format!("{}|{header_key}", model.key()),
+            Some((_, header_key, _)) => format!("{}|{header_key}", model.key()),
             None => model.key(),
         };
         let needs_build = state
@@ -168,17 +168,27 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
             .get(&model.pane_id)
             .map(|p| p.key != key)
             .unwrap_or(true);
+        let header_texts = header.as_ref().map(|(_, _, texts)| texts.clone());
         if needs_build {
             let root = PaneShell {
                 model,
                 cb: &cb,
-                header: header.map(|(tree, _)| Box::new(tree) as Box<dyn heca_grid_ui::Component>),
-                    content: None,
+                header: header
+                    .map(|(tree, _, _)| Box::new(tree) as Box<dyn heca_grid_ui::Component>),
+                content: None,
             }
             .build();
             state
                 .panes
                 .insert(model.pane_id, RetainedPane { root, key });
+        }
+        // **The words are a per-frame input**, written onto the retained tree exactly as the pane's
+        // rect is — so the program a pane shows, its branch and its working directory change
+        // without the bar being rebuilt (F003/P097/T500). Rebuilding for them blinked the buttons
+        // out and back twice per command, because a fresh widget paints nothing until the layout
+        // walk has given it a box.
+        if let (Some(texts), Some(retained)) = (&header_texts, state.panes.get(&model.pane_id)) {
+            crate::chrome::pane_header::refresh_pane_header_text(&retained.root, texts);
         }
         if let Some(retained) = state.panes.get_mut(&model.pane_id) {
             // The pane's rect is a per-frame input, written onto the retained tree rather than

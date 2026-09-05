@@ -769,4 +769,43 @@ mod by_surface {
              holding no focus is how it says it is not taking the keyboard",
         );
     }
+
+    /// **A named node's words can be rewritten without rebuilding anything** (F003/P097/T500).
+    ///
+    /// This is what lets a host change what a retained tree *says* while keeping the tree: its
+    /// identity, its layout and every widget in it survive, because the text is a signal.
+    ///
+    /// The case it exists for: a pane header shows the foreground program and the branch. Both
+    /// change while you work, and while they were part of the header's identity every change threw
+    /// the bar away and built a new one — and a fresh widget paints nothing until the layout walk
+    /// gives it a box, so the buttons blinked out and back.
+    #[test]
+    fn a_named_nodes_words_are_rewritten_in_place() {
+        use crate::builders::ComponentExt as _;
+        use crate::widgets::Label;
+
+        use crate::reactive::SignalGet as _;
+
+        let app = Label::new("zsh").key("hdr.seg:AppName");
+        let branch = Label::new("main").key("hdr.seg:GitBranch");
+        // The signals, taken before the labels move into the tree — what the widgets will say.
+        let (app_text, branch_text) = (app.text_signal(), branch.text_signal());
+        let root = Flex::column().child(app).child(branch);
+
+        assert!(set_text_by_key(&root, "hdr.seg:AppName", "cargo"));
+        assert_eq!(
+            app_text.get_untracked(),
+            "cargo",
+            "the named node says the new words"
+        );
+        assert_eq!(
+            branch_text.get_untracked(),
+            "main",
+            "and nothing else was touched",
+        );
+        assert!(
+            !set_text_by_key(&root, "hdr.seg:Nothing", "x"),
+            "a name nothing answers to writes nothing, and says so",
+        );
+    }
 }
