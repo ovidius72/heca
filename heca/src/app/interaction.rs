@@ -292,7 +292,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
 ///
 /// It used to be a single call to `chrome::content_covered` — a fact about **what is painted
 /// over** — used to decide **which context is live**. The two are orthogonal, and the exposé is
-/// exactly where they disagree: the map declares `covers_content: false` because you can still see
+/// exactly where they disagree: the map declares `lock: false` because you can still see
 /// the panes through it, and that geometric truth was also, accidentally, saying "the base context
 /// is still live". So `prefix+j` moved the focused pane behind the map, `prefix+p` opened the
 /// palette over it, and `prefix+/` picked sidebar rows the user could not see (Antonio,
@@ -1632,7 +1632,7 @@ mod tests {
         SurfaceKey::of(name)
     }
 
-    /// **The exposé's defect, as a rule.** The map declares `covers_content: false` — you can see
+    /// **The exposé's defect, as a rule.** The map declares `lock: false` — you can see
     /// the panes through it, and that is geometrically true — so the old gate said the base context
     /// was still live and `prefix+j` drove the session behind it (Antonio, 2026-08-12). What makes
     /// a context active is that it took the keyboard, not what it painted over.

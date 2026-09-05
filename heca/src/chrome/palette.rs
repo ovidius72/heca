@@ -472,14 +472,12 @@ pub(crate) fn open_command_palette(
 
     // Modal + covering: an open palette captures the keyboard for the whole viewport (that is how
     // typing reaches its query line through the widget-keymap path) and nothing behind it should be
-    // acted on — `Domain::Overlay` says so for policy, `covers_content` is the fact it reads.
+    // acted on — `Domain::Overlay` says so for policy, `lock` is the fact it reads.
     let parent = state.layers.current();
     state.layers.insert(
         id.0,
         parent,
         LayerKind::OnDemand,
-        true,
-        true,
         Box::new(palette),
         &mut state.window_root,
     );

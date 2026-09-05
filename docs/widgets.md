@@ -3878,6 +3878,49 @@ and returns every declaration in document order with the rect its letter goes ov
 &path)` **delivers the pick as an `Event::Hint`** on the walk every other event uses, answering
 `false` when the tree was rebuilt under the letters.
 
+**Whose target is whose — `collect_hints_by_surface(root)`.** A host that puts things on *layers*
+needs more than "what can be lettered": it needs to know which surface each target belongs to, so it
+can ask that surface what it hides and stop at the one holding the keyboard. This answers it, and
+hands back everything needed with it — no host walks the tree a second time:
+
+```rust
+for group in collect_hints_by_surface(&root) {
+    group.path;      // where the surface is; EMPTY means the page itself
+    group.key;       // the surface's own declared key, for a host that looks it up
+    group.bounds;    // its laid-out box, for a host that occludes by geometry
+    group.targets;   // its targets, each addressed FROM THE ROOT
+}
+```
+
+Three rules it holds so that nobody re-derives them:
+
+- **Front → back**, which is lexicographic on the path reversed — sibling order is paint order and a
+  child is drawn above its parent, so descending path order *is* "nearest the viewer first". Not a
+  second ordering to keep in step with the tree's own.
+- **The page is the group with no path**, so "page or surface" is answered by structure and never by
+  matching a name.
+- **A target belongs to the deepest surface enclosing it**, so a menu inside a dialog groups under
+  the menu. A host that reads the first step of a path instead is assuming every surface is a direct
+  child of the root — true only while whatever seats them keeps making it true.
+
+A surface is any node marked `Base::surface`, which is what seating one sets; an author writes
+nothing. Built **on** `collect_hints`, so the candidacy rules live in one place.
+
+**What a surface says about itself, and what it does not have to say:**
+
+```rust
+Overlay::new().lock(true).child(my_panel)   // the ONE line an author writes
+```
+
+- **`lock`** is a declaration, because nothing in the tree implies it. A map of the
+  working area covers every pixel it draws over and still says `false` — seeing the panes through it
+  is the point — while a dialog says `true`. `group.lock` hands it back.
+- **`holds_keyboard` is read, never declared.** A surface that wants keys holds focus, and every
+  layer widget binds its open signal to `Base::focused`, so an open overlay answers `true` by being
+  open and a toast stack answers `false` by holding no focus. `Base::captures_keyboard` overrides it
+  for a surface the framework cannot read — reach for it almost never.
+- Neither is `overlay_occludes`, which is the *geometric* question the pointer asks.
+
 **A declaration can say what it *is*, not only what it runs.** `on_hint` takes a closure or a
 `Hint` — `Hint::of(intent, run)` — carrying the `Intent` the act names. That is what lets a host ask
 its own policy about a candidate *before* spending a letter on it: `hint_intent(root, &path)` hands

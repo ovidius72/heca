@@ -60,7 +60,8 @@ pub use action::{Action, SignalData};
 pub use builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
-    Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, collect_damage, needs_layout,
+    holds_keyboard, Base, Component, Event, GridKey, Handled, Modifiers, PaintCx,
+    WidgetIntent, collect_damage, needs_layout,
     deliver, dispatch, overlay_occluded_at, paint_child,
     install_frame_request, request_frame,
 };
@@ -75,7 +76,8 @@ pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use drag::{DropAction, DropHit, DropSide, resolve_at, source_at};
 pub use hint::{
     clear_hints, collect_actions, collect_hints, fire_action, fire_hint, hint_intent, offer_hint,
-    hint_targets_of, offer_hint_by_key, DeclaredAction, Hint,
+    hint_targets_of, offer_hint_by_key, collect_hints_by_surface, DeclaredAction, Hint,
+    SurfaceHints,
 };
 pub use nav::{collect_keys, identity_of, key_at};
 pub use effects::{Attention, Eased, Flash};
@@ -113,7 +115,8 @@ pub mod prelude {
     pub use crate::keymap::{KeyChord, Keymap};
     pub use crate::hint::{
         clear_hints, collect_actions, collect_hints, fire_action, fire_hint, hint_intent,
-        hint_targets_of, offer_hint, offer_hint_by_key, Hint,
+        collect_hints_by_surface, hint_targets_of, offer_hint, offer_hint_by_key, Hint,
+        SurfaceHints,
     };
     pub use crate::nav::{collect_keys, identity_of, key_at};
     pub use crate::focus::FocusManager;

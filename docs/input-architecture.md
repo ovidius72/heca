@@ -4,7 +4,7 @@ This content now lives in **[`docs/surface-compositor.md` § 0](surface-composit
 
 It was folded in because four documents described overlapping ground — this one,
 `surface-compositor.md`, `hint-architecture.md` and `overlay-design.md` — and they were free to
-drift. They had already: `covers_content` was honoured by the action router and ignored by the hint
+drift. They had already: `lock` was honoured by the action router and ignored by the hint
 walk, which blanked every `prefix+/` letter in the app for as long as a toast stack was mounted. Two
 descriptions of one mechanism is the same defect as two implementations of it.
 

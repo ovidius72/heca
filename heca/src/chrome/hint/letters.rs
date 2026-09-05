@@ -11,8 +11,9 @@
 //! plugin author had no way to add themselves to that match. Ownership has no such list.
 
 use crate::app_state::InputMode;
+use heca_grid_ui::Component;
 use super::surfaces::{HintSurface, HintTarget};
-use super::targets::visible_hint_surfaces;
+use super::targets::{visible_views, VisibleViews};
 use crate::providers::workspaces::{column_key, pane_key, workspace_key};
 
 /// **A thing a picker asked to be lettered**, addressed the way that picker knows it.
@@ -112,9 +113,9 @@ pub(crate) fn sync_offered_letters(state: &crate::app_state::AppState) -> bool {
     // **Which views could actually show a letter.** Computed ONCE per pass, not per key: it
     // resolves the whole surface stack.
     let visible = if wanted.is_empty() {
-        std::collections::HashSet::new()
+        VisibleViews::default()
     } else {
-        visible_hint_surfaces(state)
+        visible_views(state)
     };
     let mut changed = false;
 
@@ -168,22 +169,24 @@ fn offer_in_every_tree(
     state: &crate::app_state::AppState,
     offer: &Offer,
     label: Option<String>,
-    visible: &std::collections::HashSet<HintSurface>,
+    visible: &VisibleViews,
 ) -> bool {
     // **What this view gets this pass** — the letter when it can be seen, a *withdrawal* when it
     // cannot. Every view's label goes through here, so no loop below can decide on its own.
-    let for_view = |surface: HintSurface| label_for(&label, visible.contains(&surface));
+    let for_view = |surface: HintSurface| label_for(&label, visible.surfaces.contains(&surface));
 
-    // **A path names one view already**, so there is nothing to search: the surface it was
-    // collected from is the surface that shows it, and the same visibility question is asked of it
-    // as of every other view.
+    // **A path names one target already**, so there is nothing to search — and the question asked
+    // of it is about *itself*, not about its tree. Every surface seated beside the chrome is one
+    // tree now (F003/P097/T499), so asking whether its surface is visible would ask whether
+    // anything in the window is visible, which is always true: a target behind a covering exposé
+    // would have kept its letter.
     let key = match offer {
         Offer::ByKey(key) => key.as_str(),
         Offer::ByPath(target) => {
             let Some((root, paths)) = super::surfaces::resolve(state, target) else {
                 return false;
             };
-            let label = for_view(target.surface.clone());
+            let label = label_for(&label, visible.targets.contains(target));
             let mut offered = false;
             for path in &paths {
                 offered |= heca_grid_ui::offer_hint(root, path, label.clone());
@@ -191,11 +194,15 @@ fn offer_in_every_tree(
             return offered;
         }
     };
-    for layer in state.layers.visible_front_to_back() {
-        let Some(node) = crate::chrome::surface_node(&state.window_root, layer.id) else {
-            continue;
-        };
-        if heca_grid_ui::offer_hint_by_key(node, key, label.clone()) {
+    // **A surface in front shadows one behind it**, and in one tree that is the children reversed:
+    // the chrome is child 0, so everything seated beside it is nearer the viewer. This asked the
+    // registry for its visible layers, which listed only what it owned — a surface placed without
+    // registering (the toast stack) was never given the chance to shadow anything.
+    for child in state.window_root.base().children.iter().rev() {
+        if child.base().key.as_deref() == Some(crate::chrome::CHROME_KEY) {
+            break;
+        }
+        if heca_grid_ui::offer_hint_by_key(child.as_ref(), key, label.clone()) {
             return true;
         }
     }

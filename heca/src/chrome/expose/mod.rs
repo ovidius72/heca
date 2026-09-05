@@ -376,19 +376,18 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
         .filter(|id| crate::app::focus::find_pane_workspace(&state.session, *id).is_some());
     let root = map(&rows, &theme, emit, here, &state.session.options, &keys, previous);
     let was_visible = state.layers.is_visible_named(&state.window_root, &name);
+    // **The map says what it is, on itself.** It takes the keyboard while it is up, and it does
+    // **not** cover the content: `lock` is what refuses actions on panes the user cannot
+    // see — and in the map you can see them; that is what it is. Declaring coverage made the
+    // surface refuse every act on the pane it exists to let you choose (`FocusPane` blocked in
+    // `Domain::Overlay`), however the intents were arranged. A dialog covers. A map does not.
+    let mut root = root;
+    root.base_mut().lock = false;
     let id = state.layers.add_named(
         id,
         name.clone(),
         None,
         super::LayerKind::OnDemand,
-        // Modal: it takes the keyboard while it is up.
-        true,
-        // **But it does not cover the content.** `covers_content` is what refuses actions on panes
-        // the user cannot see — and in the map you can see them; that is what it is. Declaring
-        // coverage here made the surface refuse every act on the pane it exists to let you choose:
-        // `FocusPane` was blocked in `Domain::Overlay`, so choosing a card did nothing however the
-        // intents were arranged. A dialog covers. A map does not.
-        false,
         root,
         &mut state.window_root,
     );

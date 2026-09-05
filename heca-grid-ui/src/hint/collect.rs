@@ -104,6 +104,108 @@ pub fn collect_hints(root: &dyn Component) -> Vec<(Vec<usize>, Rectangle)> {
     out.into_iter().flatten().collect()
 }
 
+/// **One surface's pick targets** — everything a letter could land on inside it, and what the
+/// surface itself is, so a host never has to walk back down the tree to find out.
+///
+/// A "surface" is a node marked [`Base::surface`]: a layer, an overlay, a menu, a plugin's panel —
+/// anything seated *above* the page rather than laid out in it. The page's own targets come back in
+/// a group whose [`path`](Self::path) is empty, so "is this the page or a surface" is answered by
+/// structure and never by matching a name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SurfaceHints {
+    /// Path to the surface node, from the root. **Empty for the page itself.**
+    pub path: Vec<usize>,
+    /// The surface's own declared key, when it has one — what a host looks it up by.
+    pub key: Option<String>,
+    /// The surface's laid-out box, for a host that occludes by geometry.
+    pub bounds: Rectangle,
+    /// What it declares about standing in front of the page — [`Base::lock`].
+    pub lock: bool,
+    /// **Whether it holds the keyboard** — observed unless the surface overrode it.
+    ///
+    /// A surface that wants keys *holds focus*: `Overlay`, `ContextMenu` and `CommandPalette` all
+    /// bind their open signal to [`Base::focused`], which is the whole of how an open layer takes
+    /// the keyboard. So an author writes nothing and an open overlay answers `true` by being open,
+    /// while an ambient stack answers `false` by holding no focus.
+    /// [`Base::captures_keyboard`] overrides it for a surface the framework cannot read.
+    pub holds_keyboard: bool,
+    /// Its targets, each addressed **from the root** so one resolver still reaches them.
+    pub targets: Vec<(Vec<usize>, Rectangle)>,
+}
+
+/// **Every pick target, grouped by the surface that owns it, front → back.**
+///
+/// The picker's other half. [`collect_hints`] answers *what* can be lettered; this answers *whose*
+/// it is — which is what a host needs to ask each surface what it hides, and to stop at the one
+/// holding the keyboard. Built **on** `collect_hints`, never beside it, so the candidacy rules stay
+/// in one place.
+///
+/// **Front → back is lexicographic on the path, reversed.** Sibling order is paint order and a
+/// child is drawn above its parent, so descending path order is exactly "nearest the viewer first"
+/// — the same rule the surface tree already states about z, rather than a second ordering a caller
+/// keeps in step by hand.
+///
+/// **Nesting is handled, so a caller never assumes a shape.** A target belongs to the *deepest*
+/// surface enclosing it, so a menu inside a dialog inside an overlay groups under the menu. A host
+/// that instead reads the first step of a path is assuming every surface is a direct child of the
+/// root — true only for as long as whatever seats them keeps making it true.
+pub fn collect_hints_by_surface(root: &dyn Component) -> Vec<SurfaceHints> {
+    let mut groups: Vec<SurfaceHints> = Vec::new();
+    for (path, bounds) in collect_hints(root) {
+        let owner = enclosing_surface(root, &path);
+        match groups.iter_mut().find(|g| g.path == owner) {
+            Some(g) => g.targets.push((path, bounds)),
+            None => {
+                let node = node_at(root, &owner);
+                groups.push(SurfaceHints {
+                    key: node.base().key.clone(),
+                    bounds: node.base().bounds,
+                    lock: node.base().lock,
+                    holds_keyboard: node
+                        .base()
+                        .captures_keyboard
+                        .unwrap_or_else(|| crate::component::focus_path(node).is_some()),
+                    path: owner,
+                    targets: vec![(path, bounds)],
+                });
+            }
+        }
+    }
+    // Front → back: deepest/latest first. `Reverse` on the path is the whole ordering rule.
+    groups.sort_by(|a, b| b.path.cmp(&a.path));
+    groups
+}
+
+/// The path of the **deepest** surface enclosing `path`, or empty for one the page owns directly.
+fn enclosing_surface(root: &dyn Component, path: &[usize]) -> Vec<usize> {
+    let mut node = root;
+    let mut here = Vec::new();
+    let mut deepest = Vec::new();
+    for &step in path {
+        let Some(child) = node.base().children.get(step) else {
+            break;
+        };
+        node = child.as_ref();
+        here.push(step);
+        if node.base().surface {
+            deepest = here.clone();
+        }
+    }
+    deepest
+}
+
+/// The node `path` names, or `root` when it names nothing left.
+fn node_at<'a>(root: &'a dyn Component, path: &[usize]) -> &'a dyn Component {
+    let mut node = root;
+    for &step in path {
+        let Some(child) = node.base().children.get(step) else {
+            return node;
+        };
+        node = child.as_ref();
+    }
+    node
+}
+
 /// **Every pick target in this tree that answers to `identity`** — a pick's address across frames.
 ///
 /// A path is child indices: it lives one frame, and a rebuilt tree does not merely invalidate it,

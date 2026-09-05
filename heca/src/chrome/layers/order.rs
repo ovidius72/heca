@@ -105,7 +105,14 @@ impl LayerRegistry {
         self.layers
             .iter()
             .enumerate()
-            .filter(|(_, l)| l.is_active(self.is_leaving(window, l.id)) && l.modal)
+            .filter(|(_, l)| {
+                l.is_active(self.is_leaving(window, l.id))
+                    && crate::chrome::surface_node(window, l.id).is_some_and(|n| {
+                        n.base()
+                            .captures_keyboard
+                            .unwrap_or_else(|| heca_grid_ui::holds_keyboard(n))
+                    })
+            })
             // The front-most is the greatest z-path. Paint reads the same order, so the two can no
             // longer disagree about which surface is in front.
             .max_by_key(|(_, l)| self.z_path(l.id))

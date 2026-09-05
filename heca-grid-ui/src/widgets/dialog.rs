@@ -36,7 +36,7 @@
 //! viewport and centers the panel by taffy), so every descendant gets true bounds (which the
 //! hint picker and pointer hit-testing need).
 
-use crate::builders::{LayoutExt, Parent};
+use crate::builders::{LayoutExt, Parent, ComponentExt as _};
 use crate::component::{
     Base, Component, Event, GridKey, Handled, WidgetIntent,
 };
@@ -90,7 +90,10 @@ impl Dialog {
         // The base Overlay owns the layer presentation: blocking (scrim + swallow),
         // viewport centering, drop shadow, panel fill, bracket reticle. Its open
         // signal IS the dialog's open signal.
-        let overlay = Overlay::new().blocking(true).panel(panel);
+        // **A dialog locks because it is a dialog.** It is asking a question, so nothing behind it
+        // is reachable until you answer — the caller never says so, and cannot get it wrong. A
+        // modeless one (find/replace, a properties panel) turns it off with `.lock(false)`.
+        let overlay = Overlay::new().blocking(true).lock(true).panel(panel);
         let open = overlay.open_signal();
 
         // Root: a full-size passthrough so the overlay child fills the viewport.

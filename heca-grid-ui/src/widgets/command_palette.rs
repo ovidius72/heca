@@ -278,6 +278,9 @@ impl CommandPalette {
         // child), so the palette is the widget that types — and it types because it holds the
         // keyboard, not because it declared that it takes raw keys and text.
         base.focused = open;
+        // **A palette locks because it is a palette.** It has the keyboard for its query line,
+        // and nothing behind it should be acted on while you are typing into it.
+        base.lock = true;
         Self {
             base,
             commands: Vec::new(),

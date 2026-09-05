@@ -293,6 +293,42 @@ pub struct Base {
     /// for the whole viewport. So the cost to an author is nothing, and the cost of forgetting is
     /// nothing.
     pub surface: bool,
+    /// **Is what is behind this surface still reachable?** — `true` locks it (F003/P097/T499).
+    ///
+    /// While a surface is locked, actions on whatever it stands in front of are refused. A dialog
+    /// locks: it is asking a question, so nothing behind it should be touched until you answer. A
+    /// map of the working area does **not** lock — it is drawn over everything, but its whole
+    /// purpose is to let you choose one of the things behind it, and locking made it refuse every
+    /// act on the very thing it exists to pick.
+    ///
+    /// ⚠️ **It is not about pixels**, which is what the old name (`covers_content`) kept implying.
+    /// The map covers every pixel it draws over and still sets this `false`.
+    ///
+    /// ⚠️ Nor is it [`overlay_occludes`](Component::overlay_occludes), which is the *geometric*
+    /// question the pointer asks: did this widget cover that point. Locking is about what may
+    /// happen, not what was drawn.
+    ///
+    /// A named surface sets this for itself — a `Dialog` locks because it is a dialog. Reach for
+    /// the builder on a raw [`Overlay`](crate::widgets::Overlay), which is the piece a new kind of
+    /// surface is built from.
+    pub lock: bool,
+    /// **Does this surface take the keyboard while it is up?** — the coarse half of layering.
+    ///
+    /// **`None` means "ask the tree", and that is the answer you want.** A surface that wants keys
+    /// *holds focus*: `Overlay`, `ContextMenu` and `CommandPalette` bind their open signal to
+    /// [`focused`](Self::focused), which is the whole of how an open layer takes the keyboard. So an
+    /// open overlay derives `true` and an ambient one — a toast stack, which holds no focus because
+    /// nothing in it is typing — derives `false`, and **neither author writes anything**.
+    ///
+    /// `Some(v)` overrides that, for a surface whose keyboard story the framework cannot see. It is
+    /// deliberately an override and not the default: an unconditional `true` here would make every
+    /// ambient surface the active context, and a toast would suppress every letter behind it — the
+    /// failure this file's `lock` note also describes.
+    ///
+    /// ⚠️ **Do not turn this into a plain `bool`.** `routes_own_subtree`, `takes_raw_keys` and
+    /// `takes_text_input` were exactly that and were deleted: a second thing to set is a second
+    /// thing to get wrong, and it disagrees silently with where the keys actually go.
+    pub captures_keyboard: Option<bool>,
     /// **Which enclosing region this subtree belongs to** — a panel, a dock, a tab group, whatever
     /// the host calls the thing that holds rows. Universal opt-in via
     /// [`ComponentExt::scope_key`](crate::builders::ComponentExt::scope_key); hit-tested by
@@ -526,6 +562,8 @@ impl Base {
             handlers: None,
             context_menu: None,
             surface: false,
+            lock: false,
+            captures_keyboard: None,
             hint: None,
             tooltip: None,
             hintable: true,
@@ -1205,6 +1243,19 @@ fn is_keyboard(ev: &Event) -> bool {
 /// inside it is focused, and the key belongs to the field. Hidden and invisible subtrees are
 /// skipped — a closed overlay still holds the focus flag its field had when it closed, and that
 /// must not pull the keyboard into something nobody can see.
+/// **Does anything in this subtree hold the keyboard?**
+///
+/// The public form of [`focus_path`] — a host asking "is this surface the one taking keys" gets the
+/// same answer the event walk uses, rather than inventing a predicate beside it. A surface that
+/// wants keys holds focus (`Overlay`, `ContextMenu` and `CommandPalette` all bind their open signal
+/// to [`Base::focused`]), so an open layer answers `true` by being open.
+///
+/// Hidden and invisible subtrees are skipped, so a dismissed surface that still carries the focus
+/// flag its field had when it closed does not answer `true`.
+pub fn holds_keyboard(node: &dyn Component) -> bool {
+    focus_path(node).is_some()
+}
+
 pub(crate) fn focus_path(node: &dyn Component) -> Option<Vec<usize>> {
     // **Last-added first**, the same order hit-testing uses: what is drawn on top owns the input.
     // Several things can carry the focus flag at once — an open layer says it holds the keyboard,

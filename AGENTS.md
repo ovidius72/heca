@@ -710,7 +710,7 @@ from the whole `AppState` and handed to the (still pure, still unit-tested) rout
 | `Tiled` | a pane has the keyboard |
 | `Floating` | a floating pane is active |
 | `Container` | a **dock** has the keyboard (keyboard/provider sources; a mouse click is judged by what it landed on) |
-| `Overlay` | a layer **covers the tiled area** — `DynamicLayer::covers_content` |
+| `Overlay` | a layer **covers the tiled area** — `DynamicLayer::lock` |
 
 `Overlay` permits **only** `Global`, which is what stops `prefix+Enter` adding a pane behind a
 plugin's overlay — the plugin declares only that its overlay obscures the panes, never which actions

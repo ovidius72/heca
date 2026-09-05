@@ -19,7 +19,7 @@
 //!
 //! Two declarations that were load-bearing as registry flags are simply gone, because in a tree
 //! nobody asks them: it never captured the keyboard (`modal: false`) and it never obscured the
-//! panes (`covers_content: false`, without which a visible toast put the app in `Domain::Overlay`
+//! panes (`lock: false`, without which a visible toast put the app in `Domain::Overlay`
 //! and silently stopped `prefix+Enter` from splitting a pane). A plain child occludes nothing and
 //! takes no focus unless it asks to.
 //!
@@ -90,9 +90,15 @@ pub(crate) fn mount_notification_stack(state: &mut AppState) {
             }
         });
 
-    let root: Box<dyn heca_grid_ui::Component> = Box::new(
+    let mut root: Box<dyn heca_grid_ui::Component> = Box::new(
         KeyHintGroup::new_boxed(Box::new(stack)).open_when(state.notification_pick_open),
     );
+    // **It says what it is, like every other surface** — and what it says is "nothing"
+    // (F003/P097/T499). The stack spans the window because that is how it *positions* its cards in
+    // a corner, not because it covers the screen: it neither stands in front of the page nor takes
+    // the keyboard, so a toast never suppresses what is behind it. Written here rather than assumed
+    // by whoever reads it, so a surface that registers nothing still answers for itself.
+    root.base_mut().lock = false;
 
     place_surface(&mut state.window_root, &surface_name(), root);
 }

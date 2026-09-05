@@ -152,7 +152,7 @@ mod hint_visibility {
     fn a_target_with_no_geometry_yet_is_kept_rather_than_called_hidden() {
         let viewport = Rectangle::new(Point::new(0.0, 0.0), Size::new(1412.0, 800.0));
         let fresh = (
-            HintTarget { surface: HintSurface::Chrome, path: vec![0], identity: None },
+            HintTarget { surface: HintSurface::Window, path: vec![0], identity: None },
             Rectangle::new(Point::new(0.0, 0.0), Size::new(0.0, 0.0)),
         );
 
@@ -166,7 +166,7 @@ mod hint_visibility {
     /// A target somewhere harmless, named by a path so two of them are never equal.
     fn target(path: usize, x: f64) -> (HintTarget, Rectangle) {
         (
-            HintTarget { surface: HintSurface::Chrome, path: vec![path], identity: None },
+            HintTarget { surface: HintSurface::Window, path: vec![path], identity: None },
             Rectangle::new(Point::new(x, 10.0), Size::new(20.0, 20.0)),
         )
     }

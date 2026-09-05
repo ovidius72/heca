@@ -43,6 +43,28 @@ pub(crate) fn surface_key_of(name: Option<&str>, id: LayerId) -> crate::app::int
     )
 }
 
+/// **Does the surface seated for `id` stand in front of the page?** — its own declaration, read
+/// off the node in the one tree (F003/P097/T499).
+///
+/// A surface that is not seated declares nothing, which is the same answer as declaring `false`.
+fn lock(window: &heca_grid_ui::widgets::Flex, id: LayerId) -> bool {
+    crate::chrome::surface_node(window, id).is_some_and(|n| n.base().lock)
+}
+
+/// **Does it take the keyboard?** — read from the tree, not declared (F003/P097/T499).
+///
+/// A surface that wants keys *holds focus*, and every layer widget binds its open signal to it, so
+/// an open overlay answers `true` by being open and an ambient one answers `false` by holding no
+/// focus. An author writes nothing; `Base::captures_keyboard` overrides it for a surface whose
+/// keyboard story the framework cannot see.
+fn captures_keyboard(window: &heca_grid_ui::widgets::Flex, id: LayerId) -> bool {
+    crate::chrome::surface_node(window, id).is_some_and(|n| {
+        n.base()
+            .captures_keyboard
+            .unwrap_or_else(|| heca_grid_ui::holds_keyboard(n))
+    })
+}
+
 /// The registry of dynamically added layers, held on `AppState`. The built-in surfaces are
 /// **not** stored here (they keep their own trees + lifecycle); this holds only layers added
 /// at runtime via [`add`](LayerRegistry::add).
@@ -72,13 +94,11 @@ impl LayerRegistry {
         &mut self,
         parent: Option<LayerId>,
         kind: LayerKind,
-        modal: bool,
-        covers_content: bool,
         root: Box<dyn Component>,
         window: &mut heca_grid_ui::widgets::Flex,
     ) -> LayerId {
         let id = self.reserve_id();
-        self.push_layer(id, parent, kind, modal, covers_content, None);
+        self.push_layer(id, parent, kind, None);
         crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), root);
         id
     }
@@ -92,8 +112,6 @@ impl LayerRegistry {
         id: LayerId,
         parent: Option<LayerId>,
         kind: LayerKind,
-        modal: bool,
-        covers_content: bool,
         node: Option<ViewNode>,
     ) {
         self.layers.push(DynamicLayer {
@@ -101,8 +119,6 @@ impl LayerRegistry {
             parent,
             doomed: false,
             kind,
-            modal,
-            covers_content,
             visible: matches!(kind, LayerKind::Persistent),
             name: None,
             node,
@@ -123,13 +139,11 @@ impl LayerRegistry {
         id: LayerId,
         parent: Option<LayerId>,
         kind: LayerKind,
-        modal: bool,
-        covers_content: bool,
         node: ViewNode,
         realized: Box<dyn Component>,
         window: &mut heca_grid_ui::widgets::Flex,
     ) -> LayerId {
-        self.push_layer(id, parent, kind, modal, covers_content, Some(node));
+        self.push_layer(id, parent, kind, Some(node));
         crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), realized);
         id
     }
@@ -155,8 +169,6 @@ impl LayerRegistry {
         name: String,
         parent: Option<LayerId>,
         kind: LayerKind,
-        modal: bool,
-        covers_content: bool,
         root: Box<dyn Component>,
         window: &mut heca_grid_ui::widgets::Flex,
     ) -> LayerId {
@@ -191,7 +203,7 @@ impl LayerRegistry {
         if let Some(at) = previous {
             self.layers.remove(at);
         }
-        self.push_layer(id, parent, kind, modal, covers_content, None);
+        self.push_layer(id, parent, kind, None);
         crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), root);
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
             l.name = Some(name);
@@ -359,6 +371,60 @@ impl LayerRegistry {
         surface_key_of(self.name_of(id).as_deref(), id)
     }
 
+    /// **What the surface seated under `slot` declares about itself**, or `None` when nothing in
+    /// this registry owns that slot (F003/P097/T499).
+    ///
+    /// The one direction of truth, kept here because the registry is what holds the association.
+    /// A caller walking the window root has a node and its **own declared key**, and needs the two
+    /// things the tree cannot answer — does this surface cover the panes, and does it take the
+    /// keyboard. It asks by that key rather than parsing an id out of it: [`LayerId::raw`] says
+    /// deriving the slot is "the one place outside this module that needs it", and a reverse parse
+    /// would be a second encoding of an identity this module already owns.
+    ///
+    /// **`None` is an answer, not a gap.** A surface may be in the tree and not in this registry —
+    /// the toast stack is placed as `heca.notifications` and registers nothing — and such a surface
+    /// has simply declared nothing: it covers no content and takes no keyboard. That is the same
+    /// answer an explicit `lock: false` gives, so there is no case to special-case and no
+    /// surface name written down anywhere.
+    ///
+    /// Built so that removing it later is a **deletion**: once a surface declares these on its own
+    /// node (`docs/surface-compositor.md` § 0.8) the caller reads them from the node it already has
+    /// and this method goes, with nothing else to unpick.
+    pub(crate) fn declaration_at(&self, slot: &str) -> Option<&DynamicLayer> {
+        self.layers
+            .iter()
+            .find(|l| crate::chrome::surface_slot(l.id) == slot)
+    }
+
+    /// The same, **but only while that surface is still in charge** (F003/P097/T499).
+    ///
+    /// ⚠️ **Presence in the tree is not liveness, and this is the whole of the difference.** Hiding
+    /// a surface calls `node.hide()` and leaves it **seated** in the window root —
+    /// [`remove_surface`](crate::chrome::remove_surface) runs only when it is destroyed — so the
+    /// tree is full of dismissed surfaces, and the exposé and the command palette both declare
+    /// `lock` and `modal`. A reader that takes their declarations at face value applies a
+    /// hidden exposé's occluders and treats a hidden modal as the active context.
+    ///
+    /// It is [`DynamicLayer::is_active`] with [`is_leaving`](Self::is_leaving), which is the same
+    /// pair [`content_covered`](Self::content_covered) asks — deliberately, so "is this surface in
+    /// charge" has **one** answer. Writing the predicate out at the call site instead is what let a
+    /// hidden surface blank every letter in the app (Antonio, driving, 2026-09-04).
+    pub(crate) fn live_declaration_at(
+        &self,
+        window: &heca_grid_ui::widgets::Flex,
+        slot: &str,
+    ) -> Option<&DynamicLayer> {
+        self.declaration_at(slot)
+            .filter(|l| l.is_active(self.is_leaving(window, l.id)))
+    }
+
+    /// **Is the surface seated in `slot` still in charge?** — the liveness half alone, for a caller
+    /// that reads the surface's *declarations* off its own node and only needs to know whether they
+    /// still count (F003/P097/T499).
+    pub(crate) fn slot_is_live(&self, window: &heca_grid_ui::widgets::Flex, slot: &str) -> bool {
+        self.live_declaration_at(window, slot).is_some()
+    }
+
     /// **What this layer is called** — the addressable, owner-prefixed name (`heca.expose`,
     /// `docker.panel`), or `None` for an anonymous one.
     ///
@@ -420,8 +486,6 @@ impl LayerRegistry {
         id: LayerId,
         parent: Option<LayerId>,
         kind: LayerKind,
-        modal: bool,
-        covers_content: bool,
         root: Box<dyn Component>,
         window: &mut heca_grid_ui::widgets::Flex,
     ) {
@@ -430,14 +494,14 @@ impl LayerRegistry {
             parent,
             doomed: false,
             kind,
-            modal,
-            covers_content,
             visible: true,
             name: None,
             node: None,
         });
         crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), root);
-        if modal {
+        // **The surface says whether it takes the keyboard**, so this reads the tree it was just
+        // placed in rather than being told a second time.
+        if captures_keyboard(window, id) {
             self.enter_context(id);
         }
     }
@@ -487,7 +551,9 @@ impl LayerRegistry {
         // coarse mechanism: an exclusive surface makes everything beneath it dormant, while the
         // base context keeps several surfaces live together. A non-modal overlay — a dropdown, a
         // toast — is a child of the context, never one itself.
-        if self.layers.iter().any(|l| l.id == id && l.modal && l.visible) {
+        if captures_keyboard(window, id)
+            && self.layers.iter().any(|l| l.id == id && l.visible)
+        {
             self.enter_context(id);
         }
     }
@@ -515,8 +581,8 @@ impl LayerRegistry {
     /// Is the tiled area covered by any visible layer? The input to `Domain::Overlay`
     /// (F003/P086/T371).
     ///
-    /// **It is `covers_content` alone, and `modal` has nothing to do with it.** The two answer
-    /// different questions: `modal` is "does this take the keyboard", `covers_content` is "may
+    /// **It is `lock` alone, and `modal` has nothing to do with it.** The two answer
+    /// different questions: `modal` is "does this take the keyboard", `lock` is "may
     /// actions still touch the panes". Conflating them left one surface impossible to describe —
     /// the exposé is both a keyboard owner and a *map of the panes*, so acting on the one you can
     /// see in it is the entire point. While `modal` implied coverage the map blocked every act on
@@ -535,7 +601,7 @@ impl LayerRegistry {
     pub(crate) fn content_covered(&self, window: &heca_grid_ui::widgets::Flex) -> bool {
         self.layers
             .iter()
-            .any(|l| l.is_active(self.is_leaving(window, l.id)) && l.covers_content)
+            .any(|l| l.is_active(self.is_leaving(window, l.id)) && lock(window, l.id))
     }
 
     /// One layer by id, whatever its visibility — how a [`HintTarget`](super::HintTarget) finds

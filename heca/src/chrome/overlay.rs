@@ -167,7 +167,7 @@ pub(crate) fn top_modal(state: &AppState) -> Option<OverlayId> {
 }
 
 /// Is the tiled area covered by an overlay? The one input `Domain::Overlay` needs
-/// (F003/P086/T371) — see [`DynamicLayer::covers_content`](crate::chrome::layers::DynamicLayer).
+/// (F003/P086/T371) — see [`DynamicLayer::lock`](crate::chrome::layers::DynamicLayer).
 pub(crate) fn content_covered(state: &AppState) -> bool {
     state.layers.content_covered(&state.window_root)
 }
@@ -201,16 +201,14 @@ pub(crate) fn open_modal(
         &state.action_shortcuts,
         &mut forms,
     );
-    // A modal **covers the tiled area** by definition: it scrims the app and demands a decision,
-    // so nothing may act on the panes behind it (F003/P086/T371). That is the same protection the
-    // router's old blanket "a modal blocks everything" gave, said as a property of the overlay.
+    // **Nothing about the surface is said here.** A `Dialog` locks what is behind it because it is
+    // a dialog, and an open layer holds focus, which IS how it takes the keyboard. Both travel with
+    // the widget, so this path cannot disagree with a dialog raised any other way.
     let parent = state.layers.current();
     state.layers.insert(
         id.0,
         parent,
         LayerKind::OnDemand,
-        true,
-        true,
         root,
         &mut state.window_root,
     );
@@ -228,18 +226,20 @@ pub(crate) fn open_modal(
 /// keeps the node beside the realized tree so a theme reload or a plugin update can re-realize from
 /// the description rather than from whatever the tree has become.
 ///
-/// `parent`, `modal` and `covers_content` are the caller's. `parent` is **what opened this** —
-/// pass `state.layers.current()` for a panel raised from wherever the user is, so it sits above
-/// that surface and goes with it; pass `None` for a surface that belongs to the base context. A
-/// plugin panel over the scrolling area is `covers_content: true` and not modal; a rich dialog is
-/// both. **No occluder is passed** — `active_hint_targets` reads it from the realized tree's
-/// laid-out bounds, which is the invariant this path must not break.
+/// `parent` and `lock` are the caller's. `parent` is **what opened this** — pass
+/// `state.layers.current()` for a panel raised from wherever the user is, so it sits above that
+/// surface and goes with it; pass `None` for a surface that belongs to the base context. A plugin
+/// panel over the scrolling area is `lock: true`.
+///
+/// **Whether it takes the keyboard is not passed**, because it is not a decision anyone makes here:
+/// a surface that wants keys holds focus, so a described overlay that opens takes them by opening,
+/// exactly as a native one does. **No occluder is passed either** — the hint walk reads it from the
+/// realized tree's laid-out bounds, which is the invariant this path must not break.
 pub(crate) fn open_view_layer(
     state: &mut AppState,
     parent: Option<LayerId>,
     kind: LayerKind,
-    modal: bool,
-    covers_content: bool,
+    lock: bool,
     node: ViewNode,
 ) -> LayerId {
     // Reserved before the tree is built, because the tree's intent sink names the layer it lives in
@@ -257,10 +257,15 @@ pub(crate) fn open_view_layer(
     // The identity rule's declarative half, said once per description rather than per realize —
     // this node is realized again on every theme reload (F003/P082/T444).
     super::identity::report_unkeyed_description("view layer", &node);
-    let realized = super::realize(&node, &theme, &view_emit, &mut forms);
+    let mut realized = super::realize(&node, &theme, &view_emit, &mut forms);
+    // **The surface declares what it obscures, on itself.** A described overlay says it the same
+    // way a native one does, so the two authoring paths produce the same tree (F003/P097/T499).
+    // A described overlay declares coverage the same way a native one does. Whether it takes
+    // the keyboard is read from the tree, exactly as for a native one.
+    realized.base_mut().lock = lock;
     let id = state
         .layers
-        .add_view(id, parent, kind, modal, covers_content, node, realized, &mut state.window_root);
+        .add_view(id, parent, kind, node, realized, &mut state.window_root);
     state.needs_redraw = true;
     id
 }
@@ -371,8 +376,6 @@ fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
         id.0,
         parent,
         LayerKind::OnDemand,
-        true,
-        true,
         Box::new(panel),
         &mut state.window_root,
     );

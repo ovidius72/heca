@@ -538,6 +538,10 @@ impl ContextMenu {
         base.style.layout.min_width = Some(Length::Px(MIN_W));
         base.style.layout.max_width = Some(Length::Px(MAX_W));
         base.focused = open;
+        // **A menu locks because it is a menu.** It demands a choice, so nothing behind it is
+        // reachable while it is up — even though its panel is small. Without that, a prefix
+        // sequence deliberately falling through the menu's key path reached the app and ran.
+        base.lock = true;
         base
     }
 

@@ -14,6 +14,10 @@
       "updatedAt": "2026-07-13T15:30:51.379Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:eff48494-6d25-4c97-a1ac-3c57241b7a93",
+          "createdAt": "2026-09-04T19:35:37.558Z"
+        },
+        {
           "sessionId": "mcp-process:92c46b79-0bbe-4f73-ae60-b353614346c1",
           "createdAt": "2026-09-03T19:29:47.689Z"
         },
@@ -66,6 +70,10 @@
       "createdAt": "2026-07-13T15:33:25.808Z",
       "updatedAt": "2026-07-13T15:33:25.808Z",
       "sessionInfo": [
+        {
+          "sessionId": "mcp-process:eff48494-6d25-4c97-a1ac-3c57241b7a93",
+          "createdAt": "2026-09-04T19:35:37.558Z"
+        },
         {
           "sessionId": "mcp-process:92c46b79-0bbe-4f73-ae60-b353614346c1",
           "createdAt": "2026-09-03T19:29:47.689Z"

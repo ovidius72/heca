@@ -852,6 +852,40 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
+    /// **Lock what is behind this surface** — refuse actions on it while this is up.
+    ///
+    /// ```ignore
+    /// Overlay::new().lock(true).child(my_panel)
+    /// ```
+    ///
+    /// A dialog locks; a map of the working area does not, because picking one of the things behind
+    /// it is the point. **Not about pixels** — the map covers every pixel it draws over and still
+    /// passes `false` — and not [`overlay_occludes`](crate::Component::overlay_occludes), which is
+    /// the geometric question the pointer asks.
+    ///
+    /// Widgets that know what they are set it themselves; this is for a raw
+    /// [`Overlay`](crate::widgets::Overlay). See [`Base::lock`](crate::Base::lock).
+    fn lock(mut self, yes: bool) -> Self {
+        self.base_mut().lock = yes;
+        self
+    }
+
+    /// **Override whether this surface takes the keyboard while it is up.**
+    ///
+    /// ```ignore
+    /// Overlay::new().child(my_panel)                      // derived: open == holds focus == takes keys
+    /// my_surface.captures_keyboard(true)                  // say so explicitly
+    /// ```
+    ///
+    /// **Optional, and you almost never want it.** Left alone, the answer is read from the tree with
+    /// the same rule the event walk uses — a surface that wants keys holds focus, and every layer
+    /// widget binds its open signal to it. Reach for this only when a surface takes the keyboard in
+    /// a way the framework cannot see. See [`Base::captures_keyboard`](crate::Base::captures_keyboard).
+    fn captures_keyboard(mut self, yes: bool) -> Self {
+        self.base_mut().captures_keyboard = Some(yes);
+        self
+    }
+
     /// **What this widget says on hover.**
     ///
     /// ```ignore
