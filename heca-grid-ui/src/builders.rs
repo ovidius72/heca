@@ -974,6 +974,93 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
+    /// **Take this widget out of the layout entirely** — CSS `display: none`. Its neighbours close
+    /// up, and it is neither painted nor Tab-focused.
+    ///
+    /// ```ignore
+    /// Row::new().hidden(collapsed)
+    /// ```
+    ///
+    /// The field was always here and every widget that folds a subtree writes it
+    /// (`ItemGroup`, `DockFrame`, `ChromeRegion`) — but only from *inside itself*, because there
+    /// was no builder, so a caller wanting the same thing had to reach for the
+    /// [`Visibility`](crate::widgets::Visibility) wrapper. Its described twin `"hidden"` has been
+    /// carried by the generic style merge all along, which left the two authoring paths unequal.
+    ///
+    /// **Its twin is [`visible`](ComponentExt::visible)** — that one keeps the box.
+    #[heca_grid_ui_macros::prop]
+    fn hidden(mut self, hidden: bool) -> Self {
+        self.base_mut().set_hidden(hidden);
+        self
+    }
+
+    /// **Whether this widget's ink is drawn**, keeping its box either way — CSS `visibility`.
+    ///
+    /// ```ignore
+    /// StatusDot::error().visible(false)   // the row's layout does not move when it appears
+    /// ```
+    ///
+    /// **The other one is [`hidden`](crate::style::Layout::hidden)** — CSS `display: none`, which
+    /// takes the widget out of the layout so its neighbours close up. Reach for that when the space
+    /// should collapse, and for this when it must not: a row of four status slots showing one at a
+    /// time stays still only if the three quiet ones keep their boxes.
+    ///
+    /// `Base::visible` has always been on every widget; this is the builder that was missing, so
+    /// setting it meant wrapping in a [`Visibility`](crate::widgets::Visibility) — which cannot be
+    /// done to a widget a typed container holds, and which a description cannot express at all.
+    /// The wrapper stays for a region that is not a widget you can put a builder on.
+    #[heca_grid_ui_macros::prop]
+    fn visible(self, visible: bool) -> Self {
+        crate::reactive::SignalUpdate::set(&self.base().visible, visible);
+        self
+    }
+
+    /// **Where this widget's hint letter sits over it** (default
+    /// [`TopCenter`](crate::widgets::HintPlacement::TopCenter)).
+    ///
+    /// ```ignore
+    /// Row::new().hint_placement(HintPlacement::CenterRight)
+    /// ```
+    ///
+    /// [`Base::hint_style`](crate::Base::hint_style) has always been universal — every widget that
+    /// wears a letter has one — but the only way to *set* it was to wrap the widget in a
+    /// [`KeyHint`](crate::widgets::KeyHint). That is the wrapper rule again: it puts the knowledge
+    /// in every caller's discipline, and it cannot be done at all to a widget a typed container
+    /// holds, because wrapping it changes what it is — the same defect that made the tooltip a
+    /// property. One builder, on the widget.
+    ///
+    /// The wrapper writes these same four fields, so there is one slot and one rule rather than two
+    /// that can drift.
+    #[heca_grid_ui_macros::prop]
+    fn hint_placement(mut self, placement: crate::widgets::HintPlacement) -> Self {
+        self.base_mut().hint_style.placement = placement;
+        self
+    }
+
+    /// The keycap's font size in logical px. Unset = derived from the widget's resolved font, which
+    /// is what keeps a letter proportional to the thing it captions.
+    #[heca_grid_ui_macros::prop]
+    fn hint_size(mut self, px: f32) -> Self {
+        self.base_mut().hint_style.size = Some(px);
+        self
+    }
+
+    /// The keycap's colour, glow included. Unset = the theme's `accent`, so a letter follows a
+    /// theme change with nothing rewritten.
+    #[heca_grid_ui_macros::prop]
+    fn hint_color(mut self, color: Color) -> Self {
+        self.base_mut().hint_style.color = Some(color);
+        self
+    }
+
+    /// A vertical nudge applied **after** placement — positive moves the cap down. What drops a
+    /// [`TopRight`](crate::widgets::HintPlacement::TopRight) cap onto a dock's header line.
+    #[heca_grid_ui_macros::prop]
+    fn hint_offset_y(mut self, px: f64) -> Self {
+        self.base_mut().hint_style.offset_y = px;
+        self
+    }
+
     fn on_action(mut self, name: impl Into<String>, f: impl Fn() + 'static) -> Self {
         self.base_mut().actions.push(crate::hint::DeclaredAction {
             name: name.into(),

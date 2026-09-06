@@ -57,6 +57,29 @@ if [ -z "$pkgs" ]; then
 fi
 
 args=(); while read -r p; do args+=(-p "$p"); done <<< "$pkgs"
+
+# `--all-targets` covers lib, bins, tests, benches and examples -- but NOT doctests. So for years
+# this gate ran none of them: every `///` example in the workspace was unverified, including the
+# runnable native + declarative examples AGENTS.md makes mandatory for every widget. Found when a
+# broken one passed this gate four times in a row (F003/P097/T501).
+#
+# Doctests need their own invocation, so `test` is two runs and the exit code is the worse of them.
+if [ "$CMD" = "test" ]; then
+  echo "==> cargo test ${args[*]} --all-targets"
+  echo "==> cargo test ${args[*]} --doc"
+  [ -n "${DRY_RUN:-}" ] && exit 0
+  cargo test "${args[@]}" --all-targets; targets=$?
+  # `--doc` is refused outright when no selected crate is a library (a bins-only selection), which
+  # is not a failure -- there is simply nothing to run.
+  doc_out=$(cargo test "${args[@]}" --doc 2>&1); doc=$?
+  printf '%s\n' "$doc_out"
+  if [ $doc -ne 0 ] && grep -q "no library targets found" <<< "$doc_out"; then
+    doc=0
+  fi
+  [ $targets -ne 0 ] && exit $targets
+  exit $doc
+fi
+
 echo "==> cargo $CMD ${args[*]} --all-targets"
 [ -n "${DRY_RUN:-}" ] && exit 0
 exec cargo "$CMD" "${args[@]}" --all-targets

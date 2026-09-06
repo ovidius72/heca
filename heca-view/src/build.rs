@@ -256,6 +256,100 @@ pub trait Style: Sized {
         self.prop("key", PropValue::Text(key.into()))
     }
 
+    /// **What this node says on hover.**
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::ViewGlyph;
+    ///
+    /// let close = Button::new().icon(ViewGlyph::Minus).tooltip("Close the pane");
+    /// ```
+    ///
+    /// Universal, like [`key`](Style::key), because `ComponentExt::tooltip` is on every widget
+    /// natively — so a described row says it the same way a native one does, and the framework owns
+    /// the rest: the reveal delay is timed off the hover clock the pointer router already keeps,
+    /// and the bubble is drawn in the one place every widget passes through.
+    ///
+    /// ⚠️ **There is no `Tooltip` widget kind, and there must not be one.** The wrapper it used to
+    /// be survives only for regions that are not widgets you can put a builder on. A plugin made to
+    /// wrap and anchor its own bubble is writing the second path by hand (⭐⭐ RULE ZERO).
+    fn tooltip(self, text: impl Into<String>) -> Self {
+        self.prop("tooltip", PropValue::Text(text.into()))
+    }
+
+    /// Which side the tooltip anchors to (default [`Top`](crate::ViewTooltipSide::Top)).
+    ///
+    /// A preference: the framework flips it when there is no room on that side. Says nothing on a
+    /// node that declared no [`tooltip`](Style::tooltip) — the side is part of the tip, not a style
+    /// of its own.
+    fn tooltip_side(self, side: crate::ViewTooltipSide) -> Self {
+        self.prop("tooltip_side", side)
+    }
+
+    /// Seconds the pointer must rest before the tooltip appears (default `0.5`).
+    ///
+    /// Says nothing on a node that declared no [`tooltip`](Style::tooltip).
+    fn tooltip_delay(self, seconds: f32) -> Self {
+        self.prop("tooltip_delay", seconds)
+    }
+
+    /// **Whether this node's ink is drawn**, keeping its box either way — CSS `visibility`.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    ///
+    /// // The row does not shift when this dot appears.
+    /// let quiet = StatusDot::new().visible(false);
+    /// ```
+    ///
+    /// **The other one is `hidden`** — CSS `display: none`, a [`Style`] property like any other,
+    /// which takes the node out of the layout so its neighbours close up. This keeps the box.
+    ///
+    /// Between them there is nothing left for a `Visibility` wrapper to do in a described tree, and
+    /// so there is no `WidgetKind` for one.
+    fn visible(self, visible: bool) -> Self {
+        self.prop("visible", visible)
+    }
+
+    /// **Where this node's hint letter sits over it** (default
+    /// [`TopCenter`](crate::ViewHintPlacement::TopCenter)).
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::ViewHintPlacement;
+    ///
+    /// // A wide list row: the cap on the right keeps the row's own label readable.
+    /// let row = Row::new().hint_placement(ViewHintPlacement::CenterRight);
+    /// ```
+    ///
+    /// Universal, like [`tooltip`](Style::tooltip), because the slot it writes is on every widget.
+    /// **Being pickable is not what this turns on** — anything actionable already wears a letter
+    /// with nothing declared; this only says where the letter goes.
+    fn hint_placement(self, placement: crate::ViewHintPlacement) -> Self {
+        self.prop("hint_placement", placement)
+    }
+
+    /// The keycap's font size in logical px. Unset = derived from the node's resolved font, which
+    /// is what keeps a letter proportional to the thing it captions.
+    fn hint_size(self, px: f32) -> Self {
+        self.prop("hint_size", px)
+    }
+
+    /// The keycap's colour **by theme token name** (`"accent"`, `"danger"`), glow included. Unset =
+    /// the theme's `accent`.
+    ///
+    /// A token, not a hex literal, for the same reason every other colour here is one: a letter
+    /// should follow a theme change with nothing rewritten.
+    fn hint_color(self, colour: &str) -> Self {
+        self.prop("hint_color", PropValue::Color(colour.to_string()))
+    }
+
+    /// A vertical nudge applied **after** placement — positive moves the cap down. What drops a
+    /// [`TopRight`](crate::ViewHintPlacement::TopRight) cap onto a dock's header line.
+    fn hint_offset_y(self, px: f64) -> Self {
+        self.prop("hint_offset_y", px)
+    }
+
     /// Keep this node **out of the picker**, however actionable it is. Default `true`.
     ///
     /// The declarative spelling of `ComponentExt::hintable`. Being pickable is not opt-in — a node
@@ -556,6 +650,7 @@ impl Parent for MarkerGroup {}
 impl Parent for Tabs {}
 impl Parent for Choice {}
 impl Parent for KeyHintGroup {}
+impl Parent for ButtonGroup {}
 
 // ── Leaves ────────────────────────────────────────────────────────────────────────────────
 builder_text!(
@@ -609,6 +704,37 @@ builder!(
 builder!(
     /// A value meter.
     Gauge => Gauge
+);
+builder!(
+    /// An indeterminate loading ring — *something is happening, and nobody knows for how long*.
+    ///
+    /// It takes no properties of its own: it animates itself off the frame clock, and its diameter
+    /// is `width`/`height` like any other node's. Reach for [`Progress`] the moment you can say how
+    /// far along you are.
+    Spinner => Spinner
+);
+builder!(
+    /// A determinate progress bar, `0.0..=1.0`.
+    ///
+    /// The fill **eases** toward whatever value it is given, so a tree re-sent with a new one
+    /// animates rather than jumping — with nothing declared.
+    Progress => Progress
+);
+builder!(
+    /// **A row of actions that gets out of its own way.** Its children are [`Button`]s.
+    ///
+    /// As the room runs out it shows icons instead of words, and whatever still does not fit
+    /// collapses into a ⋮ menu running the same actions — none of which you write. Give each button
+    /// **both** `text` and `icon`: the text is its menu row and its words on hover, the icon is what
+    /// it shows once there is no room for words.
+    ButtonGroup => ButtonGroup
+);
+builder!(
+    /// A **keyboard glyph** from the embedded Nerd Font — ⇧ ⌃ ⌥ ⌘, Enter, Escape, the arrows.
+    ///
+    /// Its own vocabulary ([`ViewNfGlyph`](crate::ViewNfGlyph)), because it is its own font. Draw a
+    /// shortcut with it rather than typing a character your user's font may not carry.
+    NfIcon => NfIcon
 );
 builder!(
     /// A message banner.
@@ -697,6 +823,10 @@ with_event!(
     Icon { on_hint => "hint" }
     StatusDot { on_hint => "hint" }
     Gauge { on_hint => "hint" }
+    Spinner { on_hint => "hint" }
+    NfIcon { on_hint => "hint" }
+    ButtonGroup { on_hint => "hint" }
+    Progress { on_hint => "hint" }
     Alert { on_hint => "hint" }
     Separator { on_hint => "hint" }
 );
@@ -915,6 +1045,42 @@ impl Checkbox {
 
 impl Gauge {
     /// The value, 0..=1.
+    pub fn value(self, value: f32) -> Self {
+        self.prop("value", value)
+    }
+}
+
+impl ButtonGroup {
+    /// How wide each action is before the row starts collapsing (default
+    /// [`IconOnly`](crate::ViewDisplay::IconOnly)).
+    pub fn display(self, display: crate::ViewDisplay) -> Self {
+        self.prop("display", display)
+    }
+    /// The look every action in the group takes, so it is said once rather than per button.
+    pub fn variant(self, variant: ViewVariant) -> Self {
+        self.prop("variant", variant)
+    }
+}
+
+impl NfIcon {
+    /// Which key this glyph is.
+    pub fn glyph(self, glyph: crate::ViewNfGlyph) -> Self {
+        self.prop("glyph", glyph)
+    }
+    /// Explicit glyph size in logical px. Unset = the inherited font size, which is what keeps a
+    /// key glyph the size of the text beside it.
+    pub fn size(self, px: f32) -> Self {
+        self.prop("size", px)
+    }
+    /// Glyph colour **by theme token name**. Unset = the enclosing control's content colour.
+    pub fn color(self, colour: &str) -> Self {
+        self.prop("color", PropValue::Color(colour.to_string()))
+    }
+}
+
+impl Progress {
+    /// How far along, `0.0..=1.0`. Out-of-range values are clamped rather than refused, because a
+    /// description is untrusted input and a bar that renders nothing is worse than a full one.
     pub fn value(self, value: f32) -> Self {
         self.prop("value", value)
     }

@@ -88,6 +88,17 @@ reinventing something, and it will be rejected.
 offset, or an event-forwarding `match` inside a widget or the app. Every one of those is some
 existing widget's job. Stop and answer the three questions.
 
+### 0a. ⛔ `key` IS OPTIONAL. A WIDGET NEVER HAS TO BE NAMED
+
+**Never gate a capability on `Base::key` being present**, and never add `.key("…")` at a call site so
+that something *else* works. A widget that declares none still has an identity, derived from its
+content. Any capability needing to know *which* widget takes the declared key when there is one and
+the derived identity when there is not — one function, read by every side.
+
+**Full rule, with the two capabilities that shipped broken this way and the code to copy:**
+[`docs/widgets.md` → "`key` is OPTIONAL — never require one, and never gate on one"](docs/widgets.md).
+It lives there because it is a rule for **anyone building on the library**, not only for agents.
+
 ### 0b. WIDGET vs COMPONENT — where a thing lives, and how it is built
 
 **Widget** — `heca-grid-ui`. Primitive, generic, self-contained, complete on its own: `Input`,

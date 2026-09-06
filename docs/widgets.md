@@ -477,6 +477,42 @@ So it comes to the cursor once, and then leaves you alone.
 see — the keyboard's case, where the cursor can move off-screen. What the mouse is on is visible by
 definition, and scrolling it moves it out from under the mouse that asked.
 
+#### `CardGrid` — described
+
+A picker surface — a map, a chooser, a palette of tiles — is a `CardGrid`. **Each child is one card:
+any kind, any subtree.** There is no card type to conform to.
+
+```rust
+ViewNode::new(WidgetKind::CardGrid)
+    .on("activate", Intent::new("docker.open"))     // the chosen card's key arrives as `key`
+    .on("move", Intent::new("docker.preview"))      // optional: every cursor move
+    .on("dismiss", Intent::new("docker.close"))     // optional: Escape
+    .child(
+        ViewNode::new(WidgetKind::Surface)
+            .key("nginx")                            // optional — see the `key` rule above
+            .child(ViewNode::new(WidgetKind::Icon).prop("icon", "container"))
+            .child(ViewNode::new(WidgetKind::Label).text("nginx")),
+    )
+```
+
+Arrow keys move the cursor, hovering moves it, Enter activates, Escape dismisses — none of it
+declared. **Each child is its own column, laid out left to right**, so ←/→ walk the cards in the
+order you see them; a grid of several rows is built natively, with one `row(..)` call per row.
+
+The card's own `key` is what activation hands back, so a plugin gets its own vocabulary (`"nginx"`,
+never an index). **A card that declares none is named by what it reads as** — the same
+accessible-name algorithm the rest of the library uses (`Component::text_summary`), so an
+`Icon` + `Label("nginx")` card comes back as `"nginx"` with nothing wired. Two cards that read the
+same are still two cards, indexed exactly as anonymous widgets are elsewhere: `nginx`, `nginx[1]`.
+Declare a `key` when the name must outlive a change of wording — a derived name moves when the
+text does.
+
+⚠️ **The lit card is not something a description wires.** Natively a caller hands the grid each
+card's own state signal (`GridCell::new(key, card.nav_state())`), which a description cannot express
+— it has no way to name another node's signal. The realizer builds **both** the card and the cell,
+so it makes that connection itself. That is why a `CardGrid` can be described while a `ScrollBar`
+cannot: there, the signal genuinely comes from outside, and a described one would be a dead control.
+
 A list whose cursor only the keyboard moves needs nothing. One whose cursor **also follows the
 mouse** gates the request on a signal: [`CardGrid`](#cardgrid) publishes `reveal_state()` — true
 while the keyboard moved the cursor, false while the mouse did — and each card takes it:
@@ -726,6 +762,30 @@ nobody and unable to fall out of step with the row it encloses.
 > make a region turn up in `collect_keys` as a steppable row. That held while identity and role
 > were the same declaration. Once every node is keyed, "region" is a question you *ask* of the tree
 > rather than something a widget asserts.
+
+#### `key` is OPTIONAL — never require one, and never gate on one
+
+**A widget never has to be named.** If you are building something that needs to know *which* widget
+— a drag, a picker, a grid's cursor, a menu — take the declared `key` when there is one and the
+**derived identity** when there is not. One function, read by every side, so the two can never
+disagree (`drag::resolve::drag_identity` is the worked example).
+
+```rust
+// ✅ works on any widget, named or not
+let id = drag_identity(node);
+
+// ❌ silently does nothing on every widget nobody had reason to name
+let Some(id) = node.base().key.clone() else { return };
+```
+
+**Two capabilities have shipped broken this way.** `.draggable()` read `key` directly, so dragging
+did nothing on unnamed widgets — with no error, and forcing an author to learn an internal rule
+before anything worked. A described card grid keyed off its cards' declared keys, so an unnamed card
+was never reported.
+
+**The tell:** you are adding `.key("…")` at a call site so that something *else* works, or reading a
+key and treating `None` as "nothing to do". Both mean the identity rule belongs one level down, in
+the thing that needs it — not in every caller's head.
 
 #### Everything else gets an identity anyway
 
@@ -2530,8 +2590,43 @@ is gone and nothing was catching it. The row divides the space instead.
 
 #### Declarative (`ViewNode`)
 
-`display` and `variant` are ordinary props. `child` is **host-only**: a description adds actions
-through `children`, like every other container.
+`WidgetKind::ButtonGroup`. `display` and `variant` are ordinary props; `child` is **host-only**,
+because a description adds actions through `children` like every other container.
+
+```rust
+use heca_view::build::*;
+use heca_view::{Intent, ViewDisplay, ViewGlyph};
+
+ButtonGroup::new()
+    .display(ViewDisplay::IconOnly)
+    .child(
+        Button::new()
+            .text("Close")                      // its menu row, and its words on hover
+            .icon(ViewGlyph::Close)             // what it shows once there is no room for words
+            .on_press(Intent::new("docker.stop").arg("id", id)),
+    )
+    .child(
+        Button::new()
+            .text("Split")
+            .icon(ViewGlyph::SquareSplitHorizontal)
+            .on_press(Intent::new("pane.split").arg("id", id)),
+    )
+```
+
+| prop | type | default | what it does |
+| --- | --- | --- | --- |
+| `display` | `"auto"` \| `"icon_only"` \| `"full"` | `"icon_only"` | how wide each action is before the row starts collapsing. `"auto"` is **not settled** — see the warning above. |
+| `variant` | the shared variant vocabulary | *(each button's own)* | the look every action takes, said once. A button that named its own variant keeps it. |
+
+**Give every action both `text` and `icon`.** The group reads a label, a glyph and a click out of
+each child to build the ⋮ menu, so an action missing its text produces a blank menu row that does
+nothing. **Children that are not buttons are skipped**, not wrapped: there is nothing in a `Label`
+for the group to read.
+
+The actions a described group holds are built by the same path a standalone described button is, so
+a grouped action is a real button — press intent, composed children and all. Each is pickable by
+`prefix+/` in its own right, and so is the ⋮, which is how a collapsed action stays reachable from
+the keyboard.
 
 ### IconButton
 
@@ -3244,7 +3339,28 @@ generated surface — there is no list of names in `realize`.
 Indeterminate loading ring (dots with a rotating brightness sweep). Animated — return its
 `tick` to keep requesting frames.
 
+*Something is happening and nobody knows for how long.* The moment you can say **how far along**,
+reach for [`ProgressBar`](#progressbar) instead — a spinner is what you show when you cannot.
+
 - **Construct**: `Spinner::new()`.
+- **Builders**: none of its own. Its diameter is `width`/`height` like any other widget's
+  (default 28px square), and it animates itself off the frame clock.
+
+**Native:**
+
+```rust
+Spinner::new()                              // the default 28px ring
+Spinner::new().width(Length::Px(16.0)).height(Length::Px(16.0))   // a smaller one
+```
+
+**Declarative (`ViewNode`)** — `WidgetKind::Spinner`, and it reads no props of its own:
+
+```rust
+use heca_view::build::*;
+
+Spinner::new()                              // the default ring
+Spinner::new().width(16.0).height(16.0)     // sized like anything else
+```
 
 ### Alert
 
@@ -3400,11 +3516,31 @@ Determinate progress track whose accent fill eases toward a value via `tick`.
 - **Builders**: `.value(f32)` (initial, clamped 0–1).
 - **Live update**: `.set(f32)` (animates), `.state() -> Signal<f32>`.
 
+**Native:**
+
 ```rust
 let bar = ProgressBar::new().value(0.4);
 let v = bar.state();           // bind reactively, or:
 bar.set(0.8);                  // animate to 80%
 ```
+
+**Declarative (`ViewNode`)** — `WidgetKind::Progress`:
+
+```rust
+use heca_view::build::*;
+
+Progress::new().value(0.4)
+```
+
+| prop | type | default | what it does |
+| --- | --- | --- | --- |
+| `value` | number `0.0..=1.0` | `0.0` | how far along. Out-of-range values are **clamped**, not refused — a description is untrusted input, and a bar that renders nothing is worse than a full one. |
+
+**The easing is the widget's, not the caller's.** A described tree re-sent with a new `value`
+animates toward it rather than jumping, with nothing declared — which is why there is no
+"animate" property to set. There is no declarative `.set(..)` or `.state()`: both are live host
+signals, and a description has no way to name one (the same reason a
+[`ScrollBar`](#scrollbar) is host-only). A described bar changes by being re-described.
 
 ### Gauge
 
@@ -3516,6 +3652,41 @@ glyphs out from under the UI.
   the plain `paint_keycap` would be shaped in the **UI** face, which does not have it: a silent
   empty box. That is why the two are separate entry points.
 
+**Native:**
+
+```rust
+NfIcon::new(NfGlyph::Command).size(14.0);
+NfIcon::new(NfGlyph::Shift).color(theme.colors.accent);
+// Render the whole set (what the showcase gallery does):
+for &g in NfGlyph::ALL { /* NfIcon::new(g) … */ }
+```
+
+**Declarative (`ViewNode`)** — `WidgetKind::NfIcon`, with its **own** glyph vocabulary
+(`ViewNfGlyph`) because it is its own font:
+
+```rust
+use heca_view::build::*;
+use heca_view::ViewNfGlyph;
+
+// A plugin spelling out its own shortcut, the way heca's key hints do
+HStack::new()
+    .gap(2.0)
+    .child(NfIcon::new().glyph(ViewNfGlyph::Command).size(14.0))
+    .child(Label::new("K"))
+```
+
+| prop | type | default | what it does |
+| --- | --- | --- | --- |
+| `glyph` | key name — `"shift"`, `"control"`, `"option"`, `"command"`, `"caps_lock"`, `"enter"`, `"escape"`, `"tab"`, `"space"`, `"backspace"`, `"arrow_up"`, `"arrow_down"`, `"arrow_left"`, `"arrow_right"` | *(required)* | which key. **An unknown or missing name renders nothing**, rather than a different key — a ⌘ where the author asked for ⇧ reads as correct, which is worse than a gap. |
+| `size` | number | *(inherited font size)* | glyph size in logical px. |
+| `color` | colour **token name** | *(the enclosing control's content colour)* | glyph tint, so it follows a theme change. |
+
+The two vocabularies are held to their libraries in both directions by the same guard, which also
+takes one name of each through to a painted glyph — matching names is not the same as a name being
+understood, and the codepoints behind them are a separate mapping that a name check cannot see.
+
+**Icon examples, for comparison:**
+
 ```rust
 Icon::new(Glyph::GitBranch).color(theme.warning).size(18.0);
 // A standalone glyph that should read as lit:
@@ -3560,6 +3731,38 @@ cleanly when absent.
 let error = Visibility::new(StatusDot::error(), false);
 error.visible_signal().set(true);
 ```
+
+> ⚠️ **Reach for the wrapper only when there is no widget to declare on.** Both ways of not showing
+> something are properties of **every** widget, and the wrapper cannot be put around a widget a
+> typed container holds. Same rule as [`Tooltip`](#tooltip) and [`KeyHint`](#keyhint).
+
+#### The two ways of not showing something
+
+They are CSS's two, and they are **not** interchangeable:
+
+| | property | what happens | reach for it when |
+| --- | --- | --- | --- |
+| `display: none` | `hidden` | out of the layout — **neighbours close up** | the space should collapse: an optional metadata row, a folded group |
+| `visibility: hidden` | `visible` | ink gone, **box kept** | the space must not move: one of four status slots showing at a time |
+
+```rust
+// Native — one builder on any widget, no wrapper
+StatusDot::error().visible(false)     // keeps its slot; the row does not shift when it appears
+Row::new().hidden(true)               // gone from the layout entirely
+```
+
+```rust
+// Described — the same two, on any node
+use heca_view::build::*;
+
+StatusDot::new().visible(false)
+Row::new().hidden(true)
+```
+
+Between them there is nothing left for a `Visibility` **kind** to do, which is why there is none.
+Note the asymmetry that used to exist and no longer does: `hidden` is a layout property and was
+always describable, while `visible` is a signal on the base and was reachable from **neither**
+authoring path — so the "keep the box" half silently did not exist for a described tree.
 
 ### ItemGroup
 
@@ -3813,6 +4016,13 @@ with no downcasting.
   `.offset_y(px)` (nudge the cap down after placement — e.g. drop a `TopCenter` cap onto a
   tall target's header row). The wrapper is **transparent to a stretching parent**: a wide
   child row fills its column instead of shrinking to content width.
+
+  > ⚠️ **Those four are on every widget too**, as `.hint_placement`, `.hint_size`, `.hint_color`
+  > and `.hint_offset_y` — the slot they write (`Base::hint_style`) was always universal, and now
+  > the way to set it is. **Prefer them; wrap only when there is no widget to declare on.** The
+  > wrapper's four delegate to them, so there is one writer per field rather than two that drift.
+  > This is the same move the tooltip made, for the same reason: wrapping is impossible on a widget
+  > a typed container holds, so a grouped button could not move its own letter at all.
   **`on_hint` is no longer here** — it is
   [`ComponentExt::on_hint`](#componentext--what-every-widget-gets), on every widget, so the two
   facts about a target (who it is, and what picking it does) stop living on two different nodes.
@@ -3833,19 +4043,32 @@ let cell = KeyHint::new(RailCell::new(icon).on_activate(/* … */))
 ```
 
 **Declarative** — there is no `KeyHint` node, because a description does not draw the letter: the
-host does. A described node says only *what a pick does*, and `realize` writes it into the same
-`Base::hint` slot:
+host does. A described node says *what a pick does* and *where the letter goes*, and `realize` writes
+both into the same slots a native widget uses:
 
 ```rust
 use heca_view::build::*;
+use heca_view::ViewHintPlacement;
 
 Row::new()
     .on_press(Intent::new("docker.select").arg("id", id))   // click: go there
     .on_hint(Intent::new("docker.reveal").arg("id", id))    // pick: look at it, stay
+    .hint_placement(ViewHintPlacement::CenterRight)         // a wide row: cap on the right
     .child(Label::new(name))
 ```
 
 Bind neither and the node is not a pick target; bind only `press` and a pick does what a click does.
+
+| prop | type | default | what it does |
+| --- | --- | --- | --- |
+| `hint_placement` | `"top_center"` \| `"center"` \| `"center_right"` \| `"top_right"` \| `"top_left"` | `"top_center"` | where the cap sits over the node. |
+| `hint_size` | number | *(from the font)* | cap font size in logical px. An integer is accepted as well as a fraction. |
+| `hint_color` | colour **token name** | `accent` | cap tint, glow included. A token, never a hex literal, so it follows a theme change. |
+| `hint_offset_y` | number | `0` | nudge applied after placement; positive moves the cap down. |
+
+**Placement does not make a node pickable.** Anything actionable already wears a letter with nothing
+declared — these only say where it goes, so a node with nothing to act on styles a letter it will
+never show.
 
 #### Which widgets get a letter
 
@@ -4147,6 +4370,10 @@ has, so **no widget opts in and no host paints on their behalf**.
 | `.tooltip_side(TooltipSide)` | which side to prefer (`Top` default). Flipped automatically when there is no room, so it is a preference, not a placement. No-op with no tooltip declared. |
 | `.tooltip_delay(seconds)` | how long the pointer must rest (default `0.5`). No-op with no tooltip declared. |
 
+All four are on `ComponentExt`, so they apply to **every** widget — and the first, third and fourth
+have the described spellings below. `tooltip_signal` is native-only, because a signal is a live host
+value a description cannot name.
+
 > ⚠️ **The bubble is drawn by `paint_child`, not by the widget's own `paint`.** Anything that paints
 > a tree with a bare `.paint(cx)` shows the widget and none of the three things the framework draws
 > over it — no tooltip, no hint letter, no drag feedback. Hosts and tests must go through
@@ -4200,10 +4427,35 @@ Tooltip::new(
 ).side(TooltipSide::Bottom);
 ```
 
-**Declarative (`ViewNode`).** Host-only — there is no `WidgetKind::Tooltip`. A tooltip wraps a
-widget in the *retained* tree and is revealed by hover state the host owns; in the heca app an
-action button's tip is derived from its `WmAction` centrally (next section), never authored per
-call site.
+**Declarative (`ViewNode`).** There is no `WidgetKind::Tooltip`, and there must not be one — for the
+same reason the wrapper stopped being the native answer. A tooltip is a **declaration on any node**,
+exactly as a [menu](#menus--menuitem-menu-contextmenu) is:
+
+```rust
+ViewNode::new(WidgetKind::Button)
+    .text("Close")
+    .prop("tooltip", PropValue::Text("Close the pane".into()))
+    .prop("tooltip_side", PropValue::Text("bottom".into()))  // optional, default "top"
+    .prop("tooltip_delay", PropValue::Float(0.25))           // optional, default 0.5
+```
+
+```rust
+// The same, through the typed SDK — universal, like `.key(..)`
+Button::new("Close").tooltip("Close the pane").tooltip_side(ViewTooltipSide::Bottom)
+```
+
+| prop | type | default | what it does |
+| --- | --- | --- | --- |
+| `tooltip` | text | *(none)* | what the node says on hover. Absent = it says nothing. |
+| `tooltip_side` | `"top"` \| `"bottom"` \| `"left"` \| `"right"` | `"top"` | which side to prefer; flipped when there is no room. Ignored with no `tooltip`. |
+| `tooltip_delay` | number | `0.5` | seconds the pointer must rest. An integer is accepted as well as a fraction. Ignored with no `tooltip`. |
+
+There is no declarative `tooltip_signal`: a signal is a live host value, and a description has no way
+to name one — the same reason a `ScrollBar` is host-only. A described tooltip whose words change is
+a re-described node.
+
+In the heca app an action button's tip is derived from its `WmAction` centrally (next section),
+never authored per call site.
 
 > The raw `Tooltip::new(button, "Close")` above hardcodes the text. **In the heca app,
 > do not do this for an action button** — see the next section: the tip (and its
@@ -4815,6 +5067,33 @@ let open = palette.open_signal();
 > Ctrl+J/K, the host must also broadcast `Event::ModifiersChanged` to the tree (most hosts do).
 
 ### Menus — `MenuItem`, `Menu`, `ContextMenu`
+
+**A menu is a DECLARATION, not something you place.** Both authoring paths say it the same way — one
+line on the thing that opens it — and neither builds, sizes or anchors a panel. The framework takes
+the anchor from whatever triggered it, dismisses it, and gives it the keyboard.
+
+```rust
+// Native — one builder on ANY widget, like `key`
+row.context_menu(my_menu)
+```
+
+```rust
+// Described — one field on ANY node, entries carrying Intents
+ViewNode::new(WidgetKind::Row)
+    .menu([DropdownItem::with_intent("stop", "Stop", Intent::new("docker.stop").arg("id", id))])
+```
+
+Each entry is a `DropdownItem { id, label, intent, danger, enabled }`: `id` is its visual identity
+(the icon and label resolve from the action catalog), `intent` is what it actually runs. They are
+separate on purpose — a "Close pane" entry shows the `close` icon while dispatching
+`close_pane_by_id` with the row's pane. Every choice goes through the one dispatch door, so the
+interaction policy and the confirm gate apply exactly as they would for a keypress, and a plugin's
+entry runs **its own** registered action rather than only heca's.
+
+⚠️ **Do not add a `ContextMenu` widget kind.** A menu a plugin has to assemble out of parts is the
+second path, and it will get the anchor, the dismissal and the keyboard half only approximately
+right. Nothing declared means nothing opens; bubbling stops at the nearest declaration.
+
 
 **Menus, split by what each part actually knows.**
 

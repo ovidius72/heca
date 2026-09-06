@@ -113,6 +113,35 @@ pub enum WidgetKind {
     Item,
     /// A thin themed divider line.
     Separator,
+    /// **Something is happening and nobody knows for how long** — an indeterminate ring
+    /// (F003/P097/T501).
+    ///
+    /// It takes no properties of its own: it animates itself off the frame clock, and its diameter
+    /// is `width`/`height` like any other node's. Reach for [`Progress`](WidgetKind::Progress)
+    /// instead the moment you can say *how far along* — a spinner is what you show when you cannot.
+    Spinner,
+    /// **How far along something is**, `0.0..=1.0` in the `value` prop (F003/P097/T501).
+    ///
+    /// The fill eases toward whatever it is given, so a described tree re-sent with a new `value`
+    /// animates rather than jumping, with nothing declared.
+    Progress,
+    /// **A keyboard glyph** from the embedded Nerd Font — ⇧ ⌃ ⌥ ⌘, Enter, Escape, the arrows
+    /// (F003/P097/T501).
+    ///
+    /// Its own `glyph` vocabulary ([`ViewNfGlyph`]), because it is its own font. It is what lets a
+    /// plugin draw a shortcut the way heca's own key hints do, rather than typing a character its
+    /// user's font may not carry.
+    NfIcon,
+    /// **A row of actions that gets out of its own way** (F003/P097/T501).
+    ///
+    /// Its children are [`Button`](WidgetKind::Button) nodes. As the room runs out it shows icons
+    /// instead of words, and whatever still does not fit collapses into a ⋮ menu that runs the same
+    /// actions — none of which an author writes. A button's own text becomes its menu row and its
+    /// words on hover, so it is written once.
+    ///
+    /// The group is why a tooltip and a hint placement had to stop being wrappers: it holds
+    /// **typed** buttons, and wrapping one changes what it is.
+    ButtonGroup,
 }
 
 impl WidgetKind {
@@ -158,6 +187,10 @@ impl WidgetKind {
         WidgetKind::Item,
         WidgetKind::Separator,
         WidgetKind::CardGrid,
+        WidgetKind::Spinner,
+        WidgetKind::Progress,
+        WidgetKind::NfIcon,
+        WidgetKind::ButtonGroup,
     ];
 
     /// This kind's position in [`ALL`](Self::ALL).
@@ -209,6 +242,10 @@ impl WidgetKind {
             WidgetKind::Item => 32,
             WidgetKind::Separator => 33,
             WidgetKind::CardGrid => 34,
+            WidgetKind::Spinner => 35,
+            WidgetKind::Progress => 36,
+            WidgetKind::NfIcon => 37,
+            WidgetKind::ButtonGroup => 38,
         }
     }
 }
@@ -320,6 +357,54 @@ pub enum ViewLabelSide {
     Left,
 }
 
+/// How a [`ButtonGroup`](WidgetKind::ButtonGroup) shows its actions — mirrors grid-ui `Display`.
+///
+/// Whatever does not fit collapses into a ⋮ menu whichever of these is chosen; this only decides
+/// how wide each action is before that happens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewDisplay {
+    /// Words while there is room, icons once there is not.
+    ///
+    /// ⚠️ **Not settled** — at some widths the group alternates between the two on successive
+    /// layouts, because taking the words off is what makes the row fit. Prefer the other two.
+    Auto,
+    /// Always icons, however much room there is. The labels still say what the hover bubble and the
+    /// collapsed menu read. **The default**, because it is the one that is settled.
+    IconOnly,
+    /// Always words. The group collapses into the menu sooner, because each action is wider.
+    Full,
+}
+
+/// Which side of a widget its tooltip anchors to — mirrors grid-ui `TooltipSide`.
+///
+/// A **preference, not a placement**: the framework flips it to the opposite side when there is no
+/// room, so an author says where they would like the bubble and never where it must go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewTooltipSide {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+/// Where a node's hint letter sits over it — mirrors grid-ui `HintPlacement`.
+///
+/// The picker draws the cap itself; this only says where. `TopLeft` is what the picker drew for
+/// every large target before letters became the widget's own to place, and it is kept as a variant
+/// because that rule was right for a card or a content pane: out of the way of what the target
+/// shows, and never on its border.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewHintPlacement {
+    TopCenter,
+    Center,
+    CenterRight,
+    TopRight,
+    TopLeft,
+}
+
 /// How a selected row shows it — mirrors grid-ui `ActiveMarker` (`Row`, `Item`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -409,6 +494,31 @@ value_set! {
     ViewAnimation { None => "none", Fade => "fade", Zoom => "zoom", ZoomFade => "zoom_fade" }
     ViewSeverity { Info => "info", Success => "success", Warning => "warning", Danger => "danger" }
     ViewLabelSide { Right => "right", Left => "left" }
+    ViewTooltipSide { Top => "top", Bottom => "bottom", Left => "left", Right => "right" }
+    ViewDisplay { Auto => "auto", IconOnly => "icon_only", Full => "full" }
+    ViewNfGlyph {
+        Shift => "shift",
+        Control => "control",
+        Option => "option",
+        Command => "command",
+        CapsLock => "caps_lock",
+        Enter => "enter",
+        Escape => "escape",
+        Tab => "tab",
+        Space => "space",
+        Backspace => "backspace",
+        ArrowUp => "arrow_up",
+        ArrowDown => "arrow_down",
+        ArrowLeft => "arrow_left",
+        ArrowRight => "arrow_right",
+    }
+    ViewHintPlacement {
+        TopCenter => "top_center",
+        Center => "center",
+        CenterRight => "center_right",
+        TopRight => "top_right",
+        TopLeft => "top_left",
+    }
     ViewMarker { None => "none", Bar => "bar", Check => "check" }
     ViewTextAlign { Start => "start", Center => "center", End => "end" }
     ViewEllipsis { End => "end", Start => "start" }
@@ -567,6 +677,35 @@ pub enum ViewGlyph {
     SquareHalfBottom,
 }
 
+/// The **keyboard** glyphs, from the embedded Nerd Font — a separate vocabulary from
+/// [`ViewGlyph`] because it is a separate font (F003/P097/T501).
+///
+/// These are the keys a shortcut is written with: ⇧ ⌃ ⌥ ⌘, Enter, Escape, Tab, Space, Backspace and
+/// the four arrows. A description names one and the host resolves it against the font, exactly as
+/// it does an icon name — so a plugin can render a keybinding the way heca's own key hints do
+/// instead of typing a character that its user's font may not have.
+///
+/// Held honest by `every_glyph_name_has_a_mirror`, which compares both vocabularies against the
+/// library's own in both directions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewNfGlyph {
+    Shift,
+    Control,
+    Option,
+    Command,
+    CapsLock,
+    Enter,
+    Escape,
+    Tab,
+    Space,
+    Backspace,
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight,
+}
+
 /// Names and the conversion into a property value, from the same list as the enum.
 ///
 /// A glyph becomes [`PropValue::Glyph`], not `Text`: that variant already exists and says what the
@@ -709,6 +848,20 @@ impl PropValue {
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             PropValue::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    /// The number if this is [`Float`](PropValue::Float) **or** [`Int`](PropValue::Int).
+    ///
+    /// Both, because a description is written by hand and over the wire: `0.5` and `1` are the same
+    /// number of seconds to whoever wrote them, and JSON does not keep the two apart the way Rust
+    /// does. Refusing the integer would fail a correct description for a reason its author cannot
+    /// see — the scalar channel already merges them the same way (`prop_to_input`).
+    pub fn as_float(&self) -> Option<f64> {
+        match self {
+            PropValue::Float(f) => Some(*f),
+            PropValue::Int(i) => Some(*i as f64),
             _ => None,
         }
     }
@@ -1548,6 +1701,10 @@ mod tests {
         check(ViewAnimation::ALL, ViewAnimation::name);
         check(ViewSeverity::ALL, ViewSeverity::name);
         check(ViewLabelSide::ALL, ViewLabelSide::name);
+        check(ViewTooltipSide::ALL, ViewTooltipSide::name);
+        check(ViewHintPlacement::ALL, ViewHintPlacement::name);
+        check(ViewNfGlyph::ALL, ViewNfGlyph::name);
+        check(ViewDisplay::ALL, ViewDisplay::name);
         check(ViewMarker::ALL, ViewMarker::name);
         check(ViewTextAlign::ALL, ViewTextAlign::name);
         check(ViewGlyph::ALL, ViewGlyph::name);

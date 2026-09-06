@@ -42,7 +42,7 @@ use std::rc::Rc;
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::widgets::{CardGrid, ContextMenu, GridCell, Menu, MenuItem};
-use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, KeyHintGroup, Label, LayoutExt, MarkerGroup, Overlay, Panel, PropInput, RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastPosition, ToastSeverity, Toggle, Track, WidgetSize};
+use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, KeyHintGroup, Label, LayoutExt, MarkerGroup, Overlay, Panel, PropInput, RailCell, Row as GridRow, NfGlyph, NfIcon, ProgressBar, ScrollRegion, Select, Separator, SetProp, SignalData, Spinner, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastPosition, ToastSeverity, Toggle, Track, WidgetSize};
 
 use heca_view::{
     Intent, PropMap, PropValue, ViewNode, ViewSize, ViewVariant, WidgetKind,
@@ -234,6 +234,79 @@ pub fn realize(
     }
     if let Some(PropValue::Bool(hintable)) = node.props.get("hintable") {
         realized.base_mut().hintable = *hintable;
+    }
+    // **What this node says on hover**, read once here for every kind, exactly like the key above.
+    //
+    // `ComponentExt::tooltip` is on every widget natively — it stopped being a wrapper you put
+    // *around* something precisely because a wrapper put the rule in every caller's discipline and
+    // made a tooltip impossible on a widget a typed container holds. So there is no widget whose
+    // builder surface it belongs to, and no `Tooltip` kind for a description to name: the same
+    // sentence, in the same slot, from either authoring path.
+    //
+    // Side and delay are part of the tip rather than styles of their own, so a node that declared
+    // no tooltip says nothing by setting them — the same no-op the native builders are.
+    if let Some(PropValue::Text(text)) = node.props.get("tooltip") {
+        realized.base_mut().tooltip = Some(heca_grid_ui::widgets::tooltip::Tip::new(text.clone()));
+        if let Some(name) = node.props.get("tooltip_side").and_then(PropValue::as_text)
+            && let Some(side) = tooltip_side(name)
+            && let Some(tip) = realized.base_mut().tooltip.as_mut()
+        {
+            tip.side = side;
+        }
+        if let Some(delay) = node
+            .props
+            .get("tooltip_delay")
+            .and_then(PropValue::as_float)
+            && let Some(tip) = realized.base_mut().tooltip.as_mut()
+        {
+            tip.delay = (delay as f32).max(0.0);
+        }
+    }
+    // **Whether this node's ink is drawn**, read once here for every kind — CSS `visibility`.
+    //
+    // Its twin, `hidden` (CSS `display: none`), needs nothing here: it is a `Layout` field, so the
+    // generic style merge already carries it and a described node can collapse out of the layout
+    // today. This one is a signal on `Base`, which no merge reaches — so a described node could
+    // keep its box and hide its ink by no means at all, and the wrapper that does it natively
+    // cannot be described. With both reachable there is nothing left for a `Visibility` kind to do.
+    if let Some(PropValue::Bool(visible)) = node.props.get("visible") {
+        heca_grid_ui::reactive::SignalUpdate::set(&realized.base().visible, *visible);
+    }
+    // **Where this node's letter sits**, read once here for every kind, like the tooltip above.
+    //
+    // `Base::hint_style` was universal long before there was a way to set it on anything but a
+    // `KeyHint` wrapper — which is why the app wraps to move a letter, and why a described tree
+    // could not move one at all. Since T501 the four knobs are on every widget natively, so this is
+    // the same sentence from the other authoring path, landing in the same slot.
+    //
+    // Placement only *says where*: being pickable is not opt-in, and a node with nothing to act on
+    // wears no letter however it styles one.
+    let style = &mut realized.base_mut().hint_style;
+    if let Some(name) = node
+        .props
+        .get("hint_placement")
+        .and_then(PropValue::as_text)
+        && let Some(placement) = hint_placement(name)
+    {
+        style.placement = placement;
+    }
+    if let Some(px) = node.props.get("hint_size").and_then(PropValue::as_float) {
+        style.size = Some(px as f32);
+    }
+    if let Some(px) = node
+        .props
+        .get("hint_offset_y")
+        .and_then(PropValue::as_float)
+    {
+        style.offset_y = px;
+    }
+    // A token name, resolved against the live theme here on the host side — the library has no
+    // notion of a token, exactly as `prop_to_input` already handles every other colour.
+    if let Some(PropValue::Color(token)) = node.props.get("hint_color")
+        && let Some(hex) = resolve_color(token, theme)
+        && let Ok(color) = hex.parse()
+    {
+        realized.base_mut().hint_style.color = Some(color);
     }
     // **The verbs this node answers to**, read once here for every kind, exactly like the hint.
     //
@@ -442,6 +515,32 @@ fn prop_enum_name<T: serde::Serialize>(value: &T) -> Option<String> {
     }
 }
 
+/// A hint placement by the name serde gives [`ViewHintPlacement`] — `"top_center"`, `"center"`,
+/// `"center_right"`, `"top_right"`, `"top_left"`. An unknown name keeps the default.
+fn hint_placement(name: &str) -> Option<heca_grid_ui::widgets::HintPlacement> {
+    use heca_grid_ui::widgets::HintPlacement as P;
+    Some(match name {
+        "top_center" => P::TopCenter,
+        "center" => P::Center,
+        "center_right" => P::CenterRight,
+        "top_right" => P::TopRight,
+        "top_left" => P::TopLeft,
+        _ => return None,
+    })
+}
+
+/// A tooltip side by the name serde gives [`ViewTooltipSide`] — `"top"`, `"bottom"`, `"left"`,
+/// `"right"`. An unknown name keeps the default, as every other untrusted value here does.
+fn tooltip_side(name: &str) -> Option<heca_grid_ui::TooltipSide> {
+    Some(match name {
+        "top" => heca_grid_ui::TooltipSide::Top,
+        "bottom" => heca_grid_ui::TooltipSide::Bottom,
+        "left" => heca_grid_ui::TooltipSide::Left,
+        "right" => heca_grid_ui::TooltipSide::Right,
+        _ => return None,
+    })
+}
+
 /// The per-kind mapping — see [`realize`], which wraps it with the props every node can carry.
 fn realize_kind(
     node: &ViewNode,
@@ -531,6 +630,43 @@ fn realize_kind(
         WidgetKind::Gauge => {
             Box::new(with_props(Gauge::new(), node, theme))
         }
+        // **Nobody knows how long** — no properties of its own: it animates off the frame clock,
+        // and its diameter is `width`/`height`, which the generic style merge already carries.
+        WidgetKind::Spinner => Box::new(Spinner::new()),
+        // **How far along** — `value` arrives through the generated property surface, clamped by
+        // the widget itself, so out-of-range input from a plugin is a full or empty bar and never a
+        // panic. The easing is the widget's: a tree re-sent with a new value animates.
+        WidgetKind::Progress => Box::new(with_props(ProgressBar::new(), node, theme)),
+        // **A keyboard glyph, from its own font.** The name is parsed by the library's own
+        // `from_prop_name` rather than a table repeated here — the enum derives that parser from
+        // the same variants the mirror guard compares, so there is one vocabulary and no second
+        // list of strings to fall behind. `size` and `color` ride the generated surface.
+        //
+        // An unknown or missing name realizes to nothing rather than a wrong key: a description is
+        // untrusted input, and a ⌘ where an author asked for ⇧ is worse than a gap.
+        // **A row of actions that gets out of its own way.** Its children are buttons, and they
+        // are built by the one button path — `button_of` — so a grouped action is the same button
+        // a standalone one is, press intent and composed content included. Anything that is not a
+        // button is skipped rather than wrapped: the group reads a label, a glyph and a click out
+        // of each child to build its overflow menu, and there is nothing to read in a `Label`.
+        WidgetKind::ButtonGroup => {
+            let mut group = with_props(heca_grid_ui::widgets::ButtonGroup::new(), node, theme);
+            for child in &node.children {
+                if child.kind == WidgetKind::Button {
+                    group = group.child(button_of(child, theme, emit, forms));
+                }
+            }
+            Box::new(group)
+        }
+        WidgetKind::NfIcon => match node
+            .props
+            .get("glyph")
+            .and_then(PropValue::as_text)
+            .and_then(<NfGlyph as heca_grid_ui::PropName>::from_prop_name)
+        {
+            Some(glyph) => Box::new(with_props(NfIcon::new(glyph), node, theme)),
+            None => Box::new(Flex::empty()),
+        },
         WidgetKind::Icon => match glyph_prop(node) {
             Some(glyph) => Box::new(Icon::new(glyph)),
             None => Box::new(Flex::empty()),
@@ -878,6 +1014,24 @@ fn realize_button(
     emit: &IntentEmitter,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
+    Box::new(button_of(node, theme, emit, forms))
+}
+
+/// The same button, **typed** — what a container holding `Button`s needs.
+///
+/// [`ButtonGroup::child`](heca_grid_ui::ButtonGroup::child) takes a `Button`, not a boxed component,
+/// because it reads the button's label, glyph and click out of it to build the overflow menu — a
+/// box would have erased all three. Same reason [`realize_choice`] is typed.
+///
+/// Split out rather than written twice: a second button-building path is exactly the drift this
+/// project forbids, and the group's buttons must be the buttons a description asked for, down to
+/// the press intent and the composed-children precedence.
+fn button_of(
+    node: &ViewNode,
+    theme: &Theme,
+    emit: &IntentEmitter,
+    forms: &mut FormBindings,
+) -> Button {
     let mut button = if node.children.is_empty() {
         // Sugar: the scalar props describe the content.
         let mut b = Button::new(text_of(node));
@@ -901,7 +1055,6 @@ fn realize_button(
     }
     // Attach the composed content. (`Box<dyn Component>` isn't `Component`, so it can't go through
     // `Parent::child`; push it the way every other container here does.)
-    let mut button: Box<dyn Component> = Box::new(button);
     for child in &node.children {
         button
             .base_mut()
@@ -1039,19 +1192,46 @@ fn realize_card_grid(
 ) -> Box<dyn Component> {
     use heca_grid_ui::builders::Parent as _;
     let mut grid = with_props(CardGrid::new(), node, theme);
-    let mut cells = Vec::new();
+    let mut columns: Vec<Vec<GridCell>> = Vec::new();
     let mut layout = Flex::row();
+    let mut derived: Vec<String> = Vec::new();
     for child in &node.children {
         let body = realize(child, theme, emit, forms);
-        // The card's own key is the grid's handle for it: one identity, named by the author, handed
-        // back on activation. A card with no key gets none, and the grid simply never reports it —
-        // the same as a native cell nobody named.
-        let key = child.declared_key().unwrap_or_default();
+        // **A card never has to be named** — `key` is optional everywhere in this library, so it is
+        // optional here. Gating on it is the mistake `.draggable()` made: silently dead on every
+        // widget nobody had reason to name, and an internal rule an author had to learn before
+        // anything worked (AGENTS.md § 0a).
+        //
+        // The fallback is not a rule this file invents. `Component::text_summary` IS the library's
+        // accessible-name algorithm — the same one [`nav::identity_of`] reads at its second level —
+        // so an unnamed `Icon` + `Label("nginx")` card is `nginx` with nothing wired, and the name
+        // a plugin gets back is the name the card reads by on screen. Reading the node's own
+        // `"text"` prop instead names a bare `Label` and leaves every real card anonymous: a card
+        // is a subtree, and its text is nested inside it.
+        //
+        // Repeats carry the index `identity_of` uses, spelled the same way (`nginx`, `nginx[1]`),
+        // so two identically-worded cards stay two cards rather than collapsing into one.
+        let key = match child.declared_key() {
+            Some(k) => k.to_owned(),
+            None => {
+                let name = body.text_summary().unwrap_or_default();
+                let n = derived.iter().filter(|d| **d == name).count();
+                derived.push(name.clone());
+                if n == 0 { name } else { format!("{name}[{n}]") }
+            }
+        };
         let card = GridRow::new().child_boxed(body);
-        cells.push(GridCell::new(key.to_string(), card.nav_state()).hovered(card.hovered()));
+        // **One column per card, because the layout draws them side by side.** `CardGrid::row`
+        // takes columns and states the contract itself: the cards must be in the same left-to-right
+        // order the layout draws them. Putting them all in ONE column instead left arrow-right
+        // doing nothing while arrow-down walked a visual row — the cursor and the picture
+        // disagreeing, which is the one thing that doc warns about and which nothing fails on.
+        columns.push(vec![
+            GridCell::new(key, card.nav_state()).hovered(card.hovered()),
+        ]);
         layout = layout.child(card);
     }
-    grid = grid.row(vec![cells], layout);
+    grid = grid.row(columns, layout);
     // Behaviour is an Intent, as everywhere: the chosen card's key travels as an argument, so one
     // described action serves every card rather than a binding per card.
     if let Some(intent) = node.events.get("activate") {
@@ -2006,12 +2186,82 @@ mod tests {
         check("Tag", <Tag as SetProp>::PROP_NAMES, "Tag");
         check("Toast", <Toast as SetProp>::PROP_NAMES, "Toast");
         check("Toggle", <Toggle as SetProp>::PROP_NAMES, "Toggle");
+        check(
+            "ProgressBar",
+            <ProgressBar as SetProp>::PROP_NAMES,
+            "Progress",
+        );
+        check("NfIcon", <NfIcon as SetProp>::PROP_NAMES, "NfIcon");
+        check(
+            "ButtonGroup",
+            <heca_grid_ui::widgets::ButtonGroup as SetProp>::PROP_NAMES,
+            "ButtonGroup",
+        );
 
         assert!(
             missing.is_empty(),
             "these widget properties have no setter in heca-view/src/build.rs, so a description \
              cannot reach them through the SDK: {missing:#?}\n\nAdd a setter, or add the property \
              to NOT_IN_SDK with the reason.",
+        );
+
+        // ── And the list above cannot silently fall behind the vocabulary ────────────────────
+        //
+        // Everything above is a **hand-written** call per widget, which is the shape this file's
+        // own doc calls the defect: a list you must remember to add to. It failed exactly that way
+        // — `Progress` was added to `WidgetKind` with a property, and every guard stayed green
+        // because nobody had written its line, so the check silently covered 33 of 35 kinds.
+        //
+        // It cannot be derived (a kind does not name its Rust type), so instead the omission is
+        // made loud: every kind must be checked above, or excused here by name with a reason.
+        const NO_PROPERTIES_TO_CHECK: &[(&str, &str)] = &[
+            ("VStack", "a plain box: `Flex` has only Style properties"),
+            ("HStack", "the same box, laid out the other way"),
+            ("Grid", "tracks are read by hand, not via the surface"),
+            ("CardGrid", "cells are built by the realizer, not props"),
+            ("Card", "a titled surface; its title is the `text` sugar"),
+            ("Surface", "a plain painted box"),
+            ("Spinner", "no properties; animates off the clock"),
+            ("StatusDot", "its state picks the constructor"),
+            ("ScrollBar", "host-only; `realize` refuses it"),
+        ];
+
+        let own_source = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs"),
+        )
+        .expect("this file is where it is expected");
+        // The third argument of each `check(..)` is the kind's SDK name — the one that has to line
+        // up with `WidgetKind`.
+        // Whitespace-insensitive on purpose: written to match `PROP_NAMES, "` it read nothing the
+        // moment rustfmt wrapped one of these calls across lines, and a guard that quietly stops
+        // reading is worse than the gap it exists for — which is why the size assertion below is
+        // not decoration.
+        let checked: std::collections::BTreeSet<&str> = own_source
+            .match_indices("PROP_NAMES,")
+            .filter_map(|(i, m)| {
+                let rest = own_source[i + m.len()..].trim_start();
+                let rest = rest.strip_prefix('"')?;
+                rest.find('"').map(|e| &rest[..e])
+            })
+            .collect();
+        assert!(
+            checked.len() > 20,
+            "this guard has stopped reading the check list, which is worse than the gap it exists \
+             for — it found only {} entries",
+            checked.len(),
+        );
+
+        let unchecked: Vec<String> = WidgetKind::ALL
+            .iter()
+            .map(|k| format!("{k:?}"))
+            .filter(|name| !checked.contains(name.as_str()))
+            .filter(|name| !NO_PROPERTIES_TO_CHECK.iter().any(|(n, _)| n == name))
+            .collect();
+        assert!(
+            unchecked.is_empty(),
+            "these kinds are in the vocabulary but no `check(..)` line above covers them, so their \
+             properties could be unreachable from the SDK and nothing would say so: {unchecked:#?}\
+             \n\nAdd a `check(..)` line, or name the kind in NO_PROPERTIES_TO_CHECK with a reason.",
         );
     }
 
@@ -2041,6 +2291,31 @@ mod tests {
         assert!(
             stale.is_empty(),
             "ViewGlyph names glyphs the library no longer has: {stale:?}",
+        );
+
+        // **The keyboard font is a second vocabulary, held to the same account** (F003/P097/T501).
+        //
+        // Checked here rather than in a test of its own: it is the same question about the same
+        // kind of copied list, and two tests would be two places to remember when a third font
+        // arrives.
+        let nf_library: BTreeSet<&str> = <NfGlyph as heca_grid_ui::PropName>::VARIANT_NAMES
+            .iter()
+            .copied()
+            .collect();
+        let nf_mirrored: BTreeSet<&str> = heca_view::ViewNfGlyph::ALL
+            .iter()
+            .map(|g| g.name())
+            .collect();
+        let missing: Vec<_> = nf_library.difference(&nf_mirrored).collect();
+        assert!(
+            missing.is_empty(),
+            "these keyboard glyphs exist in heca-grid-ui but not in ViewNfGlyph, so a description \
+             cannot name them: {missing:?}",
+        );
+        let stale: Vec<_> = nf_mirrored.difference(&nf_library).collect();
+        assert!(
+            stale.is_empty(),
+            "ViewNfGlyph names keyboard glyphs the library no longer has: {stale:?}",
         );
     }
 
@@ -2072,6 +2347,34 @@ mod tests {
             folder,
             painted(heca_view::ViewGlyph::Terminal),
             "the name picked the icon, rather than every name giving the same one",
+        );
+
+        // **And the keyboard font, the same way** (F003/P097/T501). A shortcut drawn with the
+        // wrong key is worse than one drawn with none — ⌘ where the author asked for ⇧ reads as
+        // correct — and matching names cannot catch that, because the two lists agree by name while
+        // the codepoints behind them are a separate mapping.
+        let nf_painted = |g: heca_view::ViewNfGlyph| {
+            let node = ViewNode::new(WidgetKind::NfIcon).prop("glyph", g.into());
+            let w = realize(
+                &node,
+                &Theme::default(),
+                &noop_emitter(),
+                &mut FormBindings::default(),
+            );
+            let mut scene = heca_grid_ui::Scene::new();
+            let theme = Theme::default();
+            {
+                let mut cx = heca_grid_ui::PaintCx::new(&mut scene, &theme);
+                w.paint(&mut cx);
+            }
+            format!("{:?}", scene.iter().collect::<Vec<_>>())
+        };
+        let shift = nf_painted(heca_view::ViewNfGlyph::Shift);
+        assert!(!shift.is_empty(), "a named key painted something");
+        assert_ne!(
+            shift,
+            nf_painted(heca_view::ViewNfGlyph::Command),
+            "the name picked the key, rather than every name giving the same one",
         );
     }
 
@@ -3109,6 +3412,21 @@ mod tests {
             // Leaves with their own state.
             WidgetKind::Toggle => node.prop("on", PropValue::Bool(true)),
             WidgetKind::Gauge => node.prop("value", PropValue::Float(0.5)),
+            WidgetKind::Progress => node.prop("value", PropValue::Float(0.5)),
+            WidgetKind::NfIcon => node.prop("glyph", PropValue::Text("command".into())),
+            // Its children are buttons and nothing else, and each needs the pair the group reads:
+            // the words for its menu row and hover bubble, the icon for when there is no room.
+            WidgetKind::ButtonGroup => node.child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("Close")
+                    .prop("icon", PropValue::Glyph("close".into()))
+                    .on_press(Intent::new("noop")),
+            ),
+            // It has no properties at all: it paints from the clock, and a root node has no
+            // container to take a size from, so give it the one every other leaf gets implicitly.
+            WidgetKind::Spinner => node
+                .prop("width", PropValue::Float(28.0))
+                .prop("height", PropValue::Float(28.0)),
             WidgetKind::StatusDot => node,
 
             // A rule normally stretches to its container; as a root it has none, so give it a
@@ -3129,7 +3447,163 @@ mod tests {
         }
     }
 
-    /// **Every `WidgetKind` realizes to a live widget** — one that either holds the children it was
+    /// **Every widget in the library can be described, or somebody said why not**
+    /// (F003/P097/T501, C11).
+    ///
+    /// The test below asks the vocabulary is *complete* — every kind realizes. This asks the other
+    /// direction, which is the one that actually failed: at the start of T501 **thirteen** library
+    /// widgets had no declarative form, and nothing anywhere said so. A plugin author found out by
+    /// not finding one. The census that discovered them was a person reading two crates by hand,
+    /// and a census run once is a census that is wrong a month later.
+    ///
+    /// So the list is derived from the library's own exports, and every widget must be one of:
+    ///
+    /// - a [`WidgetKind`] of the same name — it can be described;
+    /// - a **declaration** on any node rather than a thing you place (a tooltip, a menu, a hint
+    ///   letter, visibility) — the wrapper survives for regions that are not widgets, but nobody
+    ///   needs to name it to get the behaviour;
+    /// - **host-only by design**, with the reason.
+    ///
+    /// Anything else is a widget a description cannot ask for, and this says so by name.
+    #[test]
+    fn every_library_widget_is_describable_or_deliberately_not() {
+        /// Widgets with no `WidgetKind`, each with why. An entry is a deliberate decision, not a
+        /// place to park an omission — read the three categories in the doc above before adding one.
+        const NO_KIND: &[(&str, &str)] = &[
+            // ── Declarations: the behaviour is on every node, so nothing needs naming ──
+            (
+                "Tooltip",
+                "a declaration on any node; the wrapper is for regions",
+            ),
+            (
+                "ContextMenu",
+                "a declaration on any node, never a thing you place",
+            ),
+            ("KeyHint", "a declaration on any node: hint + placement"),
+            (
+                "Visibility",
+                "two declarations on any node: visible, hidden",
+            ),
+            // ── Host-only by design ──
+            (
+                "ChromeRegion",
+                "host-only: a region of the window, which the host owns",
+            ),
+            ("Pane", "host-only: the app's own concept, not a primitive"),
+            ("PaneFrame", "host-only: the frame of the above"),
+            (
+                "FocusScope",
+                "host-only: focus containment the host arranges",
+            ),
+            (
+                "ScrollBar",
+                "host-only: live host signals; realize refuses it",
+            ),
+            ("ToastStack", "host-only: it holds a queue the host drives"),
+            // ── Not widgets: parts, values and helpers that happen to be exported ──
+            (
+                "GridCell",
+                "not a widget: a CardGrid cell, built by realize",
+            ),
+            ("Menu", "not a widget: the data a menu declaration carries"),
+            ("MenuItem", "not a widget: one entry of the above"),
+            ("MenuEntry", "not a widget: one entry of the above"),
+            ("MenuAnchor", "not a widget: where a menu opens"),
+            ("Command", "not a widget: one entry of a command palette"),
+            ("Tip", "not a widget: what a tooltip declaration carries"),
+            ("Flex", "the arrangement: VStack/HStack are its names"),
+            ("Container", "not a widget: a helper for building a `Flex`"),
+            ("ScrollRegion", "described as `Scroll`"),
+            ("ProgressBar", "described as `Progress`"),
+            // ── Opened through the host API, not placed in a tree ──
+            //
+            // `docs/chrome-and-ui.md` § 3.5 is the agreed plugin contract: a plugin opens these
+            // with `app.overlay.openModal(..)` / `openDropdown(..)` and fires actions with
+            // `app.actions.dispatch(..)`. They are not kinds a plugin constructs — it would then
+            // own the scrim, the open state and the dismissal, and get the chosen button back
+            // without the form data beside it. `Dialog` stays a widget **native** code composes.
+            ("Dialog", "opened via app.overlay.openModal (§3.5)"),
+            ("CommandPalette", "opened via the host API (§3.5)"),
+        ];
+
+        let exports = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../heca-grid-ui/src/widgets/mod.rs"),
+        )
+        .expect("the widget exports are where they are expected");
+
+        // Every type name a `pub use` line publishes. Types, not values: a widget is a type, and
+        // the lower-case items on these lines are constructors and constants.
+        let published: std::collections::BTreeSet<String> = exports
+            .lines()
+            .filter(|l| l.trim_start().starts_with("pub use"))
+            .flat_map(|l| {
+                l.split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .skip(1)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|n| n.chars().next().is_some_and(char::is_uppercase))
+            .collect();
+        assert!(
+            published.len() > 30,
+            "this guard has stopped reading the library's exports, which is worse than the gap it \
+             exists for — it found only {}",
+            published.len(),
+        );
+
+        // The value types (`ButtonVariant`, `Glyph`, `Display`, …) are vocabularies a widget reads,
+        // not widgets. They are told apart by being named in a kind's properties rather than by a
+        // list here, which would be one more thing to keep in step.
+        let kinds: std::collections::BTreeSet<String> =
+            WidgetKind::ALL.iter().map(|k| format!("{k:?}")).collect();
+
+        let unreachable: Vec<&String> = published
+            .iter()
+            .filter(|n| !kinds.contains(*n))
+            .filter(|n| !NO_KIND.iter().any(|(w, _)| w == *n))
+            .filter(|n| !VALUE_TYPES.contains(&n.as_str()))
+            .collect();
+        assert!(
+            unreachable.is_empty(),
+            "these library widgets have no `WidgetKind` and no recorded reason, so a plugin can \
+             neither name them nor find out why: {unreachable:#?}\n\nAdd a kind, or add the name \
+             to NO_KIND with which of the three categories it is in.",
+        );
+    }
+
+    /// Vocabularies a widget reads — enums and value types, not widgets. Listed once because two
+    /// guards ask the same question of the same exports.
+    const VALUE_TYPES: &[&str] = &[
+        "AlertVariant",
+        "BadgeVariant",
+        "ButtonVariant",
+        "LabelSide",
+        "RegionMode",
+        "Glyph",
+        "NfGlyph",
+        "ActiveMarker",
+        "Ellipsis",
+        "Orientation",
+        "DotStatus",
+        "RevealAlign",
+        "ScrollAxes",
+        "ScrollInfo",
+        "ToastAction",
+        "ToastPosition",
+        "ToastSeverity",
+        "ToastSpec",
+        "Display",
+        "TooltipSide",
+        "HintPlacement",
+        "KeyCap",
+        "KeycapVariant",
+        "HintStyle",
+        "DEFAULT_LETTERS",
+        "NamedAnimation",
+    ];
+
+    /// **Every `WidgetKind` realizes to a live widget**    /// **Every `WidgetKind` realizes to a live widget** — one that either holds the children it was
     /// given or paints something. The fallback (an empty `Flex`) does neither, so a kind with no arm
     /// fails here loudly instead of rendering nothing and being noticed months later by a plugin
     /// author.
@@ -3442,13 +3916,6 @@ mod tests {
         );
     }
 
-    /// **Anything a widget can be given in Rust, a description must be able to ask for.**
-    ///
-    /// The runtime half: a `hint` written into a node of **any** kind survives `realize` and is
-    /// found by the picker. `on_hint` is on `ComponentExt` (F003/P082/T432), so natively *every*
-    /// widget can be told what a pick does to it; this holds the described side to the same reach.
-    ///
-    /// `ScrollBar` is the one exception, and the same one everywhere else: it is host-only, its
     /// **A menu declared on ANY kind reaches the node itself** (F003/P097/T501).
     ///
     /// A menu is a declaration, not a widget an author assembles — natively it is one builder on
@@ -3482,6 +3949,403 @@ mod tests {
         );
     }
 
+    /// **Every universal capability is reachable from the typed SDK** (F003/P097/T501, C3).
+    ///
+    /// [`every_widget_property_is_reachable_from_the_sdk`] walks each *kind's* generated
+    /// `PROP_NAMES`, and that is the whole of its reach. A capability that belongs to no particular
+    /// widget — `tooltip`, `hintable`, the ones that come next — lives on `ComponentExt`, a plain
+    /// trait with no generated property surface, so it appears in no kind's `PROP_NAMES` and that
+    /// guard cannot see it. `tooltip` was undeclarable for exactly as long as that was true, with
+    /// nothing failing anywhere.
+    ///
+    /// So this asks the other half of the question, and **fails closed** in the same way: every
+    /// `#[prop]` builder on `ComponentExt` must have a setter of the same name in the SDK, or be
+    /// named below with a reason. It reads both sources rather than calling them, because *"does a
+    /// method exist"* is not a question a running test can ask.
+    #[test]
+    fn every_universal_capability_is_reachable_from_the_sdk() {
+        /// Universal builders with no SDK spelling, each with the reason. An entry here is a
+        /// capability a described tree cannot use — keep it empty if you can.
+        const NOT_IN_SDK: &[(&str, &str)] = &[];
+
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let native = std::fs::read_to_string(dir.join("../heca-grid-ui/src/builders.rs"))
+            .expect("the native builder source is where it is expected");
+        let sdk = std::fs::read_to_string(dir.join("../heca-view/src/build.rs"))
+            .expect("the SDK source is where it is expected");
+
+        // `ComponentExt` is the trait a capability lands on when it belongs to every widget rather
+        // than to one, so it is the list this guard is about.
+        let head = "\npub trait ComponentExt: Component + Sized {\n";
+        let start = native
+            .find(head)
+            .expect("ComponentExt is where it is expected")
+            + head.len();
+        let body = &native[start..start + native[start..].find("\n}\n").unwrap_or(0)];
+
+        let universal: Vec<&str> = body
+            .split("#[heca_grid_ui_macros::prop]")
+            .skip(1)
+            .filter_map(|after| {
+                let f = after.find("fn ")? + 3;
+                let rest = &after[f..];
+                Some(&rest[..rest.find(['(', '<'])?])
+            })
+            .collect();
+        assert!(
+            !universal.is_empty(),
+            "no `#[prop]` builders found on ComponentExt — this guard has stopped reading anything, \
+             which is worse than the gap it exists for",
+        );
+
+        let missing: Vec<&str> = universal
+            .iter()
+            .filter(|name| !NOT_IN_SDK.iter().any(|(n, _)| n == *name))
+            .filter(|name| !sdk.contains(&format!("fn {name}(")))
+            .copied()
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "these capabilities are on every widget natively and cannot be said in a description at \
+             all, so a plugin can draw a row and never give it what heca's own rows have: {missing:#?}",
+        );
+    }
+
+    /// **Hiding the ink and collapsing the box are two things, and both are declarable**
+    /// (F003/P097/T501, C5).
+    ///
+    /// There is no `Visibility` widget kind and there must not be one, because the wrapper's whole
+    /// job is one of these two properties — and a wrapper cannot be put around a widget a typed
+    /// container holds, nor expressed in a description at all.
+    ///
+    /// The pair is CSS's, deliberately: `hidden` is `display: none` (out of the layout, neighbours
+    /// close up) and `visible` is `visibility: hidden` (ink gone, box kept). Confusing them is the
+    /// whole trap — a row of four status slots showing one at a time stays still only under the
+    /// second, and `hidden` was already reachable while `visible` was reachable from neither
+    /// authoring path, which is exactly the sort of half-capability that reads as working.
+    ///
+    /// So this asks both, on every kind, and asks that each leaves the *other* alone.
+    #[test]
+    fn hiding_the_ink_and_collapsing_the_box_are_separately_declarable_on_any_kind() {
+        use heca_grid_ui::reactive::SignalGet as _;
+
+        let mut wrong: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            let (emit, _fired) = recording_emitter();
+            let realized = |node: &ViewNode| {
+                realize(node, &Theme::default(), &emit, &mut FormBindings::default())
+            };
+
+            // `visible: false` — the ink goes, the box stays.
+            let w = realized(&sample_node(kind).prop("visible", PropValue::Bool(false)));
+            if w.base().visible.get_untracked() {
+                wrong.push(format!("{kind:?} (`visible: false`, still draws)"));
+            }
+            if w.base().is_hidden() {
+                wrong.push(format!("{kind:?} (`visible` collapsed the box)"));
+            }
+
+            // `hidden: true` — out of the layout entirely, and the ink flag untouched.
+            let h = realized(&sample_node(kind).prop("hidden", PropValue::Bool(true)));
+            if !h.base().is_hidden() {
+                wrong.push(format!("{kind:?} (`hidden`, still takes space)"));
+            }
+            if !h.base().visible.get_untracked() {
+                wrong.push(format!("{kind:?} (`hidden` cleared `visible`)"));
+            }
+
+            // Nothing declared changes neither.
+            let plain = realized(&sample_node(kind));
+            if !plain.base().visible.get_untracked() || plain.base().is_hidden() {
+                wrong.push(format!("{kind:?} (declared neither, not shown)"));
+            }
+        }
+        assert!(
+            wrong.is_empty(),
+            "a described node cannot say what it shows on these kinds, or the two ways of not \
+             showing have been collapsed into one: {wrong:#?}",
+        );
+    }
+
+    /// **A described action row is the same row heca's own chrome uses** (F003/P097/T501, C9).
+    ///
+    /// The pane header's action row is a `ButtonGroup`, and a whole session went into making it
+    /// behave: words become icons as the room runs out, and whatever still does not fit collapses
+    /// into a ⋮ that runs the same actions. A plugin could not ask for any of it — it would have
+    /// hand-built a row of buttons and got the collapse, the overflow menu and the hover words
+    /// approximately right, which is the second path this project forbids.
+    ///
+    /// What it asks is that the **buttons are real buttons**: the group reads a label, a glyph and
+    /// a click out of each child to build that menu, so a described action must arrive with all
+    /// three or the menu row it produces is blank and does nothing. Building them through anything
+    /// but the one button path is how that would quietly happen.
+    #[test]
+    fn a_described_action_row_carries_its_actions_into_the_overflow_menu() {
+        let (emit, fired) = recording_emitter();
+        let action = |name: &str, icon: &str| {
+            ViewNode::new(WidgetKind::Button)
+                .text(name)
+                .prop("icon", PropValue::Glyph(icon.into()))
+                .on_press(Intent::new(format!("pane.{}", name.to_lowercase())))
+        };
+        let node = ViewNode::new(WidgetKind::ButtonGroup)
+            .prop("display", PropValue::Text("icon_only".into()))
+            .child(action("Close", "close"))
+            .child(action("Split", "square_split_horizontal"))
+            // Not a button: the group has no label, glyph or click to read out of it, so it is
+            // skipped rather than wrapped into an action that does nothing.
+            .child(ViewNode::new(WidgetKind::Label).text("not an action"));
+
+        let mut group = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
+        assert_eq!(
+            group.base().children.len(),
+            3,
+            "two actions and the ⋮ the group builds for itself — the label is not an action",
+        );
+
+        // **Asked through the picker**, not by reaching into the group. The group wraps each button
+        // in its own arrangement, so an index into its children is a fact about today's internals;
+        // `prefix+/` is the contract, and it is also how a user reaches a collapsed action.
+        let targets = hints(group.as_ref());
+        assert_eq!(
+            targets.len(),
+            3,
+            "each described action is pickable in its own right, plus the ⋮ that reaches the ones \
+             that did not fit — and the label, which is not an action, is not among them",
+        );
+        assert!(heca_grid_ui::fire_hint(group.as_mut(), &targets[0]));
+        assert_eq!(
+            fired.borrow().first().map(|i| i.action.clone()),
+            Some("pane.close".to_string()),
+            "a grouped action runs the intent the description gave it — which is what makes its \
+             overflow row run the plugin's own action rather than nothing",
+        );
+    }
+
+    /// **Where a letter sits is declarable on ANY kind** (F003/P097/T501, C4).
+    ///
+    /// `Base::hint_style` was universal from the day the picker stopped drawing every cap the same
+    /// way — but the only builders that wrote it were on [`KeyHint`], the wrapper. So moving a
+    /// letter meant wrapping the widget, which is the wrapper rule living in every caller's
+    /// discipline, is impossible on a widget a typed container holds, and could not be said in a
+    /// description at all. A plugin could make its row pickable and then had to accept whatever
+    /// position heca chose for it.
+    ///
+    /// **Placement is not what makes a node pickable** — anything actionable already wears a letter
+    /// with nothing declared — so this asks only that the four knobs arrive, on every kind.
+    #[test]
+    fn where_a_letter_sits_is_declarable_on_any_kind() {
+        let mut missing: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            let (emit, _fired) = recording_emitter();
+            let node = sample_node(kind)
+                .prop("hint_placement", PropValue::Text("center_right".into()))
+                .prop("hint_size", PropValue::Int(18))
+                .prop("hint_offset_y", PropValue::Float(4.0))
+                .prop("hint_color", PropValue::Color("danger".into()));
+            let theme = Theme::default();
+            let widget = realize(&node, &theme, &emit, &mut FormBindings::default());
+            let style = widget.base().hint_style;
+            if style.placement != heca_grid_ui::widgets::HintPlacement::CenterRight {
+                missing.push(format!("{kind:?} (placement ignored)"));
+            }
+            // An integer size is the same number of pixels as a fraction to whoever wrote it.
+            if style.size != Some(18.0) {
+                missing.push(format!("{kind:?} (size ignored: {:?})", style.size));
+            }
+            if (style.offset_y - 4.0).abs() > f64::EPSILON {
+                missing.push(format!("{kind:?} (offset ignored: {})", style.offset_y));
+            }
+            // A **token name**, resolved against the live theme — never a hex literal written into
+            // the description, so a letter follows a theme change with nothing rewritten.
+            let danger: Option<heca_grid_ui::Color> =
+                resolve_color("danger", &theme).and_then(|hex| hex.parse().ok());
+            if style.color != danger {
+                missing.push(format!(
+                    "{kind:?} (colour token unresolved: {:?})",
+                    style.color
+                ));
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "a described node cannot say where its letter goes on these kinds, while a native one \
+             can: {missing:#?}",
+        );
+    }
+
+    /// **A tooltip declared on ANY kind reaches the node itself** (F003/P097/T501, C3).
+    ///
+    /// A tooltip is a declaration, not a widget an author places. It stopped being a wrapper
+    /// natively for a concrete reason — a wrapper puts the rule in every caller's discipline, and
+    /// makes a tooltip impossible on a widget a typed container holds, because wrapping it changes
+    /// what it is — so it lives in a slot on every widget's base. The described form is therefore
+    /// one field on every node, and there is no `Tooltip` kind for a plugin to construct, size and
+    /// anchor (⭐⭐ RULE ZERO — one door, never two).
+    ///
+    /// Until this, a plugin drawing its UI as a described tree could not put a tooltip on anything,
+    /// while heca's own chrome put one on every button in a line. Nothing failed: the shared
+    /// builder trait has no generated property surface, so neither the prop applier nor
+    /// [`every_widget_property_is_reachable_from_the_sdk`] can see a universal capability at all —
+    /// which is why this asks the question directly, for every kind.
+    #[test]
+    fn a_tooltip_declared_on_any_kind_lands_on_the_node_itself() {
+        let mut missing: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            let (emit, _fired) = recording_emitter();
+            let node = sample_node(kind)
+                .prop("tooltip", PropValue::Text("Close the pane".into()))
+                .prop("tooltip_side", PropValue::Text("bottom".into()))
+                .prop("tooltip_delay", PropValue::Int(2));
+            let widget = realize(
+                &node,
+                &Theme::default(),
+                &emit,
+                &mut FormBindings::default(),
+            );
+            match &widget.base().tooltip {
+                None => missing.push(format!("{kind:?} (no tooltip on the realized widget)")),
+                Some(tip) => {
+                    if tip.side != heca_grid_ui::TooltipSide::Bottom {
+                        missing.push(format!("{kind:?} (declared side ignored)"));
+                    }
+                    // An integer delay is the same number of seconds as a float one to whoever
+                    // wrote it, and JSON does not keep them apart.
+                    if (tip.delay - 2.0).abs() > f32::EPSILON {
+                        missing.push(format!("{kind:?} (declared delay ignored: {})", tip.delay));
+                    }
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "a tooltip declared on these kinds never reached the widget, so a described row \
+             cannot say what it is while every native one can: {missing:#?}",
+        );
+    }
+
+    /// **A card never has to be named** (F003/P097/T501, correcting C2).
+    ///
+    /// `key` is optional everywhere in this library, so it is optional on a card. A grid whose
+    /// cards declare none still has to report *which* card was chosen — otherwise a plugin gets a
+    /// picker that lights up, moves, activates, and hands back nothing, with no error anywhere.
+    /// That is the shape `.draggable()` shipped in: a capability gated on `Base::key`, silently
+    /// dead on every widget nobody had reason to name (AGENTS.md § 0a).
+    ///
+    /// The name is the card's **own content**, through the accessible-name algorithm the library
+    /// already uses for exactly this — [`Component::text_summary`], which is what
+    /// `nav::identity_of` reads at its second level. So a card is named the way it reads on
+    /// screen, and a caller writes nothing.
+    ///
+    /// ⚠️ It asks a card whose text is **nested**, because that is the documented shape: a card is
+    /// a `Surface` holding an icon and a label, and the card node itself carries no `text` prop of
+    /// its own. Reading only the node's own `text` prop passes a one-`Label` card and leaves every
+    /// real one anonymous.
+    #[test]
+    fn an_unnamed_card_is_still_reported_by_the_grid() {
+        let (emit, fired) = recording_emitter();
+
+        let card = |name: &str| {
+            ViewNode::new(WidgetKind::Surface)
+                .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Text("box".into())))
+                .child(ViewNode::new(WidgetKind::Label).text(name))
+        };
+        let node = ViewNode::new(WidgetKind::CardGrid)
+            .on("activate", Intent::new("docker.open"))
+            .child(card("nginx"))
+            .child(card("redis"));
+
+        use heca_grid_ui::event::{Event, WidgetIntent};
+        use heca_grid_ui::reactive::SignalUpdate as _;
+
+        let mut grid = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
+        // Keys reach the focus owner and nowhere else, so a test that activates says who is
+        // holding the keyboard — exactly as a real surface has to.
+        grid.base_mut().focused.set(true);
+        heca_grid_ui::dispatch(grid.as_mut(), &Event::Widget(WidgetIntent::Activate));
+
+        assert_eq!(
+            fired.borrow().first().and_then(|i| i.args.get("key")),
+            Some(&PropValue::Text("nginx".into())),
+            "an unnamed card must still come back by name, or a described grid reports nothing",
+        );
+    }
+
+    /// **The cursor must walk the cards the way the eye does** (F003/P097/T501, correcting C2).
+    ///
+    /// [`CardGrid::row`] takes *columns* of cards and says so in its own contract: "`cards` must be
+    /// in the same left-to-right order the layout draws them, or the cursor and the picture
+    /// disagree." A described grid draws its children with `Flex::row` — left to right — so each
+    /// child is its own column. Handing the grid one column holding every card instead makes
+    /// arrow-right do nothing at all while arrow-down walks a row: the picture says one thing and
+    /// the keyboard another, and nothing anywhere fails.
+    ///
+    /// It also pins the repeat spelling: two cards that read the same are still two cards, indexed
+    /// the way [`nav::identity_of`] indexes identically-named widgets (`nginx`, `nginx[1]`) rather
+    /// than collapsing onto whichever the grid met first.
+    #[test]
+    fn a_described_grid_walks_its_cards_the_way_it_draws_them() {
+        use heca_grid_ui::event::{Event, WidgetIntent};
+        use heca_grid_ui::reactive::SignalUpdate as _;
+
+        let card = |name: &str| {
+            ViewNode::new(WidgetKind::Surface).child(ViewNode::new(WidgetKind::Label).text(name))
+        };
+        let node = ViewNode::new(WidgetKind::CardGrid)
+            .on("activate", Intent::new("docker.open"))
+            .child(card("nginx"))
+            .child(card("redis"))
+            .child(card("nginx"));
+
+        let chosen_after = |steps: usize| {
+            let (emit, fired) = recording_emitter();
+            let mut grid = realize(
+                &node,
+                &Theme::default(),
+                &emit,
+                &mut FormBindings::default(),
+            );
+            grid.base_mut().focused.set(true);
+            for _ in 0..steps {
+                heca_grid_ui::dispatch(grid.as_mut(), &Event::Widget(WidgetIntent::ItemNext));
+            }
+            heca_grid_ui::dispatch(grid.as_mut(), &Event::Widget(WidgetIntent::Activate));
+            fired
+                .borrow()
+                .last()
+                .and_then(|i| i.args.get("key"))
+                .cloned()
+        };
+
+        assert_eq!(
+            chosen_after(1),
+            Some(PropValue::Text("redis".into())),
+            "one card right",
+        );
+        assert_eq!(
+            chosen_after(2),
+            Some(PropValue::Text("nginx[1]".into())),
+            "and the second card reading `nginx` is its own card, not the first one again",
+        );
+    }
+
+    /// **Anything a widget can be given in Rust, a description must be able to ask for.**
+    ///
+    /// The runtime half: a `hint` written into a node of **any** kind survives `realize` and is
+    /// found by the picker. `on_hint` is on `ComponentExt` (F003/P082/T432), so natively *every*
+    /// widget can be told what a pick does to it; this holds the described side to the same reach.
+    ///
+    /// `ScrollBar` is the one exception, and the same one everywhere else: it is host-only, its
     /// state is a live host signal, and `realize` refuses it rather than producing a dead control.
     #[test]
     fn a_hint_written_into_any_kind_is_found_by_the_picker() {

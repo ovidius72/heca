@@ -363,34 +363,41 @@ impl KeyHint {
         self.base.hint_label
     }
 
+    // ── The four cap knobs ────────────────────────────────────────────────────────────────
+    //
+    // These are the **wrapper's spelling** of capabilities that live on every widget
+    // (`ComponentExt::hint_placement` and friends): the slot they write, `Base::hint_style`, has
+    // always been universal, and since F003/P097/T501 so has the way to set it. They delegate
+    // rather than repeat the assignment, so there is one writer per field and the two spellings
+    // cannot drift — the same arrangement `Tooltip` has with `ComponentExt::tooltip`.
+    //
+    // Kept because the wrapper itself is kept: for a region that is not a widget you can put a
+    // builder on.
+
     /// Where the keycap sits over the target (default [`HintPlacement::TopCenter`]).
     #[heca_grid_ui_macros::prop]
-    pub fn placement(mut self, placement: HintPlacement) -> Self {
-        self.base.hint_style.placement = placement;
-        self
+    pub fn placement(self, placement: HintPlacement) -> Self {
+        crate::builders::ComponentExt::hint_placement(self, placement)
     }
 
     /// Explicit keycap font size in logical px (overrides the font-derived size).
     #[heca_grid_ui_macros::prop]
-    pub fn size(mut self, px: f32) -> Self {
-        self.base.hint_style.size = Some(px);
-        self
+    pub fn size(self, px: f32) -> Self {
+        crate::builders::ComponentExt::hint_size(self, px)
     }
 
     /// Override the keycap color (default: theme `accent`). The glow follows it too.
     #[heca_grid_ui_macros::prop]
-    pub fn color(mut self, c: Color) -> Self {
-        self.base.hint_style.color = Some(c);
-        self
+    pub fn color(self, c: Color) -> Self {
+        crate::builders::ComponentExt::hint_color(self, c)
     }
 
     /// Nudge the keycap down by `px` logical pixels after placement (positive = down).
     /// Use it to drop a `TopCenter` cap from a tall target's top edge onto its header
     /// row (e.g. align with a workspace dock's title).
     #[heca_grid_ui_macros::prop]
-    pub fn offset_y(mut self, px: f64) -> Self {
-        self.base.hint_style.offset_y = px;
-        self
+    pub fn offset_y(self, px: f64) -> Self {
+        crate::builders::ComponentExt::hint_offset_y(self, px)
     }
 
 }
