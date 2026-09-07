@@ -149,19 +149,31 @@ Its guards for **library** behaviour have already been copied to where they belo
 Deleting the file removes the duplicates; nothing else in it is worth keeping. Remove the module
 line in `heca/src/chrome/mod.rs` and the `register` call in `heca/src/app/startup.rs` with it.
 
-## Open, and the first one is a live bug
+## Open — ⚠️ THIS SECTION WAS STALE, corrected 2026-09-07
 
-Three defects from Antonio's drive of the T502 surface, none fixed:
+It was written before its own fixes and never revised, and a later session lost time on it. The
+lesson matters more than the list: **verify anything here against the tree before acting.**
 
-1. **`view intent 'close_pane' did not resolve to a known action`** — the described confirm's Delete
-   button fires an action name that does not exist, so **Delete does nothing**. It needs the real
-   by-id action; the target pane is not necessarily the focused one.
-   `heca/src/chrome/described_confirm.rs`, in `register`.
-2. **`a Button at 0/2/0 … declares no key, and it is one of 2 siblings of that kind`** — the
-   identity reporter wants keys on the two sibling buttons, and it is right: two buttons of one kind
-   side by side is a **collection**, which is the one case a `key` is for.
-3. **`key 'y' … CopySelection overwritten by ShowLayer`** — the binding suggested for testing
-   (`prefix+y`) clobbers copy-selection. Pick another; nothing in the code depends on it.
+1. ~~`close_pane did not resolve to a known action`~~ — **FIXED in `e0ffac5`.** The action is
+   `close` (`heca/src/input.rs:763`); `close_pane` is an argument on `spawn_pane`'s close policy,
+   not an action, which is why it read plausible. **Not driven** — compile-and-tests-pass only.
+   ⚠️ Still unaddressed: `close` closes the **focused** pane, which is wrong for a confirm raised
+   from a context menu or the exposé, where the target is whatever was clicked. That wants the
+   by-id action carrying a pane id. See `heca/tests/by_id_actions.rs` — a source lint written
+   because a by-id handler that searched only the active workspace worked from the exposé's first
+   row and silently did nothing from its second.
+
+2. **The two sibling buttons and the key report** — UNRESOLVED, and the first answer was wrong.
+   Keys were added; Antonio objected that `key` is optional and that adding them on a warning
+   treats it as required. The keys are still in the file.
+   ⚠️ **The reporter itself looks suspect.** It warns on same-*kind* siblings without checking
+   whether the derived identities actually collide — and these two read "Cancel" and "Delete",
+   which are distinct, so nothing needed naming. Check the reporter before obeying it; the defect
+   may be there rather than in the surface.
+
+3. ~~`key 'y' … CopySelection overwritten`~~ — **never a code defect.** It was the test binding
+   suggested for Antonio's own config; `y` was already copy-selection and the last declaration
+   wins. He has removed it. Nothing to do in the repo.
 
 ## How to see the T502 surface yourself
 
