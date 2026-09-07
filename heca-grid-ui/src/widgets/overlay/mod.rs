@@ -36,17 +36,17 @@
 mod chrome;
 mod place;
 
-pub use chrome::{paint_panel_chrome, PanelChrome, PanelElevation};
+pub use chrome::{PanelChrome, PanelElevation, paint_panel_chrome};
 pub use place::{
-    place_anchored, place_anchored_on, place_at_point, place_beside, AnchorSide, BesideSide,
-    OverlayPosition, DEFAULT_ANCHOR_GAP,
+    AnchorSide, BesideSide, DEFAULT_ANCHOR_GAP, OverlayPosition, place_anchored, place_anchored_on,
+    place_at_point, place_beside,
 };
 
 use crate::animation::{Animation, Presence};
 use crate::builders::LayoutExt;
-use crate::component::{paint_child, shift_subtree, Base, Component, Event, Handled, PaintCx};
+use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child, shift_subtree};
 use crate::event::WidgetIntent;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::{Align, Justify, Length};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
@@ -75,6 +75,54 @@ const SCRIM_REACH: f64 = 1.0e9;
 /// outside input; non-blocking = outside input falls through (light dismiss).
 /// [`animation`](Overlay::animation) says how it arrives and leaves; without one it simply appears
 /// and goes.
+/// **A surface you can show and close from anywhere** — copyable, so it goes into any closure.
+///
+/// ```ignore
+/// let confirm = Dialog::new("Close pane?").body(..).action(..);
+/// Button::new("Delete").on_click(move || confirm.show())
+/// ```
+///
+/// `show`/`hide` on the widget itself take `&mut self`, so a closure living inside a button can
+/// never hold one while the surface sits beside it. That is why every caller reached for the raw
+/// signal instead. This is the signal with the two verbs on it, and nothing else.
+#[derive(Clone, Copy)]
+pub struct SurfaceHandle {
+    open: Signal<bool>,
+}
+
+impl SurfaceHandle {
+    /// Wrap a surface's open signal.
+    pub fn new(open: Signal<bool>) -> Self {
+        Self { open }
+    }
+
+    /// Put it on screen.
+    pub fn show(&self) {
+        crate::reactive::SignalUpdate::set(&self.open, true);
+    }
+
+    /// Take it off screen.
+    pub fn close(&self) {
+        crate::reactive::SignalUpdate::set(&self.open, false);
+    }
+
+    /// Show it if it is closed, close it if it is up.
+    pub fn toggle(&self) {
+        let now = crate::reactive::SignalGet::get_untracked(&self.open);
+        crate::reactive::SignalUpdate::set(&self.open, !now);
+    }
+
+    /// Whether it is up.
+    pub fn is_open(&self) -> bool {
+        crate::reactive::SignalGet::get_untracked(&self.open)
+    }
+
+    /// The signal itself, for binding something else to the same state.
+    pub fn signal(&self) -> Signal<bool> {
+        self.open
+    }
+}
+
 pub struct Overlay {
     base: Base,
     open: Signal<bool>,
@@ -210,7 +258,9 @@ impl Overlay {
     ///     .panel_size(Length::Pct(0.6), Length::Pct(0.7))
     ///     .panel(Flex::column().child(ScrollRegion::new().child(long_content)))
     /// ```
-    #[heca_grid_ui_macros::host_only("takes more than one value, which a single property cannot carry")]
+    #[heca_grid_ui_macros::host_only(
+        "takes more than one value, which a single property cannot carry"
+    )]
     pub fn panel_size(mut self, width: Length, height: Length) -> Self {
         self.panel_size = Some((width, height));
         self.apply_panel_size();
@@ -332,16 +382,43 @@ impl Overlay {
         }
     }
 
-    /// The **initial** state — a surface *born* open is already there and plays no arrival.
-    /// The verbs are [`open`](Overlay::open) / [`hide`](Overlay::hide) / [`toggle`](Overlay::toggle).
+    /// **Whether it starts up.** A surface *born* open is already there and plays no arrival.
     ///
+    /// To follow state you already hold, use [`open_when`](Overlay::open_when) instead — this one
+    /// is a starting value, which is all a description can carry.
     ///
-    /// Order-independent: `.opened(true).animation(..)` and `.animation(..).opened(true)` are the
+    /// Order-independent: `.default_open(true).animation(..)` and `.animation(..).default_open(true)` are the
     /// same surface.
     #[heca_grid_ui_macros::prop]
-    pub fn opened(mut self, open: bool) -> Self {
+    pub fn default_open(mut self, open: bool) -> Self {
         self.open.set(open);
         self.presence.assume_open(open);
+        self
+    }
+
+    /// **Follow a signal of your own** — the surface is up exactly when it is true.
+    ///
+    /// ```ignore
+    /// let editing = signal(false);
+    /// Overlay::new().panel(body).open_when(editing);
+    /// editing.set(true);      // it appears
+    /// ```
+    ///
+    /// This is the direction that was missing. The widget owned a signal and lent it out through
+    /// [`open_signal`](Overlay::open_signal), so a caller could drive *its* state but never hand it
+    /// *theirs* — backwards from how state is held everywhere else here.
+    ///
+    /// `base.focused` is bound to whichever signal is in force — that binding is the whole of how
+    /// keys reach a panel — so adopting yours rebinds it rather than leaving it pointed at a signal
+    /// nobody writes any more.
+    #[heca_grid_ui_macros::host_only(
+        "a live signal; a description carries a starting value, `opened`"
+    )]
+    pub fn open_when(mut self, open: Signal<bool>) -> Self {
+        self.open = open;
+        self.base.focused = open;
+        self.presence
+            .assume_open(crate::reactive::SignalGet::get_untracked(&open));
         self
     }
 
@@ -368,7 +445,7 @@ impl Overlay {
     ///
     /// Opening is also where the keyboard is placed, when the surface said where it should go —
     /// here rather than at construction, because a surface is built once and opened many times.
-    pub fn open(&mut self) {
+    pub fn show(&mut self) {
         if self.presence.enter() {
             self.open.set(true);
             self.place_default_focus();
@@ -391,7 +468,7 @@ impl Overlay {
 
     /// **Dismiss it.** With an animation this begins the exit and the surface stays on screen,
     /// inert, until the gesture has played out; with none, it is gone now.
-    pub fn hide(&mut self) {
+    pub fn close(&mut self) {
         self.presence.leave();
         self.open.set(false);
     }
@@ -399,12 +476,17 @@ impl Overlay {
     /// Open it if it is closed, dismiss it if it is open.
     pub fn toggle(&mut self) {
         match self.presence.is_open() {
-            true => self.hide(),
-            false => self.open(),
+            true => self.close(),
+            false => self.show(),
         }
     }
 
     /// The open-state signal — the host (or composing widget) binds this.
+    /// **A handle to show and close this surface from anywhere.** See [`SurfaceHandle`].
+    pub fn handle(&self) -> SurfaceHandle {
+        SurfaceHandle::new(self.open)
+    }
+
     pub fn open_signal(&self) -> Signal<bool> {
         self.open
     }
@@ -558,12 +640,19 @@ impl Component for Overlay {
         Some(&mut self.presence)
     }
 
-    fn open(&mut self) {
-        Overlay::open(self);
+    fn show(&mut self) {
+        Overlay::show(self);
     }
 
     fn set_default_focus(&mut self, name: &str) {
         self.default_focus = Some(name.to_string());
+    }
+
+    fn follow_open(&mut self, open: Signal<bool>) {
+        self.open = open;
+        self.base.focused = open;
+        self.presence
+            .assume_open(crate::reactive::SignalGet::get_untracked(&open));
     }
 
     fn advance_focus(&mut self, forward: bool) {
@@ -584,8 +673,8 @@ impl Component for Overlay {
         }
     }
 
-    fn hide(&mut self) {
-        Overlay::hide(self);
+    fn close(&mut self) {
+        Overlay::close(self);
     }
 
     /// Advance the arrival or exit, then the subtree.
@@ -682,31 +771,33 @@ impl Component for Overlay {
             });
         }
 
-        frame.apply(cx, self.scale_origin(), |cx| cx.with_overlay(|cx| {
-            // Scrim over the whole viewport — the visual half of the blocking
-            // layer policy (the event half swallows outside input below).
-            if self.blocking {
-                cx.rect(
-                    self.scrim_rect(panel),
-                    background.with_alpha(scrim_a),
-                    None,
-                    0.0,
-                    None,
-                );
-            }
+        frame.apply(cx, self.scale_origin(), |cx| {
+            cx.with_overlay(|cx| {
+                // Scrim over the whole viewport — the visual half of the blocking
+                // layer policy (the event half swallows outside input below).
+                if self.blocking {
+                    cx.rect(
+                        self.scrim_rect(panel),
+                        background.with_alpha(scrim_a),
+                        None,
+                        0.0,
+                        None,
+                    );
+                }
 
-            // Lift the panel, fill it, stamp the shared bracket reticle (same
-            // visual language as Pane / DockFrame) — the base layer takes the
-            // chrome plain; specializations pass their own accents.
-            paint_panel_chrome(cx, panel, PanelChrome::default());
+                // Lift the panel, fill it, stamp the shared bracket reticle (same
+                // visual language as Pane / DockFrame) — the base layer takes the
+                // chrome plain; specializations pass their own accents.
+                paint_panel_chrome(cx, panel, PanelChrome::default());
 
-            // The panel's real children on top of the fill. A nested overlay
-            // painted in here records a DEEPER scene segment → composites above
-            // everything this layer draws (Scene::overlay_segments).
-            for child in &self.base.children {
-                paint_child(child.as_ref(), cx);
-            }
-        }));
+                // The panel's real children on top of the fill. A nested overlay
+                // painted in here records a DEEPER scene segment → composites above
+                // everything this layer draws (Scene::overlay_segments).
+                for child in &self.base.children {
+                    paint_child(child.as_ref(), cx);
+                }
+            })
+        });
     }
 
     /// What the panel did not take. A press here landed on the scrim: it fires

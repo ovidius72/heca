@@ -19,6 +19,73 @@ file is only the things they do not hold.
 4. **Antonio drives every visual check.** Green tests are not verification for anything that lays
    out, paints, scrolls or routes input. Hand him the exact gesture to try.
 
+## ▶ NEXT SESSION STARTS HERE — showing a surface is not yet mounting it
+
+**The agreed API is built. The last piece is not.** Read this section, then the two below it.
+
+### What a developer writes now (built, green, uncommitted)
+
+```rust
+let confirm = Dialog::new("Close pane?").body(..).action(..).handle();
+Button::new("Delete").on_click(move || confirm.show())     // call it, from any closure
+
+Dialog::new("..").open_when(is_editing)                    // follow YOUR signal
+Dialog::new("..").default_open(false)                      // starting value only
+Dialog::new("..").key("confirm.close")                     // show_layer confirm.close
+```
+
+Three ideas, one name each: **`default_open(bool)`** the starting value (the only form a
+description can carry), **`open_when(Signal<bool>)`** your state followed for life, and
+**`show()` / `close()` / `toggle()`** the verbs, on a copyable `SurfaceHandle` so they work inside
+a closure — `&mut self` methods cannot.
+
+`opened`, `open(bool)`, `open()` and `hide()` are **gone everywhere**, including the plugin-facing
+SDK and the described prop name. `open()` meant "start open" on one type and "show it now" on
+another; that is what put a test dialog on screen at boot.
+
+### What is left, and it is the point of the whole thing
+
+**`build_modal_root` (`heca/src/chrome/overlay.rs`) still hands the host a boxed dialog.** So a
+developer who wants a dialog still assembles a `ModalSpec` — a title, a body converted to node
+form, a list of actions, flags — hands it over, and writes a callback that works out which button
+came back and digs the typed value out of a map. Every dialog in the app repeats that.
+
+**Make showing mean mounting.** `show()` puts the surface in the layer stack; `close()` takes it
+out. Then nobody hands specs to the host, `ModalSpec` stops being a developer's concern, and the
+three doors above are the whole API.
+
+Measured before starting: **three places construct a `Dialog`** — `build_modal_root`
+(`heca/src/chrome/overlay.rs:495`), a layers test, and the showcase demo. Only the first is
+production code that hands the widget onward, so the builder chain can return the handle.
+
+⚠️ It touches the host's modal path, the layer registry and the result callback. Antonio must drive
+it; nothing here can be proven by tests alone.
+
+### The rules this API came from — do not re-litigate them
+
+- **DOM-like.** A developer has a surface and shows it. Layers, stacks, mounting, `realize`,
+  emitters and `ModalSpec` are the framework's business, exactly as paint order is not something
+  you think about when you write `<dialog>`.
+- **A plugin gets all three doors on the same terms** — its own signal, its own handle, its own
+  name. Not a reduced version.
+- **Mechanism on the generic surface, policy on the specific one.** `Overlay` carries out *how*
+  (move focus, contain Tab, answer the dismiss key); `Dialog` decides *when* — its panel recipe,
+  `dismissible`, which action is primary.
+- **`key` is optional.** Anything that points at a control takes its declared key **or the words it
+  reads by** — one lookup, `FocusManager::focus_named`.
+
+### Also still open
+
+`heca/src/chrome/described_confirm.rs` **should be deleted.** It was T502's acceptance fixture — a
+confirm built the way a plugin must, to find out whether the path worked. It found what it was
+built to find and its purpose is spent. It is a test artifact at a real surface's address, and it
+registers a layer at boot for no reason.
+
+Its guards for **library** behaviour have already been copied to where they belong
+(`heca-grid-ui/src/widgets/button.rs` and `overlay/tests.rs`), so they are currently **duplicated**.
+Deleting the file removes the duplicates; nothing else in it is worth keeping. Remove the module
+line in `heca/src/chrome/mod.rs` and the `register` call in `heca/src/app/startup.rs` with it.
+
 ## Open, and the first one is a live bug
 
 Three defects from Antonio's drive of the T502 surface, none fixed:
@@ -51,6 +118,10 @@ args = { name = "heca.confirm" }
 
 ## Operational
 
+- ⚠️ **There is UNCOMMITTED work in the tree** — the whole surface API above (the rename, the
+  handle, `open_when`) plus the guards copied into `button.rs` and `overlay/tests.rs`. It is green:
+  1492 tests, clippy at the baseline warning, no file's rustfmt count raised. Antonio has not been
+  asked to commit it.
 - **`/Users/antonio/projects/heca`**, branch **`feat/hint-collapses-to-the-tree`**, cut from `main`
   at `069e3b3`, **not pushed**. Five commits: `4cb7e24` (T499), `1b8a5b1` (T500 fixes), `d013f5c`
   (T501 part), `89a3b3e` (T501 complete), `673356d` (T502).

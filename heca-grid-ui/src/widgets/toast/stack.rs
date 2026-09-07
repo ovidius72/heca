@@ -262,7 +262,7 @@ impl ToastStack {
         // 1. A card the host has dropped is asked to leave. Once, on the frame its id goes.
         for (slot, card) in self.slots.iter_mut().zip(self.base.children.iter_mut()) {
             if !slot.leaving && !specs.iter().any(|s| s.id == slot.id) {
-                card.hide();
+                card.close();
                 slot.leaving = true;
             }
         }
@@ -273,7 +273,7 @@ impl ToastStack {
         // 3. A spec with no card yet gets one, closed, so its arrival plays.
         for spec in &specs {
             if !self.slots.iter().any(|s| s.id == spec.id) {
-                let card = self.build(spec).opened(false);
+                let card = self.build(spec).default_open(false);
                 self.slots.push(Slot { id: spec.id, leaving: false });
                 self.base.children.push(Box::new(card));
                 // A new card has to be measured and placed before it can arrive.
@@ -307,7 +307,7 @@ impl ToastStack {
         //    reconcile, which is what plays its arrival rather than cutting it in.
         for (slot, card) in self.slots.iter_mut().zip(self.base.children.iter_mut()) {
             if !slot.leaving && !showing(card.as_ref()) {
-                card.open();
+                card.show();
             }
         }
     }

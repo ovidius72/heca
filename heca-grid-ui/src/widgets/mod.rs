@@ -68,7 +68,7 @@ pub use context_menu::{ContextMenu, Menu, MenuAnchor, MenuEntry, MenuItem};
 pub use dialog::{Dialog, DIALOG_BTN_GAP, DIALOG_GAP, DIALOG_PAD};
 pub use overlay::{
     paint_panel_chrome, place_anchored, place_anchored_on, place_at_point, place_beside,
-    AnchorSide, BesideSide, Overlay, OverlayPosition, PanelChrome, PanelElevation,
+    AnchorSide, BesideSide, Overlay, OverlayPosition, PanelChrome, PanelElevation, SurfaceHandle,
     DEFAULT_ANCHOR_GAP,
 };
 pub use dock_frame::DockFrame;

@@ -139,7 +139,7 @@ fn a_plain_container_delivers_the_whole_pointer_set() {
 #[test]
 fn a_dialog_delivers_the_whole_pointer_set_to_its_body() {
     let (probe, seen, bounds) = Probe::new();
-    let dialog = Dialog::new("Pick one").body(probe).open(true);
+    let dialog = Dialog::new("Pick one").body(probe).default_open(true);
     assert_full_set("Dialog", Box::new(dialog), &seen, &bounds);
 }
 
@@ -147,7 +147,7 @@ fn a_dialog_delivers_the_whole_pointer_set_to_its_body() {
 #[test]
 fn an_overlay_delivers_the_whole_pointer_set_to_its_panel() {
     let (probe, seen, bounds) = Probe::new();
-    let overlay = Overlay::new().panel(probe).opened(true);
+    let overlay = Overlay::new().panel(probe).default_open(true);
     assert_full_set("Overlay", Box::new(overlay), &seen, &bounds);
 }
 

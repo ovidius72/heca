@@ -945,7 +945,7 @@ fn a_key_dispatched_at_the_window_root_reaches_a_placed_surface() {
                 Dialog::new("Close pane?")
                     .action(Button::new("Cancel"))
                     .action(Button::new("OK"))
-                    .open(true),
+                    .default_open(true),
             ),
             true,
             true,
@@ -994,7 +994,7 @@ fn a_menu_seated_as_a_surface_keeps_its_own_height() {
                 .child(MenuItem::new().label("New pane"))
                 .child(MenuItem::new().label("Close pane")),
         )
-        .open(true);
+        .default_open(true);
 
     let mut reg = LayerRegistry::default();
     let mut window = crate::chrome::new_window_root();
@@ -1023,7 +1023,7 @@ fn a_menu_seated_as_a_surface_keeps_its_own_height() {
 /// An open layer, built the way `fading_root` builds one.
 fn fading_root_open() -> Overlay {
     let mut o = Overlay::new().panel(Flex::row());
-    o.open();
+    o.show();
     o
 }
 
@@ -1114,7 +1114,7 @@ fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
 
 /// **A dismissed surface declares nothing** (F003/P097/T499, found by Antonio driving).
 ///
-/// Hiding a surface calls `node.hide()` and leaves it **seated** in the window root —
+/// Hiding a surface calls `node.close()` and leaves it **seated** in the window root —
 /// `remove_surface` runs only when it is destroyed — so presence in the tree says nothing about
 /// being in charge. The exposé and the command palette both declare `lock` and `modal`,
 /// so a reader that takes a seated surface's declaration at face value applies a hidden exposé's

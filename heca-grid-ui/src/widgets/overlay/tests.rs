@@ -12,7 +12,7 @@ use crate::widgets::{Flex, Label};
 fn open_overlay() -> Overlay {
     let mut o = Overlay::new()
         .panel(Flex::column().child(Label::new("hi")))
-        .opened(true);
+        .default_open(true);
     crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
     o
 }
@@ -27,13 +27,19 @@ fn open_overlay() -> Overlay {
 fn a_dismissed_overlay_paints_until_its_exit_has_played_out_and_holds_no_input() {
     let mut o = open_overlay();
     o = o.animation(Animation::Fade);
-    o.open(); // the arrival is not our subject here
+    o.show(); // the arrival is not our subject here
     while o.tick(0.05) {}
 
-    o.hide();
-    assert!(o.presence().is_some_and(|p| p.is_leaving()), "the exit begins at once");
+    o.close();
+    assert!(
+        o.presence().is_some_and(|p| p.is_leaving()),
+        "the exit begins at once"
+    );
     assert!(!o.focusable(), "…and it stops holding the keyboard");
-    assert!(o.hit_bounds().is_none(), "…and every point falls through it");
+    assert!(
+        o.hit_bounds().is_none(),
+        "…and every point falls through it"
+    );
     assert!(!o.overlay_occludes(Point::new(1.0, 1.0)));
 
     let mut painted_frames = 0;
@@ -45,8 +51,14 @@ fn a_dismissed_overlay_paints_until_its_exit_has_played_out_and_holds_no_input()
         o.paint(&mut cx);
         assert!(!scene.is_empty(), "a leaving surface is still drawn");
     }
-    assert!(painted_frames >= 3, "it played, rather than cutting: {painted_frames} frames");
-    assert!(!o.presence().is_some_and(|p| p.is_leaving()), "and then it is gone");
+    assert!(
+        painted_frames >= 3,
+        "it played, rather than cutting: {painted_frames} frames"
+    );
+    assert!(
+        !o.presence().is_some_and(|p| p.is_leaving()),
+        "and then it is gone"
+    );
 }
 
 /// A surface that declared no animation goes the instant it is dismissed — no special case
@@ -54,8 +66,11 @@ fn a_dismissed_overlay_paints_until_its_exit_has_played_out_and_holds_no_input()
 #[test]
 fn an_overlay_with_no_animation_is_gone_the_moment_it_is_closed() {
     let mut o = open_overlay();
-    o.hide();
-    assert!(!o.presence().is_some_and(|p| p.is_leaving()), "nothing to wait for");
+    o.close();
+    assert!(
+        !o.presence().is_some_and(|p| p.is_leaving()),
+        "nothing to wait for"
+    );
     let mut scene = crate::scene::Scene::new();
     let theme = crate::theme::Theme::default();
     let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(800.0, 600.0));
@@ -69,13 +84,20 @@ fn an_overlay_with_no_animation_is_gone_the_moment_it_is_closed() {
 #[test]
 fn re_stating_open_does_not_replay_the_arrival() {
     let mut o = open_overlay().animation(Animation::Zoom.from(0.5));
-    o.open();
+    o.show();
     o.tick(0.05);
     o.tick(0.05);
-    let mid = o.presence().expect("an overlay has a presence").frame().scale;
-    o.open();
+    let mid = o
+        .presence()
+        .expect("an overlay has a presence")
+        .frame()
+        .scale;
+    o.show();
     assert_eq!(
-        o.presence().expect("an overlay has a presence").frame().scale,
+        o.presence()
+            .expect("an overlay has a presence")
+            .frame()
+            .scale,
         mid,
         "the arrival carried on from where it was",
     );
@@ -89,17 +111,23 @@ fn a_described_overlay_names_its_animation() {
     let mut o = Overlay::new()
         .panel(Flex::column())
         .set_prop("animation", &PropInput::Text("fade".into()))
-        .opened(true);
-    o.hide();
-    assert!(o.presence().is_some_and(|p| p.is_leaving()), "the named animation is playing");
+        .default_open(true);
+    o.close();
+    assert!(
+        o.presence().is_some_and(|p| p.is_leaving()),
+        "the named animation is playing"
+    );
 
     // Untrusted input stays total: an unknown name leaves the surface as it was.
     let mut unknown = Overlay::new()
         .panel(Flex::column())
         .set_prop("animation", &PropInput::Text("bounce".into()))
-        .opened(true);
-    unknown.hide();
-    assert!(!unknown.presence().is_some_and(|p| p.is_leaving()), "a cut, not a panic");
+        .default_open(true);
+    unknown.close();
+    assert!(
+        !unknown.presence().is_some_and(|p| p.is_leaving()),
+        "a cut, not a panic"
+    );
 }
 
 #[test]
@@ -109,7 +137,10 @@ fn closed_overlay_is_inert() {
     assert!(!o.focusable());
     assert!(!o.overlay_occludes(Point::new(1.0, 1.0)));
     assert_eq!(
-        crate::component::dispatch(&mut o, &Event::pointer_pressed(Point::new(1.0, 1.0), PointerButton::Left)),
+        crate::component::dispatch(
+            &mut o,
+            &Event::pointer_pressed(Point::new(1.0, 1.0), PointerButton::Left)
+        ),
         Handled::No
     );
 }
@@ -117,16 +148,28 @@ fn closed_overlay_is_inert() {
 #[test]
 fn blocking_overlay_occludes_everywhere_and_swallows_outside_input() {
     let mut o = open_overlay();
-    assert!(o.overlay_occludes(Point::new(-500.0, -500.0)), "scrim owns every point");
+    assert!(
+        o.overlay_occludes(Point::new(-500.0, -500.0)),
+        "scrim owns every point"
+    );
     // A press on the scrim: inside the viewport the layer covers, outside the panel it holds.
     let outside = Point::new(4.0, 4.0);
-    assert!(!o.panel_bounds().contains(outside), "the corner is scrim, not panel");
+    assert!(
+        !o.panel_bounds().contains(outside),
+        "the corner is scrim, not panel"
+    );
     assert_eq!(
-        crate::component::dispatch(&mut o, &Event::pointer_pressed(outside, PointerButton::Left)),
+        crate::component::dispatch(
+            &mut o,
+            &Event::pointer_pressed(outside, PointerButton::Left)
+        ),
         Handled::Yes,
         "modal swallows the outside press"
     );
-    assert_eq!(crate::component::dispatch(&mut o, &Event::wheel(outside, 0.0, 1.0)), Handled::Yes);
+    assert_eq!(
+        crate::component::dispatch(&mut o, &Event::wheel(outside, 0.0, 1.0)),
+        Handled::Yes
+    );
 }
 
 #[test]
@@ -138,15 +181,24 @@ fn non_blocking_overlay_occludes_only_its_panel_and_lets_outside_fall_through() 
     let mut o = Overlay::new()
         .blocking(false)
         .panel(Flex::column().child(Label::new("hi")))
-        .opened(true)
+        .default_open(true)
         .on_outside_click(move || d.set(true));
     // Give the panel real bounds (as layout would).
     o.base.children[0].base_mut().bounds =
         Rectangle::new(Point::new(100.0, 100.0), Size::new(50.0, 20.0));
-    assert!(o.overlay_occludes(Point::new(110.0, 110.0)), "panel point occludes");
-    assert!(!o.overlay_occludes(Point::new(0.0, 0.0)), "outside point does not");
+    assert!(
+        o.overlay_occludes(Point::new(110.0, 110.0)),
+        "panel point occludes"
+    );
+    assert!(
+        !o.overlay_occludes(Point::new(0.0, 0.0)),
+        "outside point does not"
+    );
     assert_eq!(
-        crate::component::dispatch(&mut o, &Event::pointer_pressed(Point::new(0.0, 0.0), PointerButton::Left)),
+        crate::component::dispatch(
+            &mut o,
+            &Event::pointer_pressed(Point::new(0.0, 0.0), PointerButton::Left)
+        ),
         Handled::No,
         "light layer lets the outside press fall through"
     );
@@ -191,11 +243,19 @@ fn panel_never_exceeds_the_viewport() {
     let mut o = Overlay::new()
         .panel_size(Length::Px(4000.0), Length::Px(3000.0))
         .panel(ScrollRegion::new().child(Label::new("tall")))
-        .opened(true);
+        .default_open(true);
     crate::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
     let panel = o.panel_bounds();
-    assert!(panel.size.w <= 800.0, "panel width capped, got {}", panel.size.w);
-    assert!(panel.size.h <= 600.0, "panel height capped, got {}", panel.size.h);
+    assert!(
+        panel.size.w <= 800.0,
+        "panel width capped, got {}",
+        panel.size.w
+    );
+    assert!(
+        panel.size.h <= 600.0,
+        "panel height capped, got {}",
+        panel.size.h
+    );
 }
 
 /// Unset (the default) leaves the panel hugging its own content — the sizing
@@ -217,14 +277,18 @@ fn anchored_overlay_places_panel_child_on_layout() {
         .blocking(false)
         .anchored(anchor)
         .panel(Flex::column().child(Label::new("hi")))
-        .opened(true);
+        .default_open(true);
     // Simulate a layout pass: taffy placed the panel somewhere with a real size.
     o.base.children[0].base_mut().bounds =
         Rectangle::new(Point::new(300.0, 300.0), Size::new(120.0, 80.0));
     o.viewport.set(Size::new(800.0, 600.0));
     o.on_layout();
     let placed = o.panel_bounds();
-    assert_eq!(placed.loc, Point::new(40.0, 134.0), "panel anchored below trigger");
+    assert_eq!(
+        placed.loc,
+        Point::new(40.0, 134.0),
+        "panel anchored below trigger"
+    );
     // Idempotent: a second on_layout must not compound the offset.
     o.on_layout();
     assert_eq!(o.panel_bounds().loc, placed.loc, "re-placing is idempotent");
@@ -263,7 +327,7 @@ fn a_frosted_overlay_records_its_blur_in_the_base_band_over_what_it_occludes() {
     let mut o = Overlay::new()
         .frosted(true)
         .panel(Flex::column().child(Label::new("hi")))
-        .opened(true);
+        .default_open(true);
     crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
 
     let (base, overlay) = host_draws(&o);
@@ -277,7 +341,10 @@ fn a_frosted_overlay_records_its_blur_in_the_base_band_over_what_it_occludes() {
         }],
         "blocking, so it blurs the viewport it covers — and in the base band",
     );
-    assert!(overlay.is_empty(), "a backdrop is never deferred with what the surface draws");
+    assert!(
+        overlay.is_empty(),
+        "a backdrop is never deferred with what the surface draws"
+    );
 }
 
 /// **A surface that did not ask for a frost summons no blur pass.** The blur is a GPU pass over
@@ -297,12 +364,16 @@ fn a_non_blocking_frost_reaches_only_as_far_as_the_panel() {
         .blocking(false)
         .frosted(true)
         .panel(Flex::column().child(Label::new("hi")))
-        .opened(true);
+        .default_open(true);
     crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
 
     let (base, _) = host_draws(&o);
     assert_eq!(base.len(), 1);
-    assert_eq!(base[0].rect, o.panel_bounds(), "the panel's reach, not the viewport's");
+    assert_eq!(
+        base[0].rect,
+        o.panel_bounds(),
+        "the panel's reach, not the viewport's"
+    );
 }
 
 /// **The backdrop dissolves with the surface that asked for it.**
@@ -317,19 +388,173 @@ fn a_frosted_overlays_backdrop_fades_with_it() {
         .frosted(true)
         .animation(Animation::ZoomFade)
         .panel(Flex::column().child(Label::new("hi")))
-        .opened(true);
+        .default_open(true);
     crate::layout::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
-    o.open();
+    o.show();
     while o.tick(0.05) {}
 
-    o.hide();
+    o.close();
     o.tick(0.05);
     let (base, _) = host_draws(&o);
     assert_eq!(base.len(), 1, "still asking while it leaves");
-    assert!(base[0].alpha < 1.0, "and asking more faintly: {}", base[0].alpha);
+    assert!(
+        base[0].alpha < 1.0,
+        "and asking more faintly: {}",
+        base[0].alpha
+    );
     assert_eq!(
         base[0].rect,
         Rectangle::new(Point::new(0.0, 0.0), Size::new(800.0, 600.0)),
         "the zoom moves the panel, never the region being blurred",
+    );
+}
+
+// ── The keyboard an overlay holds (F003/P097/T502) ──────────────────────────────────────────
+//
+// An open overlay binds its own focus to being open, so the keys have always arrived here — and
+// were dropped, because this widget answered pointer events and nothing else. Every surface built
+// on top wrote its own dismissal and its own traversal instead (`Dialog`, `ContextMenu`,
+// `CommandPalette`: three copies), and a surface **composed** rather than built — which is what a
+// plugin writes — had neither and could not be used from the keyboard at all.
+
+/// **The dismiss key closes a surface that said what dismissal means.**
+#[test]
+fn the_dismiss_key_runs_the_dismissal_a_surface_declared() {
+    use crate::event::WidgetIntent;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let closed = Rc::new(Cell::new(false));
+    let flag = closed.clone();
+    let mut o = Overlay::new()
+        .panel(Flex::column().child(Label::new("body")))
+        .on_dismiss(move || flag.set(true));
+    o.show();
+
+    assert_eq!(
+        crate::component::dispatch(&mut o, &Event::Widget(WidgetIntent::Dismiss)),
+        Handled::Yes,
+    );
+    assert!(
+        closed.get(),
+        "Escape ran what the surface said dismissal means"
+    );
+}
+
+/// **A surface that declared none leaves the key alone.**
+///
+/// The half that matters more: `Dialog`, `ContextMenu` and `CommandPalette` each answer this key
+/// themselves and set no dismissal on their inner overlay. An overlay that swallowed it regardless
+/// would have taken Escape from all three at once — three shipped surfaces broken by a fix aimed
+/// at a fourth.
+#[test]
+fn an_overlay_with_no_dismissal_declared_does_not_swallow_the_key() {
+    use crate::event::WidgetIntent;
+
+    let mut o = Overlay::new().panel(Flex::column().child(Label::new("body")));
+    o.show();
+    assert_eq!(
+        crate::component::dispatch(&mut o, &Event::Widget(WidgetIntent::Dismiss)),
+        Handled::No,
+        "the key passes to whatever composes this overlay, untouched",
+    );
+}
+
+/// **A surface says which control the keyboard starts on, and needs no `key` to do it.**
+///
+/// The author's call, because only the author knows which control is safe. The name is the
+/// control's declared `key` when it has one and **the words it reads by** when it does not —
+/// `key` is optional everywhere in this library and a control you point at is no exception.
+#[test]
+fn a_surface_places_the_keyboard_on_the_control_it_named() {
+    use crate::reactive::SignalGet;
+    use crate::widgets::Button;
+
+    let mut o = Overlay::new().default_focus("Cancel").panel(
+        Flex::row()
+            .child(Button::new("Cancel"))
+            .child(Button::new("Delete")),
+    );
+    o.show();
+
+    let panel = &o.base().children[0];
+    let cancel = &panel.base().children[0];
+    let delete = &panel.base().children[1];
+    assert!(
+        cancel.base().focused.get_untracked(),
+        "named by the words it reads by, with no key declared anywhere",
+    );
+    assert!(!delete.base().focused.get_untracked(), "and only that one");
+}
+
+// ── Showing a surface: three doors, one thing (F003/P097/T502) ──────────────────────────────
+
+/// **A handle shows and closes it from anywhere** — the door a click handler needs.
+///
+/// `show`/`hide` on the widget take `&mut self`, so a closure living inside a button can never hold
+/// one while the surface sits beside it. Every caller reached for the raw signal instead. This is
+/// that signal with the two verbs on it, and it is `Copy`, so it goes into any closure.
+#[test]
+fn a_handle_shows_and_closes_a_surface_from_anywhere() {
+    let o = Overlay::new().panel(Flex::column().child(Label::new("body")));
+    let h = o.handle();
+    assert!(!h.is_open(), "built, not shown");
+
+    // Into a closure, by value — the case a `&mut` method cannot serve.
+    let opener = move || h.show();
+    opener();
+    assert!(
+        h.is_open(),
+        "shown from a closure that owns nothing but the handle"
+    );
+
+    h.close();
+    assert!(!h.is_open());
+    h.toggle();
+    assert!(h.is_open(), "and toggle is the same door");
+}
+
+/// **A surface follows a signal you already hold** — the door state binding needs.
+///
+/// It owned a signal and lent it out, so a caller could drive *its* state but never hand it
+/// *theirs*. This is the other direction: the surface is up exactly when your signal is true.
+#[test]
+fn a_surface_follows_a_signal_of_your_own() {
+    use crate::reactive::{SignalUpdate, signal};
+
+    let editing = signal(false);
+    let o = Overlay::new()
+        .panel(Flex::column().child(Label::new("body")))
+        .open_when(editing);
+
+    assert!(!o.handle().is_open());
+    editing.set(true);
+    assert!(
+        o.handle().is_open(),
+        "your signal is the surface's state, not a copy of it"
+    );
+    editing.set(false);
+    assert!(!o.handle().is_open());
+}
+
+/// **Taking the caller's signal rebinds the keyboard to it.**
+///
+/// `base.focused` is bound to whichever signal says whether the surface is up — that binding is
+/// the whole of how keys reach a panel. Adopting the caller's without rebinding would leave the
+/// keyboard following a signal nobody writes any more, so an overlay that was visibly open would
+/// answer nothing.
+#[test]
+fn following_your_signal_rebinds_the_keyboard_to_it() {
+    use crate::reactive::{SignalGet, SignalUpdate, signal};
+
+    let editing = signal(false);
+    let o = Overlay::new()
+        .panel(Flex::column().child(Label::new("body")))
+        .open_when(editing);
+
+    editing.set(true);
+    assert!(
+        o.base().focused.get_untracked(),
+        "an open surface holds the keyboard, whichever signal says it is open",
     );
 }

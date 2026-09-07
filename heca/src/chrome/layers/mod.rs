@@ -253,7 +253,7 @@ impl LayerRegistry {
                     // The same call the stack makes to raise it, and it replays nothing: the
                     // carried presence already says the surface is up, or that it is leaving.
                     if let Some(node) = crate::chrome::surface_node_mut(window, id) {
-                        node.open();
+                        node.show();
                     }
                 }
             }
@@ -425,7 +425,7 @@ impl LayerRegistry {
     /// The same, **but only while that surface is still in charge** (F003/P097/T499).
     ///
     /// ⚠️ **Presence in the tree is not liveness, and this is the whole of the difference.** Hiding
-    /// a surface calls `node.hide()` and leaves it **seated** in the window root —
+    /// a surface calls `node.close()` and leaves it **seated** in the window root —
     /// [`remove_surface`](crate::chrome::remove_surface) runs only when it is destroyed — so the
     /// tree is full of dismissed surfaces, and the exposé and the command palette both declare
     /// `lock` and `modal`. A reader that takes their declarations at face value applies a
@@ -549,7 +549,7 @@ impl LayerRegistry {
             return;
         }
         if let Some(node) = crate::chrome::surface_node_mut(window, id) {
-            node.hide();
+            node.close();
         }
         if self.is_leaving(window, id) {
             if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
@@ -571,7 +571,7 @@ impl LayerRegistry {
             // (`Presence::show`) and every host gets it for free.
         }
         if let Some(node) = crate::chrome::surface_node_mut(window, id) {
-            node.open();
+            node.show();
         }
         // **A modal that arrives becomes the active context**, and only a modal does. That is §2's
         // coarse mechanism: an exclusive surface makes everything beneath it dormant, while the
@@ -592,7 +592,7 @@ impl LayerRegistry {
     /// while you can still see a modal it is still covering the panes.
     pub(crate) fn hide(&mut self, window: &mut heca_grid_ui::widgets::Flex, id: LayerId) {
         if let Some(node) = crate::chrome::surface_node_mut(window, id) {
-            node.hide();
+            node.close();
         }
         // Nothing declared to play on the way out ⇒ it goes now.
         let leaving = self.is_leaving(window, id);

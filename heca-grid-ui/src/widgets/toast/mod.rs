@@ -155,7 +155,7 @@ impl Toast {
             on_dismiss: None,
             flash: Flash::new(),
             // A card built and put in a tree is on screen; a caller that wants it to arrive says
-            // `.opened(false)` and then `open()`.
+            // `.default_open(false)` and then `open()`.
             presence: {
                 let mut p = Presence::new();
                 // **A notification slides in by default**, because that is what a notification
@@ -333,7 +333,7 @@ impl Toast {
     /// Whether it starts on screen. Order-independent with
     /// [`animation`](Toast::animation), exactly as an `Overlay`'s is.
     #[heca_grid_ui_macros::prop]
-    pub fn opened(mut self, open: bool) -> Self {
+    pub fn default_open(mut self, open: bool) -> Self {
         self.open.set(open);
         self.presence.assume_open(open);
         self
@@ -356,7 +356,7 @@ impl Toast {
 
     /// **Put it on screen.** With an animation declared it plays; already up, or still on its way
     /// out, and nothing happens.
-    pub fn open(&mut self) {
+    pub fn show(&mut self) {
         if self.presence.enter() {
             self.open.set(true);
         }
@@ -364,7 +364,7 @@ impl Toast {
 
     /// **Dismiss it.** With an animation the card stays laid out, inert, until the gesture has
     /// played out — which is what lets a host drop it from a list only once it has actually gone.
-    pub fn hide(&mut self) {
+    pub fn close(&mut self) {
         self.presence.leave();
         self.open.set(false);
     }
@@ -372,8 +372,8 @@ impl Toast {
     /// Open it if it is closed, dismiss it if it is open.
     pub fn toggle(&mut self) {
         match self.presence.is_open() {
-            true => self.hide(),
-            false => self.open(),
+            true => self.close(),
+            false => self.show(),
         }
     }
 
@@ -479,12 +479,12 @@ impl Component for Toast {
         Some(&mut self.presence)
     }
 
-    fn open(&mut self) {
-        Toast::open(self);
+    fn show(&mut self) {
+        Toast::show(self);
     }
 
-    fn hide(&mut self) {
-        Toast::hide(self);
+    fn close(&mut self) {
+        Toast::close(self);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

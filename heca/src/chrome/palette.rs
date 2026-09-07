@@ -420,7 +420,7 @@ pub(crate) fn open_command_palette(
         }
         palette = palette.command(command);
     }
-    let palette = palette.query(prefill).open(true);
+    let palette = palette.query(prefill).default_open(true);
 
     // **A pane row follows its pane.** The chrome store already mirrors each pane's `program` and
     // `custom_name` as signals, and the row's title is a signal too, so this is one effect per pane

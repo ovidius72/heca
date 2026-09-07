@@ -452,7 +452,7 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
         // keyboard, so every keybinding was dead until `Escape` (Antonio, 2026-08-07 —
         // "`prefix+>` then float/unfloat makes it unstable, keybindings don't work").
         .after_select(move || emit_after.fire(close.clone()))
-        .open(true);
+        .default_open(true);
 
     // A menu **captures input and demands a choice**, so it covers for policy purposes even though
     // its panel is small: *a modal is an overlay with coverage* (F003/P086/T371). Its own entries
@@ -534,7 +534,7 @@ fn build_modal_root(
         dialog
             .dismissible(spec.dismissible)
             .on_dismiss(move || emit_dismiss.fire(close.clone()))
-            .open(true),
+            .default_open(true),
     )
 }
 

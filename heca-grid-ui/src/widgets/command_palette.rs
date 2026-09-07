@@ -400,7 +400,7 @@ impl CommandPalette {
 
     /// Set the initial open state.
     #[heca_grid_ui_macros::prop]
-    pub fn open(mut self, open: bool) -> Self {
+    pub fn default_open(mut self, open: bool) -> Self {
         self.open.set(open);
         // Mark the matches for the (empty) query now, so the first paint is not a frame behind, and
         // place the selection on whichever row asked to start there.

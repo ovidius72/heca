@@ -592,7 +592,7 @@ impl ContextMenu {
 
     /// Open or close the panel. Opening **realizes the rows** — the builders run here.
     #[heca_grid_ui_macros::prop]
-    pub fn open(mut self, open: bool) -> Self {
+    pub fn default_open(mut self, open: bool) -> Self {
         self.open.set(open);
         if open {
             self.realize();
@@ -1102,11 +1102,11 @@ impl MenuAnchor {
     /// Apply this anchor to a panel and open it.
     pub fn open(self, panel: ContextMenu) -> ContextMenu {
         match self {
-            Self::At(p) => panel.anchor(p).centered(false).open(true),
+            Self::At(p) => panel.anchor(p).centered(false).default_open(true),
             Self::Under(b) => panel
                 .anchor(Point::new(b.loc.x, b.loc.y + b.size.h))
                 .centered(false)
-                .open(true),
+                .default_open(true),
         }
     }
 }

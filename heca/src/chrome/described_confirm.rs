@@ -62,9 +62,9 @@ pub(crate) fn confirm_view(
         // **The keyboard starts on the safe one.** The author's call, because only the author
         // knows which button changes nothing — a framework cannot infer it, and guessing on a
         // destructive question is the wrong way to be wrong.
-        // **No key needed** — it names the button by the words it reads by, because `key` is
-        // optional everywhere in this library and a button you point at is no exception.
-        .default_focus("Cancel")
+        // Either spelling works: this names the button by its declared key, and would equally
+        // name it by the words it reads by — `key` is optional, and `focus_named` accepts both.
+        .default_focus("cancel")
         .child(
             build::Surface::new()
                 // **Theme steps, not pixels.** Resolved from the inherited font at layout, so this
@@ -88,6 +88,11 @@ pub(crate) fn confirm_view(
                         .justify(heca_view::ViewJustify::End)
                         .child(
                             build::Button::new()
+                                // **Named because they are a collection.** Two buttons of one kind
+                                // side by side is the one case a `key` is for: without it neither
+                                // can keep a cursor position, a right-click target or a hint letter
+                                // across a rebuild, and the identity reporter says so at startup.
+                                .key("cancel")
                                 .text("Cancel")
                                 .on_press(dismiss)
                                 .tooltip("Leave everything as it is"),
@@ -96,6 +101,7 @@ pub(crate) fn confirm_view(
                             // The destructive one reads as destructive — the same variant heca's
                             // own confirm gives the button that does the irreversible thing.
                             build::Button::new()
+                                .key("delete")
                                 .text("Delete")
                                 .variant(heca_view::ViewVariant::Destructive)
                                 .on_press(accept)
@@ -125,7 +131,10 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) {
     let node = confirm_view(
         "Delete pane?",
         "This cannot be undone.",
-        Intent::new("close_pane"),
+        // `close`, not `close_pane` — the latter is not an action at all, it is an argument name
+        // on `spawn_pane`'s close policy. A described intent that names nothing resolves to
+        // nothing and the button silently does no work (Antonio, driving, 2026-09-07).
+        Intent::new("close"),
         dismiss,
     );
     super::overlay::open_view_layer(
@@ -177,7 +186,7 @@ mod tests {
         // second answer to that question, and the two would drift the moment anything hid it —
         // which is exactly what a self-opening description did: it came up at startup, before
         // anything had asked for it.
-        surface.open();
+        surface.show();
         // One layout, as the frame would: a surface decides nothing from a box it has not been
         // given, and the picker reads coverage off laid-out bounds.
         LayoutEngine::new().compute(surface.as_mut(), Size::new(900.0, 600.0));
@@ -204,8 +213,16 @@ mod tests {
         let panel = surface.base().children[0].as_ref();
         let layout = &panel.base().style.layout;
 
-        assert_eq!(layout.pad_spacing_x, Some(DIALOG_PAD), "the panel's own padding");
-        assert_eq!(layout.gap_spacing, Some(DIALOG_GAP), "title to body to actions");
+        assert_eq!(
+            layout.pad_spacing_x,
+            Some(DIALOG_PAD),
+            "the panel's own padding"
+        );
+        assert_eq!(
+            layout.gap_spacing,
+            Some(DIALOG_GAP),
+            "title to body to actions"
+        );
 
         let actions = panel
             .base()
@@ -240,6 +257,50 @@ mod tests {
             *fired.borrow(),
             vec!["myplugin.cancel".to_string()],
             "the keyboard began on the safe button, because the surface said so",
+        );
+    }
+
+    /// **Every action this surface names is a real one** (F003/P097/T502).
+    ///
+    /// It named `close_pane`, which is not an action at all — it is an argument on `spawn_pane`'s
+    /// close policy. A described intent that resolves to nothing fires nothing, so the Delete
+    /// button **did no work and said nothing**; the only sign was a line in the running app's log,
+    /// and only because Antonio was reading it (2026-09-07).
+    ///
+    /// Nothing else can catch this: a `ViewNode` carries an action *name*, so the compiler has no
+    /// opinion, and a typo is indistinguishable from an action that has not been written yet. The
+    /// host owns the vocabulary, so the host is where the check belongs.
+    #[test]
+    fn every_action_this_surface_names_exists() {
+        let node = confirm_view(
+            "Delete pane?",
+            "This cannot be undone.",
+            Intent::new("close"),
+            Intent::new("hide_layer"),
+        );
+
+        fn intents(n: &ViewNode, out: &mut Vec<String>) {
+            out.extend(n.events.values().map(|i| i.action.clone()));
+            out.extend(n.actions.values().map(|i| i.action.clone()));
+            for c in &n.children {
+                intents(c, out);
+            }
+        }
+        let mut named = Vec::new();
+        intents(&node, &mut named);
+        assert!(
+            !named.is_empty(),
+            "the surface names some actions, or this guard reads nothing"
+        );
+
+        let unknown: Vec<&String> = named
+            .iter()
+            .filter(|n| crate::input::action_from_name(n).is_none())
+            .collect();
+        assert!(
+            unknown.is_empty(),
+            "these are not actions heca knows, so the control that names one does nothing at all \
+             and says nothing: {unknown:#?}",
         );
     }
 
@@ -346,7 +407,7 @@ mod tests {
         use heca_grid_ui::widgets::{Label, Overlay};
 
         let mut plain = Overlay::new().panel(Label::new("no dismissal here"));
-        plain.open();
+        plain.show();
         assert_eq!(
             heca_grid_ui::dispatch(&mut plain, &Event::Widget(WidgetIntent::Dismiss)),
             heca_grid_ui::event::Handled::No,
@@ -435,7 +496,7 @@ mod tests {
             );
             let theme = Theme::default();
             let mut surface = realize(&node, &theme, &emit, &mut FormBindings::default());
-            surface.open();
+            surface.show();
             LayoutEngine::new().compute(surface.as_mut(), Size::new(width, 600.0));
 
             let mut scene = Scene::new();

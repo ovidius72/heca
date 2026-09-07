@@ -93,7 +93,7 @@ impl Presence {
 
     /// **Adopt a state without playing it** — a surface *born* open, and the other half of carrying
     /// one across a rebuild. Order-independent by construction: it never touches the animation, so
-    /// `.opened(true).animation(..)` and `.animation(..).opened(true)` are the same surface.
+    /// `.default_open(true).animation(..)` and `.animation(..).default_open(true)` are the same surface.
     pub fn assume_open(&mut self, open: bool) {
         self.open = open;
     }

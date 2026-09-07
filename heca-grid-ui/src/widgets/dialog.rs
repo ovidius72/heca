@@ -36,10 +36,8 @@
 //! viewport and centers the panel by taffy), so every descendant gets true bounds (which the
 //! hint picker and pointer hit-testing need).
 
-use crate::builders::{LayoutExt, Parent, ComponentExt as _};
-use crate::component::{
-    Base, Component, Event, GridKey, Handled, WidgetIntent,
-};
+use crate::builders::{ComponentExt as _, LayoutExt, Parent};
+use crate::component::{Base, Component, Event, GridKey, Handled, WidgetIntent};
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use crate::style::{Justify, Length, Spacing};
 use crate::widgets::{Flex, Label, Overlay};
@@ -137,7 +135,9 @@ impl Dialog {
     ///
     /// `Length::Auto` on an axis keeps the hug-content behaviour. A [`Pct`](Length::Pct)
     /// resolves against the **viewport** (the composed [`Overlay`](super::Overlay) fills it).
-    #[heca_grid_ui_macros::host_only("takes more than one value, which a single property cannot carry")]
+    #[heca_grid_ui_macros::host_only(
+        "takes more than one value, which a single property cannot carry"
+    )]
     pub fn panel_size(mut self, width: Length, height: Length) -> Self {
         let style = &mut self.panel_mut().style.layout;
         style.width = width;
@@ -263,7 +263,7 @@ impl Dialog {
     /// Set the initial open state (focusing the first focusable — the safe default when the
     /// caller orders `[Cancel, …, Confirm]`).
     #[heca_grid_ui_macros::prop]
-    pub fn open(mut self, open: bool) -> Self {
+    pub fn default_open(mut self, open: bool) -> Self {
         self.open.set(open);
         if open {
             // Focus the safe-default (first) button so Enter works — but WITHOUT the ring; it
@@ -274,6 +274,37 @@ impl Dialog {
     }
 
     /// The open-state signal — the host binds this to show/hide the dialog.
+    /// **Follow a signal of your own** — the dialog is up exactly when it is true.
+    ///
+    /// ```ignore
+    /// let confirming = signal(false);
+    /// let d = Dialog::new("Close pane?").body(..).action(..).open_when(confirming);
+    /// confirming.set(true);   // it appears
+    /// ```
+    ///
+    /// Delegates to the composed [`Overlay`](super::Overlay), which holds the state.
+    #[heca_grid_ui_macros::host_only(
+        "a live signal; a description carries a starting value, `open`"
+    )]
+    pub fn open_when(mut self, open: Signal<bool>) -> Self {
+        let overlay = std::mem::replace(&mut self.base.children[0], Box::new(Flex::column()));
+        self.base.children[0] = overlay;
+        self.open = open;
+        self.base.children[0].follow_open(open);
+        self
+    }
+
+    /// **A handle to show and close this dialog from anywhere** — copyable, so it goes into any
+    /// closure. See [`SurfaceHandle`](super::SurfaceHandle).
+    ///
+    /// ```ignore
+    /// let confirm = Dialog::new("Close pane?").body(..).action(..).handle();
+    /// Button::new("Delete").on_click(move || confirm.show())
+    /// ```
+    pub fn handle(&self) -> super::SurfaceHandle {
+        super::SurfaceHandle::new(self.open)
+    }
+
     pub fn open_signal(&self) -> Signal<bool> {
         self.open
     }
@@ -462,7 +493,10 @@ impl Component for Dialog {
             },
             // Classic, always-on focus traversal: Tab / Shift+Tab move focus within the modal.
             // Universal widget behaviour, not a rebindable `[keys.widgets]` binding.
-            Event::Key { key: GridKey::Tab, pressed: true } => {
+            Event::Key {
+                key: GridKey::Tab,
+                pressed: true,
+            } => {
                 if crate::event::modifiers().shift {
                     self.focus_prev();
                 } else {
@@ -481,8 +515,8 @@ impl LayoutExt for Dialog {}
 
 #[cfg(test)]
 mod tests {
-    use crate::event::PointerButton;
     use super::*;
+    use crate::event::PointerButton;
     use crate::widgets::{Button, Label};
     use std::cell::Cell;
     use std::rc::Rc;
@@ -492,7 +526,7 @@ mod tests {
             .body(Label::new("This action cannot be undone."))
             .action(Button::new("Cancel"))
             .action(Button::new("Delete"))
-            .open(true)
+            .default_open(true)
     }
 
     /// An open dialog wired with a dismiss flag, for the Esc / scrim tests.
@@ -524,7 +558,13 @@ mod tests {
         assert!(!d.overlay_active());
         assert!(!d.focusable());
         assert_eq!(
-            crate::component::dispatch(&mut d, &Event::Key { key: GridKey::Escape, pressed: true }),
+            crate::component::dispatch(
+                &mut d,
+                &Event::Key {
+                    key: GridKey::Escape,
+                    pressed: true
+                }
+            ),
             Handled::No,
             "a closed dialog handles nothing",
         );
@@ -561,8 +601,8 @@ mod tests {
     /// grows to fit the content and the region never has anything to scroll.
     #[test]
     fn a_sized_panel_bounds_a_scrollable_body() {
-        use crate::widgets::ScrollRegion;
         use crate::Length;
+        use crate::widgets::ScrollRegion;
 
         // 12 rows, far taller than the 200px panel we ask for.
         let long_body = || {
@@ -578,7 +618,7 @@ mod tests {
         let mut sized = Dialog::new("Long list")
             .panel_size(Length::Px(300.0), Length::Px(200.0))
             .body(long_body())
-            .open(true);
+            .default_open(true);
         crate::LayoutEngine::new().compute(&mut sized, viewport);
         let panel = sized.panel_bounds();
         assert!(
@@ -592,14 +632,13 @@ mod tests {
         );
 
         // Unsized, the same body makes the panel grow instead (nothing to scroll).
-        let mut unsized_dialog = Dialog::new("Long list").body(long_body()).open(true);
+        let mut unsized_dialog = Dialog::new("Long list").body(long_body()).default_open(true);
         crate::LayoutEngine::new().compute(&mut unsized_dialog, viewport);
         assert!(
             unsized_dialog.panel_bounds().size.h > panel.size.h,
             "without panel_size the panel hugs the tall content"
         );
     }
-
 
     #[test]
     fn clicking_panel_body_keeps_button_focus() {
@@ -617,7 +656,8 @@ mod tests {
         let panel = d.panel_bounds();
         let body = Point::new(panel.loc.x + panel.size.w * 0.5, panel.loc.y + 2.0);
         assert!(panel.contains(body), "test point is inside the panel body");
-        let _ = crate::component::dispatch(&mut d, &Event::pointer_pressed(body, PointerButton::Left));
+        let _ =
+            crate::component::dispatch(&mut d, &Event::pointer_pressed(body, PointerButton::Left));
 
         assert_eq!(
             focused_buttons(&d),
@@ -633,7 +673,9 @@ mod tests {
         // `dismissible`.
         let flag = Rc::new(Cell::new(false));
         let f = flag.clone();
-        let mut d = open_dialog().dismissible(false).on_dismiss(move || f.set(true));
+        let mut d = open_dialog()
+            .dismissible(false)
+            .on_dismiss(move || f.set(true));
         assert_eq!(
             crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::Dismiss)),
             Handled::Yes,
@@ -642,7 +684,10 @@ mod tests {
 
         // A scrim click (press outside the panel) on a forced dialog must NOT dismiss.
         flag.set(false);
-        let _ = crate::component::dispatch(&mut d, &Event::pointer_pressed(Point::new(-100.0, -100.0), PointerButton::Left));
+        let _ = crate::component::dispatch(
+            &mut d,
+            &Event::pointer_pressed(Point::new(-100.0, -100.0), PointerButton::Left),
+        );
         assert!(!flag.get(), "forced dialog ignores the scrim/outside click");
     }
 
@@ -652,8 +697,14 @@ mod tests {
         // configurable `item_next`/`item_previous` bindings). Each is consumed and lands focus.
         for intent in [WidgetIntent::ItemNext, WidgetIntent::ItemPrevious] {
             let mut d = open_dialog();
-            assert_eq!(crate::component::dispatch(&mut d, &Event::Widget(intent)), Handled::Yes);
-            assert!(!focused_buttons(&d).is_empty(), "{intent:?} focuses a button");
+            assert_eq!(
+                crate::component::dispatch(&mut d, &Event::Widget(intent)),
+                Handled::Yes
+            );
+            assert!(
+                !focused_buttons(&d).is_empty(),
+                "{intent:?} focuses a button"
+            );
         }
     }
 
@@ -667,7 +718,7 @@ mod tests {
             .body(Input::new().value("term"))
             .action(Button::new("OK").on_click(move || f.set(true)))
             .action(Button::new("Cancel"))
-            .open(true);
+            .default_open(true);
         // Typed text is delivered field-first to (and consumed by) the focused input. Text, not a
         // key: `Event::TextInput` is what the user actually committed.
         assert_eq!(
@@ -690,17 +741,23 @@ mod tests {
             .body(Input::new().value("ab"))
             .action(Button::new("OK"))
             .action(Button::new("Cancel"))
-            .open(true);
+            .default_open(true);
         // Editing shortcut → forwarded to the input; it is consumed and focus stays on the field.
         assert_eq!(
             crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::EditDeleteBack)),
             Handled::Yes,
             "EditDeleteBack reaches the focused input",
         );
-        assert!(focused_buttons(&d).is_empty(), "editing keeps focus in the input");
+        assert!(
+            focused_buttons(&d).is_empty(),
+            "editing keeps focus in the input"
+        );
         // Nav moves focus off the input onto a button.
         let _ = crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::ItemNext));
-        assert!(!focused_buttons(&d).is_empty(), "ItemNext navigates to a button");
+        assert!(
+            !focused_buttons(&d).is_empty(),
+            "ItemNext navigates to a button"
+        );
     }
 }
 
@@ -728,7 +785,7 @@ mod tab_repro {
             .body(Label::new("This action cannot be undone."))
             .action(Button::new("Cancel"))
             .action(Button::new("Close"))
-            .open(true);
+            .default_open(true);
         crate::component::dispatch(
             &mut d,
             &Event::Key {

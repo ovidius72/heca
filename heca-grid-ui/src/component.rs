@@ -835,7 +835,7 @@ pub trait Component {
     /// caller repeats them. With no animation declared it is simply up.
     ///
     /// Default: nothing to open.
-    fn open(&mut self) {}
+    fn show(&mut self) {}
 
     /// **Put this surface's keyboard on the control named `key`**, if it holds one.
     ///
@@ -852,6 +852,13 @@ pub trait Component {
     /// panel is two positions that drift, so Tab and the arrow keys end up disagreeing about where
     /// the keyboard is.
     fn advance_focus(&mut self, _forward: bool) {}
+
+    /// **Follow this signal for whether the surface is up.** Default: nothing.
+    ///
+    /// [`Overlay`](crate::widgets::Overlay) implements it, so anything composed from one hands the
+    /// caller's own state down to the widget that actually holds it, rather than keeping a second
+    /// copy that has to be kept in step.
+    fn follow_open(&mut self, _open: crate::reactive::Signal<bool>) {}
 
     /// **Put the keyboard on this surface's first control, without showing a ring.**
     ///
@@ -870,14 +877,14 @@ pub trait Component {
     /// out, which is what lets a host keep painting it while it goes. With none, it is simply gone.
     ///
     /// Default: nothing to hide.
-    fn hide(&mut self) {}
+    fn close(&mut self) {}
 
     /// Open it if it is closed, dismiss it if it is open. The default reads
     /// [`presence`](Self::presence), so a surface gets it for free.
     fn toggle(&mut self) {
         match self.presence().is_some_and(crate::animation::Presence::is_open) {
-            true => self.hide(),
-            false => self.open(),
+            true => self.close(),
+            false => self.show(),
         }
     }
 

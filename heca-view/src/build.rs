@@ -1145,8 +1145,8 @@ impl Toast {
     }
     /// Whether it starts on screen. A described card that is closed takes no space until something
     /// opens it.
-    pub fn opened(self, open: bool) -> Self {
-        self.prop("opened", open)
+    pub fn default_open(self, open: bool) -> Self {
+        self.prop("default_open", open)
     }
     /// Where the card sits in the box that holds it: `"top-right"` (the default), `"top-left"`,
     /// `"top-center"`, `"bottom-right"`, `"bottom-left"`, `"bottom-center"`.
@@ -1341,10 +1341,11 @@ impl Overlay {
     pub fn blocking(self, on: bool) -> Self {
         self.prop("blocking", PropValue::Bool(on))
     }
-    /// Whether it starts up. A surface **born** open is already there and plays no arrival; one
+    /// Whether it starts up. The starting value only — to follow state you hold, the host binds a
+    /// signal with `open_when`. A surface **born** open is already there and plays no arrival; one
     /// that *becomes* open arrives.
-    pub fn opened(self, on: bool) -> Self {
-        self.prop("opened", PropValue::Bool(on))
+    pub fn default_open(self, on: bool) -> Self {
+        self.prop("default_open", PropValue::Bool(on))
     }
     /// **Blur what is behind it.** The scrim's counterpart: a scrim tints what is underneath, a
     /// frost takes its detail away, and a surface may want either, both or neither.

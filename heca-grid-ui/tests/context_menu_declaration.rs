@@ -504,7 +504,7 @@ fn a_menu_near_the_edge_is_clamped_on_the_first_layout_pass() {
                 .child(MenuItem::new().label("Rename").on_click(|| {}))
                 .child(MenuItem::new().label("Close").on_click(|| {})),
         )
-        .open(true);
+        .default_open(true);
     // Anchored hard against the bottom-right corner: unclamped, the panel would hang off-screen.
     menu.anchor_signal().set(heca_core::layout::Point::new(390.0, 290.0));
 
@@ -534,7 +534,7 @@ fn an_open_menu_mounted_as_a_layer_root_answers_dismiss_and_a_quick_pick() {
                 .child(MenuItem::new().label("Close").on_click(|| {})),
         )
         .on_dismiss(move || d.set(true))
-        .open(true);
+        .default_open(true);
     LayoutEngine::new().compute(&mut menu, Size::new(400.0, 300.0));
 
     // The quick-pick letter, as a raw key.
@@ -550,7 +550,7 @@ fn an_open_menu_mounted_as_a_layer_root_answers_dismiss_and_a_quick_pick() {
     let mut menu = ContextMenu::new("m")
         .child(Menu::new("Pane", "what you can do").child(MenuItem::new().label("Rename").on_click(|| {})))
         .on_dismiss(move || d2.set(true))
-        .open(true);
+        .default_open(true);
     LayoutEngine::new().compute(&mut menu, Size::new(400.0, 300.0));
     heca_grid_ui::dispatch(&mut menu, &heca_grid_ui::Event::Widget(WidgetIntent::Dismiss));
     assert!(dismissed.get(), "Dismiss reached the menu");

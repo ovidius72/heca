@@ -52,7 +52,7 @@ mod tests {
         let surface = Overlay::new()
             .frosted(frosted)
             .panel(Flex::row())
-            .opened(true);
+            .default_open(true);
         place_surface(&mut root, "surface:1", Box::new(surface));
         let scene = paint_chrome_root(&mut root, 1000.0, 800.0, &theme);
         backdrops(&scene)

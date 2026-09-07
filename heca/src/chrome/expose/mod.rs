@@ -248,7 +248,7 @@ pub(crate) fn map(
             // rebuilds the map and then shows the layer, and showing states that the surface is
             // open. A rebuild while it is already up carries the gesture over from the tree it
             // replaces, so nothing replays.
-            .opened(false),
+            .default_open(false),
     )
 }
 
@@ -427,7 +427,7 @@ mod tests {
         // **Shown, as the layer stack shows it.** The map is built closed and opened by whoever
         // mounts it (`LayerRegistry::show`), which is also what plays its arrival — so a test that
         // never opens it is testing a surface nobody has raised.
-        root.open();
+        root.show();
         heca_grid_ui::LayoutEngine::new()
             .compute(root.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
         (root, seen)
@@ -561,7 +561,7 @@ mod tests {
         let theme = GuiTheme::default();
         let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
         let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys(), None);
-        root.open(); // as the layer stack shows it — see `built`
+        root.show(); // as the layer stack shows it — see `built`
 
         // What is *drawn*, not what the tree holds — the question is whether a workspace name ever
         // reaches the screen.

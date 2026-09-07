@@ -3727,7 +3727,7 @@ fn command_palette_is_overlay_active_only_while_open() {
     use heca_grid_ui::Component;
     let (p, _) = palette_with_markers();
     assert!(!p.overlay_active() && !p.focusable(), "inert while closed");
-    let p = p.open(true);
+    let p = p.default_open(true);
     assert!(p.overlay_active() && p.focusable(), "captures input while open");
 }
 
@@ -3735,7 +3735,7 @@ fn command_palette_is_overlay_active_only_while_open() {
 fn command_palette_typing_filters_then_activate_runs_top_result() {
     use heca_grid_ui::{Component, WidgetIntent};
     let (mut p, ran) = palette_with_markers();
-    p = p.open(true);
+    p = p.default_open(true);
 
     // Type "tog" → "Toggle sidebar" is the top (only) match.
     for c in "tog".chars() {
@@ -3751,7 +3751,7 @@ fn command_palette_typing_filters_then_activate_runs_top_result() {
 fn command_palette_navigates_via_menu_nav() {
     use heca_grid_ui::WidgetIntent;
     let (mut p, ran) = palette_with_markers();
-    p = p.open(true);
+    p = p.default_open(true);
 
     // No query → all three; selection starts at 0. Down ×2 → idx 2, Up → idx 1.
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuDown));
@@ -3773,7 +3773,7 @@ fn command_palette_describes_a_command_on_a_second_line() {
                 .description("New column to the right of the active pane."),
         )
         .command(Command::new("Close pane", || {}).description("Close the focused pane."))
-        .open(true);
+        .default_open(true);
 
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
@@ -3831,7 +3831,7 @@ fn command_palette_stacks_a_binding_per_row_in_a_reserved_column() {
                 .keys([KeyCap::Nf(NfGlyph::Control), cap("e")]),
         )
         .command(Command::new("Reload Config", || {}).description("Re-read config.toml."))
-        .open(true);
+        .default_open(true);
 
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
@@ -3897,7 +3897,7 @@ fn command_palette_rows_are_only_as_tall_as_their_own_bindings() {
         )
         .command(Command::new("Close Pane", || {}).description("Close the focused pane."))
         .command(Command::new("Reload Config", || {}).description("Re-read config.toml."))
-        .open(true);
+        .default_open(true);
 
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
@@ -3944,7 +3944,7 @@ fn command_palette_reflows_the_selected_description_and_cuts_the_rest() {
                 .keys([KeyCap::Text("λ".into()), KeyCap::Text("e".into())]),
         )
         .command(Command::new("Reload Config", || {}).description(other))
-        .open(true);
+        .default_open(true);
 
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
@@ -4005,7 +4005,7 @@ fn command_palette_query_takes_the_edit_intents() {
     let mut p = CommandPalette::new()
         .command(Command::new("Close pane", move || r1.set(1)))
         .command(Command::new("Toggle sidebar", move || r2.set(2)))
-        .open(true);
+        .default_open(true);
 
     // Type a query that matches only "Close pane", then select-all + type over it: the field must
     // replace the selection, leaving "tog" → "Toggle sidebar".
@@ -4024,7 +4024,7 @@ fn command_palette_query_takes_the_edit_intents() {
     let r = ran.clone();
     let mut p = CommandPalette::new()
         .command(Command::new("Close pane", move || r.set(1)))
-        .open(true);
+        .default_open(true);
     for c in "zzz".chars() {
         type_text(&mut p, &c.to_string());
     }
@@ -4043,7 +4043,7 @@ fn command_palette_reserves_the_icon_column_even_for_a_command_without_one() {
     let mut p = CommandPalette::new()
         .command(Command::new("With Icon", || {}).icon(Glyph::Search))
         .command(Command::new("Without Icon", || {}))
-        .open(true);
+        .default_open(true);
 
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
@@ -4077,7 +4077,7 @@ fn the_palette_size_is_capped_by_the_window() {
         let mut p = CommandPalette::new()
             .panel_size(size)
             .command(Command::new("Close Pane", || {}))
-            .open(true);
+            .default_open(true);
         LayoutEngine::new().compute(&mut p, viewport);
         let mut scene = Scene::new();
         {
@@ -4145,7 +4145,7 @@ fn the_palette_never_runs_off_a_short_window() {
                 .keys([cap("λ"), cap("b")]),
         );
     }
-    let mut p = p.open(true);
+    let mut p = p.default_open(true);
 
     // The room kept clear beneath the panel, as a fraction of the window height — wider than the
     // gap at its sides, since a bottom edge resting on a pane boundary still reads as touching.
@@ -4197,7 +4197,7 @@ fn command_palette_recalls_past_queries_from_its_history() {
             .search(SearchModel::new("command", store.clone()))
             .command(Command::new("Close pane", || {}).id("close"))
             .command(Command::new("Split pane", || {}).id("split"))
-            .open(true)
+            .default_open(true)
     };
     // The drawn query line: the first text run inside the panel is the field's.
     let query_text = |p: &CommandPalette| {
@@ -4257,7 +4257,7 @@ fn command_palette_ranks_by_past_use_until_something_is_typed() {
             .search(SearchModel::new("command", store.clone()))
             .command(Command::new("Close pane", move || a.set("close")).id("close"))
             .command(Command::new("Split pane", move || b.set("split")).id("split"))
-            .open(true)
+            .default_open(true)
     };
 
     // Use "Split pane" — it is second in the caller's order.
@@ -4293,7 +4293,7 @@ fn a_group_leads_an_empty_query_and_dissolves_once_typing_starts() {
             // Declared second, but in the leading block.
             .command(Command::new("Zoom out", move || a.set("zoom")).id("zoom").group(1))
             .command(Command::new("Workspaces › Delete row", move || b.set("del")).id("del").group(0))
-            .open(true)
+            .default_open(true)
     };
 
     let mut p = open();
@@ -4319,7 +4319,7 @@ fn command_palette_remembers_only_what_was_run() {
         CommandPalette::new()
             .search(SearchModel::new("command", store.clone()))
             .command(Command::new("Close pane", || {}).id("close"))
-            .open(true)
+            .default_open(true)
     };
 
     let mut p = open();
@@ -4355,7 +4355,7 @@ fn command_palette_filters_on_the_label_not_the_description() {
     let mut p = CommandPalette::new()
         .command(Command::new("Close pane", move || r1.set(1)).description("Splits nothing."))
         .command(Command::new("Split pane", move || r2.set(2)).description("Adds a column."))
-        .open(true);
+        .default_open(true);
 
     for c in "split".chars() {
         type_text(&mut p, &c.to_string());
@@ -4382,7 +4382,7 @@ fn a_sigil_switches_the_mode_without_filtering_by_itself() {
             .command(Command::new("Close pane", move || a.set("close")).id("close"))
             .command(Command::new("nvim", move || b.set("nvim")).id("nvim").mode("pane"))
             .command(Command::new("zsh", move || c.set("zsh")).id("zsh").mode("pane"))
-            .open(true)
+            .default_open(true)
     };
 
     // No sigil: the default mode, exactly as before modes existed.
@@ -4429,7 +4429,7 @@ fn every_mode_keeps_its_own_history_and_ranking() {
             .mode('@', "pane")
             .command(Command::new("Close pane", || {}).id("close"))
             .command(Command::new("nvim", || {}).id("nvim").mode("pane"))
-            .open(true)
+            .default_open(true)
     };
     let query_text = |p: &CommandPalette| {
         let mut scene = Scene::new();
@@ -4497,7 +4497,7 @@ fn the_marks_land_on_the_effective_query_not_the_sigil() {
             .mode('@', "pane")
             .command(Command::new("Close pane", || {}).id("close"))
             .command(Command::new("zsh", || {}).id("zsh").mode("pane"))
-            .open(true)
+            .default_open(true)
     };
     // Marks are **over-drawn per character**, so a marked label leaves single-character runs on top
     // of the whole line (see `a_label_marks_the_characters_it_was_given`).
@@ -4541,7 +4541,7 @@ fn a_live_label_is_both_redrawn_and_matched_by_its_new_name() {
     let mut p = CommandPalette::new()
         .command(Command::new("zsh", move || a.set("first")).id("one"))
         .command(Command::new("bash", move || b.set("second")).id("two"))
-        .open(true);
+        .default_open(true);
 
     // The host renames the first row — a pane's process changed, or it was renamed.
     p.label_signals()[0].set("nvim".to_string());
@@ -4570,7 +4570,7 @@ fn the_selection_starts_on_the_preselected_row_until_something_is_typed() {
             // Declared second, and the row the caller wants Enter to land on.
             .command(Command::new("beta", move || b.set("beta")).id("b").preselect(true))
             .command(Command::new("gamma", move || c.set("gamma")).id("c"))
-            .open(true)
+            .default_open(true)
     };
 
     let mut p = open();
@@ -4602,7 +4602,7 @@ fn a_palette_without_modes_is_unchanged() {
     let mut p = CommandPalette::new()
         .command(Command::new("Close pane", move || a.set("close")).id("close"))
         .command(Command::new(":wq", move || b.set("wq")).id("wq"))
-        .open(true);
+        .default_open(true);
 
     for c in ":w".chars() {
         type_text(&mut p, &c.to_string());
@@ -4615,7 +4615,7 @@ fn a_palette_without_modes_is_unchanged() {
 fn command_palette_query_reuses_input_word_delete() {
     use heca_grid_ui::{Modifiers, WidgetIntent};
     let (mut p, ran) = palette_with_markers();
-    p = p.open(true);
+    p = p.default_open(true);
 
     // "Toggle xyz" matches nothing (no command contains "...xyz").
     for c in "Toggle xyz".chars() {
@@ -6341,7 +6341,7 @@ fn a_blocking_overlay_reports_a_key_its_panel_ignored_as_unhandled() {
     let grid = CardGrid::new()
         .row(vec![vec![GridCell::new("a", lit)]], Flex::row().child(Label::new("a")))
         .on_dismiss(move || d.set(true));
-    let mut overlay = Overlay::new().blocking(true).panel(grid).opened(true);
+    let mut overlay = Overlay::new().blocking(true).panel(grid).default_open(true);
 
     // A raw key the panel has no use for: the overlay must NOT claim it, or the keymap stops here.
     let handled = heca_grid_ui::dispatch(
@@ -6587,20 +6587,20 @@ fn a_toast_opens_hides_and_takes_no_space_while_closed() {
 
     let mut page = Flex::column()
         .width(Length::Px(400.0))
-        .child(Toast::info("Saved").opened(false))
+        .child(Toast::info("Saved").default_open(false))
         .child(Toast::info("Also saved"));
     LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
     let closed = page.base().children[0].base().bounds.size.h;
     assert_eq!(closed, 0.0, "a closed card still occupies {closed}px");
 
     // Opening puts it back in the flow; hiding takes it out again.
-    page.base_mut().children[0].open();
+    page.base_mut().children[0].show();
     LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
     assert!(page.base().children[0].base().bounds.size.h > 0.0, "open, it is laid out");
 
     // Hiding starts the exit. **It stays laid out while it plays** — that is what the gesture has
     // to play over — and takes no space only once it has finished (the card's default is a slide).
-    page.base_mut().children[0].hide();
+    page.base_mut().children[0].close();
     LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
     assert!(
         page.base().children[0].base().bounds.size.h > 0.0,

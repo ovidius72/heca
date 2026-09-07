@@ -386,11 +386,17 @@ fn every_routing_container_passes_the_whole_vocabulary_through() {
         ),
         (
             "Overlay",
-            probe_in(|p| Box::new(Overlay::new().panel(Flex::column().child(p)).opened(true))),
+            probe_in(|p| {
+                Box::new(
+                    Overlay::new()
+                        .panel(Flex::column().child(p))
+                        .default_open(true),
+                )
+            }),
         ),
         (
             "Dialog",
-            probe_in(|p| Box::new(Dialog::new("T").body(p).open(true))),
+            probe_in(|p| Box::new(Dialog::new("T").body(p).default_open(true))),
         ),
     ];
     for (name, seen) in cases {
@@ -582,7 +588,7 @@ fn a_press_outside_an_open_menu_dismisses_it() {
         .child(Menu::new("Test", "a menu").child(MenuItem::new().label("Close").on_click(|| {})))
         .anchor(Point::new(40.0, 40.0))
         .on_dismiss(move || d.set(true))
-        .open(true);
+        .default_open(true);
     LayoutEngine::new().compute(&mut menu, Size::new(400.0, 300.0));
     // Paint once so the menu caches a viewport and places its panel, as a host frame would.
     let theme = Theme::default();

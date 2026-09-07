@@ -873,7 +873,7 @@ fn realize_kind(
                 toast = toast.body_text(body);
             }
             if let Some(opened) = node.props.get("opened").and_then(PropValue::as_bool) {
-                toast = toast.opened(opened);
+                toast = toast.default_open(opened);
             }
             if let Some(position) = node
                 .props
@@ -1610,12 +1610,12 @@ mod tests {
 
         let node = ViewNode::new(WidgetKind::Overlay)
             .prop("animation", PropValue::Text("zoom_fade".into()))
-            .prop("opened", PropValue::Bool(true))
+            .prop("default_open", PropValue::Bool(true))
             .child(ViewNode::new(WidgetKind::Label).text("MAP"));
         let mut surface = realize(&node, &theme, &emit, &mut forms);
 
         assert!(surface.presence().is_some(), "a described overlay is a surface a host can drive");
-        surface.hide();
+        surface.close();
         assert!(
             surface.presence().is_some_and(|p| p.is_leaving()),
             "the named animation plays on the way out",
@@ -1632,8 +1632,8 @@ mod tests {
             .prop("animation", PropValue::Text("supernova".into()))
             .child(ViewNode::new(WidgetKind::Label).text("MAP"));
         let mut cut = realize(&unknown, &theme, &emit, &mut forms);
-        cut.open();
-        cut.hide();
+        cut.show();
+        cut.close();
         assert!(!cut.presence().is_some_and(|p| p.is_leaving()), "a cut, not a panic");
     }
 
@@ -1653,7 +1653,7 @@ mod tests {
         let mut backdrops = |frosted: bool| {
             let node = ViewNode::new(WidgetKind::Overlay)
                 .prop("frosted", PropValue::Bool(frosted))
-                .prop("opened", PropValue::Bool(true))
+                .prop("default_open", PropValue::Bool(true))
                 .child(ViewNode::new(WidgetKind::Label).text("MAP"));
             let mut w = realize(&node, &theme, &emit, &mut forms);
             heca_grid_ui::LayoutEngine::new()
