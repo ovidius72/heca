@@ -586,7 +586,7 @@
       "priority": 9,
       "shortName": "rebuild-one-real-overlay-throu",
       "title": "Rebuild one real overlay through the described path — the acceptance test",
-      "status": "done",
+      "status": "in-progress",
       "description": "GOAL: prove \"a plugin can add an overlay\" is a fact, not a claim, by rebuilding one of the app's own overlays entirely through the described (ViewNode) path — the way a plugin would have to — and confirming it gets pointer input, keyboard, hint letters, layout and paint with nothing host-side taught about it.\n\nWHY THIS TASK EXISTS: today the exposé is mounted as LayerContent::Native (a Rust component). Our flagship overlay does not use the plugin path at all, so it proves the layer stack and proves NOTHING about whether a plugin could build one. This is the Rule Zero check: until one of our overlays is built the way a plugin must, the capability is unverified.\n\nDEPENDS ON: the one-tree input work (T494-T499) so a described node actually receives input, and the declarative-widget-arms task (T501) so the overlay's widgets can be described.\n\nWORK:\n- Pick the smallest real overlay that is not composed of host-only widgets. Candidates: a described re-implementation of a simple confirm dialog body, or a described version of a plugin-facing panel. NOT the exposé first (CardGrid, cursor, delete letters — too much surface for a first proof).\n- Build it as a ViewNode tree + realize(), mounted as LayerContent from the described path, with behaviour crossing as Intent only (no closures).\n- Confirm by driving: it opens, the pointer clicks its buttons, keyboard reaches its focus, prefix+/ letters its targets, it lays out and paints at the right place, and dismiss works — all with zero host code specific to this overlay.\n- Write the result up: what worked out of the box, what still needed a host-side nudge (each nudge is a gap to file).\n\nOUTPUT: a working described overlay in the tree + a short findings note. If any part needed host-specific wiring, that wiring is a bug against the one-tree model and gets its own task. ~1 day.\n\n---\n**Completion summary:**\nDONE — 7/7. Committed as 673356d on feat/hint-collapses-to-the-tree (not pushed). Antonio drove it and confirmed it works.\n\nTHE ACCEPTANCE RESULT: \"a plugin can add an overlay\" was FALSE for the keyboard. A surface composed the way a plugin must — Overlay + Surface + Buttons, no Dialog — answered the pointer and wore hint letters and was completely deaf to the keyboard. Every bit of that behaviour lived in Dialog, which C10 settled is not a kind a plugin constructs. The described-layer path (open_view_layer) also had ZERO callers, so the road had never been driven.\n\nWHAT THE TEST FOUND, each fixed at the library:\n1. Enter activated nothing. A Button answered Event::Click and nothing else. NATIVE BUG HIDDEN BY THIS: Dialog documents the focused button as consuming Enter and falls back to firing its PRIMARY action when it does not — and it never did. So in every heca dialog, Tab to Cancel + Enter fired OK. Fixed on Button.\n2. Escape did not dismiss. Fixed on Overlay, and ONLY when the surface declared what dismissal means — Dialog/ContextMenu/CommandPalette set none on their inner overlay, so all three keep answering it exactly as before (guarded by an_overlay_with_no_dismissal_declared_does_not_swallow_the_key).\n3. Tab did not traverse. Fixed on Overlay, which contains the focusables.\n4. THE FIRST TAB DID NOTHING, in the real prefix+x dialog too. Dialog held its own FocusManager while Overlay held another — two positions over one panel. Opening focused the first button through Dialog's; the first Tab moved Overlay's to that same button. Dialog now keeps NO manager and delegates all four operations (open-quiet, Tab, arrow motion, click-in-panel). ⚠️ Collapsing only Tab BROKE input_edit_reaches_focused_field_nav_moves_to_button — the halves must move together or they disagree somewhere new instead. That failure is the lesson.\n5. Uniformity: the two dialogs looked like different products. Dialog kept its panel recipe as three PRIVATE PIXEL constants, so nothing outside could match it — buttons flush, no air between body and actions. Now DIALOG_PAD/DIALOG_GAP/DIALOG_BTN_GAP, theme steps, public, read by both. Existing dialogs shift slightly at font 15: pad 18→18.75, gap 14→12.75, button gap 10→7.5.\n6. A described tree could only say padding(16.0) — semantic spacing existed but had no declarative spelling, so the no-hardcoding rule was one a plugin COULD NOT KEEP. Added pad_all/pad_x/pad_y/gap_spacing to the SDK.\n7. A described layer could not be NAMED. add_named took a native tree, add_view wrote None. show_layer/hide_layer address by name, so a plugin could raise a surface and have nothing able to point at it. add_view takes a name and reuses add_named, keeping place/visibility/animation across a rebuild.\n8. default_focus/default_action names a control by its declared key OR the words it reads by — one lookup in FocusManager::focus_named. key stays optional.\n\nDELIVERABLE: heca/src/chrome/described_confirm.rs — the surface, composed Overlay > Surface > Label/Label/HStack > Buttons with pad_all/gap_spacing/justify doing all spacing and alignment, behaviour as Intent only. Registered hidden as heca.confirm, opened by the ordinary show_layer.\n\nVERIFICATION: 1483 pass, 0 failures, clippy at the one pre-existing warning, no file's rustfmt count raised (edition 2024). Every guard sabotaged; two were VACUOUS on the first writing and were rewritten — the Tab test passed with traversal deleted because activate reached the far button anyway.\n\n⚠️ THREE THINGS FROM ANTONIO'S RUN, NOT YET FIXED — the first is a real defect:\n1. `interaction: view intent 'close_pane' did not resolve to a known action` — the Delete button fires an action name that does not exist, so DELETE DOES NOTHING. Needs the correct by-id action name.\n2. `a Button at 0/2/0 ... declares no key, and it is one of 2 siblings of that kind` — the identity reporter wants keys on the two sibling buttons; they are a collection, which is the case a key IS for.\n3. The suggested binding `prefix+y` overwrites the existing `y` → CopySelection. Pick another key.\n\nNOT VERIFIED BY ME: nothing here was seen in the GPU app by me; Antonio drove it and reported it working apart from the three above.",
       "descriptionUpdatedAt": "2026-09-07T10:50:36.396Z",
       "notes": "",
@@ -606,6 +606,22 @@
           "toStatus": "done",
           "title": "in-progress → done",
           "description": "DONE — 7/7. Committed as 673356d on feat/hint-collapses-to-the-tree (not pushed). Antonio drove it and confirmed it works.\n\nTHE ACCEPTANCE RESULT: \"a plugin can add an overlay\" was FALSE for the keyboard. A surface composed the way a plugin must — Overlay + Surface + Buttons, no Dialog — answered the pointer and wore hint letters and was completely deaf to the keyboard. Every bit of that behaviour lived in Dialog, which C10 settled is not a kind a plugin constructs. The described-layer path (open_view_layer) also had ZERO callers, so the road had never been driven.\n\nWHAT THE TEST FOUND, each fixed at the library:\n1. Enter activated nothing. A Button answered Event::Click and nothing else. NATIVE BUG HIDDEN BY THIS: Dialog documents the focused button as consuming Enter and falls back to firing its PRIMARY action when it does not — and it never did. So in every heca dialog, Tab to Cancel + Enter fired OK. Fixed on Button.\n2. Escape did not dismiss. Fixed on Overlay, and ONLY when the surface declared what dismissal means — Dialog/ContextMenu/CommandPalette set none on their inner overlay, so all three keep answering it exactly as before (guarded by an_overlay_with_no_dismissal_declared_does_not_swallow_the_key).\n3. Tab did not traverse. Fixed on Overlay, which contains the focusables.\n4. THE FIRST TAB DID NOTHING, in the real prefix+x dialog too. Dialog held its own FocusManager while Overlay held another — two positions over one panel. Opening focused the first button through Dialog's; the first Tab moved Overlay's to that same button. Dialog now keeps NO manager and delegates all four operations (open-quiet, Tab, arrow motion, click-in-panel). ⚠️ Collapsing only Tab BROKE input_edit_reaches_focused_field_nav_moves_to_button — the halves must move together or they disagree somewhere new instead. That failure is the lesson.\n5. Uniformity: the two dialogs looked like different products. Dialog kept its panel recipe as three PRIVATE PIXEL constants, so nothing outside could match it — buttons flush, no air between body and actions. Now DIALOG_PAD/DIALOG_GAP/DIALOG_BTN_GAP, theme steps, public, read by both. Existing dialogs shift slightly at font 15: pad 18→18.75, gap 14→12.75, button gap 10→7.5.\n6. A described tree could only say padding(16.0) — semantic spacing existed but had no declarative spelling, so the no-hardcoding rule was one a plugin COULD NOT KEEP. Added pad_all/pad_x/pad_y/gap_spacing to the SDK.\n7. A described layer could not be NAMED. add_named took a native tree, add_view wrote None. show_layer/hide_layer address by name, so a plugin could raise a surface and have nothing able to point at it. add_view takes a name and reuses add_named, keeping place/visibility/animation across a rebuild.\n8. default_focus/default_action names a control by its declared key OR the words it reads by — one lookup in FocusManager::focus_named. key stays optional.\n\nDELIVERABLE: heca/src/chrome/described_confirm.rs — the surface, composed Overlay > Surface > Label/Label/HStack > Buttons with pad_all/gap_spacing/justify doing all spacing and alignment, behaviour as Intent only. Registered hidden as heca.confirm, opened by the ordinary show_layer.\n\nVERIFICATION: 1483 pass, 0 failures, clippy at the one pre-existing warning, no file's rustfmt count raised (edition 2024). Every guard sabotaged; two were VACUOUS on the first writing and were rewritten — the Tab test passed with traversal deleted because activate reached the far button anyway.\n\n⚠️ THREE THINGS FROM ANTONIO'S RUN, NOT YET FIXED — the first is a real defect:\n1. `interaction: view intent 'close_pane' did not resolve to a known action` — the Delete button fires an action name that does not exist, so DELETE DOES NOTHING. Needs the correct by-id action name.\n2. `a Button at 0/2/0 ... declares no key, and it is one of 2 siblings of that kind` — the identity reporter wants keys on the two sibling buttons; they are a collection, which is the case a key IS for.\n3. The suggested binding `prefix+y` overwrites the existing `y` → CopySelection. Pick another key.\n\nNOT VERIFIED BY ME: nothing here was seen in the GPU app by me; Antonio drove it and reported it working apart from the three above."
+        },
+        {
+          "id": "1c02161a-6b72-4c13-b1f2-9528f0d56215-check-003-done-planned",
+          "date": "2026-09-07T12:40:54.272Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Reopened on Antonio's instruction (2026-09-07). T502's own completion summary lists three defects from his drive as NOT YET FIXED, the first a real one — the described confirm's Delete button fires `close_pane`, which resolves to no action, so Delete does nothing. Its acceptance surface (heca/src/chrome/described_confirm.rs) still holds a permanent address in chrome/ root and registers a layer at boot, while its library guards are already duplicated into heca-grid-ui/src/widgets/button.rs and overlay/tests.rs. And the task's acceptance question — \"a plugin can add an overlay\" — remains false for one case it did not reach: showing a surface does not mount it. Dialog composes an Overlay but does not delegate presence/show/close/follow_open, so LayerRegistry::show calls the trait's empty default on a dialog root; nothing but default_open(true) has ever opened a dialog, show_layer cannot raise one by name, handle.show() moves a signal nothing is mounted on, and is_leaving reads presence() == None so a dialog's exit never gates retirement.",
+          "description": "Reopened on Antonio's instruction (2026-09-07). T502's own completion summary lists three defects from his drive as NOT YET FIXED, the first a real one — the described confirm's Delete button fires `close_pane`, which resolves to no action, so Delete does nothing. Its acceptance surface (heca/src/chrome/described_confirm.rs) still holds a permanent address in chrome/ root and registers a layer at boot, while its library guards are already duplicated into heca-grid-ui/src/widgets/button.rs and overlay/tests.rs. And the task's acceptance question — \"a plugin can add an overlay\" — remains false for one case it did not reach: showing a surface does not mount it. Dialog composes an Overlay but does not delegate presence/show/close/follow_open, so LayerRegistry::show calls the trait's empty default on a dialog root; nothing but default_open(true) has ever opened a dialog, show_layer cannot raise one by name, handle.show() moves a signal nothing is mounted on, and is_leaving reads presence() == None so a dialog's exit never gates retirement."
+        },
+        {
+          "id": "1c02161a-6b72-4c13-b1f2-9528f0d56215-check-004-planned-in-progress",
+          "date": "2026-09-07T12:41:04.735Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
         }
       ],
       "decisions": [],
@@ -659,10 +675,14 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-09-06T10:16:07.417Z",
-      "completedAt": "2026-09-07T10:50:36.393Z",
+      "completedAt": "",
       "createdAt": "2026-08-27T19:41:50.259Z",
-      "updatedAt": "2026-09-07T10:50:36.393Z",
+      "updatedAt": "2026-09-07T12:41:04.735Z",
       "sessionInfo": [
+        {
+          "sessionId": "mcp-process:af580e98-cc45-42af-86e1-fcbc96719b07",
+          "createdAt": "2026-09-07T12:41:04.632Z"
+        },
         {
           "sessionId": "mcp-process:4292a20d-dae1-4a5c-8ec5-0bd49c30cf12",
           "createdAt": "2026-09-06T10:16:07.319Z"
@@ -671,7 +691,7 @@
     }
   ],
   "createdAt": "2026-08-27T19:38:36.401Z",
-  "updatedAt": "2026-09-07T12:17:29.708Z",
+  "updatedAt": "2026-09-07T12:41:04.735Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-09-05T20:55:11.617Z",
   "handoffAudit": {
@@ -858,9 +878,21 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "f9f1b44e-840f-41f2-b013-c525279ed797",
+      "date": "2026-09-07T12:40:54.305Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:af580e98-cc45-42af-86e1-fcbc96719b07",
+      "createdAt": "2026-09-07T12:41:04.632Z"
+    },
     {
       "sessionId": "mcp-process:4292a20d-dae1-4a5c-8ec5-0bd49c30cf12",
       "createdAt": "2026-09-06T10:16:07.319Z"

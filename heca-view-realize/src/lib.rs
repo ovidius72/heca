@@ -3617,7 +3617,7 @@ mod tests {
         "NamedAnimation",
     ];
 
-    /// **Every `WidgetKind` realizes to a live widget**    /// **Every `WidgetKind` realizes to a live widget** — one that either holds the children it was
+    /// **Every `WidgetKind` realizes to a live widget** — one that either holds the children it was
     /// given or paints something. The fallback (an empty `Flex`) does neither, so a kind with no arm
     /// fails here loudly instead of rendering nothing and being noticed months later by a plugin
     /// author.

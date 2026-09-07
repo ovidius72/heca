@@ -61,6 +61,69 @@ production code that hands the widget onward, so the builder chain can return th
 ⚠️ It touches the host's modal path, the layer registry and the result callback. Antonio must drive
 it; nothing here can be proven by tests alone.
 
+### The plan, per surface — WHAT WAS AGREED vs WHAT WAS NEVER DESIGNED
+
+⚠️ Read the labels. Antonio approved the **API** (the three doors) and the **direction** (showing
+becomes mounting; the builder returns the handle; `ModalSpec` stops being a developer's concern).
+He did **not** approve a per-surface design, because none was ever written. Everything marked
+`[MY READING]` is one session's opinion and is worth exactly that.
+
+**The one thing that makes all of this necessary** (found by a later session, verified): a composed
+surface does not answer the surface half of the `Component` contract. `Dialog` implements NONE of
+`presence` / `presence_mut` / `show` / `close`. Neither do `ContextMenu` or `CommandPalette`. So
+`LayerRegistry::show` calls `node.show()` on the layer root and gets the trait's empty default —
+a no-op on a dialog. Nothing but `default_open(true)` has ever opened one, `show_layer` cannot raise
+one by name, and `is_leaving` reads `presence() == None` so a dialog's exit never gates retirement.
+
+**`Overlay`** — AGREED: it is the surface. It already implements presence, show, close,
+follow_open, and `tick` calls `presence.follow(is_open())` every frame, so a surface raised by a
+signal does play its arrival. TWO DEFECTS SHIPPED HERE: `SurfaceHandle::show()` writes the open
+signal directly instead of calling the widget's verb, so it skips `place_default_focus`; and
+`place_default_focus` has exactly ONE caller, `Overlay::show()`, so neither `handle.show()` nor
+`open_when` ever places the keyboard. The two tests give a false impression — one proves the handle
+moves the signal, the other proves `show()` places focus, and nothing crosses both.
+[MY READING] the handle should call the verb; the `open_when` path has no call site to hook, so
+placing focus probably belongs beside `presence.follow` in `tick`.
+
+**`Dialog`** — AGREED in principle: mechanism on the generic surface, policy on the specific one.
+It already forwards five KEYBOARD methods to its composed Overlay (`set_default_focus`,
+`focus_first_quiet`, `focus_at_trapped`, `advance_focus`, `follow_open`). [MY READING] it should
+forward the surface half the same way. ⚠️ MOVE ALL OF THEM AT ONCE. Collapsing only Tab, when the
+other three focus operations still used Dialog's own manager, BROKE
+`input_edit_reaches_focused_field_nav_moves_to_button`. A partial move relocates the disagreement
+rather than removing it. That is the single most expensive lesson of the session.
+
+**`ContextMenu` and `CommandPalette`** — ⚠️ **NOTHING TRANSFERS FROM DIALOG.** Verified: neither
+contains a single `Overlay::new()` and neither mentions `presence` at all. They are their own
+panels, not wrappers. So "forward to the composed Overlay" is not available to them and they need a
+different answer — either they gain presence of their own, or they come to be built on Overlay,
+which is a much larger change. NEVER DESIGNED. Do not assume the Dialog shape fits.
+
+**The toast stack** — ⚠️ 15 mentions of `presence`, all its own, and no Overlay. It is the file
+carrying the one pre-existing clippy warning. NEVER DESIGNED, and the most likely thing to break
+if `visible` starts being derived rather than stored.
+
+**The exposé** — registers through `add_named` with a NATIVE root and sets `lock = false`
+deliberately (a map lets you see the panes, so declaring coverage made it refuse every act on the
+pane it exists to choose). NEVER DESIGNED, not mentioned anywhere else in this file.
+
+**`visible` on `DynamicLayer`** — NEVER DECIDED. It is still stored (`layers/layer.rs:89`). T499
+moved `modal` and `lock` off the record to be read off the node; whether `visible` was left behind
+on purpose or simply not reached is UNKNOWN — that was an earlier session and its handoff does not
+mention it. [A LATER SESSION'S READING, not mine] it is the last stored copy of something the
+surface knows, and should be derived from presence with the same `unwrap_or_else` shape the registry
+already uses for `captures_keyboard`. Check the toast stack before assuming that is uniform.
+
+**`build_modal_root` and `ModalSpec`** — AGREED: the builder chain returns the handle, showing means
+mounting, and `ModalSpec` stops being something a developer assembles. NEVER DESIGNED: what happens
+to the completion callback and the form values it collects. Today `open_modal` takes a callback that
+receives `ModalResult::Action { id, data }` and digs typed values out of `data` — that is the part
+that actually makes a dialog useful, and no replacement for it was ever sketched. [MY READING]
+`ModalSpec` can survive as an internal shape the host uses; what must go is a developer or plugin
+having to construct one. Measured: three places construct a `Dialog` — `build_modal_root`
+(`heca/src/chrome/overlay.rs:495`), one layers test, and the showcase — and only the first passes
+the widget onward.
+
 ### The rules this API came from — do not re-litigate them
 
 - **DOM-like.** A developer has a surface and shows it. Layers, stacks, mounting, `realize`,
