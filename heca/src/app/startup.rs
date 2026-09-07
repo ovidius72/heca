@@ -181,13 +181,26 @@ pub(crate) async fn init_state(
     // widget built it and the framework anchored it; only the host can reach a layer. Queued
     // rather than mounted here because this closure has no `&mut AppState` — the event loop drains
     // it before the next frame.
-    type PendingMenu = (heca_grid_ui::widgets::ContextMenu, heca_grid_ui::widgets::MenuAnchor);
+    use crate::app_state::PendingMenu;
     let pending_menus: std::rc::Rc<std::cell::RefCell<Vec<PendingMenu>>> = Default::default();
     let queue = pending_menus.clone();
     let menu_proxy = event_proxy.clone();
-    heca_grid_ui::install_menu_sink(move |menu, anchor| {
-        queue.borrow_mut().push((menu, anchor));
+    heca_grid_ui::install_menu_sink(move |menu, anchor, subject| {
+        queue.borrow_mut().push((menu, anchor, subject));
         let _ = menu_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
+    });
+
+    // **Where a widget's act goes.** The twin of the menu sink above, and the reason a widget no
+    // longer needs a struct of host callbacks to do anything: it names the action, and this routes
+    // it through the one dispatch door — the same permission rules and the same confirmation on
+    // anything destructive that a keypress gets. A plugin's widget names an action the same way and
+    // is judged identically.
+    let intent_proxy = event_proxy.clone();
+    heca_grid_ui::intent::install_intent_sink(move |intent| {
+        let _ = intent_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+            source: crate::app::interaction::InteractionSource::MouseContent,
+            intent: crate::app::interaction::InteractionIntent::View(intent),
+        });
     });
 
     // **A drop nobody took**, queued the same way and for the same reason: the row owns the
@@ -531,11 +544,6 @@ pub(crate) async fn init_state(
     // from the very first frame. Re-registering is the rebuild path when the session's shape
     // changes; see `chrome::expose::register`.
     crate::chrome::register_expose(&mut state);
-    // The described-surface acceptance test (F003/P097/T502): an overlay built the way a plugin
-    // must build one, registered through the one described-layer path and reached by the same
-    // generic `show_layer heca.confirm` any other named surface is. It starts hidden, like every
-    // other on-demand layer.
-    crate::chrome::described_confirm::register(&mut state);
     state
 }
 

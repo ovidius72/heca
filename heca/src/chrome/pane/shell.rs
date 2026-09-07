@@ -17,6 +17,7 @@ use super::model::PaneShellModel;
 
 /// The app seams the shell binds, travelling as **one group** rather than one argument at a time
 /// (AGENTS.md § 0b-bis rule 3) — so a test can hand it the app's edges and nothing else.
+#[derive(Clone)]
 pub(crate) struct PaneCallbacks {
     /// What picking this pane does: focus it. Emitted as an `InteractionIntent`, never performed
     /// here — the pane asks, the core does.
@@ -96,7 +97,42 @@ impl PaneShell<'_> {
         // The pane's own identity, from the data — never a counter, never a position. A pane id is
         // stable across every rebuild, which is what lets a letter stay with the same pane between
         // openings of the picker (F003/P082/T445).
-        let mut pane = pane.key(crate::chrome::pane_key(pane_id));
+        let pane = pane.key(crate::chrome::pane_key(pane_id));
+
+        // **What a click on a pane means, said in one place, in the order it happens.**
+        //
+        // It was two separate declarations twenty lines apart: a press handler that asked for
+        // focus, and a menu handed to the framework to open on right-click. Nothing ordered them —
+        // it worked only because a press arrives before a release — and reading either one told
+        // you nothing about the gesture. A sidebar row, a dock or a plugin's panel says exactly
+        // this about itself, and nothing outside knows any of them exist.
+        // **What a click on a pane means, and nothing host-private in sight.**
+        //
+        // Clicking focuses it: the action named, not a function handed in. Right-clicking focuses
+        // it too and ends the gesture there, so nothing behind also acts on it — the menu is a
+        // *declaration* below, opened and closed by the framework, because a pane has no business
+        // knowing what a menu is.
+        //
+        // This carried a struct of host callbacks until now, cloned twice at the call site. A
+        // plugin could build none of that, so a plugin's widget could not act at all.
+        // **Clicking a pane focuses it, whichever button.** The action named, not a function
+        // handed in — a plugin's widget writes the identical line.
+        //
+        // It does not claim the click: a declared menu opens only for a right-click nobody took
+        // (guarded by `a_widget_that_claims_its_own_right_click_beats_the_declaration`), so
+        // claiming it here would silently switch this pane's own menu off.
+        let mut pane = pane
+            .on_click(move |ev| ev.dispatch(focus_pane(pane_id)))
+            .on_right_click(move |ev| ev.dispatch(focus_pane(pane_id)))
+            // **It has a menu; it does not own one.** The framework opens it on a right-click at
+            // the pointer and takes it down when a press lands outside. Everything in it comes
+            // from whatever is registered for this name — heca's entries and any plugin's alike.
+            .context_menu(|_at| {
+                heca_grid_ui::widgets::ContextMenu::new("pane").child(
+                    heca_grid_ui::widgets::Menu::new("Pane", "What you can do with this pane")
+                        .name(crate::chrome::ContextPath::PANE),
+                )
+            });
 
         // **Two rows: the header at its own height, the content taking the rest.** The header is
         // whatever the thing running in this pane wants along its top; the shell neither builds it
@@ -121,10 +157,7 @@ impl PaneShell<'_> {
         //
         // It names the built-in `focus_pane` with the argument that action declares, so the letter,
         // a keybinding, a menu entry and RPC all resolve through one `build_action`.
-        let picked = heca_view::Intent::new("focus_pane").arg(
-            "pane_id",
-            heca_view::PropValue::Int(pane_id.0 as i64),
-        );
+        let picked = focus_pane(pane_id);
         KeyHint::new(pane)
             // Centred over the pane, which is where the letter is today and what the maintainer
             // expects. `TopCenter` is for compact square targets; a pane is the large-target case.
@@ -133,6 +166,43 @@ impl PaneShell<'_> {
             .color(to_gui_color(accent))
             .on_hint(heca_grid_ui::Hint::of(picked, move || pick(pane_id)))
     }
+}
+
+/// **Focus this pane** — the catalogued action, named rather than performed here.
+fn focus_pane(pane_id: PaneId) -> heca_view::Intent {
+    heca_view::Intent::new("focus_pane")
+        .arg("pane_id", heca_view::PropValue::Int(pane_id.0 as i64))
+}
+
+/// **Give the shell what focus changed about it.** A per-frame input, exactly like the rect above
+/// and the header's words — never part of the built tree.
+///
+/// Whether a pane is active used to be part of its **identity**, so focusing one threw its tree
+/// away and built a new one. That lost any gesture in flight: a right-click is made from a press
+/// and a release on the *same* widget, and the press had been recorded on the tree that focusing
+/// discarded. So the first right-click on an unfocused pane focused it and opened nothing, and only
+/// a second one — with nothing left to rebuild — showed the menu.
+///
+/// This is the third thing in this file to move out of the rebuild key for the same reason; the
+/// other two are the rect and the header's words, each with the same story.
+pub(crate) fn focus_state_to(
+    root: &mut KeyHint,
+    active: bool,
+    border_color: [f32; 4],
+    accent: [f32; 4],
+) {
+    use heca_grid_ui::Component;
+    let color = to_gui_color(border_color);
+    let base = root.base_mut();
+    if let Some(border) = base.style.visual.border.as_mut() {
+        border.color = color;
+    }
+    base.style.visual.glow = active.then_some(heca_grid_ui::scene::Glow {
+        color,
+        radius: super::ACTIVE_GLOW_RADIUS,
+        intensity: super::ACTIVE_GLOW_STRENGTH,
+    });
+    base.hint_style.color = Some(to_gui_color(accent));
 }
 
 /// **Give the shell the rect the WM assigned it.** Size is a per-frame input, never part of the
@@ -311,5 +381,158 @@ mod tests {
                 b.size.h
             );
         }
+    }
+
+    /// **What a click on a pane means, asserted through the real path.** ⚠️ Ran red first.
+    ///
+    /// The pane names an action; the framework routes it. So this installs the sink a host installs
+    /// and reads back what the pane asked for — no callbacks, because the pane has none any more.
+    /// It carried a struct of host functions until now, cloned at the call site, which a plugin
+    /// could not have built.
+    fn dispatched(build: impl FnOnce(&mut KeyHint)) -> Vec<String> {
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let sink = seen.clone();
+        heca_grid_ui::intent::install_intent_sink(move |i| {
+            sink.borrow_mut().push(format!(
+                "{}({:?})",
+                i.action,
+                i.args.get("pane_id").cloned()
+            ))
+        });
+
+        let cb = crate::chrome::pane::testing::recording_callbacks().0;
+        let mut pane = PaneShell {
+            model: &model(3),
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
+        size_to(&mut pane, 400.0, 300.0);
+        LayoutEngine::new().compute(&mut pane, Size::new(400.0, 300.0));
+        build(&mut pane);
+        let out = seen.borrow().clone();
+        out
+    }
+
+    /// **Clicking a pane focuses it**, by naming the action rather than calling a function.
+    #[test]
+    fn a_click_on_a_pane_asks_for_that_pane() {
+        use heca_grid_ui::event::{Event, PointerEvent};
+        let at = heca_core::layout::Point::new(50.0, 50.0);
+        let fired = dispatched(|pane| {
+            heca_grid_ui::dispatch(pane, &Event::Click(PointerEvent::at(at)));
+        });
+        assert_eq!(
+            fired,
+            vec!["focus_pane(Some(Int(3)))".to_string()],
+            "the pane named the action and the framework carried it",
+        );
+    }
+
+    /// **A right-click focuses it too, and deliberately does NOT claim the click.**
+    ///
+    /// A declared menu opens only for a right-click nobody took, so claiming it here would switch
+    /// this pane's own menu off — two declarations on one widget cancelling each other, with
+    /// nothing failing anywhere. Guarded because `stop_propagation` reads like the tidy thing to
+    /// add and would break the menu silently.
+    #[test]
+    fn a_right_click_focuses_the_pane_without_claiming_the_click() {
+        use heca_grid_ui::event::{Event, PointerEvent};
+        let at = heca_core::layout::Point::new(50.0, 50.0);
+        let mut handled = heca_grid_ui::Handled::Yes;
+        let fired = dispatched(|pane| {
+            handled = heca_grid_ui::dispatch(pane, &Event::RightClick(PointerEvent::at(at)));
+        });
+        assert_eq!(fired, vec!["focus_pane(Some(Int(3)))".to_string()]);
+        assert_eq!(
+            handled,
+            heca_grid_ui::Handled::No,
+            "left unclaimed, so the framework goes on to open the menu the pane declared",
+        );
+    }
+
+    /// **And it has a menu it does not own.** Declared, so the framework opens it at the pointer
+    /// and takes it down when a press lands outside — a pane has no business knowing what a menu
+    /// is.
+    #[test]
+    fn a_pane_declares_a_menu_rather_than_opening_one() {
+        use heca_grid_ui::Component;
+        let (cb, _) = crate::chrome::pane::testing::recording_callbacks();
+        let pane = PaneShell {
+            model: &model(3),
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
+        // The declaration sits on the pane itself, inside the picker wrapper the shell returns.
+        fn declares_a_menu(n: &dyn Component) -> bool {
+            n.base().context_menu.is_some()
+                || n.base()
+                    .children
+                    .iter()
+                    .any(|c| declares_a_menu(c.as_ref()))
+        }
+        assert!(
+            declares_a_menu(&pane),
+            "the pane says it has one; opening and closing it is nobody else's business here",
+        );
+    }
+
+    /// **Focusing a pane must not rebuild it.** ⚠️ Ran red against its own bug.
+    ///
+    /// A right-click is made from a press and a release on the *same* widget. Whether a pane is
+    /// active used to be part of its identity, so focusing it — which is what the press itself
+    /// asks for — threw the tree away and built a new one. The release then landed on a different
+    /// widget, no click was ever completed, and the first right-click on an unfocused pane focused
+    /// it and opened nothing. Only a second one, with nothing left to rebuild, showed the menu
+    ///.
+    ///
+    /// The same trap caught the pane's rect and its header's words before this. Anything that
+    /// changes while a gesture is in flight belongs on the tree, not in the key.
+    #[test]
+    fn focusing_a_pane_does_not_change_its_identity() {
+        let mut inactive = model(3);
+        inactive.active = false;
+        let mut active = model(3);
+        active.active = true;
+        active.border_color = [1.0, 0.0, 0.0, 1.0];
+        active.accent = [1.0, 0.0, 0.0, 1.0];
+
+        assert_eq!(
+            inactive.key(),
+            active.key(),
+            "the same pane, focused or not, is the same pane — so focusing it keeps its tree and \
+             the press already recorded on it",
+        );
+    }
+
+    /// **And focus still shows**, because it is written on instead. Guarded because the tempting
+    /// way to pass the test above is to stop the glow appearing at all.
+    #[test]
+    fn a_focused_pane_still_glows() {
+        use heca_grid_ui::Component;
+
+        let (cb, _) = crate::chrome::pane::testing::recording_callbacks();
+        let mut pane = PaneShell {
+            model: &model(3),
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
+
+        focus_state_to(&mut pane, false, [0.1, 0.9, 0.8, 1.0], [0.1, 0.9, 0.8, 1.0]);
+        assert!(
+            pane.base().style.visual.glow.is_none(),
+            "an unfocused pane has no halo"
+        );
+
+        focus_state_to(&mut pane, true, [0.1, 0.9, 0.8, 1.0], [0.1, 0.9, 0.8, 1.0]);
+        assert!(
+            pane.base().style.visual.glow.is_some(),
+            "and a focused one does, without the tree being rebuilt to get it",
+        );
     }
 }

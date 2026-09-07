@@ -510,7 +510,7 @@ impl ButtonGroup {
         // where it happened, and the menu reads it from there.
         let trigger = ComponentExt::on_click(trigger, {
             let menu = menu.clone();
-            move |ev| menu.borrow().show(ev.event())
+            move |ev: &mut crate::event::EventCx<'_>| menu.borrow().show(ev.event())
         });
         // Nothing is declared about picking it. It is a button: a letter reaches it for that
         // reason alone, and picking it runs this same click.

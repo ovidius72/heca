@@ -42,11 +42,11 @@ pub use place::{
     place_at_point, place_beside,
 };
 
-use crate::animation::{Animation, Presence};
+use crate::animation::Animation;
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child, shift_subtree};
 use crate::event::WidgetIntent;
-use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use crate::style::{Align, Justify, Length};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
@@ -125,7 +125,6 @@ impl SurfaceHandle {
 
 pub struct Overlay {
     base: Base,
-    open: Signal<bool>,
     /// Blocking layer policy: scrim + swallow outside input (modal). `false` ⇒
     /// no scrim; outside input falls through after the outside-click callback.
     blocking: bool,
@@ -166,11 +165,6 @@ pub struct Overlay {
     panel_size: Option<(Length, Length)>,
     /// Last-seen viewport, cached during paint (scrim rect + anchored placement).
     viewport: Cell<Size>,
-    /// **Where this surface is in its arriving and leaving**, and the animation carrying it —
-    /// see [`Overlay::animation`]. A host drives it through
-    /// [`Component::set_open`](crate::Component::set_open); `open` and this are the same fact
-    /// said twice, one as the signal a composing widget binds, one as the gesture in flight.
-    presence: Presence,
 }
 
 #[heca_grid_ui_macros::props]
@@ -189,7 +183,8 @@ impl Overlay {
         // max resolves against this padded content box, so even a huge panel keeps
         // this margin and its border/glow is never shaved by the window edge.
         base.style.layout.padding = VIEWPORT_MARGIN;
-        let open = signal(false);
+        // The flag every component carries, not one of this widget's own — see `Base::open`.
+        let open = base.open;
         // **An open layer holds the keyboard.** Binding `open` to `Base::focused` is the whole of
         // how keys and intents reach a panel: the framework delivers them down the focus owner's
         // ancestor chain, so an open overlay is on that path and a closed one is not. It replaces
@@ -198,7 +193,6 @@ impl Overlay {
         base.focused = open;
         Self {
             base,
-            open,
             blocking: true,
             frosted: false,
             on_outside_click: None,
@@ -210,7 +204,6 @@ impl Overlay {
             viewport: Cell::new(Size::new(f64::INFINITY, f64::INFINITY)),
             // No animation until one is declared: a surface that never asked for one is a cut,
             // costs nothing, and needs no special case anywhere.
-            presence: Presence::new(),
         }
     }
 
@@ -391,8 +384,8 @@ impl Overlay {
     /// same surface.
     #[heca_grid_ui_macros::prop]
     pub fn default_open(mut self, open: bool) -> Self {
-        self.open.set(open);
-        self.presence.assume_open(open);
+        self.base.open.set(open);
+        self.base.presence.assume_open(open);
         self
     }
 
@@ -415,9 +408,10 @@ impl Overlay {
         "a live signal; a description carries a starting value, `opened`"
     )]
     pub fn open_when(mut self, open: Signal<bool>) -> Self {
-        self.open = open;
+        self.base.open = open;
         self.base.focused = open;
-        self.presence
+        self.base
+            .presence
             .assume_open(crate::reactive::SignalGet::get_untracked(&open));
         self
     }
@@ -446,8 +440,31 @@ impl Overlay {
     /// Opening is also where the keyboard is placed, when the surface said where it should go —
     /// here rather than at construction, because a surface is built once and opened many times.
     pub fn show(&mut self) {
-        if self.presence.enter() {
-            self.open.set(true);
+        // Refuses while the exit is still playing, exactly as `Presence::enter` does — asked here
+        // so the open flag is not raised on a surface that is still going away.
+        if self.base.presence.is_leaving() {
+            return;
+        }
+        self.base.open.set(true);
+        self.settle();
+    }
+
+    /// **The one place this surface reacts to becoming open or closed**, whoever asked.
+    ///
+    /// There are two ways in and they must not each carry their own version of what opening means:
+    /// a caller says [`show`](Overlay::show), or the open flag is simply set — by
+    /// [`SurfaceHandle`], by [`open_when`](Overlay::open_when), by a host binding its own state.
+    /// Reacting in the verb alone is what left the second way half-done: the arrival played,
+    /// because [`tick`](Component::tick) follows the flag every frame, but the keyboard was never
+    /// put where the surface said, because that lived in `show` and nothing else called it. A
+    /// surface raised by a signal came up with the keyboard nowhere.
+    ///
+    /// So the rule lives here and is asked at both moments: `show` runs it at once (the keyboard
+    /// must not wait for the next frame), and `tick` runs it every frame for everyone else.
+    fn settle(&mut self) {
+        let was_open = self.base.presence.is_open();
+        self.base.presence.follow(self.base.open.get_untracked());
+        if !was_open && self.base.presence.is_open() {
             self.place_default_focus();
         }
     }
@@ -469,13 +486,13 @@ impl Overlay {
     /// **Dismiss it.** With an animation this begins the exit and the surface stays on screen,
     /// inert, until the gesture has played out; with none, it is gone now.
     pub fn close(&mut self) {
-        self.presence.leave();
-        self.open.set(false);
+        self.base.presence.leave();
+        self.base.open.set(false);
     }
 
     /// Open it if it is closed, dismiss it if it is open.
     pub fn toggle(&mut self) {
-        match self.presence.is_open() {
+        match self.base.presence.is_open() {
             true => self.close(),
             false => self.show(),
         }
@@ -484,11 +501,11 @@ impl Overlay {
     /// The open-state signal — the host (or composing widget) binds this.
     /// **A handle to show and close this surface from anywhere.** See [`SurfaceHandle`].
     pub fn handle(&self) -> SurfaceHandle {
-        SurfaceHandle::new(self.open)
+        SurfaceHandle::new(self.base.open)
     }
 
     pub fn open_signal(&self) -> Signal<bool> {
-        self.open
+        self.base.open
     }
 
     /// **How this surface arrives and leaves.**
@@ -515,7 +532,7 @@ impl Overlay {
     /// a context menu that lingers reads as lag.
     #[heca_grid_ui_macros::prop]
     pub fn animation(mut self, animation: Animation) -> Self {
-        self.presence.set_animation(animation.build());
+        self.base.presence.set_animation(animation.build());
         self
     }
 
@@ -565,7 +582,7 @@ impl Overlay {
     }
 
     fn is_open(&self) -> bool {
-        self.open.get_untracked()
+        self.base.open.get_untracked()
     }
 
     /// **Is there still something to draw?** Open, or dismissed and still playing its exit.
@@ -574,7 +591,7 @@ impl Overlay {
     /// [`is_open`](Self::is_open) — a dissolving surface holds nothing, or the map would refuse
     /// every act on the pane it exists to let you choose — while *painting* follows this.
     fn is_present(&self) -> bool {
-        self.is_open() || self.presence.is_leaving()
+        self.is_open() || self.base.presence.is_leaving()
     }
 
     /// The fixed point an animation's scale works about: the middle of this surface, so it grows
@@ -632,14 +649,6 @@ impl Component for Overlay {
     }
 
     /// This surface's arrival and exit — what a host drives, and what it carries across a rebuild.
-    fn presence(&self) -> Option<&Presence> {
-        Some(&self.presence)
-    }
-
-    fn presence_mut(&mut self) -> Option<&mut Presence> {
-        Some(&mut self.presence)
-    }
-
     fn show(&mut self) {
         Overlay::show(self);
     }
@@ -649,9 +658,10 @@ impl Component for Overlay {
     }
 
     fn follow_open(&mut self, open: Signal<bool>) {
-        self.open = open;
+        self.base.open = open;
         self.base.focused = open;
-        self.presence
+        self.base
+            .presence
             .assume_open(crate::reactive::SignalGet::get_untracked(&open));
     }
 
@@ -679,13 +689,15 @@ impl Component for Overlay {
 
     /// Advance the arrival or exit, then the subtree.
     ///
-    /// The sync is here as well as in [`set_open`](Component::set_open) because a **composing**
-    /// widget drives the same surface through [`open_signal`](Overlay::open_signal) — one flip of
-    /// that signal is an arrival or a dismissal exactly as a host's call is, and neither may be the
-    /// only way an animation starts.
+    /// Runs [`settle`](Overlay::settle) because a **composing** widget drives the same surface
+    /// through [`open_signal`](Overlay::open_signal) — one flip of that signal is an arrival or a
+    /// dismissal exactly as a host's call is, and neither may be the only way an animation starts,
+    /// or the only way the keyboard is placed.
+    ///
+    /// (It named `Component::set_open` before, which does not exist and never has.)
     fn tick(&mut self, dt: f32) -> bool {
-        self.presence.follow(self.is_open());
-        let mut animating = self.presence.tick(dt);
+        self.settle();
+        let mut animating = self.base.presence.tick(dt);
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);
         }
@@ -743,7 +755,7 @@ impl Component for Overlay {
         };
         let panel = self.panel_bounds();
 
-        let frame = self.presence.frame();
+        let frame = self.base.presence.frame();
 
         // **The frost is recorded here, in the BASE segment, before anything this surface draws.**
         //

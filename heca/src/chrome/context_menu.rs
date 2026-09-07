@@ -145,14 +145,24 @@ impl ContextMenuRegistry {
     ) -> Vec<DropdownItem> {
         let mut providers = self.ordered_providers(path);
         providers.extend(plugin);
-        // Re-sort: the plugin entries must interleave with the built-ins by weight.
-        providers.sort_by(|a, b| a.weight.cmp(&b.weight));
 
-        let mut items = Vec::new();
+        // **One sorted list, not blocks-then-items.** Every entry has a weight: the one it declared
+        // for itself, or its block's when it declared none. So a plugin can place its entries as a
+        // block — which is what it usually wants — and still lift a single one to the top, without
+        // anyone having to understand two orderings to predict where anything lands
+        //.
+        //
+        // Stable, so entries that end up with equal weights keep the order their source produced
+        // them in — which is what makes a block with no weights at all come out exactly as written.
+        let mut weighted: Vec<(Vec<i64>, DropdownItem)> = Vec::new();
         for p in providers {
-            items.extend((p.build)(ctx, target));
+            for item in (p.build)(ctx, target) {
+                let weight = item.weight.clone().unwrap_or_else(|| p.weight.clone());
+                weighted.push((weight, item));
+            }
         }
-        items
+        weighted.sort_by(|a, b| a.0.cmp(&b.0));
+        weighted.into_iter().map(|(_, item)| item).collect()
     }
 
     /// Providers for a path, cloned + sorted by weight (stable sort keeps insertion order on
@@ -353,6 +363,40 @@ fn pane_action_items(has_custom_name: bool) -> Vec<DropdownItem> {
     items
 }
 
+/// **Turn the identity a menu's declarer published into the target its providers read.**
+///
+/// A pane declares `pane:<id>` about itself already — the same declaration the keyboard cursor, the
+/// right-click target and a drag all read — so a menu declared on a pane arrives here saying what
+/// it is about, and nothing has to hit-test to find out.
+///
+/// The hyperlink is resolved here rather than by the pane, and that is the one thing this path
+/// still owes to the terminal: whether the clicked cell holds a link is a question about the
+/// terminal's own contents, and until the terminal is a component the only thing that can answer is
+/// the host. A keyboard-opened menu passes no point and so never gets a link entry, which is right
+/// — there is no cell under a keystroke.
+pub(crate) fn target_from_subject(
+    state: &AppState,
+    subject: Option<&str>,
+    at: Option<heca_core::layout::Point>,
+) -> ContextTarget {
+    let Some(pane_id) = subject.and_then(pane_id_from_key) else {
+        return ContextTarget::Contribution;
+    };
+    let hyperlink = at.and_then(|p| {
+        crate::app::terminal_host::hyperlink_uri_at_position(
+            state,
+            pane_id,
+            (p.x as f32, p.y as f32),
+        )
+    });
+    ContextTarget::Pane { pane_id, hyperlink }
+}
+
+/// `pane:<id>` → the pane. The identity a pane publishes about itself; anything else is not a pane.
+fn pane_id_from_key(key: &str) -> Option<PaneId> {
+    key.strip_prefix("pane:")?.parse().ok().map(PaneId)
+}
+
 /// Provider for [`ContextPath::PANE`] — a content pane. "Open link" first only when the mouse
 /// click carried a hyperlink (keyboard-opened menus have `None` → no link entry).
 fn build_pane_menu(ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
@@ -520,6 +564,130 @@ mod tests {
         assert_eq!(ordered.len(), 2);
         assert_eq!(ordered[0].weight, vec![0], "built-in (weight 0) first");
         assert_eq!(ordered[1].weight, vec![2], "plugin (weight 2) second");
+    }
+
+    /// **An entry can sit somewhere other than where its block sits.** ⚠️ Ran red first.
+    ///
+    /// Block weight is the right granularity most of the time — a plugin thinks in "my entries" —
+    /// but a block can only move whole, so a plugin with one entry belonging at the very top and
+    /// the rest at the bottom was stuck. An entry that declares its own weight is placed by it;
+    /// one that declares nothing takes its block's, so this changes nothing for anybody who says
+    /// nothing.
+    #[test]
+    fn an_entry_can_outrank_its_own_block() {
+        let mut r = ContextMenuRegistry::with_builtins();
+        r.register(
+            ContextPath::PANE,
+            // A block that sorts LAST — and yet one of its entries belongs first.
+            vec![9],
+            std::rc::Rc::new(|_ctx: &ChromeCtx, _target: &ContextTarget| {
+                vec![
+                    DropdownItem::new("myplugin.pin", "Pin this").weight(vec![-1]),
+                    DropdownItem::new("myplugin.rest", "Something else"),
+                ]
+            }),
+        );
+
+        let ctx = test_ctx();
+        let items = r.items_for(
+            &ctx,
+            ContextPath::PANE,
+            &ContextTarget::Pane {
+                pane_id: PaneId(1),
+                hyperlink: None,
+            },
+            vec![],
+        );
+        let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+
+        assert_eq!(
+            ids.first(),
+            Some(&"myplugin.pin"),
+            "the entry that named a weight is placed by it, above every built-in: {ids:?}",
+        );
+        assert_eq!(
+            ids.last(),
+            Some(&"myplugin.rest"),
+            "and its silent sibling stays where its block sits, at the end: {ids:?}",
+        );
+    }
+
+    /// **Saying nothing changes nothing.** The whole ordering is one sorted list now, so this pins
+    /// that a block with no per-entry weights comes out exactly as its provider wrote it — the
+    /// sort must be stable, and every built-in menu depends on it.
+    #[test]
+    fn entries_that_name_no_weight_keep_the_order_their_block_wrote_them_in() {
+        let mut r = ContextMenuRegistry::with_builtins();
+        r.register(
+            ContextPath::PANE,
+            vec![9],
+            std::rc::Rc::new(|_ctx: &ChromeCtx, _target: &ContextTarget| {
+                vec![
+                    DropdownItem::new("one", "One"),
+                    DropdownItem::new("two", "Two"),
+                    DropdownItem::new("three", "Three"),
+                ]
+            }),
+        );
+
+        let ctx = test_ctx();
+        let items = r.items_for(
+            &ctx,
+            ContextPath::PANE,
+            &ContextTarget::Pane {
+                pane_id: PaneId(1),
+                hyperlink: None,
+            },
+            vec![],
+        );
+        let mine: Vec<&str> = items
+            .iter()
+            .map(|i| i.id.as_str())
+            .filter(|id| matches!(*id, "one" | "two" | "three"))
+            .collect();
+        assert_eq!(mine, vec!["one", "two", "three"], "written order, kept");
+    }
+
+    /// **A menu says what it is about, and the host never hit-tests to find out.** ⚠️ Ran red first.
+    ///
+    /// A pane publishes `pane:<id>` about itself already — the same declaration the keyboard
+    /// cursor, the right-click target and a drag all read — so a menu declared on a pane arrives
+    /// carrying it, and this is the whole of turning that back into the thing it names. It is what
+    /// let the pane's menu stop being hand-built by the mouse handler, and with it went the
+    /// ordering that made right-clicking a pane never focus it.
+    ///
+    /// Only the reading is asked here: resolving the hyperlink needs a live terminal, and there is
+    /// no headless `AppState` to give it one (see `heca/tests/by_id_actions.rs`, written as a
+    /// source lint for exactly that reason).
+    #[test]
+    fn a_menu_declared_on_a_pane_says_which_pane_it_is_about() {
+        assert_eq!(
+            pane_id_from_key("pane:7"),
+            Some(PaneId(7)),
+            "read from the identity the pane already publishes, not searched for by position",
+        );
+    }
+
+    /// **A declarer that publishes no identity, or one that is not a pane's, is a contribution** —
+    /// entries that act on app state rather than on a particular thing.
+    ///
+    /// Guarded because the tempting fix for the test above is to require an identity, and `key` is
+    /// optional everywhere in this codebase; and because a loose parse would read a sidebar row as
+    /// a pane and build it the wrong menu.
+    #[test]
+    fn an_identity_that_is_not_a_panes_is_never_mistaken_for_one() {
+        assert_eq!(pane_id_from_key("sidebar.row"), None);
+        assert_eq!(
+            pane_id_from_key("pane:"),
+            None,
+            "a prefix alone names nothing"
+        );
+        assert_eq!(pane_id_from_key("pane:abc"), None);
+        assert_eq!(
+            pane_id_from_key("workspace:7"),
+            None,
+            "a different kind of thing"
+        );
     }
 
     // ── context-menu-5: a plugin's entries ──

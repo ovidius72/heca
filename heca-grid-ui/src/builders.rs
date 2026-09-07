@@ -421,7 +421,7 @@ pub trait Parent: Component + Sized {
 /// # fn build_menu(_: u64) -> ContextMenu { ContextMenu::new("m") }
 /// let ctx = ContextMenu::new("pane").child(Menu::new("Pane", "…"));
 /// Row::new().context_menu(ctx.clone());               // a value
-/// Row::new().context_menu(move || build_menu(7));     // a closure
+/// Row::new().context_menu(move |_at| build_menu(7));  // a closure
 /// ```
 ///
 /// A [`ContextMenu`](crate::widgets::ContextMenu) is `Clone` — its content is plain data and `Rc`
@@ -429,19 +429,27 @@ pub trait Parent: Component + Sized {
 /// when the menu's rows depend on state this widget's tree is not rebuilt on, or when building it
 /// eagerly would be wasted work.
 pub trait IntoContextMenu {
-    /// Produce the menu to show. Called **each time** the menu is triggered.
-    fn build(&self) -> crate::widgets::ContextMenu;
+    /// Produce the menu to show, for a right-click at `at`. Called **each time** the menu is
+    /// triggered.
+    ///
+    /// **The point is passed because a menu is always opened at one**, and some entries are answers
+    /// about what is under it rather than about the widget as a whole — a terminal's *Open link*
+    /// is the case that forced it: whether that entry exists depends on the exact cell clicked, so
+    /// a builder that cannot see the point cannot decide. Without it the host had to work the menu
+    /// out on the widget's behalf, which is how a pane's menu ended up hand-written in the mouse
+    /// handler. Ignore it with `|_at|` when the menu does not vary.
+    fn build(&self, at: heca_core::layout::Point) -> crate::widgets::ContextMenu;
 }
 
 impl IntoContextMenu for crate::widgets::ContextMenu {
-    fn build(&self) -> crate::widgets::ContextMenu {
+    fn build(&self, _at: heca_core::layout::Point) -> crate::widgets::ContextMenu {
         self.clone()
     }
 }
 
-impl<F: Fn() -> crate::widgets::ContextMenu> IntoContextMenu for F {
-    fn build(&self) -> crate::widgets::ContextMenu {
-        self()
+impl<F: Fn(heca_core::layout::Point) -> crate::widgets::ContextMenu> IntoContextMenu for F {
+    fn build(&self, at: heca_core::layout::Point) -> crate::widgets::ContextMenu {
+        self(at)
     }
 }
 
@@ -785,7 +793,7 @@ pub trait ComponentExt: Component + Sized {
     /// // A value — and the same value again on the next row, because a menu is `Clone`.
     /// let row = Row::new().child(Label::new("nvim")).context_menu(ctx.clone());
     /// // …or a closure, when the rows must read state at the moment it opens.
-    /// let other = Row::new().context_menu(move || ctx.clone());
+    /// let other = Row::new().context_menu(move |_at| ctx.clone());
     /// ```
     ///
     /// Nothing else is needed: no row identity, no path string, no registered builder, no
@@ -796,7 +804,7 @@ pub trait ComponentExt: Component + Sized {
     /// **A value or a closure** — see [`IntoContextMenu`]. Either way the menu is realized when it
     /// is triggered, so a composed row's subtree is built fresh for each opening.
     fn context_menu(mut self, menu: impl IntoContextMenu + 'static) -> Self {
-        self.base_mut().context_menu = Some(Box::new(move || menu.build()));
+        self.base_mut().context_menu = Some(Box::new(move |at| menu.build(at)));
         self
     }
 

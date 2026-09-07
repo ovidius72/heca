@@ -18,11 +18,11 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
-use heca_grid_ui::widgets::{Menu, MenuAnchor, MenuItem, ContextMenu};
+use heca_grid_ui::widgets::{ContextMenu, Menu, MenuAnchor};
 use heca_grid_ui::{Button, ButtonVariant, Component, ComponentExt as _, Dialog, Point};
 
 use heca_view::{PropMap, ViewNode, WidgetKind};
-use super::{ChromeIntentEmitter, ContextTarget, FormBindings, LayerId, LayerKind};
+use super::{ChromeIntentEmitter, FormBindings, LayerId, LayerKind};
 use crate::host::App;
 use crate::providers::ChromeCtx;
 use crate::actions::ActionRegistry;
@@ -346,14 +346,25 @@ fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
 /// Plugin entries still merge: a menu that gave itself a [`name`](Menu::name) is offered to the
 /// mounted providers for that name, so "Open in Docker" can still appear on a row a different
 /// component declared. A menu that named itself nothing is simply itself.
-pub(crate) fn present_menu(state: &mut AppState, ctx: ContextMenu, anchor: MenuAnchor) -> OverlayId {
+pub(crate) fn present_menu(
+    state: &mut AppState,
+    ctx: ContextMenu,
+    anchor: MenuAnchor,
+    subject: Option<String>,
+) -> OverlayId {
     let id = OverlayId(state.layers.reserve_id());
     let source = InteractionSource::MouseContent;
     let emit = ChromeIntentEmitter::new(&state.event_proxy, source);
 
     // Rows other components added to this menu — only if it named itself.
     let mut ctx = ctx;
-    ctx.set_menu(merge_contributions(state, ctx.menu().clone(), id, &emit));
+    ctx.set_menu(merge_contributions(
+        state,
+        ctx.menu().clone(),
+        &emit,
+        subject.as_deref(),
+        anchor_point(&anchor),
+    ));
 
     // Choosing an entry runs its own closure; taking the layer down afterwards is the host's, so an
     // item stays a plain closure that knows nothing about overlays. The anchor was chosen by
@@ -375,41 +386,56 @@ pub(crate) fn present_menu(state: &mut AppState, ctx: ContextMenu, anchor: MenuA
 /// Append every mounted provider's rows for the menu's [`name`](Menu::name).
 ///
 /// A menu without a name is closed: it built its own rows and nothing else may add to it.
+/// Where the menu was opened, when a pointer opened it. `None` for a keyboard-opened menu, which
+/// has no cell under it — which is exactly why "Open link" never appears on one.
+fn anchor_point(anchor: &MenuAnchor) -> Option<Point> {
+    match anchor {
+        MenuAnchor::At(p) => Some(*p),
+        _ => None,
+    }
+}
+
 fn merge_contributions(
     state: &mut AppState,
     menu: Menu,
-    id: OverlayId,
     emit: &ChromeIntentEmitter,
+    subject: Option<&str>,
+    at: Option<Point>,
 ) -> Menu {
     let Some(path) = menu.declared_name().map(str::to_string) else {
         return menu;
     };
-    // A contributed row has no per-row payload (that was `about`, dropped 2026-08-07): it acts on
-    // app state, not on the row this menu was opened for.
-    // A contribution carries no row payload — see `ContextTarget::Contribution`. The menu's name
-    // is `path`, passed to `items_for` beside this.
-    let target = ContextTarget::Contribution;
+    // **A menu is opened about something, and the thing says what it is.** The declaring widget's
+    // own identity travels with the menu, so a provider building entries for this menu is told what
+    // it is building them for — rather than the host hit-testing to work it out, which is how a
+    // pane's whole menu ended up hand-written in the mouse handler.
+    //
+    // A menu whose declarer publishes no identity is a contribution like any other: entries that
+    // act on app state rather than on a particular thing.
+    let target = super::context_menu::target_from_subject(state, subject, at);
     let ctx = ChromeCtx::new(App::new(&state.chrome_state));
     let plugin = super::context_menu::plugin_providers_for(&state.chrome_host, &ctx, &path);
     let items = state
         .context_menu_registry
         .items_for(&ctx, &path, &target, plugin);
+    // **The same conversion the declarer's own entries went through** — one door, not a second
+    // one for contributed rows — one conversion, every authoring path.
+    //
+    // What stood here built its rows by hand and wired each to `SubmitOverlay`, which resolves the
+    // overlay and hands the chosen id to a *completion* — and a menu presented from a widget's own
+    // declaration has no completion, because nobody registers one. So contributed rows opened
+    // fine and then did **nothing at all** when chosen, with nothing failing anywhere. It went
+    // unnoticed while contributions were the rare case; the moment a pane's whole menu arrived
+    // this way, every entry in it was dead.
+    //
+    // Going through the one conversion means a contributed row runs **its own intent**, dispatched
+    // by name through the central gate — the same policy and destructive-confirm a keypress gets —
+    // exactly as a row the declarer wrote does.
+    let contributed =
+        super::context_menu::menu_from_items("", "", "", items, &state.action_catalog, emit);
     let mut menu = menu;
-    for item in items {
-        let carrier = InteractionIntent::ActivateAction(WmAction::SubmitOverlay {
-            overlay: id,
-            action: item.id.clone(),
-        });
-        let emit_e = emit.clone();
-        let mut entry = MenuItem::new()
-            .label(item.label.clone())
-            .on_click(move || emit_e.fire(carrier.clone()))
-            .danger(item.danger)
-            .enabled(item.enabled);
-        if let Some(glyph) = state.action_catalog.icon(&item.id) {
-            entry = entry.icon(glyph);
-        }
-        menu = menu.child(entry);
+    for row in contributed.into_items() {
+        menu = menu.child(row);
     }
     menu
 }
@@ -569,6 +595,52 @@ mod tests {
 
     fn noop_emit() -> ChromeIntentEmitter {
         ChromeIntentEmitter::of(InteractionSource::MouseContent, |_, _| {})
+    }
+
+    /// **A contributed row runs its own action, exactly as a row the declarer wrote does.**
+    /// ⚠️ Ran red against its own bug.
+    ///
+    /// Rows contributed to somebody else's menu used to be built by hand here and wired to
+    /// `SubmitOverlay`, which resolves the overlay and hands the chosen id to a *completion*. A
+    /// menu presented from a widget's own declaration has no completion — nobody registers one —
+    /// so a contributed row opened fine and then did **nothing at all** when chosen, and nothing
+    /// failed anywhere.
+    ///
+    /// It went unnoticed while contributions were the rare case. The moment a pane's whole menu
+    /// arrived this way, every entry in it was dead. This pins that
+    /// the merge goes through the one conversion, so the two kinds of row are wired the same way.
+    #[test]
+    fn a_contributed_row_carries_the_action_it_runs() {
+        let fired = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let sink = fired.clone();
+        let emit = ChromeIntentEmitter::of(InteractionSource::MouseContent, move |_, intent| {
+            if let InteractionIntent::View(i) = intent {
+                sink.borrow_mut().push(i.action.clone());
+            }
+        });
+
+        let menu = crate::chrome::context_menu::menu_from_items(
+            "",
+            "",
+            "",
+            vec![heca_view::DropdownItem::with_intent(
+                "close",
+                "Close pane",
+                Intent::new("close_pane_by_id").arg("pane_id", PropValue::Int(4)),
+            )],
+            &crate::actions::ActionCatalog::default(),
+            &emit,
+        );
+
+        let rows = menu.into_items();
+        assert_eq!(rows.len(), 1, "one entry in, one row out");
+        rows[0].activate();
+        assert_eq!(
+            fired.borrow().as_slice(),
+            &["close_pane_by_id".to_string()],
+            "choosing the row runs the action the entry declared — not an overlay-resolve that \
+             lands on a completion nobody registered",
+        );
     }
 
     #[test]

@@ -158,8 +158,8 @@ pub(crate) fn open_declared_menu_for_focus(state: &mut crate::app_state::AppStat
 /// a key, or from a widget's own timer all arrive the same way.
 pub(crate) fn drain_pending_menus(state: &mut crate::app_state::AppState) {
     let queued: Vec<_> = state.pending_menus.borrow_mut().drain(..).collect();
-    for (menu, anchor) in queued {
-        overlay::present_menu(state, menu, anchor);
+    for (menu, anchor, subject) in queued {
+        overlay::present_menu(state, menu, anchor, subject);
     }
 }
 

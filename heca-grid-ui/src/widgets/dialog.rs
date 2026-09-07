@@ -70,8 +70,6 @@ pub const DIALOG_BTN_GAP: Spacing = Spacing::Sm;
 /// right-aligned [`Flex`] row of the caller's [`Button`](super::Button)s.
 pub struct Dialog {
     base: Base,
-    /// Shared with the composed [`Overlay`] (it is the overlay's own signal).
-    open: Signal<bool>,
     /// When `false`, Esc / scrim clicks are swallowed but don't dismiss — a forced-decision
     /// dialog (the user must pick a button). Default `true`.
     dismissible: bool,
@@ -100,18 +98,25 @@ impl Dialog {
         // **A dialog locks because it is a dialog.** It is asking a question, so nothing behind it
         // is reachable until you answer — the caller never says so, and cannot get it wrong. A
         // modeless one (find/replace, a properties panel) turns it off with `.lock(false)`.
-        let overlay = Overlay::new().blocking(true).lock(true).panel(panel);
-        let open = overlay.open_signal();
-
         // Root: a full-size passthrough so the overlay child fills the viewport.
         let mut base = Base::new();
         base.style.layout.width = Length::Pct(1.0);
         base.style.layout.height = Length::Pct(1.0);
+
+        // **One flag, handed down.** The dialog is up when `Base::open` says so — the flag every
+        // component carries — and the overlay it composes *follows* that same signal rather than
+        // owning one of its own. This single line is what used to be five forwarded methods: show,
+        // close and the gesture all work on the dialog because they work on every component, and
+        // the surface underneath simply agrees.
+        let overlay = Overlay::new()
+            .blocking(true)
+            .lock(true)
+            .panel(panel)
+            .open_when(base.open);
         base.children.push(Box::new(overlay));
 
         Self {
             base,
-            open,
             dismissible: true,
             on_dismiss: None,
             has_actions: false,
@@ -264,7 +269,16 @@ impl Dialog {
     /// caller orders `[Cancel, …, Confirm]`).
     #[heca_grid_ui_macros::prop]
     pub fn default_open(mut self, open: bool) -> Self {
-        self.open.set(open);
+        self.base.open.set(open);
+        // **Its own gesture adopts the state too**, not just the flag. Setting only the flag left
+        // the two disagreeing for a frame — the flag said up, the component's own record said
+        // closed — so anything asking whether it was up (a host driving the layer stack, an exit
+        // still playing) got the wrong answer until the first tick caught it up.
+        //
+        // Its own, and not the composed overlay's: arriving and leaving belong to every component
+        // now, so a caller holding a `Dialog` asks the `Dialog`, and the surface underneath
+        // follows the one flag it was handed.
+        self.base.presence.assume_open(open);
         if open {
             // Focus the safe-default (first) button so Enter works — but WITHOUT the ring; it
             // appears only once the user navigates by keyboard (focus-visible).
@@ -289,7 +303,7 @@ impl Dialog {
     pub fn open_when(mut self, open: Signal<bool>) -> Self {
         let overlay = std::mem::replace(&mut self.base.children[0], Box::new(Flex::column()));
         self.base.children[0] = overlay;
-        self.open = open;
+        self.base.open = open;
         self.base.children[0].follow_open(open);
         self
     }
@@ -302,11 +316,11 @@ impl Dialog {
     /// Button::new("Delete").on_click(move || confirm.show())
     /// ```
     pub fn handle(&self) -> super::SurfaceHandle {
-        super::SurfaceHandle::new(self.open)
+        super::SurfaceHandle::new(self.base.open)
     }
 
     pub fn open_signal(&self) -> Signal<bool> {
-        self.open
+        self.base.open
     }
 
     // ── Self-contained keyboard: the widget owns focus traversal + activation + dismissal.
@@ -366,7 +380,7 @@ impl Dialog {
     }
 
     fn is_open(&self) -> bool {
-        self.open.get_untracked()
+        self.base.open.get_untracked()
     }
 
     /// The panel container (the composed [`Overlay`]'s single child), mutably.
@@ -409,6 +423,20 @@ impl Component for Dialog {
     fn overlay_occludes(&self, _pos: Point) -> bool {
         self.is_open()
     }
+
+    // ── Nothing is forwarded any more ────────────────────────────────────────────────────────
+    //
+    // This block held five hand-written methods passing `presence` / `show` / `close` /
+    // `follow_open` down to the composed `Overlay`. They are gone: arriving and leaving now live
+    // on `Base`, so **every** component answers — a `Select`, a `Button`, a pane, a dock — and a
+    // composed one is not a special case. `ContextMenu` and `CommandPalette` could never have
+    // forwarded anyway, because they are their own panels with no overlay inside to forward to,
+    // which is how it became clear that forwarding was the wrong shape rather than the missing
+    // piece (AGENTS.md § 0 rule 2: the fix is always centralized).
+    //
+    // The dialog and the overlay it composes share **one** open flag, handed down once in
+    // `Dialog::new`, so the surface still places the keyboard where the dialog said when the flag
+    // is raised by any of the three doors.
 
     // No `paint` override: the default recursion reaches the composed [`Overlay`],
     // which owns the whole layer presentation (scrim, shadow, panel fill, bracket
@@ -757,6 +785,95 @@ mod tests {
         assert!(
             !focused_buttons(&d).is_empty(),
             "ItemNext navigates to a button"
+        );
+    }
+
+    // ── A dialog answers as a surface ──────────────────────────────────────
+
+    /// **A host can raise a dialog, and until now it could not.** ⚠️ Ran red against its own bug.
+    ///
+    /// A `Dialog` is composed on an `Overlay` but forwarded only its keyboard, so asking the
+    /// dialog itself to open reached the `Component` trait's empty default and did nothing at all.
+    /// The single thing that had ever raised one was `default_open(true)` at construction — which
+    /// is why a dialog could not be shown by name, and why a handle pointing at one moved a flag
+    /// no surface was reading.
+    #[test]
+    fn asking_a_dialog_to_show_actually_opens_it() {
+        let mut d = Dialog::new("Delete pane?")
+            .body(Label::new("This action cannot be undone."))
+            .action(Button::new("Cancel"));
+        assert!(!d.is_open(), "built closed, as every surface is");
+
+        Component::show(&mut d);
+        assert!(
+            d.is_open(),
+            "the dialog forwards opening to the overlay it is built on, so a host that holds a \
+             surface can raise it without knowing what kind it is",
+        );
+
+        Component::close(&mut d);
+        assert!(!d.is_open(), "and the same for dismissing it");
+    }
+
+    /// **A dialog reports its own arrival and exit**, so a host can tell a surface that is going
+    /// away from one that has gone.
+    ///
+    /// It answered `None` before, which reads as "not a surface at all": a dismissed dialog
+    /// counted as finished the instant it was asked to leave, rather than when its gesture had
+    /// played out.
+    #[test]
+    fn a_dialog_reports_whether_it_is_up() {
+        use crate::animation::Presence;
+
+        let mut d = open_dialog();
+        assert!(
+            d.presence().is_some_and(Presence::is_open),
+            "an open dialog says it is up",
+        );
+
+        Component::close(&mut d);
+        assert!(
+            d.presence().is_some_and(|p| !p.is_open()),
+            "and a dismissed one says it is not",
+        );
+    }
+
+    /// **A dialog raised by its handle starts on the control it named.**
+    ///
+    /// The same rule the overlay guards prove, asserted through the composed widget, because that
+    /// is the shape a caller actually holds — and because forwarding a subset of a surface's
+    /// behaviour is what broke the keyboard the last time it was done by halves.
+    #[test]
+    fn a_dialog_raised_by_its_handle_starts_where_it_said() {
+        use crate::reactive::SignalGet;
+
+        let mut d = Dialog::new("Delete pane?")
+            .body(Label::new("This action cannot be undone."))
+            .action(Button::new("Cancel"))
+            .action(Button::new("Delete"))
+            .default_action("Delete");
+
+        let handle = d.handle();
+        let opener = move || handle.show();
+        opener();
+        d.tick(0.016);
+
+        fn focused(n: &dyn Component, out: &mut Vec<String>) {
+            if n.base().focused.get_untracked()
+                && let Some(name) = n.text_summary()
+            {
+                out.push(name);
+            }
+            for c in &n.base().children {
+                focused(c.as_ref(), out);
+            }
+        }
+        let mut names = Vec::new();
+        focused(&d, &mut names);
+        assert!(
+            names.iter().any(|n| n == "Delete"),
+            "opened from a closure holding nothing but the handle, and the keyboard landed on the \
+             control the dialog named: {names:?}",
         );
     }
 }

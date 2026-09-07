@@ -46,16 +46,18 @@ impl PaneShellModel {
     /// would throw away the widget signals mid-gesture. Same split
     /// [`crate::chrome::pane_header_key`] makes.
     pub(crate) fn key(&self) -> String {
+        // **What focus changes is NOT in here**, and that is deliberate: `active`, the border
+        // colour it drives and the accent are written onto the retained tree every frame by
+        // `shell::focus_state_to`, exactly as the rect and the header's words are.
+        //
+        // They used to be part of this key, so focusing a pane threw its tree away and built a new
+        // one — which lost any gesture in flight. A right-click is made from a press and a release
+        // on the *same* widget, and the press had been recorded on the tree that focusing
+        // discarded, so the first right-click on an unfocused pane focused it and opened nothing
+        //.
         format!(
-            "{}|{}|{:?}|{:?}|{}|{}|{}|{:?}",
-            self.pane_id.0,
-            self.active,
-            self.frame,
-            self.border_color,
-            self.border_width,
-            self.border_radius,
-            self.content_inset,
-            self.accent,
+            "{}|{:?}|{}|{}|{}",
+            self.pane_id.0, self.frame, self.border_width, self.border_radius, self.content_inset,
         )
     }
 }

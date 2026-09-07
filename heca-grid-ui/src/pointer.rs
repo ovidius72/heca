@@ -336,12 +336,20 @@ fn route_release(root: &mut dyn Component, raw: &RawPointer) -> Handled {
                 EventKind::MiddleClick => Event::MiddleClick(e),
                 _ => Event::Click(e),
             };
-            handled = or(handled, deliver_targeted(root, &path, base));
-            // **A declared menu is what happens when nothing claims the right-click.** A widget
-            // that answers one itself still wins; this is the fallback, resolved by walking
-            // outwards from the widget that was clicked to the nearest one carrying a menu.
+            let (delivered, default_prevented) =
+                delivering(|| deliver_targeted(root, &path, base));
+            handled = or(handled, delivered);
+            // **A declared menu opens because it was declared** — resolved by walking outwards
+            // from the widget that was clicked to the nearest one carrying one.
+            //
+            // A widget that wants to answer the right-click *and* show something else says
+            // `prevent_default`, the way a browser does. It used to be cancelled by
+            // `stop_propagation` instead, which is a different question — that one is about who
+            // *else* sees the event — so a widget that stopped the walk for an unrelated reason
+            // silently lost its own menu, with nothing failing and no warning
+            //.
             if kind == EventKind::RightClick
-                && handled == Handled::No
+                && !default_prevented
                 && crate::menu::open_declared_at(root, &path, raw.pos)
             {
                 handled = Handled::Yes;
@@ -518,7 +526,7 @@ fn deliver_self(node: &mut dyn Component, ev: &Event) {
     if node.on_event_capture(ev) == Handled::Yes {
         return;
     }
-    if node.base_mut().run_handlers(ev) == Handled::Yes {
+    if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return;
     }
     let _ = node.on_event(ev);
@@ -552,7 +560,7 @@ pub fn deliver_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Han
             return Handled::Yes;
         }
     }
-    if node.base_mut().run_handlers(ev) == Handled::Yes {
+    if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return Handled::Yes;
     }
     node.on_event(ev)
@@ -777,7 +785,6 @@ fn drag_identity(root: &dyn Component, path: &[usize]) -> Option<String> {
         .or_else(|| crate::nav::identity_of(root, path))
 }
 
-
 /// Depth-first search for the first node satisfying `f`, returning its path.
 fn find(node: &dyn Component, f: &dyn Fn(&dyn Component) -> bool) -> Option<Path> {
     if f(node) {
@@ -873,6 +880,27 @@ fn deliver_targeted(root: &mut dyn Component, path: &[usize], ev: Event) -> Hand
     deliver_path(root, path, &ev)
 }
 
+thread_local! {
+    /// **Whether any handler in the delivery just made asked the framework not to act.**
+    ///
+    /// Recorded as the event is delivered rather than found by asking again: a second walk would
+    /// run every handler twice and fire its side effects twice. Reset before each delivery, read
+    /// straight after — the walk is synchronous and single-threaded, so nothing can interleave.
+    static DEFAULT_PREVENTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Note that a handler asked the framework not to do its own thing.
+pub(crate) fn note_default_prevented() {
+    DEFAULT_PREVENTED.with(|c| c.set(true));
+}
+
+/// Run `f` as one delivery and report whether anything in it prevented the default.
+fn delivering<T>(f: impl FnOnce() -> T) -> (T, bool) {
+    DEFAULT_PREVENTED.with(|c| c.set(false));
+    let out = f();
+    (out, DEFAULT_PREVENTED.with(std::cell::Cell::get))
+}
+
 fn drag_event(item: &str, raw: &RawPointer, side: DropSide) -> DragEvent {
     DragEvent {
         item: item.to_string(),
@@ -917,10 +945,19 @@ pub(crate) fn fire_mounts(node: &mut dyn Component) {
 
 impl Base {
     /// Run this widget's registered handlers for `ev`, if it has any.
-    pub(crate) fn run_handlers(&mut self, ev: &Event) -> Handled {
+    pub(crate) fn run_handlers(&mut self, ev: &Event) -> crate::event::HandlerOutcome {
         match self.handlers.as_mut() {
-            Some(h) => h.run(ev),
-            None => Handled::No,
+            Some(h) => {
+                let out = h.run(ev);
+                if out.default_prevented {
+                    note_default_prevented();
+                }
+                out
+            }
+            None => crate::event::HandlerOutcome {
+                handled: Handled::No,
+                default_prevented: false,
+            },
         }
     }
 }

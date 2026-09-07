@@ -668,6 +668,48 @@
           "number": 7,
           "title": "Findings note: every host-side nudge it needed, each one a gap to file. If it needed none, say so — that is the acceptance result",
           "checked": true
+        },
+        {
+          "id": "1c02161a-6b72-4c13-b1f2-9528f0d56215-check-008-reopened-a-composed-surface-answers-as-a-surface-dialog-forwards-presence-presence-mut-show-close-follow-open-to-the-overlay-it-composes-all-at-once-a-partial-move-is-what-broke-input-edit-reaches-focused-field-nav-moves-to-button",
+          "number": 8,
+          "title": "REOPENED — A composed surface answers as a surface: Dialog forwards presence/presence_mut/show/close/follow_open to the Overlay it composes, all at once (a partial move is what broke input_edit_reaches_focused_field_nav_moves_to_button)",
+          "checked": true
+        },
+        {
+          "id": "1c02161a-6b72-4c13-b1f2-9528f0d56215-check-009-one-place-reacts-to-a-surface-becoming-open-overlay-settle-run-by-show-at-once-and-by-tick-every-frame-place-default-focus-had-one-caller-overlay-show-so-handle-show-and-open-when-raised-a-surface-with-the-keyboard-on-nothing-live-in-e0ffac5",
+          "number": 9,
+          "title": "One place reacts to a surface becoming open: Overlay::settle, run by show() at once and by tick() every frame. place_default_focus had ONE caller (Overlay::show), so handle.show() and open_when raised a surface with the keyboard on nothing — live in e0ffac5",
+          "checked": true
+        },
+        {
+          "id": "1c02161a-6b72-4c13-b1f2-9528f0d56215-check-010-dialog-default-open-tells-the-composed-overlay-too-presence-assume-open-so-the-shared-flag-and-the-surface-s-own-record-do-not-disagree-for-a-frame-found-by-a-new-guard-not-by-inspection",
+          "number": 10,
+          "title": "Dialog::default_open tells the composed Overlay too (presence.assume_open), so the shared flag and the surface's own record do not disagree for a frame — found by a new guard, not by inspection",
+          "checked": true
+        },
+        {
+          "id": "1c02161a-6b72-4c13-b1f2-9528f0d56215-check-011-retire-the-fixture-heca-src-chrome-described-confirm-rs-deleted-with-its-mod-line-chrome-mod-rs-and-its-boot-registration-app-startup-rs-two-of-its-ten-guards-moved-to-heca-view-realize-pointer-swallow-the-only-pointer-coverage-that-crate-has-and-the-dialog-spacing-recipe-compared-against-dialog-pad-gap-btn-gap-six-were-already-duplicated-into-overlay-tests-rs-and-button-rs-two-were-weaker-duplicates-of-the-picker-and-paint-in-box-walks",
+          "number": 11,
+          "title": "Retire the fixture: heca/src/chrome/described_confirm.rs deleted with its mod line (chrome/mod.rs) and its boot registration (app/startup.rs). Two of its ten guards moved to heca-view-realize (pointer swallow — the only pointer coverage that crate has; and the dialog spacing recipe compared against DIALOG_PAD/GAP/BTN_GAP). Six were already duplicated into overlay/tests.rs and button.rs; two were weaker duplicates of the picker and paint-in-box walks",
+          "checked": true
+        },
+        {
+          "id": "1c02161a-6b72-4c13-b1f2-9528f0d56215-check-012-centralized-antonio-2026-09-07-if-i-repetedly-say-centralize-why-you-dont-do-arriving-leaving-and-the-open-flag-move-onto-base-so-show-close-toggle-presence-work-on-every-component-select-button-pane-dock-not-only-overlay-and-toast-the-five-methods-hand-written-into-dialog-are-deleted-dialog-and-its-composed-overlay-share-one-flag-handed-down-in-one-line-contextmenu-commandpalette-get-it-with-no-code-which-forwarding-could-never-have-given-them-agents-md-0-rule-2-rewritten-to-say-the-fix-is-always-centralized",
+          "number": 12,
+          "title": "CENTRALIZED (Antonio, 2026-09-07: \"if i repetedly say Centralize why you dont do\") — arriving/leaving and the open flag move onto Base, so show/close/toggle/presence work on EVERY component (Select, Button, pane, dock), not only Overlay and Toast. The five methods hand-written into Dialog are DELETED; Dialog and its composed Overlay share one flag handed down in one line. ContextMenu/CommandPalette get it with no code, which forwarding could never have given them. AGENTS.md § 0 rule 2 rewritten to say the fix is ALWAYS centralized",
+          "checked": true
+        },
+        {
+          "id": "1c02161a-6b72-4c13-b1f2-9528f0d56215-check-013-the-guard-walks-widgetkind-all-39-kinds-incl-select-button-dockframe-tabs-not-a-hand-written-list-a-typed-out-list-is-the-same-hardcoding-one-level-up-found-toast-still-owning-a-private-open-signal-show-was-a-no-op-on-it-fixed-to-the-shared-one-also-caught-a-non-bug-a-widget-mid-exit-refuses-to-re-open-which-is-the-rule-fixed-the-test-not-the-widget",
+          "number": 13,
+          "title": "The guard walks WidgetKind::ALL (39 kinds incl. Select/Button/DockFrame/Tabs), not a hand-written list — a typed-out list is the same hardcoding one level up. Found Toast still owning a private open signal (show() was a no-op on it); fixed to the shared one. Also caught a NON-bug: a widget mid-exit refuses to re-open, which is the rule — fixed the test, not the widget",
+          "checked": true
+        },
+        {
+          "id": "1c02161a-6b72-4c13-b1f2-9528f0d56215-check-014-the-pane-declares-its-own-menu-the-hand-built-one-in-heca-src-mouse-rs-is-deleted-with-its-hit-test-root-cause-of-right-click-never-focuses-a-pane-the-host-opened-the-menu-then-asked-to-focus-so-the-menu-it-had-just-opened-covered-the-panes-and-the-focus-was-refused-a-menu-now-carries-who-it-is-about-the-declaring-widget-s-own-key-pane-lt-id-gt-read-rather-than-hit-tested-so-providers-build-entries-for-it-a-declared-menu-also-receives-the-point-it-was-opened-at-open-link-depends-on-the-clicked-cell-menu-entries-gained-an-optional-weight-inheriting-their-block-s-one-sorted-list-not-blocks-then-items",
+          "number": 14,
+          "title": "The pane declares its own menu; the hand-built one in heca/src/mouse.rs is DELETED with its hit-test. Root cause of \"right-click never focuses a pane\": the host opened the menu then asked to focus, so the menu it had just opened covered the panes and the focus was refused. A menu now carries WHO IT IS ABOUT — the declaring widget's own key (pane:&lt;id&gt;), read rather than hit-tested — so providers build entries for it. A declared menu also receives the point it was opened at (Open link depends on the clicked cell). Menu entries gained an optional weight inheriting their block's: one sorted list, not blocks-then-items",
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -677,7 +719,7 @@
       "startedAt": "2026-09-06T10:16:07.417Z",
       "completedAt": "",
       "createdAt": "2026-08-27T19:41:50.259Z",
-      "updatedAt": "2026-09-07T12:41:04.735Z",
+      "updatedAt": "2026-09-07T15:10:39.495Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:af580e98-cc45-42af-86e1-fcbc96719b07",
@@ -691,7 +733,7 @@
     }
   ],
   "createdAt": "2026-08-27T19:38:36.401Z",
-  "updatedAt": "2026-09-07T12:41:04.735Z",
+  "updatedAt": "2026-09-07T15:10:39.495Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-09-05T20:55:11.617Z",
   "handoffAudit": {

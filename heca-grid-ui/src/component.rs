@@ -293,6 +293,49 @@ pub struct Base {
     /// for the whole viewport. So the cost to an author is nothing, and the cost of forgetting is
     /// nothing.
     pub surface: bool,
+
+    /// **How this component arrives and leaves** — every component, not only the panel-shaped ones.
+    ///
+    /// [`visible`](Base::visible) says whether it is on screen. This says whether it is *coming or
+    /// going*, and it is the pair that makes [`show`](Component::show) / [`close`](Component::close)
+    /// / [`toggle`](Component::toggle) mean something on a `Select`, a `Button`, a pane, a dock —
+    /// anything — rather than only on the two widgets that happened to embed it.
+    ///
+    /// It lived on `Overlay` and on the toast card, which meant showing and closing was a
+    /// *surface* capability: a `Dialog` had to hand-write five methods forwarding to the overlay it
+    /// composed, a `ContextMenu` and a `CommandPalette` could not forward at all because they are
+    /// their own panels, and anything anyone composed later had to discover the same thing and copy
+    /// the same code. A rule a caller has to remember is the bug (AGENTS.md § 0 rule 2), so it is
+    /// here, once, and nobody forwards anything.
+    ///
+    /// A component that declares no animation cuts — costing nothing and needing no special case.
+    pub presence: crate::animation::Presence,
+
+    /// **Is this component up?** — the flag [`show`](Component::show) and
+    /// [`close`](Component::close) raise and lower, on every component.
+    ///
+    /// Distinct from [`visible`](Base::visible), and the two are not interchangeable: `visible` is
+    /// "render me if my parent renders", while this is "this thing is up". An `Overlay` that is
+    /// closed must stay **laid out** — its panel keeps its box so it can be measured, hit-tested
+    /// and shown again without a reflow — so it cannot express being closed by not being visible.
+    ///
+    /// It was a private signal on `Overlay`, which is why showing and closing was a capability only
+    /// overlay-shaped widgets had. Here, a `Select`, a `Button`, a pane and a dock are shown and
+    /// closed by the same call, and a widget that composes another hands this one flag down instead
+    /// of keeping a second copy in step.
+    pub open: crate::reactive::Signal<bool>,
+
+    /// **The seat's own name for this node**, written by a host when it places a surface and never
+    /// by an author.
+    ///
+    /// It exists so that seating a surface stops destroying the author's [`key`](Base::key). The
+    /// two are different things that were being kept in one field: `key` is what the *component*
+    /// chose to call itself and survives a rebuild, while this is the slot the host puts it in so
+    /// it can find it again. Stamping the slot over the key meant a surface that named itself
+    /// — `Dialog::new("..").key("confirm.close")` — arrived on screen with that name erased, so
+    /// nothing could point at it afterwards and `key` was a lie for exactly the widgets a plugin
+    /// most needs to address.
+    pub surface_slot: Option<String>,
     /// **Is what is behind this surface still reachable?** — `true` locks it (F003/P097/T499).
     ///
     /// While a surface is locked, actions on whatever it stands in front of are refused. A dialog
@@ -388,7 +431,7 @@ pub struct Base {
     /// The **menu inside it is content**: the same [`Menu`](crate::widgets::Menu) value could be
     /// shown by a menu bar instead. What makes it a *context* menu is being here — attached to a
     /// widget, opened by a right-click or the keyboard action.
-    pub context_menu: Option<Box<dyn Fn() -> crate::widgets::ContextMenu>>,
+    pub context_menu: Option<Box<dyn Fn(heca_core::layout::Point) -> crate::widgets::ContextMenu>>,
     /// **What a leader-key pick does to this widget, when that differs from acting on it** —
     /// written with [`on_hint`](crate::builders::ComponentExt::on_hint), on any widget.
     ///
@@ -562,6 +605,9 @@ impl Base {
             handlers: None,
             context_menu: None,
             surface: false,
+            surface_slot: None,
+            presence: crate::animation::Presence::new(),
+            open: crate::reactive::signal(false),
             lock: false,
             captures_keyboard: None,
             hint: None,
@@ -815,17 +861,18 @@ pub trait Component {
     /// swapping this value, so an arrival already played does not play again.
     ///
     /// It is deliberately **not** recursive: a surface is the root of what was mounted, not
-    /// something to be hunted for in a subtree. A widget that *composes* an
-    /// [`Overlay`](crate::widgets::Overlay) (a [`Dialog`](crate::widgets::Dialog)) forwards this to
-    /// the overlay it composes if it wants a host to drive it.
+    /// something to be hunted for in a subtree.
+    ///
+    /// **Every component answers**, because it lives on [`Base`](Base::presence) — so nothing
+    /// forwards this, and a widget that composes another is not a special case.
     fn presence(&self) -> Option<&crate::animation::Presence> {
-        None
+        Some(&self.base().presence)
     }
 
     /// The mutable half of [`presence`](Self::presence) — see there. Both, for the same reason
     /// [`base`](Self::base) and [`base_mut`](Self::base_mut) are both there.
     fn presence_mut(&mut self) -> Option<&mut crate::animation::Presence> {
-        None
+        Some(&mut self.base_mut().presence)
     }
 
     /// **Put this surface on screen.**
@@ -834,8 +881,21 @@ pub trait Component {
     /// out is not resurrected. Both rules live in [`Presence`](crate::animation::Presence), so no
     /// caller repeats them. With no animation declared it is simply up.
     ///
-    /// Default: nothing to open.
-    fn show(&mut self) {}
+    /// **Works on any component**, because the gesture lives on [`Base`](Base::presence): a
+    /// `Select`, a `Button`, a pane and a dock are shown the same way a dialog is. A widget with
+    /// something extra to do on the way up — an `Overlay` places the keyboard where the surface
+    /// said — overrides this and does that as well, never instead.
+    fn show(&mut self) {
+        let base = self.base_mut();
+        // Still going away: refuse, rather than resurrect something mid-exit. The rule lives in
+        // `Presence`, so no caller repeats it.
+        if base.presence.is_leaving() {
+            return;
+        }
+        base.presence.enter();
+        crate::reactive::SignalUpdate::set(&base.open, true);
+        crate::reactive::SignalUpdate::set(&base.visible, true);
+    }
 
     /// **Put this surface's keyboard on the control named `key`**, if it holds one.
     ///
@@ -876,8 +936,19 @@ pub trait Component {
     /// [`Presence::is_leaving`](crate::animation::Presence::is_leaving) says the gesture has played
     /// out, which is what lets a host keep painting it while it goes. With none, it is simply gone.
     ///
-    /// Default: nothing to hide.
-    fn close(&mut self) {}
+    /// **Works on any component**, for the reason [`show`](Self::show) does.
+    ///
+    /// A component with a declared animation stays on screen, inert, until its exit has played
+    /// out; one with none is gone now. The two are the same call — which is the point, because a
+    /// caller must never have to know which kind it is holding.
+    fn close(&mut self) {
+        let base = self.base_mut();
+        base.presence.leave();
+        crate::reactive::SignalUpdate::set(&base.open, false);
+        if !base.presence.is_leaving() {
+            crate::reactive::SignalUpdate::set(&base.visible, false);
+        }
+    }
 
     /// Open it if it is closed, dismiss it if it is open. The default reads
     /// [`presence`](Self::presence), so a surface gets it for free.
@@ -1390,7 +1461,7 @@ pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Eve
         // that belongs here.
         run_pick(node);
     }
-    if node.base_mut().run_handlers(ev) == Handled::Yes {
+    if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return Handled::Yes;
     }
     node.on_event(ev)
@@ -1438,7 +1509,7 @@ fn broadcast(node: &mut dyn Component, ev: &Event) -> Handled {
     if from_subtree == Handled::Yes {
         return Handled::Yes;
     }
-    if node.base_mut().run_handlers(ev) == Handled::Yes {
+    if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return Handled::Yes;
     }
     node.on_event(ev)

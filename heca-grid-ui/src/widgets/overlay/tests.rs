@@ -558,3 +558,153 @@ fn following_your_signal_rebinds_the_keyboard_to_it() {
         "an open surface holds the keyboard, whichever signal says it is open",
     );
 }
+
+/// **Opening by flag puts the keyboard where opening by call does.** ⚠️ Ran red against its own bug.
+///
+/// There are two ways a surface goes up — a caller says [`Overlay::show`], or the open flag is
+/// simply set (a [`SurfaceHandle`], [`open_when`](Overlay::open_when), a host binding its own
+/// state) — and only the first used to place the keyboard, because placing it lived inside the
+/// verb. The arrival played either way, so the second looked right and was deaf: it came up with
+/// the keyboard on nothing, and the first Tab was spent travelling to the control the surface had
+/// already named.
+///
+/// The two existing guards each cover half of this and cross in the middle: one proves the handle
+/// moves the flag, the other proves `show()` places focus. Neither proves the handle places focus,
+/// which is exactly what it did not do.
+#[test]
+fn opening_by_flag_places_the_keyboard_the_same_as_opening_by_call() {
+    use crate::component::Component as _;
+    use crate::reactive::SignalGet;
+    use crate::widgets::Button;
+
+    let mut o = Overlay::new().default_focus("Cancel").panel(
+        Flex::row()
+            .child(Button::new("Cancel"))
+            .child(Button::new("Delete")),
+    );
+    // The door a click handler uses: copied into a closure, nothing borrowed.
+    let handle = o.handle();
+    let opener = move || handle.show();
+    opener();
+
+    let focused = |o: &Overlay| {
+        o.base().children[0].base().children[0]
+            .base()
+            .focused
+            .get_untracked()
+    };
+    assert!(
+        !focused(&o),
+        "the flag is set, but nothing has reacted to it yet",
+    );
+
+    o.tick(0.016);
+    assert!(
+        focused(&o),
+        "a surface raised by its handle starts on the control it named, exactly as one raised by \
+         the call does — otherwise the first Tab is a wasted press",
+    );
+}
+
+/// **The same, for a signal the caller owns.** A host binding its own state gets the keyboard
+/// placed too; the surface does not care who set the flag.
+#[test]
+fn following_your_own_signal_also_places_the_keyboard() {
+    use crate::component::Component as _;
+    use crate::reactive::{SignalGet, SignalUpdate, signal};
+    use crate::widgets::Button;
+
+    let editing = signal(false);
+    let mut o = Overlay::new()
+        .default_focus("Cancel")
+        .panel(
+            Flex::row()
+                .child(Button::new("Cancel"))
+                .child(Button::new("Delete")),
+        )
+        .open_when(editing);
+
+    editing.set(true);
+    o.tick(0.016);
+    assert!(
+        o.base().children[0].base().children[0]
+            .base()
+            .focused
+            .get_untracked(),
+        "your signal raises it and the keyboard lands where the surface said",
+    );
+}
+
+/// **Placing the keyboard happens once per arrival, not every frame.**
+///
+/// Settling runs on every tick, so it has to react to the *change* rather than to the state. If it
+/// re-placed on each frame it would drag the keyboard back to the default control continuously,
+/// and Tab would appear to do nothing at all while the surface was open.
+#[test]
+fn a_surface_places_the_keyboard_once_and_then_leaves_it_alone() {
+    use crate::component::Component as _;
+    use crate::reactive::SignalGet;
+    use crate::widgets::Button;
+
+    let mut o = Overlay::new().default_focus("Cancel").panel(
+        Flex::row()
+            .child(Button::new("Cancel"))
+            .child(Button::new("Delete")),
+    );
+    o.show();
+    // Move on, the way a Tab would.
+    o.advance_focus(true);
+    let moved = |o: &Overlay| {
+        o.base().children[0].base().children[1]
+            .base()
+            .focused
+            .get_untracked()
+    };
+    assert!(moved(&o), "the keyboard moved off the default control");
+
+    o.tick(0.016);
+    o.tick(0.016);
+    assert!(
+        moved(&o),
+        "and stayed there — settling reacts to the arrival, not to being open",
+    );
+}
+
+// ── Showing and closing is something EVERY widget does ─────────────────────
+
+// **The universal guard is not here, and deliberately.** "Every widget can be shown and closed" is
+// a claim about the whole catalogue, so it has to be asked of the whole catalogue — a list of
+// widgets typed out by hand is the same hardcoding one level up, and a widget added next month
+// would not be in it. It walks `WidgetKind::ALL` in `heca-view-realize`
+// (`every_widget_kind_can_be_shown_and_closed`), where adding a widget without adding it to that
+// list is already a compile error.
+
+/// **A widget that declared no gesture is gone the moment it is closed**, and one that declared a
+/// gesture stays until it has played out — the same call either way.
+///
+/// The point is that a caller never has to know which kind it is holding. Guarded because the
+/// tempting shape is a caller asking "does this animate?" before deciding what to do, which is a
+/// rule at the call site and therefore the bug.
+#[test]
+fn closing_cuts_or_plays_out_without_the_caller_knowing_which() {
+    use crate::component::Component as _;
+    use crate::widgets::Button;
+
+    let mut cut = Button::new("Delete");
+    cut.show();
+    cut.close();
+    assert!(
+        !cut.presence().is_some_and(|p| p.is_leaving()),
+        "nothing declared, so it is simply gone",
+    );
+
+    let mut plays = Overlay::new()
+        .panel(Flex::column().child(Label::new("body")))
+        .animation(crate::animation::Animation::Fade);
+    plays.show();
+    plays.close();
+    assert!(
+        plays.presence().is_some_and(|p| p.is_leaving()),
+        "a declared gesture is still playing, so it is still on screen and still inert",
+    );
+}

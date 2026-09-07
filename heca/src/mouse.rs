@@ -91,25 +91,6 @@ pub(crate) fn window_center_logical(state: &AppState) -> (f32, f32) {
     (phys.width as f32 / s / 2.0, phys.height as f32 / s / 2.0)
 }
 
-/// Open the right-click context menu for `pane_id` at `pos`: an **Open link** entry when the
-/// click cell is a hyperlink, plus the common pane actions. Routes through the unified
-/// [`crate::chrome::open_context_menu_for`] — the pane provider builds the items, including the
-/// optional Open link from the resolved hyperlink target. terminal-task-18 / app-task-33 /
-/// context-menu-4 / context-menu-6.
-fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
-    use crate::app::interaction::InteractionSource;
-    use crate::chrome::{ContextPath, ContextTarget};
-    // Mouse-open only: a keyboard-opened menu has no target cell, so no hyperlink.
-    let hyperlink = crate::app::terminal_host::hyperlink_uri_at_position(state, pane_id, pos);
-    crate::chrome::open_context_menu_for(
-        state,
-        ContextPath::PANE,
-        ContextTarget::Pane { pane_id, hyperlink },
-        heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64),
-        InteractionSource::MouseContent,
-    );
-}
-
 /// Sync the current drag mode with modifier state changes.
 ///
 /// This keeps move/swap behavior live while the user presses or releases Shift.
@@ -198,15 +179,14 @@ pub fn on_mouse_input(
                 return None;
             }
 
-            // Content click → focus. The release that used to be here is gone: the generic
-            // "no container under the point" branch above covers it, and covers the paths this one
-            // never reached (F003/P086/T365).
-            if let Some(pane_id) = hit_test_pane(state, pos) {
-                return Some((
-                    WmAction::FocusPane { pane_id },
-                    InteractionSource::MouseContent,
-                ));
-            }
+            // **Focusing the clicked pane is gone from here, and that is the point.** A pane says
+            // what a press on it means, on itself — so it focuses for the left button and the
+            // right one alike, and nothing in the mouse layer has to find which pane the cursor is
+            // over in order to do it for it.
+            //
+            // What stood here hit-tested the pane by hand for the left button; the right button had
+            // a second copy that opened the menu first and then asked to focus, which is why
+            // right-clicking a pane never focused it.
         }
         (Btn::Left, Kind::Released) => {
             // End a divider resize-drag first (left-button gap drag).
@@ -240,9 +220,18 @@ pub fn on_mouse_input(
         // turns into a declared context menu (F004/P084/T395). Delivering only the press produced
         // no clicks at all, so no sidebar row opened a menu.
         (Btn::Right, Kind::Released) => {
-            if crate::chrome::deliver(state, ev) {
-                state.needs_redraw = true;
-            }
+            // **Both trees, and both halves of the gesture.** A pane's widgets are dispatched
+            // separately from the chrome's until the pane joins the one tree
+            // tree, and only *left* presses were ever handed to them — so a
+            // right-click never reached a pane at all, and the menu a pane declares about itself
+            // could not be found.
+            //
+            // The release matters as much as the press: `RightClick` is synthesised from the pair
+            // on the same widget, so handing over only one half produces no click and no menu —
+            // which is what `heca/tests/pointer_funnel.rs` exists to keep true.
+            let handled =
+                crate::chrome::deliver(state, ev) | crate::chrome::deliver_to_panes(state, ev);
+            state.needs_redraw |= handled;
             return None;
         }
         // Right-click → the menu for whatever is under the cursor: a container's row, else the
@@ -254,22 +243,20 @@ pub fn on_mouse_input(
         // Aiming the keyboard first used to be impossible here: opening a menu captured the input
         // mode to restore afterwards, and moving focus first would have rewritten what it captured.
         // Nothing is restored any more, so the constraint went with it.
+        // **And this is the whole of a right-click.** The press goes to the tree, whatever is
+        // under it deals with it, and a widget that declared a menu gets it opened by the
+        // framework. There is no branch here that knows what a pane is.
+        //
+        // What stood here hit-tested to find the pane, built its menu by hand and then asked to
+        // focus it, in that order — so the menu it had just opened covered the panes and the focus
+        // was refused every single time: right-clicking a pane never focused it. The pane declares
+        // its own menu now, like every other widget. Deleting the
+        // special case deletes the ordering it got wrong, which is the point: swapping two lines
+        // would have left the next person the same trap.
         (Btn::Right, Kind::Pressed) => {
-            // **The widget gets the right-click first.** It carries its button now, so a widget
-            // that declares `on_right_click` owns its own menu and the host never has to work out
-            // what was under the cursor on its behalf. Only when nothing claims it does the app's
-            // own row-menu path run.
-            if crate::chrome::deliver(state, ev) {
-                state.needs_redraw = true;
-                return None;
-            }
-            if let Some(pane_id) = hit_test_pane(state, pos) {
-                open_context_menu(state, pane_id, pos);
-                return Some((
-                    WmAction::FocusPane { pane_id },
-                    InteractionSource::MouseContent,
-                ));
-            }
+            let handled =
+                crate::chrome::deliver(state, ev) | crate::chrome::deliver_to_panes(state, ev);
+            state.needs_redraw |= handled;
         }
         _ => {}
     }

@@ -45,6 +45,7 @@ pub mod pointer;
 pub mod keymap;
 pub mod layout;
 pub mod menu;
+pub mod intent;
 pub mod reactive;
 pub mod scene;
 pub mod search;

@@ -37,9 +37,9 @@ pub use stack::ToastStack;
 
 use crate::builders::{LayoutExt, Parent};
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
-use crate::animation::{Animation, Presence};
+use crate::animation::Animation;
 use crate::effects::Flash;
-use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use crate::scene::TextAlign;
 use crate::style::{Align, Direction, Length, WidgetSize};
 use crate::widgets::{Ellipsis, Flex, Glyph, Icon, IconButton, Label};
@@ -105,12 +105,9 @@ pub struct Toast {
     /// The whole-card press flash. The actions and the × are real controls that flash themselves,
     /// so this is only ever the card's own press.
     flash: Flash,
-    /// **How it arrives and leaves.** The same mechanism an `Overlay` uses, so the verbs are the
-    /// library's — `open` / `hide` / `toggle` — and the animation is declared rather than baked
-    /// (F003/P096/T485).
-    presence: Presence,
-    /// The open state a host can bind — see [`open_signal`](Toast::open_signal).
-    open: Signal<bool>,
+    // **How it arrives and leaves, and whether it is up, are both on `Base` now** — the same two
+    // things every component carries. They were a `Presence` and a `Signal<bool>` of this widget's
+    // own, which is what made showing and closing a capability only a card and an overlay had.
 }
 
 #[heca_grid_ui_macros::props]
@@ -154,20 +151,18 @@ impl Toast {
             on_click: None,
             on_dismiss: None,
             flash: Flash::new(),
-            // A card built and put in a tree is on screen; a caller that wants it to arrive says
-            // `.default_open(false)` and then `open()`.
-            presence: {
-                let mut p = Presence::new();
-                // **A notification slides in by default**, because that is what a notification
-                // does: it arrives from the edge it lives on rather than materialising in place.
-                // Any other gesture is one builder away — `animation(Animation::Fade)`,
-                // `Animation::of(mine)` — and `Animation::None` is the cut.
-                p.set_animation(Animation::Slide.build());
-                p.assume_open(true);
-                p
-            },
-            open: signal(true),
         };
+        // A card built and put in a tree is on screen; a caller that wants it to arrive says
+        // `.default_open(false)` and then `show()`.
+        //
+        // **A notification slides in by default**, because that is what a notification does: it
+        // arrives from the edge it lives on rather than materialising in place. Any other gesture
+        // is one builder away — `animation(Animation::Fade)`, `Animation::of(mine)` — and
+        // `Animation::None` is the cut. Set on the gesture every component carries, which is where
+        // it lives now rather than in a field of this widget's own.
+        toast.base.presence.set_animation(Animation::Slide.build());
+        toast.base.presence.assume_open(true);
+        crate::reactive::SignalUpdate::set(&toast.base.open, true);
         toast.sync_icon();
         toast.sync_dismiss();
         toast.remeasure();
@@ -334,8 +329,8 @@ impl Toast {
     /// [`animation`](Toast::animation), exactly as an `Overlay`'s is.
     #[heca_grid_ui_macros::prop]
     pub fn default_open(mut self, open: bool) -> Self {
-        self.open.set(open);
-        self.presence.assume_open(open);
+        self.base.open.set(open);
+        self.base.presence.assume_open(open);
         self
     }
 
@@ -343,35 +338,35 @@ impl Toast {
     /// [`open`](Toast::open) / [`hide`](Toast::hide) — the arrival or the exit plays either way —
     /// so a host that keeps its state in signals drives the card without holding it.
     pub fn open_signal(&self) -> Signal<bool> {
-        self.open
+        self.base.open
     }
 
     /// **How it arrives and leaves** — `Animation::Fade`, `ZoomFade`, or one of your own. Undeclared
     /// it cuts: on screen the frame it opens, gone the frame it hides.
     #[heca_grid_ui_macros::host_only("an animation is a behaviour object, not a value static data carries")]
     pub fn animation(mut self, animation: crate::animation::Animation) -> Self {
-        self.presence.set_animation(animation.build());
+        self.base.presence.set_animation(animation.build());
         self
     }
 
     /// **Put it on screen.** With an animation declared it plays; already up, or still on its way
     /// out, and nothing happens.
     pub fn show(&mut self) {
-        if self.presence.enter() {
-            self.open.set(true);
+        if self.base.presence.enter() {
+            self.base.open.set(true);
         }
     }
 
     /// **Dismiss it.** With an animation the card stays laid out, inert, until the gesture has
     /// played out — which is what lets a host drop it from a list only once it has actually gone.
     pub fn close(&mut self) {
-        self.presence.leave();
-        self.open.set(false);
+        self.base.presence.leave();
+        self.base.open.set(false);
     }
 
     /// Open it if it is closed, dismiss it if it is open.
     pub fn toggle(&mut self) {
-        match self.presence.is_open() {
+        match self.base.presence.is_open() {
             true => self.close(),
             false => self.show(),
         }
@@ -380,7 +375,7 @@ impl Toast {
     /// Whether it is on screen — **including while it is leaving**, which is when it is still drawn
     /// and no longer interactive.
     pub fn is_showing(&self) -> bool {
-        self.presence.is_open() || self.presence.is_leaving()
+        self.base.presence.is_open() || self.base.presence.is_leaving()
     }
 
     /// Paint the text column one slot at a time, each under the colour that slot means: the title
@@ -471,14 +466,6 @@ impl Component for Toast {
     }
 
     /// This surface's arrival and exit — what a host drives, and what it carries across a rebuild.
-    fn presence(&self) -> Option<&Presence> {
-        Some(&self.presence)
-    }
-
-    fn presence_mut(&mut self) -> Option<&mut Presence> {
-        Some(&mut self.presence)
-    }
-
     fn show(&mut self) {
         Toast::show(self);
     }
@@ -509,7 +496,7 @@ impl Component for Toast {
         let glow = cx.rest_glow(GLOW_RADIUS);
         // Everything the card draws goes through the arrival/exit frame, so a fade or a zoom takes
         // the whole card — chrome and content — rather than half of it.
-        let frame = self.presence.frame();
+        let frame = self.base.presence.frame();
         frame.apply(cx, b.loc, |cx| {
         cx.rect(b, surface.lerp(tone, toast_tint as f32 / 255.0), None, card_radius, glow);
         cx.bracket_frame(b);
@@ -569,8 +556,8 @@ impl Component for Toast {
     fn tick(&mut self, dt: f32) -> bool {
         // A bound signal is as good as a call: one flip of it is an arrival or a dismissal, and
         // neither may be the only way the animation starts.
-        self.presence.follow(self.open.get_untracked());
-        let mut animating = self.presence.tick(dt);
+        self.base.presence.follow(self.base.open.get_untracked());
+        let mut animating = self.base.presence.tick(dt);
         animating |= self.flash.tick(dt);
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);

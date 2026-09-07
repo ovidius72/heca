@@ -269,6 +269,17 @@ impl Default for MenuItem {
 }
 
 impl MenuItem {
+    /// **Run what this row runs.** The row's own act, reachable without a pointer.
+    ///
+    /// The counterpart of [`label_text`](MenuItem::label_text): that reads a menu back, this drives
+    /// it. A test asserting that a row *does* something needs it, and so does anything choosing an
+    /// entry by keyboard, by quick-pick key or over RPC — otherwise "this row is wired up" is only
+    /// checkable by clicking it, and a row wired to nothing looks exactly like a row wired to
+    /// something — contributed rows once opened fine and did nothing at all.
+    pub fn activate(&self) {
+        (self.on_select)();
+    }
+
     /// The row's text, for a caller (or a test) reading a menu back. `None` for a composed row,
     /// whose text lives in its subtree.
     pub fn label_text(&self) -> Option<&str> {
@@ -401,6 +412,13 @@ impl Menu {
     /// The name other components may add rows to, if this menu has one.
     pub fn declared_name(&self) -> Option<&str> {
         self.name.as_deref()
+    }
+
+    /// **Take this menu's rows.** For a caller merging two menus into one: rows built by the same
+    /// conversion everything else goes through, moved onto another menu rather than rebuilt by hand
+    /// beside it — which is how a second, subtly different way of wiring a row gets written.
+    pub fn into_items(self) -> Vec<MenuItem> {
+        self.items
     }
 
     /// The rows' labels, in order — what a caller (or a test) reads back without reaching into the
@@ -586,7 +604,7 @@ impl ContextMenu {
     /// position — there is no sensible default for "somewhere".
     pub fn show(&self, ev: &Event) {
         if let Some(anchor) = MenuAnchor::from_event(ev) {
-            crate::menu::present(self.clone(), anchor);
+            crate::menu::present(self.clone(), anchor, None);
         }
     }
 

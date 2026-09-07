@@ -525,10 +525,47 @@ impl LayerRegistry {
             node: None,
         });
         crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), root);
+        // **A surface that named itself is addressable by that name**, read off the node it was
+        // just placed in — the same way `lock` and `captures_keyboard` are, and for the same
+        // reason: a name passed here as well would be a second answer that can disagree.
+        //
+        // This is what made `show_layer` reach only surfaces the host had registered by hand under
+        // a name typed in a second place. A `Dialog::new("..").key("confirm.close")` declared a
+        // name that nothing read, so the third of the three doors — point at it — was never
+        // connected to anything.
+        self.name_from_surface(window, id);
         // **The surface says whether it takes the keyboard**, so this reads the tree it was just
         // placed in rather than being told a second time.
         if captures_keyboard(window, id) {
             self.enter_context(id);
+        }
+    }
+
+    /// **Adopt the name the seated surface declared**, if it declared one and the layer has none.
+    ///
+    /// The owner half is stamped here and never written by the author (see
+    /// [`layer_name`](super::layer::layer_name)), so a plugin cannot claim `heca.*` or another
+    /// component's namespace however it names its own surface. A surface that declares nothing
+    /// stays anonymous, which is right: `key` is optional everywhere in this codebase and a
+    /// surface is no exception — it is simply reached by the id its opener kept instead.
+    fn name_from_surface(&mut self, window: &heca_grid_ui::widgets::Flex, id: LayerId) {
+        let Some(declared) =
+            crate::chrome::surface_node(window, id).and_then(|n| n.base().key.clone())
+        else {
+            return;
+        };
+        let named = super::layers::layer::layer_name(super::layers::layer::HOST_OWNER, &declared);
+        match named {
+            Some(name) => {
+                if let Some(l) = self.layers.iter_mut().find(|l| l.id == id)
+                    && l.name.is_none()
+                {
+                    l.name = Some(name);
+                }
+            }
+            // A name that cannot be stamped is one nothing will ever reach. Silence here is how
+            // the declaration went unread in the first place, so say so rather than drop it.
+            None => crate::chrome::identity::report_unusable_surface_name(&declared),
         }
     }
 

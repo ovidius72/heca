@@ -30,7 +30,6 @@ pub(crate) use hint::{
 };
 mod contribution;
 pub(crate) mod context_menu;
-pub(crate) mod described_confirm;
 mod events;
 mod expose;
 pub(crate) use expose::register as register_expose;
@@ -476,7 +475,7 @@ pub(crate) fn surface_node(root: &Flex, id: LayerId) -> Option<&dyn Component> {
     root.base()
         .children
         .iter()
-        .find(|c| c.base().key.as_deref() == Some(key.as_str()))
+        .find(|c| c.base().surface_slot.as_deref() == Some(key.as_str()))
         .map(|c| c.as_ref())
 }
 
@@ -487,7 +486,7 @@ pub(crate) fn surface_node_mut(root: &mut Flex, id: LayerId) -> Option<&mut Box<
     root.base_mut()
         .children
         .iter_mut()
-        .find(|c| c.base().key.as_deref() == Some(key.as_str()))
+        .find(|c| c.base().surface_slot.as_deref() == Some(key.as_str()))
 }
 
 /// **Take a surface out of the window root.** The counterpart of [`place_surface`]; an unknown key
@@ -495,7 +494,7 @@ pub(crate) fn surface_node_mut(root: &mut Flex, id: LayerId) -> Option<&mut Box<
 pub(crate) fn remove_surface(root: &mut Flex, key: &str) {
     root.base_mut()
         .children
-        .retain(|c| c.base().key.as_deref() != Some(key));
+        .retain(|c| c.base().surface_slot.as_deref() != Some(key));
 }
 
 /// **Place a surface in the window root** — the whole of "how do I put something on screen"
@@ -512,7 +511,10 @@ pub(crate) fn remove_surface(root: &mut Flex, key: &str) {
 /// second copy accumulating behind the first.
 pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: Box<dyn Component>) {
     let mut surface = surface;
-    surface.base_mut().key = Some(key.to_string());
+    // **The slot, not the author's name.** This used to write `key`, which is the string the
+    // component chose about *itself* — so a surface that named itself (`.key("confirm.close")`)
+    // had that name erased the moment it went on screen, and nothing could point at it afterwards.
+    surface.base_mut().surface_slot = Some(key.to_string());
     // Seated above the page, so it answers the pointer the way a positioned wrapper does in a
     // browser: through, except where it covers something. The author of the surface writes nothing
     // for this and cannot get it wrong.
@@ -533,7 +535,7 @@ pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: Box<dyn Compone
     let children = &mut root.base_mut().children;
     match children
         .iter()
-        .position(|c| c.base().key.as_deref() == Some(key))
+        .position(|c| c.base().surface_slot.as_deref() == Some(key))
     {
         Some(at) => children[at] = surface,
         None => children.push(surface),

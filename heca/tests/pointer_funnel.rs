@@ -173,6 +173,44 @@ fn the_mouse_layer_sends_a_release_for_every_press_it_sends() {
     }
 }
 
+/// **A right-click must reach the panes, not only the chrome.** ⚠️ Ran red against its own bug.
+///
+/// A pane's widgets live in a tree of their own until the pane joins the one tree
+/// tree, and only *left* presses were ever handed to them. So a right-click never
+/// reached a pane at all — and the moment a pane started declaring its own menu, right-clicking one
+/// showed nothing whatsoever, while `prefix+>` still worked because the keyboard path resolves the
+/// pane a different way.
+///
+/// A lint rather than a behaviour test, like its neighbours: what it guards is *absence*, and the
+/// suite was fully green with right-click menus completely dead.
+#[test]
+fn a_right_click_is_handed_to_the_panes_as_well_as_the_chrome() {
+    let src = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"))
+        .expect("read the mouse layer");
+
+    for arm in [
+        "(Btn::Right, Kind::Pressed) =>",
+        "(Btn::Right, Kind::Released) =>",
+    ] {
+        let at = src.find(arm).unwrap_or_else(|| {
+            panic!("the mouse layer no longer has a `{arm}` arm — move this guard with it")
+        });
+        let body = &src[at..];
+        let end = body[arm.len()..]
+            .find("\n        (")
+            .map(|i| i + arm.len())
+            .unwrap_or(body.len());
+        assert!(
+            body[..end].contains("deliver_to_panes("),
+            "the mouse layer's `{arm}` arm hands the event to the chrome tree but not to the \
+             panes.\n\
+             A pane is dispatched separately until it joins the one tree, so a right-click that \
+             goes only to the chrome never reaches a pane — and the menu a pane declares about \
+             itself is then unreachable, with nothing failing anywhere.",
+        );
+    }
+}
+
 /// **A divider resize must end at the same level its press started it.**
 ///
 /// The press starts the drag in the event loop (`mouse::resize::on_press`, before the general mouse

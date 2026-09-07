@@ -27,7 +27,7 @@ type Opened = Rc<RefCell<Vec<ContextMenu>>>;
 fn recording_sink() -> Opened {
     let opened: Opened = Rc::new(RefCell::new(Vec::new()));
     let sink = opened.clone();
-    heca_grid_ui::install_menu_sink(move |menu, anchor| {
+    heca_grid_ui::install_menu_sink(move |menu, anchor, _subject| {
         sink.borrow_mut().push(anchor.open(menu));
     });
     opened
@@ -162,7 +162,7 @@ fn the_items_are_built_when_the_menu_opens_not_when_it_was_declared() {
         Row::new()
             .width(Length::Px(100.0))
             .height(Length::Px(40.0))
-            .context_menu(move || {
+            .context_menu(move |_at| {
                 menu_named(if r.get() { "Use default name" } else { "Rename" })
             }),
     );
@@ -174,13 +174,18 @@ fn the_items_are_built_when_the_menu_opens_not_when_it_was_declared() {
     assert_eq!(labels(&opened), vec!["Rename", "Use default name"]);
 }
 
-/// A widget that **claims** its own right-click wins: the declared menu is what happens when
-/// nothing claims the click, not something that overrides a widget's own behaviour.
+/// A widget that wants to show **something other than** its declared menu says so, by name:
+/// `prevent_default`, exactly as a browser does.
 ///
-/// The claim is a call, not a side effect of registering a handler (F004/P084/T400): a handler
-/// runs and the event carries on, the way a DOM listener does, until one says `stop_propagation`.
+/// The claim is a call, not a side effect of registering a handler.
+///
+/// ⚠️ **It used to be `stop_propagation` that cancelled the menu**, and that was a trap: stopping
+/// the walk is about who *else* sees the event, not about what the framework does afterwards. A
+/// widget that stopped the walk for an unrelated reason — to keep something behind from also
+/// reacting — silently lost its own declared menu, with nothing failing and no warning. The two
+/// are separate levers now.
 #[test]
-fn a_widget_that_claims_its_own_right_click_beats_the_declaration() {
+fn a_widget_that_prevents_the_default_beats_the_declaration() {
     let opened = recording_sink();
     let hits = Rc::new(std::cell::Cell::new(0));
     let h = hits.clone();
@@ -190,7 +195,7 @@ fn a_widget_that_claims_its_own_right_click_beats_the_declaration() {
             .height(Length::Px(40.0))
             .on_right_click(move |e| {
                 h.set(h.get() + 1);
-                e.stop_propagation();
+                e.prevent_default();
             })
             .context_menu(menu_named("Rename")),
     );
@@ -198,7 +203,34 @@ fn a_widget_that_claims_its_own_right_click_beats_the_declaration() {
 
     right_click(&mut root, AT);
     assert_eq!(hits.get(), 1, "the widget's own handler ran");
-    assert!(opened.borrow().is_empty(), "and it owned the click");
+    assert!(
+        opened.borrow().is_empty(),
+        "and it said not to open the declared one"
+    );
+}
+
+/// **Stopping the walk does NOT cancel the menu** — the whole point of splitting the two.
+///
+/// This is the trap that prompted the split: a widget answers its right-click and stops the event
+/// reaching anything behind it, and its own menu still opens, because it never said otherwise.
+#[test]
+fn stopping_the_walk_does_not_withhold_the_declared_menu() {
+    let opened = recording_sink();
+    let mut root = Flex::row().child(
+        Row::new()
+            .width(Length::Px(100.0))
+            .height(Length::Px(40.0))
+            .on_right_click(|e| e.stop_propagation())
+            .context_menu(menu_named("Rename")),
+    );
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
+
+    right_click(&mut root, AT);
+    assert_eq!(
+        labels(&opened),
+        vec!["Rename"],
+        "nobody said prevent_default, so the menu the widget declared still opens",
+    );
 }
 
 /// …and a handler that only **watches** the click gets both: it runs, and the declared menu still
@@ -291,7 +323,7 @@ fn a_menu_is_declared_as_a_value_or_as_a_closure() {
             Row::new()
                 .width(Length::Px(100.0))
                 .height(Length::Px(40.0))
-                .context_menu(move || ctx.clone()),
+                .context_menu(move |_at| ctx.clone()),
         );
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
 

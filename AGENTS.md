@@ -77,12 +77,36 @@ reinventing something, and it will be rejected.
    host wiring with a component. This applies to code you are only passing through: when you meet an
    oversized file while fixing something else, **say so and agree the split first** — a large file
    quietly reorganised is a diff nobody can review.
-2. **Write it for the next caller, not for this one.** Every widget, component and function will be
-   used by another developer, another agent, or a plugin — and none of them should have to make the
-   same fix or build the same thing twice. So **centralise the logic**: a second copy of a rule is
-   the bug, not the copy you are about to write. And a capability must be reachable from all three
-   surfaces — the app, a plugin, and RPC — never trapped in the one that needed it first. This is
-   ⭐⭐ RULE ZERO stated up front; that section is the full form.
+2. ⛔ **THE FIX IS ALWAYS CENTRALIZED. NEVER HARDCODED. ALWAYS COMPOSED AND REUSABLE.**
+
+   This is not a question to weigh up, and there is no "where does this one belong" to decide.
+   Centralized is the answer, every time, before the first line. If the centralized version looks
+   too big, that is the work — it is not a reason to write the local one.
+
+   **The test is not "did I put it in the library".** It is:
+
+   > **Will any other developer or agent ever have to know this problem exists?**
+
+   If yes, the fix is in the wrong place, however central the file looks. A rule a caller has to
+   remember is the bug, even when it is written down once. Code that sits in a library and still
+   has to be repeated by the next person who composes something is a call-site fix wearing a
+   library's address.
+
+   **The tells you are writing the local version — stop at any one of them:**
+   - You are typing the same method, field or block into a **second** type. Three copies is not a
+     pattern to extend; it is the framework telling you the capability is missing. **Count them
+     before writing the next one** (`grep -rn "<the pattern>" src/`), because the count changes
+     what you build.
+   - You are reaching for a number, a key, a flag or an id at the place that *consumes* it.
+   - The fix works for the thing in front of you and the next widget of a different shape would
+     need its own version.
+   - You are about to ask permission to change a shared type. Centralizing IS the standing
+     decision; asking is a slower way of not doing it. Do it, then say what changed.
+
+   **Then build it once**, composed from what exists — Flex, Grid, Surface, the widgets in
+   `docs/widgets.md` — with every size a share and no pixel constants. And a capability must be
+   reachable from all three surfaces — the app, a plugin, and RPC — never trapped in the one that
+   needed it first. This is ⭐⭐ RULE ZERO stated up front; that section is the full form.
 
 **The tell you are about to fail this**: you are writing `paint`, a measure, a hit-test, a scroll
 offset, or an event-forwarding `match` inside a widget or the app. Every one of those is some

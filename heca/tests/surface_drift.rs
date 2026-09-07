@@ -128,3 +128,45 @@ fn the_known_surface_list_is_exactly_what_still_registers() {
          file reusing the path is not excused without anyone deciding that: {stale:?}",
     );
 }
+
+/// **A menu row must be wired by the one conversion, whoever contributed it.**
+///
+/// Rows a component contributes to somebody else's menu were built by hand and wired to
+/// `SubmitOverlay`, which resolves the overlay and hands the chosen id to a *completion*. A menu
+/// presented from a widget's own declaration has no completion — nobody registers one — so a
+/// contributed row opened fine and then did **nothing at all** when chosen.
+///
+/// Nothing failed. It went unnoticed while contributions were the rare case; the moment a pane's
+/// whole menu arrived that way, every entry in it was dead.
+///
+/// A lint, like its neighbours: what it guards is a *second* way of doing something, and the suite
+/// was green with the menu entries doing nothing at all.
+#[test]
+fn contributed_menu_rows_go_through_the_one_conversion() {
+    let src = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/chrome/overlay.rs"),
+    )
+    .expect("read the overlay host");
+
+    let at = src
+        .find("fn merge_contributions(")
+        .expect("merge_contributions moved — move this guard with it");
+    let body = &src[at..];
+    let end = body.find("\n}\n").map(|i| i + 2).unwrap_or(body.len());
+    let body = &body[..end];
+
+    assert!(
+        body.contains("menu_from_items("),
+        "merge_contributions no longer goes through `menu_from_items`.\n\
+         That is the one place an entry becomes a row — it wires the row to run the entry's own \
+         action, dispatched by name through the central gate. Anything else builds a second kind \
+         of row that looks identical and behaves differently.",
+    );
+    assert!(
+        !body.contains("MenuItem::new()"),
+        "merge_contributions builds a menu row by hand.\n\
+         A row built here is wired by whatever this function remembers to wire, which is how \
+         contributed rows ended up carrying an overlay-resolve that lands on a completion nobody \
+         registers — they opened, and did nothing at all, and nothing failed.",
+    );
+}

@@ -393,6 +393,61 @@ fn an_overlay_sits_above_its_opener_not_above_the_newest_layer() {
     );
 }
 
+/// **A surface that names itself is reachable by that name**. ⚠️ Ran red first.
+///
+/// The third of the three doors — `default_open` for the starting value, `open_when` for state you
+/// hold, and *point at it by name* — was never connected to anything. A widget's `key` is the name
+/// the component chose about itself, but nothing read it when the surface was seated, and worse,
+/// seating **overwrote** it with the host's internal slot. So
+/// `Dialog::new("..").key("confirm")` declared a name that was destroyed on the way onto the
+/// screen, and the only surfaces `show_layer` could reach were the ones the host had registered by
+/// hand under a name typed in a second place — two answers to one question, and a plugin could
+/// give neither.
+#[test]
+fn a_surface_that_names_itself_can_be_reached_by_that_name() {
+    let mut reg = LayerRegistry::default();
+    let mut window = crate::chrome::new_window_root();
+
+    let mut root = empty_root();
+    root.base_mut().key = Some("confirm".to_string());
+    let id = reg.reserve_id();
+    reg.insert(id, None, LayerKind::OnDemand, root, &mut window);
+
+    assert_eq!(
+        reg.by_name("heca.confirm"),
+        Some(id),
+        "the surface's own key becomes the name `show_layer` resolves, with the owner half stamped \
+         here so it cannot be forged",
+    );
+    assert_eq!(
+        crate::chrome::surface_node(&window, id).and_then(|n| n.base().key.clone()),
+        Some("confirm".to_string()),
+        "and seating it leaves the author's own name alone — it used to be overwritten by the \
+         host's internal slot, so the declaration was gone the moment it went on screen",
+    );
+}
+
+/// **A surface that names nothing stays anonymous, and that is fine.**
+///
+/// `key` is optional everywhere in this codebase and a surface is no exception: one that declares
+/// no name is reached by the id its opener kept, exactly as a dropdown or a modal always has been.
+/// Guarding it because the tempting fix for the test above is to require a key.
+#[test]
+fn a_surface_that_names_nothing_is_still_a_perfectly_good_surface() {
+    let mut reg = LayerRegistry::default();
+    let mut window = crate::chrome::new_window_root();
+
+    let id = reg.reserve_id();
+    reg.insert(id, None, LayerKind::OnDemand, empty_root(), &mut window);
+
+    assert_eq!(reg.name_of(id), None, "no name declared, so none invented");
+    reg.show(&mut window, id);
+    assert!(
+        reg.visible_front_to_back().iter().any(|l| l.id == id),
+        "and it is on screen like any other surface",
+    );
+}
+
 /// **A described layer can be named, so something can point at it** (F003/P097/T502).
 ///
 /// `show_layer` / `hide_layer` address a surface **by name** — that is how a key binding, the

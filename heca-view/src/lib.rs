@@ -1421,6 +1421,21 @@ pub struct DropdownItem {
     pub intent: Intent,
     pub danger: bool,
     pub enabled: bool,
+    /// **Where this entry sits among all the others**, or `None` to sit where its block sits.
+    ///
+    /// A menu is filled by several sources at once — heca's own entries and any plugin's — and each
+    /// source declares a weight for its whole block. That is the right granularity most of the
+    /// time: a plugin thinks in "my entries". It is not enough when one entry belongs at the very
+    /// top and the rest belong at the bottom, because a block can only move whole.
+    ///
+    /// So an entry may say where it goes, and **one that says nothing takes its block's weight**.
+    /// There is a single ordering rule rather than "sort the blocks, then sort inside them": every
+    /// entry has a weight, most simply do not spell it, and the whole menu is one sorted list.
+    ///
+    /// A list of numbers rather than one, sorted ascending, so an entry can be slotted *between*
+    /// two neighbours without renumbering either — `[1, 1, 1]` lands between `[1, 1]` and `[1, 2]`.
+    /// Ties keep the order the entries were produced in.
+    pub weight: Option<Vec<i64>>,
 }
 
 impl DropdownItem {
@@ -1435,6 +1450,7 @@ impl DropdownItem {
             intent,
             danger: false,
             enabled: true,
+            weight: None,
         }
     }
 
@@ -1448,6 +1464,7 @@ impl DropdownItem {
             intent,
             danger: false,
             enabled: true,
+            weight: None,
         }
     }
     /// Tint destructive (red) — the confirm gate still applies on dispatch.
@@ -1458,6 +1475,17 @@ impl DropdownItem {
     /// Enable/disable (a disabled entry is dimmed + unselectable).
     pub fn enabled(mut self, on: bool) -> Self {
         self.enabled = on;
+        self
+    }
+
+    /// **Put this entry somewhere other than where its block sits** — see
+    /// [`weight`](DropdownItem::weight).
+    ///
+    /// ```ignore
+    /// DropdownItem::new("myplugin.pin", "Pin this").weight(vec![0])   // above everything
+    /// ```
+    pub fn weight(mut self, weight: Vec<i64>) -> Self {
+        self.weight = Some(weight);
         self
     }
 }

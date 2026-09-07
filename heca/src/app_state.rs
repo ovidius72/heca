@@ -592,6 +592,18 @@ fn make_terminal_texture(
     (texture, view)
 }
 
+/// **A menu a widget asked to open, waiting for the host to mount it.**
+///
+/// The menu itself, where it goes, and **who it is about** — the declaring widget's own identity,
+/// carried through so the host's providers can build its entries without a hit test of their own.
+/// `None` when the declarer publishes no identity, which is a contribution: entries that act on app
+/// state rather than on a particular thing.
+pub type PendingMenu = (
+    heca_grid_ui::widgets::ContextMenu,
+    heca_grid_ui::widgets::MenuAnchor,
+    Option<String>,
+);
+
 /// Central application runtime state.
 ///
 /// Holds the winit window, GPU resources, session layout, backends,
@@ -933,9 +945,7 @@ pub struct AppState {
     /// A queue rather than a direct call because the sink is a plain `Fn` installed once at
     /// startup, and inserting a layer needs `&mut AppState`; and rather than an `AppEvent` because
     /// a menu carries closures and a winit user event must be `Send`.
-    pub pending_menus: std::rc::Rc<
-        std::cell::RefCell<Vec<(heca_grid_ui::widgets::ContextMenu, heca_grid_ui::widgets::MenuAnchor)>>,
-    >,
+    pub pending_menus: std::rc::Rc<std::cell::RefCell<Vec<PendingMenu>>>,
     /// **Drops no widget took**, waiting to become moves (F003/P097/T496).
     ///
     /// The twin of [`pending_menus`](Self::pending_menus), for the same reason: a row owns the

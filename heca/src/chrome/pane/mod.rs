@@ -195,6 +195,13 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
             // built into it — so a zoom, a resize or a float moves the frame without rebuilding
             // the widget and throwing away its signals.
             shell::size_to(&mut retained.root, model.w, model.h);
+            // **What focus changed**, written on rather than rebuilt for — see `focus_state_to`.
+            shell::focus_state_to(
+                &mut retained.root,
+                model.active,
+                model.border_color,
+                model.accent,
+            );
             LayoutEngine::new().compute(
                 &mut retained.root,
                 Size::new(model.w as f64, model.h as f64),
