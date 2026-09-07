@@ -118,10 +118,9 @@ args = { name = "heca.confirm" }
 
 ## Operational
 
-- ⚠️ **There is UNCOMMITTED work in the tree** — the whole surface API above (the rename, the
-  handle, `open_when`) plus the guards copied into `button.rs` and `overlay/tests.rs`. It is green:
-  1492 tests, clippy at the baseline warning, no file's rustfmt count raised. Antonio has not been
-  asked to commit it.
+- **Everything is COMMITTED and the tree is clean.** The surface API — the rename, the copyable
+  handle,  — is . Green at that commit: 1492 tests, clippy at the one
+  pre-existing warning, no file's rustfmt count raised.
 - **`/Users/antonio/projects/heca`**, branch **`feat/hint-collapses-to-the-tree`**, cut from `main`
   at `069e3b3`, **not pushed**. Five commits: `4cb7e24` (T499), `1b8a5b1` (T500 fixes), `d013f5c`
   (T501 part), `89a3b3e` (T501 complete), `673356d` (T502).
