@@ -837,6 +837,32 @@ pub trait Component {
     /// Default: nothing to open.
     fn open(&mut self) {}
 
+    /// **Put this surface's keyboard on the control named `key`**, if it holds one.
+    ///
+    /// Default: nothing. [`Overlay`](crate::widgets::Overlay) implements it, so anything composed
+    /// from one — a `Dialog`, a plugin's described surface — places the keyboard by the same rule
+    /// instead of each carrying its own. A trait method rather than a downcast, exactly as
+    /// [`open`](Component::open) already is.
+    fn set_default_focus(&mut self, _key: &str) {}
+
+    /// **Move this surface's keyboard to the next or previous control.**
+    ///
+    /// Default: nothing. [`Overlay`](crate::widgets::Overlay) implements it, and anything composed
+    /// from one calls it rather than keeping a focus manager of its own — two managers over one
+    /// panel is two positions that drift, so Tab and the arrow keys end up disagreeing about where
+    /// the keyboard is.
+    fn advance_focus(&mut self, _forward: bool) {}
+
+    /// **Put the keyboard on this surface's first control, without showing a ring.**
+    ///
+    /// What a surface does as it opens so Enter works immediately, while the ring still waits for
+    /// the user to actually navigate. Default: nothing.
+    fn focus_first_quiet(&mut self) {}
+
+    /// **A click inside this surface moves its keyboard**, and a click that hits no control leaves
+    /// the keyboard where it is — the trapped-panel rule. Default: nothing.
+    fn focus_at_trapped(&mut self, _pos: heca_core::layout::Point) {}
+
     /// **Dismiss this surface.**
     ///
     /// With an animation declared this *begins* the exit — the surface is gone when

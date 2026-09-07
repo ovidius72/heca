@@ -357,6 +357,22 @@ pub enum ViewLabelSide {
     Left,
 }
 
+/// A spacing step from the theme — mirrors grid-ui `Spacing`.
+///
+/// **Resolved from the inherited font at layout, never a pixel count**, so a described tree spaces
+/// itself the way the rest of the app does and follows a font or theme change with nothing
+/// rewritten. It is what an author reaches for instead of `padding(16.0)`: raw pixels are still
+/// there for the rare case that genuinely needs one, and are the wrong default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewSpacing {
+    None,
+    Xs,
+    Sm,
+    Md,
+    Lg,
+}
+
 /// How a [`ButtonGroup`](WidgetKind::ButtonGroup) shows its actions — mirrors grid-ui `Display`.
 ///
 /// Whatever does not fit collapses into a ⋮ menu whichever of these is chosen; this only decides
@@ -496,6 +512,7 @@ value_set! {
     ViewLabelSide { Right => "right", Left => "left" }
     ViewTooltipSide { Top => "top", Bottom => "bottom", Left => "left", Right => "right" }
     ViewDisplay { Auto => "auto", IconOnly => "icon_only", Full => "full" }
+    ViewSpacing { None => "none", Xs => "xs", Sm => "sm", Md => "md", Lg => "lg" }
     ViewNfGlyph {
         Shift => "shift",
         Control => "control",
@@ -1705,6 +1722,7 @@ mod tests {
         check(ViewHintPlacement::ALL, ViewHintPlacement::name);
         check(ViewNfGlyph::ALL, ViewNfGlyph::name);
         check(ViewDisplay::ALL, ViewDisplay::name);
+        check(ViewSpacing::ALL, ViewSpacing::name);
         check(ViewMarker::ALL, ViewMarker::name);
         check(ViewTextAlign::ALL, ViewTextAlign::name);
         check(ViewGlyph::ALL, ViewGlyph::name);

@@ -85,7 +85,37 @@ pub trait Style: Sized {
     fn gap(self, px: f32) -> Self {
         self.prop("gap", px)
     }
-    /// Space inside the box on every side, in px.
+    /// **Space inside the box on every side, from the theme** — the one to reach for.
+    ///
+    /// Resolved from the inherited font at layout, so it follows a font or theme change with
+    /// nothing rewritten, and a described tree spaces itself the way the rest of the app does.
+    /// Prefer it over [`padding`](Style::padding): a pixel count is a hardcoded value that stops
+    /// matching everything around it the moment anything changes.
+    fn pad_all(self, s: crate::ViewSpacing) -> Self {
+        self.prop("pad_spacing_x", s).prop("pad_spacing_y", s)
+    }
+
+    /// Horizontal (left + right) padding from the theme. See [`pad_all`](Style::pad_all).
+    fn pad_x(self, s: crate::ViewSpacing) -> Self {
+        self.prop("pad_spacing_x", s)
+    }
+
+    /// Vertical (top + bottom) padding from the theme. See [`pad_all`](Style::pad_all).
+    fn pad_y(self, s: crate::ViewSpacing) -> Self {
+        self.prop("pad_spacing_y", s)
+    }
+
+    /// **Space between children, from the theme.** The gap counterpart of
+    /// [`pad_all`](Style::pad_all), and preferred over [`gap`](Style::gap) for the same reason.
+    ///
+    /// Use the steps to group: a tight `Xs` inside a label-and-control couple, a roomier `Md`
+    /// between couples — no arithmetic, and no new widget.
+    fn gap_spacing(self, s: crate::ViewSpacing) -> Self {
+        self.prop("gap_spacing", s)
+    }
+
+    /// Space inside the box on every side, **in px**. Prefer [`pad_all`](Style::pad_all), which
+    /// takes a theme step and follows a font or theme change.
     fn padding(self, px: f32) -> Self {
         self.prop("padding", px)
     }
@@ -814,7 +844,7 @@ with_event!(
     Scroll { on_hint => "hint" }
     Panel { on_hint => "hint" }
     Surface { on_hint => "hint" }
-    Overlay { on_hint => "hint" }
+    Overlay { on_dismiss => "dismiss", on_hint => "hint" }
     KeyHintGroup { on_hint => "hint" }
     MarkerGroup { on_hint => "hint" }
     Label { on_hint => "hint" }
@@ -1281,6 +1311,23 @@ impl Panel {
 }
 
 impl Overlay {
+    /// **Which control the keyboard starts on**, named by its `key`.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    ///
+    /// let confirm = Overlay::new()
+    ///     .default_focus("cancel")
+    ///     .child(Button::new().key("cancel").text("Cancel"));
+    /// ```
+    ///
+    /// Yours to decide, because only you know which control is safe: a confirm starts on the
+    /// button that changes nothing, a form on its first field, a menu on neither. Unset, nothing
+    /// is focused.
+    pub fn default_focus(self, key: &str) -> Self {
+        self.prop("default_focus", PropValue::Text(key.to_string()))
+    }
+
     /// **How it arrives and leaves.** Unset, it cuts.
     ///
     /// These are the built-ins. An animation nobody named is a Rust type handed to

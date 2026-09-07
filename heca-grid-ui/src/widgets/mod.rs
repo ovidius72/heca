@@ -65,7 +65,7 @@ pub use chrome_region::{ChromeRegion, RegionMode};
 pub use card_grid::{CardGrid, GridCell};
 pub use command_palette::{Command, CommandPalette};
 pub use context_menu::{ContextMenu, Menu, MenuAnchor, MenuEntry, MenuItem};
-pub use dialog::Dialog;
+pub use dialog::{Dialog, DIALOG_BTN_GAP, DIALOG_GAP, DIALOG_PAD};
 pub use overlay::{
     paint_panel_chrome, place_anchored, place_anchored_on, place_at_point, place_beside,
     AnchorSide, BesideSide, Overlay, OverlayPosition, PanelChrome, PanelElevation,

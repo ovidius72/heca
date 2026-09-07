@@ -393,6 +393,48 @@ fn an_overlay_sits_above_its_opener_not_above_the_newest_layer() {
     );
 }
 
+/// **A described layer can be named, so something can point at it** (F003/P097/T502).
+///
+/// `show_layer` / `hide_layer` address a surface **by name** — that is how a key binding, the
+/// palette or RPC reaches one, none of which could ever know a runtime `LayerId`. Until this,
+/// `add_named` took a native tree and `add_view` took a description and wrote no name at all, so a
+/// plugin could have a surface it could put up and then nothing that could point at it: the two
+/// halves were reachable one at a time and never together.
+#[test]
+fn a_described_layer_can_be_named_so_an_action_can_reach_it() {
+    use heca_view::{ViewNode, WidgetKind};
+    let mut reg = LayerRegistry::default();
+    let mut window = crate::chrome::new_window_root();
+
+    let slot = reg.reserve_id();
+    let named = reg.add_view(
+        slot,
+        Some("heca.confirm".to_string()),
+        None,
+        LayerKind::OnDemand,
+        ViewNode::new(WidgetKind::Label),
+        declaring(empty_root(), false, true),
+        &mut window,
+    );
+
+    assert_eq!(
+        reg.by_name("heca.confirm"),
+        Some(named),
+        "a described surface answers to its name, so `show_layer heca.confirm` reaches it",
+    );
+    reg.show(&mut window, named);
+    let layers = reg.visible_front_to_back();
+    let layer = layers
+        .iter()
+        .find(|l| l.id == named)
+        .expect("the layer is registered");
+    assert!(
+        layer.node.is_some(),
+        "and naming it did not cost it its description — that is what a theme reload re-realizes \
+         from",
+    );
+}
+
 /// **A described layer is a real layer.** It sorts, shows, hides and covers exactly like a
 /// native one — the arm decides where the tree came from, never how the stack treats it.
 #[test]
@@ -410,6 +452,7 @@ fn a_view_layer_behaves_like_any_other_and_keeps_its_description() {
     let slot = reg.reserve_id();
     let described = reg.add_view(
         slot,
+        None,
         None,
         LayerKind::Persistent,
         node,

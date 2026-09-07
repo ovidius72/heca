@@ -531,6 +531,11 @@ pub(crate) async fn init_state(
     // from the very first frame. Re-registering is the rebuild path when the session's shape
     // changes; see `chrome::expose::register`.
     crate::chrome::register_expose(&mut state);
+    // The described-surface acceptance test (F003/P097/T502): an overlay built the way a plugin
+    // must build one, registered through the one described-layer path and reached by the same
+    // generic `show_layer heca.confirm` any other named surface is. It starts hidden, like every
+    // other on-demand layer.
+    crate::chrome::described_confirm::register(&mut state);
     state
 }
 

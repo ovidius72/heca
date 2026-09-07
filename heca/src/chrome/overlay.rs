@@ -236,6 +236,7 @@ pub(crate) fn open_modal(
 /// realized tree's laid-out bounds, which is the invariant this path must not break.
 pub(crate) fn open_view_layer(
     state: &mut AppState,
+    name: Option<String>,
     parent: Option<LayerId>,
     kind: LayerKind,
     lock: bool,
@@ -262,9 +263,15 @@ pub(crate) fn open_view_layer(
     // A described overlay declares coverage the same way a native one does. Whether it takes
     // the keyboard is read from the tree, exactly as for a native one.
     realized.base_mut().lock = lock;
-    let id = state
-        .layers
-        .add_view(id, parent, kind, node, realized, &mut state.window_root);
+    let id = state.layers.add_view(
+        id,
+        name,
+        parent,
+        kind,
+        node,
+        realized,
+        &mut state.window_root,
+    );
     state.needs_redraw = true;
     id
 }

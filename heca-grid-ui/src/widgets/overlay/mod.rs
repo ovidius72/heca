@@ -45,6 +45,7 @@ pub use place::{
 use crate::animation::{Animation, Presence};
 use crate::builders::LayoutExt;
 use crate::component::{paint_child, shift_subtree, Base, Component, Event, Handled, PaintCx};
+use crate::event::WidgetIntent;
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::style::{Align, Justify, Length};
 use heca_core::layout::{Point, Rectangle, Size};
@@ -85,6 +86,31 @@ pub struct Overlay {
     /// Fired when a press lands outside the panel — the standalone dismissal
     /// hook (a composing widget usually implements its own policy instead).
     on_outside_click: Option<Box<dyn Fn()>>,
+    /// **What the dismiss key means to this surface**, when it means anything.
+    ///
+    /// An open overlay already holds the keyboard (`base.focused = open`), so the key arrives here
+    /// whatever composes it — it was simply dropped, because this widget answered pointer events
+    /// and nothing else. Every surface built on top therefore wrote its own dismissal: `Dialog`,
+    /// `ContextMenu` and `CommandPalette` each have one, three copies of the same sentence, and a
+    /// surface **composed** rather than built — which is what a plugin writes — had none at all
+    /// and could not be closed from the keyboard (F003/P097/T502).
+    ///
+    /// Unset means unset: the key is left alone and passes to whatever composes this overlay, so
+    /// the three widgets above keep answering it exactly as they did.
+    on_dismiss: Option<Box<dyn Fn()>>,
+    /// **Keyboard focus among the panel's focusable descendants.**
+    ///
+    /// Tab is the universal focus primitive — not a rebindable binding — and it belongs to
+    /// whatever *contains* the focusables. That is this widget: an open overlay already holds the
+    /// keyboard, and its panel is the subtree to walk. It lived only in `Dialog`, so a surface
+    /// composed rather than built could not be tabbed through at all (F003/P097/T502).
+    focus: crate::focus::FocusManager,
+    /// **Which of its own controls the keyboard starts on**, by the name that control goes by.
+    ///
+    /// The author's call, not the framework's: a confirm wants the safe button, a form wants its
+    /// first field, and a menu wants nothing at all. Unset means nothing is focused, which is what
+    /// every surface did before there was a way to say otherwise.
+    default_focus: Option<String>,
     /// How the panel is placed: centered (default) or anchored to a trigger rect.
     position: OverlayPosition,
     /// Explicit panel size, applied to the panel child's style. `None` (default)
@@ -128,6 +154,9 @@ impl Overlay {
             blocking: true,
             frosted: false,
             on_outside_click: None,
+            on_dismiss: None,
+            focus: crate::focus::FocusManager::new(),
+            default_focus: None,
             position: OverlayPosition::Center,
             panel_size: None,
             viewport: Cell::new(Size::new(f64::INFINITY, f64::INFINITY)),
@@ -316,11 +345,47 @@ impl Overlay {
         self
     }
 
+    /// **Which control the keyboard starts on**, by the name that control goes by.
+    ///
+    /// ```ignore
+    /// Overlay::new().panel(body).default_focus("Cancel")
+    /// ```
+    ///
+    /// Yours to decide, because only you know which control is safe: a confirm starts on the
+    /// button that changes nothing, a form on its first field, a menu on neither. Unset leaves the
+    /// keyboard where it was.
+    ///
+    /// **No `key` required.** The name is the control's declared `key` when it has one and the
+    /// words it reads by when it does not — see [`FocusManager::focus_named`].
+    #[heca_grid_ui_macros::prop]
+    pub fn default_focus(mut self, name: impl Into<String>) -> Self {
+        self.default_focus = Some(name.into());
+        self
+    }
+
     /// **Put it on screen.** If an [`animation`](Overlay::animation) was declared it plays;
     /// if not, it is simply up. Already up, or still on its way out, and nothing happens.
+    ///
+    /// Opening is also where the keyboard is placed, when the surface said where it should go —
+    /// here rather than at construction, because a surface is built once and opened many times.
     pub fn open(&mut self) {
         if self.presence.enter() {
             self.open.set(true);
+            self.place_default_focus();
+        }
+    }
+
+    /// Put the keyboard where [`default_focus`](Overlay::default_focus) said, if that control is
+    /// there. Goes **through the focus manager**, which is the point: writing the control's
+    /// `focused` signal by hand leaves the manager's own position unset, so the next Tab is spent
+    /// moving to the first control instead of the next one and the first press appears to do
+    /// nothing (Antonio, driving, 2026-09-07).
+    fn place_default_focus(&mut self) {
+        let Some(name) = self.default_focus.clone() else {
+            return;
+        };
+        if let Some(panel) = self.base.children.first_mut() {
+            self.focus.focus_named(panel.as_mut(), &name);
         }
     }
 
@@ -376,6 +441,22 @@ impl Overlay {
     /// composing widget usually intercepts the press and applies its own
     /// dismissal policy instead).
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
+    /// **What the dismiss key does to this surface.**
+    ///
+    /// ```ignore
+    /// Overlay::new().panel(my_panel).on_dismiss(move || close())
+    /// ```
+    ///
+    /// The keys already arrive — an open overlay holds them. This is what makes one of them mean
+    /// something, and it is on the overlay rather than in each surface built from it, so a
+    /// composed surface closes on Escape without its author writing anything.
+    #[heca_grid_ui_macros::host_only("a callback, not a scalar — behaviour crosses as an Intent")]
+    pub fn on_dismiss(mut self, f: impl Fn() + 'static) -> Self {
+        self.on_dismiss = Some(Box::new(f));
+        self
+    }
+
+    #[heca_grid_ui_macros::host_only("a callback, not a scalar")]
     pub fn on_outside_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_outside_click = Some(Box::new(f));
         self
@@ -479,6 +560,28 @@ impl Component for Overlay {
 
     fn open(&mut self) {
         Overlay::open(self);
+    }
+
+    fn set_default_focus(&mut self, name: &str) {
+        self.default_focus = Some(name.to_string());
+    }
+
+    fn advance_focus(&mut self, forward: bool) {
+        if let Some(panel) = self.base.children.first_mut() {
+            self.focus.advance(panel.as_mut(), forward);
+        }
+    }
+
+    fn focus_first_quiet(&mut self) {
+        if let Some(panel) = self.base.children.first_mut() {
+            self.focus.focus_first_quiet(panel.as_mut());
+        }
+    }
+
+    fn focus_at_trapped(&mut self, pos: heca_core::layout::Point) {
+        if let Some(panel) = self.base.children.first_mut() {
+            self.focus.focus_at_trapped(panel.as_mut(), pos);
+        }
     }
 
     fn hide(&mut self) {
@@ -623,6 +726,39 @@ impl Component for Overlay {
                 self.swallow()
             }
             Event::PointerUp(_) | Event::PointerMove(_) | Event::Scroll(_) => self.swallow(),
+            // **The dismiss key, answered where the keys already arrive.**
+            //
+            // An open overlay holds the keyboard — `base.focused = open`, set in the constructor —
+            // so this key has always been delivered here and was simply dropped. Every surface
+            // built on top wrote its own dismissal instead (`Dialog`, `ContextMenu`,
+            // `CommandPalette`: three copies of one sentence), and a surface **composed** rather
+            // than built had none at all — a plugin's overlay could not be closed from the
+            // keyboard (F003/P097/T502).
+            //
+            // **Unanswered when nothing was declared**, which is what keeps those three exactly as
+            // they were: they set no dismissal on their inner overlay, so the key passes up to
+            // them untouched. A surface that declares one closes on it, whoever composed it.
+            // **Tab moves through the panel, and stays inside it.**
+            //
+            // Universal, so it is not gated on anything being declared: an overlay is a place the
+            // keyboard is contained, and containment is what makes Tab mean something here rather
+            // than wandering into the page behind. `Dialog` did this for itself and nothing else
+            // did, which is why a composed surface — a plugin's — had no traversal at all.
+            Event::Key {
+                key: crate::component::GridKey::Tab,
+                pressed: true,
+            } => {
+                let forward = !crate::event::modifiers().shift;
+                Component::advance_focus(self, forward);
+                Handled::Yes
+            }
+            Event::Widget(WidgetIntent::Dismiss) => match &self.on_dismiss {
+                Some(f) => {
+                    f();
+                    Handled::Yes
+                }
+                None => Handled::No,
+            },
             // A **non-blocking** layer is not on the path of a press beside it, so the press
             // reaches it as the outside event instead. Same hook, both shapes.
             Event::PointerDownOutside(_) => {

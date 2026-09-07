@@ -211,6 +211,41 @@ impl FocusManager {
     /// Focus the top-most focusable component containing `pos` (e.g. on a mouse
     /// click); **clears** focus if the click misses every focusable. This is the
     /// page-level "click empty space to blur" semantics.
+    /// **Put the keyboard on the focusable called `name`.** Returns whether one was found.
+    ///
+    /// `name` is the control's declared `key` when it has one, and **the name it reads by** when it
+    /// does not — `key` is optional everywhere in this library and a control you point at is no
+    /// exception. Gating on a declared key is the mistake `.draggable()` shipped with: silently
+    /// dead on every widget nobody had reason to name, and an internal rule an author had to learn
+    /// before anything worked (AGENTS.md § 0a). `text_summary` is the same accessible-name
+    /// algorithm the picker and the card grid already resolve names with.
+    ///
+    /// It goes **through the manager**, which is the point: setting a `focused` signal by hand
+    /// leaves the manager's own position unset, so the next Tab is spent moving to the first
+    /// control instead of the next one — the keyboard appears to do nothing on the first press
+    /// (Antonio, driving, 2026-09-07).
+    ///
+    /// A name that matches nothing leaves the keyboard alone rather than guessing: a stale name
+    /// should not silently focus something else.
+    pub fn focus_named(&mut self, root: &mut dyn Component, name: &str) -> bool {
+        let mut found: Option<usize> = None;
+        let mut idx = 0;
+        for_each_focusable(root, &mut idx, &mut |i, c| {
+            if found.is_none()
+                && (c.base().answers_to(name) || c.text_summary().as_deref() == Some(name))
+            {
+                found = Some(i);
+            }
+        });
+        match found {
+            Some(i) => {
+                self.apply(root, Some(i), true);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn focus_at(&mut self, root: &mut dyn Component, pos: Point) {
         let hit = Self::hit_test(root, pos);
         self.apply(root, hit, false); // mouse focus → no ring (focus-visible)

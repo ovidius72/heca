@@ -134,17 +134,43 @@ impl LayerRegistry {
     // Every argument is one of the layer's own declarations, and grouping them into a spec struct
     // is work T417 would throw away — it deletes `LayerBand` and rebuilds this as a surface tree.
     #[allow(clippy::too_many_arguments)]
+    /// `name` is what an action, a key binding or RPC addresses it by — build it with
+    /// [`layer_name`] so the owner half is stamped rather than typed. `None` for a surface nobody
+    /// names, exactly as for a native one.
+    ///
+    /// **A described layer could not be named at all** until F003/P097/T502: this took no `name`
+    /// and [`push_layer`](Self::push_layer) wrote `None`, while [`add_named`](Self::add_named) took
+    /// a native tree. So a plugin got a surface it could put up and then had no way to point at —
+    /// `show_layer` / `hide_layer` address by name, and its layer had none. The two halves were
+    /// reachable one at a time and never together.
+    ///
+    /// The named case goes through `add_named` rather than repeating it, so a described layer
+    /// keeps its place in the stack on a rebuild and carries its visibility and its animation in
+    /// flight — the two bugs that logic exists for are not ones to learn twice.
     pub(crate) fn add_view(
         &mut self,
         id: LayerId,
+        name: Option<String>,
         parent: Option<LayerId>,
         kind: LayerKind,
         node: ViewNode,
         realized: Box<dyn Component>,
         window: &mut heca_grid_ui::widgets::Flex,
     ) -> LayerId {
-        self.push_layer(id, parent, kind, Some(node));
-        crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), realized);
+        match name {
+            Some(name) => {
+                self.add_named(id, name, parent, kind, realized, window);
+            }
+            None => {
+                self.push_layer(id, parent, kind, None);
+                crate::chrome::place_surface(window, &crate::chrome::surface_slot(id), realized);
+            }
+        }
+        // **The description is kept whichever way it was registered** — it is what a theme reload
+        // or a plugin update re-realizes from.
+        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
+            l.node = Some(node);
+        }
         id
     }
 

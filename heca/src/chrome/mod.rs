@@ -30,6 +30,7 @@ pub(crate) use hint::{
 };
 mod contribution;
 pub(crate) mod context_menu;
+pub(crate) mod described_confirm;
 mod events;
 mod expose;
 pub(crate) use expose::register as register_expose;

@@ -31,6 +31,7 @@ use crate::builders::{LayoutExt, Parent};
 use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
+use crate::event::WidgetIntent;
 use crate::font::MONO_ADVANCE_RATIO;
 use crate::reactive::{Signal, SignalGet};
 use crate::scene::{Border, Glow};
@@ -847,6 +848,25 @@ impl Component for Button {
         }
         match ev {
             Event::Click(_) => {
+                self.fire();
+                Handled::Yes
+            }
+            // **A focused button answers the activate key** (F003/P097/T502).
+            //
+            // Keys reach the focus owner, so this only ever runs for the button the keyboard is
+            // actually on — which is why it needs no focus test of its own.
+            //
+            // `Dialog` already documented this as the way it works ("when a button itself is
+            // focused, Enter is delivered straight to it (it consumes it)") and fell back to
+            // firing its *primary* action for the case where it was not consumed. The button never
+            // consumed it, so every Enter went to the primary action instead of the focused
+            // button: Tab to Cancel, press Enter, and you got OK.
+            //
+            // Found by building an overlay the way a plugin has to — `Overlay` + `Surface` +
+            // `Button`s, with no `Dialog` to translate anything — where nothing answered Enter at
+            // all. That surface has no primary action to fall back to, so the gap that was hidden
+            // natively was total there.
+            Event::Widget(WidgetIntent::Activate) => {
                 self.fire();
                 Handled::Yes
             }

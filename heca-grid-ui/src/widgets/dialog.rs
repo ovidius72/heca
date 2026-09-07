@@ -40,18 +40,29 @@ use crate::builders::{LayoutExt, Parent, ComponentExt as _};
 use crate::component::{
     Base, Component, Event, GridKey, Handled, WidgetIntent,
 };
-use crate::focus::FocusManager;
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use crate::style::{Justify, Length, Spacing};
 use crate::widgets::{Flex, Label, Overlay};
 use heca_core::layout::{Point, Rectangle, Size};
 
-/// Panel inner padding.
-const PAD: f32 = 18.0;
-/// Gap between the title, body, and the action row.
-const GAP: f32 = 14.0;
-/// Gap between adjacent action buttons.
-const BTN_GAP: f32 = 10.0;
+// ── The dialog panel recipe ───────────────────────────────────────────────────────────────
+//
+// **Theme steps, and public, because a dialog is not the only thing shaped like one.** These were
+// three private `f32` pixel constants living in this file, which had two consequences: they did not
+// follow the font or the theme, and **nothing outside could match them** — so a surface composed
+// from `Overlay` + `Surface` + `Button`s, which is what a plugin writes, produced a dialog that
+// looked nothing like heca's own. Buttons flush together, no air between the body and the actions
+// (Antonio, driving, 2026-09-07, with the two side by side).
+//
+// One vocabulary, read by both, so the two cannot drift: change a step here and every dialog-shaped
+// surface follows, whoever built it.
+
+/// Inner padding of a dialog panel.
+pub const DIALOG_PAD: Spacing = Spacing::Lg;
+/// Space between a dialog's title, its body, and its action row.
+pub const DIALOG_GAP: Spacing = Spacing::Md;
+/// Space between adjacent action buttons.
+pub const DIALOG_BTN_GAP: Spacing = Spacing::Sm;
 
 /// A centered overlay panel over a scrim, holding real child components.
 ///
@@ -66,9 +77,7 @@ pub struct Dialog {
     /// When `false`, Esc / scrim clicks are swallowed but don't dismiss — a forced-decision
     /// dialog (the user must pick a button). Default `true`.
     dismissible: bool,
-    /// Keyboard focus across the panel's focusable descendants (the action buttons, plus any
-    /// focusables inside a rich `body`).
-    focus: FocusManager,
+
     /// Fired when Esc or a scrim click requests dismissal (only if `dismissible`). The host
     /// points this at its overlay-close path (e.g. emit `CloseOverlay`).
     on_dismiss: Option<Box<dyn Fn()>>,
@@ -83,8 +92,8 @@ impl Dialog {
     pub fn new(title: impl Into<String>) -> Self {
         // Panel: a padded column holding the title, then body + actions as they're added.
         let panel = Flex::column()
-            .padding(PAD)
-            .gap(GAP)
+            .pad_all(DIALOG_PAD)
+            .gap_spacing(DIALOG_GAP)
             .child(Label::new(title));
 
         // The base Overlay owns the layer presentation: blocking (scrim + swallow),
@@ -106,7 +115,6 @@ impl Dialog {
             base,
             open,
             dismissible: true,
-            focus: FocusManager::new(),
             on_dismiss: None,
             has_actions: false,
         }
@@ -198,7 +206,9 @@ impl Dialog {
     pub fn action(mut self, button: impl Component + 'static) -> Self {
         if !self.has_actions {
             // Lazily create the right-aligned action row on first use.
-            let row = Flex::row().gap(BTN_GAP).justify(Justify::End);
+            let row = Flex::row()
+                .gap_spacing(DIALOG_BTN_GAP)
+                .justify(Justify::End);
             self.panel_mut().children.push(Box::new(row));
             self.has_actions = true;
         }
@@ -208,6 +218,29 @@ impl Dialog {
             .base_mut()
             .children
             .push(Box::new(button));
+        self
+    }
+
+    /// **Which action the keyboard starts on**, named by that button's `key`.
+    ///
+    /// ```ignore
+    /// Dialog::new("Close pane?")
+    ///     .action(Button::new("Cancel").key("cancel"))
+    ///     .action(Button::destructive("Close").key("close"))
+    ///     .default_action("cancel")          // Enter is the safe one
+    /// ```
+    ///
+    /// The author's call, and only the author's: which button is safe is a fact about *this*
+    /// question, not something a framework can infer. Unset, nothing is focused — a deliberate
+    /// choice a dialog can keep making.
+    ///
+    /// It delegates to [`Overlay::default_focus`], so a dialog and a surface **composed** from an
+    /// overlay place the keyboard by the same rule rather than two that drift.
+    #[heca_grid_ui_macros::prop]
+    pub fn default_action(mut self, key: impl Into<String>) -> Self {
+        let key = key.into();
+        // The composed `Overlay` is this dialog's only child, and it is what holds the keyboard.
+        self.base.children[0].set_default_focus(&key);
         self
     }
 
@@ -235,8 +268,7 @@ impl Dialog {
         if open {
             // Focus the safe-default (first) button so Enter works — but WITHOUT the ring; it
             // appears only once the user navigates by keyboard (focus-visible).
-            let panel = self.base.children[0].base_mut().children[0].as_mut();
-            self.focus.focus_first_quiet(panel);
+            self.base.children[0].focus_first_quiet();
         }
         self
     }
@@ -255,15 +287,20 @@ impl Dialog {
     //    arrows → focus motion). ──
 
     /// Move keyboard focus to the next focusable descendant (wraps).
+    ///
+    /// **Delegated to the composed [`Overlay`](super::Overlay), which owns the keyboard.** This
+    /// used to drive a `FocusManager` of the dialog's own — a second position over the same panel,
+    /// so Tab (the overlay's) and the arrow keys (this one) each thought the keyboard was
+    /// somewhere else and one of them was always wrong. One manager, one position
+    /// (F003/P097/T502).
     fn focus_next(&mut self) {
-        let panel = self.base.children[0].base_mut().children[0].as_mut();
-        self.focus.advance(panel, true);
+        self.base.children[0].advance_focus(true);
     }
 
-    /// Move keyboard focus to the previous focusable descendant (wraps).
+    /// Move keyboard focus to the previous focusable descendant (wraps). See
+    /// [`focus_next`](Dialog::focus_next).
     fn focus_prev(&mut self) {
-        let panel = self.base.children[0].base_mut().children[0].as_mut();
-        self.focus.advance(panel, false);
+        self.base.children[0].advance_focus(false);
     }
 
     /// Fire the **primary** (first) action button — used when Enter is pressed from a field
@@ -372,7 +409,7 @@ impl Component for Dialog {
                 if panel_bounds.contains(p.pos)
                     || crate::component::overlay_occluded_at(panel, p.pos)
                 {
-                    self.focus.focus_at_trapped(panel, p.pos);
+                    self.base.children[0].focus_at_trapped(p.pos);
                     Handled::No
                 } else if self.dismissible {
                     // Scrim / outside click dismisses only when dismissible.
@@ -664,5 +701,62 @@ mod tests {
         // Nav moves focus off the input onto a button.
         let _ = crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::ItemNext));
         assert!(!focused_buttons(&d).is_empty(), "ItemNext navigates to a button");
+    }
+}
+
+#[cfg(test)]
+mod tab_repro {
+    use super::*;
+    use crate::component::GridKey;
+    use crate::widgets::Button;
+
+    /// **The first Tab moves the keyboard** (F003/P097/T502).
+    ///
+    /// It did not. Opening a dialog quietly focused its first button through a `FocusManager` the
+    /// **dialog** owned, while Tab was answered by the one the composed **overlay** owns — two
+    /// positions over one panel. The first press moved the overlay's manager to *its* first
+    /// control, which was the button the keyboard was already on, so nothing appeared to happen
+    /// and only the second press moved (Antonio, driving `prefix+x`, 2026-09-07).
+    ///
+    /// One manager now, on the overlay, which is what holds the keyboard. The dialog keeps none
+    /// and delegates all four operations — opening, Tab, arrow motion, and a click inside the
+    /// panel. Collapsing only *one* of them is what broke the arrow-key traversal on the first
+    /// attempt: the halves have to move together or they disagree in a new place instead.
+    #[test]
+    fn the_first_tab_in_a_dialog_moves_off_the_default_button() {
+        let mut d = Dialog::new("Close pane?")
+            .body(Label::new("This action cannot be undone."))
+            .action(Button::new("Cancel"))
+            .action(Button::new("Close"))
+            .open(true);
+        crate::component::dispatch(
+            &mut d,
+            &Event::Key {
+                key: GridKey::Tab,
+                pressed: true,
+            },
+        );
+
+        fn focused(n: &dyn Component, out: &mut Vec<String>) {
+            if crate::reactive::SignalGet::get_untracked(&n.base().focused)
+                && let Some(name) = n.text_summary()
+            {
+                out.push(name);
+            }
+            for c in &n.base().children {
+                focused(c.as_ref(), out);
+            }
+        }
+        let mut names = Vec::new();
+        focused(&d, &mut names);
+
+        assert!(
+            names.iter().any(|n| n == "Close"),
+            "one Tab moved off the button the dialog opened on, got {names:?}",
+        );
+        assert!(
+            !names.iter().any(|n| n == "Cancel"),
+            "and left it, rather than lighting both: {names:?}",
+        );
     }
 }

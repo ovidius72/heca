@@ -590,7 +590,16 @@ fn realize_kind(
                 1 => realize(&node.children[0], theme, emit, forms),
                 _ => attach_children(Box::new(Flex::column()), node, theme, emit, forms),
             };
-            Box::new(with_props(Overlay::new().panel_boxed(panel), node, theme))
+            let mut overlay = with_props(Overlay::new().panel_boxed(panel), node, theme);
+            // **What the dismiss key means, declared like any other behaviour.** The overlay has
+            // always held the keys; since F003/P097/T502 it answers this one, and this is the
+            // described spelling — so a plugin's surface closes on Escape by saying what closing
+            // means, and never by writing a key.
+            if let Some(intent) = node.events.get("dismiss") {
+                let (intent, emit) = (intent.clone(), emit.clone());
+                overlay = overlay.on_dismiss(move || emit(intent.clone()));
+            }
+            Box::new(overlay)
         }
         // **A described picker** — the one thing a description could not have.
         //
@@ -3600,6 +3609,11 @@ mod tests {
         "KeycapVariant",
         "HintStyle",
         "DEFAULT_LETTERS",
+        // The dialog panel recipe — spacing steps every dialog-shaped surface reads, so a
+        // described one is laid out identically to a native one (F003/P097/T502).
+        "DIALOG_PAD",
+        "DIALOG_GAP",
+        "DIALOG_BTN_GAP",
         "NamedAnimation",
     ];
 
@@ -4177,6 +4191,37 @@ mod tests {
             "a described node cannot say where its letter goes on these kinds, while a native one \
              can: {missing:#?}",
         );
+    }
+
+    /// **A described tree can space itself from the theme, without a pixel** (F003/P097/T502).
+    ///
+    /// The library has had semantic spacing all along — steps resolved from the inherited font at
+    /// layout, so padding follows a font or theme change with nothing rewritten. The **described**
+    /// side had only raw px, so a plugin author had no way *not* to hardcode: the rule this project
+    /// states everywhere was one a plugin could not keep.
+    ///
+    /// It asks the steps arrive as steps, not as numbers frozen at authoring time.
+    #[test]
+    fn a_described_tree_spaces_itself_from_the_theme() {
+        use heca_grid_ui::style::Spacing;
+        use heca_view::ViewSpacing;
+        use heca_view::build::{self, Style as _};
+
+        let (emit, _fired) = recording_emitter();
+        let node: ViewNode = build::Surface::new()
+            .pad_all(ViewSpacing::Md)
+            .gap_spacing(ViewSpacing::Xs)
+            .into();
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
+        let layout = &w.base().style.layout;
+        assert_eq!(layout.pad_spacing_x, Some(Spacing::Md), "padding is a step");
+        assert_eq!(layout.pad_spacing_y, Some(Spacing::Md), "on both axes");
+        assert_eq!(layout.gap_spacing, Some(Spacing::Xs), "and so is the gap");
     }
 
     /// **A tooltip declared on ANY kind reaches the node itself** (F003/P097/T501, C3).
