@@ -6,6 +6,19 @@ so this is where the operational half lives. The *what and why* is in the task r
 `planner-task-show P097(F003)/T501 full=true` and `.../T502 full=true`. Read those first; this
 file is only the things they do not hold.
 
+## If you have never seen this project
+
+1. **Read `AGENTS.md` in full before writing anything.** It is the entry point: the pre-flight
+   questions, the widget-vs-component rule, the DOM-shaped event model, and RULE ZERO. Then
+   `docs/widgets.md` for the library and `docs/surface-compositor.md` for layers and surfaces.
+2. **The planner is the only source of truth for what to do next.** `BACKLOG.md` and any root
+   `*-plan.md` are stale. Load it with `/planner load`, then `planner-task-recommend`. Never create
+   a feature, phase or task without asking Antonio first — propose it.
+3. **Build and run:** `cargo run -p heca`. The widget gallery is
+   `cargo run -p heca-renderer --example showcase` and is the fastest way to see the library.
+4. **Antonio drives every visual check.** Green tests are not verification for anything that lays
+   out, paints, scrolls or routes input. Hand him the exact gesture to try.
+
 ## Open, and the first one is a live bug
 
 Three defects from Antonio's drive of the T502 surface, none fixed:
@@ -19,6 +32,22 @@ Three defects from Antonio's drive of the T502 surface, none fixed:
    side by side is a **collection**, which is the one case a `key` is for.
 3. **`key 'y' … CopySelection overwritten by ShowLayer`** — the binding suggested for testing
    (`prefix+y`) clobbers copy-selection. Pick another; nothing in the code depends on it.
+
+## How to see the T502 surface yourself
+
+The described confirm is registered **hidden** as `heca.confirm` and opened by the ordinary
+`show_layer` action — nothing about it is special-cased. Add this to `~/.config/heca/config.toml`
+(pick a free key; `y` is taken by CopySelection — see defect 3):
+
+```toml
+[[keys.bind]]
+keys = "prefix+u"
+action = "show_layer"
+args = { name = "heca.confirm" }
+```
+
+`[[keys.bind]]` is the parameterised form; the flat `action = "keys"` table has nowhere to put
+`args`.
 
 ## Operational
 
@@ -77,6 +106,65 @@ prefix, hand Antonio the exact gesture, strip it after. An integration test does
 `cfg(test)` in the library, so such a probe silently never compiles. `AppState` needs a window, so
 there is **no headless call** to any handler taking `&mut AppState` — `heca/tests/by_id_actions.rs`
 is written as a source lint for exactly that reason.
+
+## Files and symbols this phase left behind
+
+`heca/src/chrome/described_confirm.rs` is the T502 surface — a confirm described end to end, and the
+worked example of what a plugin writes. The rest, by crate:
+`heca-grid-ui/src/{component,focus}.rs`; `heca-grid-ui/src/widgets/{button,dialog,overlay/mod}.rs`;
+`heca-view/src/{lib,build}.rs`; `heca-view-realize/src/lib.rs`;
+`heca/src/chrome/{overlay,mod}.rs`; `heca/src/chrome/layers/{mod,tests}.rs`.
+
+Names worth knowing before you re-invent one:
+
+- `DIALOG_PAD` / `DIALOG_GAP` / `DIALOG_BTN_GAP` — the dialog panel recipe, theme steps, public so a
+  composed surface matches instead of guessing.
+- `FocusManager::focus_named` — "put the keyboard on the control called X", by declared `key` **or**
+  the words it reads by. The one place that rule lives.
+- `Component::{advance_focus, focus_first_quiet, focus_at_trapped, set_default_focus}` — the
+  surface's keyboard, implemented by `Overlay`, delegated to by `Dialog`.
+- `Overlay::{on_dismiss, default_focus}`, `Dialog::default_action`.
+- `open_view_layer` / `LayerRegistry::add_view` — the described-layer path, which now takes a name.
+
+## Guards — do not "fix" these by relaxing them
+
+Several tests here are deliberately strict and were each run red against their own bug:
+
+- `an_overlay_with_no_dismissal_declared_does_not_swallow_the_key` — proves the dismissal fix did
+  **not** take Escape away from `Dialog` / `ContextMenu` / `CommandPalette`.
+- `the_first_tab_in_a_dialog_moves_off_the_default_button` — the `prefix+x` bug.
+- `every_library_widget_is_describable_or_deliberately_not` — every library widget must have a kind,
+  be a declaration, or carry a recorded reason. It fails when a widget is added with none.
+- `every_widget_property_is_reachable_from_the_sdk` — also fails when a *kind* exists that no
+  `check(..)` line covers, which is how two new kinds were caught unprompted.
+- `every_universal_capability_is_reachable_from_the_sdk` — capabilities on `ComponentExt` are
+  invisible to the per-kind check, which is how `tooltip` was unsayable for months.
+
+## Where the work goes next
+
+P097 is finished, so nothing here is the next task. The planner decides, but for orientation:
+
+- **`P082(F003)`** — five open bugs (`T474`, `T475`, `T477`, `T478`, `T491`), plus the
+  oversized-file splits `T466`/`T468`/`T470`/`T471`/`T472` and `T509`–`T514`, which were
+  **deliberately deferred behind P097** because they carve up the same files. They are now unblocked.
+- **`P094(F011)/T449`** — Terminal as a component; `T498` was canceled into it.
+- **`P096(F003)/T504`, `T505`**; `P035(F003)/T506`; F009's `T381` and `P063`.
+- The `app.actions.*` / `app.overlay.*` host-API namespaces that `docs/chrome-and-ui.md` §3.5 calls
+  future phases — that is what T501's C10 decision points at, and what a plugin needs to open a
+  dialog at all.
+
+## How Antonio works
+
+- **He drives every visual check and decides every commit. Never commit or push unasked.**
+- **He decides what is filed in the planner.** Propose; do not create while passing through.
+- **Short answers, plain words, no jargon.** Long replies are a failure.
+- **"Fix all" means close the gap, not report it as still open.**
+- **Do not tell him about an agent's own limits** — pacing the work is his call.
+- **He asks "did you fix centralized?" and "have you written all the detail for another agent?"** —
+  run both checks before he asks, not after.
+- **A peer session may be working in the same folder.** Worth asking (one supplied real facts here),
+  but verify what it says — one of its three claims was wrong. Identify it by its **folder**, never
+  its name.
 
 ## Related records
 
