@@ -20,7 +20,7 @@ use heca_grid_ui::theme::Theme as GuiTheme;
 /// Everything a component's seams borrow from, owned by the test for as long as it runs.
 pub(crate) struct Fixture {
     pub(crate) theme: GuiTheme,
-    pub(crate) programs: ProgramsConfig,
+    pub(crate) programs: std::rc::Rc<ProgramsConfig>,
     pub(crate) emit: ChromeIntentEmitter,
     pub(crate) catalog: ActionCatalog,
     pub(crate) store: SharedChromeState,
@@ -34,7 +34,7 @@ impl Default for Fixture {
         store.workspaces.set_active_pane(Some(PaneId(1)));
         Self {
             theme: GuiTheme::default(),
-            programs: ProgramsConfig::default(),
+            programs: std::rc::Rc::new(ProgramsConfig::default()),
             emit: crate::chrome::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {}),
             catalog: ActionCatalog::with_builtins(),
             store,

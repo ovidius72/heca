@@ -2,7 +2,7 @@
 
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::reactive::Signal;
-use heca_grid_ui::style::{Align, Length};
+use heca_grid_ui::style::{Align, Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, Visibility};
 
@@ -29,6 +29,15 @@ pub(crate) struct FolderLine<'a> {
     /// Size relative to the surrounding text: metadata sits under the name, never beside it in
     /// weight.
     pub(crate) font_scale: f32,
+    /// **How far the line sits in from the name above it** — a token, resolved from the font, and
+    /// applied *inside* this line's own visibility so the inset disappears with the line.
+    ///
+    /// It is a property because it is the surrounding card's taste, not the line's: the dock's
+    /// card steps its metadata in under the name, the exposé's centres it and steps nothing.
+    /// It lives here rather than in a wrapper the caller adds because a wrapper does not vanish
+    /// when the line hides — a row holding a hidden line is still a row, and the column above it
+    /// still spends a gap on it.
+    pub(crate) indent: Spacing,
     pub(crate) theme: &'a GuiTheme,
 }
 
@@ -58,6 +67,8 @@ impl FolderLine<'_> {
             Flex::row()
                 .align(Align::Center)
                 .gap(GAP)
+                // Inside the `Visibility`, never around it — see `indent`.
+                .pad_x(self.indent)
                 // Never wider than what holds it — see `PaneName`. The line is commonly centred,
                 // and a centred child is sized by its content unless it says otherwise.
                 .max_width(Length::Pct(1.0))
@@ -94,6 +105,7 @@ mod tests {
             path,
             show,
             font_scale: 0.85,
+            indent: Spacing::None,
             theme: &GuiTheme::default(),
         }
         .build()

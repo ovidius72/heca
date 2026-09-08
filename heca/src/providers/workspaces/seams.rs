@@ -23,6 +23,7 @@ use crate::chrome::{
 use heca_config::programs::ProgramsConfig;
 use heca_core::layout::PaneId;
 use heca_grid_ui::theme::Theme as GuiTheme;
+use std::rc::Rc;
 
 /// What every row of this dock reads, gathered once in `mod.rs`.
 pub(crate) struct DockSeams<'a> {
@@ -32,8 +33,10 @@ pub(crate) struct DockSeams<'a> {
     pub(crate) mount: &'a str,
     /// Every colour, size and radius. A component names a token, never a literal.
     pub(crate) theme: &'a GuiTheme,
-    /// How a program is recognised and what icon it gets.
-    pub(crate) programs: &'a ProgramsConfig,
+    /// How a program is recognised and what icon it gets. The `Rc` travels, not a bare
+    /// reference: a row keeps it alive inside the subscription that recomputes its labels, which
+    /// outlives this borrow.
+    pub(crate) programs: &'a Rc<ProgramsConfig>,
     /// Where a row's declared gesture goes. A row names an action; it never runs one.
     pub(crate) emit: &'a ChromeIntentEmitter,
     /// What an action **looks like** — the one thing a row cannot answer for itself, needed

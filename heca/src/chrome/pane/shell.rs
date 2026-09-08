@@ -411,8 +411,7 @@ mod tests {
         size_to(&mut pane, 400.0, 300.0);
         LayoutEngine::new().compute(&mut pane, Size::new(400.0, 300.0));
         build(&mut pane);
-        let out = seen.borrow().clone();
-        out
+        seen.borrow().clone()
     }
 
     /// **Clicking a pane focuses it**, by naming the action rather than calling a function.

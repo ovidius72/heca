@@ -3732,6 +3732,30 @@ let error = Visibility::new(StatusDot::error(), false);
 error.visible_signal().set(true);
 ```
 
+> ⛔ **Attach it always, and wrap nothing around it.**
+>
+> The wrapper is what lets a line sit in the tree while it has **nothing to say**, so put it there
+> unconditionally and let the signal decide. Adding it only when its content already exists cannot
+> work — a signal reveals a child, it cannot create one, and a tree that is not rebuilt when the
+> content arrives never gets a second chance:
+>
+> ```rust
+> // ✅ the line is there, saying nothing, ready to be revealed
+> column.child(Visibility::new(folder_line, cwd.is_some()))
+>
+> // ❌ if the directory arrives later, nothing can ever show it
+> if cwd.is_some() { column = column.child(Visibility::new(folder_line, true)) }
+> ```
+>
+> And nothing may go **around** it. An inset, an alignment box or a spacer wrapped around a
+> `Visibility` is a visible widget holding an invisible one: it keeps its own box and its parent
+> still spends a gap on it, which is the empty strip that makes hiding look broken. Put that
+> decoration on the child inside, as padding, so it goes with the line.
+>
+> Both mistakes shipped together in heca's sidebar pane card: the directory line was attached only
+> when the pane already had a directory, and the shell reports one *after* the row is on screen, so
+> whether a pane showed its path came down to timing and neighbouring rows disagreed.
+
 > ⚠️ **Reach for the wrapper only when there is no widget to declare on.** Both ways of not showing
 > something are properties of **every** widget, and the wrapper cannot be put around a widget a
 > typed container holds. Same rule as [`Tooltip`](#tooltip) and [`KeyHint`](#keyhint).
@@ -5959,6 +5983,13 @@ The final Phase 7 pane chrome recipe is a two-row composition:
 
 Hide the full second row outside repos with `Visibility`. This matches the app
 sidebar more closely than the earlier segmented-`Tag` experiment.
+
+**Note what the recipe does and does not do:** the second row is added to the column
+**unconditionally** and hides itself. Do not turn that into `if has_branch { … }` — see
+[the rule on `Visibility`](#visibility). A metadata line that is only attached once it already has
+something to say can never be revealed when the answer arrives later, and any inset you wrap
+*around* it keeps its box and its gap when the line hides. Put the inset inside the row, as
+padding.
 
 ```rust
 Flex::column()

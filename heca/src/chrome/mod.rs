@@ -15,7 +15,7 @@ pub(crate) use pane::{clear_panes, header_height as pane_header_height, sync_pan
 pub(crate) mod pane_header;
 pub(crate) use pane_header::{
     action_tooltip, build_pane_headers, home_relative_path, pane_info_view,
-    sync_pane_viewport_widgets, truncate_path_left, ActionShortcuts, PaneInfoSignals,
+    sync_pane_viewport_widgets, truncate_path_left, ActionShortcuts,
     RetainedPaneViewportWidgets, CARD_META_FONT_SCALE,
 };
 pub(crate) mod drag;
@@ -210,7 +210,6 @@ impl ChromeConfig {
 
 // ── Grid-UI chrome scene builder ──────────────────────────────────────────────
 
-use crate::providers::workspaces::{PaneEntry, WorkspaceTree};
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
@@ -743,6 +742,14 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     // enough to rebuild on a workspace SWITCH — but pane-to-pane focus *within* a
     // workspace must NOT rebuild: pane/column `active` + the status text are bound
     // signals (`sync_chrome_signals`), deliberately excluded from this signature.
+    //
+    // **A pane's runtime is not in here, and must not be put back.** It used to carry
+    // "does this pane have a git branch", to force a rebuild that attached the git line —
+    // the sidebar card decided at build time whether to include a line it was already
+    // publishing a visibility signal for. Nothing forced the same rebuild when a pane's
+    // *directory* arrived, so that line was simply never revealed. The
+    // card now attaches every metadata line always and each one shows itself, so a term
+    // here would buy nothing and would put the next line's author back in this file.
     state.session.active_workspace_idx.hash(&mut hsh);
     for ws in &state.chrome_state.workspaces.tree().workspaces {
         ws.ws_idx.hash(&mut hsh);
@@ -754,26 +761,12 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
             for p in &c.panes {
                 p.pane_id.0.hash(&mut hsh);
                 p.name.hash(&mut hsh);
-                state
-                    .chrome_state
-                    .workspaces
-                    .with_pane_runtime(p.pane_id, |runtime| {
-                        runtime.and_then(|rt| rt.git.get_untracked()).is_some()
-                    })
-                    .hash(&mut hsh);
             }
             u8::MAX.hash(&mut hsh); // column separator in the hash stream
         }
         for p in &ws.floating_panes {
             p.pane_id.0.hash(&mut hsh);
             p.name.hash(&mut hsh);
-            state
-                .chrome_state
-                .workspaces
-                .with_pane_runtime(p.pane_id, |runtime| {
-                    runtime.and_then(|rt| rt.git.get_untracked()).is_some()
-                })
-                .hash(&mut hsh);
         }
         u64::MAX.hash(&mut hsh); // workspace separator
     }

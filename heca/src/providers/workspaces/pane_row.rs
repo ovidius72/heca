@@ -21,16 +21,24 @@ use super::seams::{DockRegistries, DockSeams};
 use super::{pane_key, pane_row_items, pane_row_press, row_hint, PaneEntry, MENU_PANE};
 use crate::chrome::{
     alpha_u8, home_relative_path, pane_info_view, runtime_snapshot, truncate_sidebar_git_branch,
-    ChromeDragItem, PaneInfoSignals, RepaintWatch, CARD_META_FONT_SCALE,
+    ChromeDragItem, RepaintWatch, CARD_META_FONT_SCALE,
 };
 use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::reactive::signal;
-use heca_grid_ui::style::{Align, Length};
+use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect, signal};
+use heca_grid_ui::style::{Align, Spacing};
 use heca_grid_ui::widgets::{
     Flex, Glyph, HintPlacement, Icon, KeyHint, Label, Row, StatusDot, Tooltip, TooltipSide,
     Visibility,
 };
+
+/// **How far a metadata line sits in from the name above it.** One token, read by every line under
+/// the name, so a third line steps in with the others instead of picking its own number.
+///
+/// It is applied by each line to *itself*, inside its own visibility — never as a wrapper the card
+/// puts around it. A wrapper does not disappear when the line hides, so a card with nothing to say
+/// about its directory would keep an empty row and the gap above it.
+const META_INDENT: Spacing = Spacing::Xs;
 
 /// A single pane **card**: a state-tinted background + radius, a leading program icon, the display
 /// name, an optional exceptional-state indicator, and cwd/git metadata when present.
@@ -163,6 +171,7 @@ impl PaneRow<'_> {
             Flex::row()
                 .align(Align::Center)
                 .gap(6.0)
+                .pad_x(META_INDENT)
                 .child(
                     Icon::new(Glyph::GitBranch)
                         .size(12.0)
@@ -223,10 +232,10 @@ impl PaneRow<'_> {
             path: cwd_text.as_deref(),
             show: ws_state.pane_show_cwd(),
             font_scale: CARD_META_FONT_SCALE,
+            indent: META_INDENT,
             theme,
         }
         .build();
-        let show_cwd = ws_state.pane_show_cwd() && cwd_text.is_some();
         let (cwd_row, cwd_signal, cwd_visible_signal) = (cwd.widget, cwd.text, cwd.visible);
         // The pane's identity row (status dots + program icon + name) — shared by every card
         // layout so the cwd and git rows just stack beneath it in one column.
@@ -236,24 +245,25 @@ impl PaneRow<'_> {
             .child(status_dot)
             .child(Flex::row().align(Align::Center).child(icon_widget))
             .child(title_area);
-        // One column: the name row, then the optional cwd and git rows (each 2px-indented and
-        // added only when shown, mirroring the git row). A card with only the name row lays
-        // out exactly like the former single-row layout — a one-child column adds no gap.
-        let mut content = Flex::column().gap(4.0).grow(1.0).child(name_row);
-        if show_cwd {
-            content = content.child(
-                Flex::row()
-                    .child(Flex::row().width(Length::Px(2.0)))
-                    .child(cwd_row),
-            );
-        }
-        if info.git_branch.is_some() {
-            content = content.child(
-                Flex::row()
-                    .child(Flex::row().width(Length::Px(2.0)))
-                    .child(git_row),
-            );
-        }
+        // One column: the name row, then the metadata lines under it.
+        //
+        // **Every line is attached, always** — each one is a `Visibility` that decides for itself,
+        // and hidden is `display: none`, so a card with nothing to say lays out exactly like the
+        // one-row card and spends no gap on what it is not showing.
+        //
+        // Attaching a line only when it *already* had something to say is the bug this shape
+        // exists to stop: a directory arrives from the shell after the row is on screen and the
+        // sidebar tree is not rebuilt when it does, so a line left out at build time could never
+        // be revealed by its own signal. Whether a pane showed its path came down to whether the
+        // shell had answered by the instant that row was built. The git line was
+        // written the same way and only looked right because `chrome_signature` carried a term for
+        // it — a second copy of the rule, in a file nobody adding a line would think to open.
+        let content = Flex::column()
+            .gap(4.0)
+            .grow(1.0)
+            .child(name_row)
+            .child(cwd_row)
+            .child(git_row);
         let card = Row::new()
             .background(
                 theme
@@ -340,27 +350,55 @@ impl PaneRow<'_> {
         // letter over it. `KeyHint` is transparent — it hugs the child and routes events, focus and
         // drag straight through — so the card stays a drag source and target, and clickable. **The
         // letter is offered by key** (`chrome::hint`) and drawn by the widget itself.
-        reg.signals.pane_info.push((
-            pane_id,
-            PaneInfoSignals {
-                icon: icon_signal,
-                title: title_signal,
-                process_hint: process_hint_signal,
-                process_hint_visible,
-                cwd: cwd_signal,
-                cwd_visible: cwd_visible_signal,
-                status: status_signal,
-                git_visible: git_visible_signal,
-                git_branch: branch_signal,
-                git_branch_display: branch_display_signal,
-                git_added_visible: add_text_visible_signal,
-                git_added: add_label,
-                git_modified_visible: modified_text_visible_signal,
-                git_modified: modified_label,
-                git_deleted_visible: deleted_text_visible_signal,
-                git_deleted: deleted_label,
-            },
-        ));
+        // **The row follows its pane. Nothing writes to it.**
+        //
+        // These sixteen signals used to be handed to the host, which walked every pane every frame,
+        // recomputed this same view and wrote them back — a scan pretending to be reactivity. That
+        // cost every new piece of pane state four edits in four files, two of which fail silently
+        // when forgotten, and left a plugin's row with nowhere to join in: the write was a
+        // host-private arm, so there was no line a plugin author could write.
+        //
+        // Now the row subscribes, here, where it knows what it draws. `snapshot()` reads this
+        // pane's fields, so the subscription depends on this pane and not on the map holding every
+        // pane's — a neighbour's `cd` does not wake this row.
+        let face = PaneFace {
+            icon: icon_signal,
+            title: title_signal,
+            process_hint: process_hint_signal,
+            process_hint_visible,
+            cwd: cwd_signal,
+            cwd_visible: cwd_visible_signal,
+            status: status_signal,
+            git_visible: git_visible_signal,
+            git_branch: branch_signal,
+            git_branch_display: branch_display_signal,
+            git_added_visible: add_text_visible_signal,
+            git_added: add_label,
+            git_modified_visible: modified_text_visible_signal,
+            git_modified: modified_label,
+            git_deleted_visible: deleted_text_visible_signal,
+            git_deleted: deleted_label,
+        };
+        let runtime_signals = ws_state.pane_runtime_signals(pane_id);
+        let programs = seams.programs.clone();
+        let fallback_name = pane.name.clone();
+        let show_cwd = ws_state.pane_show_cwd_signal();
+        let add_process_name = ws_state.pane_renamed_add_process_name_signal();
+        create_effect(move |_| {
+            let runtime = runtime_signals.snapshot();
+            let custom = runtime_signals.custom_name.get();
+            face.show(
+                &pane_info_view(
+                    &programs,
+                    &fallback_name,
+                    custom.as_deref(),
+                    Some(&runtime),
+                    add_process_name.get(),
+                ),
+                runtime.cwd.as_deref(),
+                show_cwd.get(),
+            );
+        });
         let (watch, _repaint) = RepaintWatch::new(
             KeyHint::new(card)
                 // **What `prefix+/` does to this row**, declared right where its letter is drawn: move
@@ -375,6 +413,106 @@ impl PaneRow<'_> {
                 .placement(HintPlacement::CenterRight),
         );
         watch
+    }
+}
+
+/// **Everything a pane row shows that changes without the tree being rebuilt.**
+///
+/// One signal per thing on the card, held together so the row's subscription writes them in one
+/// place — and so adding a seventeenth is one field and one line in [`show`](PaneFace::show),
+/// beside the widget it belongs to, instead of an edit in a host file the author never opens.
+#[derive(Clone, Copy)]
+pub(crate) struct PaneFace {
+    pub(crate) icon: Signal<Glyph>,
+    /// The pane's name. **One signal, because there is one name** — its colour follows the row's
+    /// selected state through the inherited content colour, so no second copy exists to keep in
+    /// step.
+    pub(crate) title: Signal<String>,
+    /// The dimmed `(process)` suffix beside a renamed pane's name, or empty when hidden.
+    pub(crate) process_hint: Signal<String>,
+    pub(crate) process_hint_visible: Signal<bool>,
+    /// The working-directory line: the home-relative path, and whether it shows at all
+    /// (`[settings] pane_show_cwd` and the pane having a directory).
+    pub(crate) cwd: Signal<String>,
+    pub(crate) cwd_visible: Signal<bool>,
+    /// What the status pip shows. **One pip that changes what it says**, not one pip per state
+    /// with four booleans revealing one.
+    pub(crate) status: Signal<heca_grid_ui::DotStatus>,
+    pub(crate) git_visible: Signal<bool>,
+    pub(crate) git_branch: Signal<String>,
+    pub(crate) git_branch_display: Signal<String>,
+    pub(crate) git_added_visible: Signal<bool>,
+    pub(crate) git_added: Signal<String>,
+    pub(crate) git_modified_visible: Signal<bool>,
+    pub(crate) git_modified: Signal<String>,
+    pub(crate) git_deleted_visible: Signal<bool>,
+    pub(crate) git_deleted: Signal<String>,
+}
+
+impl PaneFace {
+    /// Write what the pane currently is onto the card.
+    ///
+    /// Every write is change-guarded: a signal set to what it already holds would mark the tree
+    /// dirty and cost a repaint for nothing, every time anything about any pane moved.
+    fn show(
+        &self,
+        view: &crate::chrome::pane_header::PaneInfoView,
+        cwd: Option<&std::path::Path>,
+        show_cwd: bool,
+    ) {
+        set_if_changed(self.icon, view.icon);
+        set_if_changed(self.title, view.title.clone());
+        set_if_changed(
+            self.process_hint,
+            view.process_hint
+                .as_deref()
+                .map(|program| format!("({program})"))
+                .unwrap_or_default(),
+        );
+        set_if_changed(self.process_hint_visible, view.process_hint.is_some());
+        // The path is cut to a home-relative form here, at the binding, rather than by whoever
+        // happens to write the signal — so there is one spelling of "where this pane is".
+        set_if_changed(
+            self.cwd,
+            cwd.map(crate::chrome::home_relative_path)
+                .unwrap_or_default(),
+        );
+        set_if_changed(self.cwd_visible, show_cwd && cwd.is_some());
+        set_if_changed(self.status, dot_status(view.status.clone()));
+        set_if_changed(self.git_visible, view.git_branch.is_some());
+        let branch = view.git_branch.clone().unwrap_or_default();
+        set_if_changed(
+            self.git_branch_display,
+            crate::chrome::truncate_sidebar_git_branch(&branch),
+        );
+        set_if_changed(self.git_branch, branch);
+        for (visible, label, value) in [
+            (self.git_added_visible, self.git_added, &view.git_added),
+            (
+                self.git_modified_visible,
+                self.git_modified,
+                &view.git_modified,
+            ),
+            (
+                self.git_deleted_visible,
+                self.git_deleted,
+                &view.git_deleted,
+            ),
+        ] {
+            set_if_changed(visible, value.is_some());
+            set_if_changed(label, value.clone().unwrap_or_default());
+        }
+    }
+}
+
+/// Write a signal only when the value actually differs.
+///
+/// Stated once rather than at each of the sixteen writes above: setting a signal to what it already
+/// holds marks the tree dirty, and a card that rewrote itself unchanged would cost a repaint every
+/// time anything about any pane moved.
+fn set_if_changed<T: Clone + PartialEq + 'static>(signal: Signal<T>, value: T) {
+    if signal.get_untracked() != value {
+        signal.set(value);
     }
 }
 
@@ -435,6 +573,163 @@ mod tests {
         // The pick letter is **not** a signal this component registers any more: it is offered by
         // the row's own `key` (`chrome::hint`) and drawn by the widget, so what this component
         // owes is the identity — asserted above through `row_nav` — and nothing else.
+    }
+
+    /// **A metadata line that had nothing to say when the row was built must still be able to
+    /// speak later.**
+    ///
+    /// A pane's directory arrives from its shell after the row is on screen, and the sidebar tree
+    /// is not rebuilt when it does — the path and its visibility are signals for exactly that
+    /// reason. A line attached only when it already had something to show can never be revealed by
+    /// its own signal, so whether a pane showed its path came down to whether the shell had
+    /// answered by the instant that row was built: neighbouring rows, same program, one with a
+    /// path line and one without.
+    #[test]
+    fn a_directory_that_arrives_after_the_row_was_built_still_shows() {
+        let mut fx = Fixture::default();
+        fx.store.workspaces.set_pane_show_cwd(true);
+        // The shell has not reported a directory yet — the state that decided, wrongly, whether
+        // the line existed at all.
+        fx.store.workspaces.set_pane_runtime(
+            PaneId(7),
+            &heca_core::runtime::PaneRuntime::default(),
+            None,
+        );
+        let pane = testing::pane(PaneId(7), "seven");
+        let row = {
+            let (seams, mut reg) = fx.split("left");
+            PaneRow {
+                pane: &pane,
+                column_of_pane: Some((0, 0)),
+            }
+            .build(&seams, &mut reg)
+        };
+
+        // The directory arrives. Nothing rebuilds the tree and no sync pass runs — the row is
+        // subscribed to its own pane, so telling the store is the whole of it.
+        pane_reports(
+            &fx,
+            PaneId(7),
+            heca_core::runtime::PaneRuntime {
+                cwd: Some("/Users/antonio/projects/heca".into()),
+                ..Default::default()
+            },
+        );
+
+        assert!(
+            painted_text(row).iter().any(|t| t == "~/projects/heca"),
+            "the path arrived and the row is still not drawing it",
+        );
+    }
+
+    /// Tell the store what the pane's shell just reported — the one write the app makes, and
+    /// the only thing a row should need in order to change what it shows.
+    fn pane_reports(fx: &Fixture, pane_id: PaneId, runtime: heca_core::runtime::PaneRuntime) {
+        fx.store
+            .workspaces
+            .set_pane_runtime(pane_id, &runtime, None);
+    }
+
+    /// Lay the row out in a sidebar-sized box and return every run of text it actually drew.
+    fn painted_text(row: RepaintWatch) -> Vec<String> {
+        use heca_grid_ui::Component as _;
+        let mut root = Flex::column().child(row);
+        heca_grid_ui::LayoutEngine::new()
+            .compute(&mut root, heca_core::layout::Size::new(300.0, 200.0));
+        let mut scene = heca_grid_ui::Scene::new();
+        let theme = heca_grid_ui::theme::Theme::default();
+        root.paint(&mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
+        scene
+            .iter()
+            .filter_map(|cmd| match cmd {
+                heca_grid_ui::DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The card's inner column — the name row plus every metadata line stacked under it.
+    fn metadata_column(node: &dyn heca_grid_ui::Component) -> Option<&dyn heca_grid_ui::Component> {
+        if node.base().children.len() == METADATA_COLUMN_CHILDREN {
+            return Some(node);
+        }
+        node.base()
+            .children
+            .iter()
+            .find_map(|c| metadata_column(c.as_ref()))
+    }
+
+    /// The name row, the directory line and the git line.
+    const METADATA_COLUMN_CHILDREN: usize = 3;
+
+    /// **The git line is the same line, and it was written the same way.** It only ever looked
+    /// right because `chrome_signature` carried a term saying "this pane has a branch", forcing the
+    /// rebuild that attached it — the rule written twice, once in the card and once in a file
+    /// nobody adding a metadata line would open. With the line attached always, the term is gone
+    /// and a branch appearing reveals it the way the directory does.
+    #[test]
+    fn a_branch_that_arrives_after_the_row_was_built_still_shows() {
+        let mut fx = Fixture::default();
+        let pane = testing::pane(PaneId(7), "seven");
+        let row = {
+            let (seams, mut reg) = fx.split("left");
+            PaneRow {
+                pane: &pane,
+                column_of_pane: Some((0, 0)),
+            }
+            .build(&seams, &mut reg)
+        };
+
+        pane_reports(
+            &fx,
+            PaneId(7),
+            heca_core::runtime::PaneRuntime {
+                git: Some(heca_core::runtime::GitInfo {
+                    branch: Some("main".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+
+        assert!(
+            painted_text(row).iter().any(|t| t == "main"),
+            "the branch arrived and the row is still not drawing it",
+        );
+    }
+
+    /// **A line with nothing to say costs nothing** — not its own height, and not the gap above it.
+    ///
+    /// This is the risk in attaching every line always, and it is the one worth guarding: an empty
+    /// strip under half the rows would be a worse defect than the one being fixed. `Visibility`
+    /// hides with `display: none`, so the layout skips the line *and* the gap that would have
+    /// preceded it — which is why the inset each line applies has to live inside that visibility
+    /// rather than in a wrapper around it.
+    #[test]
+    fn a_card_with_nothing_to_show_is_exactly_as_tall_as_its_name() {
+        let mut fx = Fixture::default();
+        let pane = testing::pane(PaneId(7), "seven");
+        let row = {
+            let (seams, mut reg) = fx.split("left");
+            PaneRow {
+                pane: &pane,
+                column_of_pane: Some((0, 0)),
+            }
+            .build(&seams, &mut reg)
+        };
+
+        let mut root = Flex::column().child(row);
+        heca_grid_ui::LayoutEngine::new()
+            .compute(&mut root, heca_core::layout::Size::new(300.0, 200.0));
+
+        let content = metadata_column(&root).expect("the card stacks a name and its metadata");
+        let name_row = &content.base().children[0];
+        assert_eq!(
+            content.base().bounds.size.h,
+            name_row.base().bounds.size.h,
+            "the two hidden lines, and the gaps above them, took height from a card with \
+             nothing to say",
+        );
     }
 
     /// A row declares the one identity everything else reads — the cursor, the drag, the

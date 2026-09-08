@@ -91,15 +91,19 @@ impl PaneRuntimeSignals {
         }
     }
 
-    #[cfg(test)]
+    /// Read every field of this pane's runtime at once.
+    ///
+    /// **Tracked reads, one per field.** Outside a reactive scope this is the same as an untracked
+    /// read; inside one it is the whole point — a subscription depends on this pane's six fields
+    /// and on nothing else, so a neighbour's directory changing does not wake this row.
     pub(crate) fn snapshot(&self) -> PaneRuntime {
         PaneRuntime {
-            program: self.program.get_untracked(),
-            status: self.status.get_untracked(),
-            cwd: self.cwd.get_untracked(),
-            exit_code: self.exit_code.get_untracked(),
-            git: self.git.get_untracked(),
-            kind: self.kind.get_untracked(),
+            program: self.program.get(),
+            status: self.status.get(),
+            cwd: self.cwd.get(),
+            exit_code: self.exit_code.get(),
+            git: self.git.get(),
+            kind: self.kind.get(),
         }
     }
 }
@@ -274,6 +278,19 @@ impl WorkspacesContainerState {
     pub fn pane_renamed_add_process_name(&self) -> bool {
         self.pane_renamed_add_process_name.get_untracked()
     }
+    /// **The two display settings as signals**, for a row that follows them rather than reading
+    /// them once while its tree is built. The untracked accessors above stay for the build-time
+    /// initial value; these are what a subscription depends on, so a setting reload reaches every
+    /// row without a rebuild.
+    pub(crate) fn pane_show_cwd_signal(&self) -> Signal<bool> {
+        self.pane_show_cwd
+    }
+
+    /// See [`pane_show_cwd_signal`](Self::pane_show_cwd_signal).
+    pub(crate) fn pane_renamed_add_process_name_signal(&self) -> Signal<bool> {
+        self.pane_renamed_add_process_name
+    }
+
     /// The program catalog this component resolves process icons and names through. Read untracked —
     /// consumed while building the retained tree, not inside a reactive paint closure.
     pub fn programs(&self) -> std::rc::Rc<heca_config::programs::ProgramsConfig> {
@@ -302,6 +319,30 @@ impl WorkspacesContainerState {
         f: impl FnOnce(Option<&PaneRuntimeSignals>) -> R,
     ) -> R {
         self.panes.with(|panes| f(panes.get(&pane)))
+    }
+
+    /// **This pane's signal handles, created if the store has not met it yet.**
+    ///
+    /// The handles are `Copy`, so a component takes them once while it builds and reads them from
+    /// inside its own subscription — depending on that pane's fields rather than on the map that
+    /// holds them. Subscribing to the map instead would wake every row on every frame, because the
+    /// per-frame mirror touches it whether anything changed or not.
+    ///
+    /// It **creates** the entry rather than answering `None`, and that is the point: a handle a
+    /// caller does not get is a subscription that can never form, so a row built in the same frame
+    /// its pane appeared would be deaf for the life of the tree — the same "read once at build time
+    /// and frozen" failure as a line that was never attached. The mirror fills the entry in on its
+    /// next pass, and `retain_panes` prunes it when the pane goes.
+    pub(crate) fn pane_runtime_signals(&self, pane: PaneId) -> PaneRuntimeSignals {
+        let mut sigs = None;
+        self.panes.update(|panes| {
+            sigs = Some(
+                *panes
+                    .entry(pane)
+                    .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default())),
+            );
+        });
+        sigs.expect("the entry was just inserted")
     }
 
     /// Snapshot a pane's reactive runtime into a plain [`PaneRuntime`] (the public

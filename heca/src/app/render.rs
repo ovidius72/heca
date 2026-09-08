@@ -972,15 +972,19 @@ pub(crate) fn render_frame(state: &mut AppState) {
     }
     // Push value-state (selection + status) into the retained tree's bound signals so
     // focus/mode changes update in place without a rebuild (the signature excludes them).
-    let chrome_signals_changed = crate::chrome::sync_chrome_signals(state);
-    if chrome_signals_changed {
-        // Runtime/git signal writes happen during render, but wrappers like
-        // `Visibility` apply their `style.hidden` flip in `tick()`. Advance the
-        // retained chrome tree immediately so new branch/count rows participate in
-        // this frame's layout + damage pass instead of waiting for a later focus/input
-        // event to flush the signal-backed structure.
-        state.window_root.tick(0.0);
-    }
+    crate::chrome::sync_chrome_signals(state);
+    // **Flush signal-driven structure before this frame is laid out.**
+    //
+    // Wrappers like `Visibility` apply their `hidden` flip in `tick`, so a row revealed by a
+    // signal has no box until one runs. The frame pass already ticked, but that was before the
+    // store was brought up to date — and a pane's runtime now reaches its row through the row's
+    // own subscription, which fires during that update. Without this the reveal would land a
+    // frame late, and it used to be skipped entirely whenever the sync pass reported no change.
+    //
+    // Unconditional, because "did anything change" is no longer a question one return value can
+    // answer once rows subscribe for themselves. A tick with no time and nothing pending is a
+    // walk that finds nothing.
+    state.window_root.tick(0.0);
     let chrome_theme = crate::chrome::chrome_gui_theme(state);
     let mut chrome_scene =
         crate::chrome::paint_chrome_root(&mut state.window_root, w, h, &chrome_theme);

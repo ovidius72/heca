@@ -31,38 +31,6 @@ pub(crate) struct PaneInfoView {
     pub(crate) git_deleted: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct PaneInfoSignals {
-    pub(crate) icon: Signal<Glyph>,
-    /// The pane's name. **One signal, because there is one name** — its colour follows the
-    /// row's selected state through the inherited content colour, so no second copy exists to
-    /// keep in step (F003/P082/T480).
-    pub(crate) title: Signal<String>,
-    /// The dimmed `(process)` suffix text beside a renamed pane's name (e.g. `(nvim)`),
-    /// or empty when hidden. Signal-driven so a rename toggles it live without a tree
-    /// rebuild (renames update signals, they don't rebuild the sidebar card).
-    pub(crate) process_hint: Signal<String>,
-    pub(crate) process_hint_visible: Signal<bool>,
-    /// The pane's working-directory row text (home-relative path), and its visibility
-    /// (`[settings] pane_show_cwd` and the pane has a cwd). Signal-driven so a `cd` in the
-    /// pane updates the path live, mirroring the git-branch row.
-    pub(crate) cwd: Signal<String>,
-    pub(crate) cwd_visible: Signal<bool>,
-    /// What the row's status pip shows. **One signal, not one dot per state**: the row keeps a
-    /// single `StatusDot` and rewrites what it is, instead of building four and toggling four
-    /// booleans to reveal one (F003/P096/T483).
-    pub(crate) status: Signal<heca_grid_ui::DotStatus>,
-    pub(crate) git_visible: Signal<bool>,
-    pub(crate) git_branch: Signal<String>,
-    pub(crate) git_branch_display: Signal<String>,
-    pub(crate) git_added_visible: Signal<bool>,
-    pub(crate) git_added: Signal<String>,
-    pub(crate) git_modified_visible: Signal<bool>,
-    pub(crate) git_modified: Signal<String>,
-    pub(crate) git_deleted_visible: Signal<bool>,
-    pub(crate) git_deleted: Signal<String>,
-}
-
 fn program_glyph(icon: ProgramIcon) -> Glyph {
     match icon {
         ProgramIcon::Terminal => Glyph::Terminal,

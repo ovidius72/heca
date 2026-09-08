@@ -183,6 +183,8 @@ impl PaneCard<'_> {
                     // same absence, so a card has one question to answer rather than two.
                     show: true,
                     font_scale: crate::chrome::CARD_META_FONT_SCALE,
+                    // A card centres its content, so there is nothing to step in from.
+                    indent: heca_grid_ui::style::Spacing::None,
                     theme,
                 }
                 .build();
