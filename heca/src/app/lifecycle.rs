@@ -49,6 +49,63 @@ pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
     result
 }
 
+/// **Everything that wants the loop back at a TIME rather than on an event.**
+///
+/// Gathered as data so the choice below is a pure function: the app cannot be built in a test (it
+/// needs a window), and this is the part worth asserting.
+pub(crate) struct WakeRequests {
+    /// Something on screen is mid-animation, so the next frame is due at the frame interval.
+    pub(crate) animating: bool,
+    /// Seconds until a widget wants drawing — a tooltip revealing under a resting pointer, a caret
+    /// blinking. `None` when no tree is waiting on the clock.
+    pub(crate) widget_in: Option<f32>,
+    /// When the next toast auto-dismisses, or `None` when the stack is holding its deadlines.
+    pub(crate) toast_expiry: Option<Instant>,
+}
+
+/// What the loop should do next: sleep until [`wake_at`](Wake::wake_at), or until an event when it
+/// is `None`.
+pub(crate) struct Wake {
+    pub(crate) wake_at: Option<Instant>,
+    /// The widget deadline to remember, because **arriving at it is itself the reason to draw**:
+    /// by then the widget no longer reports a pending wake, so every other reason is false and the
+    /// loop would wake and go straight back to sleep with the bubble still unshown.
+    pub(crate) widget_frame_due: Option<Instant>,
+}
+
+/// **The nearest pending deadline wins — that is the whole rule.**
+///
+/// It used to be an if / else-if chain, and only the winning arm ran, so only the winning arm's
+/// deadline was booked: a widget that asked to be woken had its request dropped outright whenever
+/// anything was animating, and the toast expiry was outranked by both. Nothing looked wrong,
+/// because while something animates the frames arrive anyway — the moment the animation stopped,
+/// the deadline was simply gone and the widget waited for the user to nudge something.
+///
+/// A list has no order to get wrong, and the next subsystem that needs a wake adds a field instead
+/// of working out what outranks what. Note the widget's deadline is remembered whatever else wins:
+/// waking earlier for another reason is harmless, because the wake is recomputed and re-booked on
+/// that frame.
+///
+/// ⚠️ Every entry must be a deadline something is actually waiting for. An entry that is always
+/// `Some` turns an idle window into a poller, which is what the whole design avoids.
+pub(crate) fn next_wake(now: Instant, req: WakeRequests) -> Wake {
+    let widget_frame_due = req
+        .widget_in
+        .map(|secs| now + Duration::from_secs_f32(secs.max(0.0)));
+    let wake_at = [
+        req.animating.then(|| now + crate::chrome::FRAME_INTERVAL),
+        widget_frame_due,
+        req.toast_expiry,
+    ]
+    .into_iter()
+    .flatten()
+    .min();
+    Wake {
+        wake_at,
+        widget_frame_due,
+    }
+}
+
 /// How long a visual-bell flash takes to fade out. Shared with the render pass
 /// (`chrome::paint_bell_flash`) so the fade fraction matches the schedule.
 pub(crate) const BELL_FLASH_DURATION: Duration = Duration::from_millis(140);
@@ -196,31 +253,94 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.window.request_redraw();
     }
 
-    if state.session.are_animations_ongoing()
-        || terminal_animating
-        || image_animating
-        || chrome_animating
-    {
-        event_loop.set_control_flow(ControlFlow::WaitUntil(
-            Instant::now() + crate::chrome::FRAME_INTERVAL,
-        ));
-    } else if let Some(secs) = widget_wake {
-        // Wake once, when it comes due — not every frame while the pointer rests.
-        let at = Instant::now() + std::time::Duration::from_secs_f32(secs.max(0.0));
-        state.widget_frame_due = Some(at);
-        event_loop.set_control_flow(ControlFlow::WaitUntil(at));
-    // **Nothing to wake for while the pointer rests on the stack.** The deadlines are frozen, so
-    // waking at one would find nothing due and re-arm at the same instant — a spin, for as long as
-    // the pointer stayed. What ends the hold is a pointer event, which wakes the loop on its own.
-    // Same contract as below, in the one case that would otherwise break it.
-    } else if let Some(next_expiry) = match state.notifications.is_hovered() {
-        true => None,
-        false => state.notifications.next_expiry(),
-    } {
-        // No busy-loop (F009/T202's contract): wake exactly once, at the next auto-dismiss
-        // deadline, rather than polling every frame while a sticky-free toast is up.
-        event_loop.set_control_flow(ControlFlow::WaitUntil(next_expiry));
-    } else {
-        event_loop.set_control_flow(ControlFlow::Wait);
+    let schedule = next_wake(
+        Instant::now(),
+        WakeRequests {
+            animating: state.session.are_animations_ongoing()
+                || terminal_animating
+                || image_animating
+                || chrome_animating,
+            widget_in: widget_wake,
+            // **Nothing to wake for while the pointer rests on the stack.** The deadlines are
+            // frozen, so waking at one would find nothing due and re-arm at the same instant — a
+            // spin, for as long as the pointer stayed. What ends the hold is a pointer event,
+            // which wakes the loop on its own.
+            toast_expiry: match state.notifications.is_hovered() {
+                true => None,
+                false => state.notifications.next_expiry(),
+            },
+        },
+    );
+    state.widget_frame_due = schedule.widget_frame_due;
+    match schedule.wake_at {
+        Some(at) => event_loop.set_control_flow(ControlFlow::WaitUntil(at)),
+        None => event_loop.set_control_flow(ControlFlow::Wait),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn requests(
+        animating: bool,
+        widget_in: Option<f32>,
+        toast_in: Option<f32>,
+        now: Instant,
+    ) -> WakeRequests {
+        WakeRequests {
+            animating,
+            widget_in,
+            toast_expiry: toast_in.map(|s| now + Duration::from_secs_f32(s)),
+        }
+    }
+
+    /// **A widget's request survives an animation.** This is the bug the list replaced: the chain
+    /// tested "is anything animating" first, so while something moved on screen the widget's
+    /// deadline was never even computed — and `widget_frame_due`, which is what makes arriving at
+    /// it a reason to draw, stayed empty. It looked fine because the animation was producing
+    /// frames; the tooltip went missing the moment the animation stopped.
+    #[test]
+    fn an_animation_does_not_swallow_a_widget_deadline() {
+        let now = Instant::now();
+        let wake = next_wake(now, requests(true, Some(0.5), None, now));
+        assert_eq!(
+            wake.widget_frame_due,
+            Some(now + Duration::from_secs_f32(0.5)),
+            "the widget asked to be woken and something else was animating",
+        );
+    }
+
+    /// **The nearest deadline wins, whoever asked for it.** A widget due before the next animation
+    /// frame is not made to wait for it, and a toast is not outranked by either.
+    #[test]
+    fn the_nearest_pending_deadline_is_the_one_chosen() {
+        let now = Instant::now();
+        let soon = Duration::from_millis(4);
+        assert_eq!(
+            next_wake(now, requests(true, Some(soon.as_secs_f32()), None, now)).wake_at,
+            Some(now + soon),
+            "a widget due inside the frame interval",
+        );
+        assert_eq!(
+            next_wake(now, requests(true, None, Some(0.004), now)).wake_at,
+            Some(now + soon),
+            "a toast due inside the frame interval",
+        );
+        assert_eq!(
+            next_wake(now, requests(true, Some(1.0), Some(2.0), now)).wake_at,
+            Some(now + crate::chrome::FRAME_INTERVAL),
+            "the animation is the soonest of the three",
+        );
+    }
+
+    /// **Nothing pending, nothing booked.** The window sleeps until an event; an entry that were
+    /// always `Some` would turn an idle app into a poller, which is the thing this design avoids.
+    #[test]
+    fn an_idle_window_books_no_wake() {
+        let now = Instant::now();
+        let wake = next_wake(now, requests(false, None, None, now));
+        assert_eq!(wake.wake_at, None);
+        assert_eq!(wake.widget_frame_due, None);
     }
 }
