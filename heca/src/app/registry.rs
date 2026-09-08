@@ -322,16 +322,9 @@ pub fn build_keymap(
     for (k, v) in &config.keys.bindings {
         merged_bindings.insert(k.clone(), v.clone());
     }
-    // `[[keys.bind]]` — the same normal-mode keymap, for the bindings that carry `args`. Merged by
-    // **combo** rather than replaced wholesale: a user adding one parameterized binding must not
-    // silently drop the defaults, which is the trap an array of tables otherwise sets.
+    // `[[keys.bind]]` — the same normal-mode keymap, for the bindings that carry `args`.
     let mut merged_bind = default_keys.bind.clone();
-    for binding in &config.keys.bind {
-        match merged_bind.iter_mut().find(|b| b.keys == binding.keys) {
-            Some(existing) => *existing = binding.clone(),
-            None => merged_bind.push(binding.clone()),
-        }
-    }
+    merge_by(&mut merged_bind, &config.keys.bind, |b| b.keys.clone());
 
     let no_args = HashMap::new();
     for (action_name, value) in &merged_bindings {
@@ -402,7 +395,14 @@ pub fn build_keymap(
         unbind_and_deindex(&mut keymap, mode, "[keys]", trimmed, index);
     }
 
-    for cmd_cfg in &config.keys.command {
+    // `[[keys.command]]` — a program on a key. It had no merge at all, so defining one replaced
+    // every default outright; the defaults ship none uncommented today, which is the only reason
+    // nobody lost a binding to it yet.
+    let mut merged_commands = default_keys.command.clone();
+    merge_by(&mut merged_commands, &config.keys.command, |c| {
+        c.key.trim().to_string()
+    });
+    for cmd_cfg in &merged_commands {
         let action = ActionRef::Builtin(WmAction::SpawnCommand {
             command: cmd_cfg.command.clone(),
             kind: cmd_cfg.kind.parse().unwrap_or(SpawnKind::Terminal),
@@ -506,6 +506,27 @@ fn bind_global_focus(
     }
 }
 
+/// **A keyed array merges by its key, never wholesale.**
+///
+/// TOML merges a table per key, so overriding one `action = "combo"` line keeps the rest. An
+/// **array** is replaced entire — which for a binding list means adding one entry silently deletes
+/// every default, with nothing to see and nothing to fail. That is a trap the config sets and the
+/// user springs.
+///
+/// A keymap *is* a map from combo to action, so merging on the combo is the ordinary table rule
+/// applied to what the array is really keyed by — not a special case. Written once here because it
+/// was written three times: `[[keys.bind]]`, `[[keys.surface.bind]]`, and not at all for
+/// `[[keys.command]]`, which is how that one kept the trap. A fourth keyed array gets the rule by
+/// calling this rather than by remembering it.
+fn merge_by<T: Clone, K: PartialEq>(base: &mut Vec<T>, over: &[T], key: impl Fn(&T) -> K) {
+    for entry in over {
+        match base.iter_mut().find(|b| key(b) == key(entry)) {
+            Some(existing) => *existing = entry.clone(),
+            None => base.push(entry.clone()),
+        }
+    }
+}
+
 /// Layer one `[[keys.component]]` entry over another (F003/P086/T362).
 ///
 /// **The merge rules, and why they differ between the two forms.** A TOML table merges per key
@@ -533,12 +554,7 @@ fn layer_component_keys(
         base.id = over.id;
     }
     base.bindings.extend(over.bindings);
-    for binding in over.bind {
-        match base.bind.iter_mut().find(|b| b.keys == binding.keys) {
-            Some(existing) => *existing = binding,
-            None => base.bind.push(binding),
-        }
-    }
+    merge_by(&mut base.bind, &over.bind, |b| b.keys.clone());
     base.unbind.extend(over.unbind);
 }
 
@@ -1340,6 +1356,52 @@ mod tests {
     }
 
     // ── plugin-04 / T2: config bindings can target dynamic action ids ──
+
+    /// **A user's binding list adds to the defaults; it does not replace them.**
+    ///
+    /// TOML replaces an array wholesale, so writing one `[[keys.command]]` used to delete every
+    /// default one — silently, with nothing to fail. `[[keys.bind]]` and `[[keys.surface.bind]]`
+    /// each carried a hand-written merge to dodge that; `[[keys.command]]` carried none, and the
+    /// only reason nobody lost a binding is that the shipped defaults have none uncommented yet.
+    ///
+    /// Asserted against a **synthetic** default rather than the shipped file, so the guard says
+    /// something the day a default is added rather than passing on an empty list.
+    #[test]
+    fn a_users_command_binding_does_not_delete_the_default_ones() {
+        use heca_config::theme::CommandKeybindConfig;
+        let shipped = |key: &str, command: &str| CommandKeybindConfig {
+            key: key.to_string(),
+            command: command.to_string(),
+            kind: "terminal".to_string(),
+            float: false,
+            close_pane: false,
+            keep_on_error: false,
+            keep_on_success: false,
+        };
+
+        let mut defaults = vec![shipped("prefix+g", "lazygit"), shipped("prefix+t", "btm")];
+        let user = vec![shipped("prefix+t", "htop"), shipped("Alt+l", "lazydocker")];
+        super::merge_by(&mut defaults, &user, |c| c.key.trim().to_string());
+
+        let by_key = |key: &str| {
+            defaults
+                .iter()
+                .find(|c| c.key == key)
+                .map(|c| c.command.as_str())
+        };
+        assert_eq!(
+            by_key("prefix+g"),
+            Some("lazygit"),
+            "an untouched default survives"
+        );
+        assert_eq!(
+            by_key("prefix+t"),
+            Some("htop"),
+            "the same combo is overridden"
+        );
+        assert_eq!(by_key("Alt+l"), Some("lazydocker"), "a new combo is added");
+        assert_eq!(defaults.len(), 3);
+    }
 
     /// NON-REGRESSION: every binding in the DEFAULT keymap still resolves to a `Builtin` at load.
     /// `build_keymap` no longer skips unresolvable names (they become `Dynamic`), so a typo — or a

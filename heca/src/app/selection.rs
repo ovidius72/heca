@@ -35,14 +35,29 @@ pub(crate) fn has_pane_candidate_overflow(session: &Session) -> bool {
     false
 }
 
-/// Collect ALL panes across ALL workspaces as letter candidates.
+/// Collect every pane that could be picked, across all workspaces, as letter candidates.
 /// Hard-capped at 52 unique labels (a–z, A–Z). Beyond that, use sidebar
 /// navigation instead of letter selection.
-pub(crate) fn collect_all_pane_candidates(session: &Session) -> Vec<(char, PaneId)> {
+///
+/// **`except` is never a candidate** — every pane pick means "the other one" (focus it, swap with
+/// it, take it), so offering the pane you are already on is a move to nowhere.
+///
+/// That rule used to live in the letter layer instead, which meant the candidate list and the
+/// letters gave different answers: with a single pane open, `prefix+q` counted one candidate,
+/// entered the pick and announced itself in the bottom bar — and then the only letter was filtered
+/// away, so the prompt sat there over a screen with nothing to press (Antonio, driving). Whoever
+/// counts the candidates has to be the one who decides what a candidate is.
+pub(crate) fn collect_all_pane_candidates(
+    session: &Session,
+    except: Option<PaneId>,
+) -> Vec<(char, PaneId)> {
     let mut candidates = Vec::new();
     for ws in &session.workspaces {
         for col in &ws.scrolling.columns {
             for pane in &col.panes {
+                if Some(pane.id) == except {
+                    continue;
+                }
                 // Running out of letters *is* the cap — no second number to keep in step.
                 let Some(ch) = candidate_letter(candidates.len()) else {
                     return candidates;
@@ -51,6 +66,9 @@ pub(crate) fn collect_all_pane_candidates(session: &Session) -> Vec<(char, PaneI
             }
         }
         for float in &ws.floating_panes {
+            if Some(float.pane.id) == except {
+                continue;
+            }
             let Some(ch) = candidate_letter(candidates.len()) else {
                 return candidates;
             };
@@ -140,9 +158,60 @@ mod tests {
     #[test]
     fn candidate_collection_caps_at_limit() {
         let session = make_session_with_panes(PANE_CANDIDATE_LIMIT + 5);
-        let candidates = collect_all_pane_candidates(&session);
+        let candidates = collect_all_pane_candidates(&session, None);
         assert_eq!(candidates.len(), PANE_CANDIDATE_LIMIT);
         assert!(has_pane_candidate_overflow(&session));
+    }
+
+    /// **The pane you are on is not a candidate**, so the count and the letters are one answer.
+    ///
+    /// The rule used to be applied by the letter layer instead, which meant a pick could be entered
+    /// with a candidate that was never going to be lettered: with a single pane open, `prefix+q`
+    /// counted one, entered the pick, put "pick a letter" in the bottom bar — and drew no letter
+    /// anywhere (Antonio, driving). Whoever counts has to decide.
+    #[test]
+    fn the_pane_you_are_on_is_never_a_candidate() {
+        let session = make_session_with_panes(3);
+        let all = collect_all_pane_candidates(&session, None);
+        assert_eq!(all.len(), 3);
+
+        let others = collect_all_pane_candidates(&session, Some(PaneId(2)));
+        assert_eq!(others.len(), 2, "the pane you are on is gone");
+        assert!(
+            !others.iter().any(|(_, id)| *id == PaneId(2)),
+            "and it is that pane, not merely one fewer",
+        );
+    }
+
+    /// **The only pane there is leaves nothing to pick.** This is the case that showed a prompt
+    /// with no letters: the pick must come out empty so it can be refused out loud instead.
+    #[test]
+    fn a_single_pane_leaves_no_one_to_pick() {
+        let session = make_session_with_panes(1);
+        assert!(
+            collect_all_pane_candidates(&session, Some(PaneId(1))).is_empty(),
+            "with one pane open, every pane pick has nothing to offer",
+        );
+    }
+
+    /// The letters are handed out **after** the exclusion, so the panes that remain get the front of
+    /// the alphabet rather than inheriting a gap where the excluded one was — two panes to pick from
+    /// wear the same two letters however many were left out.
+    #[test]
+    fn the_letters_close_up_around_the_pane_that_was_left_out() {
+        let letters = |session, except| -> Vec<char> {
+            collect_all_pane_candidates(session, except)
+                .into_iter()
+                .map(|(ch, _)| ch)
+                .collect()
+        };
+        let two = make_session_with_panes(2);
+        let three = make_session_with_panes(3);
+        assert_eq!(
+            letters(&three, Some(PaneId(1))),
+            letters(&two, None),
+            "the alphabet is the library's; what matters is that it starts at the beginning",
+        );
     }
 
     #[test]

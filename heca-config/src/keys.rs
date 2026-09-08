@@ -419,21 +419,25 @@ do_thing = "u"
         assert!(cfg.bindings.contains_key("close"));
     }
 
-    /// The workspaces dock's keys are a **component layer** now, not a mode. The `sidebar` mode
-    /// and its twelve `sidebar_*` actions are gone (F003/P085/T356) — a container is driven because
-    /// it has focus, not because the app entered a state.
+    /// The workspaces dock's keys are a **surface layer** now, not a mode. The `sidebar` mode and
+    /// its twelve `sidebar_*` actions are gone — a container is driven because it has focus, not
+    /// because the app entered a state.
+    ///
+    /// Read through [`surfaces`](KeysConfig::surfaces), never one of the two fields behind it:
+    /// asking `component` alone made this test an assertion about which *spelling* the bundled file
+    /// happened to use, and it went red the day the defaults moved to `[[keys.surface]]` — with
+    /// nothing actually broken.
     #[test]
-    fn the_workspaces_dock_ships_a_component_layer_not_a_mode() {
+    fn the_workspaces_dock_ships_a_surface_layer_not_a_mode() {
         let cfg = KeysConfig::default();
         assert!(
             !cfg.mode.iter().any(|m| m.name == "sidebar"),
             "the sidebar mode went with the built-ins it drove",
         );
         let ws = cfg
-            .component
-            .iter()
+            .surfaces()
             .find(|c| c.name == "workspaces")
-            .expect("the workspaces component ships its keys here");
+            .expect("the workspaces dock ships its keys here");
         // One spelling per key: `Down` and `ArrowDown` are the same physical key (both parse to
         // `GridKey::ArrowDown`), so binding both bound it twice and every surface that renders the
         // shortcut drew the same cap twice (2026-07-30).

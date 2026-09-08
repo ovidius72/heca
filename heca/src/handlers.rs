@@ -841,7 +841,7 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
 /// own identity — the same function and the same remembered map `prefix+/` uses. One assignment
 /// rule for both pickers, which is the whole point of F011/P094/T451.
 fn pane_candidates_with_stable_letters(state: &mut AppState) -> Vec<(char, PaneId)> {
-    let panes: Vec<PaneId> = collect_all_pane_candidates(&state.session)
+    let panes: Vec<PaneId> = collect_all_pane_candidates(&state.session, state.focused_pane)
         .into_iter()
         .map(|(_, id)| id)
         .collect();
@@ -864,29 +864,114 @@ fn pane_candidates_with_stable_letters(state: &mut AppState) -> Vec<(char, PaneI
         .collect()
 }
 
+/// **Start a pick, or say why it cannot start.**
+///
+/// The one door every letter pick goes through. Each handler used to write `if
+/// !candidates.is_empty() { state.input_mode = ..; state.needs_redraw = true; }` for itself — ten
+/// copies of one rule — and the empty case simply fell off the end. `prefix+g` with a single
+/// workspace open did nothing at all: no prompt, no message, no flash, which is indistinguishable
+/// from an unbound key and is exactly how a working feature gets reported as broken.
+///
+/// There is no branch here for a caller to leave out. A handler hands over the mode it wants and
+/// this decides; a pick that has nothing to offer says so, and a plugin's pick gets the same
+/// sentence heca's does with nothing written.
+///
+/// The words come from the [`ActionCatalog`](crate::actions::ActionCatalog), which is the single
+/// source of truth for what an action is called, plus the pick's own
+/// [`subject`](crate::app_state::PickKind::subject) — the one thing the catalog cannot know,
+/// because it describes what an action does rather than what it picks among.
+pub(crate) fn begin_pick(state: &mut AppState, mode: InputMode) {
+    let empty = mode.pick_candidate_count() == Some(0);
+    if !empty {
+        state.input_mode = mode;
+        state.needs_redraw = true;
+        return;
+    }
+    let Some(pending) = mode.pending_pick(&state.action_catalog) else {
+        return;
+    };
+    state.status_note = Some(pick_refusal(&pending));
+    state.needs_redraw = true;
+}
+
+/// **What a pick with nothing to offer says.**
+///
+/// Split out because the app needs a window, so `begin_pick` cannot be called in a test and this is
+/// the half worth asserting. It names the act in the action's own words — the ones the command
+/// palette and the tooltip already use — and then what there was none of.
+///
+/// It goes in the bottom bar, which is where that pick's *prompt* would have appeared, so the
+/// answer lands where the question would have. A toast was tried first and is too much for it: a
+/// key that cannot do its thing is not an event worth covering the work.
+pub(crate) fn pick_refusal(pending: &crate::app_state::PendingPick) -> String {
+    format!(
+        "{} — there is no other {} to pick",
+        pending.label,
+        pending.kind.subject()
+    )
+}
+
+#[cfg(test)]
+mod pick_refusal_tests {
+    use crate::actions::ActionCatalog;
+    use crate::app_state::InputMode;
+
+    /// **A refused pick says which act it was and what there was none of.**
+    ///
+    /// The words come from the action's own catalog entry, so the bar names the act exactly as the
+    /// command palette and its tooltip do — one vocabulary, not a sentence written here.
+    #[test]
+    fn a_refused_pick_names_the_act_and_what_was_missing() {
+        let catalog = ActionCatalog::with_builtins();
+        let mode = InputMode::WorkspacePick {
+            candidates: Vec::new(),
+            target: crate::app_state::WorkspacePickTarget::Pane(heca_core::layout::PaneId(1)),
+        };
+        let pending = mode
+            .pending_pick(&catalog)
+            .expect("a workspace pick is a pick");
+        let note = super::pick_refusal(&pending);
+
+        assert!(
+            note.contains("workspace"),
+            "it must say what there was none of, not just that something failed: {note}",
+        );
+        assert!(
+            note.contains(&pending.label),
+            "and name the act in the catalog's words: {note}",
+        );
+    }
+
+    /// The pane picks say "pane", so the sentence is about what you were choosing among rather than
+    /// a generic "nothing found".
+    #[test]
+    fn a_pane_pick_says_pane() {
+        let catalog = ActionCatalog::with_builtins();
+        let mode = InputMode::PaneSelect {
+            candidates: Vec::new(),
+        };
+        let pending = mode.pending_pick(&catalog).expect("a pane pick is a pick");
+        assert!(super::pick_refusal(&pending).contains("pane"));
+    }
+}
+
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         focus_navigable_dock(state);
         return;
     }
     let candidates = pane_candidates_with_stable_letters(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneSelect { candidates };
-        state.needs_redraw = true;
-    }
+    begin_pick(state, InputMode::PaneSelect { candidates });
 }
 
 pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) {
     let candidates = crate::app::terminal_host::collect_link_hints(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::FollowLink { candidates };
-        state.needs_redraw = true;
-    }
+    begin_pick(state, InputMode::FollowLink { candidates });
 }
 
 /// Enter the universal picker (`prefix+/`): assign a letter to every region on screen that said
 /// what a pick does to it (document order) and show a keycap over each; the next keypress runs that
-/// region's declaration. No-ops if nothing on screen declares one.
+/// region's declaration. Says so when nothing on screen declares one.
 /// **Hand out the letters, giving each target back the one it had last time** (F003/P082/T445).
 ///
 /// `identities` is one entry per target, in document order — `None` for a target with no identity to
@@ -969,15 +1054,12 @@ pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
             .filter_map(|(id, ch)| Some((id.clone()?, (*ch)?))),
     );
 
-    if !candidates.is_empty() {
-        // **Entering the mode is the whole of it.** The letters are handed out by
-        // `sync_offered_letters`, every frame, exactly as every other pick mode's are — so the
-        // rules that live there apply here too: a view that becomes covered loses its letter, and a
-        // withdrawal reaches every view. Handing them out once from here is what left `prefix+/`
-        // outside all of it (F003/P082/T438).
-        state.input_mode = InputMode::HintPick { candidates };
-        state.needs_redraw = true;
-    }
+    // **Entering the mode is the whole of it.** The letters are handed out by
+    // `sync_offered_letters`, every frame, exactly as every other pick mode's are — so the rules
+    // that live there apply here too: a view that becomes covered loses its letter, and a
+    // withdrawal reaches every view. Handing them out once from here is what left `prefix+/`
+    // outside all of it.
+    begin_pick(state, InputMode::HintPick { candidates });
 }
 
 pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
@@ -986,13 +1068,13 @@ pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
         return;
     }
     let candidates = pane_candidates_with_stable_letters(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneSwap {
+    begin_pick(
+        state,
+        InputMode::PaneSwap {
             candidates,
             focus_after: false,
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
@@ -1001,18 +1083,18 @@ pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
         return;
     }
     let candidates = pane_candidates_with_stable_letters(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneSwap {
+    begin_pick(
+        state,
+        InputMode::PaneSwap {
             candidates,
             focus_after: true,
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 /// Enter the "move active column → workspace" letter pick: assign a letter to each
 /// workspace (shown as a `KeyHint` over its dock); the next keypress moves the active
-/// column into that workspace. No-ops if there are no workspaces.
+/// column into that workspace. Says so when there is no other workspace.
 pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAction) {
     let ws_idx = state.session.active_workspace_idx;
     let col_idx = state
@@ -1021,29 +1103,29 @@ pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAc
         .map(|ws| ws.scrolling.active_column_idx)
         .unwrap_or(0);
     let candidates = crate::app::selection::collect_workspace_candidates(&state.session);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::WorkspacePick {
+    begin_pick(
+        state,
+        InputMode::WorkspacePick {
             candidates,
             target: WorkspacePickTarget::Column { ws_idx, col_idx },
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 /// Enter the "move active pane → workspace" letter pick (see
-/// [`handle_move_column_to_workspace_pick`]). No-ops without a focused pane.
+/// [`handle_move_column_to_workspace_pick`]). Does nothing without a focused pane.
 pub fn handle_move_pane_to_workspace_pick(state: &mut AppState, _action: &WmAction) {
     let Some(pane_id) = state.focused_pane else {
         return;
     };
     let candidates = crate::app::selection::collect_workspace_candidates(&state.session);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::WorkspacePick {
+    begin_pick(
+        state,
+        InputMode::WorkspacePick {
             candidates,
             target: WorkspacePickTarget::Pane(pane_id),
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 /// Enter the "move active pane → column" letter pick: assign a letter to each column
@@ -1055,13 +1137,13 @@ pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction)
         return;
     };
     let candidates = crate::app::selection::collect_column_candidates(&state.session);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::ColumnPick {
+    begin_pick(
+        state,
+        InputMode::ColumnPick {
             candidates,
             pane_id,
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 /// **Move a mounted container's cursor to the row named by `key`** — the generic form of a click
@@ -1492,13 +1574,13 @@ pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) {
         return;
     }
     let candidates = pane_candidates_with_stable_letters(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneTake {
+    begin_pick(
+        state,
+        InputMode::PaneTake {
             candidates,
             focus_after: false,
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) {
@@ -1507,13 +1589,13 @@ pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) {
         return;
     }
     let candidates = pane_candidates_with_stable_letters(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneTake {
+    begin_pick(
+        state,
+        InputMode::PaneTake {
             candidates,
             focus_after: true,
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 /// Move a pane from wherever it is to the bottom of the active column.
@@ -1853,11 +1935,7 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
     let candidates = crate::chrome::dock_candidates(&state.chrome_host, |region| {
         crate::chrome::region_on_screen(state, region)
     });
-    if candidates.is_empty() {
-        return;
-    }
-    state.input_mode = InputMode::DockPick { candidates };
-    state.needs_redraw = true;
+    begin_pick(state, InputMode::DockPick { candidates });
 }
 
 /// **Focus a dock, or give the keyboard back if it already has it** — one key in and out.

@@ -59,15 +59,17 @@ pub(crate) struct OfferedLetters {
 ///
 /// One place that knows how a mode's candidates become row identities, so a new pick mode is one
 /// arm here rather than a fifth signal list and a fifth projection.
-fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> Vec<(Offer, char)> {
+fn wanted(mode: &InputMode) -> Vec<(Offer, char)> {
     let mut out = Vec::new();
     if let Some(cands) = mode.candidates() {
-        // **The focused pane is never a target**, even when the mode lists it: every one of these
-        // picks means "the other one", so lettering where you already are offers a move to nowhere.
+        // **Every candidate is lettered.** "The focused pane is never a target" used to be applied
+        // here, which made this disagree with whoever counted the candidates: a pick could be
+        // entered, announce itself in the bottom bar, and then have its only letter filtered away
+        // right here. The rule belongs to `collect_all_pane_candidates`, which is what decides
+        // whether the pick happens at all.
         out.extend(
             cands
                 .iter()
-                .filter(|(_, id)| Some(*id) != active_pane)
                 .map(|(ch, id)| (Offer::ByKey(pane_key(*id)), *ch)),
         );
     }
@@ -109,7 +111,7 @@ fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> V
 /// Runs every frame and is cheap when nothing is picking — the common case is two empty vectors.
 /// Returns whether anything changed, so the caller can decide to repaint.
 pub(crate) fn sync_offered_letters(state: &crate::app_state::AppState) -> bool {
-    let wanted = wanted(&state.input_mode, state.focused_pane);
+    let wanted = wanted(&state.input_mode);
     // **Which views could actually show a letter.** Computed ONCE per pass, not per key: it
     // resolves the whole surface stack.
     let visible = if wanted.is_empty() {
@@ -252,7 +254,7 @@ fn label_for(label: &Option<String>, visible: bool) -> Option<String> {
 /// this file, so its assertions live wherever the case is clearest rather than being re-derived.
 #[cfg(test)]
 pub(crate) fn wanted_for_tests(mode: &InputMode) -> Vec<(Offer, char)> {
-    wanted(mode, None)
+    wanted(mode)
 }
 
 #[cfg(test)]
@@ -287,7 +289,7 @@ mod tests {
             candidates: vec![('a', PaneId(7)), ('b', PaneId(9))],
         };
         assert_eq!(
-            wanted(&mode, None),
+            wanted(&mode),
             vec![
                 (Offer::ByKey(pane_key(PaneId(7))), 'a'),
                 (Offer::ByKey(pane_key(PaneId(9))), 'b'),
@@ -301,20 +303,26 @@ mod tests {
     /// letters and would have erased a plugin's.
     #[test]
     fn a_mode_that_is_not_picking_wants_nothing() {
-        assert!(wanted(&InputMode::Normal, None).is_empty());
+        assert!(wanted(&InputMode::Normal).is_empty());
     }
 
-    /// **The focused pane is never a target**, even when the mode lists it as a candidate: every
-    /// one of these picks means "the other one", so a letter where you already are offers a move to
-    /// nowhere. The rule came from the host projection this replaced and had to travel with it.
+    /// **Every candidate is lettered**, and deciding who is a candidate is somebody else's job.
+    ///
+    /// This used to filter out the focused pane here, which made it disagree with whoever counted
+    /// the candidates: a pick could be entered and announce itself with the only letter then
+    /// filtered away right here. The rule moved to `collect_all_pane_candidates`, and its guard
+    /// went with it.
     #[test]
-    fn the_pane_you_are_on_gets_no_letter() {
+    fn every_candidate_a_mode_lists_gets_a_letter() {
         let mode = InputMode::PaneSelect {
             candidates: vec![('a', PaneId(1)), ('s', PaneId(2))],
         };
         assert_eq!(
-            wanted(&mode, Some(PaneId(1))),
-            vec![(Offer::ByKey(pane_key(PaneId(2))), 's')],
+            wanted(&mode),
+            vec![
+                (Offer::ByKey(pane_key(PaneId(1))), 'a'),
+                (Offer::ByKey(pane_key(PaneId(2))), 's'),
+            ],
         );
     }
     /// **`hint.changed` fires when the lettering changes, and not otherwise** — the event a plugin

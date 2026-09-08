@@ -1,30 +1,85 @@
 # heca — Default Keybindings
 # ===========================
-# This file holds heca's DEFAULT keybindings (only the `[keys]` section). It is
-# embedded into the binary and parsed at startup, so the bindings below are always
-# valid and complete by construction. Non-keybinding settings live in a separate
-# file: `config.default.toml`.
 #
-# To customize: copy this file to ~/.config/heca/keybindings.toml (Linux/macOS) or
-# %APPDATA%\heca\keybindings.toml (Windows) and change only what you need. Your
-# file is deep-merged over these defaults:
-#   • flat bindings + [keys.unbind] merge per-key (override one, keep the rest);
-#   • [[keys.command]] and [[keys.mode]] arrays REPLACE the default list wholesale
-#     — re-list the defaults you still want, or rely on heca's built-in modes
-#     (resize/sidebar/selection/focus are always merged back in at runtime by name).
+# This file holds heca's DEFAULT keybindings (the `[keys]` section, and nothing else). It is
+# embedded into the binary and parsed at startup, so what is below is always valid and complete by
+# construction. Non-keybinding settings live in `config.default.toml`.
 #
-# Combo syntax:
-#   "prefix+h"        → prefix key (Ctrl+B) then h
-#   "prefix+Shift+q"  → prefix key then Shift+q
-#   "prefix+Ctrl+h"   → prefix key then Ctrl+h
-#   "Alt+Enter"       → global Alt+Enter (no prefix needed)
-#   "Super+v"         → global Super+v (no prefix needed)
-# Modifiers: Ctrl, Shift, Alt, Super (also accepts Win/Cmd).
-# Named keys: Enter, Tab, Escape, Backspace, ArrowLeft/Right/Up/Down.
-
-# Every `keys` value below takes **one combo, several comma-separated, or a list** — the three are
-# the same binding, in every table: `keys = "q"`, `keys = "q, Ctrl+q"`, `keys = ["q", "Ctrl+q"]`.
-# So one action reached by two keys is one entry, never a repeated block.
+# A guide with worked examples: docs/keybindings.md
+# Every binding and what it resolved to, live: `heca --keys-show`
+#
+#
+# ── CUSTOMIZING ────────────────────────────────────────────────────────────────
+#
+# Write only what you change, in ~/.config/heca/keybindings.toml (Linux/macOS) or
+# %APPDATA%\heca\keybindings.toml (Windows). `[keys]` is also honoured in `config.toml` — the two
+# files are merged into one config before anything reads them.
+#
+# **Your file is merged over these defaults, and nothing you leave out is lost.** Each table says
+# what it is keyed by; an entry with the same key replaces that default and the rest are untouched:
+#
+#   [keys] flat bindings          keyed by ACTION    focus_left = "prefix+h"
+#   [keys.unbind]                 keyed by COMBO     "prefix+f" = true
+#   [[keys.bind]]                 keyed by COMBO     an action with `args`
+#   [[keys.command]]              keyed by COMBO     a program on a key
+#   [[keys.surface]]              keyed by NAME + `id`, and its `bind` array by COMBO
+#   [[keys.mode]]                 keyed by NAME      ⚠️ see below — not like the others
+#
+# ⚠️ **`[[keys.mode]]` is the exception.** Its `bindings` are ADDED to the built-in mode's, but
+# `trigger` and `sticky` REPLACE them. So redefining a mode to add one key means repeating its
+# `trigger` and `sticky` exactly as they are here — omitting `trigger` sets it to "", and for a mode
+# like `resize` that silently means prefix+r no longer enters it, with nothing to say why.
+#
+#
+# ── WRITING A COMBO ────────────────────────────────────────────────────────────
+#
+#   "prefix+h"        the prefix key (Ctrl+B), then h
+#   "prefix+Shift+q"  the prefix key, then Shift+q
+#   "prefix+Ctrl+h"   the prefix key, then Ctrl+h
+#   "Alt+Enter"       global — no prefix
+#   "Super+v"         global — Cmd+V on macOS
+#
+# Modifiers: Ctrl, Shift, Alt, Super (also accepts Win / Cmd).
+# Named keys: Enter, Tab, Escape, Backspace, Space, ArrowLeft/Right/Up/Down, Home, End,
+#             PageUp, PageDown, F1–F12, ContextMenu.
+#
+# **`Alt+…` works, including on macOS.** Option rewrites the character a key produces — Option+L
+# types `¬` — so heca reads the key off the keyboard itself whenever the character it was handed is
+# not one a binding could name. A layout that produces an ordinary character keeps its own answer,
+# so this is a repair and never a guess.
+#
+# Every `keys` value in every table takes **one combo, several comma-separated, or a list** — the
+# three are the same binding: `keys = "q"`, `keys = "q, Ctrl+q"`, `keys = ["q", "Ctrl+q"]`. One
+# action reached by two keys is one entry, never a repeated block.
+#
+#
+# ── WHICH SURFACE ANSWERS A KEY ────────────────────────────────────────────────
+#
+# A key acts on whatever is in front of you. Three surfaces, front to back, and exactly one holds
+# the keyboard at a time:
+#
+#   layer        an overlay — the exposé, a dialog, a menu, a plugin's panel
+#   dock         a focused chrome container (the one wearing the focus ring)
+#   heca.panes   the scrolling area — what is in front the rest of the time
+#
+# One resolution order, for every key:
+#
+#   the focused surface's own [[keys.surface]] entry
+#     → the floor its kind is guaranteed
+#     → the global [keys] map
+#     → then swallowed (a layer, a dock) or sent to the program in the pane (heca.panes)
+#
+# Nearest declaration wins, so a surface key shadows a global one with the same combo. This is why
+# `Escape` is never bound globally: a global one would outrank all three at once. The floors are a
+# layer closing itself, a dock handing the keyboard back, and `heca.panes` having none — so Escape
+# reaches the program in the pane, and vim still works.
+#
+#
+# ── A TYPO IS NOT AN ERROR ─────────────────────────────────────────────────────
+#
+# Action names resolve when the key is PRESSED, not when this file is read, so a binding to a plugin
+# action can be written before the plugin exists. The cost is that a misspelled name is not an error
+# either — it simply never fires. `heca --keys-show` is how you tell the two apart.
 
 [keys]
 # Prefix key triggers prefix mode for all `prefix+...` bindings (tmux-style).
@@ -58,8 +113,9 @@ pane_height_decrease = "prefix+Shift+-"
 # on top of the app-wide size. =/- zoom in/out; 0 resets. The same gesture is also
 # on Ctrl/Meta+mouse-wheel, resolved by what's under the pointer (pane → pane,
 # chrome → whole app).
-# (Alt is deliberately avoided: on macOS the Option key rewrites the typed
-#  character, so an Alt+= binding would never match.)
+# (Ctrl rather than Alt here for a reason that outlived its cause: macOS's Option rewrites the typed
+#  character, which used to stop an `Alt+=` binding matching at all. It no longer does — see the
+#  header — but these keys are muscle memory now and are left where they are.)
 app_font_increase = "prefix+Ctrl+="        # Whole app (chrome + terminals) bigger
 app_font_decrease = "prefix+Ctrl+-"        # Whole app (chrome + terminals) smaller
 app_font_reset    = "prefix+Ctrl+0"        # Whole app back to configured sizes
@@ -80,7 +136,7 @@ swap_pane           = "prefix+Shift+m"  # Letters, swap panes (stay here)
 swap_and_focus_pane = "prefix+m"        # Letters, swap panes (follow)
 
 # ── Move pane/column to a picked target (KeyHint overlay) ──
-move_column_to_workspace_pick = "prefix+c"        # Move active column → picked workspace
+move_column_to_workspace_pick = "prefix+Shift+g"  # Move active column → picked workspace
 move_pane_to_workspace_pick   = "prefix+g"        # Move active pane → picked workspace
 move_pane_to_column_pick      = "prefix+Ctrl+c"   # Move active pane → picked column
 pane_take                     = "prefix+t"        # Take target pane to bottom of active column
@@ -281,11 +337,14 @@ args   = { name = "heca.expose" }
 # keys = "w"
 # args = { container = "web" }
 
-# ── A COMPONENT'S OWN KEYS — `[[keys.component]]` ──
-# These apply **only while that component holds chrome focus** (see the `focus` mode further down
-# for the keys every focused container shares). `name` says which component; an optional `id`
-# narrows the entry to ONE placement, so two seatings of the same component can differ while its
-# cursor, scroll position and focus stay per placement anyway.
+# ── A SURFACE'S OWN KEYS — `[[keys.surface]]` ──
+# A dock and an overlay are the same thing to the keyboard, so this is one table for both. It was
+# called `[[keys.component]]` and that spelling still works everywhere; write `surface`.
+#
+# These apply **only while that surface holds the keyboard** (see the `focus` mode further down for
+# the keys every focused container shares). `name` says which surface; an optional `id` narrows the
+# entry to ONE placement, so two seatings of the same component can differ while its cursor, scroll
+# position and focus stay per placement anyway.
 #
 # Binding names are SHORT: under `name = "docker"`, `restart_selected` means the action id
 # `docker.restart_selected`. You never repeat the component on every line of its own block. An id
@@ -296,22 +355,25 @@ args   = { name = "heca.expose" }
 # them. A plugin has no file, so it registers its keys at runtime instead — whatever you write here
 # still wins.
 #
-# [[keys.component]]
-# name = "docker"               # a FIELD, never the table name — so a component may be called
+# [[keys.surface]]
+# name = "docker"               # a FIELD, never the table name — so a surface may be called
 # restart_selected = "r"        #   `unbind` or `widgets` without colliding with a keyword
 # next_pane        = "n"        # …an existing action id, simply bound here
 #
-# [[keys.component]]            # the same component, narrowed to one placement
+# [[keys.surface]]              # the same surface, narrowed to one placement
 # name = "docker"
 # id   = "docker.right"         # layered OVER the entry above; everything else is inherited
 # restart_selected = "R"
 #
-# [[keys.component.bind]]       # the arg-carrying form. Arrays are normally replaced wholesale,
-# action = "spawn_command"      #   which would drop every other default — so these merge by their
-# keys   = "t"                  #   `keys` field: this replaces exactly the binding for `t`.
-# args   = { command = "lazydocker", float = "true" }
+# [[keys.surface.bind]]         # ↑ THIS ATTACHES TO THE ENTRY ABOVE IT — the docker surface. It is
+# action = "spawn_command"      #   the arg-carrying form: `restart_selected = "r"` is one string
+# keys   = "t"                  #   and has nowhere to put `args`, so anything that needs them is
+# args   = { command = "lazydocker", float = "true" }   # written this way. Reads as: while the
+#                               #   docker dock has the keyboard, `t` opens lazydocker. Arrays are
+#                               #   normally replaced wholesale — these merge by their `keys` field,
+#                               #   so this replaces exactly the binding for `t` and leaves the rest.
 #
-# [keys.component.unbind]       # explicit removal, keyed by the COMBO, so it retires whatever that
+# [keys.surface.unbind]         # explicit removal, keyed by the COMBO, so it retires whatever that
 # "s" = true                    #   key pointed at. Never null / empty-string semantics.
 #
 # Binding an id whose component is not mounted is not an error: like every other binding it
@@ -371,7 +433,9 @@ args   = { name = "heca.expose" }
 # Launch a program on a key. `kind = "terminal"` runs it inside a pane;
 # `float = true` opens it floating; `close_pane = true` closes the pane on exit;
 # `keep_on_error` / `keep_on_success` keep the pane open after the program ends.
-# NOTE: defining ANY [[keys.command]] in your config replaces this whole list.
+# Merged by `keys`, like every other binding list: yours override the default for the same combo and
+# leave the rest alone. `Alt+…` combos work — the key is read off the keyboard, so macOS's Option
+# rewriting the character (Option+L types `¬`) does not stop a binding matching.
 # [[keys.command]]
 # keys = "prefix+g"
 # command = "lazygit"
@@ -422,7 +486,9 @@ edit_select_all           = ["Ctrl+a", "Super+a"]    # Input: select the whole f
 # A mode is a sub-keymap: while it is active, its own bindings apply instead of the
 # normal ones. Each mode takes three fields plus its bindings.
 #
-#   name     The mode's name. The built-ins are `resize`, `sidebar`, `selection`.
+#   name     The mode's name. The built-ins are `resize`, `selection`, `layer` and `focus` — all
+#            four are defined below. (`sidebar` is gone: a container is driven because it has
+#            focus, not because the app entered a state.)
 #
 #   trigger  The key that ENTERS the mode, e.g. "prefix+r". Same key syntax as any
 #            other binding. Leave it EMPTY ("") for a mode that has no key of its
@@ -433,18 +499,8 @@ edit_select_all           = ["Ctrl+a", "Super+a"]    # Input: select the whole f
 #   sticky   true  = stay in the mode until Esc (default).
 #            false = run one binding, then drop back to Normal.
 #
-# ⚠️ REDEFINING A BUILT-IN MODE — read this before copying one of the blocks below.
-# heca merges the built-ins back in at runtime BY NAME, but the three fields are
-# NOT treated the same way:
-#
-#   bindings          are ADDED to the built-in ones (your extra keys just work,
-#                     and you keep every default key of that mode)
-#   trigger, sticky   REPLACE the built-in values
-#
-# So if you redefine a mode to add one key, you must repeat its `trigger` and
-# `sticky` exactly as they are here. Omitting `trigger` sets it to "" — and for a
-# mode like `resize` that silently means prefix+r no longer enters it, with nothing
-# to tell you why.
+# ⚠️ REDEFINING A BUILT-IN MODE — `bindings` are added, `trigger` and `sticky` are replaced. See
+# the header's customizing note; this is the one table that does not merge like the rest.
 #
 # Adding `p` as a second "previous search match" key, keeping everything else:
 #
@@ -554,33 +610,15 @@ action = "resize"
 keys = "Up"
 args = { target = "pane", amount = "-40" }
 
-# ── focus ── (entered by focusing a DOCK — focus_dock / a click; no trigger of its own)
-#
-# While a chrome container holds the keyboard, THESE keys apply instead of the terminal:
-# unprefixed, no leader, and an unbound key does nothing rather than leaking into the
-# shell behind the dock. `prefix+…` still works throughout, and Esc gives the keyboard
-# back to the pane (as does aiming `focus_dock` at the dock that already has it).
-#
-# What lives here is what the WIDGETS answer — paging and edges for whatever scroll area
-# the container nests. It is deliberately not a per-container vocabulary: a scroll region
-# behaves the same wherever it is mounted, so nothing declares it. A container with
-# nothing scrollable simply declines and the key does nothing.
-#
-# Vertical uses the bare keys, which are free here precisely because nothing is being
-# forwarded to a backend; the `Shift+` forms in [keys] above keep scrolling the focused
-# PANE and, while a dock is focused, are aimed at the dock too — one binding, one
-# meaning: scroll whatever has the keyboard. Horizontal takes the same four keys with
-# Alt, since a terminal viewport has no horizontal axis to share them with.
 # ── layer ── (entered by an overlay being SHOWN — no trigger of its own)
 #
-# The twin of `focus` below, for the other kind of surface that holds the keyboard: a layer — the
-# exposé, a dialog, a menu, a plugin's panel. What is written here applies to **every** layer, so a
-# way out is declared once instead of copied into each surface's own `[[keys.surface]]` entry (and
-# a plugin's surface gets it for free, which is the point).
+# The keys EVERY layer answers — the exposé, a dialog, a menu, a plugin's panel. Written once here
+# instead of copied into each surface's own `[[keys.surface]]` entry, which is why a plugin's
+# surface is closable without its author doing anything.
 #
-# It is also why these keys are not global. While no overlay is up they do not exist, so the
-# program in the pane keeps them: `q` closes the map, and `:q` still quits vim. `Ctrl+q` is
-# `quoted-insert` in emacs and readline, which a global binding would shadow everywhere.
+# It is also why these keys are not global. While no overlay is up they do not exist, so the program
+# in the pane keeps them: `q` closes the map, and `:q` still quits vim. `Ctrl+q` is `quoted-insert`
+# in emacs and readline, which a global binding would shadow everywhere.
 #
 # `Escape` is asserted over whatever is written here and cannot be unbound — a surface must always
 # have a way out. Add further keys; you cannot remove that one.
@@ -592,6 +630,24 @@ sticky = true
 action = "close_overlay"
 keys = ["q", "Ctrl+q"]
 
+# ── focus ── (entered by focusing a DOCK — `focus_dock`, or a click; no trigger of its own)
+#
+# The `layer` block's twin, for the other kind of surface that holds the keyboard. While a chrome
+# container has it, THESE keys apply instead of the terminal: unprefixed, no leader, and an unbound
+# key does nothing rather than leaking into the shell behind the dock. `prefix+…` still works
+# throughout, and Esc gives the keyboard back to the pane (as does aiming `focus_dock` at the dock
+# that already has it).
+#
+# What lives here is what the WIDGETS answer — paging and edges for whatever scroll area the
+# container nests. Deliberately not a per-container vocabulary: a scroll region behaves the same
+# wherever it is mounted, so nothing declares it, and a container with nothing scrollable simply
+# declines and the key does nothing.
+#
+# Vertical takes the bare keys, which are free here precisely because nothing is being forwarded to
+# a backend. The `Shift+` forms in [keys] above keep scrolling the focused PANE and, while a dock is
+# focused, are aimed at the dock too — one binding, one meaning: scroll whatever has the keyboard.
+# Horizontal takes the same four keys with Alt, since a terminal viewport has no horizontal axis to
+# share them with.
 [[keys.mode]]
 name = "focus"
 trigger = ""
@@ -763,13 +819,13 @@ action = "pane_terminal_font_reset"
 keys = "0"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  Component keys — [[keys.component]]  (F003/P086/T362)
+#  Surface keys — [[keys.surface]]
 # ═══════════════════════════════════════════════════════════════════════════════
 # heca's own components ship their keys HERE rather than in their code, so there is exactly one
 # place a key is written and one place to change it. See the block near the top for the shape.
 # These apply only while the component holds chrome focus; `prefix+Shift+e` picks a dock.
 
-[[keys.component]]
+[[keys.surface]]
 name              = "workspaces"
 # The same keystroke `sidebar_focus` used to own. It is a plain container key now: nothing
 # app-side knows this dock exists, and a second component asks for its own the same way.
@@ -791,33 +847,22 @@ delete_selected_column = "Shift+x"  # its whole column — the cursor never land
 zoom_selected     = "z"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  Surface keys — [[keys.surface]]  (F003/P082/T416)
+#  Surface keys — the layers
 # ═══════════════════════════════════════════════════════════════════════════════
-# A dock and an overlay are the same thing to the keyboard: something that holds it for a while and
-# answers keys of its own. `[[keys.surface]]` is the general spelling of the `[[keys.component]]`
-# block above — which still works, and still means exactly this. A surface's entry is consulted only
-# while that surface holds the keyboard.
+# The same `[[keys.surface]]` table as the docks above. A surface's entry is consulted only while
+# that surface holds the keyboard.
 #
 # A layer names itself by its addressable, owner-prefixed name — the same one `show_layer` and
 # `hide_layer` take, so a layer has one name wherever it is spoken about.
 #
-# ── WHICH SURFACE ANSWERS A KEY (F003/P082/T428) ──
-# A key acts on the surface in front of you. There are three, front to back — a layer covers a dock,
-# a dock covers the panes — and exactly one of them holds the keyboard at a time:
+# The resolution order — which of the three surfaces answers a key, and why `Escape` is never a
+# global binding — is in this file's header. What follows is how a surface NAMES itself:
 #
-#   layer        the exposé, a dialog, a menu, a plugin's surface   named by `show_layer`'s name
-#   dock         a focused chrome container                          named by its mount id, then its kind
-#   heca.panes   the scrolling area — what is in front the rest of the time
+#   a layer   by its addressable name, the one `show_layer` / `hide_layer` take
+#   a dock    by its mount id, then by its kind
 #
-# The order for every key: the focused surface's own entry below → the floor its kind is guaranteed
-# → the global `[keys]` map → then it is swallowed (a layer or a dock) or sent to the pane
-# (`heca.panes`). Nearest declaration wins, so a surface key shadows a global one of the same combo.
-#
-# The floors are `Escape`, and they are why it is not bound globally:
-#   • a layer closes itself       (`close_overlay`)
-#   • a focused dock hands the keyboard back  (`unfocus_dock`)
-#   • `heca.panes` has none — Escape reaches the program in the pane, so vim still works.
-# Neither floor can be unbound; bind further keys to those actions here if you want more ways out.
+# Bind further keys to `close_overlay` / `unfocus_dock` if you want more ways out; the Escape floor
+# itself cannot be unbound.
 #
 # `heca.panes` ships with no bindings, and that absence is the feature: anything declared for it is
 # taken away from the program running in the pane. Declare it to give the scrolling area keys of its

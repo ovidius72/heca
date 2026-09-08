@@ -244,6 +244,32 @@ impl InputMode {
         }
     }
 
+    /// **How many things this pick has to offer** — `None` for a mode that is not a pick.
+    ///
+    /// **Exhaustive on purpose — no wildcard**, for the reason
+    /// [`awaits_pick_letter`](Self::awaits_pick_letter) is: a new pick variant that nobody
+    /// classified would answer "not a pick" silently, and its refusal would go back to being
+    /// invisible.
+    pub fn pick_candidate_count(&self) -> Option<usize> {
+        match self {
+            InputMode::PaneSelect { candidates }
+            | InputMode::PaneSwap { candidates, .. }
+            | InputMode::PaneTake { candidates, .. } => Some(candidates.len()),
+            InputMode::WorkspacePick { candidates, .. } => Some(candidates.len()),
+            InputMode::ColumnPick { candidates, .. } => Some(candidates.len()),
+            InputMode::DockPick { candidates } => Some(candidates.len()),
+            InputMode::FollowLink { candidates } => Some(candidates.len()),
+            InputMode::HintPick { candidates } => Some(candidates.len()),
+            InputMode::Normal
+            | InputMode::Prefix
+            | InputMode::Chord { .. }
+            | InputMode::Mode { .. }
+            | InputMode::Selection
+            | InputMode::ConfirmDelete
+            | InputMode::Search => None,
+        }
+    }
+
     /// Dock pick candidates (letter → container id) while a `DockPick` is active.
     pub fn dock_candidates(&self) -> Option<&[(char, crate::chrome::ContainerId)]> {
         match self {
@@ -331,6 +357,21 @@ pub enum PickKind {
     MovePaneToColumn,
     /// Pick a chrome container to give keyboard focus to.
     FocusDock,
+}
+
+impl PickKind {
+    /// **What this pick offers, as a word** — so a refusal can say what there was none of without
+    /// each pick carrying its own sentence. The label and prompt still come from the
+    /// [`ActionCatalog`](crate::actions::ActionCatalog); this is the one thing the catalog does not
+    /// know, because it describes what an action *does* rather than what it picks among.
+    pub fn subject(self) -> &'static str {
+        match self {
+            PickKind::SelectPane | PickKind::SwapPane | PickKind::TakePane => "pane",
+            PickKind::MovePaneToWorkspace | PickKind::MoveColumnToWorkspace => "workspace",
+            PickKind::MovePaneToColumn => "column",
+            PickKind::FocusDock => "dock",
+        }
+    }
 }
 
 /// State for the interactive content-area drag (pane moved by mouse).
@@ -711,6 +752,17 @@ pub struct AppState {
     pub pane_cell_override: HashMap<PaneId, (f32, f32)>,
     pub scale_factor: f64,
     pub needs_redraw: bool,
+    /// **One line of feedback in the bottom bar**, shown until the next keypress.
+    ///
+    /// What a key did when it could not do the thing you asked — a pick with nothing to offer is
+    /// the case it exists for. It goes here rather than into a toast because it is a reply to the
+    /// key you just pressed, not an event: the bar is already where the pick's own prompt appears,
+    /// so the answer and the question share a surface, and nothing covers the work to say it.
+    ///
+    /// Cleared by the next key rather than by a timer. A stale line in a status bar costs nothing —
+    /// unlike a toast, which is why this is not one — and the next thing you do is what makes it
+    /// irrelevant.
+    pub status_note: Option<String>,
     pub focused_pane: Option<PaneId>,
     pub input_mode: InputMode,
     /// **The window root — the one retained tree** (`docs/surface-compositor.md` § 0.8).
@@ -1185,6 +1237,52 @@ mod tests {
             .candidates(),
             Some(cands.as_slice())
         );
+    }
+
+    /// **An empty pick is a pick, and must be recognised as one.** This is what decides whether a
+    /// refusal is reported or the key looks unbound: a pick answering `None` here would be treated
+    /// as "not a pick" and go back to failing silently.
+    #[test]
+    fn a_pick_with_nothing_to_offer_still_counts_as_a_pick() {
+        assert_eq!(
+            InputMode::PaneSelect {
+                candidates: Vec::new()
+            }
+            .pick_candidate_count(),
+            Some(0),
+        );
+        assert_eq!(
+            InputMode::WorkspacePick {
+                candidates: Vec::new(),
+                target: WorkspacePickTarget::Pane(PaneId(1)),
+            }
+            .pick_candidate_count(),
+            Some(0),
+        );
+        assert_eq!(
+            InputMode::PaneSelect {
+                candidates: vec![('a', PaneId(1))]
+            }
+            .pick_candidate_count(),
+            Some(1),
+        );
+    }
+
+    /// A mode that is not a pick has no count, so nothing tries to refuse it.
+    #[test]
+    fn a_mode_that_is_not_a_pick_has_no_count() {
+        assert_eq!(InputMode::Normal.pick_candidate_count(), None);
+        assert_eq!(InputMode::Search.pick_candidate_count(), None);
+    }
+
+    /// **Every pick names what it picks among**, so a refusal reads as a sentence rather than a
+    /// generic "nothing found". The words are the user's, not the code's.
+    #[test]
+    fn every_pick_says_what_it_offers() {
+        assert_eq!(PickKind::MovePaneToWorkspace.subject(), "workspace");
+        assert_eq!(PickKind::MovePaneToColumn.subject(), "column");
+        assert_eq!(PickKind::SelectPane.subject(), "pane");
+        assert_eq!(PickKind::FocusDock.subject(), "dock");
     }
 
     #[test]

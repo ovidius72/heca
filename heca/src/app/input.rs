@@ -91,6 +91,13 @@ pub(crate) fn handle_keyboard_input(
         &keymaps.components,
         &keymaps.triggers,
     );
+    // **The last key's reply is answered by the next key.** Cleared here, before this press is
+    // dispatched, so a note set by *this* handler survives to be read — and is gone the moment you
+    // do anything else. No timer, and nothing to schedule: a stale line in a status bar costs
+    // nothing, which is the whole reason it is not a toast.
+    if state.status_note.take().is_some() {
+        state.needs_redraw = true;
+    }
     let input_mode = state.input_mode.clone();
     // **A picker is waiting for one letter, and a modifier is not it.** Every pick mode ends on the
     // next key — picked, wrong key, or Esc — so reaching for Shift to type a capital would cancel

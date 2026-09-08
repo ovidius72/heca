@@ -88,6 +88,75 @@ mod declarations {
         );
     }
 
+    /// **A nested identity owns its own letter.**
+    ///
+    /// The search inside a named node exists for a container that names itself on the outside and
+    /// declares its pick within. But a child that names something *else* is a different thing, and
+    /// its declaration says what a pick does to **it** — so handing it the parent's letter draws
+    /// the parent's keycap on the child, in the child's place and the child's colour.
+    ///
+    /// heca's case: a workspace dock names itself and declares its pick on the wrapper *outside*
+    /// it, so the search went in and found the first pane row's declaration. Picking a workspace to
+    /// move a pane into put the workspace's letter over a pane — blue and right-aligned instead of
+    /// orange on the workspace's own header (Antonio, driving, screenshot).
+    #[test]
+    fn a_letter_never_crosses_into_something_that_names_itself() {
+        use crate::builders::ComponentExt;
+        use crate::reactive::SignalGet;
+
+        // A workspace that names itself, declares its pick on the wrapper AROUND it, and holds a
+        // pane row that names itself and declares its own pick.
+        let row = KeyHint::new(Surface::new().key("pane:7").on_click(|_| {})).on_hint(|| {});
+        let mut workspace = Flex::column().key("ws:1");
+        workspace.base_mut().children.push(Box::new(row));
+        let outer = KeyHint::new(workspace).on_hint(|| {});
+        let mut root = Flex::column();
+        root.base_mut().children.push(Box::new(outer));
+
+        assert!(offer_hint_by_key(&root, "ws:1", Some("f".into())));
+
+        let outer = &root.base().children[0];
+        assert_eq!(
+            outer.base().hint_label.get_untracked().as_deref(),
+            Some("f"),
+            "the workspace's own declaration must draw the workspace's letter",
+        );
+        let row = &outer.base().children[0].base().children[0];
+        assert!(
+            row.base().hint_label.get_untracked().is_none(),
+            "the pane row inside is a different thing — it must not wear the workspace's letter",
+        );
+    }
+
+    /// The pane inside still gets its **own** letter, by its own name. The boundary stops a letter
+    /// crossing into somebody else; it does not make a nested target unreachable.
+    #[test]
+    fn a_nested_identity_still_gets_the_letter_that_is_its_own() {
+        use crate::builders::ComponentExt;
+        use crate::reactive::SignalGet;
+
+        let row = KeyHint::new(Surface::new().key("pane:7").on_click(|_| {})).on_hint(|| {});
+        let mut workspace = Flex::column().key("ws:1");
+        workspace.base_mut().children.push(Box::new(row));
+        let outer = KeyHint::new(workspace).on_hint(|| {});
+        let mut root = Flex::column();
+        root.base_mut().children.push(Box::new(outer));
+
+        assert!(offer_hint_by_key(&root, "pane:7", Some("j".into())));
+
+        let outer = &root.base().children[0];
+        let row = &outer.base().children[0].base().children[0];
+        assert_eq!(
+            row.base().hint_label.get_untracked().as_deref(),
+            Some("j"),
+            "the pane's own letter reaches the pane's own declaration",
+        );
+        assert!(
+            outer.base().hint_label.get_untracked().is_none(),
+            "and the workspace around it does not take it",
+        );
+    }
+
     #[test]
     fn collects_declarations_with_bounds_in_document_order() {
         let log = Rc::new(RefCell::new(Vec::new()));

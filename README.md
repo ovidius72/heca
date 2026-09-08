@@ -608,9 +608,9 @@ zoom_column = "prefix+z"
 close = "prefix+x"
 float = "prefix+f"
 pane_select = "prefix+q"
-swap_pane = "prefix+Shift+q"
+swap_pane = "prefix+Shift+m"
 swap_and_focus_pane = "prefix+m"
-move_column_to_workspace_pick = "prefix+c"
+move_column_to_workspace_pick = "prefix+Shift+g"
 move_pane_to_workspace_pick = "prefix+g"
 move_pane_to_column_pick = "prefix+Ctrl+c"
 rename_workspace = "prefix+Shift+w"
@@ -661,6 +661,10 @@ what values an enum accepts — because the declaration lives beside the parser,
 drift. `--help` is rendered from the same table that dispatches, so it cannot list a command that
 does nothing or miss one that works.
 
+> 📖 **[docs/keybindings.md](docs/keybindings.md)** is the keybinding guide — the five binding
+> shapes, which surface answers a key, and worked examples. Read that first; this section is the
+> reference for one of the shapes.
+
 ### Keybindings that carry arguments — `[[keys.bind]]`
 
 The flat form under `[keys]` is `action = "combo"` — a single string, so it carries no arguments.
@@ -672,25 +676,11 @@ long-hand, with `args`:
 keys = "prefix+z"
 action = "zoom_column"
 
+# Open a pane running a command. `command` is the whole command line.
 [[keys.bind]]
-keys = "prefix+g"
-action = "spawn_pane"
-args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
-
-[[keys.bind]]
-keys = "prefix+Shift+b"
-action = "spawn_pane"
-args = { kind = "browser", float = true, width = "1200", height = "800" }
-
-[[keys.bind]]
-keys = "prefix+Shift+n"
-action = "spawn_pane"
-args = { kind = "nvim_gui", float = true, width = "1000", height = "700" }
-
-[[keys.bind]]
-keys = "prefix+Shift+f"
-action = "float_active_at"
-args = { width = "95%", height = "95%" }
+keys = "prefix+Shift+g"
+action = "spawn_command"
+args = { command = "lazygit", kind = "terminal", float = "true", close_pane = "true" }
 ```
 
 Mode bindings take the same `action` + `keys` + `args` shape, inside a mode:
@@ -702,18 +692,28 @@ trigger = "prefix+s"
 sticky = true
 
 [[keys.mode.bindings]]
-action = "spawn_pane"
+action = "spawn_command"
 keys = "t"
-args = { kind = "terminal", program = "btm", argv = [], float = true, width = "800", height = "400" }
+args = { command = "btm", float = "true" }
 ```
 
-Size parsing contract:
+For launching a program there is also `[[keys.command]]`, which says the same thing without naming
+an action:
 
-- `800` → `800px`
-- `800px` → explicit pixels
-- `80%` → percentage of available content area
+```toml
+[[keys.command]]
+keys = "prefix+Ctrl+g"
+command = "lazygit"
+kind = "terminal"      # terminal | app | plugin
+float = true
+close_pane = true      # close the pane when the command exits
+keep_on_error = false  # keep it open if the command fails
+```
 
-Floating spawns should open **centered by default** when `x/y` are omitted.
+`spawn_command`'s arguments in full: `command` (required), `kind`, `float`, `close_pane`,
+`keep_on_error`, `keep_on_success`. **There is no size or position argument** — a floating pane
+takes its default geometry. See [Planned: `spawn_pane`](#planned-spawn_pane-action-contract) for the
+sized/multi-kind spawn that has been designed and not built.
 
 Complete example set:
 
@@ -722,75 +722,38 @@ Complete example set:
 focus_left = "prefix+h"
 float = "prefix+f"
 
-# Unit action via parameterized-normal-binding syntax
+# A unit action, long-hand
 [[keys.bind]]
 keys = "prefix+z"
 action = "zoom_column"
 
-# Tiled terminal pane
+# A tiled pane running a command
 [[keys.bind]]
-keys = "prefix+g"
-action = "spawn_pane"
-args = { kind = "terminal", program = "lazygit", argv = [] }
+keys = "prefix+Ctrl+g"
+action = "spawn_command"
+args = { command = "lazygit" }
 
-# Floating terminal pane with implicit px values
+# The same, floating, closing itself when the command exits
 [[keys.bind]]
 keys = "prefix+Shift+t"
-action = "spawn_pane"
-args = { kind = "terminal", program = "btm", argv = [], float = true, width = "800", height = "400" }
-
-# Floating terminal pane with explicit px suffix
-[[keys.bind]]
-keys = "prefix+Shift+y"
-action = "spawn_pane"
-args = { kind = "terminal", program = "htop", argv = [], float = true, width = "800px", height = "400px" }
-
-# Floating terminal pane with percent sizing
-[[keys.bind]]
-keys = "prefix+Shift+g"
-action = "spawn_pane"
-args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
-
-# Floating browser pane
-[[keys.bind]]
-keys = "prefix+Shift+b"
-action = "spawn_pane"
-args = { kind = "browser", float = true, width = "1200", height = "800" }
-
-# Floating nvim GUI pane
-[[keys.bind]]
-keys = "prefix+Shift+n"
-action = "spawn_pane"
-args = { kind = "nvim_gui", float = true, width = "1000", height = "700" }
-
-# Float active pane with geometry helper
-[[keys.bind]]
-keys = "prefix+Shift+f"
-action = "float_active_at"
-args = { width = "95%", height = "95%" }
+action = "spawn_command"
+args = { command = "btm", float = "true", close_pane = "true" }
 
 [[keys.mode]]
 name = "spawn"
 trigger = "prefix+s"
 sticky = true
 
-# Tiled spawn from a mode
 [[keys.mode.bindings]]
-action = "spawn_pane"
+action = "spawn_command"
 keys = "g"
-args = { kind = "terminal", program = "lazygit", argv = [] }
+args = { command = "lazygit" }
 
-# Floating percent-sized spawn from a mode
-[[keys.mode.bindings]]
-action = "spawn_pane"
-keys = "n"
-args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
-
-# Zoom from a mode
 [[keys.mode.bindings]]
 action = "zoom_column"
 keys = "z"
 ```
+
 
 ### Key Combo Syntax
 
@@ -1554,13 +1517,13 @@ focus_left = ["prefix+h", "prefix+ArrowLeft"]
 Alt+Enter = "spawn_terminal"
 ```
 
-For richer bindings with arguments, use `[[keys.bind]]` (planned contract):
+For richer bindings with arguments, use `[[keys.bind]]`:
 
 ```toml
 [[keys.bind]]
-keys = "prefix+g"
-action = "spawn_pane"
-args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+keys = "prefix+Ctrl+g"
+action = "spawn_command"
+args = { command = "lazygit", float = "true" }
 
 [[keys.bind]]
 keys = "prefix+z"
@@ -1824,6 +1787,16 @@ disabled = true
 
 ### Planned `spawn_pane` action contract
 
+> ⚠️ **`spawn_pane` DOES NOT EXIST.** Nothing below this line is implemented — not the action, not
+> `float_active_at`, not the `program` / `argv` / `width` / `height` arguments, and not the
+> `browser` or `nvim_gui` pane kinds. A binding to an unknown action is not an error: it simply
+> never fires, so copying one of these produces a key that silently does nothing.
+>
+> What exists today is **`spawn_command`** (`command`, `kind`, `float`, `close_pane`,
+> `keep_on_error`, `keep_on_success`) and **`[[keys.command]]`** — see
+> [Keybindings that carry arguments](#keybindings-that-carry-arguments--keysbind). This section is
+> kept as the agreed design for the sized, multi-kind spawn.
+
 The agreed future-ready action model is `spawn_pane`, designed for multiple pane kinds:
 
 - `terminal`
@@ -1854,7 +1827,7 @@ args = { kind = "terminal", program = "htop", argv = [], float = true, width = "
 
 # Terminal-like pane, floating, centered, 80% of content area
 [[keys.bind]]
-keys = "prefix+Shift+g"
+keys = "prefix+Shift+v"
 action = "spawn_pane"
 args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
 

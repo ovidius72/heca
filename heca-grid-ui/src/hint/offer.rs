@@ -130,9 +130,13 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
             // pick within), then a declaration *enclosing* it, and only then anything merely
             // actionable inside. Same precedence in both directions: whoever DECLARED what a pick
             // does owns the letter — and the placement it drew with.
-            if label_nearest_matching(node, label, clip, &|c: &dyn Component| {
-                c.base().hint.is_some()
-            }) {
+            if label_nearest_matching(
+                node,
+                label,
+                clip,
+                &|c: &dyn Component| c.base().hint.is_some(),
+                Some(key),
+            ) {
                 return true;
             }
             if let Some(outer) = declaring
@@ -140,7 +144,7 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
             {
                 return true;
             }
-            if label_nearest_matching(node, label, clip, &|_: &dyn Component| true) {
+            if label_nearest_matching(node, label, clip, &|_: &dyn Component| true, Some(key)) {
                 return true;
             }
             if let Some(outer) = enclosing
@@ -170,7 +174,32 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
     walk(root, key, &label, None, None, None)
 }
 
-/// The nearest target in this subtree that `pick` accepts, labelled.
+/// Whether this subtree **is somebody else** — it holds an identity that is not `owner`'s.
+///
+/// Asked of a subtree rather than of a node, because the declaration and the name are on different
+/// widgets and usually the wrong way round: a row names itself on the inside and the `KeyHint`
+/// carrying its declaration wraps it. Asking only whether *this* node names something else would
+/// therefore never fire — the wrapper names nothing, and the letter lands on it.
+///
+/// A subtree that names nothing is part of whatever encloses it, which is what keeps a `KeyHint`, a
+/// `Flex` or a `Surface` transparent here.
+fn governs_foreign_identity(node: &dyn Component, owner: Option<&str>) -> bool {
+    if skip(node) {
+        return false;
+    }
+    let base = node.base();
+    if let Some(declared) = base.key.as_deref().or(base.scope_key.as_deref())
+        && Some(declared) != owner
+    {
+        return true;
+    }
+    base.children
+        .iter()
+        .any(|c| governs_foreign_identity(c.as_ref(), owner))
+}
+
+/// The nearest target in this subtree that `pick` accepts, labelled — **without crossing into
+/// something that is somebody else.**
 ///
 /// Split in two passes so a **declaration wins over mere actionability**, which is the precedence
 /// T441 settled: a declared hint shadows something merely actionable beneath it, but never another
@@ -181,11 +210,25 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
 /// goes with it (`CenterRight`, so the letter clears the row's label). A single inner-first pass
 /// labelled the row, so the same pane wore a right-aligned keycap under one picker and a
 /// top-centred one under the other — same letter, two widgets, two looks.
+///
+/// # A nested identity owns its own letter
+///
+/// `key` is what stops the descent. Searching inside the named thing is right — a container names
+/// itself on the outside and may declare its pick within — but a child that **names something
+/// else** is a different thing, and its declaration says what a pick does to *it*. Handing it a
+/// letter that belongs to its parent draws the parent's keycap on the child, in the child's place
+/// and the child's colour.
+///
+/// That is what happened: a workspace dock declares its pick on the wrapper *outside* itself, so
+/// the search went in and found the first pane row's — and the workspace's letter appeared over a
+/// pane, blue and right-aligned, instead of orange on the workspace's own header. Everything the
+/// caller sees is the same; the letter simply lands on the wrong widget.
 fn label_nearest_matching(
     node: &dyn Component,
     label: &Option<String>,
     clip: Option<Rectangle>,
     pick: &dyn Fn(&dyn Component) -> bool,
+    owner: Option<&str>,
 ) -> bool {
     if skip(node) {
         return false;
@@ -194,10 +237,13 @@ fn label_nearest_matching(
         return true;
     }
     let clip = narrowed(clip, node);
-    node.base()
-        .children
-        .iter()
-        .any(|c| label_nearest_matching(c.as_ref(), label, clip, pick))
+    // **Do not go into somebody else.** Checked per child, never of the node the search started
+    // from: that one *is* `owner`. A child subtree holding a different identity is a different
+    // thing, and its declaration says what a pick does to it.
+    node.base().children.iter().any(|c| {
+        !governs_foreign_identity(c.as_ref(), owner)
+            && label_nearest_matching(c.as_ref(), label, clip, pick, owner)
+    })
 }
 
 /// Withdraw every letter in this tree — what a host calls when the picker closes.
