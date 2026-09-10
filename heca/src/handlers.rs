@@ -1107,7 +1107,9 @@ pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction)
     let Some(pane_id) = state.focused_pane else {
         return;
     };
-    let candidates = crate::app::selection::collect_column_candidates(&state.session);
+    // The column this pane is already in is not a destination — moving it there does nothing.
+    let here = crate::app::selection::column_of_pane(&state.session, pane_id);
+    let candidates = crate::app::selection::collect_column_candidates(&state.session, here);
     begin_pick(
         state,
         InputMode::ColumnPick {

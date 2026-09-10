@@ -97,11 +97,21 @@ pub(crate) fn collect_workspace_candidates(
         .collect()
 }
 
-/// Collect **all** columns across **all** workspaces as letter candidates
+/// Collect the columns across **all** workspaces as letter candidates
 /// (letter → `(ws_idx, col_idx)`) for the "move pane to column" pick — a pane can be
 /// stacked into a column in any workspace. Capped at 52.
+///
+/// **`except` is the column the pane is already in**, and it is skipped: moving a pane into its own
+/// column does nothing, so a letter on it is a letter that buys nothing.
+///
+/// It is excluded **here**, where the candidates are counted, and not at the letter — the rule
+/// F003/P082/T475 settled. Filtering later lets a pick start, announce itself in the bottom bar and
+/// then have a letter filtered away underneath it; with one column, `begin_pick` now refuses the
+/// pick and says so instead. [`collect_workspace_candidates`] already skips the active workspace
+/// for the same reason.
 pub(crate) fn collect_column_candidates(
     session: &Session,
+    except: Option<heca_core::layout::ColumnId>,
 ) -> Vec<(char, usize, usize, heca_core::layout::ColumnId)> {
     session
         .workspaces
@@ -114,9 +124,27 @@ pub(crate) fn collect_column_candidates(
                 .enumerate()
                 .map(move |(col_idx, col)| (ws_idx, col_idx, col.id))
         })
+        .filter(|(_, _, col_id)| Some(*col_id) != except)
         .zip(heca_grid_ui::widgets::DEFAULT_LETTERS.chars())
         .map(|((ws_idx, col_idx, col_id), ch)| (ch, ws_idx, col_idx, col_id))
         .collect()
+}
+
+/// **The column a pane is in**, by its own id — what a column pick excludes.
+pub(crate) fn column_of_pane(
+    session: &Session,
+    pane_id: PaneId,
+) -> Option<heca_core::layout::ColumnId> {
+    let (ws_idx, col_idx, _) = find_pane_location(session, pane_id)?;
+    Some(
+        session
+            .workspaces
+            .get(ws_idx)?
+            .scrolling
+            .columns
+            .get(col_idx)?
+            .id,
+    )
 }
 
 /// Find the (workspace_index, column_index, pane_index) containing a pane.
@@ -138,7 +166,7 @@ pub(crate) fn find_pane_location(
 mod tests {
     use super::{
         PANE_CANDIDATE_LIMIT, candidate_letter, collect_all_pane_candidates,
-        has_pane_candidate_overflow,
+        collect_column_candidates, column_of_pane, has_pane_candidate_overflow,
     };
     use heca_core::layout::{
         Pane as LayoutPane, PaneId, Session,
@@ -153,6 +181,37 @@ mod tests {
             session.add_pane(pane, None, true);
         }
         session
+    }
+
+    /// **The column the pane is already in is not a destination** (Antonio, 2026-09-10: the letter
+    /// on the current column "is redundant").
+    ///
+    /// Moving a pane into its own column does nothing, so a letter on it buys nothing. Excluded
+    /// where the candidates are counted, not at the letter — the same rule that keeps the pane you
+    /// are on out of `collect_all_pane_candidates`.
+    #[test]
+    fn the_column_you_are_in_is_never_a_destination() {
+        // Three panes, each opened as its own column.
+        let session = make_session_with_panes(3);
+        let all = collect_column_candidates(&session, None);
+        assert_eq!(all.len(), 3);
+
+        let here = column_of_pane(&session, PaneId(2)).expect("pane 2 is in a column");
+        let others = collect_column_candidates(&session, Some(here));
+        assert_eq!(others.len(), 2, "the column you are in is gone");
+        assert!(
+            !others.iter().any(|(_, _, _, col_id)| *col_id == here),
+            "and it is not lettered under another letter either",
+        );
+    }
+
+    /// With one column there is nowhere to move to, so the pick has nothing to offer — which
+    /// `begin_pick` refuses out loud instead of drawing a letter that does nothing.
+    #[test]
+    fn a_single_column_offers_no_destination_at_all() {
+        let session = make_session_with_panes(1);
+        let here = column_of_pane(&session, PaneId(1)).expect("pane 1 is in a column");
+        assert!(collect_column_candidates(&session, Some(here)).is_empty());
     }
 
     #[test]
