@@ -139,6 +139,10 @@ swap_and_focus_pane = "prefix+m"        # Letters, swap panes (follow)
 move_column_to_workspace_pick = "prefix+Shift+g"  # Move active column → picked workspace
 move_pane_to_workspace_pick   = "prefix+g"        # Move active pane → picked workspace
 move_pane_to_column_pick      = "prefix+Ctrl+c"   # Move active pane → picked column
+# Reads like split_horizontal (prefix+Enter, "make a column here") but MOVES the pane you are on
+# instead of creating a new one. A pane already alone in its column stays put — it would leave a
+# column of one and land in a column of one.
+move_pane_to_new_column       = "prefix+Shift+Enter"  # Move active pane → a new column beside it
 pane_take                     = "prefix+t"        # Take target pane to bottom of active column
 pane_take_and_focus           = "prefix+Shift+t"  # Take + focus the moved pane
 

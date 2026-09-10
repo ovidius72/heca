@@ -1054,6 +1054,14 @@ impl ActionRegistry {
             args: &[],
         },
         ActionDescriptor {
+            name: "move_pane_to_new_column",
+            label: "Move Pane to New Column",
+            description: "Take the active pane out of its column into a new one beside it.",
+            category: ActionCategory::Layout,
+            icon: None,
+            args: &[],
+        },
+        ActionDescriptor {
             name: "rename_pane",
             label: "Rename Pane",
             description: "Rename the active pane/tab.",

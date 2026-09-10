@@ -336,6 +336,10 @@ pub enum WmAction {
     /// active workspace's columns; the picked letter dispatches
     /// [`MovePaneToColumn`](WmAction::MovePaneToColumn), stacking into that column).
     MovePaneToColumnPick,
+    /// Take the focused pane out of its column and give it one of its own, immediately to the
+    /// right. The intersection of `SplitHorizontal` ("make a column here") and `MovePaneToColumn`
+    /// ("put this pane in that column"), and it reads like both.
+    MovePaneToNewColumn,
     RenamePane,
     RenameColumn,
 
@@ -801,6 +805,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "move_column_to_workspace_pick" => Some(WmAction::MoveColumnToWorkspacePick),
         "move_pane_to_workspace_pick" => Some(WmAction::MovePaneToWorkspacePick),
         "move_pane_to_column_pick" => Some(WmAction::MovePaneToColumnPick),
+        // The bare name says everything: it acts on the focused pane and needs no target.
+        "move_pane_to_new_column" => Some(WmAction::MovePaneToNewColumn),
         "pane_take" => Some(WmAction::PaneTake),
         "pane_take_and_focus" => Some(WmAction::PaneTakeAndFocus),
         "swap_and_focus_pane" => Some(WmAction::SwapAndFocusPane),
@@ -1270,6 +1276,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::MoveColumnToWorkspacePick
         | WmAction::MovePaneToWorkspacePick
         | WmAction::MovePaneToColumnPick
+        | WmAction::MovePaneToNewColumn
         | WmAction::FocusToggleLocal
         | WmAction::FocusToggleGlobal
         | WmAction::CreateWorkspace
@@ -1629,6 +1636,7 @@ mod tests {
             WmAction::MoveColumnToWorkspacePick,
             WmAction::MovePaneToWorkspacePick,
             WmAction::MovePaneToColumnPick,
+            WmAction::MovePaneToNewColumn,
             WmAction::FocusToggleLocal,
             WmAction::FocusToggleGlobal,
             WmAction::CreateWorkspace,

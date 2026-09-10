@@ -986,6 +986,10 @@ pub fn build_registry() -> ActionRegistry {
         &WmAction::MovePaneToColumnPick,
         handle_move_pane_to_column_pick,
     );
+    registry.register(
+        &WmAction::MovePaneToNewColumn,
+        handle_move_pane_to_new_column,
+    );
     registry.register(&WmAction::PaneTake, handle_pane_take);
     registry.register(&WmAction::PaneTakeAndFocus, handle_pane_take_and_focus);
     registry.register(

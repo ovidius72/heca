@@ -313,6 +313,43 @@ impl ScrollingSpace {
     }
 
     /// Add a pane to a column.
+    /// **Take a pane out of its column and give it one of its own, immediately to the right.**
+    ///
+    /// Distinct from [`add_pane_to_column`](Self::add_pane_to_column), which puts a pane *into* a
+    /// column that exists. The nearest existing move only creates a column when the target is past
+    /// the end of the strip, so asked for a position between two columns it stacks into the
+    /// existing one instead — this always creates, which is the whole act.
+    ///
+    /// **A pane already alone in its column is left where it is** and this answers `false`: it
+    /// would leave a column of one and land in a column of one, so nothing on screen would change.
+    ///
+    /// `new_id` is passed in rather than derived: an id taken from the pane could name a column
+    /// that already exists, and two columns with one id are two rows the cursor, the hint letters
+    /// and a right-click cannot tell apart (F003/P082/T458).
+    pub fn extract_pane_to_new_column(
+        &mut self,
+        pane_id: PaneId,
+        new_id: ColumnId,
+        width: ColumnWidth,
+    ) -> bool {
+        let Some((src_col, pane_idx)) = self.columns.iter().enumerate().find_map(|(c, col)| {
+            col.panes
+                .iter()
+                .position(|p| p.id == pane_id)
+                .map(|p| (c, p))
+        }) else {
+            return false;
+        };
+        if self.columns[src_col].panes.len() <= 1 {
+            return false;
+        }
+        let Some(pane) = self.remove_pane(src_col, pane_idx) else {
+            return false;
+        };
+        self.add_column(Some(src_col + 1), Column::new(new_id, pane, width), true);
+        true
+    }
+
     pub fn add_pane_to_column(
         &mut self,
         col_idx: usize,
@@ -1367,6 +1404,50 @@ mod tests {
             pane.slot.loc, before.loc,
             "and the slot itself has not moved"
         );
+    }
+
+    /// **A pane leaves its column and gets one of its own, immediately to the right**
+    /// (F003/P082/T474 part B; Antonio, 2026-09-10 — right of the current one, not the end of the
+    /// strip, so you keep your place).
+    #[test]
+    fn a_pane_is_extracted_into_a_new_column_beside_its_own() {
+        let mut space = space_with_columns(2);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(99), "second"), false);
+        assert_eq!(space.columns[0].panes.len(), 2);
+
+        assert!(space.extract_pane_to_new_column(
+            PaneId(99),
+            ColumnId(500),
+            ColumnWidth::Proportion(0.5)
+        ));
+
+        assert_eq!(space.columns.len(), 3, "a column was created");
+        assert_eq!(space.columns[0].panes.len(), 1, "it left the one it was in");
+        assert_eq!(
+            space.columns[1]
+                .panes
+                .iter()
+                .map(|p| p.id)
+                .collect::<Vec<_>>(),
+            vec![PaneId(99)],
+            "and landed immediately to the right, alone",
+        );
+        assert_eq!(space.columns[1].id, ColumnId(500));
+    }
+
+    /// A pane already alone in its column stays put and says so: it would leave a column of one and
+    /// land in a column of one, so nothing on screen would change.
+    #[test]
+    fn a_pane_alone_in_its_column_is_left_where_it_is() {
+        let mut space = space_with_columns(2);
+        let before = space.columns.len();
+
+        assert!(!space.extract_pane_to_new_column(
+            PaneId(1),
+            ColumnId(500),
+            ColumnWidth::Proportion(0.5)
+        ));
+        assert_eq!(space.columns.len(), before);
     }
 
     fn test_scrolling_space() -> ScrollingSpace {

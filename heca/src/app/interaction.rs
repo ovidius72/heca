@@ -446,6 +446,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::MovePaneToWorkspacePick
         // Move-to-column overlay (active pane → picked column)
         | WmAction::MovePaneToColumnPick
+        | WmAction::MovePaneToNewColumn
         // FloatAt: spawns new floating pane — blocked when already floating
         | WmAction::FloatAt { .. } => ActionPolicy::TiledOnly,
 

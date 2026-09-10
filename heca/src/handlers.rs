@@ -874,12 +874,64 @@ pub(crate) fn begin_pick(state: &mut AppState, mode: InputMode) {
 /// It goes in the bottom bar, which is where that pick's *prompt* would have appeared, so the
 /// answer lands where the question would have. A toast was tried first and is too much for it: a
 /// key that cannot do its thing is not an event worth covering the work.
+/// **What a key that could not act says** — the act in the action's own words, then why.
+///
+/// The sibling of [`pick_refusal`], for an action that is not a pick. Both exist for one reason: a
+/// key that cannot do its thing is a reply to what you pressed, and saying nothing is
+/// indistinguishable from a keypress that never registered (Antonio, 2026-09-10, on
+/// `move_pane_to_new_column` doing nothing for a pane already alone in its column).
+///
+/// The label comes from the catalog, so the bar names the act exactly as the command palette and
+/// its tooltip do — one vocabulary, never a sentence written at the call site.
+pub(crate) fn act_refusal(
+    catalog: &crate::actions::ActionCatalog,
+    action_name: &str,
+    because: &str,
+) -> String {
+    match catalog.describe(action_name) {
+        Some(d) => format!("{} — {because}", d.label),
+        None => format!("{action_name} — {because}"),
+    }
+}
+
 pub(crate) fn pick_refusal(pending: &crate::app_state::PendingPick) -> String {
     format!(
         "{} — there is no other {} to pick",
         pending.label,
         pending.kind.subject()
     )
+}
+
+#[cfg(test)]
+mod act_refusal_tests {
+    use crate::actions::ActionCatalog;
+
+    /// **A key that could not act names the act and why** (Antonio, 2026-09-10: with the pane alone
+    /// in its column "it's not clear" that anything happened).
+    ///
+    /// The words come from the action's own catalog entry, so the bar names it exactly as the
+    /// command palette and its tooltip do — one vocabulary, not a sentence written at the call site.
+    #[test]
+    fn a_refused_act_names_itself_in_the_catalogs_words() {
+        let catalog = ActionCatalog::with_builtins();
+        let note = super::act_refusal(
+            &catalog,
+            "move_pane_to_new_column",
+            "it is already the only pane in its column",
+        );
+        assert_eq!(
+            note,
+            "Move Pane to New Column — it is already the only pane in its column",
+        );
+    }
+
+    /// An action the catalog does not know still says something, rather than an empty bar.
+    #[test]
+    fn an_unknown_action_still_answers() {
+        let catalog = ActionCatalog::with_builtins();
+        let note = super::act_refusal(&catalog, "plugin.something", "there is nowhere to put it");
+        assert_eq!(note, "plugin.something — there is nowhere to put it");
+    }
 }
 
 #[cfg(test)]
@@ -1103,6 +1155,29 @@ pub fn handle_move_pane_to_workspace_pick(state: &mut AppState, _action: &WmActi
 /// in the active workspace (shown as a `KeyHint` over its sidebar column); the next
 /// keypress moves the active pane into that column (stacking with its panes). No-ops
 /// without a focused pane or columns.
+/// **Take the focused pane out of its column into a new one, right of it.**
+///
+/// The layout change itself lives in `heca-core`'s scrolling space, reached through
+/// [`move_pane_to_new_column`](crate::app::mutations::move_pane_to_new_column) — this handler
+/// computes no geometry, the same way every other structural action works.
+pub fn handle_move_pane_to_new_column(state: &mut AppState, _action: &WmAction) {
+    let Some(pane_id) = state.focused_pane else {
+        return;
+    };
+    if crate::app::mutations::move_pane_to_new_column(state, pane_id) {
+        after_layout_change(state);
+        return;
+    }
+    // It is already the only pane in its column: it would leave a column of one and land in a
+    // column of one. Say so rather than looking like a key that did not register.
+    state.status_note = Some(act_refusal(
+        &state.action_catalog,
+        "move_pane_to_new_column",
+        "it is already the only pane in its column",
+    ));
+    state.needs_redraw = true;
+}
+
 pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction) {
     let Some(pane_id) = state.focused_pane else {
         return;
