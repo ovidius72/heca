@@ -19,9 +19,9 @@ pub(crate) fn hit_test_pane_excluding(
     pos: (f32, f32),
     exclude: Option<PaneId>,
 ) -> Option<PaneId> {
-    let (win_w, win_h) = super::window_logical_size(state);
-    let chrome = super::chrome_config(state);
-    let pane_area = chrome.content_rect(win_w, win_h);
+    let chrome = crate::chrome::ChromeConfig::of(state);
+    let (win_w, win_h) = (chrome.window().w as f32, chrome.window().h as f32);
+    let pane_area = chrome.content_rect();
 
     let sidebar_left_w = if state.chrome_state.left_visible() {
         chrome.left_sidebar_width

@@ -167,20 +167,10 @@ fn layer_occluders(lock: bool, bounds: Rectangle) -> Vec<Rectangle> {
 fn visible_hint_targets(
     state: &crate::app_state::AppState,
 ) -> Vec<(HintTarget, Rectangle)> {
-    let (vw, vh) = {
-        let phys = state.window.inner_size();
-        let s = state.scale_factor;
-        (phys.width as f64 / s, phys.height as f64 / s)
-    };
+    let chrome = ChromeConfig::of(state);
+    let (vw, vh) = (chrome.window().w, chrome.window().h);
     let viewport = Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, vh));
-    let content = ChromeConfig {
-        tab_bar_height: state.tab_bar_height(),
-        status_bar_height: state.status_bar_height(),
-        left_sidebar_width: state.left_sidebar_width(),
-        right_sidebar_width: state.right_sidebar_width(),
-        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
-    }
-    .content_rect(vw as f32, vh as f32);
+    let content = chrome.content_rect();
 
     let mut layers: Vec<HintLayer> = Vec::new();
 

@@ -764,7 +764,8 @@ pub(crate) fn hyperlink_uri_at_position(
 /// order. Each candidate carries its own `pane_id`. Panes fully off-screen and
 /// panes without a terminal backend are skipped. terminal-task-18.
 pub(crate) fn collect_link_hints(state: &AppState) -> Vec<crate::app_state::LinkHint> {
-    let (win_w, win_h) = window_logical_size(state);
+    let window = crate::chrome::ChromeConfig::of(state).window();
+    let (win_w, win_h) = (window.w as f32, window.h as f32);
     let mut hints = Vec::new();
     let mut idx = 0usize;
     for (pane_id, x, y, w, h) in pane_outer_frames(state) {
@@ -1088,9 +1089,7 @@ fn terminal_target_at_position(state: &AppState, pos: (f32, f32)) -> Option<Term
 /// position the in-pane info bar without a GPU borrow (render's `scene_view` holds
 /// `state.compositor`). Returns `(pane_id, x, y, w, h)` in logical px.
 pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32, f32)> {
-    let (win_w, win_h) = window_logical_size(state);
-    let chrome = chrome_config(state);
-    let pane_area = chrome.content_rect(win_w, win_h);
+    let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
     let ws_offset = state
         .session
         .workspace_geometries()
@@ -1121,9 +1120,7 @@ pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32,
 }
 
 fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle> {
-    let (win_w, win_h) = window_logical_size(state);
-    let chrome = chrome_config(state);
-    let pane_area = chrome.content_rect(win_w, win_h);
+    let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
     let ws_offset = state
         .session
         .workspace_geometries()
@@ -1191,24 +1188,6 @@ fn pane_content_inset(state: &AppState) -> f32 {
     let border = state.appearance.effective_pane_border_width(&state.theme);
     let padding = state.appearance.effective_pane_padding(&state.theme);
     padding.max(border + 1.0)
-}
-
-fn chrome_config(state: &AppState) -> crate::chrome::ChromeConfig {
-    crate::chrome::ChromeConfig {
-        tab_bar_height: state.tab_bar_height(),
-        status_bar_height: state.status_bar_height(),
-        left_sidebar_width: state.left_sidebar_width(),
-        right_sidebar_width: state.right_sidebar_width(),
-        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
-    }
-}
-
-fn window_logical_size(state: &AppState) -> (f32, f32) {
-    let phys = state.window.inner_size();
-    (
-        phys.width as f32 / state.scale_factor as f32,
-        phys.height as f32 / state.scale_factor as f32,
-    )
 }
 
 #[cfg(test)]

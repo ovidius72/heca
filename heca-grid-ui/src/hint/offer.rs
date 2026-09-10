@@ -3,14 +3,16 @@
 //! draws it in its own paint.
 
 use crate::component::Component;
-use super::collect::{is_target, narrowed, out_of_view, skip};
+use super::collect::{is_target, narrowed, skip, unseen};
 use crate::reactive::SignalUpdate;
 use heca_core::layout::Rectangle;
 
 /// **Hand `label` to `node`, unless nothing can see it there.**
 ///
-/// The one place a letter is written, so the rule that a clipped-away view does not get one is
-/// stated once per walk rather than at each of the four places a letter is handed out.
+/// The one place a letter is written, so the rule that a view you cannot see does not get one is
+/// stated once per walk rather than at each of the four places a letter is handed out. **Cannot
+/// see** covers both halves — clipped away by an ancestor, or squeezed to nothing of its own
+/// ([`unseen`]).
 ///
 /// **Withdrawal is never refused.** `None` takes a letter back and must reach a widget wherever it
 /// has scrolled to since it got one, or the keycap outlives the picker that put it up — the exact
@@ -21,7 +23,7 @@ use heca_core::layout::Rectangle;
 /// and the letter belongs to the pane. A row past the sidebar's fold simply is not one of the
 /// places that can show it; the pane keeps its letter and its other views still wear it.
 fn give(node: &dyn Component, label: &Option<String>, clip: Option<Rectangle>) -> bool {
-    if label.is_some() && out_of_view(node, clip) {
+    if label.is_some() && unseen(node, clip) {
         return false;
     }
     node.base().hint_label.set(label.clone());
@@ -123,7 +125,7 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
             // hand its letter up to the workspace header, which is a wrong letter rather than no
             // letter. The named thing is not visible in this tree, so this tree is not one of the
             // places that can show it (F003/P082/T438).
-            if label.is_some() && out_of_view(node, clip) {
+            if label.is_some() && unseen(node, clip) {
                 return false;
             }
             // A declaration inside wins first (a dock names itself on the outside and declares the

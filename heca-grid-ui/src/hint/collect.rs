@@ -62,6 +62,34 @@ pub(crate) fn out_of_view(node: &dyn Component, clip: Option<Rectangle>) -> bool
     clip.is_some_and(|c| c.intersection(node.base().bounds).is_none())
 }
 
+/// **Has this widget been squeezed to nothing?** — laid out with no width, or no height.
+///
+/// Such a widget draws nothing, so there is nothing to aim at. Nobody asked before, and nothing
+/// downstream caught it either: the cap's own placement is computed from the target's box, so
+/// [`HintPlacement::Center`](crate::widgets::HintPlacement) on a target of zero width puts the
+/// keycap half a cap to the *left* of it — outside a thing with no inside. Several panes squeezed
+/// to nothing by two sidebars in a narrow window stacked their letters in the gutter between them,
+/// looking dragged there (F003/P082/T478). The layout no longer produces that pane, and this is why
+/// no widget of any other shape can produce it again.
+///
+/// ⚠️ **A box with no geometry AT ALL has not been laid out yet** — no position and no size, which
+/// is what every widget's bounds are before the first layout pass. That is *"no answer yet"*, never
+/// *"invisible"*: a chrome tree is rebuilt with zero bounds and laid out afterwards, and judging it
+/// in between calls every row hidden and takes back its letter (Antonio, driving, 2026-08-24). A
+/// widget that is genuinely gone is hidden or invisible, which [`skip`] already catches.
+pub(crate) fn collapsed(node: &dyn Component) -> bool {
+    let b = node.base().bounds;
+    let unplaced = b.loc.x == 0.0 && b.loc.y == 0.0 && b.size.w == 0.0 && b.size.h == 0.0;
+    !unplaced && (b.size.w <= 0.0 || b.size.h <= 0.0)
+}
+
+/// **Can this widget show a letter at all?** The one visibility question, asked in both places a
+/// letter is decided: by the collector when it spends one of the 52, and by the offer walk when it
+/// hands one over. Two copies of it would be two answers, and only one of them is what you see.
+pub(crate) fn unseen(node: &dyn Component, clip: Option<Rectangle>) -> bool {
+    out_of_view(node, clip) || collapsed(node)
+}
+
 /// **Can the user act on this widget?** A click, a double click, or a key — the three ways a widget
 /// says "do something to me" (Antonio, 2026-08-17: *"if we have on_click, on_key_up,
 /// on_double_click also maybe it needs to be hintable"*).
@@ -274,9 +302,10 @@ fn hints_into(
         return;
     }
     // **A target nobody can see is not a target** — dropped here rather than at the letter, so it
-    // does not spend one of the 52 either (see [`narrowed`]).
+    // does not spend one of the 52 either. Hidden by an ancestor's clip, or squeezed to nothing of
+    // its own: one question, asked once (see [`unseen`]).
     let mut here = wrapping;
-    if is_target(node) && !out_of_view(node, clip) {
+    if is_target(node) && !unseen(node, clip) {
         let declares = node.base().hint.is_some();
         // **Among layers of one thing, a declaration outranks mere actionability.** Saying what a
         // pick does is precisely saying it is *not* the click — a sidebar row is activated and left

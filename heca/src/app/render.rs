@@ -232,14 +232,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .unwrap_or(state.theme.accent)
         .to_f32x4();
 
-    let chrome = ChromeConfig {
-        tab_bar_height: state.tab_bar_height(),
-        status_bar_height: state.status_bar_height(),
-        left_sidebar_width: state.left_sidebar_width(),
-        right_sidebar_width: state.right_sidebar_width(),
-        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
-    };
-    let pane_area = chrome.content_rect(w, h);
+    let chrome = ChromeConfig::of(state);
+    let pane_area = chrome.content_rect();
     state.text_renderer.begin_frame();
     state.text_renderer.set_damage(None);
     state.text_renderer.set_clip(None);
@@ -1123,17 +1117,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
 /// Update session viewport to match current chrome/content area size.
 pub(crate) fn update_session_viewport(state: &mut AppState) {
-    let phys = state.window.inner_size();
-    let win_w = phys.width as f32 / state.scale_factor as f32;
-    let win_h = phys.height as f32 / state.scale_factor as f32;
-    let chrome = ChromeConfig {
-        tab_bar_height: state.tab_bar_height(),
-        status_bar_height: state.status_bar_height(),
-        left_sidebar_width: state.left_sidebar_width(),
-        right_sidebar_width: state.right_sidebar_width(),
-        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
-    };
-    let pane_area = chrome.content_rect(win_w, win_h);
+    let pane_area = ChromeConfig::of(state).content_rect();
     let new_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     state.session.update_viewport(new_size);
 }

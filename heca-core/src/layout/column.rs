@@ -81,13 +81,25 @@ impl Column {
         self.zoom_restore_width.is_some()
     }
 
+    /// **How wide this column is on screen**, and never narrower than
+    /// [`MIN_COLUMN_WIDTH`](crate::layout::scrolling::MIN_COLUMN_WIDTH).
+    ///
+    /// The floor is here because this is where the width is *decided*. It used to live only in the
+    /// resize handlers — which stop **you** dragging a column to nothing, and stopped nothing else:
+    /// a proportion of a squeezed working area resolved straight through zero, and every pane in the
+    /// column laid out with no width at all (F003/P082/T478). A column narrower than its floor
+    /// overflows the viewport instead, which is what a scrolling column layout is for.
+    ///
+    /// One constant, not two: the zoomed branch floored at a private `50.0` while everything else
+    /// used 150.
     pub fn resolve_width(&self, working_width: f64, gaps: f64) -> f64 {
+        let floor = crate::layout::scrolling::MIN_COLUMN_WIDTH;
         if self.is_zoomed() || self.is_full_width {
-            return (working_width - gaps * 2.0).max(50.0);
+            return (working_width - gaps * 2.0).max(floor);
         }
         match self.width {
-            ColumnWidth::Proportion(p) => (working_width - gaps) * p - gaps,
-            ColumnWidth::Fixed(w) => w,
+            ColumnWidth::Proportion(p) => ((working_width - gaps) * p - gaps).max(floor),
+            ColumnWidth::Fixed(w) => w.max(floor),
         }
     }
 
@@ -567,6 +579,41 @@ mod pane_height_tests {
     /// to them, the heights summed past the column, and the proportional scale that keeps the column
     /// full then shrank every pane — including the two the drag had just pinned (Antonio, driving,
     /// 2026-09-03).
+    /// **A column is never narrower than its floor, whatever the window did** (F003/P082/T478).
+    ///
+    /// `MIN_COLUMN_WIDTH` used to be enforced only by the resize handlers, which stop *you* dragging
+    /// a column to nothing and stopped nothing else. Two sidebars in a narrow window squeezed the
+    /// working area to zero, a proportion of zero resolved to zero, and every pane in the column
+    /// laid out with no width at all — still lettered by `prefix+/`, its keycap drawn beside a pane
+    /// with no inside.
+    #[test]
+    fn a_column_keeps_its_floor_when_the_working_area_collapses() {
+        let floor = crate::layout::scrolling::MIN_COLUMN_WIDTH;
+        let col = column_of(1);
+        assert!(
+            col.resolve_width(0.0, 8.0) >= floor,
+            "a column in a working area squeezed to nothing still has a width (got {})",
+            col.resolve_width(0.0, 8.0),
+        );
+        assert!(
+            col.resolve_width(150.0, 8.0) >= floor,
+            "and so does one whose proportion resolves below the floor (got {})",
+            col.resolve_width(150.0, 8.0),
+        );
+    }
+
+    /// A column with room resolves to what its proportion actually asks for — the floor is a floor,
+    /// not a width.
+    #[test]
+    fn a_column_with_room_is_sized_by_its_proportion_not_the_floor() {
+        let col = column_of(1);
+        let w = col.resolve_width(1200.0, 8.0);
+        assert!(
+            w > crate::layout::scrolling::MIN_COLUMN_WIDTH,
+            "a wide working area gives a wide column (got {w})",
+        );
+    }
+
     #[test]
     fn a_resize_leaves_every_other_pane_where_it_was() {
         let working = 400.0;

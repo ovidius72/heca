@@ -1036,7 +1036,7 @@ back through `~/.config/heca/themes/{name}.toml` → bundled → `grid_tron`, so
 `Theme::grid_tron()` is the one preset built in code. Tokens: `background`, `surface`,
 `foreground`, `muted`, `border`, `accent`, `glow`, `danger`, `success`, `warning`,
 `font_family`, `font_size`, `radius`, `border_width`, `focus_border_width`, `focus_ring`,
-`glow_size` (`GlowLevel`), `intensity`, `show_focus_border`, `icon_secondary_alpha`,
+`hint_color`, `glow_size` (`GlowLevel`), `intensity`, `show_focus_border`, `icon_secondary_alpha`,
 `active_wash_alpha`, `card_background_alpha`.
 
 | Token | Type | Drives |
@@ -1045,6 +1045,7 @@ back through `~/.config/heca/themes/{name}.toml` → bundled → `grid_tron`, so
 | `border_width` | `f32` | Decorative border stroke width for every box/pill widget **and** the `Pane`/`bracket_frame` reticle. `0` ⇒ no border anywhere. (App config: global `[appearance] border_width`.) |
 | `focus_border_width` | `f32` | Width of the **affordance** outlines — the keyboard focus indicator (`focus_ring`) and selected-item highlight. Independent of `border_width`, so focus/selection stay visible even with borders off. Default `1.5`. (App config: `[appearance] focus_border_width`.) |
 | `focus_ring` | `Option<Color>` | Color of the keyboard **focus outline** drawn by `PaintCx::focus_ring` (every widget). Unset ⇒ derived per-tone by `effective_focus_ring()` / `focus_ring_tone()`: the tone (accent, or `danger` for a destructive button) shifted toward `foreground`, which brightens the ring on dark themes and darkens it on light themes so it stays distinct from the widget's own border. Set it to pin the default/accent focus color; the `danger` ring always derives. |
+| `hint_color` | `Option<Color>` | Colour of the **picker's letters** — every keycap `prefix+/` and the pane / column / workspace picks stamp over their targets. Unset ⇒ the `accent`, via `effective_hint_color()`. **One colour for the whole app**, like `hint_font_size` is one size: a letter is chrome drawn *over* a target, never part of it, so it must not take the colour of whatever it lands on. A host may still tint one *kind* of target apart — workspace picks use `warning` — with [`ComponentExt::hint_color`](#componentext--what-every-widget-gets), which overrides this per widget. |
 | `show_focus_border` | `bool` | Focus-ring **kill switch** (default `true`); every ring draw is gated on it. Overridable per-config via `[appearance] show_focus_border`. Rings additionally show only on **keyboard** focus (`Base::shows_focus_ring()`), never on click. |
 | `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius **and strength**. `None` removes glow entirely. |
 | `intensity` | `Intensity` | The **CRT scanline overlay** only (no longer touches glow). |
@@ -4113,6 +4114,28 @@ activated, is two nodes and one card. So:
 
 A pane holds a bar and its content, so it is a container: the pane keeps its letter and every button
 in its bar keeps one too.
+
+**And nothing you cannot see.** Candidacy asks one question with two halves, and a target failing
+either is dropped by the collector rather than at the letter — so it does not spend one of the 52:
+
+- **hidden by a clipping ancestor.** Any overlap at all counts as visible, so a row half past a
+  sidebar's fold keeps its letter — you can see it, so you can aim at it. Its keycap is drawn whole
+  rather than clipped to match, which is the point of lettering a row you can only half see.
+- **squeezed to nothing of its own** — laid out with no width, or no height. Such a widget draws
+  nothing, so there is nothing to aim at, and the cap would not even land on it: a placement is
+  computed from the target's box, so `Center` on a target of zero width puts the keycap half a cap
+  to the *left* of it, outside a thing with no inside.
+
+> ⚠️ **A box with no geometry AT ALL has not been laid out yet** — no position and no size, which is
+> what every widget's bounds are before the first layout pass. That is *"no answer yet"*, never
+> *"invisible"*: a retained tree is rebuilt with zero bounds and laid out afterwards, and judging it
+> in between calls every row hidden and takes its letter back. A widget that is genuinely gone is
+> hidden or invisible, which the walk already skips.
+
+Both halves are one predicate, asked in both places a letter is decided: by `collect_hints` when it
+spends one, and by the offer walk when it hands one over. Two copies would be two answers, and only
+one of them is what you see. **Withdrawal is never refused** — a view that was lettered and has
+since collapsed still gives the letter back, or the keycap outlives the picker that put it up.
 
 > ⚠️ **The rule this replaced, so it is not reinstated.** A declared hint used to silence mere
 > actionability *anywhere* beneath it. That silenced layers, and could not tell a decorator speaking

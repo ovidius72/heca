@@ -280,9 +280,7 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
     }
 
     let pos = state.mouse.pos;
-    let (win_w, win_h) = window_logical_size(state);
-    let chrome = chrome_config(state);
-    let pane_area = chrome.content_rect(win_w, win_h);
+    let pane_area = ChromeConfig::of(state).content_rect();
 
     // During drag, scroll when near any edge:
     // - Absolute window edge (150px): covers sidebar area, fast (1000 px/s)
@@ -377,29 +375,11 @@ fn rubberband(x: f32) -> f32 {
 }
 
 fn content_area_origin(state: &AppState) -> (f32, f32) {
-    let (win_w, win_h) = window_logical_size(state);
-    let chrome = chrome_config(state);
-    let r = chrome.content_rect(win_w, win_h);
+    let r = ChromeConfig::of(state).content_rect();
     (r.loc.x as f32, r.loc.y as f32)
 }
 
 
-
-fn chrome_config(state: &AppState) -> ChromeConfig {
-    ChromeConfig {
-        tab_bar_height: state.tab_bar_height(),
-        status_bar_height: state.status_bar_height(),
-        left_sidebar_width: state.left_sidebar_width(),
-        right_sidebar_width: state.right_sidebar_width(),
-        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
-    }
-}
-
-fn window_logical_size(state: &AppState) -> (f32, f32) {
-    let phys = state.window.inner_size();
-    let scale = state.scale_factor as f32;
-    (phys.width as f32 / scale, phys.height as f32 / scale)
-}
 
 fn find_pane_in_workspace(
     ws: &mut heca_core::layout::workspace::Workspace,

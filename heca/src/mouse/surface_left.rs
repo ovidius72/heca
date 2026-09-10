@@ -18,8 +18,8 @@ use heca_grid_ui::drag::DropSide;
 
 /// Helper: compute sidebar geometry (width, top, bottom).
 fn sidebar_bounds(state: &AppState) -> (f32, f32, f32, f32) {
-    let chrome = super::chrome_config(state);
-    let (_win_w, win_h) = super::window_logical_size(state);
+    let chrome = crate::chrome::ChromeConfig::of(state);
+    let win_h = chrome.window().h as f32;
     // `left_sidebar_width` is 0 when Hidden (no icon rail), so the bounds collapse
     // to nothing and no click lands in the region — see `docs/sidebar-provider-modes.md`.
     let total_w = chrome.left_sidebar_width;

@@ -117,14 +117,15 @@ fn test_find_pane_multi_column() {
 
 #[test]
 fn test_chrome_content_rect_left_sidebar() {
-    let cfg = ChromeConfig {
-        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
-        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
-        left_sidebar_width: 200.0,
-        right_sidebar_width: 0.0,
-        sidebar_gap: 0.0,
-    };
-    let r = cfg.content_rect(1280.0, 800.0);
+    let r = ChromeConfig::for_window(
+        heca_core::layout::types::Size::new(1280.0, 800.0),
+        DEFAULT_TAB_BAR_HEIGHT,
+        DEFAULT_STATUS_BAR_HEIGHT,
+        200.0,
+        0.0,
+        0.0,
+    )
+    .content_rect();
     assert_eq!(r.loc.x, 200.0);
     assert_eq!(r.loc.y, 32.0);
     assert_eq!(r.size.w, 1080.0);
@@ -133,14 +134,15 @@ fn test_chrome_content_rect_left_sidebar() {
 
 #[test]
 fn test_chrome_content_rect_no_sidebars() {
-    let cfg = ChromeConfig {
-        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
-        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
-        left_sidebar_width: 40.0,
-        right_sidebar_width: 0.0,
-        sidebar_gap: 0.0,
-    };
-    let r = cfg.content_rect(1280.0, 800.0);
+    let r = ChromeConfig::for_window(
+        heca_core::layout::types::Size::new(1280.0, 800.0),
+        DEFAULT_TAB_BAR_HEIGHT,
+        DEFAULT_STATUS_BAR_HEIGHT,
+        40.0,
+        0.0,
+        0.0,
+    )
+    .content_rect();
     assert_eq!(r.loc.x, 40.0);
     assert_eq!(r.loc.y, 32.0);
     assert_eq!(r.size.w, 1240.0);

@@ -311,27 +311,31 @@ pub(crate) async fn init_state(
     let backdrop = Backdrop::new(&device, surface_format);
     let background = BackgroundLayer::new(&device, surface_format, physical.width, physical.height);
 
-    let chrome = ChromeConfig {
-        tab_bar_height: if app_config.config.settings.show_top_bar {
+    // Before `AppState` exists, so the division is asked for directly rather than through
+    // `ChromeConfig::of` — same rule either way, because there is only the one.
+    let chrome = ChromeConfig::for_window(
+        heca_core::layout::types::Size::new(
+            (physical.width as f32 / scale_factor as f32) as f64,
+            (physical.height as f32 / scale_factor as f32) as f64,
+        ),
+        if app_config.config.settings.show_top_bar {
             DEFAULT_TAB_BAR_HEIGHT
         } else {
             0.0
         },
-        status_bar_height: if app_config.config.settings.show_bottom_bar {
+        if app_config.config.settings.show_bottom_bar {
             DEFAULT_STATUS_BAR_HEIGHT
         } else {
             0.0
         },
-        left_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
-        right_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
-        sidebar_gap: app_config
+        crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+        crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+        app_config
             .config
             .appearance
             .effective_sidebar_gap(&app_config.theme),
-    };
-    let log_w = physical.width as f32 / scale_factor as f32;
-    let log_h = physical.height as f32 / scale_factor as f32;
-    let pane_area = chrome.content_rect(log_w, log_h);
+    );
+    let pane_area = chrome.content_rect();
 
     let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     let layout_options = layout_options_from(app_config);
