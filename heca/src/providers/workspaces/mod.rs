@@ -713,11 +713,10 @@ pub(crate) fn workspace_key(ws_id: heca_core::layout::WorkspaceId) -> String {
     format!("ws:{}", ws_id.0)
 }
 
-/// `col:<id>` — a column group. No workspace prefix: a [`ColumnId`](heca_core::layout::ColumnId) is
-/// allocated from the session's counter, so it is unique across the whole session on its own.
-pub(crate) fn column_key(col_id: heca_core::layout::ColumnId) -> String {
-    format!("col:{}", col_id.0)
-}
+// `column_key` lives beside `pane_key` in `crate::chrome` since F003/P082/T474: the column in the
+// scrolling area OWNS that identity and this provider shows a VIEW of it, so both sides must read
+// the same string rather than keeping two copies in step.
+pub(crate) use crate::chrome::column_key;
 
 // ── What each row kind does when you press it (F003/P086/T365) ──
 //
@@ -753,7 +752,7 @@ fn pane_row_press(pane_id: PaneId) -> Intent {
 /// Pointing one intent at both gestures is precisely the bug this replaces: commit `e712d70`
 /// (2026-07-30) made the row's hint target fire the row's *click*, and `prefix+/` on a sidebar row
 /// started activating the pane and leaving the sidebar.
-fn row_hint(key: String) -> Intent {
+pub(super) fn row_hint(key: String) -> Intent {
     Intent::new(PEEK_SELECTED).arg("key", PropValue::Text(key))
 }
 
