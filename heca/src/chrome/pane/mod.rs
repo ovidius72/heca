@@ -81,6 +81,7 @@ pub(crate) fn header_height(state: &crate::app_state::AppState, pane_id: PaneId)
 
 pub(crate) fn clear_panes(state: &mut crate::app_state::AppState) {
     state.panes.clear();
+    crate::chrome::clear_columns(state);
 }
 
 /// Build, lay out and position the retained shell for every visible pane.
@@ -206,10 +207,13 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
                 &mut retained.root,
                 Size::new(model.w as f64, model.h as f64),
             );
-            crate::chrome::translate_tree(&mut retained.root, model.x as f64, model.y as f64);
+            heca_grid_ui::shift_subtree(&mut retained.root, model.x as f64, model.y as f64);
         }
     }
     state.panes.retain(|id, _| seen.contains(id));
+    // The columns are placed in the same pass, from the same geometry — so a column and the panes
+    // in it can never be one frame out of step.
+    crate::chrome::sync_columns(state);
 }
 
 /// The app's edges, gathered once. A test calls this to get exactly the seams and nothing else

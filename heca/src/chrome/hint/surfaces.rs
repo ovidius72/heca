@@ -211,4 +211,5 @@ pub(crate) fn clear_hint_letters(state: &crate::app_state::AppState) {
     for shell in state.panes.values() {
         heca_grid_ui::clear_hints(&shell.root);
     }
+    crate::chrome::clear_column_hints(state);
 }

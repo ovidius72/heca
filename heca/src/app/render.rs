@@ -697,6 +697,17 @@ pub(crate) fn render_frame(state: &mut AppState) {
             );
         }
 
+        // **The columns' own letters.** A column draws no chrome of its own — it is the box and
+        // the name — so this stamps only what it carries. **Through `paint_child`, never `paint`**:
+        // `paint_child` is what draws a widget's hint letter after painting it.
+        {
+            let column_theme = crate::chrome::chrome_gui_theme(state);
+            let mut cx = heca_grid_ui::PaintCx::new(&mut pane_scene, &column_theme);
+            for column in state.columns.values() {
+                heca_grid_ui::paint_child(&column.root, &mut cx);
+            }
+        }
+
         pane_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
         render_chrome(
             &mut state.grid_renderer,

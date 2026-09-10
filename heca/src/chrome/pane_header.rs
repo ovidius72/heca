@@ -1058,7 +1058,7 @@ pub(crate) fn sync_pane_viewport_widgets(
             // X hugs the pane's outer right edge; Y/H follow the terminal content
             // rect so the thumb stays below the header and above the bottom inset.
             let bar_x = pane.x + pane.w - bar_bounds.size.w as f32;
-            translate_tree(&mut widgets.scrollbar, bar_x as f64, content_rect.loc.y);
+            heca_grid_ui::shift_subtree(&mut widgets.scrollbar, bar_x as f64, content_rect.loc.y);
         }
         if badge_visible {
             LayoutEngine::new().base_font(font).compute(
@@ -1073,7 +1073,7 @@ pub(crate) fn sync_pane_viewport_widgets(
             // slot rather than a height guessed from the font. Zero when there is no header.
             let header_h = header_heights.get(&pane.pane_id).copied().unwrap_or(0.0);
             let badge_y = pane.y + header_h + VIEWPORT_BADGE_MARGIN;
-            translate_tree(&mut widgets.badge, badge_x as f64, badge_y as f64);
+            heca_grid_ui::shift_subtree(&mut widgets.badge, badge_x as f64, badge_y as f64);
         }
     }
     state.pane_viewport_widgets.retain(|id, _| seen.contains(id));

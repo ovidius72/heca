@@ -795,6 +795,12 @@ pub struct AppState {
     /// carry one — which is why the pane letters used to be stamped by a host paint pass
     /// (F011/P094/T451).
     pub panes: HashMap<PaneId, crate::chrome::RetainedPane>,
+    /// **Retained per-column trees**, keyed by the column's own id — the box a column occupies in
+    /// the scrolling area, and the identity a pick addresses it by.
+    ///
+    /// The column is what OWNS `col:<id>`; the workspaces dock shows a view of it. Built and placed
+    /// each frame by `chrome::sync_columns` (F003/P082/T474).
+    pub columns: HashMap<heca_core::layout::ColumnId, crate::chrome::RetainedColumn>,
     /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
     /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
     /// trees; this holds runtime-added layers that join the same surface stack. See

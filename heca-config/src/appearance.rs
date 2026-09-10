@@ -1104,8 +1104,10 @@ mod tests {
             "a theme that names one wins over the accent",
         );
 
-        let mut over = AppearanceConfig::default();
-        over.hint_color = Some(Color::rgb(0x00, 0xff, 0x00));
+        let over = AppearanceConfig {
+            hint_color: Some(Color::rgb(0x00, 0xff, 0x00)),
+            ..Default::default()
+        };
         assert_eq!(
             over.effective_hint_color(&themed),
             Color::rgb(0x00, 0xff, 0x00),

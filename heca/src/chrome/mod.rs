@@ -10,6 +10,10 @@ pub(crate) use theme::{
 };
 pub(crate) mod signals;
 pub(crate) use signals::{sync_chrome_signals, sync_chrome_state, ChromeSignals};
+pub(crate) mod column;
+pub(crate) use column::{
+    clear_column_hints, clear_columns, offer_to_columns, sync_columns, RetainedColumn,
+};
 pub(crate) mod pane;
 pub(crate) use pane::{clear_panes, header_height as pane_header_height, sync_panes, RetainedPane};
 pub(crate) mod pane_header;
@@ -312,18 +316,6 @@ use heca_grid_ui::widgets::{
 };
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::rc::Rc;
-
-/// Translate a freshly-laid-out widget subtree (positioned from the origin by
-/// [`LayoutEngine::compute`]) to an absolute `(dx, dy)`. Mirrors the helper in
-/// `terminal_render` so the retained header can be placed at its pane.
-pub(crate) fn translate_tree(c: &mut dyn Component, dx: f64, dy: f64) {
-    let b = c.base().bounds;
-    c.base_mut().bounds = Rectangle::new(Point::new(b.loc.x + dx, b.loc.y + dy), b.size);
-    for child in c.base_mut().children.iter_mut() {
-        translate_tree(child.as_mut(), dx, dy);
-    }
-}
-
 
 pub(crate) fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option<PaneRuntime> {
     state.pane_runtime(pane_id)
@@ -640,6 +632,16 @@ pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: Box<dyn Compone
 /// what lets a hint letter stay with the same pane between openings of the picker.
 pub(crate) fn pane_key(pane: heca_core::layout::PaneId) -> String {
     format!("pane:{}", pane.0)
+}
+
+/// `col:<id>` — a column. No workspace prefix: a [`ColumnId`](heca_core::layout::ColumnId) is
+/// allocated from the session's counter, so it is unique across the whole session on its own.
+///
+/// It lives here beside [`pane_key`] rather than in the workspaces provider because the column in
+/// the scrolling area is what OWNS this identity; the provider's group is a second view of it, and
+/// two homes for one string is two spellings waiting to drift (F003/P082/T474).
+pub(crate) fn column_key(col_id: heca_core::layout::ColumnId) -> String {
+    format!("col:{}", col_id.0)
 }
 
 /// **Fire a named gesture**: the closure that emits `intent` through this surface's chrome sink.

@@ -231,6 +231,11 @@ fn offer_in_every_tree(
             for_view(HintSurface::Pane(*pane_id)),
         );
     }
+    // **And the columns in the scrolling area.** A column is a third place a letter can land: it is
+    // drawn in the content area, so it is not in the window root, and it is not a pane. Its sidebar
+    // group is a second view of the same identity and is reached by the window-root walk above —
+    // both wear the letter, exactly as a pane and its sidebar row do (F003/P082/T474).
+    offered |= crate::chrome::offer_to_columns(state, key, label.clone());
     offered
 }
 

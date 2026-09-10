@@ -1636,7 +1636,10 @@ fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
 ///
 /// Shifting is destructive, so the widget must re-derive it after every layout pass (the engine
 /// calls [`Component::on_layout`] post-order once bounds are natural again).
-pub(crate) fn shift_subtree(c: &mut dyn Component, dx: f64, dy: f64) {
+/// **This is the element's own displacement** — CSS `transform` on a box the layout already
+/// placed. A host placing a retained tree at an absolute point is the same operation from the other
+/// end, which is why the app kept a private copy of this until F003/P082/T474.
+pub fn shift_subtree(c: &mut dyn Component, dx: f64, dy: f64) {
     c.base_mut().bounds.loc.x += dx;
     c.base_mut().bounds.loc.y += dy;
     let n = c.base().children.len();

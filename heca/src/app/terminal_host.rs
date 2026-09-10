@@ -1088,6 +1088,45 @@ fn terminal_target_at_position(state: &AppState, pos: (f32, f32)) -> Option<Term
 /// loop derives per pane (`render.rs`); kept here so the pane-header sync step can
 /// position the in-pane info bar without a GPU borrow (render's `scene_view` holds
 /// `state.compositor`). Returns `(pane_id, x, y, w, h)` in logical px.
+/// **The columns of the active workspace, in screen coordinates**, with the panes inside each.
+///
+/// The same geometry [`pane_outer_frames`] reports, grouped the way the tree is shaped. Built on
+/// `ScrollingSpace::columns_with_positions`, so a caller asking about a column and a caller asking
+/// about a pane read one walk.
+///
+/// Floating panes are **not** here: they belong to no column.
+pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutColumn> {
+    let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
+    let ws_offset = state
+        .session
+        .workspace_geometries()
+        .first()
+        .map(|(_, rect)| (rect.loc.x, rect.loc.y))
+        .unwrap_or((0.0, 0.0));
+    let (dx, dy) = (pane_area.loc.x + ws_offset.0, pane_area.loc.y + ws_offset.1);
+    let Some(ws) = state.session.active_workspace() else {
+        return Vec::new();
+    };
+    let shift = |r: heca_core::layout::Rectangle| {
+        heca_core::layout::Rectangle::new(
+            heca_core::layout::types::Point::new(r.loc.x + dx, r.loc.y + dy),
+            r.size,
+        )
+    };
+    ws.scrolling
+        .columns_with_positions()
+        .into_iter()
+        .map(|mut col| {
+            col.rect = shift(col.rect);
+            for pane in &mut col.panes {
+                pane.rect = shift(pane.rect);
+                pane.slot = shift(pane.slot);
+            }
+            col
+        })
+        .collect()
+}
+
 pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32, f32)> {
     let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
     let ws_offset = state
