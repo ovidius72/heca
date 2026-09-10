@@ -809,6 +809,9 @@ overlay_border_style = "bracketed"   # bracketed | bordered | none — the share
 hint_font_size = 12.0      # one size for EVERY letter in the app, in logical px. A letter is drawn
                            # over whatever it points at, so it is not scaled by the size of that
                            # thing — a header button and a whole pane wear the same letter.
+# hint_color = "#ffb86c"   # the letters' colour. Unset = the theme's own `hint_color`, which falls
+                           # back to the accent. The colour lives in the theme so it travels with a
+                           # palette; this overrides it for every theme you load.
 
 # Keyboard focus outline
 show_focus_border = true   # draw the focus ring at all

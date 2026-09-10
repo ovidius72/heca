@@ -122,7 +122,7 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     // border and background), so a letter looks the same on the active pane, an inactive one, a
     // header button and a sidebar row.
     theme.hint_font_size = state.appearance.hint_font_size.clamp(6.0, 48.0);
-    theme.hint_color = state.theme.accent;
+    theme.hint_color = state.appearance.effective_hint_color(&state.theme);
     theme.colors.glow_size = state.appearance.effective_glow_size(&state.theme);
     theme.colors.intensity = state.appearance.effective_intensity(&state.theme);
     // Focus-outline visibility (config `show_focus_border`, theme fallback) — the

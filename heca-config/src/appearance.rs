@@ -469,6 +469,15 @@ pub struct AppearanceConfig {
     /// pane's own, in the same picker.
     #[serde(default = "default_hint_font_size")]
     pub hint_font_size: f32,
+    /// Picker letter **colour** override. `None` → inherits the theme's `hint_color`, which itself
+    /// falls back to the accent. Set in `config.toml` to pin one colour whatever theme is loaded.
+    ///
+    /// The pair with [`hint_font_size`](Self::hint_font_size): size is a setting because it depends
+    /// on your display and font, colour is a theme token because it belongs with a palette — and
+    /// this override exists for the same reason `glow_size` has one, so a user can differ from every
+    /// theme they load without editing each.
+    #[serde(default)]
+    pub hint_color: Option<Color>,
 
     // ── z=0 background layer (compositor-blur refactor) ──
     /// z=0 background gradient *top* color override. `None` → inherits
@@ -653,6 +662,14 @@ impl AppearanceConfig {
     // ── Effect token resolvers ──
     // Config.toml `[appearance]` overrides take precedence; `None` inherits
     // from the theme automatically.
+
+    /// Effective picker letter colour: config override → `theme.hint_color` → the accent. One
+    /// colour for every keycap in the app; a host may still tint one *kind* of target apart with
+    /// the per-widget `hint_color` builder.
+    pub fn effective_hint_color(&self, theme: &Theme) -> Color {
+        self.hint_color
+            .unwrap_or_else(|| theme.effective_hint_color())
+    }
 
     /// Effective glow halo level: config override → `theme.glow_size`. Owns
     /// glow presence + radius + strength.
@@ -858,6 +875,7 @@ impl Default for AppearanceConfig {
             background_gradient_bottom: None,
             background_blur: default_background_blur(),
             background_transparency: default_background_transparency(),
+            hint_color: None,
             glow_size: None,
             intensity: None,
             show_focus_border: None,
@@ -1064,6 +1082,35 @@ mod tests {
         let grid_tron = crate::theme::load("grid_tron");
         assert_eq!(cfg.effective_glow_size(&grid_tron), grid_tron.glow_size);
         assert_eq!(cfg.effective_intensity(&grid_tron), grid_tron.intensity);
+    }
+
+    /// **The picker's letters: theme first, config on top** — the same two-step every effect token
+    /// takes, so a user who wants one colour across every theme sets it once.
+    #[test]
+    fn the_picker_colour_falls_back_to_the_theme_then_to_the_accent() {
+        let grid_tron = crate::theme::load("grid_tron");
+        let cfg = AppearanceConfig::default();
+        assert_eq!(
+            cfg.effective_hint_color(&grid_tron),
+            grid_tron.accent,
+            "no setting and no theme token: the letters wear the accent",
+        );
+
+        let mut themed = grid_tron.clone();
+        themed.hint_color = Some(Color::rgb(0xff, 0xb8, 0x6c));
+        assert_eq!(
+            cfg.effective_hint_color(&themed),
+            Color::rgb(0xff, 0xb8, 0x6c),
+            "a theme that names one wins over the accent",
+        );
+
+        let mut over = AppearanceConfig::default();
+        over.hint_color = Some(Color::rgb(0x00, 0xff, 0x00));
+        assert_eq!(
+            over.effective_hint_color(&themed),
+            Color::rgb(0x00, 0xff, 0x00),
+            "and the setting wins over the theme",
+        );
     }
 
     #[test]

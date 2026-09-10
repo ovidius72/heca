@@ -321,6 +321,20 @@ pub struct Theme {
     /// [`focus_ring_tone`](Self::focus_ring_tone) and are not overridden by this token.
     #[serde(default)]
     pub focus_ring: Option<Color>,
+    /// Optional colour of the **picker's letters** — the keycaps `prefix+/` and the pane / column /
+    /// workspace picks stamp over their targets. `None` → the accent.
+    ///
+    /// **One colour for every letter in the app**, exactly as `hint_font_size` is one size: a letter
+    /// is chrome the framework draws *over* a target, not part of the target, so it must not take
+    /// the colour of whatever it happens to land on. Set it in a theme (`hint_color = "#rrggbb"`)
+    /// when the accent is hard to pick out against your panes.
+    ///
+    /// A host may still tint one *kind* of target differently — workspace picks are drawn in
+    /// `warning` so they read apart from pane picks — through
+    /// [`ComponentExt::hint_color`](../heca_grid_ui/builders/trait.ComponentExt.html), which
+    /// overrides this per widget.
+    #[serde(default)]
+    pub hint_color: Option<Color>,
     #[serde(default = "default_icon_secondary_alpha")]
     pub icon_secondary_alpha: f32,
     /// Opacity (`0.0..=1.0`) of the **active-region wash** — the faint accent
@@ -760,6 +774,14 @@ impl Theme {
         self.focus_ring.unwrap_or_else(|| self.focus_ring_tone(self.accent))
     }
 
+    /// The **picker's letter colour** — the theme's `hint_color` token when set, else the accent.
+    ///
+    /// Read at the one place the picker's tokens are applied, so every keycap in the app answers to
+    /// it and a theme reload moves them all together.
+    pub fn effective_hint_color(&self) -> Color {
+        self.hint_color.unwrap_or(self.accent)
+    }
+
     /// Derive a focus-outline color from any semantic tone (`accent`, `danger`, …) by shifting it
     /// toward the theme's `foreground`. `foreground` is the theme's high-contrast-against-background
     /// color — light on dark themes, dark on light themes — so this brightens the ring on dark
@@ -798,6 +820,50 @@ mod tests {
     fn control_radius_is_half_of_radius() {
         let theme = Theme::grid_tron();
         assert!((theme.control_radius() - 2.0).abs() < f32::EPSILON);
+    }
+
+    /// **The picker's letters follow the theme, and a theme may pin them** (Antonio, 2026-09-09).
+    ///
+    /// Unset, they wear the accent — which is the colour they always had, so a theme that says
+    /// nothing looks exactly as before. A theme that names one wins, and because it is a theme token
+    /// rather than a user setting it travels with the theme and moves on a reload.
+    #[test]
+    fn the_picker_letters_follow_the_accent_until_a_theme_names_a_colour() {
+        let mut theme = Theme::grid_tron();
+        theme.hint_color = None;
+        assert_eq!(
+            theme.effective_hint_color(),
+            theme.accent,
+            "saying nothing keeps the colour the letters always had",
+        );
+
+        let named = Color::new(0xff, 0xb8, 0x6c, 0xff);
+        theme.hint_color = Some(named);
+        assert_eq!(theme.effective_hint_color(), named);
+        assert_ne!(
+            named, theme.accent,
+            "…and it is not merely the accent again"
+        );
+    }
+
+    /// A theme file may carry the token, and one that omits it still parses — every bundled theme
+    /// does.
+    #[test]
+    fn a_theme_file_may_name_the_picker_colour_and_may_omit_it() {
+        let bundled: Theme = toml::from_str(include_str!("themes/latte.toml"))
+            .expect("bundled latte.toml must parse into Theme");
+        assert_eq!(
+            bundled.effective_hint_color(),
+            bundled.accent,
+            "a theme that names none falls back to its own accent",
+        );
+
+        let named: Theme = toml::from_str(&format!(
+            "{}\nhint_color = \"#ffb86c\"\n",
+            include_str!("themes/latte.toml")
+        ))
+        .expect("a theme naming hint_color must parse");
+        assert_eq!(named.hint_color, Some(Color::new(0xff, 0xb8, 0x6c, 0xff)));
     }
 
     #[test]

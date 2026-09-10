@@ -95,6 +95,10 @@ const LEFT_INSET: f64 = 2.0;
 const GLYPH_ADVANCE_FRAC: f32 = 0.62;
 /// Keycap glow intensity (scaled by the theme `glow_size`) — soft, not blazing.
 const KEYCAP_GLOW: f32 = 0.45;
+/// How far a keycap's chip must sit from the theme `background` in luminance for a
+/// background-coloured letter to still read on it. Below this the letter takes the contrasting tone
+/// instead — see [`keycap_glyph_color`].
+const KEYCAP_MIN_GLYPH_CONTRAST: f32 = 0.15;
 
 /// Size of the keycap chip for `text` at `font` (logical px) — the exact sizing
 /// [`KeyHint`] uses. Exposed so hosts can stamp a standalone keycap over targets
@@ -239,6 +243,35 @@ impl KeyCap {
 }
 
 /// The shared chip: the surface (per [`KeycapVariant`]) plus whatever sits in it.
+/// **The letter's colour on a filled keycap** — the theme `background`, unless the chip is too close
+/// to it to read, in which case the contrasting tone.
+///
+/// The chip is not `tint`: it is an opaque `background` base with `tint` laid over it at `alpha`, so
+/// the fill the eye sees is the blend. Asking about `tint` alone would answer for a colour that is
+/// never painted.
+///
+/// **Why not simply [`Theme::on`] every time.** That is the more contrasty answer and it would
+/// change how heca looks: measured on `grid_tron`, the chip lands at luminance 0.24 against a 0.003
+/// background and a 0.82 foreground, so `on` returns the *foreground* and the letters would flip
+/// from dark-on-accent to light-on-accent. The dark glyph is the design; this only steps in when
+/// keeping it would make the letter vanish.
+///
+/// **Why it steps in at all.** The glyph used to be `background` unconditionally, which is right for
+/// an accent far from the background and wrong the moment it is not — a light-background theme had a
+/// light glyph on a light chip. `hint_color` then made that reachable on any theme: set the letters
+/// near your own background and you get an empty keycap. A colour a user is free to choose cannot
+/// carry a legibility rule that only holds for one of its values.
+fn keycap_glyph_color(theme: &heca_theme::Theme, tint: Color, alpha: u8) -> Color {
+    let chip = theme.background.lerp(tint, alpha as f32 / 255.0);
+    let reads_on_background =
+        (chip.luminance() - theme.background.luminance()).abs() >= KEYCAP_MIN_GLYPH_CONTRAST;
+    if reads_on_background {
+        theme.background
+    } else {
+        theme.on(chip)
+    }
+}
+
 fn paint_keycap_content(
     cx: &mut PaintCx,
     cap: Rectangle,
@@ -277,9 +310,14 @@ fn paint_keycap_content(
                     intensity: KEYCAP_GLOW,
                 }),
             );
-            // Accent tint on top of the opaque base, then the dark bold glyph for contrast.
+            // Tint on top of the opaque base, then the glyph in whichever of the theme's
+            // background/foreground contrasts with the chip — see [`keycap_glyph_color`].
             cx.rect(cap, keycap_c.with_alpha(keycap_alpha), None, radius, None);
-            content.paint(cx, cap, background, font);
+            let glyph = {
+                let t = cx.theme();
+                keycap_glyph_color(&t.colors, keycap_c, keycap_alpha)
+            };
+            content.paint(cx, cap, glyph, font);
         }
         KeycapVariant::Bordered => {
             // Outline-only chip: **no fill** (empty interior) + a full-strength **accent** border
@@ -715,6 +753,65 @@ mod tests {
 
         let fitted = fit_into_view(cap, permitted, Some(clip)).expect("the caption band holds it");
         assert_eq!(fitted, cap, "and the clamp leaves it there");
+    }
+
+    /// **A letter stays readable whatever colour it is given** (Antonio, 2026-09-10: *"what if a
+    /// user set the same color of the text?"*).
+    ///
+    /// `hint_color` is a colour the user picks, so the glyph cannot assume the chip is bright. The
+    /// glyph was a constant — always the theme background — which is legible under a bright accent
+    /// and invisible the moment the chip is near the background instead.
+    #[test]
+    fn a_keycap_letter_contrasts_with_the_chip_whatever_colour_it_is_given() {
+        use super::keycap_glyph_color;
+        let theme = heca_theme::Theme::grid_tron();
+        let alpha = theme.interaction.keycap;
+
+        // The dangerous setting: the letters painted the same colour as the background behind them.
+        let glyph = keycap_glyph_color(&theme, theme.background, alpha);
+        assert_ne!(
+            glyph, theme.background,
+            "a chip the colour of the background must not carry a background-coloured letter",
+        );
+        assert_eq!(
+            glyph, theme.foreground,
+            "it takes the contrasting tone instead"
+        );
+
+        // …and the default is unchanged: a bright accent chip still carries the dark glyph.
+        assert_eq!(
+            keycap_glyph_color(&theme, theme.accent, alpha),
+            theme.background,
+            "the accent letters must look exactly as they always did",
+        );
+    }
+
+    /// **The rule is about the chip, not about the theme being dark.** A light theme whose accent is
+    /// also light gives a chip that a background-coloured letter disappears into — the same failure
+    /// a badly chosen `hint_color` produces, reached without touching the setting.
+    #[test]
+    fn a_pale_chip_on_a_pale_theme_switches_the_letter_too() {
+        use super::keycap_glyph_color;
+        let mut light = heca_theme::Theme::grid_tron();
+        // A light palette is the dark one's two tones swapped — enough to state the rule without
+        // depending on which bundled theme happens to be light.
+        std::mem::swap(&mut light.background, &mut light.foreground);
+        let alpha = light.interaction.keycap;
+
+        // A mid-toned accent is far enough from the pale background: the letter is unchanged.
+        assert_eq!(
+            keycap_glyph_color(&light, light.accent, alpha),
+            light.background,
+            "a chip that already stands off the background keeps the design's own letter",
+        );
+
+        // A pale accent is not, so the letter takes the contrasting tone rather than vanishing.
+        let pale = light.background.lerp(light.accent, 0.1);
+        assert_eq!(
+            keycap_glyph_color(&light, pale, alpha),
+            light.foreground,
+            "a chip the eye cannot separate from the background gets the other tone",
+        );
     }
 
     #[test]
