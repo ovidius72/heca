@@ -5,7 +5,7 @@
 
 pub(crate) mod theme;
 pub(crate) use theme::{
-    alpha_u8, apply_pane_frame, chrome_colors, chrome_gui_theme, chrome_status,
+    alpha_u8, chrome_colors, chrome_gui_theme, chrome_status,
     left_sidebar_shell_background_color, right_sidebar_shell_background_color,
 };
 pub(crate) mod signals;

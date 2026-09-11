@@ -1,14 +1,14 @@
 //! [`Pane`] — a generic container with configurable frame decoration.
 //!
-//! Supports three frame modes via [`PaneFrame`]:
+//! Supports three frame modes via [`FrameStyle`]:
 //!
 //! | Mode | Visual |
 //! |------|--------|
-//! | [`PaneFrame::None`] | Background fill only — no border, no brackets |
-//! | [`PaneFrame::Bordered`] | A clean border from `style.border` |
-//! | [`PaneFrame::Bracketed`] | The self-contained accent corner-bracket reticle (no `style.border`) |
+//! | [`FrameStyle::None`] | Background fill only — no border, no brackets |
+//! | [`FrameStyle::Bordered`] | A clean border from `style.border` |
+//! | [`FrameStyle::Bracketed`] | The self-contained accent corner-bracket reticle (no `style.border`) |
 //!
-//! Default mode is [`PaneFrame::Bordered`] — a fill-only container that
+//! Default mode is [`FrameStyle::Bordered`] — a fill-only container that
 //! becomes a bordered panel once `.border(color, width)` is called.
 //!
 //! Use `.bracketed()` to opt into the decorative corner-accent look.
@@ -25,35 +25,20 @@ use crate::color::Color;
 use crate::component::{Base, Component, PaintCx, paint_child};
 use crate::reactive::SignalGet;
 use crate::style::Direction;
+use crate::theme::FrameStyle;
 
 /// Rest-glow spread radius (px) — the pane's share of the theme rest halo
 /// (`PaintCx::rest_glow` carries color + intensity).
 const GLOW_RADIUS: f32 = 12.0;
 
-/// Frame decoration mode for a [`Pane`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, heca_grid_ui_macros::PropName)]
-pub enum PaneFrame {
-    /// Fill only — no border, no brackets. Use when you just want the
-    /// background without any frame decoration.
-    None,
-    /// A clean border from `style.border` (set via `.border(color, width)`).
-    /// No corner brackets.
-    Bordered,
-    /// The self-contained accent corner-bracket reticle drawn by
-    /// [`PaintCx::bracket_frame`](crate::PaintCx::bracket_frame): bright rounded
-    /// corners with short arms over a dimmed continuous line. Does **not** also
-    /// draw `style.border` — that would wash the reticle into a plain border.
-    Bracketed,
-}
-
 /// A generic container with configurable frame decoration.
 ///
-/// Default [`PaneFrame`] is [`PaneFrame::Bordered`] — just a fill until
+/// Default [`FrameStyle`] is [`FrameStyle::Bordered`] — just a fill until
 /// `.border(color, width)` is supplied.
 pub struct Pane {
     base: Base,
-    frame: PaneFrame,
-    /// Optional per-widget [`PaneFrame::Bordered`] border width override (logical
+    frame: FrameStyle,
+    /// Optional per-widget [`FrameStyle::Bordered`] border width override (logical
     /// px). `None` → the live `theme.colors.border_width` (the default, so the global
     /// BORDER control still drives every pane). `Some(w)` lets one pane carry its
     /// own frame width independent of the theme (e.g. a self-themed sidebar shell).
@@ -62,7 +47,7 @@ pub struct Pane {
 
 #[heca_grid_ui_macros::props]
 impl Pane {
-    /// A new vertical (column) pane with the default [`PaneFrame::Bordered`].
+    /// A new vertical (column) pane with the default [`FrameStyle::Bordered`].
     /// Content is inset by 8.0 px by default — override with `.padding(x)`.
     pub fn new() -> Self {
         let mut base = Base::new();
@@ -70,7 +55,7 @@ impl Pane {
         base.style.layout.padding = 8.0;
         Self {
             base,
-            frame: PaneFrame::Bordered,
+            frame: FrameStyle::Bordered,
             border_width: None,
         }
     }
@@ -82,35 +67,53 @@ impl Pane {
         pane
     }
 
-    /// Choose the frame decoration mode.
+    /// **The kind of border this pane draws** — none, a continuous line, or the corner-bracket
+    /// reticle. It is a border *style*, the way CSS `border-style` is, which is why it is not
+    /// called `frame`: a caller who reads `.frame(..)` has to go and find out what a frame is.
+    ///
+    /// It is `border_style` and **not** `border` because
+    /// [`StyleExt::border`](crate::builders::StyleExt::border) already takes the colour and the
+    /// width. CSS splits the three for the same reason.
+    ///
+    /// Takes [`FrameStyle`](crate::theme::FrameStyle) — the theme's own vocabulary, which
+    /// [`Overlay`](crate::widgets::Overlay) already uses for its edge, and which the app's
+    /// `[appearance] border_style` converts into. So a config value goes straight in and no
+    /// caller translates:
+    ///
+    /// The app's `[appearance] border_style` converts into it, so a config value goes in with
+    /// nothing to translate:
+    ///
+    /// ```ignore
+    /// Pane::new().border_style(appearance.effective_pane_border_style().into())
+    /// ```
     #[heca_grid_ui_macros::prop]
-    pub fn frame(mut self, f: PaneFrame) -> Self {
-        self.frame = f;
+    pub fn border_style(mut self, style: FrameStyle) -> Self {
+        self.frame = style;
         self
     }
 
-    /// Shorthand: set frame to [`PaneFrame::Bordered`].
+    /// Shorthand: set frame to [`FrameStyle::Bordered`].
     #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn bordered(mut self) -> Self {
-        self.frame = PaneFrame::Bordered;
+        self.frame = FrameStyle::Bordered;
         self
     }
 
-    /// Shorthand: set frame to [`PaneFrame::Bracketed`].
+    /// Shorthand: set frame to [`FrameStyle::Bracketed`].
     #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn bracketed(mut self) -> Self {
-        self.frame = PaneFrame::Bracketed;
+        self.frame = FrameStyle::Bracketed;
         self
     }
 
-    /// Shorthand: set frame to [`PaneFrame::None`].
+    /// Shorthand: set frame to [`FrameStyle::None`].
     #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn frameless(mut self) -> Self {
-        self.frame = PaneFrame::None;
+        self.frame = FrameStyle::None;
         self
     }
 
-    /// Override the [`PaneFrame::Bordered`] border width (logical px), independent
+    /// Override the [`FrameStyle::Bordered`] border width (logical px), independent
     /// of the theme. `None` (the default) keeps the live `theme.colors.border_width` so the
     /// global BORDER control drives the pane; `Some(w)` pins this pane's frame width
     /// (e.g. a sidebar shell that wants its own thickness). No effect on the
@@ -150,13 +153,13 @@ impl Component for Pane {
         let glow = self.base.style.visual.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
 
         match self.frame {
-            PaneFrame::None => {
+            FrameStyle::None => {
                 // Fill only — no border, no brackets.
                 if let Some(f) = fill {
                     cx.rect(b, f, None, radius, glow);
                 }
             }
-            PaneFrame::Bordered => {
+            FrameStyle::Bordered => {
                 // A clean border whose WIDTH always comes from the live
                 // `theme.colors.border_width` (the global border control) — read at paint
                 // time so it tracks the control immediately and is gone at
@@ -181,7 +184,7 @@ impl Component for Pane {
                     cx.rect(b, Color::TRANSPARENT, border, radius, glow);
                 }
             }
-            PaneFrame::Bracketed => {
+            FrameStyle::Bracketed => {
                 // Fill only; the frame is the self-contained corner-bracket reticle
                 // drawn by `bracket_frame` (bright rounded corners + a dimmed
                 // continuous line) — matching Modal/Toast. Drawing a full

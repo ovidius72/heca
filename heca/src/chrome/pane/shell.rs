@@ -80,7 +80,8 @@ impl PaneShell<'_> {
         // onto this tree's root every frame. Baking `Px(w)` in here instead meant the tree kept
         // the width it was first built at, so zooming or resizing left the frame at the old size
         // while the content moved (found by tracing: asked 648 wide, got 380, forever).
-        let mut pane = crate::chrome::apply_pane_frame(UiPane::new(), frame)
+        let mut pane = UiPane::new()
+            .border_style(frame.into())
             .width(heca_grid_ui::Length::Percent(1.0))
             .height(heca_grid_ui::Length::Percent(1.0))
             .padding(content_inset)

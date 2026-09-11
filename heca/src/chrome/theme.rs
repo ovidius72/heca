@@ -151,21 +151,6 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     theme
 }
 
-/// Apply a config [`BorderStyle`](heca_config::appearance::BorderStyle) as the
-/// grid-ui [`Pane`] frame — the single mapping used for both terminal panes
-/// (`pane_border_style`) and the sidebar shell (`sidebar_border_style`).
-pub(crate) fn apply_pane_frame(
-    pane: Pane,
-    style: heca_config::appearance::BorderStyle,
-) -> Pane {
-    use heca_config::appearance::BorderStyle;
-    match style {
-        BorderStyle::None => pane.frameless(),
-        BorderStyle::Bordered => pane.bordered(),
-        BorderStyle::Bracketed => pane.bracketed(),
-    }
-}
-
 /// The status-bar text projection (`N panes | focus | MODE…`).
 pub(crate) fn chrome_status(state: &crate::app_state::AppState) -> String {
     let pane_count = state

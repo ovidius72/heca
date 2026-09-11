@@ -1751,10 +1751,18 @@ properties are applied after children are attached.
 
 ### Pane
 
-A generic container for sidebars/panels with three **frame modes** (`PaneFrame`),
-selectable via `.frame(..)` / `.frameless()` / `.bordered()` / `.bracketed()`:
+A generic container for sidebars/panels with three **border styles**
+([`FrameStyle`](#theme), the theme's own vocabulary — the same one
+[`Overlay`](#overlay) uses for its edge), set with `.border_style(..)` or the shorthands
+`.frameless()` / `.bordered()` / `.bracketed()`:
 
-- **`None`** — background fill only.
+> **It is `border_style`, not `frame`.** All three choices are about the border — none, a
+> continuous line, corner brackets — which is what CSS calls `border-style`. It is not `.border`
+> because [`StyleExt::border`](#builder-traits) already takes the colour and the width; CSS splits
+> the three for the same reason. The app's `[appearance] border_style` converts straight into it,
+> so no caller translates a config value into a widget enum — the six-line host function that used
+> to do exactly that is deleted.
+
 - **`None`** — background fill only.
 - **`Bordered`** (default) — a clean continuous border. Width comes from
   `theme.border_width` (read at paint, so the global border control governs it)

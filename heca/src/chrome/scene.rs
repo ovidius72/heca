@@ -246,7 +246,8 @@ pub(super) fn build_sidebar_shell(
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
     // The collapse toggle lives in the always-visible top bar (sidebar-fu-14), so the
     // shell has no header row — the mounted content (if any) fills the body.
-    let mut body = apply_pane_frame(Pane::new(), border_style)
+    let mut body = Pane::new()
+        .border_style(border_style.into())
         .border_width(border_width)
         .radius(border_radius)
         .width(Length::Px(inner_w))

@@ -89,7 +89,7 @@ pub use key_hint::{
 };
 pub use label::{Ellipsis, Label};
 pub use marker_group::MarkerGroup;
-pub use pane::{Pane, PaneFrame};
+pub use pane::Pane;
 pub use progress::ProgressBar;
 pub use rail_cell::RailCell;
 pub use row::Row;

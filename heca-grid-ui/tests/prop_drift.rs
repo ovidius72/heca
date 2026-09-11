@@ -34,7 +34,6 @@ const NO_SURFACE_REQUIRED: &[(&str, &str)] = &[
     ("ToastAction", "one entry in a ToastSpec's list, not a widget. A DESCRIBED toast declares its actions as children (an ordinary described Button per action), so the description path never meets this type"),
     ("ActiveMarker", "an enum, not a widget"),
     ("GridCell", "a value describing one cell, and everything it carries is a live host signal — a selection light and a hover — which static data cannot supply"),
-    ("PaneFrame", "an enum, not a widget"),
 ];
 
 fn widgets_dir() -> PathBuf {
