@@ -28,13 +28,17 @@ touch AppState:
         .cell(ScrollRegion::new()
                   .child(Terminal { pane_id, surface, cb }.build()), 1, 2, 1, 1)
 
-THE TREE IS THE CONTENT'S, NOT THE PANE'S — so a content component picks a `Flex` or a `Grid` for
-what it is arranging. A header and a body are two parts with DIFFERENT JOBS, so the default to reach
-for is a `Grid` with a track template (`auto` for what sizes itself, `1fr` for what takes the rest).
-A `Flex` is for a list of LIKE things — a row of buttons, a column of rows. The failure a template
-avoids is a parent that COUNTS ITS CHILDREN to tell them apart: the pane holds `[header, content]`
-today and the host asks "does it have two children?" to decide whether there is a header, so putting
-two things in the body makes the first look like one. Full rule: docs/widgets.md -> Grid.
+THE TREE IS THE CONTENT'S, NOT THE PANE'S — so a content component composes whatever it needs:
+`Flex`, `Grid`, `Surface`, `ScrollRegion`, any of them, nested to any depth. The pane does not care
+and must not be told. The sample above is a `Grid` because THIS content has a header and a body —
+two parts with different jobs, where a track template says the whole arrangement in one line
+(`auto` for what sizes itself, `1fr` for what takes the rest). A `Flex` is right for a list of like
+things, a `Surface` for something that is one box. Pick per case.
+
+The one thing that is never right, whichever container is chosen: a parent that COUNTS ITS CHILDREN
+to tell them apart. The pane holds `[header, content]` today and the host asks "does it have two
+children?" to decide whether there is a header, so putting two things in the body makes the first
+look like one. Full rule: docs/widgets.md -> Grid.
 
 The pane shell — heca/src/chrome/pane/mod.rs. It composes the grid-ui `Pane` widget for its frame,
 carries its own identity and letter, and holds exactly ONE content child:
