@@ -551,8 +551,8 @@ return `Self` for chaining.
 | `.padding(f32)` | Inner padding (all sides). |
 | `.padding_xy(x, y)` | Per axis: `x` left+right, `y` top+bottom. |
 | `.padding_left/right/top/bottom(f32)` | **One side**, overriding the axis and the uniform value (side → axis → uniform, the same cascade as the per-side margins). Use it to reserve space along a single edge without moving the opposite one — a [`ScrollRegion`](#scrollregion) keeping content clear of its scrollbar is the case that asked for it. Also settable from a description, for free: the declarative property surface *is* `Layout`'s own fields. |
-| `.width(Length)` / `.height(Length)` | `Length::Auto` or `Length::Px(f32)`. |
-| `.grow(f32)` | Flex-grow factor. |
+| `.width(Length)` / `.height(Length)` | `Length::Auto`, `Length::Px(f32)` or `Length::Percent(f32)`. ⚠️ **`Percent` takes a FRACTION between `0.0` and `1.0`, not a 0–100 percentage** — half the parent is `Percent(0.5)`, and `Percent(50.0)` is fifty times it with nothing to warn you. The fraction is taffy's convention underneath; the wire spelling is the human one, so `Percent(0.5)` serializes to `"50%"` and parses back from it. **Set neither width nor height and the widget fills its parent across the cross axis**, exactly as CSS `align-items: stretch` does — so a panel with no width in a 600px column is 600px wide, and `.width(Length::Percent(1.0))` on a child that already fills says nothing; leave it off. |
+| `.grow(f32)` | Flex-grow factor — a share of what is **left over** after the fixed children. That is what flex-grow means, so "a share of the widest sibling" is a **percentage against one denominator**, not a grow weight. |
 | `.disabled(bool)` | Dim + make inert + drop from focus order. |
 | `.tab_index(i32)` | Explicit Tab order; indexed widgets visited first, ascending. |
 
@@ -1550,6 +1550,12 @@ Layout-only flexible box — the workhorse for arranging children. **`Container`
 are aliases. It's the tool for grouping: nest a `Flex` inside a `Flex` to build any arrangement,
 including form fields (see below), so most layouts need no dedicated widget.
 
+⚠️ **A `Flex` is for a list of LIKE things** — a row of buttons, a column of rows — where the
+children are interchangeable. The moment the children have **different jobs** (a header and a body;
+a toolbar, a list and a status line), it is a [`Grid` with a track template](#grid) instead: see
+**⭐ THE RULE** there. A flex stack of unlike parts ends up carrying one tuned number per child, and
+a parent that counts its children to tell them apart.
+
 - **Construct**: `Flex::row()`, `Flex::column()`, `container()`.
 - **Direction / distribution**: `.direction(Direction)`; `.justify(Justify)` (main-axis:
   `Start`/`Center`/`End`/`SpaceBetween`/`SpaceAround`/`SpaceEvenly`); `.align(Align)` (cross-axis:
@@ -1562,7 +1568,7 @@ including form fields (see below), so most layouts need no dedicated widget.
 - **Padding**: `.padding(px)` / `.padding_xy(x, y)` for raw px, or the tokens `.pad_all(Spacing)` /
   `.pad_x(Spacing)` / `.pad_y(Spacing)` (same font-relative scaling as `gap_spacing`).
 - **Sizing** (from `LayoutExt`, shared by every widget): `.width(Length)` / `.height(Length)`
-  (`Auto` / `Px` / `Pct`), `.grow(f32)` (flex-grow, absorb leftover space), `.margin*`.
+  (`Auto` / `Px` / `Percent`), `.grow(f32)` (flex-grow, absorb leftover space), `.margin*`.
 - **Traits**: `LayoutExt`, `Parent`. **No `StyleExt`, deliberately** — a `Flex` arranges, it does
   not paint, so `.background(..)` on one is a compile error rather than a missing feature. Put the
   colour on a [`Surface`](#surface) and the `Flex` inside it. See
@@ -1626,7 +1632,7 @@ box, the flex is how its contents line up.
 Surface::new()
     .background(theme.colors.surface)
     .pad_y(Spacing::Xs)                       // token, not px — see Flex
-    .width(Length::Pct(1.0))
+    .width(Length::Percent(1.0))
     .child(
         Flex::row()
             .justify(Justify::SpaceBetween)
@@ -1756,6 +1762,36 @@ Pane::new().bordered().background(theme.surface).border(theme.accent, 2.0).paddi
 
 CSS-grid layout (taffy `display: grid`): explicit column/row tracks, named template areas, and
 per-child placement. Pure layout (no styling) — the building block for rich composed rows.
+
+> ### ⭐ THE RULE — anything with more than one PART is a `Grid` with a track template
+>
+> A header and a body. A header, a body and a footer. A toolbar above a list. Two parts or more,
+> and the arrangement is a **track template** — `auto` for what sizes itself, `1fr` for what takes
+> the rest — never a stack of `Flex` children with `grow` weights and heights tuned by hand, and
+> never a parent that **counts its children** to work out which one is which.
+>
+> ```rust
+> Grid::new()
+>     .rows([Track::Auto, Track::Fr(1.0), Track::Auto])   // header · body · footer
+>     .cell(header,  1, 1, 1, 1)
+>     .cell(body,    1, 2, 1, 1)
+>     .cell(footer,  1, 3, 1, 1)
+> ```
+>
+> **Why this and not a `Flex`.** The template says the whole arrangement in one line a reader can
+> check against the picture. A flex stack says it in as many tuned numbers as there are children,
+> spread across the file, and each one is right only for the child count it was written for. Add a
+> footer and every other term needs revisiting.
+>
+> **The counting failure is the one to watch for.** A pane holds `[header, content]` — so the host
+> asks *"does this pane have two children?"* to decide whether it has a header. Put two things in
+> the body and the first is mistaken for a header. A template has no such question: a part is in the
+> row it was placed in, and a missing part is a missing row.
+>
+> **A part is optional by being absent**, not by a flag: build the template from the parts you have.
+>
+> Use a [`Flex`](#flex--container) for a *list of like things* — a row of buttons, a column of rows
+> — where the children are interchangeable and no one of them has a job the others don't.
 
 - **Construct**: `Grid::new()`.
 - **Builders**: `.columns([Track])`, `.rows([Track])` (`Track::{Px(f32), Fr(f32), Auto,
@@ -4002,7 +4038,7 @@ ViewNode::new(WidgetKind::RailCell)
 > a `press` intent is reachable by `prefix+/` with nothing written, and a node that wants a pick to
 > mean something *else* binds `hint` (see the declarative example below). Likewise a **context
 > menu** is a host-owned dropdown the plugin declares with `.context_menu(…)`, not a nested widget.
-> See **[chrome-and-ui.md](chrome-and-ui.md)** → §0 and "Menus and keyboard hints".
+> See **[plugins.md](plugins.md)** → §0 and "Menus and keyboard hints".
 
 A **transparent wrapper that carries a hint letter on behalf of a region** — a group of widgets, or
 something that is not a widget you can put a builder on. It is transparent to focus, layout and
@@ -4624,8 +4660,8 @@ keyed on it, no declaration outside the tree.
   (point-anchored) delegate their placement here, so the flip/clamp rule exists once.
 - **Sizing**: `.panel_size(width: Length, height: Length)` gives the panel an explicit size instead
   of letting it hug its content. Default = unset (hug). `Length::Auto` on an axis keeps the hug
-  behaviour there; a `Length::Pct` resolves against the **viewport**, since the `Overlay` fills it
-  (`Pct(0.6)` = 60% of the viewport). Call order does not matter — the size is stored and re-applied
+  behaviour there; a `Length::Percent` resolves against the **viewport**, since the `Overlay` fills it
+  (`Percent(0.6)` = 60% of the viewport). Call order does not matter — the size is stored and re-applied
   whenever `.panel()`/`.panel_boxed()` replaces the child.
   **Why it matters:** a [`ScrollRegion`](#scrollregion) only scrolls when its parent *bounds* it. An
   unsized panel grows with its content, so a long body never overflows and no scrollbar appears.
@@ -4950,13 +4986,13 @@ the dialog) and `Activate` commits its row.
   from a mapper (e.g. `realize`).
 - **Sizing + a scrollable body**: `.panel_size(width: Length, height: Length)` bounds the panel
   instead of letting it hug its content (default = hug; `Length::Auto` keeps hugging on that axis;
-  `Length::Pct` resolves against the **viewport**). This is what makes a long body scrollable: a
+  `Length::Percent` resolves against the **viewport**). This is what makes a long body scrollable: a
   [`ScrollRegion`](#scrollregion) only scrolls when its parent bounds it, so wrap the body in one and
   size the panel. Put **only the body** in the region — the title and the action row stay fixed:
 
   ```rust
   Dialog::new("Pick a container")
-      .panel_size(Length::Pct(0.5), Length::Pct(0.6))   // 50% × 60% of the viewport
+      .panel_size(Length::Percent(0.5), Length::Percent(0.6))   // 50% × 60% of the viewport
       .body(ScrollRegion::new().child(long_list))       // only this scrolls
       .action(Button::secondary("Cancel"))
   ```
@@ -5470,6 +5506,34 @@ ViewNode::new(WidgetKind::VStack)
 The merge lands **on top of** the constructed widget, so a widget's own constructor settings survive
 any property the node doesn't mention — a `Scroll` keeps the zeroed min-sizes and shrink factor that
 let a viewport be smaller than its content.
+
+#### Sizes: the three spellings, and the one number written two ways
+
+A size — `width`, `height`, `min_*`, `max_*`, and the per-side margins — accepts exactly three
+forms, the same ones CSS does:
+
+| written | means |
+|---|---|
+| `240` / `"240"` / `"240px"` | logical pixels |
+| `"50%"` | **a fraction of the parent** |
+| `"auto"` | sized by content and flex rules |
+| *nothing at all* | **fills the parent across the cross axis** — CSS `align-items: stretch` |
+
+There is **no second vocabulary for plugins**: the same `Length` deserializer reads a described
+tree, an RPC message and a config file, so what an author writes is what the app's own code gets.
+
+⚠️ **`"50"` is fifty pixels, not half** — exactly as in CSS. The `%` is what makes it a fraction.
+
+⚠️ **The same value is spelled two ways on purpose.** On the wire it is `"50%"`, because that is
+what an author writes; in Rust it is `Length::Percent(0.5)`, because that is the fraction taffy
+takes underneath. One translator does the conversion — `Length`'s `Deserialize`/`Serialize` in
+`heca-grid-ui/src/style.rs` — and it round-trips, which is what the layout merge relies on. So a
+plugin never sees `0.5` and native code never sees `"50%"`, and neither has to know the other
+spelling exists.
+
+Through the typed SDK the same thing is `width_pct(0.5)`, which emits `"50%"` for you
+(`a_percentage_width_is_written_the_way_length_reads_it`); that a fraction really lands at half the
+parent is held by `a_described_node_stretches_to_its_parent_like_css`.
 
 ### Identity props — `key` and `hintable`, on every kind
 
@@ -6104,10 +6168,10 @@ implements faithfully), so a fractional `top` silently produces a number — jus
 ```rust
 // A floating pane drawn over the workspace strip behind it, at its own fraction of it.
 strip = strip.child(card.at_rect(
-    Length::Pct(f.x / strip_w),      // ← left and width resolve against the parent's WIDTH
-    Length::Pct(f.y / screen_h),     // ← top and height against its HEIGHT
-    Length::Pct(f.w / strip_w),
-    Length::Pct(f.h / screen_h),
+    Length::Percent(f.x / strip_w),      // ← left and width resolve against the parent's WIDTH
+    Length::Percent(f.y / screen_h),     // ← top and height against its HEIGHT
+    Length::Percent(f.w / strip_w),
+    Length::Percent(f.h / screen_h),
 ));
 ```
 
@@ -6118,7 +6182,7 @@ strip = strip.child(card.at_rect(
   whole reason this exists.
 - **The rect overrides `width`/`height`**: it names both, and a leftover size beside it would
   draw a different rect than the one asked for.
-- Units mix freely: a fixed `Px` chip at a proportional `Pct` position is as valid as a fully
+- Units mix freely: a fixed `Px` chip at a proportional `Percent` position is as valid as a fully
   fractional rect.
 
 Declarative form — a plugin authors the same thing as a grouped property, because a rect is

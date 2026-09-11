@@ -212,7 +212,7 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 | `Base` / `Component` / `PaintCx` | `heca-grid-ui/src/component.rs` |
 | Widget catalog (human docs) | `docs/widgets.md` |
 | Long-arc plugin design | `chrome-and-ui.md` §2.6.2, §2.7.2 |
-| Plugin authoring model | `chrome-and-ui.md` |
+| Plugin authoring model | `plugins.md` |
 
 ---
 

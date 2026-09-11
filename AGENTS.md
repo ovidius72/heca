@@ -161,7 +161,7 @@ window, the overlay margin, the panel padding, the gaps, the row count, each row
 centring. Miss one and everything is wrong by exactly that term. The exposé did this and took **seven
 attempts, six of them wrong, each missing a different term** — and since nothing was a component,
 nothing had a headless test, so the only way to see any of it was to photograph the running app.
-Express it as `Length::Pct` of a shared denominator and `grow` weights, and taffy answers it exactly
+Express it as `Length::Percent` of a shared denominator and `grow` weights, and taffy answers it exactly
 at every window size. (`grow` alone always fills its container — that is what flex-grow *means*, so
 "a share of the widest sibling" is a percentage, not a grow weight.)
 
@@ -283,7 +283,7 @@ rather than reaching into a registry — see ⭐⭐ RULE ZERO.
 
 #### 6. Sizes are shares; the PARENT sizes the CHILD
 
-`Length::Pct` of one shared denominator, or a `grow` weight. Never a model number times a scale of
+`Length::Percent` of one shared denominator, or a `grow` weight. Never a model number times a scale of
 your own (§ 0b). Two traps, both real:
 
 - **`grow` alone always fills.** That is what flex-grow *means*: it distributes free space. "A share
@@ -1252,7 +1252,7 @@ remembered. When you touch a capability, check its neighbours for the same shape
 
 **heca's UI is a declarative, compositional tree — the same shape SwiftUI/Flutter use — and this is the target architecture for EVERY widget.** Two layers, one shape:
 
-- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `VStack`/`HStack`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`Overlay`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling IS a prop** — the `Theme` gives the default and code may override it with a string; the old "styling is not a prop" rule is dead. See [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
+- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `VStack`/`HStack`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`Overlay`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling IS a prop** — the `Theme` gives the default and code may override it with a string; the old "styling is not a prop" rule is dead. See [`docs/plugins.md`](docs/plugins.md). **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
 - **`realize(&ViewNode, …) -> Box<dyn Component>`** (`heca/src/chrome/realize.rs`) — the recursive host mapper: build the `heca-grid-ui` widget for `kind`, resolve props against `Theme`, wire events to intents, recurse `children`, attach via `.child(...)`. It **translates**; it never re-implements layout/paint/focus.
 
 **THE RULE (mandatory, every task): a widget's content is COMPOSED from child components — the very tree `realize` produces — never hand-drawn in `paint`.** A widget draws its own *chrome* (background/border/glow/focus ring, from `Theme`); its *content* (labels, icons, rows) must be child `Component`s laid out by the engine, so that:
@@ -1284,7 +1284,7 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the r
 | What type is a slot / child? | **`impl Component`** — any widget. **Never** narrow it to a closed `Icon\|Label` enum. |
 | How does a **realized** subtree enter a widget? | Via a **`*_boxed` setter**: `realize` returns `Box<dyn Component>`, which is not itself `Component`, so it cannot go through `Parent::child`. `Dialog::body_boxed(Box<dyn Component>)` is the precedent. |
 | How does behaviour cross the plugin boundary? | As an **`Intent`** (action id + args), never a callback. Click, KeyHint pick, and RPC all fire the same intent. |
-| Is styling a prop? | **YES.** The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name like `"muted"`). Set nothing and you follow the theme, which is what most widgets should do — a literal colour will not follow a theme reload, and that is the author's trade to make. **The old rule ("NO — the host resolves the pixels") is dead; do not restore it.** `Visual` (fill, border, glow, radius, font size) serializes and merges through the same generic path as `Layout`; a token name resolves against the theme the tree is built with, and a theme reload rebuilds the trees, so the token follows. `border` and `glow` are **structs**, so a scalar property value could not carry them however serde was derived — `PropValue::Map` carries a named group of values, and a colour nested in one is still a theme token. Nothing tested that gap, so nothing failed while it was open: **adding serde to a type is not the same as being able to author it — check the value channel.** Full model: [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). |
+| Is styling a prop? | **YES.** The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name like `"muted"`). Set nothing and you follow the theme, which is what most widgets should do — a literal colour will not follow a theme reload, and that is the author's trade to make. **The old rule ("NO — the host resolves the pixels") is dead; do not restore it.** `Visual` (fill, border, glow, radius, font size) serializes and merges through the same generic path as `Layout`; a token name resolves against the theme the tree is built with, and a theme reload rebuilds the trees, so the token follows. `border` and `glow` are **structs**, so a scalar property value could not carry them however serde was derived — `PropValue::Map` carries a named group of values, and a colour nested in one is still a theme token. Nothing tested that gap, so nothing failed while it was open: **adding serde to a type is not the same as being able to author it — check the value channel.** Full model: [`docs/plugins.md`](docs/plugins.md). |
 
 **Both authoring paths converge on the same retained tree — that is the whole point:**
 
@@ -1407,7 +1407,7 @@ truncation/ellipsis + wrapping (a long label overflows its box today).
   `Scroll`); it also applies to individual builders, e.g. `DockFrame::rail(..)`.
 
 Background reading (the rules above are self-contained — you do **not** need these to avoid the
-mistakes): `docs/widget-architecture.md` (same content, with rationale); `docs/chrome-and-ui.md` §2.6.2 + §2.7.2; `docs/widgets.md` → "Declarative UI model (`ViewNode`)"; `docs/chrome-and-ui.md`.
+mistakes): `docs/widget-architecture.md` (same content, with rationale); `docs/plugins.md` (everything a plugin author writes); `docs/chrome-and-ui.md` §2.6.2 + §2.7.2 (the chrome's own architecture); `docs/widgets.md` → "Declarative UI model (`ViewNode`)".
 
 ---
 
