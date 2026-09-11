@@ -82,11 +82,11 @@ pub trait LayoutExt: Component + Sized {
     ///
     /// ```no_run
     /// # use heca_grid_ui::prelude::*;
-    /// # use heca_grid_ui::style::Length::Pct;
+    /// # use heca_grid_ui::style::Length::Percent;
     /// # let (x, y, w, h, strip_w, screen_h) = (200.0, 100.0, 400.0, 300.0, 1600.0, 900.0);
     /// # let card = Label::new("float");
     /// // A floating pane at its own fraction of the workspace behind it.
-    /// let placed = card.at_rect(Pct(x / strip_w), Pct(y / screen_h), Pct(w / strip_w), Pct(h / screen_h));
+    /// let placed = card.at_rect(Percent(x / strip_w), Percent(y / screen_h), Percent(w / strip_w), Percent(h / screen_h));
     /// ```
     ///
     /// Two things follow, and both are the point:

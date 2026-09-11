@@ -124,9 +124,14 @@ impl Spacing {
 /// A size along one axis.
 ///
 /// Serializes to the spelling an author would reach for rather than to its enum shape:
-/// [`Auto`](Self::Auto) is `"auto"`, [`Px`](Self::Px) is a bare number, and [`Pct`](Self::Pct) is a
-/// percentage string (`"50%"`). So a declarative description writes `"width": 240` or
-/// `"width": "50%"`, not `{"px": 240}`. Round-trips, which the layout merge relies on.
+/// [`Auto`](Self::Auto) is `"auto"`, [`Px`](Self::Px) is a bare number, and
+/// [`Percent`](Self::Percent) is a percentage string (`"50%"`). So a declarative description writes
+/// `"width": 240` or `"width": "50%"`, not `{"px": 240}`. Round-trips, which the layout merge
+/// relies on.
+///
+/// **Set neither a width nor a height and the widget fills its parent across the cross axis**,
+/// exactly as CSS `align-items: stretch` does — so `.width(Length::Percent(1.0))` on a child that
+/// already fills says nothing, and is better left off.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Length {
     /// Sized by content / flex rules.
@@ -134,8 +139,14 @@ pub enum Length {
     Auto,
     /// Fixed logical pixels.
     Px(f32),
-    /// Fraction of the parent (`0.0..=1.0`).
-    Pct(f32),
+    /// **A fraction of the parent, `0.0..=1.0` — NOT a 0–100 percentage.** Half the parent is
+    /// `Percent(0.5)`; `Percent(50.0)` is fifty times it, and nothing warns you.
+    ///
+    /// The fraction is taffy's own convention, which this sits on, and the wire spelling is the
+    /// human one: [`Percent(0.5)`](Self::Percent) serializes to `"50%"` and parses back from it.
+    /// That is the mismatch the name has to survive, which is why it is spelled out rather than
+    /// abbreviated — an author who reads `Percent` asks what the number means, and this answers.
+    Percent(f32),
 }
 
 impl From<f32> for Length {
@@ -151,7 +162,7 @@ impl Serialize for Length {
         match *self {
             Length::Auto => s.serialize_str("auto"),
             Length::Px(v) => s.serialize_f32(v),
-            Length::Pct(v) => s.serialize_str(&format!("{}%", v * 100.0)),
+            Length::Percent(v) => s.serialize_str(&format!("{}%", v * 100.0)),
         }
     }
 }
@@ -174,7 +185,7 @@ impl<'de> Deserialize<'de> for Length {
                 } else if let Some(pct) = t.strip_suffix('%') {
                     pct.trim()
                         .parse::<f32>()
-                        .map(|v| Length::Pct(v / 100.0))
+                        .map(|v| Length::Percent(v / 100.0))
                         .map_err(|_| D::Error::custom("percentage is not a number"))
                 } else {
                     t.parse::<f32>()
@@ -192,7 +203,7 @@ impl Length {
         match self {
             Length::Auto => auto(),
             Length::Px(v) => length(v),
-            Length::Pct(p) => percent(p),
+            Length::Percent(p) => percent(p),
         }
     }
 
@@ -203,7 +214,7 @@ impl Length {
         match self {
             Length::Auto => taffy::LengthPercentageAuto::Auto,
             Length::Px(v) => length(v),
-            Length::Pct(p) => percent(p),
+            Length::Percent(p) => percent(p),
         }
     }
 }
@@ -216,7 +227,7 @@ impl Length {
 /// what it is for and why a margin cannot do the job.
 ///
 /// All four are [`Length`]s, so a caller may mix units: a chip at a fixed `Px` size over a
-/// proportional `Pct` position is as valid as a fully fractional rect. **A percentage resolves
+/// proportional `Percent` position is as valid as a fully fractional rect. **A percentage resolves
 /// against the parent on its own axis** — `left`/`width` against the parent's width, `top`/`height`
 /// against its height — which is the difference from a percentage *margin*, where CSS resolves
 /// **both** axes against the width.
@@ -474,7 +485,7 @@ pub struct Layout {
     /// Minimum height — see [`min_width`](Style::min_width).
     pub min_height: Option<Length>,
     /// Maximum width. `None` ⇒ unbounded. Used to cap a node against its parent —
-    /// an overlay panel is capped at `Pct(1.0)` so a fixed `Px` size can never
+    /// an overlay panel is capped at `Percent(1.0)` so a fixed `Px` size can never
     /// make a dialog larger than the window.
     pub max_width: Option<Length>,
     /// Maximum height — see [`max_width`](Style::max_width).
@@ -662,7 +673,7 @@ impl Layout {
                 // `x / strip_width` of its row, with no pixel scale anywhere (F003/P082/T420).
                 let side = |v: Option<Length>, axis: f32| match v {
                     Some(Length::Px(px)) => length(px),
-                    Some(Length::Pct(f)) => percent(f),
+                    Some(Length::Percent(f)) => percent(f),
                     // `Auto` is the CSS centring margin; taffy spells it on this type.
                     Some(Length::Auto) => taffy::LengthPercentageAuto::Auto,
                     None => length(axis),

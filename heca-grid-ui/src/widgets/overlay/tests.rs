@@ -211,7 +211,7 @@ fn non_blocking_overlay_occludes_only_its_panel_and_lets_outside_fall_through() 
 /// the size and re-apply it.
 #[test]
 fn panel_size_applies_regardless_of_builder_order() {
-    let want_w = Length::Pct(0.6);
+    let want_w = Length::Percent(0.6);
     let want_h = Length::Px(420.0);
 
     // size first, then panel

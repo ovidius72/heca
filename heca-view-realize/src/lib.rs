@@ -4693,7 +4693,7 @@ mod tests {
         assert_eq!(case(PropValue::Int(240)), Length::Px(240.0));
         assert_eq!(case(PropValue::Float(12.5)), Length::Px(12.5));
         assert_eq!(case(PropValue::Text("auto".into())), Length::Auto);
-        assert_eq!(case(PropValue::Text("50%".into())), Length::Pct(0.5));
+        assert_eq!(case(PropValue::Text("50%".into())), Length::Percent(0.5));
     }
 
     /// Untrusted input stays total, and — the part that matters — a single bad value costs only
@@ -4760,9 +4760,9 @@ mod tests {
 
         let w = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
         let placement = w.base().style.layout.placement.expect("the rect was authored");
-        assert_eq!(placement.left, Length::Pct(0.25));
-        assert_eq!(placement.top, Length::Pct(0.10));
-        assert_eq!(placement.width, Length::Pct(0.5));
+        assert_eq!(placement.left, Length::Percent(0.25));
+        assert_eq!(placement.top, Length::Percent(0.10));
+        assert_eq!(placement.width, Length::Percent(0.5));
         assert_eq!(placement.height, Length::Px(120.0), "a bare number is pixels");
     }
 

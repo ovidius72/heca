@@ -6,7 +6,7 @@
 //! the whole viewport and swallows outside input (modal — [`Dialog`](super::Dialog));
 //! a non-blocking one lets outside input fall through (light-dismiss popovers).
 //! Positioning is a [property](OverlayPosition) of this layer: the default
-//! [`Center`](OverlayPosition::Center) fills the viewport (`Pct(1.0)`²) and
+//! [`Center`](OverlayPosition::Center) fills the viewport (`Percent(1.0)`²) and
 //! **centers** its single panel child with real taffy layout, so every
 //! descendant gets true bounds (hint picker + pointer hit-testing need them);
 //! [`Anchored`](OverlayPosition::Anchored) instead hangs the panel off a trigger
@@ -174,12 +174,12 @@ impl Overlay {
         let mut base = Base::new();
         // Fill the viewport and center the panel on both axes — real taffy
         // centering, so every descendant gets true bounds.
-        base.style.layout.width = Length::Pct(1.0);
-        base.style.layout.height = Length::Pct(1.0);
+        base.style.layout.width = Length::Percent(1.0);
+        base.style.layout.height = Length::Percent(1.0);
         base.style.layout.justify = Justify::Center;
         base.style.layout.align = Align::Center;
         // Breathing room between the panel and the window edge. It doubles as the
-        // inset for the viewport cap in `apply_panel_size`: the panel's `Pct(1.0)`
+        // inset for the viewport cap in `apply_panel_size`: the panel's `Percent(1.0)`
         // max resolves against this padded content box, so even a huge panel keeps
         // this margin and its border/glow is never shaved by the window edge.
         base.style.layout.padding = VIEWPORT_MARGIN;
@@ -237,8 +237,8 @@ impl Overlay {
     /// appears. Give the panel a height and the body can scroll inside it.
     ///
     /// `Length::Auto` on an axis means "as before" (hug the content). A
-    /// [`Pct`](Length::Pct) resolves against the **viewport**, because the
-    /// `Overlay` itself fills it — so `Pct(0.8)` is 80% of the viewport, not 80%
+    /// [`Percent`](Length::Percent) resolves against the **viewport**, because the
+    /// `Overlay` itself fills it — so `Percent(0.8)` is 80% of the viewport, not 80%
     /// of anything the caller laid out.
     ///
     /// Call order does not matter: this is stored on the overlay and re-applied
@@ -248,7 +248,7 @@ impl Overlay {
     /// ```ignore
     /// // A modal that is 60% of the viewport wide and 70% tall, whose body scrolls.
     /// Overlay::new()
-    ///     .panel_size(Length::Pct(0.6), Length::Pct(0.7))
+    ///     .panel_size(Length::Percent(0.6), Length::Percent(0.7))
     ///     .panel(Flex::column().child(ScrollRegion::new().child(long_content)))
     /// ```
     #[heca_grid_ui_macros::host_only(
@@ -264,7 +264,7 @@ impl Overlay {
     /// cap the panel at the viewport.
     ///
     /// The cap is unconditional, not part of `panel_size`: the `Overlay` fills the
-    /// viewport, so `Pct(1.0)` here *is* the window. Without it a fixed `Px` panel
+    /// viewport, so `Percent(1.0)` here *is* the window. Without it a fixed `Px` panel
     /// (or a big content-sized one) draws larger than the window and gets cut off
     /// by the screen edge on both sides — a dialog must never be bigger than the
     /// thing it is centered in.
@@ -273,8 +273,8 @@ impl Overlay {
             return;
         };
         let style = &mut panel.base_mut().style.layout;
-        style.max_width = Some(Length::Pct(1.0));
-        style.max_height = Some(Length::Pct(1.0));
+        style.max_width = Some(Length::Percent(1.0));
+        style.max_height = Some(Length::Percent(1.0));
         if let Some((w, h)) = self.panel_size {
             style.width = w;
             style.height = h;

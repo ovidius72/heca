@@ -54,7 +54,7 @@ impl ExposeGrid<'_> {
             .fold(0.0_f64, f64::max)
             * self.gap_frac;
 
-        let mut grid = CardGrid::new().width(Length::Pct(1.0)).height(Length::Pct(1.0));
+        let mut grid = CardGrid::new().width(Length::Percent(1.0)).height(Length::Percent(1.0));
         for ws in self.rows {
             let (row, cells) = WorkspaceRow {
                 workspace: ws,

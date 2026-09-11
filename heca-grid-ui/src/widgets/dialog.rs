@@ -100,8 +100,8 @@ impl Dialog {
         // modeless one (find/replace, a properties panel) turns it off with `.lock(false)`.
         // Root: a full-size passthrough so the overlay child fills the viewport.
         let mut base = Base::new();
-        base.style.layout.width = Length::Pct(1.0);
-        base.style.layout.height = Length::Pct(1.0);
+        base.style.layout.width = Length::Percent(1.0);
+        base.style.layout.height = Length::Percent(1.0);
 
         // **One flag, handed down.** The dialog is up when `Base::open` says so — the flag every
         // component carries — and the overlay it composes *follows* that same signal rather than
@@ -133,12 +133,12 @@ impl Dialog {
     ///
     /// ```ignore
     /// Dialog::new("Pick a container")
-    ///     .panel_size(Length::Pct(0.5), Length::Pct(0.6))   // 50% × 60% of the VIEWPORT
+    ///     .panel_size(Length::Percent(0.5), Length::Percent(0.6))   // 50% × 60% of the VIEWPORT
     ///     .body(ScrollRegion::new().child(long_list))       // only the body scrolls
     ///     .action(Button::new("Cancel"))
     /// ```
     ///
-    /// `Length::Auto` on an axis keeps the hug-content behaviour. A [`Pct`](Length::Pct)
+    /// `Length::Auto` on an axis keeps the hug-content behaviour. A [`Percent`](Length::Percent)
     /// resolves against the **viewport** (the composed [`Overlay`](super::Overlay) fills it).
     #[heca_grid_ui_macros::host_only(
         "takes more than one value, which a single property cannot carry"
@@ -194,7 +194,7 @@ impl Dialog {
         let idx = self.panel_mut().children.len() - 1;
         let style = &mut self.panel_mut().children[idx].base_mut().style.layout;
         if style.width == Length::Auto {
-            style.width = Length::Pct(1.0);
+            style.width = Length::Percent(1.0);
         }
         if style.flex_grow == 0.0 {
             style.flex_grow = 1.0;

@@ -144,7 +144,7 @@ fn window_slot_of(state: &crate::app_state::AppState, target: &HintTarget) -> Op
 /// occlusion is the same question asked about letters, so it is answered from the declaration
 /// rather than assumed from the root's box.
 ///
-/// An ambient overlay fills the viewport and draws in a corner of it: a toast stack is `Pct(1.0)`
+/// An ambient overlay fills the viewport and draws in a corner of it: a toast stack is `Percent(1.0)`
 /// square because it *positions* its cards on screen, not because it covers the screen. Reading its
 /// bounds as an occluder blanked every letter in the app for as long as the stack was mounted —
 /// chrome, panes and all — leaving letters only on the toast itself.
@@ -225,7 +225,7 @@ fn visible_hint_targets(
             // **A surface hides what it says it hides.** `lock` is the declaration the
             // action router already acts on, and occlusion is the same question asked about
             // letters, so it is read rather than assumed from the node's box. An ambient overlay
-            // fills the viewport and draws in a corner of it: a toast stack is `Pct(1.0)` because
+            // fills the viewport and draws in a corner of it: a toast stack is `Percent(1.0)` because
             // it *positions* its cards, not because it covers the screen.
             //
             // **Declaring nothing is declaring `false`** — a surface that registered no entry (the

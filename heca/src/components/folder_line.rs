@@ -71,7 +71,7 @@ impl FolderLine<'_> {
                 .pad_x(self.indent)
                 // Never wider than what holds it — see `PaneName`. The line is commonly centred,
                 // and a centred child is sized by its content unless it says otherwise.
-                .max_width(Length::Pct(1.0))
+                .max_width(Length::Percent(1.0))
                 // **This line absorbs the squeeze**, which is how a widget asks for it here
                 // (`Style::flex_shrink`: nothing shrinks unless it says so). A path is the longest
                 // thing on a card and the first that should give way — without this the line keeps

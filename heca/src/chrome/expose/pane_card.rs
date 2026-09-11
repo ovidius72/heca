@@ -120,8 +120,8 @@ impl PaneCard<'_> {
             // its child, so the share or the rect the parent handed the wrapper has to be passed on
             // deliberately — a card left to hug its own label would collapse to the width of the
             // word in it, whatever the column was given.
-            .width(Length::Pct(1.0))
-            .height(Length::Pct(1.0))
+            .width(Length::Percent(1.0))
+            .height(Length::Percent(1.0))
             .active(self.active)
             .previous(self.previous)
             // **A card has a scale of its own.** The theme's default previous mark is tuned for a
@@ -197,7 +197,7 @@ impl PaneCard<'_> {
                     // cannot be narrower than the longest path inside it, and a narrow window drew
                     // every card's text across its neighbours.
                     .shrink(1.0)
-                    .max_width(Length::Pct(1.0))
+                    .max_width(Length::Percent(1.0))
                     // The name as every surface shows it — and it stays inside the card, however
                     // narrow the window makes it (`components::PaneName`).
                     .child(
@@ -340,7 +340,7 @@ mod tests {
                 cb: &cb,
             }
             .build();
-            // The card is a **share** of the strip it sits in (`Pct`), so it is laid out inside a
+            // The card is a **share** of the strip it sits in (`Percent`), so it is laid out inside a
             // parent that gives it one — as the map does. At the root of a layout a percentage has
             // nothing to be a percentage of.
             use heca_grid_ui::builders::{LayoutExt as _, Parent as _};

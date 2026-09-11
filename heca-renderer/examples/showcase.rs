@@ -638,7 +638,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // body is inside the region. The nested Select above still has to composite
         // ABOVE the buttons even while the body is scrolled.
         // SIZED panel: `panel_size` bounds the panel so the scrollable list below has
-        // something to overflow. A `Pct` tracks the window; `Px` would pin it.
+        // something to overflow. A `Percent` tracks the window; `Px` would pin it.
         // A bounded panel (fixed px — a dialog is not viewport-proportional) so the
         // scrollable body has something to overflow. Note what the caller does NOT
         // have to say: the body fills the panel width and takes the leftover height
@@ -1402,7 +1402,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             Surface::new()
                 .background(theme.colors.surface)
                 .pad_all(Spacing::Xs)
-                .width(Length::Pct(0.5))
+                .width(Length::Percent(0.5))
                 .child(
                     ButtonGroup::new()
                         .size(WidgetSize::Small)

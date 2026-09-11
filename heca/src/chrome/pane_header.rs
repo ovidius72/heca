@@ -886,7 +886,7 @@ pub(crate) fn build_pane_header(
     // (Antonio, driving, 2026-09-02). The pane is a column of two — this bar at its natural height,
     // the content taking everything left — so the bar is exactly as tall as what is in it.
     let row = Flex::row()
-        .width(Length::Pct(1.0))
+        .width(Length::Percent(1.0))
         // **Air between the title and the actions**, as a token — it resolves against the inherited
         // font, so it holds at every font size and UI zoom instead of being tuned for one.
         .gap_spacing(heca_grid_ui::Spacing::Sm)
@@ -912,7 +912,7 @@ pub(crate) fn build_pane_header(
     Some(
         Surface::new()
             .background(band)
-            .width(Length::Pct(1.0))
+            .width(Length::Percent(1.0))
             // **The strip's own inset, on both axes.** It replaces a hand-subtracted 6px margin
             // that the host used to take off the pane width before handing the bar a budget — the
             // container holds its own padding, and nothing outside it has to know the number.

@@ -63,7 +63,7 @@ impl PaneName<'_> {
             // free to overflow its container — which is how the exposé's cards, whose column
             // centres this, kept drawing a full name out of a card far too narrow for it. CSS's
             // `max-width: 100%`, said once here rather than at each surface.
-            .max_width(Length::Pct(1.0));
+            .max_width(Length::Percent(1.0));
         if (self.font_scale - 1.0).abs() > f32::EPSILON {
             widget = widget.font_scale(self.font_scale);
         }

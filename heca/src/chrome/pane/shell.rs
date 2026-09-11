@@ -81,8 +81,8 @@ impl PaneShell<'_> {
         // the width it was first built at, so zooming or resizing left the frame at the old size
         // while the content moved (found by tracing: asked 648 wide, got 380, forever).
         let mut pane = crate::chrome::apply_pane_frame(UiPane::new(), frame)
-            .width(heca_grid_ui::Length::Pct(1.0))
-            .height(heca_grid_ui::Length::Pct(1.0))
+            .width(heca_grid_ui::Length::Percent(1.0))
+            .height(heca_grid_ui::Length::Percent(1.0))
             .padding(content_inset)
             .border(to_gui_color(border_color), border_width)
             .radius(border_radius);

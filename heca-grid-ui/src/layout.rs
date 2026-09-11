@@ -128,7 +128,7 @@ impl LayoutEngine {
         // root it can only mean a fraction of the space the root was given.
         let root_margin = |side: Option<crate::style::Length>, uniform: f32, space: f64| match side {
             Some(crate::style::Length::Px(px)) => px as f64,
-            Some(crate::style::Length::Pct(f)) => f as f64 * space,
+            Some(crate::style::Length::Percent(f)) => f as f64 * space,
             Some(crate::style::Length::Auto) | None => uniform as f64,
         };
         let origin = Point::new(
@@ -262,7 +262,7 @@ impl LayoutEngine {
                         // 240: in a narrower panel they painted straight through its border and out
                         // the other side, at *every* window size, because an intrinsic width never
                         // consults the box it was given (F003/P082/T438).
-                        s.max_width = s.max_width.or(Some(crate::style::Length::Pct(1.0)));
+                        s.max_width = s.max_width.or(Some(crate::style::Length::Percent(1.0)));
                     }
                 }
             }
@@ -443,7 +443,7 @@ mod tests {
     ///
     /// This is CSS's rule and taffy implements it faithfully, but it is the opposite of
     /// what "a fraction of the parent" reads as on the vertical, and it is silent: a
-    /// `margin_top(Pct(0.25))` produces a number, just the wrong one, on any parent that
+    /// `margin_top(Percent(0.25))` produces a number, just the wrong one, on any parent that
     /// is not square. So a caller placing a box at a **fractional rect** can express its
     /// `x` this way and **not** its `y` — the vertical fraction has to be a share
     /// (`grow` weights) or a wrapper the engine can measure against the right axis.
@@ -459,8 +459,8 @@ mod tests {
                 Flex::row()
                     .width(Length::Px(10.0))
                     .height(Length::Px(10.0))
-                    .margin_left(Length::Pct(0.25))
-                    .margin_top(Length::Pct(0.25)),
+                    .margin_left(Length::Percent(0.25))
+                    .margin_top(Length::Percent(0.25)),
             );
         LayoutEngine::new().compute(&mut root, Size::new(800.0, 400.0));
         // A quarter of the width on **both** — not (200, 100), which is what a
@@ -478,10 +478,10 @@ mod tests {
             .height(Length::Px(400.0))
             .child(
                 Flex::row().at_rect(
-                    Length::Pct(0.25),
-                    Length::Pct(0.25),
-                    Length::Pct(0.5),
-                    Length::Pct(0.5),
+                    Length::Percent(0.25),
+                    Length::Percent(0.25),
+                    Length::Percent(0.5),
+                    Length::Percent(0.5),
                 ),
             );
         LayoutEngine::new().compute(&mut root, Size::new(800.0, 400.0));
@@ -497,7 +497,7 @@ mod tests {
     /// Reading `Auto` as "shrink to content" instead is how a menu seated as a surface ended up
     /// stretched down the whole window: the seat handed it the viewport, and a menu is not a layer
     /// — it *is* its panel. Both halves are here, because the trap is that one of them is silent:
-    /// a layer that declares its own `Pct(1.0)` must keep filling the window.
+    /// a layer that declares its own `Percent(1.0)` must keep filling the window.
     #[test]
     fn a_placement_that_leaves_an_axis_auto_keeps_the_widgets_own_size() {
         let mut root = Flex::row()
@@ -509,8 +509,8 @@ mod tests {
                     .width(Length::Px(220.0))
                     .height(Length::Px(90.0))
                     .at_rect(
-                        Length::Pct(0.0),
-                        Length::Pct(0.0),
+                        Length::Percent(0.0),
+                        Length::Percent(0.0),
                         Length::Auto,
                         Length::Auto,
                     ),
@@ -518,11 +518,11 @@ mod tests {
             // Declares itself the whole window, like every layer-shaped surface.
             .child(
                 Flex::row()
-                    .width(Length::Pct(1.0))
-                    .height(Length::Pct(1.0))
+                    .width(Length::Percent(1.0))
+                    .height(Length::Percent(1.0))
                     .at_rect(
-                        Length::Pct(0.0),
-                        Length::Pct(0.0),
+                        Length::Percent(0.0),
+                        Length::Percent(0.0),
                         Length::Auto,
                         Length::Auto,
                     ),
@@ -598,10 +598,14 @@ mod tests {
         let mut root = Flex::row()
             .width(Length::Px(800.0))
             .height(Length::Px(400.0))
-            .child(Flex::row().width(Length::Pct(1.0)).height(Length::Pct(1.0)))
+            .child(
+                Flex::row()
+                    .width(Length::Percent(1.0))
+                    .height(Length::Percent(1.0)),
+            )
             .child(Flex::row().at_rect(
-                Length::Pct(0.5),
-                Length::Pct(0.5),
+                Length::Percent(0.5),
+                Length::Percent(0.5),
                 Length::Px(100.0),
                 Length::Px(100.0),
             ));

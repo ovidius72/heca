@@ -83,13 +83,13 @@ impl WorkspaceRow<'_> {
         // and centring it is what puts a short workspace in the middle of the map instead of
         // against the left edge.
         let mut strip = Flex::row()
-            .width(Length::Pct((extent / self.widest) as f32))
+            .width(Length::Percent((extent / self.widest) as f32))
             // **The row reserves its own air.** Its allotment includes the gap (see `ExposeGrid`),
             // and the strip takes the screen's share of that, centred — so half a gap sits above
             // and half below, and between two rows they meet as one. Expressed this way the gap is
             // a share like everything else and stays a tenth of a screen at every window size,
             // rather than a token tuned to text.
-            .height(Length::Pct((screen_h / (screen_h + self.gap)) as f32));
+            .height(Length::Percent((screen_h / (screen_h + self.gap)) as f32));
 
         for col in &ws.columns {
             let (column, cells) = ColumnCard {
@@ -107,7 +107,7 @@ impl WorkspaceRow<'_> {
             // container and two of them would spread across the whole strip and look like six.
             // That is what flex-grow means and is not a bug to fix: a share of a fixed denominator
             // is a percentage.
-            strip = strip.child(column.width(Length::Pct((col.width / extent) as f32)));
+            strip = strip.child(column.width(Length::Percent((col.width / extent) as f32)));
         }
 
         // **A floating pane is drawn over the strip, where it actually sits.** It belongs to no
@@ -135,10 +135,10 @@ impl WorkspaceRow<'_> {
             .build();
             float_cells.push(cell);
             strip = strip.child(card.at_rect(
-                Length::Pct((float.x / extent) as f32),
-                Length::Pct((float.y / screen_h) as f32),
-                Length::Pct((float.w / extent) as f32),
-                Length::Pct((float.h / screen_h) as f32),
+                Length::Percent((float.x / extent) as f32),
+                Length::Percent((float.y / screen_h) as f32),
+                Length::Percent((float.w / extent) as f32),
+                Length::Percent((float.h / screen_h) as f32),
             ));
         }
         // **A float is a card like any other, so the cursor must reach it.** The floats become one
@@ -206,7 +206,11 @@ mod tests {
             cb: &cb,
         }
         .build();
-        lay_out(row.width(Length::Pct(1.0)).height(Length::Pct(1.0)), w, h)
+        lay_out(
+            row.width(Length::Percent(1.0)).height(Length::Percent(1.0)),
+            w,
+            h,
+        )
     }
 
     /// **A column takes the share of the row its real width is worth** — measured against the

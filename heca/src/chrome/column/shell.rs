@@ -48,8 +48,8 @@ impl ColumnShell<'_> {
         } = *self.model;
 
         let mut column = Flex::column()
-            .width(heca_grid_ui::Length::Pct(1.0))
-            .height(heca_grid_ui::Length::Pct(1.0));
+            .width(heca_grid_ui::Length::Percent(1.0))
+            .height(heca_grid_ui::Length::Percent(1.0));
 
         // The column's own identity, from the data — never a position. A `ColumnId` is stable
         // across a split, which is what stops every column after an insertion being renamed.

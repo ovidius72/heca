@@ -508,8 +508,8 @@ pub(crate) struct RetainedChrome {
 /// exists to **outlive** the chrome, not to lay anything out.
 pub(crate) fn new_window_root() -> Flex {
     Flex::column()
-        .width(Length::Pct(1.0))
-        .height(Length::Pct(1.0))
+        .width(Length::Percent(1.0))
+        .height(Length::Percent(1.0))
 }
 
 /// **The chrome subtree's identity in the window root.** Its slot is found by this, never by
@@ -600,14 +600,14 @@ pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: Box<dyn Compone
     surface.base_mut().surface = true;
     // **The seat says where, the surface says how big.** Out of the flow at the window's origin,
     // with both sizes left to the surface: every layer-shaped one already declares itself
-    // full-viewport (`Overlay`, `ToastStack`, `CommandPalette` all set `Pct(1.0)` in their own
+    // full-viewport (`Overlay`, `ToastStack`, `CommandPalette` all set `Percent(1.0)` in their own
     // constructors), so they are unchanged — while a surface that is *not* a layer keeps the size
     // it gives itself. A `ContextMenu` is the case: the widget **is** its panel, so being handed
     // the viewport stretched it down the whole window and made every point in the window
     // clickable as the menu (F003/P097/T495).
     surface.base_mut().style.layout.placement = Some(heca_grid_ui::style::Placement {
-        left: Length::Pct(0.0),
-        top: Length::Pct(0.0),
+        left: Length::Percent(0.0),
+        top: Length::Percent(0.0),
         width: Length::Auto,
         height: Length::Auto,
     });

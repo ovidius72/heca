@@ -81,7 +81,7 @@ There are two things called "overlay" here: the **`Overlay` widget** in `heca-gr
 
 | what a surface needs | `Overlay` already has |
 |---|---|
-| fill the viewport, place a panel in it | `Pct(1.0)` fill with real layout, so every descendant gets true bounds |
+| fill the viewport, place a panel in it | `Percent(1.0)` fill with real layout, so every descendant gets true bounds |
 | swallow input (modal) | `blocking(true)` — scrim plus swallow |
 | let input fall through | `blocking(false)` — a press beside it reaches the page behind |
 | show and hide | `open` / `hide` / `toggle`, or bind `open_signal` |

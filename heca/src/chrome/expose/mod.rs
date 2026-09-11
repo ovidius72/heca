@@ -207,8 +207,8 @@ pub(crate) fn map(
         // The wrapper hugs its child, so the room the panel gives it has to be passed on
         // deliberately — the grid inside is a share of *this*, and a hugged wrapper would leave it
         // resolving a percentage of nothing (the same term the cards' `KeyHint` needs).
-        .width(Length::Pct(1.0))
-        .height(Length::Pct(1.0));
+        .width(Length::Percent(1.0))
+        .height(Length::Percent(1.0));
 
     Box::new(
         Overlay::new()
@@ -231,7 +231,7 @@ pub(crate) fn map(
             // rows begin off-screen and rush in. The setting defaults to a gentler value, and a
             // user who wants the literal reading sets 2.0.
             .animation(Animation::ZoomFade.from(geometry.overview_zoom_from as f32))
-            .panel_size(Length::Pct(1.0), Length::Pct(1.0))
+            .panel_size(Length::Percent(1.0), Length::Percent(1.0))
             // **The panel is the frost's tint, not a lid.** The blurred frame is stamped under this
             // surface (`.frosted(true)` above), so the surface here is the background
             // colour at the theme's scrim strength: enough to hold the cards' contrast, thin

@@ -1714,7 +1714,7 @@ pub struct PaintCx<'a> {
 /// [`KeyHintGroup`](crate::widgets::KeyHintGroup)) hugs its child, so its bounds are the child's —
 /// which is what the decoration is positioned off. Hugging alone is not transparency:
 ///
-/// - a child sized as a **share** (`Length::Pct`) resolves that percentage against its parent, and
+/// - a child sized as a **share** (`Length::Percent`) resolves that percentage against its parent, and
 ///   its parent is now the wrapper. A hugged wrapper is `Auto`, so the share resolves against
 ///   nothing and silently falls back to the child's **content** size — the widget stops being a
 ///   share and becomes as wide as its text;

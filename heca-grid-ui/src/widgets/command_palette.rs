@@ -1132,8 +1132,8 @@ impl Component for CommandPalette {
         // The palette **fills the viewport**, like every other layer root, so `on_layout` can read
         // its own size and learn the viewport from the layout pass rather than waiting for a paint.
         self.base.style.layout.direction = Direction::Column;
-        self.base.style.layout.width = Length::Pct(1.0);
-        self.base.style.layout.height = Length::Pct(1.0);
+        self.base.style.layout.width = Length::Percent(1.0);
+        self.base.style.layout.height = Length::Percent(1.0);
         // The text children carry the width instead: the engine measures each against the width it
         // will be drawn at, so the line count it reports is the line count that gets painted.
         let w = self.text_w() as f32;

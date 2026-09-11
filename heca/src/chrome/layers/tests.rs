@@ -1141,7 +1141,9 @@ fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
     // The chrome: a plain child of the window root, and the thing the pointer must reach.
     crate::chrome::seat_chrome(
         &mut window,
-        Flex::row().width(Length::Pct(1.0)).height(Length::Pct(1.0)),
+        Flex::row()
+            .width(Length::Percent(1.0))
+            .height(Length::Percent(1.0)),
     );
     // The stack, seated **exactly as the app seats it** — wrapped in its picker group, and empty,
     // as it is nearly always. The wrapper is the point: a first version of this guard placed a bare
