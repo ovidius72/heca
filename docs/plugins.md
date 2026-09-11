@@ -346,10 +346,11 @@ build::Panel::new().width_pct(0.5)     // half — what a percentage is actually
 build::Panel::new().width(240.0)       // fixed; this is what keeps two panels side by side
 ```
 
-A percentage travels as `"100%"` / `"50%"`, which is one of the three spellings `Length` accepts
-(a number is px, `"auto"` is content-sized). Full reference — the three forms, the `"50"`-is-pixels
-trap, and why the same value is `"50%"` on the wire and `Percent(0.5)` in Rust:
-[`docs/widgets.md` → Sizes: the three spellings](widgets.md).
+A percentage travels as `"100%"` / `"50%"`, which is one of the spellings `Length` accepts (a number
+is px, `"200px"` the same, `"auto"` content-sized). **They are not a plugin dialect** — one parser
+reads them, and the app's own builders take the identical strings, so what you write is what native
+code gets. Full reference, including the `"50"`-is-pixels trap:
+[`docs/widgets.md` → Writing a size](widgets.md).
 
 Authors depend on the stretch without asking for it, so it is pinned by
 `a_described_node_stretches_to_its_parent_like_css`. Changing a container's default `align` would

@@ -228,14 +228,21 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.layout.pad_spacing_y = Some(s);
         self
     }
-    /// Width along the main/cross axis.
-    fn width(mut self, w: Length) -> Self {
-        self.base_mut().style.layout.width = w;
+    /// Width along the main/cross axis, in any of the spellings a size is written in:
+    /// `.width(200)` / `.width("200px")` px, `.width("50%")` a fraction of the parent,
+    /// `.width("auto")` content-sized, `.width(Length::HALF)` the same fraction without a number
+    /// to mistype. See [`Length`] for the whole vocabulary.
+    ///
+    /// **Setting neither width nor height already fills the parent** across the cross axis, exactly
+    /// as CSS `align-items: stretch` does — so `.width(Length::FULL)` on a child that fills says
+    /// nothing, and is better left off.
+    fn width(mut self, w: impl Into<Length>) -> Self {
+        self.base_mut().style.layout.width = w.into();
         self
     }
-    /// Height along the main/cross axis.
-    fn height(mut self, h: Length) -> Self {
-        self.base_mut().style.layout.height = h;
+    /// Height along the main/cross axis — the same spellings as [`width`](LayoutExt::width).
+    fn height(mut self, h: impl Into<Length>) -> Self {
+        self.base_mut().style.layout.height = h.into();
         self
     }
     /// Flex grow factor (share of remaining space).
@@ -260,20 +267,22 @@ pub trait LayoutExt: Component + Sized {
     }
 
     /// Floor for the height — a row that must stay legible however many share the space.
-    fn min_height(mut self, h: Length) -> Self {
-        self.base_mut().style.layout.min_height = Some(h);
+    /// Same spellings as [`width`](LayoutExt::width).
+    fn min_height(mut self, h: impl Into<Length>) -> Self {
+        self.base_mut().style.layout.min_height = Some(h.into());
         self
     }
 
-    /// Floor for the width.
-    fn min_width(mut self, w: Length) -> Self {
-        self.base_mut().style.layout.min_width = Some(w);
+    /// Floor for the width. Same spellings as [`width`](LayoutExt::width).
+    fn min_width(mut self, w: impl Into<Length>) -> Self {
+        self.base_mut().style.layout.min_width = Some(w.into());
         self
     }
 
     /// Ceiling for the height — a box that may not grow past it however tall its content is.
-    fn max_height(mut self, h: Length) -> Self {
-        self.base_mut().style.layout.max_height = Some(h);
+    /// Same spellings as [`width`](LayoutExt::width).
+    fn max_height(mut self, h: impl Into<Length>) -> Self {
+        self.base_mut().style.layout.max_height = Some(h.into());
         self
     }
 
@@ -283,8 +292,8 @@ pub trait LayoutExt: Component + Sized {
     /// ceiling so one long row does not stretch it across the screen. Past the ceiling the content
     /// is the child's problem — a [`Label`](crate::widgets::Label) with
     /// [`truncate`](crate::widgets::Label::truncate) cuts, anything else overflows.
-    fn max_width(mut self, w: Length) -> Self {
-        self.base_mut().style.layout.max_width = Some(w);
+    fn max_width(mut self, w: impl Into<Length>) -> Self {
+        self.base_mut().style.layout.max_width = Some(w.into());
         self
     }
 

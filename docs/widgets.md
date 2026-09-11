@@ -551,10 +551,48 @@ return `Self` for chaining.
 | `.padding(f32)` | Inner padding (all sides). |
 | `.padding_xy(x, y)` | Per axis: `x` left+right, `y` top+bottom. |
 | `.padding_left/right/top/bottom(f32)` | **One side**, overriding the axis and the uniform value (side → axis → uniform, the same cascade as the per-side margins). Use it to reserve space along a single edge without moving the opposite one — a [`ScrollRegion`](#scrollregion) keeping content clear of its scrollbar is the case that asked for it. Also settable from a description, for free: the declarative property surface *is* `Layout`'s own fields. |
-| `.width(Length)` / `.height(Length)` | `Length::Auto`, `Length::Px(f32)` or `Length::Percent(f32)`. ⚠️ **`Percent` takes a FRACTION between `0.0` and `1.0`, not a 0–100 percentage** — half the parent is `Percent(0.5)`, and `Percent(50.0)` is fifty times it with nothing to warn you. The fraction is taffy's convention underneath; the wire spelling is the human one, so `Percent(0.5)` serializes to `"50%"` and parses back from it. **Set neither width nor height and the widget fills its parent across the cross axis**, exactly as CSS `align-items: stretch` does — so a panel with no width in a 600px column is 600px wide, and `.width(Length::Percent(1.0))` on a child that already fills says nothing; leave it off. |
+| `.width(..)` / `.height(..)` / `.min_*` / `.max_*` | **Any spelling a size is written in** — see the table below. **Set neither width nor height and the widget fills its parent across the cross axis**, exactly as CSS `align-items: stretch` does, so a panel with no width in a 600px column is 600px wide and `.width(Length::FULL)` on a child that already fills says nothing; leave it off. |
 | `.grow(f32)` | Flex-grow factor — a share of what is **left over** after the fixed children. That is what flex-grow means, so "a share of the widest sibling" is a **percentage against one denominator**, not a grow weight. |
 | `.disabled(bool)` | Dim + make inert + drop from focus order. |
 | `.tab_index(i32)` | Explicit Tab order; indexed widgets visited first, ascending. |
+
+#### Writing a size — one vocabulary, native and described alike
+
+Every sizing builder takes `impl Into<Length>`, so a size is written the way it is said:
+
+```rust
+.width(200)              .width(200.0)     // pixels — integer or decimal
+.width("200px")          .width("200")     // the px suffix is optional
+.width("50%")                              // a fraction of the parent
+.width("auto")                             // sized by content and flex rules
+.width(Length::HALF)                       // FULL / HALF / THIRD / QUARTER
+// …and nothing at all                     // already fills the parent
+```
+
+| written | means |
+|---|---|
+| `200` / `200.0` / `"200"` / `"200px"` | logical pixels |
+| `"50%"` | a fraction of the parent |
+| `"auto"` | sized by content and flex rules |
+| `Length::FULL` / `HALF` / `THIRD` / `QUARTER` | the same fractions, with no number to mistype |
+| *nothing* | fills the parent across the cross axis — CSS `align-items: stretch` |
+
+**There is exactly one parser** (`Length: FromStr`), and `Deserialize` calls it — so a call site,
+a plugin's description, an RPC message and `config.toml` can never come to disagree about what
+`"50%"` means. Held by `the_wire_and_a_call_site_read_a_size_through_the_same_parser`.
+
+⚠️ **`"50"` is fifty pixels, not half** — exactly as in CSS. The `%` is what makes it a fraction.
+
+⚠️ **`Length::Percent` takes a fraction, `0.0..=1.0`, not a 0–100 percentage.** Half is
+`Percent(0.5)`; `Percent(50.0)` is fifty times the parent and nothing warns you. The fraction is
+taffy's convention underneath and `"50%"` is the human spelling, so `Percent(0.5)` serializes to
+`"50%"` and parses back from it. **Prefer `"50%"` or `Length::HALF` at a call site** and let the
+variant stay inside the library, where the convention is consistent.
+
+⚠️ **A string nobody can read becomes `Auto`, it does not panic** — the same rule the grid's track
+vocabulary follows, because these spellings arrive from a plugin and from config as well as from
+Rust: a typo costs its author a differently-sized box rather than taking the host down. Use
+`"…".parse::<Length>()` when you want to be told instead.
 
 **`StyleExt`** (visual decoration — *surfaces only*: `Surface`, `Card`, `Button`):
 
@@ -1567,7 +1605,7 @@ a parent that counts its children to tell them apart.
   is tuned for one font size and wrong at every other.
 - **Padding**: `.padding(px)` / `.padding_xy(x, y)` for raw px, or the tokens `.pad_all(Spacing)` /
   `.pad_x(Spacing)` / `.pad_y(Spacing)` (same font-relative scaling as `gap_spacing`).
-- **Sizing** (from `LayoutExt`, shared by every widget): `.width(Length)` / `.height(Length)`
+- **Sizing** (from `LayoutExt`, shared by every widget): `.width(..)` / `.height(..)`
   (`Auto` / `Px` / `Percent`), `.grow(f32)` (flex-grow, absorb leftover space), `.margin*`.
 - **Traits**: `LayoutExt`, `Parent`. **No `StyleExt`, deliberately** — a `Flex` arranges, it does
   not paint, so `.background(..)` on one is a compile error rather than a missing feature. Put the
