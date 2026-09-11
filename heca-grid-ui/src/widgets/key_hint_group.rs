@@ -96,14 +96,8 @@ pub struct KeyHintGroup {
 #[heca_grid_ui_macros::props]
 impl KeyHintGroup {
     /// Wrap `child`. Name the verb that opens it with [`opens_on`](KeyHintGroup::opens_on).
-    pub fn new(child: impl Component + 'static) -> Self {
-        Self::wrap(Box::new(child))
-    }
-
-    /// Wrap an **already-boxed** subtree — what a dynamically built tree is (`realize` output, a
-    /// provider's render seam), where the concrete widget type is not known at the call site.
-    pub fn new_boxed(child: Box<dyn Component>) -> Self {
-        Self::wrap(child)
+    pub fn new(child: impl crate::builders::IntoComponent) -> Self {
+        Self::wrap(child.into_component())
     }
 
     fn wrap(child: Box<dyn Component>) -> Self {

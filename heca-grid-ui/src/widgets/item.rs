@@ -153,33 +153,15 @@ impl Item {
 
     /// Set the leading (left) slot — any component (icon, dot, badge…).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn leading(mut self, c: impl Component + 'static) -> Self {
-        self.base.children[LEADING] = Box::new(c);
+    pub fn leading(mut self, c: impl crate::builders::IntoComponent) -> Self {
+        self.base.children[LEADING] = c.into_component();
         self
     }
 
     /// Set the trailing (right) slot — any component (kbd hint, `>`, badge…).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn trailing(mut self, c: impl Component + 'static) -> Self {
-        self.base.children[TRAILING] = Box::new(c);
-        self
-    }
-
-    /// [`leading`](Item::leading) for an **already-boxed** component — what a host mapper has after
-    /// realizing a declarative subtree. `Box<dyn Component>` is not itself `Component`, so it cannot
-    /// go through the `impl Component` setters; same seam as
-    /// [`Dialog::body_boxed`](super::Dialog::body_boxed).
-    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn leading_boxed(mut self, c: Box<dyn Component>) -> Self {
-        self.base.children[LEADING] = c;
-        self
-    }
-
-    /// [`trailing`](Item::trailing) for an already-boxed component — see
-    /// [`leading_boxed`](Item::leading_boxed).
-    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn trailing_boxed(mut self, c: Box<dyn Component>) -> Self {
-        self.base.children[TRAILING] = c;
+    pub fn trailing(mut self, c: impl crate::builders::IntoComponent) -> Self {
+        self.base.children[TRAILING] = c.into_component();
         self
     }
 

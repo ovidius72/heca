@@ -135,9 +135,12 @@ closed enum (`Icon | Label`); that is a narrow patch against a general problem. 
 intrinsic semantic color (`Badge::danger`, `StatusDot::online`) keep it; unstyled text/glyphs
 inherit the parent's state color.
 
-**A realized subtree goes in via `*_boxed`.** `realize` returns `Box<dyn Component>`, which is not
-itself `Component`, so it cannot go through `Parent::child`. The established seam is an explicit
-boxed setter — `Dialog::body_boxed(Box<dyn Component>)` is the precedent; new widgets follow it.
+**A realized subtree goes in through the slot's own builder.** `realize` returns
+`Box<dyn Component>`, which is not itself `Component` — so every child-taking builder used to come
+in twos, sixteen of them, and a caller had to know which spelling to reach for. They take
+`impl IntoComponent` now, which covers a widget and a box alike and hands an already-boxed subtree
+through rather than wrapping it again. **A new slot takes `impl IntoComponent`; do not add a
+seventeenth `*_boxed`.**
 
 ---
 
@@ -194,7 +197,7 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 | Does a plugin author write raw `ViewNode`? | **They may, but the typed SDK is the surface.** | `heca-view::build` — one type per kind, so the compiler refuses what the widget cannot do. Same relationship Flutter's typed `Widget`s have to `Element`. |
 | Do widgets hold children, or hand-draw content? | **Children.** | The rule in §3. Hand-drawn content is a refactor target. |
 | Can any component go inside a widget's slot? | **Yes.** | Slots are `impl Component`. Never narrow to a closed enum. |
-| How does a realized subtree get into a widget? | **`*_boxed` setter.** | `Dialog::body_boxed` is the precedent. |
+| How does a realized subtree get into a widget? | **The slot's own builder.** | Slots take `impl IntoComponent`; the `*_boxed` twins are deleted. |
 | Does behaviour cross the plugin boundary as a callback? | **No — an `Intent`** (action id + args). | Keeps the model serializable; click, KeyHint pick, and RPC all fire the same intent. |
 | Is styling a prop? | **Yes — changed 2026-07-26, built 2026-07-27.** | The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name). The old "No" is dead — do not restore it. All of `Visual` is settable; a token name resolves against the theme the tree is built with. |
 
@@ -207,7 +210,7 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 | `ViewNode` / `WidgetKind` / `PropValue` / `Intent` | `heca-view/src/lib.rs` |
 | The typed SDK a plugin author writes | `heca-view/src/build.rs` |
 | `realize(&ViewNode, theme, emit, forms) -> Box<dyn Component>` | `heca-view-realize/src/lib.rs` |
-| Overlay: `ModalSpec` → `Dialog` (the `*_boxed` seam in action) | `heca/src/chrome/overlay.rs` |
+| Overlay: `ModalSpec` → `Dialog` (a realized subtree entering a slot) | `heca/src/chrome/overlay.rs` |
 | The widgets | `heca-grid-ui/src/widgets/` |
 | `Base` / `Component` / `PaintCx` | `heca-grid-ui/src/component.rs` |
 | Widget catalog (human docs) | `docs/widgets.md` |

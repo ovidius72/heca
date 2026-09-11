@@ -1108,7 +1108,7 @@ mod tests {
         let wrapped = || -> WidgetModel {
             let mut body = tall();
             pass_box_down(body.as_mut());
-            let mut picked = KeyHint::new_boxed(body);
+            let mut picked = KeyHint::new(body);
             pass_box_down(&mut picked);
             Box::new(FocusScope::new(picked).focus(signal(true)))
         };
@@ -1166,10 +1166,10 @@ mod tests {
         let body: WidgetModel = Box::new(Flex::column().height(Length::Px(120.0)));
         // What `focus_and_pick` does with `share = 0.0`: wrap, and touch no layout.
         let wrapped: WidgetModel =
-            Box::new(FocusScope::new(KeyHint::new_boxed(body)).focus(signal(false)));
+            Box::new(FocusScope::new(KeyHint::new(body)).focus(signal(false)));
         let mut region = Flex::column()
             .height(Length::Px(600.0))
-            .child_boxed(with_share(wrapped, 0.0));
+            .child(with_share(wrapped, 0.0));
         LayoutEngine::new().compute(&mut region, CoreSize::new(300.0, 600.0));
 
         let ring = &region.base().children[0];

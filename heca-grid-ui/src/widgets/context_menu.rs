@@ -328,7 +328,7 @@ impl MenuItem {
                 .align(Align::Center)
                 .padding_xy(ROW_PAD_X, ROW_PAD_Y)
                 .padding_right(ROW_PAD_X + self.trailing_width(font) as f32)
-                .child_boxed(inner),
+                .child(inner),
         )
     }
 }

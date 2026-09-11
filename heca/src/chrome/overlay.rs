@@ -518,7 +518,7 @@ fn build_modal_root(
         super::identity::report_unkeyed_description("modal body", &spec.body);
         super::realize(&spec.body, theme, &view_emit, forms)
     };
-    let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);
+    let mut dialog = Dialog::new(spec.title.clone()).body(body);
     for action in &spec.actions {
         let variant = if action.danger {
             ButtonVariant::Destructive

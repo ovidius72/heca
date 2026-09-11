@@ -68,7 +68,7 @@ const SCRIM_REACH: f64 = 1.0e9;
 /// bracket reticle.
 ///
 /// Build with [`Overlay::new`], hand it the panel via [`panel`](Overlay::panel) (or
-/// [`panel_boxed`](Overlay::panel_boxed) for a mapper-produced `Box<dyn Component>`), and raise it
+/// a mapper-produced `Box<dyn Component>` goes through the same builder), and raise it
 /// with [`open`](Overlay::open) / [`hide`](Overlay::hide) / [`toggle`](Overlay::toggle) — or bind
 /// [`open_signal`](Overlay::open_signal), which a composing widget does.
 /// [`blocking`](Overlay::blocking) selects the layer policy: blocking (default) = scrim + swallow
@@ -211,9 +211,9 @@ impl Overlay {
     /// The caller owns the panel's internal layout (padding, gaps, children);
     /// the overlay owns the chrome around it. Replaces any previous panel.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn panel(mut self, panel: impl Component + 'static) -> Self {
+    pub fn panel(mut self, panel: impl crate::builders::IntoComponent) -> Self {
         self.base.children.clear();
-        self.base.children.push(Box::new(panel));
+        self.base.children.push(panel.into_component());
         self.apply_panel_size();
         self
     }
@@ -222,13 +222,6 @@ impl Overlay {
     /// for a panel produced by a mapper returning `Box<dyn Component>` (e.g.
     /// `heca`'s `realize(ViewNode)`).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn panel_boxed(mut self, panel: Box<dyn Component>) -> Self {
-        self.base.children.clear();
-        self.base.children.push(panel);
-        self.apply_panel_size();
-        self
-    }
-
     /// Give the panel an explicit size instead of letting it hug its content.
     ///
     /// The main reason to want this: **a [`ScrollRegion`](super::ScrollRegion)

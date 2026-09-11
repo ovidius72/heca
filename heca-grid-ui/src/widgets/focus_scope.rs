@@ -66,16 +66,8 @@ pub struct FocusScope {
 #[heca_grid_ui_macros::props]
 impl FocusScope {
     /// Wrap `child`. Bind the focus state with [`focus`](FocusScope::focus).
-    pub fn new(child: impl Component + 'static) -> Self {
-        Self::wrap(Box::new(child))
-    }
-
-    /// Wrap an **already-boxed** subtree — what a dynamically built tree is
-    /// ([`realize`](crate::widgets) output, a chrome provider's render seam), where the concrete
-    /// widget type is not known at the call site. Mirrors
-    /// [`Parent::child_boxed`](crate::builders::Parent::child_boxed).
-    pub fn new_boxed(child: Box<dyn Component>) -> Self {
-        Self::wrap(child)
+    pub fn new(child: impl crate::builders::IntoComponent) -> Self {
+        Self::wrap(child.into_component())
     }
 
     fn wrap(child: Box<dyn Component>) -> Self {
@@ -467,7 +459,7 @@ mod tests {
         // What a chrome provider's render seam returns: a `Box<dyn Component>`, which is not itself
         // `Component`, so it cannot go through `new`.
         let body: Box<dyn Component> = Box::new(child());
-        let mut ring = FocusScope::new_boxed(body).focus(signal(true));
+        let mut ring = FocusScope::new(body).focus(signal(true));
         let theme = Theme::default();
         assert!(!painted(&mut ring, &theme).is_empty());
     }

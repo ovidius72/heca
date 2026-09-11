@@ -413,7 +413,7 @@ mod tests {
     fn the_deepest_row_under_the_point_wins() {
         let mut group = Surface::new().key("col:0:1");
         group.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 60.0));
-        group = group.child_boxed(at(Surface::new().key("pane:7"), 10.0, 20.0));
+        group = group.child(at(Surface::new().key("pane:7"), 10.0, 20.0));
         let mut root = Flex::column();
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
         root.base_mut().children.push(Box::new(group));

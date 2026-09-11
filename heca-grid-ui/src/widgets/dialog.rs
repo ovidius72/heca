@@ -153,8 +153,8 @@ impl Dialog {
     /// Set the dialog **body** — an arbitrary component (a message label, a form, a table…),
     /// inserted between the title and the action row. Call before [`action`](Dialog::action).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn body(mut self, body: impl Component + 'static) -> Self {
-        self.panel_mut().children.push(Box::new(body));
+    pub fn body(mut self, body: impl crate::builders::IntoComponent) -> Self {
+        self.panel_mut().children.push(body.into_component());
         self.fit_body();
         self
     }
@@ -163,12 +163,6 @@ impl Dialog {
     /// by a mapper that returns `Box<dyn Component>` (e.g. `heca`'s `realize(ViewNode)`), which
     /// can't be passed to `body` because `Box<dyn Component>` is not itself `Component`.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn body_boxed(mut self, body: Box<dyn Component>) -> Self {
-        self.panel_mut().children.push(body);
-        self.fit_body();
-        self
-    }
-
     /// Make the body behave the way a dialog body always should, so no caller has
     /// to remember it: **fill the panel's width** (instead of hugging its content
     /// and sitting to the left) and **take the space left between the title and the

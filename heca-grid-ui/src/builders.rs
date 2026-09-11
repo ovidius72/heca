@@ -359,31 +359,39 @@ pub trait StyleExt: Component + Sized {
 }
 
 /// Components that contain children.
-pub trait Parent: Component + Sized {
-    /// Append a child component.
-    fn child(mut self, c: impl Component + 'static) -> Self {
-        self.base_mut().children.push(Box::new(c));
+/// **Anything that can be a child** — a widget, or a subtree someone else already built.
+///
+/// A `Box<dyn Component>` is not itself a [`Component`], which is the whole reason every
+/// child-taking builder used to come in twos: `child` / `child_boxed`, `body` / `body_boxed`,
+/// `leading` / `leading_boxed`, sixteen of them. A caller with a dynamically built subtree — what
+/// the host's `realize()` returns from a `ViewNode`, or a chrome provider's render seam — had to
+/// know which spelling to reach for, and a widget author had to remember to write both.
+///
+/// One bound covers both, so there is one builder per slot and nothing to remember. Implemented
+/// for every `Component` and for `Box<dyn Component>`; nothing else needs an impl, and a caller
+/// never names this trait.
+pub trait IntoComponent {
+    /// The subtree, boxed exactly once.
+    fn into_component(self) -> Box<dyn Component>;
+}
+
+impl<C: Component + 'static> IntoComponent for C {
+    fn into_component(self) -> Box<dyn Component> {
+        Box::new(self)
+    }
+}
+
+impl IntoComponent for Box<dyn Component> {
+    /// Already boxed — handed straight through, so a realized subtree costs no second allocation.
+    fn into_component(self) -> Box<dyn Component> {
         self
     }
+}
 
-    /// Append an **already-boxed** subtree.
-    ///
-    /// [`child`](Parent::child) takes `impl Component`, and a `Box<dyn Component>` is not
-    /// itself `Component` — so a subtree built *dynamically*, where the concrete widget
-    /// type is not known at the call site, cannot go through it. That is what the host's
-    /// `realize()` (a `ViewNode` tree) and a chrome provider's render seam both return.
-    ///
-    /// A widget with **several** places to put children names them instead
-    /// ([`DockFrame::header_boxed`](crate::widgets::DockFrame::header_boxed),
-    /// [`Dialog::body_boxed`](crate::widgets::Dialog::body_boxed)); those inherent methods
-    /// take precedence over this one. This is the plain "append it to my children" case.
-    ///
-    /// ```ignore
-    /// let body: Box<dyn Component> = realize(&node, &emit, &mut hints, &mut forms);
-    /// let panel = Pane::new().padding(10.0).child_boxed(body);
-    /// ```
-    fn child_boxed(mut self, c: Box<dyn Component>) -> Self {
-        self.base_mut().children.push(c);
+pub trait Parent: Component + Sized {
+    /// Append a child — a widget, or an already-boxed subtree; see [`IntoComponent`].
+    fn child(mut self, c: impl IntoComponent) -> Self {
+        self.base_mut().children.push(c.into_component());
         self
     }
 }
@@ -1085,9 +1093,61 @@ pub trait ComponentExt: Component + Sized {
         });
         self
     }
-
 }
 
 /// Every component gets them — the point of the design: put a widget in a tree and it works, with
 /// nothing to opt into.
 impl<T: Component + Sized> ComponentExt for T {}
+
+#[cfg(test)]
+mod one_builder_per_slot {
+    use super::*;
+    use crate::widgets::{Flex, Label};
+
+    fn subtree() -> Box<dyn Component> {
+        Box::new(Label::new("realized"))
+    }
+
+    /// **A widget and an already-built subtree go through the SAME builder.**
+    ///
+    /// `Box<dyn Component>` is not itself a `Component`, and for that one reason every
+    /// child-taking builder came in twos — `child`/`child_boxed`, `body`/`body_boxed`,
+    /// `leading`/`leading_boxed`, sixteen in all. A caller holding a dynamically built subtree,
+    /// which is what `realize()` returns from a description, had to know which spelling to reach
+    /// for; a widget author had to remember to write both, and a new slot that forgot its twin
+    /// was simply unreachable from the declarative side with nothing to report it.
+    #[test]
+    fn a_boxed_subtree_and_a_widget_take_the_same_builder() {
+        let from_widget = Flex::column().child(Label::new("realized"));
+        let from_boxed = Flex::column().child(subtree());
+        assert_eq!(from_widget.base().children.len(), 1);
+        assert_eq!(from_boxed.base().children.len(), 1);
+        assert_eq!(
+            from_boxed.base().children[0].text_summary(),
+            from_widget.base().children[0].text_summary(),
+            "the same subtree, whichever way it arrived",
+        );
+    }
+
+    /// **A subtree that is already boxed is not boxed again.** The whole point of the second
+    /// builder was to avoid that, and the merged one must not give it back: `Box<Box<dyn …>>`
+    /// would still work and still walk, so nothing would fail — it would only cost an allocation
+    /// and a pointer hop per realized child, invisibly.
+    #[test]
+    fn an_already_boxed_subtree_is_handed_through_rather_than_wrapped() {
+        let boxed = subtree();
+        let addr = (&*boxed) as *const dyn Component as *const () as usize;
+        let parent = Flex::column().child(boxed);
+        let child = &parent.base().children[0];
+        let after = (&**child) as *const dyn Component as *const () as usize;
+        assert_eq!(addr, after, "the same allocation, not a box around a box");
+    }
+
+    /// The named slots take it too — a header, a body, a leading icon. One builder each.
+    #[test]
+    fn a_named_slot_takes_a_boxed_subtree_through_its_own_builder() {
+        use crate::widgets::Item;
+        let it = Item::new("row").leading(subtree()).trailing(Label::new("x"));
+        assert_eq!(it.base().children.len(), 3, "leading, label, trailing");
+    }
+}

@@ -1152,9 +1152,7 @@ fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
     crate::chrome::place_surface(
         &mut window,
         "heca.notifications",
-        Box::new(KeyHintGroup::new_boxed(Box::new(ToastStack::new(signal(
-            Vec::new(),
-        ))))),
+        Box::new(KeyHintGroup::new(ToastStack::new(signal(Vec::new())))),
     );
     LayoutEngine::new().compute(&mut window, viewport);
 

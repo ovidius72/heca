@@ -91,7 +91,7 @@ pub(crate) fn mount_notification_stack(state: &mut AppState) {
         });
 
     let mut root: Box<dyn heca_grid_ui::Component> = Box::new(
-        KeyHintGroup::new_boxed(Box::new(stack)).open_when(state.notification_pick_open),
+        KeyHintGroup::new(stack).open_when(state.notification_pick_open),
     );
     // **It says what it is, like every other surface** — and what it says is "nothing"
     // (F003/P097/T499). The stack spans the window because that is how it *positions* its cards in

@@ -132,8 +132,8 @@ impl Toast {
             .grow(1.0)
             .gap(GAP)
             .child(title)
-            .child_boxed(empty_slot()) // BODY
-            .child_boxed(empty_slot()); // ACTION
+            .child(empty_slot()) // BODY
+            .child(empty_slot()); // ACTION
 
         base.children.push(empty_slot()); // ICON
         base.children.push(Box::new(column));
@@ -215,14 +215,8 @@ impl Toast {
     /// secondary without the caller saying so — and content that carries its own colour keeps it,
     /// the same way a `.badge-danger` stays red inside a coloured parent.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn body(self, body: impl Component + 'static) -> Self {
-        self.body_boxed(Box::new(body))
-    }
-
-    /// [`body`](Toast::body) for an **already-boxed** component — what a host mapper has after
-    /// realizing a described subtree. Same seam as [`Dialog::body_boxed`](super::Dialog::body_boxed).
-    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn body_boxed(mut self, body: Box<dyn Component>) -> Self {
+    pub fn body(mut self, body: impl crate::builders::IntoComponent) -> Self {
+        let body = body.into_component();
         self.has_body = true;
         self.column_mut()[BODY] = body;
         self
@@ -249,13 +243,8 @@ impl Toast {
     /// **No pick declaration is needed.** Anything actionable is lettered by `prefix+/` already, so
     /// a button dropped in here is keyboard-reachable the moment the card is in the tree.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn action(self, action: impl Component + 'static) -> Self {
-        self.action_boxed(Box::new(action))
-    }
-
-    /// [`action`](Toast::action) for an already-boxed control — the host-mapper seam.
-    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn action_boxed(mut self, action: Box<dyn Component>) -> Self {
+    pub fn action(mut self, action: impl crate::builders::IntoComponent) -> Self {
+        let action = action.into_component();
         if !self.has_actions {
             self.has_actions = true;
             self.column_mut()[ACTION] = Box::new(

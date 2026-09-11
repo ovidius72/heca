@@ -356,15 +356,8 @@ impl KeyHint {
     // only is why sidebar letters kept failing with no error.
 
     /// Wrap `child`. Bind the hint text with [`hint`](KeyHint::hint).
-    pub fn new(child: impl Component + 'static) -> Self {
-        Self::wrap(Box::new(child))
-    }
-
-    /// Wrap an **already-boxed** subtree — what a dynamically built tree is (a chrome provider's
-    /// render seam, `realize` output), where the concrete widget type is not known at the call
-    /// site. Mirrors [`Parent::child_boxed`](crate::builders::Parent::child_boxed).
-    pub fn new_boxed(child: Box<dyn Component>) -> Self {
-        Self::wrap(child)
+    pub fn new(child: impl crate::builders::IntoComponent) -> Self {
+        Self::wrap(child.into_component())
     }
 
     fn wrap(child: Box<dyn Component>) -> Self {

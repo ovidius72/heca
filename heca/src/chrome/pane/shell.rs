@@ -138,12 +138,12 @@ impl PaneShell<'_> {
         // whatever the thing running in this pane wants along its top; the shell neither builds it
         // nor knows what it is.
         if let Some(header) = self.header {
-            pane = pane.child_boxed(header);
+            pane = pane.child(header);
         }
         // The content row. It grows, which is what holds the header to a strip at the top rather
         // than letting it centre itself down the middle of the pane.
         pane = match self.content {
-            Some(content) => pane.child_boxed(content),
+            Some(content) => pane.child(content),
             None => pane.child(heca_grid_ui::widgets::Flex::column().grow(1.0)),
         };
 

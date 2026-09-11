@@ -100,58 +100,28 @@ impl Grid {
     /// Place a child at an explicit 1-based cell with spans.
     pub fn cell(
         mut self,
-        mut child: impl Component + 'static,
+        child: impl crate::builders::IntoComponent,
         col: u16,
         row: u16,
         col_span: u16,
         row_span: u16,
     ) -> Self {
+        let mut child = child.into_component();
         child.base_mut().style.layout.grid_cell = Some(GridCell {
             col,
             row,
             col_span,
             row_span,
         });
-        self.base.children.push(Box::new(child));
+        self.base.children.push(child);
         self
     }
 
     /// Place a child into a previously-defined named [`area`](Grid::areas).
     /// Unknown names fall back to grid auto-placement.
-    pub fn area(mut self, mut child: impl Component + 'static, name: &str) -> Self {
+    pub fn area(mut self, child: impl crate::builders::IntoComponent, name: &str) -> Self {
+        let mut child = child.into_component();
         child.base_mut().style.layout.grid_cell = self.areas.get(name).copied();
-        self.base.children.push(Box::new(child));
-        self
-    }
-
-    /// [`area`](Grid::area) for an **already-boxed** child — what a host mapper has after
-    /// realizing a declarative subtree. `Box<dyn Component>` is not itself `Component`, so it
-    /// cannot go through the `impl Component` setters; this is the same boxed-setter seam as
-    /// [`Dialog::body_boxed`](super::Dialog::body_boxed).
-    ///
-    /// Call it **after** [`areas`](Grid::areas) — an unknown (or not-yet-defined) name falls back to
-    /// grid auto-placement rather than erroring.
-    pub fn area_boxed(mut self, mut child: Box<dyn Component>, name: &str) -> Self {
-        child.base_mut().style.layout.grid_cell = self.areas.get(name).copied();
-        self.base.children.push(child);
-        self
-    }
-
-    /// [`cell`](Grid::cell) for an already-boxed child — see [`area_boxed`](Grid::area_boxed).
-    pub fn cell_boxed(
-        mut self,
-        mut child: Box<dyn Component>,
-        col: u16,
-        row: u16,
-        col_span: u16,
-        row_span: u16,
-    ) -> Self {
-        child.base_mut().style.layout.grid_cell = Some(GridCell {
-            col,
-            row,
-            col_span,
-            row_span,
-        });
         self.base.children.push(child);
         self
     }

@@ -179,7 +179,7 @@ pub struct Button {
 #[heca_grid_ui_macros::props]
 impl Button {
     /// An **empty** primary button — no content. Compose it with [`child`](Parent::child) /
-    /// [`icon`](Self::icon) / [`content_boxed`](Self::content_boxed).
+    /// [`icon`](Self::icon) / [`content`](Self::content).
     ///
     /// [`new`](Self::new) is the common case (a single label); this is the entry point when the
     /// content is a tree.
@@ -260,13 +260,8 @@ impl Button {
 
     /// Append an already-boxed component — the seam for a subtree built by a mapper
     /// (`realize(&ViewNode)` returns `Box<dyn Component>`, which is not itself `Component` and so
-    /// cannot go through [`Parent::child`]). Mirrors `Dialog::body_boxed`.
+    /// goes through the same builder). Mirrors [`Dialog::body`](super::Dialog::body).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn content_boxed(mut self, content: Box<dyn Component>) -> Self {
-        self.base.children.push(content);
-        self
-    }
-
     /// Convenience constructors, one per variant.
     pub fn primary(label: impl Into<String>) -> Self {
         Self::new(label)

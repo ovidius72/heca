@@ -93,7 +93,7 @@ fn focus_and_pick(
     if share > 0.0 {
         pass_box_down(body.as_mut());
     }
-    let mut picked = KeyHint::new_boxed(body)
+    let mut picked = KeyHint::new(body)
         // Top-centre over a tall dock. Outside a render pass there is no theme to tint it with, and
         // there is no keycap to draw either (no pick is open while a host reads metadata), so the
         // default accent stands.
@@ -211,7 +211,7 @@ pub(super) fn build_region_content(
                     } else {
                         col
                     };
-                    col.child_boxed(body)
+                    col.child(body)
                 },
             )))
         }
@@ -266,7 +266,7 @@ pub(super) fn build_sidebar_shell(
         //
         // The shell's job is to give containers bounds. It hands them the region's height, they
         // take their shares of it, and each scrolls inside what it got.
-        body = body.child_boxed(content);
+        body = body.child(content);
     }
     Flex::column()
         .width(Length::Px(region_w))

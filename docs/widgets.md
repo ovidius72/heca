@@ -671,13 +671,22 @@ takes no argument and there is no event to carry.
 
 | Method | Effect |
 |--------|--------|
-| `.child(impl Component + 'static)` | Append a child. |
-| `.child_boxed(Box<dyn Component>)` | Append an **already-boxed** subtree — one whose concrete widget type isn't known at the call site. `Box<dyn Component>` is not itself `Component`, so it cannot go through `.child()`. This is what the host's `realize()` (a [`ViewNode`](#declarative-ui-model-viewnode) tree) and a chrome provider's render seam both return. |
+| `.child(impl IntoComponent)` | Append a child — a widget, **or a subtree someone else already built**. |
 
-> A widget with **several** places to put children names them instead —
-> [`DockFrame::header_boxed`](#dockframe), [`Dialog::body_boxed`](#dialog) — and those
-> inherent methods win over the trait one. `.child_boxed` is the plain "append it to my
-> children" case.
+> **One builder per slot, never two.** `Box<dyn Component>` is not itself a `Component`, and for
+> that single reason every child-taking builder used to come in twos — `child`/`child_boxed`,
+> `body`/`body_boxed`, `leading`/`leading_boxed`, sixteen in all. A caller holding a dynamically
+> built subtree, which is what `realize()` returns from a description, had to know which spelling to
+> reach for; a widget author had to remember to write both; and a new slot that forgot its twin was
+> simply unreachable from the declarative side, with nothing to report it.
+>
+> `IntoComponent` is the bound that covers both, and it is implemented for you — a caller never
+> names it. An already-boxed subtree is **handed through, not boxed again**
+> (`an_already_boxed_subtree_is_handed_through_rather_than_wrapped`). Every named slot takes it on
+> the same terms: `Dialog::body`, `DockFrame::header`, `Item::leading`, `Overlay::panel`,
+> `Grid::cell`, `KeyHint::new`.
+>
+> **When you add a slot to a widget, take `impl IntoComponent`.** That is the whole rule.
 
 <a id="hintable-and-being-pickable"></a>
 **Being pickable** (part of `ComponentExt`):
@@ -1837,10 +1846,6 @@ per-child placement. Pure layout (no styling) — the building block for rich co
   cell); `.area(child, "name")` places a child in an area; `.cell(child, col, row, col_span,
   row_span)` explicit 1-based placement. A child placed by neither gets taffy's auto-placement; an
   unknown area name falls back to it too.
-- **Boxed setters**: `.area_boxed(Box<dyn Component>, "name")` / `.cell_boxed(box, col, row,
-  col_span, row_span)` — for a host mapper that has an *already-realized* subtree. (`Box<dyn
-  Component>` is not itself `Component`, so it can't go through the `impl Component` setters; same
-  seam as [`Dialog::body_boxed`](#dialog).)
 - **Traits**: `LayoutExt`, `Parent`.
 
 **Native:**
@@ -2459,8 +2464,7 @@ spellings — never two paint paths.
   content — compose it yourself).
 - **Content builders**: `.icon(Glyph)` (prepend a leading `Icon` → children `[Icon, Label]`) ·
   `.child(impl Component)` (`Parent` — append **any** component, at any depth) ·
-  `.content_boxed(Box<dyn Component>)` (mount a subtree from a mapper — what `realize(&ViewNode)`
-  returns; mirrors `Dialog::body_boxed`).
+  `.content(..)` takes a widget **or** a subtree from a mapper — what `realize(&ViewNode)` returns.
 - **Look builders**: `.variant(ButtonVariant)` · `.size(WidgetSize)` (`Small`/`Normal`/`Large`/`Header`
   — scales font **and** padding, and **cascades into the content**) · `.font_size(f32)` (pin an
   explicit size) · `.glow(bool)` (hover glow, default on) · `.bordered(bool)` (default on).
@@ -3463,13 +3467,12 @@ sidebar. Severity maps to theme tokens, never literals.
   glyph), `.icon(Glyph)` to override that glyph / `.no_icon()` to drop it, `.dismissible(bool)`
   (default `true` — the × affordance).
 - **Content is slots, and each takes any component**:
-  - `.body(impl Component)` — the column under the title. `.body_boxed(Box<dyn Component>)` is the
-    same slot for an already-realized subtree (the host-mapper seam, as
-    [`Dialog::body_boxed`](#dialog) is). `.body_text(text)` is **sugar** that builds the small
-    ellipsised `Label` you would have built — one code path, not two.
-  - `.action(impl Component)` — **repeatable**; call it again for a second action and they sit in a
-    row that **wraps** when the card is too narrow. `.action_boxed(..)` is the realized-subtree
-    form. The caller says *what* the action is; the card says where it sits and what hue it takes.
+  - `.body(..)` — the column under the title. Takes a widget **or** an already-realized subtree,
+    through the one builder. `.body_text(text)` is **sugar** that builds the small ellipsised
+    `Label` you would have built — one code path, not two.
+  - `.action(..)` — **repeatable**; call it again for a second action and they sit in a row that
+    **wraps** when the card is too narrow. Takes a widget or a realized subtree alike. The caller
+    says *what* the action is; the card says where it sits and what hue it takes.
 - **Placement**: `.position(ToastPosition)` — `TopRight`/`TopLeft`/`TopCenter`/`BottomRight`/
   `BottomLeft`/`BottomCenter`, resolved to **auto margins**, never pixels, so it lands correctly in
   a container of any size. Unset, it sits wherever its parent puts it. The same vocabulary places a
@@ -4099,9 +4102,9 @@ events (the wrapped widget stays clickable and focusable); it only adds a declar
 The slot itself is universal — `Base::hint` — so the framework's collector stays one uniform walk
 with no downcasting.
 
-- **Construct**: `KeyHint::new(child)`, or `KeyHint::new_boxed(Box<dyn Component>)` for a subtree built
+- **Construct**: `KeyHint::new(child)` — a widget or a subtree built
   dynamically — a `realize`d `ViewNode` tree, or a chrome provider's render seam — where the concrete
-  widget type is not known at the call site (mirrors [`Parent::child_boxed`](#builder-traits)).
+  widget type is not known at the call site 
 - **Builders**: `.hint(Signal<Option<String>>)`, `.placement(HintPlacement)`
   (`TopCenter` for compact square targets | `Center` for large panes | `CenterRight`
   for wide list rows — keycap pinned to the right edge | `TopRight` for tall targets like a
@@ -4324,8 +4327,8 @@ The host keeps exactly one thing, because only it can answer it: **which surface
 the picker's scope is the whole screen. `prefix+/` is this widget's behaviour at screen scope with
 that filter applied; a plugin's is the same behaviour scoped to its own panel.
 
-- **Construct**: `KeyHintGroup::new(child)`, or `KeyHintGroup::new_boxed(Box<dyn Component>)` for a
-  subtree built dynamically (mirrors [`Parent::child_boxed`](#builder-traits)).
+- **Construct**: `KeyHintGroup::new(child)` — a widget or a
+  subtree built dynamically 
 - **Builders**:
   - `.opens_on("mypanel.pick")` — **the verb that opens it**, and the whole of what a picker costs
     its author. The widget owns its open signal, holds the keyboard while it is up, and declares the
@@ -4434,7 +4437,7 @@ set, focused and unfocused.)
 The two halves share the signal on purpose: a ring that says "the keys come here" while the keys go
 elsewhere is worse than no ring.
 
-- **Construct**: `FocusScope::new(child)`, or `FocusScope::new_boxed(Box<dyn Component>)` for a
+- **Construct**: `FocusScope::new(child)` — a widget or a
   dynamically built subtree (a `realize`d tree, a provider's render seam).
 - **Builders**:
   - `.focus(Signal<bool>)` — the host-owned focus state. **Host-only** (a live signal, which static
@@ -4638,7 +4641,7 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
 
 - **Construct**: `Overlay::new()` (closed, blocking), then `.panel(impl Component)` — the single
   child; the caller owns the panel's internal layout (padding/gaps/children), the overlay owns
-  the chrome around it. `.panel_boxed(Box<dyn Component>)` takes a mapper-produced panel (e.g.
+  the chrome around it. `.panel(..)` also takes a mapper-produced panel (e.g.
   `heca`'s `realize(ViewNode)`).
 - **Builders**: `.blocking(bool)` (default `true` — scrim + swallow outside input; `false` = no
   scrim, outside input falls through), `.frosted(bool)` (default `false` — see *The frosted
@@ -4700,7 +4703,7 @@ keyed on it, no declaration outside the tree.
   of letting it hug its content. Default = unset (hug). `Length::Auto` on an axis keeps the hug
   behaviour there; a `Length::Percent` resolves against the **viewport**, since the `Overlay` fills it
   (`Percent(0.6)` = 60% of the viewport). Call order does not matter — the size is stored and re-applied
-  whenever `.panel()`/`.panel_boxed()` replaces the child.
+  whenever `.panel()` replaces the child.
   **Why it matters:** a [`ScrollRegion`](#scrollregion) only scrolls when its parent *bounds* it. An
   unsized panel grows with its content, so a long body never overflows and no scrollbar appears.
   Size the panel and the body can scroll inside it.
@@ -4824,7 +4827,7 @@ keyed on it, no declaration outside the tree.
 ```rust
 // A host-mounted blocking layer around an arbitrary (here: realized) panel.
 let overlay = Overlay::new()
-    .panel_boxed(realized_panel)                  // Box<dyn Component> from realize(ViewNode)
+    .panel(realized_panel)                        // Box<dyn Component> from realize(ViewNode)
     .on_outside_click(move || emit(close_intent)) // host's overlay-close path
     .open(true);
 let visible = overlay.open_signal();
@@ -5020,7 +5023,7 @@ the dialog) and `Activate` commits its row.
   swallowed without dismissing), `.on_dismiss(impl Fn())` (fired on `WidgetIntent::Dismiss` / scrim),
   `.open(bool)`
   (focuses the first focusable — a text field body if present, so the user types immediately;
-  otherwise the first button as a safe default), plus `.body_boxed(Box<dyn Component>)` for a body
+  otherwise the first button as a safe default), and `.body(..)` also takes a realized body
   from a mapper (e.g. `realize`).
 - **Sizing + a scrollable body**: `.panel_size(width: Length, height: Length)` bounds the panel
   instead of letting it hug its content (default = hug; `Length::Auto` keeps hugging on that axis;

@@ -590,7 +590,7 @@ fn realize_kind(
                 1 => realize(&node.children[0], theme, emit, forms),
                 _ => attach_children(Box::new(Flex::column()), node, theme, emit, forms),
             };
-            let mut overlay = with_props(Overlay::new().panel_boxed(panel), node, theme);
+            let mut overlay = with_props(Overlay::new().panel(panel), node, theme);
             // **What the dismiss key means, declared like any other behaviour.** The overlay has
             // always held the keys; since F003/P097/T502 it answers this one, and this is the
             // described spelling — so a plugin's surface closes on Escape by saying what closing
@@ -612,7 +612,7 @@ fn realize_kind(
                 1 => realize(&node.children[0], theme, emit, forms),
                 _ => attach_children(Box::new(Flex::column()), node, theme, emit, forms),
             };
-            Box::new(with_props(KeyHintGroup::new_boxed(subtree), node, theme))
+            Box::new(with_props(KeyHintGroup::new(subtree), node, theme))
         }
         WidgetKind::Scroll => {
             // `axes` reaches the widget through its own builder, so a declarative region can be
@@ -748,8 +748,8 @@ fn realize_kind(
             for child in &node.children {
                 let realized = realize(child, theme, emit, forms);
                 match slot_of(child) {
-                    Some("leading") => it = it.leading_boxed(realized),
-                    Some("trailing") => it = it.trailing_boxed(realized),
+                    Some("leading") => it = it.leading(realized),
+                    Some("trailing") => it = it.trailing(realized),
                     other => warn_unknown_slot(node, child, other, &["leading", "trailing"]),
                 }
             }
@@ -850,11 +850,11 @@ fn realize_kind(
             for child in &node.children {
                 let realized = realize(child, theme, emit, forms);
                 match slot_of(child) {
-                    Some("header") => dock = dock.header_boxed(realized),
-                    None => dock = dock.child_boxed(realized),
+                    Some("header") => dock = dock.header(realized),
+                    None => dock = dock.child(realized),
                     other => {
                         warn_unknown_slot(node, child, other, &["header"]);
-                        dock = dock.child_boxed(realized);
+                        dock = dock.child(realized);
                     }
                 }
             }
@@ -900,12 +900,12 @@ fn realize_kind(
                 match slot_of(child) {
                     Some("actions") => {
                         described_actions = true;
-                        toast = toast.action_boxed(realized);
+                        toast = toast.action(realized);
                     }
-                    Some("body") | None => toast = toast.body_boxed(realized),
+                    Some("body") | None => toast = toast.body(realized),
                     other => {
                         warn_unknown_slot(node, child, other, &["body", "actions"]);
-                        toast = toast.body_boxed(realized);
+                        toast = toast.body(realized);
                     }
                 }
             }
@@ -1229,7 +1229,7 @@ fn realize_card_grid(
                 if n == 0 { name } else { format!("{name}[{n}]") }
             }
         };
-        let card = GridRow::new().child_boxed(body);
+        let card = GridRow::new().child(body);
         // **One column per card, because the layout draws them side by side.** `CardGrid::row`
         // takes columns and states the contract itself: the cards must be in the same left-to-right
         // order the layout draws them. Putting them all in ONE column instead left arrow-right
@@ -1286,10 +1286,10 @@ fn realize_grid(
     for child in &node.children {
         let realized = realize(child, theme, emit, forms);
         match child.props.get("area").and_then(PropValue::as_text) {
-            Some(area) => grid = grid.area_boxed(realized, area),
+            Some(area) => grid = grid.area(realized, area),
             None => match (usize_prop(child, "col"), usize_prop(child, "row")) {
                 (Some(col), Some(row)) => {
-                    grid = grid.cell_boxed(
+                    grid = grid.cell(
                         realized,
                         col as u16,
                         row as u16,
@@ -4932,7 +4932,7 @@ mod tests {
                     .axes(axes)
                     .width(Length::Px(120.0))
                     .height(Length::Px(80.0))
-                    .child_boxed(realized_content()),
+                    .child(realized_content()),
             ))
         };
 
