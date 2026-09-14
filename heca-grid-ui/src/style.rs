@@ -160,25 +160,114 @@ impl From<i32> for Space {
     }
 }
 
-impl From<&str> for Space {
-    /// `"sm"` / `"md"` for a step, `"8"` / `"8px"` for pixels — the spellings a description
-    /// travels in, so native code and the wire say a space the same way.
-    ///
-    /// ⚠️ Anything unreadable is **no space at all** rather than a panic, the same rule the grid's
-    /// track vocabulary follows: these arrive from config and from plugins, so a typo costs its
-    /// author a gap and not the host.
-    fn from(t: &str) -> Self {
+impl std::str::FromStr for Space {
+    type Err = SpaceParseError;
+
+    /// **The one parser.** `"sm"` / `"md"` for a step, `"8"` / `"8px"` for pixels — the spellings a
+    /// description already travels in. [`Deserialize`] calls this, so the wire and native code can
+    /// never come to disagree about what `"sm"` means.
+    fn from_str(t: &str) -> Result<Self, Self::Err> {
         let t = t.trim();
         match t.to_ascii_lowercase().as_str() {
-            "none" => return Space::Step(Spacing::None),
-            "xs" => return Space::Step(Spacing::Xs),
-            "sm" => return Space::Step(Spacing::Sm),
-            "md" => return Space::Step(Spacing::Md),
-            "lg" => return Space::Step(Spacing::Lg),
+            "none" => return Ok(Space::Step(Spacing::None)),
+            "xs" => return Ok(Space::Step(Spacing::Xs)),
+            "sm" => return Ok(Space::Step(Spacing::Sm)),
+            "md" => return Ok(Space::Step(Spacing::Md)),
+            "lg" => return Ok(Space::Step(Spacing::Lg)),
             _ => {}
         }
+        // `px` is optional and means the same as no suffix — the same rule `Length` follows.
         let t = t.strip_suffix("px").map_or(t, str::trim_end);
-        Space::Px(t.parse().unwrap_or(0.0))
+        t.parse::<f32>().map(Space::Px).map_err(|_| SpaceParseError)
+    }
+}
+
+/// What [`Space::from_str`] returns when a string is neither a step name nor a length.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpaceParseError;
+
+impl std::fmt::Display for SpaceParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("expected a number, a length like \"8px\", or a step name (none/xs/sm/md/lg)")
+    }
+}
+
+impl std::error::Error for SpaceParseError {}
+
+impl From<&str> for Space {
+    /// `.gap("sm")` / `.padding("8px")`.
+    ///
+    /// ⚠️ Anything unreadable is **no space at all** rather than a panic, the same rule
+    /// [`Length`] and the grid's track vocabulary follow: these arrive from config and from
+    /// plugins, so a typo costs its author a gap and not the host. Use
+    /// [`from_str`](std::str::FromStr::from_str) when you want to be told.
+    fn from(t: &str) -> Self {
+        t.parse().unwrap_or(Space::Px(0.0))
+    }
+}
+
+impl From<&String> for Space {
+    fn from(t: &String) -> Self {
+        Space::from(t.as_str())
+    }
+}
+
+impl Serialize for Space {
+    /// A step travels as its **name** and a length as a number — the two spellings
+    /// [`Deserialize`] reads back, and the ones [`plugins.md` §6] documents for every value.
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match *self {
+            Space::Px(v) => s.serialize_f32(v),
+            Space::Step(step) => step.serialize(s),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Space {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            Num(f32),
+            Text(String),
+        }
+        match Repr::deserialize(d)? {
+            Repr::Num(v) => Ok(Space::Px(v)),
+            // **One parser, not a second copy** — the trap `Length` already documents.
+            Repr::Text(t) => t
+                .parse::<Space>()
+                .map_err(|e| D::Error::custom(e.to_string())),
+        }
+    }
+}
+
+impl Default for Space {
+    fn default() -> Self {
+        Space::Px(0.0)
+    }
+}
+
+impl Space {
+    /// **The one place a space becomes pixels**, and the only one that can: a step is a fraction of
+    /// the inherited font, so nothing can resolve it without knowing that font.
+    ///
+    /// **Rounded to whole pixels, and that is what makes air look even.** A token is a fraction of
+    /// the font (`Xs` is a quarter of it), so it lands on halves at most sizes — and the two sides
+    /// of a boundary between siblings then round in different directions. Percentage-sized siblings
+    /// put the air in their padding rather than a gap (a gap is added *outside* a percentage and
+    /// overflows it), so every boundary in such a row is made of two paddings, and half a pixel
+    /// each side became a gap of 6, 7 or 8 where all of them should have been 7. Measured across
+    /// fourteen equal columns of the exposé; uniform once the token resolves to a whole pixel. A
+    /// widget's own padding moves by at most half a pixel, which is under what the screen can draw;
+    /// the rhythm between siblings is the thing an eye actually reads.
+    ///
+    /// A pixel count is already what it says and is passed through untouched.
+    pub fn resolve(self, font_px: f32) -> f32 {
+        match self {
+            Space::Px(v) => v,
+            Space::Step(step) => (font_px * step.scale()).round(),
+        }
     }
 }
 
@@ -574,20 +663,23 @@ pub struct Layout {
     /// **Grid only** — horizontal placement of **this** item inside its own cell, overriding the
     /// parent's [`justify_items`](Self::justify_items) for it alone (CSS `justify-self`).
     pub justify_self: Option<Align>,
-    pub gap: f32,
+    /// Space between children — a number of pixels or a step of the theme's rhythm. **Prefer the
+    /// step**: it is resolved from the inherited font at layout, so it scales with the font, the
+    /// size variant and UI zoom.
+    pub gap: Space,
     /// Uniform outer margin (all sides), unless overridden per side by
     /// [`margin_left`](Self::margin_left) / [`margin_right`](Self::margin_right)
     /// / [`margin_top`](Self::margin_top) / [`margin_bottom`](Self::margin_bottom).
-    pub margin: f32,
+    pub margin: Space,
     /// Horizontal (left+right) margin override; `None` ⇒ use [`margin`](Self::margin).
     ///
     /// The axis shorthands exist for parity with [`padding_x`](Self::padding_x) /
     /// [`padding_y`](Self::padding_y): without them a **described** tree could set padding by axis
     /// but had to name both sides for a margin. A `Separator` wanting to breathe on one axis is the
     /// case that found it.
-    pub margin_x: Option<f32>,
+    pub margin_x: Option<Space>,
     /// Vertical (top+bottom) margin override; `None` ⇒ use [`margin`](Self::margin).
-    pub margin_y: Option<f32>,
+    pub margin_y: Option<Space>,
     /// Left margin override; `None` ⇒ [`margin_x`](Self::margin_x), then [`margin`](Self::margin).
     pub margin_left: Option<Length>,
     /// Right margin override; `None` ⇒ [`margin_x`](Self::margin_x), then [`margin`](Self::margin).
@@ -598,35 +690,24 @@ pub struct Layout {
     pub margin_bottom: Option<Length>,
     /// Uniform inner padding (all sides), unless overridden per axis by
     /// [`padding_x`](Self::padding_x) / [`padding_y`](Self::padding_y).
-    pub padding: f32,
+    pub padding: Space,
     /// Horizontal (left+right) padding override; `None` ⇒ use [`padding`](Self::padding).
-    pub padding_x: Option<f32>,
+    pub padding_x: Option<Space>,
     /// Vertical (top+bottom) padding override; `None` ⇒ use [`padding`](Self::padding).
-    pub padding_y: Option<f32>,
+    pub padding_y: Option<Space>,
     /// Left padding override; `None` ⇒ use [`padding_x`](Self::padding_x), then
     /// [`padding`](Self::padding). Mirrors the per-side margins.
-    pub padding_left: Option<f32>,
+    pub padding_left: Option<Space>,
     /// Right padding override; `None` ⇒ [`padding_x`](Self::padding_x), then [`padding`](Self::padding).
     ///
     /// This is what lets a widget reserve space along one edge without moving the opposite one — a
     /// [`ScrollRegion`](crate::widgets::ScrollRegion) keeping its content clear of the scrollbar,
     /// for instance, where padding the whole axis would inset the far side for no reason.
-    pub padding_right: Option<f32>,
+    pub padding_right: Option<Space>,
     /// Top padding override; `None` ⇒ [`padding_y`](Self::padding_y), then [`padding`](Self::padding).
-    pub padding_top: Option<f32>,
+    pub padding_top: Option<Space>,
     /// Bottom padding override; `None` ⇒ [`padding_y`](Self::padding_y), then [`padding`](Self::padding).
-    pub padding_bottom: Option<f32>,
-    /// Horizontal padding as a theme [`Spacing`] token — resolved to px from the font at
-    /// layout (sets `padding_x`). `None` ⇒ use the px padding fields.
-    pub pad_spacing_x: Option<Spacing>,
-    /// Vertical padding as a theme [`Spacing`] token — resolved to px from the font at layout.
-    pub pad_spacing_y: Option<Spacing>,
-    /// Gap between children as a theme [`Spacing`] token — resolved to px from the
-    /// inherited font at layout (sets [`gap`](Self::gap)). `None` ⇒ use the raw
-    /// `gap` px. Prefer this over a literal: a token scales with the font, the size
-    /// variant and UI zoom, so rows stay comfortably spaced at every scale instead
-    /// of being tuned once for one font size.
-    pub gap_spacing: Option<Spacing>,
+    pub padding_bottom: Option<Space>,
     pub width: Length,
     pub height: Length,
     /// Minimum size. `None` ⇒ taffy's default, which for a flex item is
@@ -724,24 +805,21 @@ impl Default for Layout {
             align_self: None,
             justify_items: None,
             justify_self: None,
-            gap: 0.0,
-            margin: 0.0,
+            gap: Space::Px(0.0),
+            margin: Space::Px(0.0),
             margin_x: None,
             margin_y: None,
             margin_left: None,
             margin_right: None,
             margin_top: None,
             margin_bottom: None,
-            padding: 0.0,
+            padding: Space::Px(0.0),
             padding_x: None,
             padding_y: None,
             padding_left: None,
             padding_right: None,
             padding_top: None,
             padding_bottom: None,
-            pad_spacing_x: None,
-            pad_spacing_y: None,
-            gap_spacing: None,
             width: Length::Auto,
             height: Length::Auto,
             min_width: None,
@@ -769,31 +847,35 @@ impl Layout {
     /// re-deriving the cascade and drifting from it. A widget that insets a highlight or a marker
     /// needs to know where its content box starts, and by paint time the `pad_spacing_*` tokens
     /// have already been resolved into the px fields these read.
-    pub fn pad_left(&self) -> f32 {
+    pub fn pad_left(&self, font_px: f32) -> f32 {
         self.padding_left
             .unwrap_or_else(|| self.padding_x.unwrap_or(self.padding))
+            .resolve(font_px)
     }
 
     /// Effective right padding in px — see [`pad_left`](Self::pad_left).
-    pub fn pad_right(&self) -> f32 {
+    pub fn pad_right(&self, font_px: f32) -> f32 {
         self.padding_right
             .unwrap_or_else(|| self.padding_x.unwrap_or(self.padding))
+            .resolve(font_px)
     }
 
     /// Effective top padding in px — see [`pad_left`](Self::pad_left).
-    pub fn pad_top(&self) -> f32 {
+    pub fn pad_top(&self, font_px: f32) -> f32 {
         self.padding_top
             .unwrap_or_else(|| self.padding_y.unwrap_or(self.padding))
+            .resolve(font_px)
     }
 
     /// Effective bottom padding in px — see [`pad_left`](Self::pad_left).
-    pub fn pad_bottom(&self) -> f32 {
+    pub fn pad_bottom(&self, font_px: f32) -> f32 {
         self.padding_bottom
             .unwrap_or_else(|| self.padding_y.unwrap_or(self.padding))
+            .resolve(font_px)
     }
 
     /// Map the layout fields onto a `taffy::Style` for the layout engine.
-    pub fn to_taffy(&self) -> taffy::Style {
+    pub fn to_taffy(&self, font_px: f32) -> taffy::Style {
         use taffy::prelude::*;
         if self.hidden {
             return taffy::Style {
@@ -813,15 +895,15 @@ impl Layout {
             // Grid-only (taffy ignores them on a flex container).
             justify_items: self.justify_items.map(|a| a.to_taffy()),
             justify_self: self.justify_self.map(|a| a.to_taffy()),
-            gap: Size {
-                width: length(self.gap),
-                height: length(self.gap),
+            gap: {
+                let g = self.gap.resolve(font_px);
+                Size { width: length(g), height: length(g) }
             },
             margin: {
                 // Most specific wins: a side, else its axis, else the uniform value — the same
                 // cascade padding has.
-                let mx = self.margin_x.unwrap_or(self.margin);
-                let my = self.margin_y.unwrap_or(self.margin);
+                let mx = self.margin_x.unwrap_or(self.margin).resolve(font_px);
+                let my = self.margin_y.unwrap_or(self.margin).resolve(font_px);
                 // A side may be a **percentage** of the parent, which is what lets a caller place
                 // a box at a proportional position — a floating pane in the exposé sits at
                 // `x / strip_width` of its row, with no pixel scale anywhere (F003/P082/T420).
@@ -843,10 +925,10 @@ impl Layout {
             // lives in `pad_left`/`pad_right`/`pad_top`/`pad_bottom` so paint can read the same
             // numbers layout does.
             padding: Rect {
-                left: length(self.pad_left()),
-                right: length(self.pad_right()),
-                top: length(self.pad_top()),
-                bottom: length(self.pad_bottom()),
+                left: length(self.pad_left(font_px)),
+                right: length(self.pad_right(font_px)),
+                top: length(self.pad_top(font_px)),
+                bottom: length(self.pad_bottom(font_px)),
             },
             // **A placement names the box's size as well as where it goes**, so it wins over the
             // `width`/`height` fields — a caller who said "this rect" has already answered both,
@@ -926,8 +1008,8 @@ impl Layout {
     /// Build a **grid container** taffy style: the flex/box fields from
     /// `to_taffy()` plus `display: grid` and the given column/row tracks.
     /// Used by [`Grid`](crate::widgets::Grid) via `Component::taffy_style`.
-    pub fn to_taffy_grid(&self, columns: &[Track], rows: &[Track]) -> taffy::Style {
-        let mut s = self.to_taffy();
+    pub fn to_taffy_grid(&self, font_px: f32, columns: &[Track], rows: &[Track]) -> taffy::Style {
+        let mut s = self.to_taffy(font_px);
         s.display = taffy::Display::Grid;
         s.grid_template_columns = columns.iter().map(|t| t.to_taffy()).collect();
         s.grid_template_rows = rows.iter().map(|t| t.to_taffy()).collect();

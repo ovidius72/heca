@@ -51,19 +51,12 @@ pub trait LayoutExt: Component + Sized {
     /// docs said prefer the token and the token was used 8 times against this one's 112, because
     /// advice loses to whichever name is shorter.
     fn gap(mut self, v: impl Into<crate::style::Space>) -> Self {
-        let l = &mut self.base_mut().style.layout;
-        match v.into() {
-            crate::style::Space::Px(px) => {
-                l.gap = px;
-                l.gap_spacing = None;
-            }
-            crate::style::Space::Step(step) => l.gap_spacing = Some(step),
-        }
+        self.base_mut().style.layout.gap = v.into();
         self
     }
-    /// Outer margin on all sides.
-    fn margin(mut self, m: f32) -> Self {
-        self.base_mut().style.layout.margin = m;
+    /// Outer margin on all sides — a number of pixels or a step, like [`gap`](Self::gap).
+    fn margin(mut self, m: impl Into<crate::style::Space>) -> Self {
+        self.base_mut().style.layout.margin = m.into();
         self
     }
     /// Outer margin split per axis: `x` left+right, `y` top+bottom.
@@ -76,13 +69,13 @@ pub trait LayoutExt: Component + Sized {
         self
     }
     /// Horizontal outer margin (left+right) only.
-    fn margin_x(mut self, v: f32) -> Self {
-        self.base_mut().style.layout.margin_x = Some(v);
+    fn margin_x(mut self, v: impl Into<crate::style::Space>) -> Self {
+        self.base_mut().style.layout.margin_x = Some(v.into());
         self
     }
     /// Vertical outer margin (top+bottom) only — a rule breathing away from what it separates.
-    fn margin_y(mut self, v: f32) -> Self {
-        self.base_mut().style.layout.margin_y = Some(v);
+    fn margin_y(mut self, v: impl Into<crate::style::Space>) -> Self {
+        self.base_mut().style.layout.margin_y = Some(v.into());
         self
     }
     /// **Place this widget at a rect of its parent**, instead of letting it flow with its siblings.
@@ -188,18 +181,7 @@ pub trait LayoutExt: Component + Sized {
     }
     /// **Inner padding on all sides** — pixels or a step, exactly as [`gap`](LayoutExt::gap).
     fn padding(mut self, p: impl Into<crate::style::Space>) -> Self {
-        let l = &mut self.base_mut().style.layout;
-        match p.into() {
-            crate::style::Space::Px(px) => {
-                l.padding = px;
-                l.pad_spacing_x = None;
-                l.pad_spacing_y = None;
-            }
-            crate::style::Space::Step(step) => {
-                l.pad_spacing_x = Some(step);
-                l.pad_spacing_y = Some(step);
-            }
-        }
+        self.base_mut().style.layout.padding = p.into();
         self
     }
     /// **Inner padding per axis**: `x` left+right, `y` top+bottom. Pixels or a step, each.
@@ -210,20 +192,8 @@ pub trait LayoutExt: Component + Sized {
     ) -> Self {
         {
             let l = &mut self.base_mut().style.layout;
-            match x.into() {
-                crate::style::Space::Px(px) => {
-                    l.padding_x = Some(px);
-                    l.pad_spacing_x = None;
-                }
-                crate::style::Space::Step(step) => l.pad_spacing_x = Some(step),
-            }
-            match y.into() {
-                crate::style::Space::Px(px) => {
-                    l.padding_y = Some(px);
-                    l.pad_spacing_y = None;
-                }
-                crate::style::Space::Step(step) => l.pad_spacing_y = Some(step),
-            }
+            l.padding_x = Some(x.into());
+            l.padding_y = Some(y.into());
         }
         self
     }
@@ -233,27 +203,13 @@ pub trait LayoutExt: Component + Sized {
     /// There was no pixel form of this: `pad_x` took only a token, so a caller wanting a measured
     /// horizontal inset had to reach for `padding_xy` and restate the vertical one.
     fn padding_x(mut self, p: impl Into<crate::style::Space>) -> Self {
-        let l = &mut self.base_mut().style.layout;
-        match p.into() {
-            crate::style::Space::Px(px) => {
-                l.padding_x = Some(px);
-                l.pad_spacing_x = None;
-            }
-            crate::style::Space::Step(step) => l.pad_spacing_x = Some(step),
-        }
+        self.base_mut().style.layout.padding_x = Some(p.into());
         self
     }
 
     /// **Inner padding top+bottom** — see [`padding_x`](LayoutExt::padding_x).
     fn padding_y(mut self, p: impl Into<crate::style::Space>) -> Self {
-        let l = &mut self.base_mut().style.layout;
-        match p.into() {
-            crate::style::Space::Px(px) => {
-                l.padding_y = Some(px);
-                l.pad_spacing_y = None;
-            }
-            crate::style::Space::Step(step) => l.pad_spacing_y = Some(step),
-        }
+        self.base_mut().style.layout.padding_y = Some(p.into());
         self
     }
 
@@ -262,23 +218,23 @@ pub trait LayoutExt: Component + Sized {
     /// Reserving space along a single edge is not the same as padding the axis: the opposite side
     /// should not move because this one needed room. A `ScrollRegion` keeping its content clear of
     /// its scrollbar is the case that asked for it.
-    fn padding_left(mut self, p: f32) -> Self {
-        self.base_mut().style.layout.padding_left = Some(p);
+    fn padding_left(mut self, p: impl Into<crate::style::Space>) -> Self {
+        self.base_mut().style.layout.padding_left = Some(p.into());
         self
     }
     /// Inner padding on the right only — see [`padding_left`](Self::padding_left).
-    fn padding_right(mut self, p: f32) -> Self {
-        self.base_mut().style.layout.padding_right = Some(p);
+    fn padding_right(mut self, p: impl Into<crate::style::Space>) -> Self {
+        self.base_mut().style.layout.padding_right = Some(p.into());
         self
     }
     /// Inner padding on the top only — see [`padding_left`](Self::padding_left).
-    fn padding_top(mut self, p: f32) -> Self {
-        self.base_mut().style.layout.padding_top = Some(p);
+    fn padding_top(mut self, p: impl Into<crate::style::Space>) -> Self {
+        self.base_mut().style.layout.padding_top = Some(p.into());
         self
     }
     /// Inner padding on the bottom only — see [`padding_left`](Self::padding_left).
-    fn padding_bottom(mut self, p: f32) -> Self {
-        self.base_mut().style.layout.padding_bottom = Some(p);
+    fn padding_bottom(mut self, p: impl Into<crate::style::Space>) -> Self {
+        self.base_mut().style.layout.padding_bottom = Some(p.into());
         self
     }
     /// Width along the main/cross axis, in any of the spellings a size is written in:
