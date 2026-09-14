@@ -180,6 +180,28 @@ impl KeyHintGroup {
         self.open_when(open).on_action(action, move || open.set(true))
     }
 
+    /// **Which scope this picker letters.** Unset — the default — means the ordinary set: every
+    /// target that named no scope, which is how every picker that exists today behaves.
+    ///
+    /// Name one and this picker letters only the targets that named it with
+    /// [`hint_scope`](crate::builders::ComponentExt::hint_scope), and **only those**: a surface
+    /// with two verbs over one tree gives each its own set of letters rather than one picker
+    /// handing out twice as many, half of which do the other thing.
+    ///
+    /// ```ignore
+    /// KeyHintGroup::new(cards).opens_on("map.jump")                    // the cards
+    /// KeyHintGroup::new(cards).opens_on("map.close").scope("close")    // their ⊠ icons
+    /// ```
+    ///
+    /// A picker whose scope matches nothing shows **no letters**, rather than falling back to
+    /// lettering everything. The fallback is the dangerous direction: a "close" picker that
+    /// silently lettered every card would delete what you meant to jump to.
+    #[heca_grid_ui_macros::prop]
+    pub fn scope(mut self, scope: impl Into<String>) -> Self {
+        self.base.picker_scope = Some(scope.into());
+        self
+    }
+
     /// Is the picker showing its letters?
     pub fn is_open(&self) -> bool {
         self.open.get_untracked()
@@ -202,9 +224,10 @@ impl KeyHintGroup {
     fn targets(&self) -> Vec<Vec<usize>> {
         let mut out = Vec::new();
         let clip = crate::hint::narrowed(None, self);
+        let scope = self.base.picker_scope.as_deref();
         for (i, child) in self.base.children.iter().enumerate() {
             let mut here = vec![i];
-            collect(child.as_ref(), &mut here, clip, &mut out);
+            collect(child.as_ref(), &mut here, clip, scope, &mut out);
         }
         out
     }
@@ -250,18 +273,27 @@ fn collect(
     node: &dyn Component,
     path: &mut Vec<usize>,
     clip: Option<crate::Rectangle>,
+    scope: Option<&str>,
     out: &mut Vec<Vec<usize>>,
 ) {
     if crate::hint::skip(node) {
         return;
     }
-    if node.base().hint.is_some() && !crate::hint::out_of_view(node, clip) {
+    // **Stop at somebody else's picker.** Two verbs over one tree is what scopes are for, and a
+    // picker that walked into another's subtree would letter targets answering to that one.
+    if crate::hint::foreign_picker(node, scope) {
+        return;
+    }
+    if node.base().hint.is_some()
+        && crate::hint::in_scope(node, scope)
+        && !crate::hint::out_of_view(node, clip)
+    {
         out.push(path.clone());
     }
     let clip = crate::hint::narrowed(clip, node);
     for (i, child) in node.base().children.iter().enumerate() {
         path.push(i);
-        collect(child.as_ref(), path, clip, out);
+        collect(child.as_ref(), path, clip, scope, out);
         path.pop();
     }
 }

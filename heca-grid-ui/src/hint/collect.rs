@@ -116,7 +116,39 @@ fn actionable(c: &dyn Component) -> bool {
 /// [`Base::hint`] stays meaningful as the **override**: it says a pick does something *other* than
 /// acting on the widget normally.
 pub(crate) fn is_target(c: &dyn Component) -> bool {
-    c.base().hintable && (c.base().hint.is_some() || actionable(c))
+    in_scope(c, None) && c.base().hintable && (c.base().hint.is_some() || actionable(c))
+}
+
+/// **Does this target belong to the picker asking?**
+///
+/// `scope` is the picker's: `None` is the ordinary one — `prefix+/` in heca — and a name is a
+/// surface's own verb. A target declares the scopes it answers to with
+/// [`hint_scope`](crate::builders::ComponentExt::hint_scope), and declaring none means it belongs
+/// to the ordinary picker and to nothing else.
+///
+/// **The asymmetry is deliberate.** A scoped target does *not* also appear in the ordinary picker:
+/// a ⊠ that deletes a card must not wear a letter in the picker you use to jump between them, and
+/// a column that exists to receive a moved pane is not somewhere `prefix+/` should send you.
+/// Belonging to both is still sayable — name the scope *and* let the ordinary picker have it by
+/// declaring a second target — but it is never the default, because the failure of getting this
+/// backwards is destructive.
+pub(crate) fn in_scope(c: &dyn Component, scope: Option<&str>) -> bool {
+    match scope {
+        None => c.base().hint_scopes.is_empty(),
+        Some(want) => c.base().hint_scopes.iter().any(|s| s == want),
+    }
+}
+
+/// **Is this node a picker for a different scope than the one collecting?**
+///
+/// A walk stops here. Two pickers over one tree is the whole point of scopes, and a picker that
+/// descended into another's subtree would letter targets that answer to somebody else — which is
+/// the sixteen-letters-for-eight failure, arriving by a different route.
+pub(crate) fn foreign_picker(c: &dyn Component, scope: Option<&str>) -> bool {
+    match c.base().picker_scope.as_deref() {
+        Some(theirs) => Some(theirs) != scope,
+        None => false,
+    }
 }
 
 /// **Every widget in this tree that says what a pick does to it**, with the rect the letter goes
@@ -299,6 +331,11 @@ fn hints_into(
     out: &mut Vec<Option<(Vec<usize>, Rectangle)>>,
 ) {
     if skip(node) {
+        return;
+    }
+    // **A surface that owns its own picker keeps its targets.** Walking into it would letter, in
+    // the ordinary picker, things that answer to that surface's verb instead.
+    if foreign_picker(node, None) {
         return;
     }
     // **A target nobody can see is not a target** — dropped here rather than at the letter, so it

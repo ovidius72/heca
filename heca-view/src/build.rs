@@ -359,6 +359,36 @@ pub trait Style: Sized {
         self.prop("hint_placement", placement)
     }
 
+    /// **Which pickers letter this target.** Unset — the default — means the ordinary one, which
+    /// letters everything actionable.
+    ///
+    /// One surface can mean more than one thing by a letter: a card that means *go there* and a ⊠
+    /// beside it that means *remove that*. A picker that letters both hands out twice the letters
+    /// and half of them do the wrong one, so a target names the sets it answers to and a picker
+    /// names the set it letters.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::Intent;
+    ///
+    /// // Lettered only by a picker that asked for "close" — never by the ordinary one.
+    /// let close = IconButton::new().on_press(Intent::new("card.remove")).hint_scope(["close"]);
+    /// ```
+    ///
+    /// **Naming a scope takes the target OUT of the ordinary picker** — that is the point, and the
+    /// direction matters: a ⊠ that deletes something must not wear a letter in the picker you use
+    /// to move around. Name several and it belongs to each of those pickers.
+    ///
+    /// Universal, like [`hint_placement`](Style::hint_placement), because the slot is on every
+    /// widget.
+    fn hint_scope(self, scopes: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let list: Vec<PropValue> = scopes
+            .into_iter()
+            .map(|s| PropValue::Text(s.into()))
+            .collect();
+        self.prop("hint_scope", PropValue::List(list))
+    }
+
     /// The keycap's font size in logical px. Unset = derived from the node's resolved font, which
     /// is what keeps a letter proportional to the thing it captions.
     fn hint_size(self, px: f32) -> Self {
@@ -1300,6 +1330,27 @@ impl KeyHintGroup {
     /// native one and not a cut-down copy (F003/P082/T436).
     pub fn opens_on(self, action: impl Into<String>) -> Self {
         self.prop("opens_on", PropValue::Text(action.into()))
+    }
+
+    /// **Which set of targets this picker letters.** Unset — the default — means the ordinary
+    /// set: everything beneath it that named no scope.
+    ///
+    /// A surface with two verbs over one tree gives each its own picker and its own letters:
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::Intent;
+    ///
+    /// // Two pickers over the same cards. The first letters the cards, the second only the ⊠s.
+    /// let jump  = KeyHintGroup::new().opens_on("map.jump");
+    /// let close = KeyHintGroup::new().opens_on("map.close").scope("close");
+    /// ```
+    ///
+    /// A picker whose scope matches nothing shows **no letters** rather than falling back to
+    /// lettering everything — the fallback is the dangerous direction, since a "close" picker that
+    /// quietly lettered every card would remove what you meant to go to.
+    pub fn scope(self, scope: impl Into<String>) -> Self {
+        self.prop("scope", PropValue::Text(scope.into()))
     }
 }
 

@@ -293,12 +293,28 @@ pub fn realize(
     if let Some(px) = node.props.get("hint_size").and_then(PropValue::as_float) {
         style.size = Some(px as f32);
     }
+
     if let Some(px) = node
         .props
         .get("hint_offset_y")
         .and_then(PropValue::as_float)
     {
         style.offset_y = px;
+    }
+
+    // **Which pickers this target answers to** — read for every kind, like the placement above.
+    // A described surface gets two verbs over one tree exactly as a native one does; without it a
+    // plugin could own a picker (`opens_on`) but not say what it letters, so it would letter
+    // everything beneath it.
+    if let Some(PropValue::List(list)) = node.props.get("hint_scope") {
+        let scopes: Vec<String> = list
+            .iter()
+            .filter_map(PropValue::as_text)
+            .map(str::to_string)
+            .collect();
+        if !scopes.is_empty() {
+            realized.base_mut().hint_scopes = scopes;
+        }
     }
     // A token name, resolved against the live theme here on the host side — the library has no
     // notion of a token, exactly as `prop_to_input` already handles every other colour.

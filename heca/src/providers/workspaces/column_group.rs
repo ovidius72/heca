@@ -94,6 +94,15 @@ impl ColumnGroup<'_> {
                 row_hint(column_key(column.col_id)),
                 seams.emit,
             ))
+            // **A column is a DESTINATION, not somewhere `prefix+/` sends you.** Its letter means
+            // "move the pane here", which only makes sense while that pick is up — so it names
+            // that scope and drops out of the ordinary picker (Antonio, driving, 2026-09-11:
+            // the sidebar's columns wore green letters under `prefix+/` that landed you in the
+            // dock having selected nothing).
+            //
+            // Addressing it **by key** is untouched: `prefix+Ctrl+c` names `col:<id>` outright
+            // rather than collecting a set, so there is nothing for a scope to filter.
+            .hint_scope([crate::chrome::COLUMN_PICK_SCOPE])
             .color(seams.theme.colors.success)
             .placement(HintPlacement::CenterRight);
         let (watch, _repaint) = RepaintWatch::new(hinted);

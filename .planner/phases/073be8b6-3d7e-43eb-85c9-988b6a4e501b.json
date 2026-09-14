@@ -54,7 +54,9 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-21T10:26:47.163Z",
-      "updatedAt": "2026-08-21T10:26:47.163Z"
+      "updatedAt": "2026-08-21T10:26:47.163Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "5db4fb02-c198-4924-9cd9-f1b3cb8e70d8",
@@ -64,11 +66,20 @@
       "priority": 2,
       "shortName": "scoped-hints-a-picker-letters",
       "title": "Scoped hints — a picker letters one KIND of target (heca-grid-ui)",
-      "status": "planned",
+      "status": "in-progress",
       "description": "**The one framework gap the sketch needs.** Antonio's shape (2026-08-21): an optional `.hint_scope([\"close\", \"other\"])` on the declaration, and a picker letters only what matches.\n\n**Current state.** `collect` (heca-grid-ui/src/widgets/key_hint_group.rs:195) walks the whole subtree and pushes **every** node whose `Base.hint` is set, with no notion of which set it belongs to, and does not stop at a nested `KeyHintGroup`. So with cards *and* ⊠ icons both declaring a hint, `Ctrl+p` would letter all of them — sixteen letters where the sketch shows eight.\n\n**Build.**\n- `Base` carries an optional scope list beside `hint` (`heca-grid-ui/src/component.rs`), set by a builder on `ComponentExt` beside `on_hint` — one line on the widget, the ⭐⭐ RULE ZERO shape: `IconButton::new(..).on_hint(..).hint_scope([\"close\"])`.\n- `KeyHintGroup` gains the matching declaration (which scope it letters); unset means \"the unscoped ones\", so every picker that exists today behaves exactly as it does now.\n- `collect` filters by scope, and stops descending into a nested group that letters a different scope — the nesting hole this closes is real today, not only for the exposé.\n- The declarative half: a described node names its scopes (`heca-view`/`heca-view-realize`), so a plugin's surface gets two verbs on one tree from JSON as well as from Rust.\n\n**Edge cases.** A target with several scopes belongs to each picker that names one. A picker whose scope matches nothing shows no letters rather than lettering everything (fail closed — the opposite is a picker that deletes what you meant to jump to). Letters must stay stable per target across a rebuild, as `assign_letters` + `remembered_letters` already do.\n\n**Docs are part of this task** (AGENTS.md): rustdoc on the builder, and `docs/widgets.md` under `KeyHint`/`KeyHintGroup` with both a native and a declarative example.\n\nBlocks T4 and T5. Nothing in the exposé can be built against a picker that letters everything.",
       "descriptionUpdatedAt": "2026-08-21T10:27:02.959Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "5db4fb02-c198-4924-9cd9-f1b3cb8e70d8-check-001-planned-in-progress",
+          "date": "2026-09-11T14:13:19.932Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from The column in the scrolling area does not own its identity — only its sidebar view does."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -76,10 +87,17 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-09-11T14:13:19.932Z",
       "completedAt": "",
       "createdAt": "2026-08-21T10:27:02.921Z",
-      "updatedAt": "2026-08-21T10:27:02.921Z"
+      "updatedAt": "2026-09-11T14:13:19.932Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:a70b4e20-9380-4450-9aa5-4d6c767bb1aa",
+          "createdAt": "2026-09-11T14:13:19.873Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:a70b4e20-9380-4450-9aa5-4d6c767bb1aa"
     },
     {
       "id": "0c306a56-589d-4782-bde5-ff482dd3013a",
@@ -104,7 +122,9 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-21T10:27:16.707Z",
-      "updatedAt": "2026-08-21T10:27:16.707Z"
+      "updatedAt": "2026-08-21T10:27:16.707Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "6e2b41f2-040c-4f82-bc6a-0287806240e5",
@@ -129,7 +149,9 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-21T10:27:30.876Z",
-      "updatedAt": "2026-08-21T10:27:30.876Z"
+      "updatedAt": "2026-08-21T10:27:30.876Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "0fa72783-7180-460f-a238-33c99a4625d5",
@@ -154,7 +176,9 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-21T10:27:43.921Z",
-      "updatedAt": "2026-08-21T10:27:43.921Z"
+      "updatedAt": "2026-08-21T10:27:43.921Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "6df15669-5e81-4a09-b131-e651319e4a5b",
@@ -179,14 +203,32 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-21T10:27:57.710Z",
-      "updatedAt": "2026-08-21T10:27:57.710Z"
+      "updatedAt": "2026-08-21T10:27:57.710Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-08-21T10:26:33.762Z",
-  "updatedAt": "2026-08-21T10:30:06.300Z",
+  "updatedAt": "2026-09-11T14:13:19.932Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": []
+  "statusLog": [
+    {
+      "id": "dee59fb6-dbc2-4239-91c4-e9104b52443a",
+      "date": "2026-09-11T14:13:20.085Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:a70b4e20-9380-4450-9aa5-4d6c767bb1aa",
+      "createdAt": "2026-09-11T14:13:19.873Z"
+    }
+  ]
 }

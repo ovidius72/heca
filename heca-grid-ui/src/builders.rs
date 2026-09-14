@@ -999,6 +999,33 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
+    /// **Which pickers letter this target.** Unset — the default — means the ordinary one, which
+    /// is `prefix+/` in heca and letters everything actionable.
+    ///
+    /// One surface can carry more than one verb over the same tree. The exposé's cards mean *go
+    /// there* and their ⊠ icons mean *remove that*: a picker that letters both hands out sixteen
+    /// letters where you wanted eight, and half of them delete what you meant to jump to. So a
+    /// target says which sets it belongs to and a picker says which one it hands letters for.
+    ///
+    /// ```ignore
+    /// Row::new().on_hint(go_to(id))                          // the ordinary picker
+    /// IconButton::new(Glyph::X).on_hint(remove(id)).hint_scope(["close"])   // only "close"
+    /// ```
+    ///
+    /// **Naming a scope takes the target OUT of the ordinary picker.** That is what makes this
+    /// worth more than the surface it was built for: a column in the workspaces dock is a
+    /// *destination* for "move a pane to a column", never somewhere `prefix+/` should send you, and
+    /// saying so is one line on the widget instead of a rule the picker carries about columns.
+    ///
+    /// Name several and the target belongs to each of those pickers. Addressing a widget **by
+    /// key** — what `prefix+q` and "move to column" do — ignores scopes entirely: those name one
+    /// target outright rather than collecting a set, so there is nothing to filter.
+    #[heca_grid_ui_macros::prop]
+    fn hint_scope(mut self, scopes: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.base_mut().hint_scopes = scopes.into_iter().map(Into::into).collect();
+        self
+    }
+
     /// **Take this widget out of the layout entirely** — CSS `display: none`. Its neighbours close
     /// up, and it is neither painted nor Tab-focused.
     ///

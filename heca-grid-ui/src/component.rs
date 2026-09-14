@@ -450,6 +450,36 @@ pub struct Base {
     /// why sidebar letters kept failing with no error. `KeyHint` stays as a decorator for a
     /// **region that is not a widget you can put a builder on**, and nothing else.
     pub hint: Option<crate::hint::Hint>,
+    /// **Which pickers this target belongs to.** Empty — the default — means the ordinary one:
+    /// `prefix+/`, the picker that letters everything actionable.
+    ///
+    /// A surface can have more than one verb over the same tree. The exposé's cards mean *go
+    /// there* and their ⊠ icons mean *remove that*, and a picker that letters both at once gives
+    /// you sixteen letters where you wanted eight — with the wrong half able to delete what you
+    /// meant to jump to. So a target names the scopes it answers to and a picker names the one it
+    /// letters, and each hands out letters for its own set.
+    ///
+    /// Written with [`hint_scope`](crate::builders::ComponentExt::hint_scope), one line on the
+    /// widget beside the declaration it scopes:
+    ///
+    /// ```ignore
+    /// IconButton::new(Glyph::X).on_hint(remove(id)).hint_scope(["close"])
+    /// ```
+    ///
+    /// **A scoped target drops out of the ordinary picker**, which is the property that makes this
+    /// usable for more than the exposé: a column in the workspaces dock is a *destination* for
+    /// "move a pane to a column", not somewhere `prefix+/` should send you, and saying so is one
+    /// line rather than a rule the picker has to carry about columns.
+    ///
+    /// A target may name several scopes and then belongs to each of those pickers.
+    pub hint_scopes: Vec<String>,
+    /// **The scope this node's own picker letters**, when it is one — set by
+    /// [`KeyHintGroup::scope`](crate::widgets::KeyHintGroup::scope).
+    ///
+    /// It lives here rather than on the widget so a walk can see it without knowing what a
+    /// `KeyHintGroup` is: a picker stops descending into a nested picker that letters a different
+    /// scope, and that rule belongs to the walk, not to one widget's type.
+    pub picker_scope: Option<String>,
     /// **What this widget says on hover.** `None` — the default — means it says nothing and costs
     /// nothing.
     ///
@@ -611,6 +641,8 @@ impl Base {
             lock: false,
             captures_keyboard: None,
             hint: None,
+            hint_scopes: Vec::new(),
+            picker_scope: None,
             tooltip: None,
             hintable: true,
             activatable: false,

@@ -717,7 +717,8 @@ its letter**, and the keycap is drawn whole rather than cut, so you can still re
 |---|---|
 | nothing | actionable → gets a letter; picking it does what clicking it does |
 | `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays). On **every** widget — it was a `KeyHint` builder before |
-| `.hintable(false)` | never gets a letter, however actionable it is |
+| `.hintable(false)` | never gets a letter, however actionable it is — **from any picker** |
+| `.hint_scope(["close"])` | gets a letter only from a picker that asked for `"close"`, and **drops out of the ordinary one**. See [Two verbs over one tree](#two-verbs-over-one-tree) |
 
 **"Actionable" is `Base::activatable`**, set wherever an action is wired: once in `ComponentExt::on`
 for the generic listeners (`Click`, `DoubleClick`, `Key` — so `on_click`, `on_double_click`,
@@ -730,6 +731,12 @@ thing, so it should not spend one of the 52 letters.
 
 **Letters are scarce.** One picker hands out 52, one keystroke each — `.hintable(false)` is how a
 dense surface keeps them for the targets that matter.
+
+**`hintable(false)` and `hint_scope` are not the same tool.** `hintable(false)` means *nobody* — it
+hides the widget from every picker, including a plugin's own. `hint_scope` means *not this one*: the
+target still has a picker, just not the ordinary one. Reach for the scope when the thing is pickable
+in some context — a ⊠ under a "close" verb, a column under "move a pane here" — and for
+`hintable(false)` only when a letter on it would be waste whoever asked.
 
 > **Declarative form:** `hintable` is an ordinary boolean prop on the node, read for every kind — see [Identity props](#identity-props--key-and-hintable-on-every-kind).
 
@@ -4348,6 +4355,9 @@ that filter applied; a plugin's is the same behaviour scoped to its own panel.
   - `.letters(impl IntoIterator<Item = char>)` — **the letters this picker hands out, in order.**
     Defaults to `DEFAULT_LETTERS`. Host-only (an app's choice of alphabet, not data a described tree
     carries).
+  - `.scope("close")` — **which set of targets it letters.** Unset means the ordinary set:
+    everything beneath it that named no scope, which is how every picker behaved before this
+    existed. See **[Two verbs over one tree](#two-verbs-over-one-tree)** below.
 - **Accessors**: `.is_open() -> bool`, `.open_signal() -> Signal<bool>`.
 - **Dismissal** comes from `[keys.widgets]`, so the widget names no key of its own.
 - **Letters are claimed in capture**, before the subtree sees them: the regions a picker covers
@@ -4414,6 +4424,47 @@ screen declares the name is the one that runs — so a verb whose surface is not
 nothing. A verb whose intent names *itself* is refused at realize time: it would resolve back to the
 same widget and re-post itself forever.
 
+
+<a id="two-verbs-over-one-tree"></a>
+#### Two verbs over one tree — `hint_scope` and `KeyHintGroup::scope`
+
+One surface can mean more than one thing by a letter. A map of cards means *go there*; the ⊠ on each
+card means *remove that*. A single picker over both hands out twice the letters, and half of them
+delete what you meant to jump to.
+
+So a **target** names the sets it answers to, and a **picker** names the set it letters:
+
+```rust
+// the cards — no scope, so the ordinary picker gets them
+Row::new().on_hint(go_to(id))
+// the ⊠ — only a picker that asked for "close"
+IconButton::new(Icon::new(Glyph::X)).on_hint(remove(id)).hint_scope(["close"])
+
+KeyHintGroup::new(cards).opens_on("map.jump")                  // letters the cards
+KeyHintGroup::new(cards).opens_on("map.close").scope("close")  // letters the ⊠s
+```
+
+Described, the same thing:
+
+```json
+{ "kind": "KeyHintGroup", "props": { "opens_on": "map.close", "scope": "close" },
+  "children": [ { "kind": "IconButton",
+                  "props": { "hint_scope": ["close"] },
+                  "events": { "hint": { "action": "card.remove" } } } ] }
+```
+
+**The four rules, and each is held by a test:**
+
+| rule | why |
+|---|---|
+| **Naming a scope takes a target OUT of the ordinary picker** | a ⊠ that deletes something must not wear a letter in the picker you move around with |
+| **A picker whose scope matches nothing letters nothing** | fail closed. The other way, a "close" picker that quietly lettered every card would remove what you meant to go to |
+| **A picker stops at another picker's subtree** | its children are ordinary targets from *their* picker's point of view, so nothing else keeps them out |
+| **A target may name several scopes** | and then belongs to each of those pickers |
+
+⚠️ **Addressing a widget by KEY ignores scopes.** `prefix+q` and "move a pane to a column" name one
+target outright (`pane:7`, `col:3`) rather than collecting a set, so there is nothing to filter —
+which is what lets a column wear a letter as a *destination* while staying out of `prefix+/`.
 
 ### FocusScope
 

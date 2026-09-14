@@ -517,6 +517,14 @@ pub(crate) fn new_window_root() -> Flex {
 /// at startup), and a positional "child 0" would then seat the chrome *over* it.
 pub(crate) const CHROME_KEY: &str = "heca.chrome";
 
+/// **The scope a column's letter belongs to** — "somewhere a pane can be moved to".
+///
+/// A column wears a letter while `prefix+Ctrl+c` is choosing a destination, and at no other time.
+/// Naming the scope is what keeps it out of `prefix+/`, where its letter landed you in the dock
+/// having selected nothing. Addressing it by key is unaffected: that names `col:<id>` outright
+/// rather than collecting a set.
+pub(crate) const COLUMN_PICK_SCOPE: &str = "column.destination";
+
 /// **Seat a freshly built chrome subtree in the window root**, keeping every surface beside it.
 ///
 /// Doing it this way rather than replacing the retained tree is the whole point of the extra level.
