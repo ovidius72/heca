@@ -28,8 +28,7 @@ use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect, signal};
 use heca_grid_ui::style::{Align, Spacing};
 use heca_grid_ui::widgets::{
-    Flex, Glyph, HintPlacement, Icon, KeyHint, Label, Row, StatusDot, Tooltip, TooltipSide,
-    Visibility,
+    Flex, Glyph, HintPlacement, Icon, Label, Row, StatusDot, Tooltip, TooltipSide, Visibility,
 };
 
 /// **How far a metadata line sits in from the name above it.** One token, read by every line under
@@ -346,10 +345,9 @@ impl PaneRow<'_> {
             pane_key(pane_id),
             card.nav_state(),
         ));
-        // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this pane's
-        // letter over it. `KeyHint` is transparent — it hugs the child and routes events, focus and
-        // drag straight through — so the card stays a drag source and target, and clickable. **The
-        // letter is offered by key** (`chrome::hint`) and drawn by the widget itself.
+        // A move/swap/take pick stamps this pane's letter over the card. **The letter is offered
+        // by key** (`chrome::hint`) and drawn by `paint_child` on the card itself — which is why
+        // there is no wrapper: the card is a widget, so it can simply say so.
         // **The row follows its pane. Nothing writes to it.**
         //
         // These sixteen signals used to be handed to the host, which walked every pane every frame,
@@ -400,17 +398,15 @@ impl PaneRow<'_> {
             );
         });
         let (watch, _repaint) = RepaintWatch::new(
-            KeyHint::new(card)
-                // **What `prefix+/` does to this row**, declared right where its letter is drawn: move
-                // the cursor here and bring the pane to the front, staying in the sidebar. Nothing is
-                // registered and no id leaves this line — which is the only reason a plugin's row could
-                // ever have the same picker (RULE ZERO, F004/P084/T399).
-                .on_hint(crate::chrome::picks(
-                    seams.mount,
-                    row_hint(pane_key(pane_id)),
-                    seams.emit,
-                ))
-                .placement(HintPlacement::CenterRight),
+            // **The card says it about itself** — no `KeyHint` wrapper, which is for a region that
+            // is not a widget you can put a builder on.
+            //
+            // **What `prefix+/` does to this row**, declared right where its letter is drawn: move
+            // the cursor here and bring the pane to the front, staying in the sidebar. Nothing is
+            // registered and no id leaves this line — which is the only reason a plugin's row could
+            // ever have the same picker (RULE ZERO).
+            card.on_hint(seams.picks(row_hint(pane_key(pane_id))))
+                .hint_placement(HintPlacement::CenterRight),
         );
         watch
     }

@@ -11,7 +11,7 @@ use super::seams::{DockRegistries, DockSeams};
 use super::{column_key, column_row_items, pane_row::PaneRow, row_hint, ColumnEntry, MENU_COLUMN};
 use crate::chrome::{ChromeDragItem, RepaintWatch};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
-use heca_grid_ui::widgets::{HintPlacement, KeyHint, MarkerGroup};
+use heca_grid_ui::widgets::{HintPlacement, HintTone, MarkerGroup};
 
 /// A generic [`MarkerGroup`] (left marker bar + grip gutter) holding the column's stacked pane
 /// cards — no per-column header row, because columns are spatial groupings whose only user-facing
@@ -77,11 +77,12 @@ impl ColumnGroup<'_> {
             column_key(column.col_id),
             col.nav_state(),
         ));
-        // Wrap the column in the universal `KeyHint` so a "move pane → column" pick can stamp this
-        // column's letter over it (tinted `success`, distinct from pane/workspace picks). **The
-        // letter is offered by key** (`chrome::hint`) and drawn by the widget — nothing is
-        // registered here and nothing is projected onto it every frame.
-        let hinted = KeyHint::new(col)
+        // **The group says all of this about itself** — no `KeyHint` wrapper. That is for a
+        // region which is not a widget you can put a builder on; a `MarkerGroup` is one, and the
+        // letter is drawn by `paint_child` for any widget carrying one. The letter itself is
+        // offered **by key** (`chrome::hint`): nothing is registered here and nothing is projected
+        // onto it every frame.
+        let hinted = col
             // **What a pick does to this row** — the cursor lands on the column and the dock keeps
             // the keyboard, exactly as a pane row and a workspace row already declare.
             //
@@ -89,11 +90,7 @@ impl ColumnGroup<'_> {
             // group was not a pick target at all: a letter offered by `col:<id>` could not land on
             // it and climbed to the nearest thing that could — the **workspace header** above it.
             // That is why a column pick lettered workspaces (Antonio, driving, 2026-09-10).
-            .on_hint(crate::chrome::picks(
-                seams.mount,
-                row_hint(column_key(column.col_id)),
-                seams.emit,
-            ))
+            .on_hint(seams.picks(row_hint(column_key(column.col_id))))
             // **A column is a DESTINATION, not somewhere `prefix+/` sends you.** Its letter means
             // "move the pane here", which only makes sense while that pick is up — so it names
             // that scope and drops out of the ordinary picker (Antonio, driving, 2026-09-11:
@@ -103,8 +100,10 @@ impl ColumnGroup<'_> {
             // Addressing it **by key** is untouched: `prefix+Ctrl+c` names `col:<id>` outright
             // rather than collecting a set, so there is nothing for a scope to filter.
             .hint_scope([crate::chrome::COLUMN_PICK_SCOPE])
-            .color(seams.theme.colors.success)
-            .placement(HintPlacement::CenterRight);
+            // The tone says what the target IS; the theme colours it, so this file names no
+            // colour and a column still reads distinctly from a pane and a workspace.
+            .hint_tone(HintTone::Success)
+            .hint_placement(HintPlacement::CenterRight);
         let (watch, _repaint) = RepaintWatch::new(hinted);
         watch
     }

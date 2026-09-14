@@ -394,6 +394,35 @@ pub trait Parent: Component + Sized {
         self.base_mut().children.push(c.into_component());
         self
     }
+
+    /// **The plural of [`child`](Parent::child)** — a whole collection, in one call.
+    ///
+    /// Without it a caller holding a list has to break the chain and go imperative:
+    ///
+    /// ```ignore
+    /// let mut dock = DockFrame::new(name).active(true).key(k);
+    /// for column in &ws.columns {
+    ///     dock = dock.child(ColumnGroup { column }.build());   // reassigned, mid-expression
+    /// }
+    /// ```
+    ///
+    /// …which is a `mut`, a rebinding and a loop sitting inside what reads everywhere else as one
+    /// declarative expression. With the plural it stays one:
+    ///
+    /// ```ignore
+    /// DockFrame::new(name)
+    ///     .active(true)
+    ///     .key(k)
+    ///     .children(ws.columns.iter().map(|c| ColumnGroup { column: c }.build()))
+    /// ```
+    ///
+    /// Takes anything iterable of anything that can be a child, so a `Vec`, a `map` over a slice,
+    /// or a mix of widgets and already-realized subtrees all go through the same call.
+    fn children(mut self, cs: impl IntoIterator<Item = impl IntoComponent>) -> Self {
+        let slot = &mut self.base_mut().children;
+        slot.extend(cs.into_iter().map(IntoComponent::into_component));
+        self
+    }
 }
 
 /// **Event handlers, on any widget.** The one-line opt-in every widget already has for layout

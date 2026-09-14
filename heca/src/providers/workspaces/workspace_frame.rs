@@ -16,7 +16,7 @@ use super::{
 };
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
 use heca_grid_ui::style::{Align, Length};
-use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, KeyHint};
+use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, HintTone};
 
 /// A `.frameless(true)` [`DockFrame`] whose header carries the workspace's total pane count, and
 /// whose body is the workspace's columns followed by its floating panes.
@@ -62,7 +62,7 @@ impl WorkspaceFrame<'_> {
             // accent, a column's is `success`. Folding is a structural control rather than
             // somewhere to navigate, so it reads `muted`. The widget places the letter (only it
             // knows where its chevron is) and says nothing about what it means.
-            .fold_hint_tone(heca_grid_ui::widgets::HintTone::Muted)
+            .fold_hint_tone(HintTone::Muted)
             .frameless(true)
             .gap(4.0) // tighten the workspace header → body spacing
             .expanded(!seams.ws_state.is_ws_collapsed(ws_idx))
@@ -140,25 +140,20 @@ impl WorkspaceFrame<'_> {
                 .build(seams, reg),
             );
         }
-        dock = dock.child(cols);
-        // Wrap the whole workspace dock in the universal `KeyHint` so a
-        // "move column/pane → workspace" pick can stamp this workspace's letter over
-        // it. The keycap is tinted `warning` (not accent) so a workspace target reads
-        // distinctly from a pane target. The hint signal is driven each frame in
-        // `sync_chrome_signals` from the active pick candidates.
-        KeyHint::new(dock)
-            // **What `prefix+/` does to this row** — the cursor lands on the workspace header
-            // and the dock keeps the keyboard, exactly as it does on a pane row.
-            .on_hint(crate::chrome::picks(
-                seams.mount,
-                row_hint(workspace_key(ws_id)),
-                seams.emit,
-            ))
-            .color(theme.colors.warning)
-            // Top-right (like the pane cards' right-aligned keycap), nudged down
-            // onto the workspace title row so it lines up with the name.
-            .placement(HintPlacement::TopRight)
-            .offset_y((theme.font_size * 0.45) as f64)
+        // **The dock says all of this about itself** — no wrapper.
+        //
+        // `KeyHint` is for a region that is not a widget you can put a builder on; a `DockFrame`
+        // is one. Its `paint` only paints its child, because the letter is drawn by `paint_child`
+        // for any widget carrying one — so wrapping bought a node in the tree and nothing else.
+        //
+        // The tone says what the target IS and the theme colours it: a workspace reads distinctly
+        // from a pane, without this file naming a colour. Top-right like the pane cards, nudged
+        // down onto the title row so it lines up with the name.
+        dock.child(cols)
+            .on_hint(seams.picks(row_hint(workspace_key(ws_id))))
+            .hint_tone(HintTone::Warning)
+            .hint_placement(HintPlacement::TopRight)
+            .hint_offset_y((theme.font_size * 0.45) as f64)
     }
 }
 
