@@ -108,6 +108,19 @@ impl HintTone {
     }
 }
 
+/// **What colour a keycap is: an explicit choice, then a declared meaning, then the picker's own.**
+///
+/// A widget composing itself has no theme at build time, so a literal is not something it can
+/// write — a tone is. It has to be resolved *before* the picker's fallback: with the fallback
+/// first, `color` is always `Some` by the time the tone is consulted and the tone is silently
+/// dead, which looks from the outside like a placement that moved and a colour that did not.
+pub(crate) fn cap_tint(style: &HintStyle, theme: &crate::theme::Theme) -> Color {
+    style
+        .color
+        .or_else(|| style.tone.map(|t| t.resolve(theme)))
+        .unwrap_or(theme.hint_color)
+}
+
 /// Keycap font size as a fraction of the wrapped component's resolved font.
 const HINT_FONT_MUL: f32 = 1.05;
 /// Horizontal / vertical padding inside the keycap, in fractions of the hint font.
@@ -651,17 +664,18 @@ pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
     // instead, an emphasized header button wore a letter a quarter larger than the pane's own, and
     // in a different colour, in the same picker (Antonio, driving, 2026-09-03).
     let picker_font = cx.theme().hint_font_size;
-    style.color = Some(style.color.unwrap_or(cx.theme().hint_color));
+    // **Explicit colour, then the declared MEANING, then the picker's own token.** A widget
+    // composing itself has no theme at build time, so a tone is the only thing it can say — and it
+    // has to be resolved here, before the fallback, or the fallback always wins and the tone is
+    // silently dead.
+    style.color = Some(cap_tint(&style, cx.theme()));
     let (cap, permitted) = keycap_rect(base.bounds, picker_font, &style, &text, cx.viewport());
     let Some(cap) = fit_into_view(cap, permitted, cx.clip()) else {
         return;
     };
     let font = hint_font(picker_font, &style, base.bounds);
     cx.with_overlay(|cx| {
-        let tint = style
-            .color
-            .or_else(|| style.tone.map(|t| t.resolve(cx.theme())));
-        paint_keycap(cx, cap, &text, font, tint, KeycapVariant::Filled);
+        paint_keycap(cx, cap, &text, font, style.color, KeycapVariant::Filled);
     });
 }
 
@@ -866,5 +880,53 @@ mod tests {
         let large = keycap_size(20.0, "a");
         assert!(large.w > small.w);
         assert!(large.h > small.h);
+    }
+}
+
+#[cfg(test)]
+mod keycap_tint {
+    use super::*;
+    use crate::builders::ComponentExt as _;
+    use crate::widgets::{HintTone, Surface};
+
+    fn style_of(w: impl Component) -> HintStyle {
+        w.base().hint_style
+    }
+
+    /// **A declared MEANING colours the cap** — the one thing a widget composing itself can say,
+    /// since it has no theme at build time to take a literal from.
+    ///
+    /// It was dead on arrival once: the picker's own fallback ran first, so `color` was always
+    /// `Some` by the time the tone was consulted. From the outside that looked like a placement
+    /// that moved and a colour that did not.
+    #[test]
+    fn a_tone_decides_the_cap_when_no_colour_was_named() {
+        let theme = crate::theme::Theme::default();
+        let muted = style_of(Surface::new().hint_tone(HintTone::Muted));
+        assert_eq!(cap_tint(&muted, &theme), theme.colors.muted);
+        assert_ne!(
+            cap_tint(&muted, &theme),
+            cap_tint(&style_of(Surface::new()), &theme),
+            "a tone has to change something",
+        );
+    }
+
+    /// **An explicit colour still wins**, so the app's per-kind tints are untouched.
+    #[test]
+    fn a_named_colour_outranks_a_tone() {
+        let theme = crate::theme::Theme::default();
+        let red = crate::Color::new(255, 0, 0, 255);
+        let both = style_of(Surface::new().hint_tone(HintTone::Muted).hint_color(red));
+        assert_eq!(cap_tint(&both, &theme), red);
+    }
+
+    /// …and with neither, the picker's own token, exactly as before any of this.
+    #[test]
+    fn nothing_named_is_the_pickers_own_colour() {
+        let theme = crate::theme::Theme::default();
+        assert_eq!(
+            cap_tint(&style_of(Surface::new()), &theme),
+            theme.hint_color
+        );
     }
 }
