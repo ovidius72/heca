@@ -1209,10 +1209,11 @@ mod scoped_pickers {
         let button = Button::new("both")
             .on_click(|| {})
             .hint_scope(["close", "other"]);
-        assert!(crate::hint::in_scope(&button, Some("close")));
-        assert!(crate::hint::in_scope(&button, Some("other")));
+        // Asked through what a picker actually calls, not the scope test underneath it.
+        assert!(crate::hint::is_target_of(&button, Some("close")));
+        assert!(crate::hint::is_target_of(&button, Some("other")));
         assert!(
-            !crate::hint::in_scope(&button, None),
+            !crate::hint::is_target_of(&button, None),
             "still out of the ordinary picker"
         );
     }
