@@ -88,8 +88,8 @@ impl Dialog {
     pub fn new(title: impl Into<String>) -> Self {
         // Panel: a padded column holding the title, then body + actions as they're added.
         let panel = Flex::column()
-            .pad_all(DIALOG_PAD)
-            .gap_spacing(DIALOG_GAP)
+            .padding(DIALOG_PAD)
+            .gap(DIALOG_GAP)
             .child(Label::new(title));
 
         // The base Overlay owns the layer presentation: blocking (scrim + swallow),
@@ -205,9 +205,7 @@ impl Dialog {
     pub fn action(mut self, button: impl Component + 'static) -> Self {
         if !self.has_actions {
             // Lazily create the right-aligned action row on first use.
-            let row = Flex::row()
-                .gap_spacing(DIALOG_BTN_GAP)
-                .justify(Justify::End);
+            let row = Flex::row().gap(DIALOG_BTN_GAP).justify(Justify::End);
             self.panel_mut().children.push(Box::new(row));
             self.has_actions = true;
         }

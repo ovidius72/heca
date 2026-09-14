@@ -889,7 +889,7 @@ pub(crate) fn build_pane_header(
         .width(Length::Percent(1.0))
         // **Air between the title and the actions**, as a token — it resolves against the inherited
         // font, so it holds at every font size and UI zoom instead of being tuned for one.
-        .gap_spacing(heca_grid_ui::Spacing::Sm)
+        .gap(heca_grid_ui::Spacing::Sm)
         // **The bar's own breathing room, which is what makes the strip the height it is.** The
         // host reserves `title_bar_reserve` at the pane top — the bar's content height plus this
         // margin twice over — so carrying the margin here is what makes the bar exactly fill the
@@ -916,12 +916,12 @@ pub(crate) fn build_pane_header(
             // **The strip's own inset, on both axes.** It replaces a hand-subtracted 6px margin
             // that the host used to take off the pane width before handing the bar a budget — the
             // container holds its own padding, and nothing outside it has to know the number.
-            .pad_x(heca_grid_ui::Spacing::Xs)
+            .padding_x(heca_grid_ui::Spacing::Xs)
             // **A theme token, not a pixel count.** `Spacing` resolves against the inherited font
             // at layout, so the bar's breathing room scales with the font, the size variant and UI
             // zoom. A raw px value is tuned for one font size and wrong at every other
             // (`docs/widgets.md` § Flex).
-            .pad_y(heca_grid_ui::Spacing::Xs)
+            .padding_y(heca_grid_ui::Spacing::Xs)
             .child(row),
     )
 }

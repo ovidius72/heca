@@ -110,7 +110,7 @@ impl PaneCard<'_> {
             // `surface` is legible by the palette's own construction.
             .background(theme.colors.surface)
                         .radius(theme.colors.control_radius())
-            .pad_all(Spacing::Xs)
+            .padding(Spacing::Xs)
             // **The name sits in the middle of the card.** A card in the map is a picture of a
             // pane, not a row in a list: there is no column of names to align down, and a label
             // against the left edge reads as the start of a list item (Antonio, driving,

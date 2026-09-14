@@ -41,7 +41,7 @@ impl ColumnCard<'_> {
         // failure this whole task exists to remove. Padding sits **inside** the border box, so the
         // share stays exact and the air appears between the cards all the same. Vertically a gap is
         // safe (`grow` divides what is left *after* gaps), so the panes below use one.
-        let mut stack = Flex::column().pad_x(Spacing::Xs).gap_spacing(Spacing::Xs);
+        let mut stack = Flex::column().padding_x(Spacing::Xs).gap(Spacing::Xs);
         let mut cells = Vec::new();
         for pane in &self.column.panes {
             let (card, cell) = PaneCard {

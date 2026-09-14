@@ -1401,12 +1401,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Surface::new()
                 .background(theme.colors.surface)
-                .pad_all(Spacing::Xs)
+                .padding(Spacing::Xs)
                 .width(Length::Percent(0.5))
                 .child(
                     ButtonGroup::new()
                         .size(WidgetSize::Small)
-                        .gap_spacing(Spacing::Xs)
+                        .gap(Spacing::Xs)
                         .child(
                             Button::new("Split")
                                 .icon(Glyph::Plus)
@@ -1435,12 +1435,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Surface::new()
                 .background(theme.colors.surface)
-                .pad_all(Spacing::Xs)
+                .padding(Spacing::Xs)
                 .child(
                     ButtonGroup::new()
                         .size(WidgetSize::Small)
                         .display(heca_grid_ui::widgets::Display::IconOnly)
-                        .gap_spacing(Spacing::Xs)
+                        .gap(Spacing::Xs)
                         .child(
                             Button::new("Split")
                                 .icon(Glyph::Plus)

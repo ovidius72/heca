@@ -35,18 +35,30 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.layout.direction = d;
         self
     }
-    /// Gap between children.
-    fn gap(mut self, v: f32) -> Self {
-        self.base_mut().style.layout.gap = v;
-        self
-    }
-    /// Gap between children from a theme [`Spacing`](crate::style::Spacing) token —
-    /// resolved to px from the inherited font at layout, so it scales with the
-    /// font, size variant and UI zoom (unlike a raw [`gap`](LayoutExt::gap) px).
-    /// Use it to group form fields: a tight `Spacing::Xs` inside a label+control
-    /// couple, a roomier `Spacing::Md` between couples — no new widget needed.
-    fn gap_spacing(mut self, s: crate::style::Spacing) -> Self {
-        self.base_mut().style.layout.gap_spacing = Some(s);
+    /// **Space between children** — a number of pixels, or a step of the theme's rhythm.
+    ///
+    /// ```ignore
+    /// Flex::row().gap(8)             // eight pixels
+    /// Flex::row().gap(Spacing::Sm)   // a step, scaling with the font
+    /// Flex::row().gap("sm")          // the same step, said as a description would
+    /// ```
+    ///
+    /// **Prefer the step.** It is resolved from the inherited font at layout, so it moves with the
+    /// font, the size variant and UI zoom; a pixel gap is tuned for one font size and wrong at
+    /// every other. Use a number when you can say why it should not move.
+    ///
+    /// It was two builders — this and `gap_spacing` — which is two paths over one property. The
+    /// docs said prefer the token and the token was used 8 times against this one's 112, because
+    /// advice loses to whichever name is shorter.
+    fn gap(mut self, v: impl Into<crate::style::Space>) -> Self {
+        let l = &mut self.base_mut().style.layout;
+        match v.into() {
+            crate::style::Space::Px(px) => {
+                l.gap = px;
+                l.gap_spacing = None;
+            }
+            crate::style::Space::Step(step) => l.gap_spacing = Some(step),
+        }
         self
     }
     /// Outer margin on all sides.
@@ -174,18 +186,77 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.layout.justify_self = Some(a);
         self
     }
-    /// Inner padding on all sides.
-    fn padding(mut self, p: f32) -> Self {
-        self.base_mut().style.layout.padding = p;
+    /// **Inner padding on all sides** — pixels or a step, exactly as [`gap`](LayoutExt::gap).
+    fn padding(mut self, p: impl Into<crate::style::Space>) -> Self {
+        let l = &mut self.base_mut().style.layout;
+        match p.into() {
+            crate::style::Space::Px(px) => {
+                l.padding = px;
+                l.pad_spacing_x = None;
+                l.pad_spacing_y = None;
+            }
+            crate::style::Space::Step(step) => {
+                l.pad_spacing_x = Some(step);
+                l.pad_spacing_y = Some(step);
+            }
+        }
         self
     }
-    /// Inner padding split per axis: `x` left+right, `y` top+bottom.
-    fn padding_xy(mut self, x: f32, y: f32) -> Self {
-        let s = &mut self.base_mut().style.layout;
-        s.padding_x = Some(x);
-        s.padding_y = Some(y);
+    /// **Inner padding per axis**: `x` left+right, `y` top+bottom. Pixels or a step, each.
+    fn padding_xy(
+        mut self,
+        x: impl Into<crate::style::Space>,
+        y: impl Into<crate::style::Space>,
+    ) -> Self {
+        {
+            let l = &mut self.base_mut().style.layout;
+            match x.into() {
+                crate::style::Space::Px(px) => {
+                    l.padding_x = Some(px);
+                    l.pad_spacing_x = None;
+                }
+                crate::style::Space::Step(step) => l.pad_spacing_x = Some(step),
+            }
+            match y.into() {
+                crate::style::Space::Px(px) => {
+                    l.padding_y = Some(px);
+                    l.pad_spacing_y = None;
+                }
+                crate::style::Space::Step(step) => l.pad_spacing_y = Some(step),
+            }
+        }
         self
     }
+
+    /// **Inner padding left+right** — pixels or a step.
+    ///
+    /// There was no pixel form of this: `pad_x` took only a token, so a caller wanting a measured
+    /// horizontal inset had to reach for `padding_xy` and restate the vertical one.
+    fn padding_x(mut self, p: impl Into<crate::style::Space>) -> Self {
+        let l = &mut self.base_mut().style.layout;
+        match p.into() {
+            crate::style::Space::Px(px) => {
+                l.padding_x = Some(px);
+                l.pad_spacing_x = None;
+            }
+            crate::style::Space::Step(step) => l.pad_spacing_x = Some(step),
+        }
+        self
+    }
+
+    /// **Inner padding top+bottom** — see [`padding_x`](LayoutExt::padding_x).
+    fn padding_y(mut self, p: impl Into<crate::style::Space>) -> Self {
+        let l = &mut self.base_mut().style.layout;
+        match p.into() {
+            crate::style::Space::Px(px) => {
+                l.padding_y = Some(px);
+                l.pad_spacing_y = None;
+            }
+            crate::style::Space::Step(step) => l.pad_spacing_y = Some(step),
+        }
+        self
+    }
+
     /// Inner padding on one side, overriding the axis and the uniform value.
     ///
     /// Reserving space along a single edge is not the same as padding the axis: the opposite side
@@ -208,24 +279,6 @@ pub trait LayoutExt: Component + Sized {
     /// Inner padding on the bottom only — see [`padding_left`](Self::padding_left).
     fn padding_bottom(mut self, p: f32) -> Self {
         self.base_mut().style.layout.padding_bottom = Some(p);
-        self
-    }
-    /// Inner padding (both axes) from a theme [`Spacing`](crate::style::Spacing) token —
-    /// resolved to px from the font at layout. Prefer this over hand-computed px.
-    fn pad_all(mut self, s: crate::style::Spacing) -> Self {
-        let st = &mut self.base_mut().style.layout;
-        st.pad_spacing_x = Some(s);
-        st.pad_spacing_y = Some(s);
-        self
-    }
-    /// Horizontal (left+right) padding from a theme [`Spacing`](crate::style::Spacing) token.
-    fn pad_x(mut self, s: crate::style::Spacing) -> Self {
-        self.base_mut().style.layout.pad_spacing_x = Some(s);
-        self
-    }
-    /// Vertical (top+bottom) padding from a theme [`Spacing`](crate::style::Spacing) token.
-    fn pad_y(mut self, s: crate::style::Spacing) -> Self {
-        self.base_mut().style.layout.pad_spacing_y = Some(s);
         self
     }
     /// Width along the main/cross axis, in any of the spellings a size is written in:
@@ -1221,5 +1274,46 @@ mod one_builder_per_slot {
         use crate::widgets::Item;
         let it = Item::new("row").leading(subtree()).trailing(Label::new("x"));
         assert_eq!(it.base().children.len(), 3, "leading, label, trailing");
+    }
+}
+
+#[cfg(test)]
+mod spacing_builders {
+    use super::*;
+    use crate::style::Spacing;
+    use crate::widgets::Flex;
+
+    /// **A step and a number go through the same builder and land in different places** — which is
+    /// the whole point: a step is resolved against the inherited font at layout, a number is not.
+    #[test]
+    fn one_builder_writes_whichever_kind_it_was_given() {
+        let px = Flex::row().gap(8);
+        assert_eq!(px.base().style.layout.gap, 8.0);
+        assert_eq!(px.base().style.layout.gap_spacing, None);
+
+        let step = Flex::row().gap(Spacing::Sm);
+        assert_eq!(step.base().style.layout.gap_spacing, Some(Spacing::Sm));
+    }
+
+    /// **Saying it again the other way replaces it**, rather than leaving both set with the token
+    /// silently winning at layout — which is what two separate builders allowed.
+    #[test]
+    fn a_number_after_a_step_really_is_a_number() {
+        let w = Flex::row().gap(Spacing::Lg).gap(4);
+        assert_eq!(w.base().style.layout.gap, 4.0);
+        assert_eq!(
+            w.base().style.layout.gap_spacing,
+            None,
+            "the step has to be cleared, or layout resolves it over the number",
+        );
+    }
+
+    /// Padding behaves the same, on every axis.
+    #[test]
+    fn padding_takes_either_kind_per_axis() {
+        let w = Flex::row().padding_x(12).padding_y(Spacing::Xs);
+        assert_eq!(w.base().style.layout.padding_x, Some(12.0));
+        assert_eq!(w.base().style.layout.pad_spacing_x, None);
+        assert_eq!(w.base().style.layout.pad_spacing_y, Some(Spacing::Xs));
     }
 }

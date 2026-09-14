@@ -388,7 +388,7 @@ fn chrome_root(
             .width(Length::Px(w))
             .height(Length::Px(tab_bar_height))
             .align(Align::Center)
-            .pad_x(Spacing::Sm);
+            .padding_x(Spacing::Sm);
         if let Some(t) = left_toggle {
             band = band.child(t);
         }
@@ -618,14 +618,11 @@ pub(super) fn search_bar_tree(
 ) -> Flex {
     // The query slot, then the match position as a separate chip so it reads as
     // distinct information rather than as part of what was typed.
-    let mut row = Flex::row()
-        .align(Align::Center)
-        .gap_spacing(Spacing::Sm)
-        .child(
-            Flex::row()
-                .width(Length::Px(field.w as f32))
-                .height(Length::Px(field.h as f32)),
-        );
+    let mut row = Flex::row().align(Align::Center).gap(Spacing::Sm).child(
+        Flex::row()
+            .width(Length::Px(field.w as f32))
+            .height(Length::Px(field.h as f32)),
+    );
     if let Some(count) = count {
         row = row.child(Tag::new(count).color(theme.colors.accent));
     }

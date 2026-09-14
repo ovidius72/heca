@@ -241,7 +241,7 @@ pub(crate) fn map(
             .panel(
                 Surface::column()
                     .background(theme.colors.background.with_alpha(theme.colors.interaction.scrim))
-                    .pad_all(Spacing::Md)
+                    .padding(Spacing::Md)
                     .child(grid),
             )
             // **Closed until the stack shows it**, which is what plays the arrival: `ShowLayer`

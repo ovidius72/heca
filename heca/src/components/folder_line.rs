@@ -68,7 +68,7 @@ impl FolderLine<'_> {
                 .align(Align::Center)
                 .gap(GAP)
                 // Inside the `Visibility`, never around it — see `indent`.
-                .pad_x(self.indent)
+                .padding_x(self.indent)
                 // Never wider than what holds it — see `PaneName`. The line is commonly centred,
                 // and a centred child is sized by its content unless it says otherwise.
                 .max_width(Length::Percent(1.0))

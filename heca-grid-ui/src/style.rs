@@ -108,6 +108,80 @@ pub enum Spacing {
     Lg,
 }
 
+/// **A space: a number of pixels, or a step of the theme's rhythm.**
+///
+/// The two were separate builders — `gap(8.0)` beside `gap_spacing(Spacing::Sm)`, `padding(6.0)`
+/// beside `pad_all(Spacing::Xs)` — which is two paths over one property, in the library itself. The
+/// counts said what that costs: `.gap` was used 112 times against `.gap_spacing`'s 8, and the docs
+/// told everyone to prefer the token. Advice loses to whichever name is shorter and more obvious.
+///
+/// One builder takes either:
+///
+/// ```ignore
+/// Flex::row().gap(8)             // eight pixels
+/// Flex::row().gap(Spacing::Sm)   // a step of the rhythm
+/// Flex::row().gap("sm")          // the same step, said as a description would
+/// ```
+///
+/// **Prefer the step.** It is resolved from the inherited font at layout, so it scales with the
+/// font, the size variant and UI zoom; a raw pixel gap is tuned for one font size and wrong at
+/// every other. Use a number when you can say why it should not move with the font.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Space {
+    /// Logical pixels, fixed whatever the font does.
+    Px(f32),
+    /// A step of the theme's rhythm, resolved against the inherited font at layout.
+    Step(Spacing),
+}
+
+impl From<Spacing> for Space {
+    fn from(s: Spacing) -> Self {
+        Space::Step(s)
+    }
+}
+
+impl From<f32> for Space {
+    fn from(v: f32) -> Self {
+        Space::Px(v)
+    }
+}
+
+impl From<f64> for Space {
+    /// Rust reads a bare decimal as `f64`, so without this `.gap(8.0)` does not compile.
+    fn from(v: f64) -> Self {
+        Space::Px(v as f32)
+    }
+}
+
+impl From<i32> for Space {
+    /// …and a bare integer as `i32`.
+    fn from(v: i32) -> Self {
+        Space::Px(v as f32)
+    }
+}
+
+impl From<&str> for Space {
+    /// `"sm"` / `"md"` for a step, `"8"` / `"8px"` for pixels — the spellings a description
+    /// travels in, so native code and the wire say a space the same way.
+    ///
+    /// ⚠️ Anything unreadable is **no space at all** rather than a panic, the same rule the grid's
+    /// track vocabulary follows: these arrive from config and from plugins, so a typo costs its
+    /// author a gap and not the host.
+    fn from(t: &str) -> Self {
+        let t = t.trim();
+        match t.to_ascii_lowercase().as_str() {
+            "none" => return Space::Step(Spacing::None),
+            "xs" => return Space::Step(Spacing::Xs),
+            "sm" => return Space::Step(Spacing::Sm),
+            "md" => return Space::Step(Spacing::Md),
+            "lg" => return Space::Step(Spacing::Lg),
+            _ => {}
+        }
+        let t = t.strip_suffix("px").map_or(t, str::trim_end);
+        Space::Px(t.parse().unwrap_or(0.0))
+    }
+}
+
 impl Spacing {
     /// Multiplier applied to the inherited font size to get the padding in px.
     pub fn scale(self) -> f32 {
@@ -951,5 +1025,42 @@ mod length_spellings {
         let d: serde::de::value::F32Deserializer<serde::de::value::Error> =
             240.0f32.into_deserializer();
         assert_eq!(Length::deserialize(d).unwrap(), Length::from(240));
+    }
+}
+
+#[cfg(test)]
+mod one_spacing_builder {
+    use super::*;
+
+    /// **A space is written either way through one builder.**
+    ///
+    /// It was two — `gap(8.0)` beside `gap_spacing(Spacing::Sm)`, `padding(6.0)` beside
+    /// `pad_all(Spacing::Xs)` — which is two paths over one property inside the library itself.
+    /// The usage said what that costs: `.gap` 112 times against `.gap_spacing`'s 8, with the docs
+    /// telling everyone to prefer the token. Advice loses to whichever name is shorter.
+    #[test]
+    fn a_space_is_pixels_or_a_step_and_one_builder_takes_both() {
+        assert_eq!(Space::from(8), Space::Px(8.0), "a bare integer is pixels");
+        assert_eq!(Space::from(8.0), Space::Px(8.0), "and a bare decimal");
+        assert_eq!(Space::from("8px"), Space::Px(8.0), "the suffix is optional");
+        assert_eq!(Space::from(Spacing::Sm), Space::Step(Spacing::Sm));
+        assert_eq!(
+            Space::from("sm"),
+            Space::Step(Spacing::Sm),
+            "the wire spelling"
+        );
+        assert_eq!(
+            Space::from("MD"),
+            Space::Step(Spacing::Md),
+            "case is not a spelling"
+        );
+    }
+
+    /// **A space nobody can read is none, not a panic** — these arrive from `config.toml` and from
+    /// a plugin's description as well as from Rust, the same rule the grid's tracks follow.
+    #[test]
+    fn an_unreadable_space_is_no_space() {
+        assert_eq!(Space::from("roomy"), Space::Px(0.0));
+        assert_eq!(Space::from(""), Space::Px(0.0));
     }
 }

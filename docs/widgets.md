@@ -542,14 +542,15 @@ return `Self` for chaining.
 | Method | Effect |
 |--------|--------|
 | `.direction(Direction)` | Main axis (`Row`/`Column`). |
-| `.gap(f32)` | Space between children. |
+| `.gap(..)` | **Space between children** — a number (pixels) **or** a step of the theme's rhythm: `.gap(8)`, `.gap(Spacing::Sm)`, `.gap("sm")`. **Prefer the step**: it resolves against the inherited font at layout, so it moves with the font, the size variant and UI zoom, while a pixel gap is tuned for one font size and wrong at every other. |
 | `.justify(Justify)` | Main-axis distribution (`Start`/`Center`/`End`/`SpaceBetween`/`SpaceAround`). |
 | `.align(Align)` | Cross-axis alignment of the **children** (`Start`/`Center`/`End`/`Stretch`). In a `Row` that is vertical; in a `Column`, horizontal; in a [`Grid`](#grid), it is how items sit **vertically inside their cells**. |
 | `.align_self(Align)` | Cross-axis alignment of **this** widget in its parent (CSS `align-self`), overriding the parent's `.align()` for it alone. `Align::Start` keeps an `Auto`-sized widget **hugging its content** instead of stretching to fill the parent — which is what the default `Stretch` would otherwise do (see [`Select`](#select), sized to its widest option). |
 | `.justify_items(Align)` | **Grid only** — how the items sit **horizontally inside their cells** (CSS `justify-items`). Not the same as `.justify()`, which on a grid distributes the whole *track set*. |
 | `.justify_self(Align)` | **Grid only** — horizontal placement of **this** item in its own cell, overriding the grid's `.justify_items()`. |
-| `.padding(f32)` | Inner padding (all sides). |
-| `.padding_xy(x, y)` | Per axis: `x` left+right, `y` top+bottom. |
+| `.padding(..)` | Inner padding, all sides — a number or a step, as [`gap`](#builder-traits). |
+| `.padding_x(..)` / `.padding_y(..)` | One axis — left+right, top+bottom. Either kind. |
+| `.padding_xy(x, y)` | Both axes at once. Either kind, each. |
 | `.padding_left/right/top/bottom(f32)` | **One side**, overriding the axis and the uniform value (side → axis → uniform, the same cascade as the per-side margins). Use it to reserve space along a single edge without moving the opposite one — a [`ScrollRegion`](#scrollregion) keeping content clear of its scrollbar is the case that asked for it. Also settable from a description, for free: the declarative property surface *is* `Layout`'s own fields. |
 | `.width(..)` / `.height(..)` / `.min_*` / `.max_*` | **Any spelling a size is written in** — see the table below. **Set neither width nor height and the widget fills its parent across the cross axis**, exactly as CSS `align-items: stretch` does, so a panel with no width in a 600px column is 600px wide and `.width(Length::FULL)` on a child that already fills says nothing; leave it off. |
 | `.grow(f32)` | Flex-grow factor — a share of what is **left over** after the fixed children. That is what flex-grow means, so "a share of the widest sibling" is a **percentage against one denominator**, not a grow weight. |
@@ -1622,12 +1623,14 @@ a parent that counts its children to tell them apart.
   `Start`/`Center`/`End`/`SpaceBetween`/`SpaceAround`/`SpaceEvenly`); `.align(Align)` (cross-axis:
   `Start`/`Center`/`End`/`Stretch` — the default `Stretch` makes an `Auto`-sized child fill the
   cross axis; `.align_self(Align)` overrides it for one child).
-- **Gap between children**: `.gap(px)` for a raw value, or **`.gap_spacing(Spacing)`** for a
-  **font-relative theme token** (`None`/`Xs`/`Sm`/`Md`/`Lg`) — resolved from the inherited font at
-  layout, so it scales with the font, size variant, and UI zoom. **Prefer the token**; a raw px gap
-  is tuned for one font size and wrong at every other.
-- **Padding**: `.padding(px)` / `.padding_xy(x, y)` for raw px, or the tokens `.pad_all(Spacing)` /
-  `.pad_x(Spacing)` / `.pad_y(Spacing)` (same font-relative scaling as `gap_spacing`).
+- **Gap between children**: `.gap(..)` takes **either** — `.gap(8)` for pixels, `.gap(Spacing::Sm)`
+  or `.gap("sm")` for a **font-relative theme token** (`None`/`Xs`/`Sm`/`Md`/`Lg`), resolved from
+  the inherited font at layout so it scales with the font, size variant and UI zoom. **Prefer the
+  token**; a raw px gap is tuned for one font size and wrong at every other. One builder, because
+  two — `gap` and `gap_spacing` — meant the docs said *prefer the token* and the token was used 8
+  times against the other's 112.
+- **Padding**: `.padding(..)`, `.padding_x(..)` / `.padding_y(..)`, `.padding_xy(x, y)` — each takes
+  a number or a token, the same way.
 - **Sizing** (from `LayoutExt`, shared by every widget): `.width(..)` / `.height(..)`
   (`Auto` / `Px` / `Percent`), `.grow(f32)` (flex-grow, absorb leftover space), `.margin*`.
 - **Traits**: `LayoutExt`, `Parent`. **No `StyleExt`, deliberately** — a `Flex` arranges, it does
@@ -1643,21 +1646,21 @@ Flex::row().gap(12.0).align(Align::Center)
 
 **Form fields — grouping with two gap scales (no `Field` widget needed).** A label and its control
 are one *couple* (tight); couples are separated by a larger gap. Express it with two nested `Flex`
-columns at different `gap_spacing` — the inner tight gap couples label↔control, the outer roomier gap
+columns at different gap steps — the inner tight gap couples label↔control, the outer roomier gap
 falls *between* fields:
 
 ```rust
-let field = |label, control| Flex::column().gap_spacing(Spacing::Xs)   // tight: label ↔ its control
+let field = |label, control| Flex::column().gap(Spacing::Xs)   // tight: label ↔ its control
     .child(Label::new(label).color(theme.muted))
     .child(control);
 
-Flex::column().gap_spacing(Spacing::Md)                                 // roomy: between fields
+Flex::column().gap(Spacing::Md)                                 // roomy: between fields
     .child(field("Confirm name", Input::new().value("pane-1")))
     .child(field("Archive target", Select::new(["SCRATCHPAD", "TRASH"])))
     .child(Checkbox::new().label("Also close its column"));
 ```
 
-A [`Dialog`](#dialog) body already defaults its own children to `gap_spacing(Md)`, so dropping the
+A [`Dialog`](#dialog) body already defaults its own children to `gap(Spacing::Md)`, so dropping the
 `field(...)` groups straight into `.body(...)` gives correct form spacing with no per-modal setup.
 
 ### Surface
@@ -1692,14 +1695,14 @@ box, the flex is how its contents line up.
 // A strip with its own background, contents pushed to either end.
 Surface::new()
     .background(theme.colors.surface)
-    .pad_y(Spacing::Xs)                       // token, not px — see Flex
+    .padding_y(Spacing::Xs)                       // token, not px — see Flex
     .width(Length::Percent(1.0))
     .child(
         Flex::row()
             .justify(Justify::SpaceBetween)
             .align(Align::Center)
             .child(Tag::new("~").segment_text(Glyph::Terminal, "zsh"))
-            .child(Flex::row().gap_spacing(Spacing::Xs).child(close_button)),
+            .child(Flex::row().gap(Spacing::Xs).child(close_button)),
     );
 ```
 
@@ -2591,7 +2594,7 @@ Nothing is ever squashed, and nothing is ever silently unreachable.
 ButtonGroup::new()
     .size(WidgetSize::Header)                       // one size for every button in the group
     .variant(ButtonVariant::Ghost)                  // …and one variant
-    .gap_spacing(Spacing::Xs)                       // a token, never a pixel count
+    .gap(Spacing::Xs)                       // a token, never a pixel count
     .child(Button::new("Split").icon(Glyph::Plus).on_click(split))
     .child(Button::new("Zoom").icon(Glyph::FrameCorners).on_click(zoom))
     .child(Button::new("Close").icon(Glyph::Minus).on_click(close))
@@ -2623,7 +2626,7 @@ not merely agree: they are the same handler, and cannot drift.
 | `.display(Display)` | `IconOnly` (default) — always icons, words kept for hover and the menu · `Full` — always words · `Auto` — words while they fit. ⚠️ **`Auto` is not settled**: taking the words off makes the row narrower, so it then fits, which is the condition for putting them back; at some widths it still alternates. Use `IconOnly` or `Full`. |
 | `.variant(ButtonVariant)` | the variant the group's buttons take. **A button that named its own keeps it** — which is what lets a toolbar be uniformly quiet while its close button still reads as destructive, without either fact being written twice. |
 | `.size(WidgetSize)` | from [`LayoutExt`](#builder-traits), and it cascades: children inherit their parent's size variant. |
-| `.gap_spacing(Spacing)` / `.gap(px)` | from `LayoutExt`, applied to the row inside. **Prefer the token.** |
+| `.gap(Spacing)` / `.gap(px)` | from `LayoutExt`, applied to the row inside. **Prefer the token.** |
 | `.shown_count()` / `.is_collapsed()` | what the group decided, for a caller that needs to know. |
 
 > ⚠️ **`display` governs stages 1 and 2 only.** Collapsing into the menu still happens whenever the
@@ -3541,7 +3544,7 @@ Toast::danger("Connection lost")
 // Composed — the body is anything, and actions repeat. Neither Button carries a colour:
 // the card publishes its severity as a control tone and they take it.
 Toast::danger("Build failed")
-    .body(Flex::column().gap_spacing(Spacing::Xs)
+    .body(Flex::column().gap(Spacing::Xs)
         .child(Label::new("3 errors in heca-grid-ui"))
         .child(Label::new("cargo check exited 1").font_scale(0.85)))
     .action(Button::new("Retry").on_click(|| rebuild()))

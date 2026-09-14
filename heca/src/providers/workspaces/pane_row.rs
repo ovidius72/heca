@@ -170,7 +170,7 @@ impl PaneRow<'_> {
             Flex::row()
                 .align(Align::Center)
                 .gap(6.0)
-                .pad_x(META_INDENT)
+                .padding_x(META_INDENT)
                 .child(
                     Icon::new(Glyph::GitBranch)
                         .size(12.0)
@@ -215,7 +215,7 @@ impl PaneRow<'_> {
         // suffix's 14, and centring puts both mid-lines on the same pixel.
         let title_area = Flex::row()
             .align(Align::Center)
-            .gap_spacing(heca_grid_ui::style::Spacing::Sm)
+            .gap(heca_grid_ui::style::Spacing::Sm)
             .child(title_label)
             .child(process_hint);
         // Optional cwd row (folder icon + home-relative path), stacked between the name and
