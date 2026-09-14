@@ -721,6 +721,12 @@ its letter**, and the keycap is drawn whole rather than cut, so you can still re
 | `.hint_scope(["close"])` | gets a letter only from a picker that asked for `"close"`, and **drops out of the ordinary one**. See [Two verbs over one tree](#two-verbs-over-one-tree) |
 | `.hint_tone(HintTone::Muted)` | **what the letter means**, coloured by the theme. A fold or a close is `Muted`; a place to go is `Accent`. Use this, not `hint_color`, inside a widget — it has no theme at build time |
 
+> **Every picker asks this same question** — the global `prefix+/` and a surface's own
+> [`KeyHintGroup`](#keyhintgroup) alike. They had drifted: the group used to letter only nodes with
+> an explicit `on_hint`, so "being pickable is not opt-in" held on one path and not the other, and a
+> plugin that put a panel of ordinary buttons behind its own verb got no letters with nothing to say
+> why. One rule, one definition, the scope passed in.
+
 **"Actionable" is `Base::activatable`**, set wherever an action is wired: once in `ComponentExt::on`
 for the generic listeners (`Click`, `DoubleClick`, `Key` — so `on_click`, `on_double_click`,
 `on_key_down`, `on_key_up`), and in each widget that keeps its own callback instead (`Button`,

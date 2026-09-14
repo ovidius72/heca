@@ -1053,7 +1053,7 @@ mod scoped_pickers {
     use crate::builders::{ComponentExt, Parent};
     use crate::component::Component;
     use crate::reactive::{SignalGet, SignalUpdate};
-    use crate::widgets::{Button, Flex, KeyHintGroup};
+    use crate::widgets::{Button, Flex, KeyHintGroup, Label};
 
     /// Real bounds, because a target nobody can see is not a target — a zero-sized widget is
     /// dropped before it can be lettered, which would make every assertion below pass for the
@@ -1176,6 +1176,30 @@ mod scoped_pickers {
             crate::collect_hints(&tree).len(),
             1,
             "only the page's own target"
+        );
+    }
+
+    /// **A surface's own picker letters an ordinary button** — the same rule the global one
+    /// follows, because it is now literally the same question.
+    ///
+    /// The two walks had drifted: `hint::is_target` takes anything actionable, and this one asked
+    /// only whether a declaration was present. So "being pickable is not opt-in" held for
+    /// `prefix+/` and not for a picker a plugin owns — it could put a panel of buttons behind its
+    /// own verb and get no letters, with nothing to say why.
+    #[test]
+    fn a_surfaces_own_picker_letters_an_ordinary_button() {
+        let mut group = KeyHintGroup::new(
+            Flex::column()
+                .child(Button::new("act").on_click(|| {}))
+                .child(Label::new("just text")),
+        );
+        lay_out(&mut group);
+        group.open_signal().set(true);
+        group.tick(0.0);
+        assert_eq!(
+            labels(&group),
+            vec!["act"],
+            "actionable is enough here too; a Label has nothing to run",
         );
     }
 

@@ -116,7 +116,16 @@ fn actionable(c: &dyn Component) -> bool {
 /// [`Base::hint`] stays meaningful as the **override**: it says a pick does something *other* than
 /// acting on the widget normally.
 pub(crate) fn is_target(c: &dyn Component) -> bool {
-    in_scope(c, None) && c.base().hintable && (c.base().hint.is_some() || actionable(c))
+    is_target_of(c, None)
+}
+
+/// The same question, asked **by a picker with a scope of its own**.
+///
+/// One definition with the scope as a parameter, not two walks each deciding what a target is: they
+/// had drifted, and the global picker lettered an ordinary button where a surface's own picker did
+/// not, so a plugin owning a picker over a panel of buttons got no letters and nothing said why.
+pub(crate) fn is_target_of(c: &dyn Component, scope: Option<&str>) -> bool {
+    in_scope(c, scope) && c.base().hintable && (c.base().hint.is_some() || actionable(c))
 }
 
 /// **Does this target belong to the picker asking?**

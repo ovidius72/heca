@@ -284,10 +284,14 @@ fn collect(
     if crate::hint::foreign_picker(node, scope) {
         return;
     }
-    if node.base().hint.is_some()
-        && crate::hint::in_scope(node, scope)
-        && !crate::hint::out_of_view(node, clip)
-    {
+    // **The same question the global picker asks** — `hint::is_target`: anything actionable, plus
+    // anything that declared what a pick does, minus anything that said `hintable(false)`.
+    //
+    // This used to ask only whether a declaration was present, so the two walks disagreed about
+    // what a target even is: `prefix+/` lettered an ordinary button and a surface's own picker did
+    // not. A plugin owning a picker over a panel of buttons got no letters and nothing said why —
+    // "being pickable is not opt-in" held on one path and not the other. One rule, in one place.
+    if crate::hint::is_target_of(node, scope) && !crate::hint::out_of_view(node, clip) {
         out.push(path.clone());
     }
     let clip = crate::hint::narrowed(clip, node);
