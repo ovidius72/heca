@@ -76,6 +76,8 @@ const HEADER: usize = 0;
 const BODY: usize = 1;
 const RAIL: usize = 2;
 /// Index of the controls slot within the header row (after the toggle [`Item`]).
+/// The header row's first child: the title Item that folds the frame.
+const TOGGLE: usize = 0;
 const CONTROLS: usize = 1;
 /// A titled, collapsible, bracket-framed container for a Dock.
 pub struct DockFrame {
@@ -127,18 +129,21 @@ impl DockFrame {
             .child(chevron_label);
         // The toggle Item carries the title and flips `expanded` on activate; it
         // grows so the controls slot sits at the right edge.
-        // **Its letter sits on the chevron it folds, in the muted tone.**
+        // **Its letter sits on the chevron it folds.**
         //
-        // Folding a dock is a real act, so it earns one of the 52 — but it is a structural control,
-        // not somewhere to navigate to, and it was wearing the default cap in the default place:
-        // centred on the title, on top of whatever the dock's own author declared there, in the
-        // tone that means "a pane" (Antonio, driving, 2026-09-14 — two letters stacked on one
-        // workspace header). Top-left puts it over the chevron, which is the thing it operates.
+        // Folding a dock is a real act, so it earns one of the 52 — but it was wearing the default
+        // cap in the default place: centred on the title, on top of whatever the dock's own author
+        // declared there (Antonio, driving, 2026-09-14 — two letters stacked on one workspace
+        // header). Top-left puts it over the chevron, which is the thing it operates, and that is
+        // geometry only this widget knows.
+        //
+        // **What the letter MEANS is not this widget's to say** — accent, warning, success are a
+        // vocabulary the app assigns, and a domain-neutral widget picking one of them is the
+        // library deciding app styling. A caller says it with `fold_hint_tone`.
         let toggle = Item::new(title)
             .leading(leading)
             .on_activate(move || expanded.set(!expanded.get_untracked()))
             .hint_placement(crate::widgets::HintPlacement::TopLeft)
-            .hint_tone(crate::widgets::HintTone::Muted)
             .grow(1.0);
         // Header row: [toggle (grows), controls slot]. Children — not the toggle
         // Item — so an interactive control (e.g. a search Input) still receives
@@ -220,6 +225,28 @@ impl DockFrame {
             .base_mut()
             .children
             .push(c.into_component());
+        self
+    }
+
+    /// **What the fold control's letter means**, for the theme to colour.
+    ///
+    /// Folding is a real act, so the toggle earns a letter — but which *class* of target it reads
+    /// as belongs to whoever is assembling the surface, not here: `accent`, `warning` and the rest
+    /// are a vocabulary an app assigns across its own kinds, and a domain-neutral widget claiming
+    /// one of them would be the library deciding app styling.
+    ///
+    /// Unset, the letter takes the picker's own colour, exactly as every letter did before tones
+    /// existed. heca passes `Muted`: a fold is a structural control, not somewhere to navigate to.
+    ///
+    /// ```ignore
+    /// DockFrame::new("Docker").fold_hint_tone(HintTone::Muted)
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn fold_hint_tone(mut self, tone: crate::widgets::HintTone) -> Self {
+        self.base.children[HEADER].base_mut().children[TOGGLE]
+            .base_mut()
+            .hint_style
+            .tone = Some(tone);
         self
     }
 

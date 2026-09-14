@@ -57,6 +57,12 @@ impl WorkspaceFrame<'_> {
         // rebuilds (F4.3). Collapse is read back from that same shared state.
         let emit = seams.emit.clone();
         let mut dock = DockFrame::new(ws.name.clone())
+            // **What the fold control's letter means** — this is the file that assigns the
+            // vocabulary: a workspace's own letter is `warning` a few lines down, a pane's is the
+            // accent, a column's is `success`. Folding is a structural control rather than
+            // somewhere to navigate, so it reads `muted`. The widget places the letter (only it
+            // knows where its chevron is) and says nothing about what it means.
+            .fold_hint_tone(heca_grid_ui::widgets::HintTone::Muted)
             .frameless(true)
             .gap(4.0) // tighten the workspace header → body spacing
             .expanded(!seams.ws_state.is_ws_collapsed(ws_idx))

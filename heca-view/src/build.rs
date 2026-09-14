@@ -1280,6 +1280,14 @@ impl DockFrame {
     pub fn previous(self, on: bool) -> Self {
         self.prop("previous", on)
     }
+    /// **What the fold control's letter means**, for the theme to colour.
+    ///
+    /// Folding is a real act, so the toggle earns a letter — but which class of target it reads as
+    /// belongs to whoever assembles the surface. Unset, it takes the picker's own colour.
+    pub fn fold_hint_tone(self, tone: crate::ViewHintTone) -> Self {
+        self.prop("fold_hint_tone", tone)
+    }
+
     /// Whether the frame is open.
     pub fn expanded(self, on: bool) -> Self {
         self.prop("expanded", on)
