@@ -381,6 +381,20 @@ pub trait Style: Sized {
     ///
     /// Universal, like [`hint_placement`](Style::hint_placement), because the slot is on every
     /// widget.
+    /// **What this node's keycap means** — the theme picks the colour, so it follows a reload and
+    /// a description never carries a hex.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::{Intent, ViewHintTone};
+    ///
+    /// // A fold control: a real act, but not somewhere to navigate to.
+    /// let fold = IconButton::new().on_press(Intent::new("panel.fold")).hint_tone(ViewHintTone::Muted);
+    /// ```
+    fn hint_tone(self, tone: crate::ViewHintTone) -> Self {
+        self.prop("hint_tone", tone)
+    }
+
     fn hint_scope(self, scopes: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let list: Vec<PropValue> = scopes
             .into_iter()

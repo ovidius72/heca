@@ -293,6 +293,11 @@ pub fn realize(
     if let Some(px) = node.props.get("hint_size").and_then(PropValue::as_float) {
         style.size = Some(px as f32);
     }
+    if let Some(name) = node.props.get("hint_tone").and_then(PropValue::as_text)
+        && let Some(tone) = hint_tone(name)
+    {
+        style.tone = Some(tone);
+    }
 
     if let Some(px) = node
         .props
@@ -533,6 +538,19 @@ fn prop_enum_name<T: serde::Serialize>(value: &T) -> Option<String> {
 
 /// A hint placement by the name serde gives [`ViewHintPlacement`] — `"top_center"`, `"center"`,
 /// `"center_right"`, `"top_right"`, `"top_left"`. An unknown name keeps the default.
+/// A keycap tone by the name serde gives [`ViewHintTone`].
+fn hint_tone(name: &str) -> Option<heca_grid_ui::widgets::HintTone> {
+    use heca_grid_ui::widgets::HintTone as T;
+    Some(match name {
+        "accent" => T::Accent,
+        "muted" => T::Muted,
+        "warning" => T::Warning,
+        "success" => T::Success,
+        "danger" => T::Danger,
+        _ => return None,
+    })
+}
+
 fn hint_placement(name: &str) -> Option<heca_grid_ui::widgets::HintPlacement> {
     use heca_grid_ui::widgets::HintPlacement as P;
     Some(match name {

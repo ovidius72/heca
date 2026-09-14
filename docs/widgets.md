@@ -719,6 +719,7 @@ its letter**, and the keycap is drawn whole rather than cut, so you can still re
 | `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays). On **every** widget — it was a `KeyHint` builder before |
 | `.hintable(false)` | never gets a letter, however actionable it is — **from any picker** |
 | `.hint_scope(["close"])` | gets a letter only from a picker that asked for `"close"`, and **drops out of the ordinary one**. See [Two verbs over one tree](#two-verbs-over-one-tree) |
+| `.hint_tone(HintTone::Muted)` | **what the letter means**, coloured by the theme. A fold or a close is `Muted`; a place to go is `Accent`. Use this, not `hint_color`, inside a widget — it has no theme at build time |
 
 **"Actionable" is `Base::activatable`**, set wherever an action is wired: once in `ComponentExt::on`
 for the generic listeners (`Click`, `DoubleClick`, `Key` — so `on_click`, `on_double_click`,
@@ -4181,6 +4182,7 @@ Bind neither and the node is not a pick target; bind only `press` and a pick doe
 | `hint_placement` | `"top_center"` \| `"center"` \| `"center_right"` \| `"top_right"` \| `"top_left"` | `"top_center"` | where the cap sits over the node. |
 | `hint_size` | number | *(from the font)* | cap font size in logical px. An integer is accepted as well as a fraction. |
 | `hint_color` | colour **token name** | `accent` | cap tint, glow included. A token, never a hex literal, so it follows a theme change. |
+| `hint_tone` | `"accent"` \| `"muted"` \| `"warning"` \| `"success"` \| `"danger"` | `accent` | **what the cap means**, left for the theme to colour. `muted` is a structural control — fold this, close that — rather than somewhere to navigate. Prefer it over `hint_color`: a widget composing itself has no theme at build time to take a literal from. |
 | `hint_offset_y` | number | `0` | nudge applied after placement; positive moves the cap down. |
 
 **Placement does not make a node pickable.** Anything actionable already wears a letter with nothing

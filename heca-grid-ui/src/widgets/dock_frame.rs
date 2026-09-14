@@ -37,7 +37,7 @@
 //! write-via-actions* contract — the host's toggle action expands the rail back.
 
 use crate::action::{Action, SignalData};
-use crate::builders::{LayoutExt, Parent, StyleExt};
+use crate::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::{Align, Direction, Justify};
@@ -127,9 +127,18 @@ impl DockFrame {
             .child(chevron_label);
         // The toggle Item carries the title and flips `expanded` on activate; it
         // grows so the controls slot sits at the right edge.
+        // **Its letter sits on the chevron it folds, in the muted tone.**
+        //
+        // Folding a dock is a real act, so it earns one of the 52 — but it is a structural control,
+        // not somewhere to navigate to, and it was wearing the default cap in the default place:
+        // centred on the title, on top of whatever the dock's own author declared there, in the
+        // tone that means "a pane" (Antonio, driving, 2026-09-14 — two letters stacked on one
+        // workspace header). Top-left puts it over the chevron, which is the thing it operates.
         let toggle = Item::new(title)
             .leading(leading)
             .on_activate(move || expanded.set(!expanded.get_untracked()))
+            .hint_placement(crate::widgets::HintPlacement::TopLeft)
+            .hint_tone(crate::widgets::HintTone::Muted)
             .grow(1.0);
         // Header row: [toggle (grows), controls slot]. Children — not the toggle
         // Item — so an interactive control (e.g. a search Input) still receives

@@ -31,7 +31,7 @@ pub(crate) fn active_hint_targets(
     //
     // A pick is a **keyboard** gesture: it lands on nothing, so where the keyboard is *is* its
     // context — the same reasoning `chrome/pane/mod.rs` and RPC already apply.
-    visible_hint_targets(state)
+    let offered: Vec<(HintTarget, Rectangle)> = visible_hint_targets(state)
         .into_iter()
         .filter(|(target, _)| {
             let Some(root) = hint_surface_root(state, &target.surface) else {
@@ -39,7 +39,66 @@ pub(crate) fn active_hint_targets(
             };
             candidate_allowed(state, target, root)
         })
-        .collect()
+        .collect();
+    log_offered(state, &offered);
+    offered
+}
+
+/// **Say what the picker is about to letter, and where each one came from.**
+///
+/// A letter that turns up somewhere unexpected is the hardest kind of thing to trace by reading:
+/// the picker walks trees the app never names, a target may be a widget nobody declared (anything
+/// actionable gets one), and the tree it sits in is rebuilt constantly. Reasoning about it has been
+/// wrong every time; this prints the answer instead.
+///
+/// Debug builds only, and only while something is picking — the common case is nothing, and this
+/// runs every time the letters are worked out.
+#[cfg(debug_assertions)]
+fn log_offered(state: &crate::app_state::AppState, offered: &[(HintTarget, Rectangle)]) {
+    if offered.is_empty() || std::env::var_os("HECA_LOG_HINTS").is_none() {
+        return;
+    }
+    eprintln!("[hints] {} target(s) offered a letter:", offered.len());
+    for (target, rect) in offered {
+        let (name, declared) = match hint_surface_root(state, &target.surface) {
+            Some(root) => (
+                heca_grid_ui::identity_of(root, &target.path).unwrap_or_else(|| "<unnamed>".into()),
+                node_at(root, &target.path).is_some_and(|n| n.base().hint.is_some()),
+            ),
+            None => ("<no surface>".into(), false),
+        };
+        eprintln!(
+            "[hints]   {:<28} declared={:<5} surface={:?} path={:?} at ({:.0},{:.0}) {:.0}x{:.0}",
+            name,
+            declared,
+            target.surface,
+            target.path,
+            rect.loc.x,
+            rect.loc.y,
+            rect.size.w,
+            rect.size.h,
+        );
+    }
+    eprintln!(
+        "[hints]   declared=false means nobody asked for it — it is lettered because it is \
+         actionable, which is the rule, applied to a widget's own internals."
+    );
+}
+
+#[cfg(not(debug_assertions))]
+fn log_offered(_: &crate::app_state::AppState, _: &[(HintTarget, Rectangle)]) {}
+
+/// The node a path names, for the log above.
+#[cfg(debug_assertions)]
+fn node_at<'a>(
+    root: &'a dyn heca_grid_ui::Component,
+    path: &[usize],
+) -> Option<&'a dyn heca_grid_ui::Component> {
+    let mut node = root;
+    for step in path {
+        node = node.base().children.get(*step)?.as_ref();
+    }
+    Some(node)
 }
 
 /// **Is this candidate worth a letter?** — judged by *what it says it does*, and by nothing else

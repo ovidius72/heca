@@ -1099,9 +1099,25 @@ pub trait ComponentExt: Component + Sized {
 
     /// The keycap's colour, glow included. Unset = the theme's `accent`, so a letter follows a
     /// theme change with nothing rewritten.
+    ///
+    /// Prefer [`hint_tone`](ComponentExt::hint_tone) where a *meaning* fits: a literal does not
+    /// follow a theme reload, and a widget has no theme at build time to take one from.
     #[heca_grid_ui_macros::prop]
     fn hint_color(mut self, color: Color) -> Self {
         self.base_mut().hint_style.color = Some(color);
+        self
+    }
+
+    /// **What this widget's keycap MEANS** — the theme picks the colour.
+    ///
+    /// `Accent` is a place to go, `Muted` a structural control (fold this, close that), and
+    /// `Warning` / `Success` / `Danger` are further classes so two kinds never read alike. A
+    /// literal via [`hint_color`](ComponentExt::hint_color) still wins where one is set, but a
+    /// widget composing itself has no theme to take a literal from — which is why a meaning is the
+    /// thing it can say.
+    #[heca_grid_ui_macros::prop]
+    fn hint_tone(mut self, tone: crate::widgets::HintTone) -> Self {
+        self.base_mut().hint_style.tone = Some(tone);
         self
     }
 

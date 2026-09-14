@@ -421,6 +421,21 @@ pub enum ViewHintPlacement {
     TopLeft,
 }
 
+/// **What a keycap means** — mirrors grid-ui `HintTone`. The theme picks the colour, so a letter
+/// follows a theme reload and a plugin never writes a hex.
+///
+/// `Accent` is a place to go; `Muted` a structural control — fold this, close that — which is not
+/// somewhere to navigate; the rest are further classes so two kinds of target never read alike.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewHintTone {
+    Accent,
+    Muted,
+    Warning,
+    Success,
+    Danger,
+}
+
 /// How a selected row shows it — mirrors grid-ui `ActiveMarker` (`Row`, `Item`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -513,6 +528,7 @@ value_set! {
     ViewTooltipSide { Top => "top", Bottom => "bottom", Left => "left", Right => "right" }
     ViewDisplay { Auto => "auto", IconOnly => "icon_only", Full => "full" }
     ViewSpacing { None => "none", Xs => "xs", Sm => "sm", Md => "md", Lg => "lg" }
+    ViewHintTone { Accent => "accent", Muted => "muted", Warning => "warning", Success => "success", Danger => "danger" }
     ViewNfGlyph {
         Shift => "shift",
         Control => "control",

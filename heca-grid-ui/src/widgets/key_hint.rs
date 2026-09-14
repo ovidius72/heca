@@ -64,8 +64,48 @@ pub struct HintStyle {
     pub size: Option<f32>,
     /// Cap colour override; defaults to the theme `accent`, glow included.
     pub color: Option<Color>,
+    /// **What the cap MEANS, left for the theme to colour.** Overridden by
+    /// [`color`](Self::color) when both are set.
+    ///
+    /// A literal colour cannot be written by a widget that has no theme at build time — which is
+    /// every widget, since the theme arrives at paint. So a widget names a tone and the theme
+    /// decides the pixels, which is the same rule every other colour in the library follows.
+    pub tone: Option<HintTone>,
     /// Extra vertical nudge applied after placement — positive moves it down.
     pub offset_y: f64,
+}
+
+/// **What a keycap means**, so the theme can colour it.
+///
+/// heca reads them: a pane is `Accent`, a workspace `Warning`, a column `Success`, and a
+/// structural control — fold this, close that — is `Muted`, because it is not somewhere to go.
+/// A caller names the meaning; which pixels that is stays the theme's business and follows a
+/// reload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, heca_grid_ui_macros::PropName)]
+pub enum HintTone {
+    /// The default weight — a target you would navigate to.
+    Accent,
+    /// A structural control rather than a destination: a fold, a close, a handle.
+    Muted,
+    /// Reserved for a distinct class of target, so two kinds never read alike.
+    Warning,
+    /// As `Warning`, a third class.
+    Success,
+    /// Something destructive.
+    Danger,
+}
+
+impl HintTone {
+    /// The colour, from the theme this frame.
+    pub fn resolve(self, theme: &crate::theme::Theme) -> Color {
+        match self {
+            HintTone::Accent => theme.colors.accent,
+            HintTone::Muted => theme.colors.muted,
+            HintTone::Warning => theme.colors.warning,
+            HintTone::Success => theme.colors.success,
+            HintTone::Danger => theme.colors.danger,
+        }
+    }
 }
 
 /// Keycap font size as a fraction of the wrapped component's resolved font.
@@ -618,7 +658,10 @@ pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
     };
     let font = hint_font(picker_font, &style, base.bounds);
     cx.with_overlay(|cx| {
-        paint_keycap(cx, cap, &text, font, style.color, KeycapVariant::Filled);
+        let tint = style
+            .color
+            .or_else(|| style.tone.map(|t| t.resolve(cx.theme())));
+        paint_keycap(cx, cap, &text, font, tint, KeycapVariant::Filled);
     });
 }
 
