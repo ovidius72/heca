@@ -182,7 +182,7 @@ impl Overlay {
         // inset for the viewport cap in `apply_panel_size`: the panel's `Percent(1.0)`
         // max resolves against this padded content box, so even a huge panel keeps
         // this margin and its border/glow is never shaved by the window edge.
-        base.style.layout.padding = VIEWPORT_MARGIN;
+        base.style.layout.padding = (VIEWPORT_MARGIN).into();
         // The flag every component carries, not one of this widget's own — see `Base::open`.
         let open = base.open;
         // **An open layer holds the keyboard.** Binding `open` to `Base::focused` is the whole of
@@ -690,7 +690,7 @@ impl Component for Overlay {
     /// (It named `Component::set_open` before, which does not exist and never has.)
     fn tick(&mut self, dt: f32) -> bool {
         self.settle();
-        let mut animating = self.base.presence.tick(dt);
+        let mut animating = self.base.tick_presence(dt);
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);
         }

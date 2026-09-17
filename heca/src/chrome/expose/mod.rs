@@ -55,15 +55,15 @@ pub(crate) mod workspace_row;
 mod testing;
 
 use heca_core::layout::PaneId;
+use heca_grid_ui::Component;
+use heca_grid_ui::animation::Animation;
 use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::{Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::animation::Animation;
 use heca_grid_ui::widgets::{KeyHintGroup, Overlay, Surface};
-use heca_grid_ui::Component;
 
 pub(crate) use expose_grid::ExposeGrid;
-pub(crate) use model::{model, ExposeWorkspace};
+pub(crate) use model::{ExposeWorkspace, model};
 pub(crate) use pane_card::{DispatchAction, ExposeCallbacks, ExposeDeleteKeys};
 
 /// The surface name the map registers under, and the one a `[[keys.surface]]` entry addresses. One
@@ -82,13 +82,13 @@ pub(crate) const PICK_ACTION: &str = "heca.expose.pick";
 ///
 /// `flex_grow` alone does not do it: it distributes only *positive free space*, so a column of
 /// `grow(1.0)` children collapses to its content instead of splitting the box. A share needs a
-/// **zero base size and permission to shrink** as well (CSS `flex: 1 1 0`). Written once here so no
-/// component re-derives it — and gaps come out of the free space before it is divided, so a gap
-/// between shares stays exact.
+/// **zero basis and permission to shrink** as well — CSS `flex: 1 1 0`, said in those words now
+/// that [`LayoutExt::basis`] exists. It used to be spelled with a zero *height*, which says the box
+/// is zero rather than "start from nothing", and left this comment apologising for the substitution.
+/// Written once here so no component re-derives it — and gaps come out of the free space before it
+/// is divided, so a gap between shares stays exact.
 pub(super) fn share_v<T: LayoutExt + Component>(node: T, weight: f64) -> T {
-    node.grow(weight.max(0.001) as f32)
-        .height(Length::Px(0.0))
-        .shrink(1.0)
+    node.grow(weight.max(0.001) as f32).basis(0.0).shrink(1.0)
 }
 
 /// **Wire the map's seams to the host**, once — the four acts every component in it can ask for.
@@ -96,7 +96,10 @@ pub(super) fn share_v<T: LayoutExt + Component>(node: T, weight: f64) -> T {
 /// Separate from [`map`] because a component test needs exactly these and nothing else: they are
 /// the only things in the surface that reach the app, so a test that supplies them can build any
 /// part of the map on its own.
-pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys) -> ExposeCallbacks {
+pub(super) fn callbacks(
+    emit: super::ChromeIntentEmitter,
+    keys: ExposeDeleteKeys,
+) -> ExposeCallbacks {
     // **Deleting is the card's own key handler, dispatching the actions that already exist.** No
     // new `WidgetIntent`, no new `ActionPolicy` arm, no host-side key match: a handler on the
     // widget, exactly as a click is (AGENTS § 0c). The action carries the confirm with it —
@@ -109,9 +112,11 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
     let delete: DispatchAction = {
         let emit = emit.clone();
         std::rc::Rc::new(move |action: &str, args: &[(&str, i64)]| {
-            let intent = args.iter().fold(heca_view::Intent::new(action), |i, (k, v)| {
-                i.arg(*k, heca_view::PropValue::Int(*v))
-            });
+            let intent = args
+                .iter()
+                .fold(heca_view::Intent::new(action), |i, (k, v)| {
+                    i.arg(*k, heca_view::PropValue::Int(*v))
+                });
             emit.fire(crate::app::interaction::InteractionIntent::View(intent));
         })
     };
@@ -138,10 +143,12 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
             // the user asked for, not of a pane being focused (a hint focuses without leaving).
             // Without it the map focused the right pane and the keyboard stayed where it was, so
             // choosing a card looked like it had done nothing at all.
-            emit.fire(crate::app::interaction::InteractionIntent::FocusPaneThenAction {
-                pane_id,
-                action: Box::new(crate::input::WmAction::UnfocusDock),
-            });
+            emit.fire(
+                crate::app::interaction::InteractionIntent::FocusPaneThenAction {
+                    pane_id,
+                    action: Box::new(crate::input::WmAction::UnfocusDock),
+                },
+            );
             emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
                 crate::input::WmAction::CloseOverlay { overlay: None },
             ));
@@ -157,7 +164,13 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
             ));
         })
     };
-    ExposeCallbacks { choose, delete, cursor_to, dismiss, keys }
+    ExposeCallbacks {
+        choose,
+        delete,
+        cursor_to,
+        dismiss,
+        keys,
+    }
 }
 
 /// Build the overview layer — **a composition, not a widget**: it binds `PaneId` to a `FocusPane`
@@ -207,8 +220,8 @@ pub(crate) fn map(
         // The wrapper hugs its child, so the room the panel gives it has to be passed on
         // deliberately — the grid inside is a share of *this*, and a hugged wrapper would leave it
         // resolving a percentage of nothing (the same term the cards' `KeyHint` needs).
-        .width(Length::Percent(1.0))
-        .height(Length::Percent(1.0));
+        .width(Length::FULL)
+        .height(Length::FULL);
 
     Box::new(
         Overlay::new()
@@ -240,7 +253,12 @@ pub(crate) fn map(
             // the frosted compositor — the app read straight through it, sharp.
             .panel(
                 Surface::column()
-                    .background(theme.colors.background.with_alpha(theme.colors.interaction.scrim))
+                    .background(
+                        theme
+                            .colors
+                            .background
+                            .with_alpha(theme.colors.interaction.scrim),
+                    )
                     .padding(Spacing::Md)
                     .child(grid),
             )
@@ -360,21 +378,35 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     // `prefix+Shift+r` — so a rebind reaches the map without this path knowing anything about the
     // config file, and without a second reader of it.
     let keys = ExposeDeleteKeys {
-        pane: state.action_shortcuts.in_surface(&name, "delete_pane").to_vec(),
-        column: state.action_shortcuts.in_surface(&name, "delete_column").to_vec(),
+        pane: state
+            .action_shortcuts
+            .in_surface(&name, "delete_pane")
+            .to_vec(),
+        column: state
+            .action_shortcuts
+            .in_surface(&name, "delete_column")
+            .to_vec(),
         workspace: state
             .action_shortcuts
             .in_surface(&name, "delete_workspace")
             .to_vec(),
     };
-        // The map's own "you were just here" mark, from the one field the bindings read.
+    // The map's own "you were just here" mark, from the one field the bindings read.
     let previous = state
         .last_visited_pane_per_ws
         .get(state.session.active_workspace_idx)
         .copied()
         .flatten()
         .filter(|id| crate::app::focus::find_pane_workspace(&state.session, *id).is_some());
-    let root = map(&rows, &theme, emit, here, &state.session.options, &keys, previous);
+    let root = map(
+        &rows,
+        &theme,
+        emit,
+        here,
+        &state.session.options,
+        &keys,
+        previous,
+    );
     let was_visible = state.layers.is_visible_named(&state.window_root, &name);
     // **The map says what it is, on itself.** It takes the keyboard while it is up, and it does
     // **not** cover the content: `lock` is what refuses actions on panes the user cannot
@@ -413,17 +445,28 @@ mod tests {
     /// The whole layer, as [`register`] assembles it.
     fn built(
         start: Option<PaneId>,
-    ) -> (Box<dyn Component>, std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
+    ) -> (
+        Box<dyn Component>,
+        std::rc::Rc<std::cell::RefCell<Vec<String>>>,
+    ) {
         let s = session();
         let rows = model(&s, |p| p.title.clone(), false);
         let theme = GuiTheme::default();
         let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
         let sink = seen.clone();
-        let emit: super::super::ChromeIntentEmitter =
-            super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, move |_, intent| {
-                sink.borrow_mut().push(format!("{intent:?}"))
-            });
-        let mut root = map(&rows, &theme, emit, start, &LayoutOptions::default(), &shipped_keys(), None);
+        let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            move |_, intent| sink.borrow_mut().push(format!("{intent:?}")),
+        );
+        let mut root = map(
+            &rows,
+            &theme,
+            emit,
+            start,
+            &LayoutOptions::default(),
+            &shipped_keys(),
+            None,
+        );
         // **Shown, as the layer stack shows it.** The map is built closed and opened by whoever
         // mounts it (`LayerRegistry::show`), which is also what plays its arrival — so a test that
         // never opens it is testing a surface nobody has raised.
@@ -515,7 +558,10 @@ mod tests {
              {:?}",
             seen.borrow(),
         );
-        assert!(order.contains(&"delete".to_string()), "…and the delete follows: {order:?}");
+        assert!(
+            order.contains(&"delete".to_string()),
+            "…and the delete follows: {order:?}"
+        );
     }
 
     /// **Activate must reach the grid through the overlay**, and choose the card the cursor is on.
@@ -534,7 +580,10 @@ mod tests {
             got.contains("FocusPaneThenAction") && got.contains("PaneId(2)"),
             "it focuses the card the cursor was on: {got:?}",
         );
-        assert!(got.contains("UnfocusDock"), "and hands the keyboard back: {got:?}");
+        assert!(
+            got.contains("UnfocusDock"),
+            "and hands the keyboard back: {got:?}"
+        );
         assert!(got.contains("CloseOverlay"), "and closes the map: {got:?}");
     }
 
@@ -559,8 +608,19 @@ mod tests {
         let s = session();
         let rows = model(&s, |p| p.title.clone(), false);
         let theme = GuiTheme::default();
-        let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
-        let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys(), None);
+        let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            |_, _| {},
+        );
+        let mut root = map(
+            &rows,
+            &theme,
+            emit,
+            None,
+            &LayoutOptions::default(),
+            &shipped_keys(),
+            None,
+        );
         root.show(); // as the layer stack shows it — see `built`
 
         // What is *drawn*, not what the tree holds — the question is whether a workspace name ever
@@ -577,10 +637,15 @@ mod tests {
             })
             .collect();
         assert!(
-            !seen.iter().any(|t| t == "Editing" || t.starts_with("Workspace ")),
+            !seen
+                .iter()
+                .any(|t| t == "Editing" || t.starts_with("Workspace ")),
             "no workspace name is drawn; the map showed: {seen:?}",
         );
-        assert!(seen.iter().any(|t| t == "a"), "the pane names are still there: {seen:?}");
+        assert!(
+            seen.iter().any(|t| t == "a"),
+            "the pane names are still there: {seen:?}"
+        );
 
         // **Everything the map DRAWS lives in the scene's OVERLAY layer**, because `Overlay` paints
         // through `PaintCx::with_overlay`. A host deciding whether to flush the layer pass by
@@ -598,7 +663,10 @@ mod tests {
                 .all(|c| matches!(c, heca_grid_ui::DrawCommand::Host(_))),
             "the map draws nothing into the base layer — do not gate its flush on that",
         );
-        assert!(scene.has_overlay(), "and everything it draws is in the overlay layer");
+        assert!(
+            scene.has_overlay(),
+            "and everything it draws is in the overlay layer"
+        );
     }
 
     /// **The map opens on the pane the session is focused on** — not where it was last browsed.
@@ -617,7 +685,11 @@ mod tests {
             .expect("the fixture has a focused pane");
         // A different pane remembered from a previous browse, in the row the map would open on.
         let remembered = vec![Some(PaneId(2))];
-        assert_ne!(remembered[0], Some(focused), "the fixture must actually differ");
+        assert_ne!(
+            remembered[0],
+            Some(focused),
+            "the fixture must actually differ"
+        );
 
         assert_eq!(
             open_on(&s, false, Some(0), &remembered),
@@ -683,11 +755,20 @@ mod tests {
             let s = session();
             let rows = model(&s, |p| p.title.clone(), false);
             let theme = GuiTheme::default();
-            let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
-            let mut root =
-                map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), None);
-            heca_grid_ui::LayoutEngine::new()
-                .compute(root.as_mut(), heca_grid_ui::Size::new(w, h));
+            let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(
+                crate::app::interaction::InteractionSource::Keyboard,
+                |_, _| {},
+            );
+            let mut root = map(
+                &rows,
+                &theme,
+                emit,
+                Some(PaneId(1)),
+                &LayoutOptions::default(),
+                &shipped_keys(),
+                None,
+            );
+            heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), heca_grid_ui::Size::new(w, h));
             let drawn = super::testing::cards_bounds(root.as_ref()).expect("the map has cards");
             assert!(
                 drawn.loc.x >= 0.0
@@ -714,9 +795,19 @@ mod tests {
         let s = session();
         let rows = model(&s, |p| p.title.clone(), false);
         let theme = GuiTheme::default();
-        let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
-        let mut root =
-            map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), None);
+        let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            |_, _| {},
+        );
+        let mut root = map(
+            &rows,
+            &theme,
+            emit,
+            Some(PaneId(1)),
+            &LayoutOptions::default(),
+            &shipped_keys(),
+            None,
+        );
         heca_grid_ui::LayoutEngine::new()
             .compute(root.as_mut(), heca_grid_ui::Size::new(1280.0, 800.0));
 

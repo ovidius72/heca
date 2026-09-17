@@ -16,6 +16,15 @@ use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify, Length, WidgetSize};
 
 /// Arrangement builders: how a container lays out itself and its children.
+/// What a grid item starts as when it names one axis and leaves the other to auto-placement:
+/// the first line, one track. Auto-placement then moves it if nothing pinned it.
+const DEFAULT_CELL: crate::style::GridCell = crate::style::GridCell {
+    col: 1,
+    row: 1,
+    col_span: 1,
+    row_span: 1,
+};
+
 pub trait LayoutExt: Component + Sized {
     /// Size variant — scales the widget's font and intrinsic padding together
     /// (`Small`/`Normal`/`Big`). Available on every widget; controls honor it in
@@ -31,8 +40,8 @@ pub trait LayoutExt: Component + Sized {
         self
     }
     /// Main-axis direction.
-    fn direction(mut self, d: Direction) -> Self {
-        self.base_mut().style.layout.direction = d;
+    fn direction(mut self, d: impl Into<Direction>) -> Self {
+        self.base_mut().style.layout.direction = d.into();
         self
     }
     /// **Space between children** — a number of pixels, or a step of the theme's rhythm.
@@ -146,21 +155,21 @@ pub trait LayoutExt: Component + Sized {
         self
     }
     /// Main-axis distribution.
-    fn justify(mut self, j: Justify) -> Self {
-        self.base_mut().style.layout.justify = j;
+    fn justify(mut self, j: impl Into<Justify>) -> Self {
+        self.base_mut().style.layout.justify = j.into();
         self
     }
     /// Cross-axis alignment of this component's **children**.
-    fn align(mut self, a: Align) -> Self {
-        self.base_mut().style.layout.align = a;
+    fn align(mut self, a: impl Into<Align>) -> Self {
+        self.base_mut().style.layout.align = a.into();
         self
     }
     /// Cross-axis alignment of **this** component inside its parent (CSS `align-self`),
     /// overriding the parent's [`align`](Self::align) for it alone. Use
     /// [`Align::Start`] to keep an `Auto`-sized widget hugging its content instead of
     /// stretching to fill the parent.
-    fn align_self(mut self, a: Align) -> Self {
-        self.base_mut().style.layout.align_self = Some(a);
+    fn align_self(mut self, a: impl Into<Align>) -> Self {
+        self.base_mut().style.layout.align_self = Some(a.into());
         self
     }
     /// **Grid only** — how this grid's items sit **horizontally inside their cells**
@@ -169,14 +178,14 @@ pub trait LayoutExt: Component + Sized {
     /// Not to be confused with [`justify`](Self::justify): on a grid that is `justify-content`,
     /// which distributes the whole *track set* inside the container and leaves the items where
     /// they are. The vertical counterpart is [`align`](Self::align).
-    fn justify_items(mut self, a: Align) -> Self {
-        self.base_mut().style.layout.justify_items = Some(a);
+    fn justify_items(mut self, a: impl Into<Align>) -> Self {
+        self.base_mut().style.layout.justify_items = Some(a.into());
         self
     }
     /// **Grid only** — horizontal placement of **this** item inside its own cell (CSS
     /// `justify-self`), overriding the grid's [`justify_items`](Self::justify_items) for it alone.
-    fn justify_self(mut self, a: Align) -> Self {
-        self.base_mut().style.layout.justify_self = Some(a);
+    fn justify_self(mut self, a: impl Into<Align>) -> Self {
+        self.base_mut().style.layout.justify_self = Some(a.into());
         self
     }
     /// **Inner padding on all sides** — pixels or a step, exactly as [`gap`](LayoutExt::gap).
@@ -310,6 +319,68 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.layout.flex_grow = g;
         self
     }
+
+    /// **Which column this item sits in, and how far it reaches** — CSS `grid-column`, said by the
+    /// item about itself.
+    ///
+    /// ```ignore
+    /// Label::new("title").column("2")          // column 2
+    /// header.column("1 / -1")                  // the whole width, however many columns there are
+    /// wide.column("1 / span 2")                // two columns from the first
+    /// ```
+    fn column(mut self, line: impl Into<crate::style::GridLine>) -> Self {
+        let line = line.into();
+        let cell = self.base_mut().style.layout.grid_cell.get_or_insert(DEFAULT_CELL);
+        cell.col = line.start;
+        cell.col_span = line.span.stored();
+        self
+    }
+
+    /// **Which row this item sits in, and how far it reaches** — CSS `grid-row`. Same spellings as
+    /// [`column`](Self::column).
+    fn row(mut self, line: impl Into<crate::style::GridLine>) -> Self {
+        let line = line.into();
+        let cell = self.base_mut().style.layout.grid_cell.get_or_insert(DEFAULT_CELL);
+        cell.row = line.start;
+        cell.row_span = line.span.stored();
+        self
+    }
+
+    /// **How many columns this item covers**, leaving where it starts to auto-placement — CSS
+    /// `grid-column: span n`. `Span::All` is every column there are, now and after one is added.
+    fn column_span(mut self, span: impl Into<crate::style::Span>) -> Self {
+        let cell = self.base_mut().style.layout.grid_cell.get_or_insert(DEFAULT_CELL);
+        cell.col_span = span.into().stored();
+        self
+    }
+
+    /// **How many rows this item covers** — CSS `grid-row: span n`.
+    fn row_span(mut self, span: impl Into<crate::style::Span>) -> Self {
+        let cell = self.base_mut().style.layout.grid_cell.get_or_insert(DEFAULT_CELL);
+        cell.row_span = span.into().stored();
+        self
+    }
+
+    /// **The named area this item belongs in** — CSS `grid-area: title`.
+    ///
+    /// The name is resolved against whichever grid holds it, during layout. So a child can be
+    /// built before its parent, and changing the parent's template re-places the children without
+    /// rebuilding any of them.
+    fn area(mut self, name: impl Into<String>) -> Self {
+        self.base_mut().grid_area = Some(name.into());
+        self
+    }
+
+    /// **What this item starts from before it grows or shrinks** (CSS `flex-basis`) — pixels, a
+    /// percentage, or `"auto"`.
+    ///
+    /// **A share of its container is `.grow(w).basis(0.0).shrink(1.0)`** — CSS `flex: 1 1 0`.
+    /// Reach for this rather than `.height(0.0)`: a zero *height* says the box is zero, which is a
+    /// different answer to anything measuring the container's content.
+    fn basis(mut self, b: impl Into<crate::style::Length>) -> Self {
+        self.base_mut().style.layout.flex_basis = Some(b.into());
+        self
+    }
     /// Disable the widget: dimmed, non-interactive, skipped by focus traversal.
     fn disabled(mut self, disabled: bool) -> Self {
         self.base_mut().disabled.set(disabled);
@@ -397,41 +468,59 @@ impl IntoComponent for Box<dyn Component> {
     }
 }
 
+/// **One child or many, through one builder.**
+///
+/// A widget, an already-boxed subtree, or a `Vec`/array of either. It exists so that every place
+/// that takes children takes them in whichever shape the caller happens to hold — `.child(row)` and
+/// `.child(rows)` are the same door, and nobody has to find out that a plural spelling exists.
+///
+/// This replaced a `child` / `children` pair. Two names for one idea is the shape this codebase
+/// treats as a defect: the tests exercise one, the caller reaches for whichever name they saw
+/// first, and the two drift.
+pub trait IntoChildren {
+    /// The subtree(s), each boxed exactly once.
+    fn into_children(self) -> Vec<Box<dyn Component>>;
+}
+
+impl<C: Component + 'static> IntoChildren for C {
+    fn into_children(self) -> Vec<Box<dyn Component>> {
+        vec![Box::new(self)]
+    }
+}
+
+impl IntoChildren for Box<dyn Component> {
+    /// Already boxed — handed straight through, so a realized subtree costs no second allocation.
+    fn into_children(self) -> Vec<Box<dyn Component>> {
+        vec![self]
+    }
+}
+
+impl<T: IntoComponent> IntoChildren for Vec<T> {
+    fn into_children(self) -> Vec<Box<dyn Component>> {
+        self.into_iter().map(IntoComponent::into_component).collect()
+    }
+}
+
+impl<T: IntoComponent, const N: usize> IntoChildren for [T; N] {
+    fn into_children(self) -> Vec<Box<dyn Component>> {
+        self.into_iter().map(IntoComponent::into_component).collect()
+    }
+}
+
 pub trait Parent: Component + Sized {
-    /// Append a child — a widget, or an already-boxed subtree; see [`IntoComponent`].
-    fn child(mut self, c: impl IntoComponent) -> Self {
-        self.base_mut().children.push(c.into_component());
+    /// **Append a child, or several** — a widget, an already-boxed subtree, or a `Vec`/array of
+    /// them; see [`IntoChildren`].
+    ///
+    /// ```ignore
+    /// Flex::column().child(header).child(body)
+    /// Flex::column().child([header, body])
+    /// DockFrame::new(name).child(ws.columns.iter().map(build).collect::<Vec<_>>())
+    /// ```
+    fn child(mut self, c: impl IntoChildren) -> Self {
+        self.base_mut().children.extend(c.into_children());
         self
     }
 
-    /// **The plural of [`child`](Parent::child)** — a whole collection, in one call.
-    ///
-    /// Without it a caller holding a list has to break the chain and go imperative:
-    ///
-    /// ```ignore
-    /// let mut dock = DockFrame::new(name).active(true).key(k);
-    /// for column in &ws.columns {
-    ///     dock = dock.child(ColumnGroup { column }.build());   // reassigned, mid-expression
-    /// }
-    /// ```
-    ///
-    /// …which is a `mut`, a rebinding and a loop sitting inside what reads everywhere else as one
-    /// declarative expression. With the plural it stays one:
-    ///
-    /// ```ignore
-    /// DockFrame::new(name)
-    ///     .active(true)
-    ///     .key(k)
-    ///     .children(ws.columns.iter().map(|c| ColumnGroup { column: c }.build()))
-    /// ```
-    ///
-    /// Takes anything iterable of anything that can be a child, so a `Vec`, a `map` over a slice,
-    /// or a mix of widgets and already-realized subtrees all go through the same call.
-    fn children(mut self, cs: impl IntoIterator<Item = impl IntoComponent>) -> Self {
-        let slot = &mut self.base_mut().children;
-        slot.extend(cs.into_iter().map(IntoComponent::into_component));
-        self
-    }
 }
 
 /// **Event handlers, on any widget.** The one-line opt-in every widget already has for layout
@@ -523,6 +612,50 @@ impl<F: Fn(heca_core::layout::Point) -> crate::widgets::ContextMenu> IntoContext
 /// surfaces only (a layout-only `Flex` cannot be given a background), and [`Parent`] is containers
 /// only (a `Label` has no `.child()`).
 pub trait ComponentExt: Component + Sized {
+    /// **Override the accent — for this widget and everything inside it.**
+    ///
+    /// ```ignore
+    /// Surface::new().accent(theme.colors.danger)   // this card is a danger card
+    ///     .child(Button::new("Delete"))            // …and this follows, without being told
+    /// ```
+    ///
+    /// **The theme is always first.** Set nothing and every widget reads the theme's accent, which
+    /// is what almost everything should do. The order is: **this widget's own → the nearest
+    /// ancestor that set one → the theme.** So this is an override on top of the theme, exactly
+    /// like [`fill`](StyleExt::background), [`border`](StyleExt::border) and [`glow`](StyleExt::glow)
+    /// — not a second source of colour.
+    ///
+    /// **What it reaches**: a control's own chrome — focus rings, hover and press fills, selected
+    /// washes, scrollbar thumbs, a caret. Everything that would otherwise be the theme accent.
+    ///
+    /// ⚠️ **It does NOT redefine a declared meaning.** `Badge::accent`, `Alert::info`,
+    /// `ToastSeverity::Info` and a destructive `Button` keep the colour their variant *names* — what
+    /// the author said the thing IS, which a container does not get to restyle. A `Delete` inside a
+    /// warning-toned panel is still a `Delete`.
+    ///
+    /// ⚠️ **Two different things are spelled `accent` on a [`Badge`](crate::widgets::Badge) and a
+    /// [`BadgeButton`](crate::widgets::BadgeButton)**: `Badge::accent("3")` *constructs* the
+    /// accent-coloured variant, while `.accent(colour)` overrides the hue. The first is a
+    /// meaning, the second is a value; the compiler tells them apart by their arguments, and a
+    /// reader has only this note.
+    ///
+    /// ⚠️ **A literal colour does not follow a theme reload**, the same trade every other colour
+    /// override makes. Pass a colour you read from the theme at the moment you build, and rebuild
+    /// (or rewrite it) when the theme changes — which is what the pane shell does every frame.
+    ///
+    /// **Why it exists.** A subtree that needed its own accent used to get one by being painted
+    /// under a *copy of the theme* with the accent swapped. That forces a separate paint call per
+    /// subtree, and is therefore what stopped any container from painting its own children — the
+    /// reason a column could not own the panes inside it. The hue is inherited now, so painting is
+    /// one walk for everything.
+    ///
+    /// Read back with [`PaintCx::accent`](crate::component::PaintCx::accent), which applies the
+    /// whole order above. Applied to the subtree by `paint_child`, so nothing opts in.
+    fn accent(mut self, c: Color) -> Self {
+        self.base_mut().style.visual.accent = Some(c);
+        self
+    }
+
 
     /// **This widget can be dragged**, and what gets dragged is the identity it already declares
     /// with [`key`](ComponentExt::key) — the same one the keyboard cursor and the right-click
@@ -1236,31 +1369,29 @@ mod one_builder_per_slot {
 #[cfg(test)]
 mod spacing_builders {
     use super::*;
-    use crate::style::Spacing;
+    use crate::style::{Space, Spacing};
     use crate::widgets::Flex;
 
-    /// **A step and a number go through the same builder and land in different places** — which is
-    /// the whole point: a step is resolved against the inherited font at layout, a number is not.
+    /// **A step and a number go through the same builder into the same setting** — which is the
+    /// whole point: one place holds whichever kind was given, so nothing can be set twice.
     #[test]
     fn one_builder_writes_whichever_kind_it_was_given() {
         let px = Flex::row().gap(8);
-        assert_eq!(px.base().style.layout.gap, 8.0);
-        assert_eq!(px.base().style.layout.gap_spacing, None);
+        assert_eq!(px.base().style.layout.gap, Space::Px(8.0));
 
         let step = Flex::row().gap(Spacing::Sm);
-        assert_eq!(step.base().style.layout.gap_spacing, Some(Spacing::Sm));
+        assert_eq!(step.base().style.layout.gap, Space::Step(Spacing::Sm));
     }
 
-    /// **Saying it again the other way replaces it**, rather than leaving both set with the token
-    /// silently winning at layout — which is what two separate builders allowed.
+    /// **Saying it again the other way replaces it.** Two settings let both stand at once with the
+    /// step silently winning at layout; one cannot.
     #[test]
     fn a_number_after_a_step_really_is_a_number() {
         let w = Flex::row().gap(Spacing::Lg).gap(4);
-        assert_eq!(w.base().style.layout.gap, 4.0);
         assert_eq!(
-            w.base().style.layout.gap_spacing,
-            None,
-            "the step has to be cleared, or layout resolves it over the number",
+            w.base().style.layout.gap,
+            Space::Px(4.0),
+            "the step has to be gone, or layout resolves it over the number",
         );
     }
 
@@ -1268,8 +1399,262 @@ mod spacing_builders {
     #[test]
     fn padding_takes_either_kind_per_axis() {
         let w = Flex::row().padding_x(12).padding_y(Spacing::Xs);
-        assert_eq!(w.base().style.layout.padding_x, Some(12.0));
-        assert_eq!(w.base().style.layout.pad_spacing_x, None);
-        assert_eq!(w.base().style.layout.pad_spacing_y, Some(Spacing::Xs));
+        assert_eq!(w.base().style.layout.padding_x, Some(Space::Px(12.0)));
+        assert_eq!(
+            w.base().style.layout.padding_y,
+            Some(Space::Step(Spacing::Xs))
+        );
     }
+
+    /// **A step only becomes pixels where the font is known**, and it is rounded there — the two
+    /// sides of a boundary between siblings must not round in different directions.
+    #[test]
+    fn a_step_resolves_against_the_font_and_lands_on_a_whole_pixel() {
+        // Xs is a quarter of the font, so 14 gives 3.5 — the half-pixel case the rounding exists
+        // for. A pixel count is already what it says and is left alone.
+        assert_eq!(Space::Step(Spacing::Xs).resolve(14.0), 4.0);
+        assert_eq!(Space::Px(3.5).resolve(14.0), 3.5);
+    }
+
+    /// **The authored step survives layout.** It used to be copied into the px setting on every
+    /// pass, which destroyed it — so a font change had nothing left to re-resolve and the spacing
+    /// stayed at the old size.
+    #[test]
+    fn resolving_a_step_does_not_consume_it() {
+        let w = Flex::row().gap(Spacing::Md);
+        let gap = w.base().style.layout.gap;
+        assert_eq!(gap.resolve(12.0), 10.0);
+        assert_eq!(
+            gap.resolve(24.0),
+            20.0,
+            "the same step, against a bigger font"
+        );
+        assert_eq!(
+            w.base().style.layout.gap,
+            Space::Step(Spacing::Md),
+            "still a step after being resolved twice",
+        );
+    }
+
+    /// Every spelling a description travels in reaches the same value, through one parser.
+    #[test]
+    fn a_space_reads_every_spelling() {
+        assert_eq!(Space::from("sm"), Space::Step(Spacing::Sm));
+        assert_eq!(Space::from("8px"), Space::Px(8.0));
+        assert_eq!(Space::from("8"), Space::Px(8.0));
+        assert_eq!(
+            Space::from("nonsense"),
+            Space::Px(0.0),
+            "an unreadable spelling costs its author a gap, never the host",
+        );
+    }
+
+    /// **A track reads every spelling a stylesheet writes**, through the one parser on the type.
+    ///
+    /// ⚠️ Ran red first: the vocabulary lived in `heca-view-realize`, so a described grid could
+    /// say `"1fr"` and native code could not — it wrote `Track::Fr(1.0)`, one variant per track.
+    #[test]
+    fn a_track_reads_every_spelling() {
+        use crate::style::Track;
+        assert_eq!(Track::from("auto"), Track::Auto);
+        assert_eq!(Track::from("1fr"), Track::Fr(1.0));
+        assert_eq!(Track::from("2.5fr"), Track::Fr(2.5));
+        assert_eq!(Track::from("22px"), Track::Px(22.0));
+        assert_eq!(Track::from("22"), Track::Px(22.0));
+        assert_eq!(Track::from(22), Track::Px(22.0));
+        // Both spellings of the same word: CSS writes one, serde's own names write the other.
+        assert_eq!(Track::from("min-content"), Track::MinContent);
+        assert_eq!(Track::from("min_content"), Track::MinContent);
+        assert_eq!(Track::from("max-content"), Track::MaxContent);
+        assert_eq!(
+            Track::from("nonsense"),
+            Track::Auto,
+            "an unreadable track costs its author a size, never the host",
+        );
+    }
+
+    /// **A whole track list reads as one stylesheet line**, which is what `.template_row(..)` and
+    /// `.template_column(..)` are built on — including CSS's `repeat(n, …)`.
+    #[test]
+    fn a_template_is_a_track_list_written_the_way_css_writes_one() {
+        use crate::style::Track;
+        assert_eq!(Track::list("auto 1fr"), vec![Track::Auto, Track::Fr(1.0)]);
+        assert_eq!(
+            Track::list("200px  1fr   2fr"),
+            vec![Track::Px(200.0), Track::Fr(1.0), Track::Fr(2.0)],
+            "any run of whitespace separates, as in CSS",
+        );
+        assert_eq!(
+            Track::list("repeat(3, 1fr)"),
+            vec![Track::Fr(1.0); 3],
+            "repeat() expands as CSS expands it",
+        );
+        assert_eq!(
+            Track::list("auto repeat(2, 1fr) auto"),
+            vec![Track::Auto, Track::Fr(1.0), Track::Fr(1.0), Track::Auto],
+            "and sits among ordinary tracks",
+        );
+        assert_eq!(
+            Track::list("repeat(2, auto 1fr)"),
+            vec![Track::Auto, Track::Fr(1.0), Track::Auto, Track::Fr(1.0)],
+            "a repeat of several tracks repeats all of them",
+        );
+    }
+
+    /// **A layout keyword reads the way a stylesheet writes it**, hyphen or underscore, through
+    /// the type's own serde names — so a word that works in a plugin's JSON works in Rust.
+    #[test]
+    fn a_layout_keyword_reads_every_spelling() {
+        assert_eq!(Justify::from("space-between"), Justify::SpaceBetween);
+        assert_eq!(Justify::from("space_between"), Justify::SpaceBetween);
+        assert_eq!(Justify::from("center"), Justify::Center);
+        assert_eq!(Align::from("stretch"), Align::Stretch);
+        assert_eq!(Direction::from("column"), Direction::Column);
+        assert_eq!(
+            Justify::from("nonsense"),
+            Justify::default(),
+            "an unreadable keyword falls back to the default, never a panic",
+        );
+    }
+
+    /// **The builders take the spelling, not only the variant** — the whole point of the parsers
+    /// above. A call site never writes an enum variant by hand again.
+    #[test]
+    fn the_layout_builders_take_a_spelling() {
+        use crate::widgets::Flex;
+        let row = Flex::row().justify("space-between").align("center");
+        let layout = &row.base().style.layout;
+        assert_eq!(layout.justify, Justify::SpaceBetween);
+        assert_eq!(layout.align, Align::Center);
+    }
+
+    /// **One child or many, through one builder — on every widget, not only the grid.**
+    ///
+    /// `Flex` declares no `child` of its own; it gets this from `Parent`, which is what makes the
+    /// answer the same wherever children go. The pair this replaced (`child` / `children`) was two
+    /// names for one idea, and a caller reached for whichever they had seen first.
+    #[test]
+    fn any_parent_takes_one_child_or_several() {
+        use crate::widgets::{Flex, Label};
+        let one = Flex::column().child(Label::new("only"));
+        assert_eq!(one.base().children.len(), 1);
+
+        let many = Flex::column().child([Label::new("a"), Label::new("b"), Label::new("c")]);
+        assert_eq!(many.base().children.len(), 3, "an array lands as three children");
+
+        let built: Vec<Label> = (0..4).map(|i| Label::new(format!("row {i}"))).collect();
+        let from_vec = Flex::column().child(built);
+        assert_eq!(from_vec.base().children.len(), 4, "and so does a Vec");
+
+        // Mixed with the singular form in one chain, which is the point of one door.
+        let chained = Flex::column()
+            .child(Label::new("header"))
+            .child([Label::new("a"), Label::new("b")]);
+        assert_eq!(chained.base().children.len(), 3);
+    }
+
+    /// **A share is `flex: 1 1 0`** — a weight, a **zero basis**, and permission to shrink.
+    ///
+    /// The zero basis is the part that is easy to leave out and hard to see missing: with the
+    /// default `auto` basis each item starts from its own content and only the *leftover* is
+    /// divided, so two items of unequal content never come out in their stated ratio. With a zero
+    /// basis the whole box is divided by weight, which is what a share means.
+    ///
+    /// ⚠️ Ran red first: the library had no `flex-basis` at all, so every share in the app spelled
+    /// it with a zero *height* and a comment apologising for the substitution.
+    #[test]
+    fn a_share_divides_the_whole_box_by_weight_not_just_the_leftover() {
+        use crate::style::Length;
+        use crate::widgets::{Flex, Label};
+        use crate::{Component, LayoutEngine};
+        use heca_core::layout::Size;
+
+        // Unequal content is what tells the two apart: one item holds three lines, the other one.
+        let content = |lines: usize| {
+            let mut f = Flex::column();
+            for i in 0..lines {
+                f = f.child(Label::new(format!("line {i}")));
+            }
+            f
+        };
+        let heights = |basis: bool| -> Vec<f64> {
+            let item = |w: f32, lines: usize| {
+                let f = Flex::column().grow(w).shrink(1.0).child(content(lines));
+                if basis { f.basis(0.0) } else { f }
+            };
+            let mut root: Box<dyn Component> = Box::new(
+                Flex::column()
+                    .height(Length::Percent(1.0))
+                    .child([item(2.0, 3), item(1.0, 1)]),
+            );
+            LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 900.0));
+            root.base().children.iter().map(|c| c.base().bounds.size.h).collect()
+        };
+
+        let shares = heights(true);
+        assert!(
+            (shares[0] - 600.0).abs() < 1.0 && (shares[1] - 300.0).abs() < 1.0,
+            "a zero basis divides the whole box 2:1 however much content each holds: {shares:?}",
+        );
+
+        let leftover = heights(false);
+        assert!(
+            (leftover[0] - 600.0).abs() > 1.0,
+            "and without it the ratio is skewed by the content each started from — which is why \
+             the basis has to be said out loud: {leftover:?}",
+        );
+    }
+
+    /// **A child places itself, as in CSS** — `grid-column: 1 / -1` on the item, never a
+    /// coordinate the parent writes into it.
+    ///
+    /// ⚠️ Ran red first: placement used to be `.cell(child, col, row, col_span, row_span)` on the
+    /// grid, so a child could not say where it went and five positional numbers said it for them.
+    #[test]
+    fn a_child_says_where_it_goes_and_a_span_of_all_follows_the_template() {
+        use crate::style::{GridCell, Span};
+        use crate::widgets::{Grid, Label};
+        use crate::{Component, LayoutEngine};
+        use heca_core::layout::Size;
+
+        let mut grid: Box<dyn Component> = Box::new(
+            Grid::new()
+                .template_column("auto 1fr auto")
+                .template_row("auto 1fr")
+                .child([
+                    Label::new("icon").column(1).row(1),
+                    Label::new("title").column(2).row(1),
+                    Label::new("badge").column(3).row(1),
+                    // The whole width, whatever the template turns out to say.
+                    Label::new("body").column("1 / -1").row(2),
+                ]),
+        );
+        LayoutEngine::new().compute(grid.as_mut(), Size::new(600.0, 400.0));
+
+        let cell = |i: usize| -> GridCell {
+            grid.base().children[i].base().style.layout.grid_cell.expect("placed")
+        };
+        assert_eq!((cell(0).col, cell(0).row), (1, 1));
+        assert_eq!((cell(2).col, cell(2).row), (3, 1));
+        assert_eq!(
+            (cell(3).col, cell(3).row, cell(3).col_span),
+            (1, 2, 3),
+            "`1 / -1` became every column there are, resolved against the parent's template",
+        );
+
+        // And it follows the template rather than a number frozen at build time.
+        let mut wider: Box<dyn Component> = Box::new(
+            Grid::new()
+                .template_column("repeat(5, 1fr)")
+                .child(Label::new("body").column("1 / -1")),
+        );
+        LayoutEngine::new().compute(wider.as_mut(), Size::new(600.0, 400.0));
+        assert_eq!(
+            wider.base().children[0].base().style.layout.grid_cell.expect("placed").col_span,
+            5,
+            "the same child spans five columns in a five-column grid",
+        );
+        assert_eq!(Span::from("all").stored(), GridCell::ALL);
+    }
+
 }

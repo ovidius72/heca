@@ -24,7 +24,7 @@ pub(crate) use model::PaneShellModel;
 pub(crate) use shell::{PaneCallbacks, PaneShell};
 
 use heca_core::layout::PaneId;
-use heca_grid_ui::widgets::KeyHint;
+use heca_grid_ui::widgets::Pane as UiPane;
 use heca_grid_ui::{LayoutEngine, Size};
 
 /// A retained per-pane shell tree.
@@ -33,7 +33,7 @@ use heca_grid_ui::{LayoutEngine, Size};
 /// re-layout; re-laid-out and repositioned every frame by [`sync_panes`]; painted **through
 /// `heca_grid_ui::paint_child`**, which is what draws its letter.
 pub(crate) struct RetainedPane {
-    pub(crate) root: KeyHint,
+    pub(crate) root: UiPane,
     /// The model key the tree was built from.
     pub(crate) key: String,
 }
@@ -68,11 +68,12 @@ pub(crate) fn header_height(state: &crate::app_state::AppState, pane_id: PaneId)
     let Some(retained) = state.panes.get(&pane_id) else {
         return 0.0;
     };
-    // KeyHint wraps the Pane; the Pane holds [header, content] or just [content].
-    let Some(pane) = retained.root.base().children.first() else {
-        return 0.0;
-    };
-    let children = &pane.base().children;
+    // ⚠️ **This counts children to tell them apart**, which AGENTS § 0 names as never right: the
+    // pane holds `[header, content]` or just `[content]`, so a second thing in the body would make
+    // the content look like a header. It is written down rather than fixed here because the fix is
+    // a `header` SLOT on `Pane` — what `DockFrame::header` already is — and that is a library
+    // addition to agree, not to slip in.
+    let children = &retained.root.base().children;
     match children.len() {
         2 => children[0].base().bounds.size.h as f32,
         _ => 0.0,

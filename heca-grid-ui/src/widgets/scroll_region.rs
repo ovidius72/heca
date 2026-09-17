@@ -348,8 +348,8 @@ impl ScrollRegion {
         // scan. Both are theme SPACING TOKENS, not literals, so they scale with the
         // font, the size variant and UI zoom (a px value tuned at one font size is
         // wrong at every other). A caller can still override either.
-        base.style.layout.pad_spacing_y = Some(Spacing::Sm);
-        base.style.layout.gap_spacing = Some(Spacing::Md);
+        base.style.layout.padding_y = Some(Spacing::Sm.into());
+        base.style.layout.gap = Spacing::Md.into();
         Self {
             base,
             axes: ScrollAxes::default(),
@@ -1334,7 +1334,7 @@ impl Component for ScrollRegion {
                 cx.theme().colors.interaction.thumb_rest
             };
             let theme = cx.theme();
-            let color = theme.colors.accent.with_alpha(alpha);
+            let color = cx.accent().with_alpha(alpha);
             cx.rect(t, color, None, theme.colors.control_radius(), None);
         }
         // Horizontal scrollbar thumb (bottom edge), same theme-driven affordance.
@@ -1345,7 +1345,7 @@ impl Component for ScrollRegion {
                 cx.theme().colors.interaction.thumb_rest
             };
             let theme = cx.theme();
-            let color = theme.colors.accent.with_alpha(alpha);
+            let color = cx.accent().with_alpha(alpha);
             cx.rect(t, color, None, theme.colors.control_radius(), None);
         }
     }
@@ -1481,16 +1481,20 @@ impl ScrollRegion {
     fn reserve_scrollbar_gutters(&mut self) {
         // Read the overflow flags before borrowing the layout mutably.
         let (v_overflow, h_overflow) = (self.v_overflow(), self.h_overflow());
+        // A step is a fraction of the font, and this compares against a fixed gutter — so the
+        // authored padding has to become pixels before the two can be weighed against each other.
+        let font = self.base.font;
         let layout = &mut self.base.style.layout;
         // What the other side of each axis already insets by. The bar takes the LARGER of that and
         // the gutter, never the sum: where the padding is already roomy enough the bar simply sits
         // in it, both sides stay equal, and nothing looks lopsided. Space is only added when the
         // bar genuinely needs more than is already there.
-        let base_x = layout.padding_x.unwrap_or(layout.padding);
-        let base_y = layout.padding_y.unwrap_or(layout.padding);
+        let base_x = layout.padding_x.unwrap_or(layout.padding).resolve(font);
+        let base_y = layout.padding_y.unwrap_or(layout.padding).resolve(font);
         let gutter = SCROLLBAR_GUTTER as f32;
-        let want_x = v_overflow.then(|| base_x.max(gutter));
-        let want_y = h_overflow.then(|| base_y.max(gutter));
+        // The reservation is a measured number, not an authored step — it is what the bar needs.
+        let want_x = v_overflow.then(|| crate::style::Space::Px(base_x.max(gutter)));
+        let want_y = h_overflow.then(|| crate::style::Space::Px(base_y.max(gutter)));
         if layout.padding_right != want_x || layout.padding_bottom != want_y {
             layout.padding_right = want_x;
             layout.padding_bottom = want_y;

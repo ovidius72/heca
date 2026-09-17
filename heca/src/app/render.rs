@@ -242,27 +242,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // note in `render_chrome`).
     state.grid_renderer.begin_frame();
 
-    let active_pane_id = state
-        .session
-        .active_workspace()
-        .and_then(|ws| ws.active_pane())
-        .map(|pane| pane.id)
-        .or_else(|| state.chrome_state.workspaces.active_pane())
-        .or(state.focused_pane);
-
     // ── Pane chrome from pane-specific config ──
-    let pane_border_color = state
-        .appearance
-        .effective_pane_border_color(&state.theme)
-        .to_f32x4();
-    let pane_active_border_color = state
-        .appearance
-        .effective_pane_active_border_color(&state.theme)
-        .to_f32x4();
-    let pane_floating_border_color = state
-        .appearance
-        .effective_pane_floating_border_color(&state.theme)
-        .to_f32x4();
+    // The three frame colours are **not** read here. A pane's frame colour is its own — written
+    // onto its retained shell by `chrome::sync_panes`, which is also where it becomes the hue the
+    // pane publishes to its contents. Reading them here meant the host decided how a widget looked.
     let pane_border_radius = state.appearance.effective_pane_border_radius(&state.theme);
     let pane_content_inset = state.appearance.effective_pane_padding(&state.theme);
     let pane_positions = state
@@ -322,7 +305,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
             y: py,
             w: pw,
             h: ph,
-            is_active: active_pane_id == Some(*pane_id),
             content_rect,
             mount,
         });
@@ -372,7 +354,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 y: fy,
                 w: fw,
                 h: fh,
-                is_active: active_pane_id == Some(float.pane.id),
                 content_rect,
                 mount,
             });
@@ -678,11 +659,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
         ));
 
         for pane in &tiled_panes {
-            let bcolor = if pane.is_active {
-                pane_active_border_color
-            } else {
-                pane_border_color
-            };
+            // Which colour this pane's frame is, and what it re-tints inside itself, is the
+            // retained shell's own business — written on it by `chrome::sync_panes`.
             paint_terminal_pane_shell(
                 state,
                 &mut pane_scene,
@@ -692,7 +670,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     y: pane.y,
                     w: pane.w,
                     h: pane.h,
-                    border_color: bcolor,
                 },
             );
         }
@@ -776,9 +753,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     }
 
     for pane in &floating_panes {
-        // Floating panes use their own border color (distinct layer), independent
-        // of the tiled active/inactive border colors.
-        let fborder = pane_floating_border_color;
         if pane.content_rect.is_some() {
             // ── Floating pane backdrop (solid or frosted), rounded-clipped ──
             //
@@ -910,7 +884,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     y: pane.y,
                     w: pane.w,
                     h: pane.h,
-                    border_color: fborder,
                 },
             );
             float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);

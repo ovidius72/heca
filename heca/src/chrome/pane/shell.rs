@@ -10,7 +10,7 @@
 //! plugin's own tree — each is a child, and none of them has anything to do with the letter.
 
 use heca_core::layout::PaneId;
-use heca_grid_ui::widgets::{HintPlacement, KeyHint, Pane as UiPane};
+use heca_grid_ui::widgets::{HintPlacement, Pane as UiPane};
 use heca_grid_ui::{ComponentExt, LayoutExt, Parent, StyleExt};
 
 use super::model::PaneShellModel;
@@ -54,15 +54,17 @@ pub(crate) struct PaneShell<'a> {
 impl PaneShell<'_> {
     /// Build the retained tree for one pane.
     ///
-    /// Returns the `KeyHint` wrapper rather than the `Pane` inside it: the wrapper is what carries
-    /// the pick declaration, and it is transparent to layout, focus and events, so the pane below
-    /// stays an ordinary widget. (`ComponentExt::on_hint` — which would let the `Pane` declare it
-    /// directly and drop the wrapper — is F003/P082/T432 and is not built yet.)
+    /// Returns the `Pane` itself: it says what picking it does, where its letter goes and what
+    /// colour that letter is, the same way it says what a click does. There is no wrapper to see
+    /// past — which matters twice over. A wrapper round an actionable widget is a SECOND pick
+    /// target, so a surface picker offered two letters where the author wrote one; and the pane's
+    /// `key` sat inside it, so anything looking for the pane by name found an anonymous wrapper
+    /// instead, treated every pane as unbuilt, and rebuilt all of them every frame.
     ///
     /// **The letter is drawn by the framework**, inside `heca_grid_ui::paint_child`, from
     /// `Base::hint_label`. Anything that paints this tree with a direct `.paint(cx)` will show no
     /// letter at all — which is exactly the defect this task exists to end.
-    pub(crate) fn build(self) -> KeyHint {
+    pub(crate) fn build(self) -> UiPane {
         let PaneShellModel {
             pane_id,
             active,
@@ -159,12 +161,12 @@ impl PaneShell<'_> {
         // It names the built-in `focus_pane` with the argument that action declares, so the letter,
         // a keybinding, a menu entry and RPC all resolve through one `build_action`.
         let picked = focus_pane(pane_id);
-        KeyHint::new(pane)
+        pane
             // Centred over the pane, which is where the letter is today and what the maintainer
             // expects. `TopCenter` is for compact square targets; a pane is the large-target case.
-            .placement(HintPlacement::Center)
+            .hint_placement(HintPlacement::Center)
             // The theme accent, not the ambient one: see `PaneShellModel::accent`.
-            .color(to_gui_color(accent))
+            .hint_color(to_gui_color(accent))
             .on_hint(heca_grid_ui::Hint::of(picked, move || pick(pane_id)))
     }
 }
@@ -187,12 +189,11 @@ fn focus_pane(pane_id: PaneId) -> heca_view::Intent {
 /// This is the third thing in this file to move out of the rebuild key for the same reason; the
 /// other two are the rect and the header's words, each with the same story.
 pub(crate) fn focus_state_to(
-    root: &mut KeyHint,
+    root: &mut impl heca_grid_ui::Component,
     active: bool,
     border_color: [f32; 4],
     accent: [f32; 4],
 ) {
-    use heca_grid_ui::Component;
     let color = to_gui_color(border_color);
     let base = root.base_mut();
     if let Some(border) = base.style.visual.border.as_mut() {
@@ -204,6 +205,14 @@ pub(crate) fn focus_state_to(
         intensity: super::ACTIVE_GLOW_STRENGTH,
     });
     base.hint_style.color = Some(to_gui_color(accent));
+    // **A pane re-tints what it holds by publishing its hue, not by swapping the theme.**
+    //
+    // An active pane really does mean to re-accent its contents — that is its identity. It used to
+    // be done by painting the pane under a theme whose accent had been replaced, which meant the
+    // host had to make a separate paint call per pane, and therefore that nothing else could ever
+    // paint one. Published as a tone, the hue reaches the same widgets through the ordinary walk,
+    // so who paints the pane stops mattering.
+    base.style.visual.accent = Some(color);
 }
 
 /// **Give the shell the rect the WM assigned it.** Size is a per-frame input, never part of the
@@ -213,8 +222,7 @@ pub(crate) fn focus_state_to(
 /// Baking `Px(w)` into `build` instead is the regression this exists to stop — the tree kept the
 /// width it was first built at, so the border stayed put while the content moved (traced: asked
 /// 648 wide, got 380, every frame).
-pub(crate) fn size_to(root: &mut KeyHint, w: f32, h: f32) {
-    use heca_grid_ui::Component;
+pub(crate) fn size_to(root: &mut impl heca_grid_ui::Component, w: f32, h: f32) {
     let style = &mut root.base_mut().style.layout;
     style.width = heca_grid_ui::Length::Px(w);
     style.height = heca_grid_ui::Length::Px(h);
@@ -249,9 +257,42 @@ mod tests {
             content: None,
         }
         .build();
-        // The wrapper is transparent; the identity belongs to the pane inside it.
-        let pane = &tree.base().children[0];
-        assert_eq!(pane.base().key.as_deref(), Some("pane:7"));
+        // **The identity is on the outermost node**, because the pane IS the outermost node.
+        // It sat one level in while a `KeyHint` wrapped it, so anything looking a pane up by name
+        // found an anonymous wrapper, judged the pane unbuilt, and rebuilt every one of them every
+        // frame.
+        assert_eq!(tree.base().key.as_deref(), Some("pane:7"));
+    }
+
+    /// **An active pane re-tints what it holds by publishing its hue, not by swapping the theme.**
+    ///
+    /// The frame colour used to be written into a *copy of the theme* the host painted this pane
+    /// under — which is why each pane needed its own paint call, and therefore why no container
+    /// could ever paint one of its children. Published on the shell, the hue reaches the same
+    /// widgets through the ordinary paint walk and who paints the pane stops mattering.
+    ///
+    /// Without this a pane's contents fall back to the global accent: header buttons in the active
+    /// pane stop reading as active, and nothing else notices.
+    #[test]
+    fn a_pane_publishes_its_frame_colour_to_everything_it_holds() {
+        let (cb, _) = recording_callbacks();
+        let m = model(7);
+        let mut tree = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
+
+        let frame = [1.0, 0.0, 0.0, 1.0];
+        focus_state_to(&mut tree, true, frame, m.accent);
+
+        assert_eq!(
+            tree.base().style.visual.accent,
+            Some(to_gui_color(frame)),
+            "the pane's contents follow its frame colour, whoever paints them",
+        );
     }
 
     /// **A pick says what it IS, not only what it runs** (F003/P082/T432).
@@ -390,7 +431,7 @@ mod tests {
     /// and reads back what the pane asked for — no callbacks, because the pane has none any more.
     /// It carried a struct of host functions until now, cloned at the call site, which a plugin
     /// could not have built.
-    fn dispatched(build: impl FnOnce(&mut KeyHint)) -> Vec<String> {
+    fn dispatched(build: impl FnOnce(&mut UiPane)) -> Vec<String> {
         let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
         let sink = seen.clone();
         heca_grid_ui::intent::install_intent_sink(move |i| {

@@ -101,7 +101,7 @@ use crate::component::{
 };
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Glow, TextAlign, TextStyle};
-use crate::style::{Align, Direction, Length};
+use crate::style::{Direction, Length};
 use crate::widgets::key_hint::{keycap_size, paint_keycap, KeycapVariant};
 use crate::widgets::{paint_panel_chrome, place_at_point, Glyph, Icon, Label, PanelChrome, PanelElevation};
 use heca_core::layout::{Point, Rectangle, Size};
@@ -310,8 +310,8 @@ impl MenuItem {
             Some(build) => build(),
             None => {
                 let mut row = crate::widgets::container()
-                    .direction(Direction::Row)
-                    .align(Align::Center)
+                    .direction("row")
+                    .align("center")
                     .gap(ICON_GAP);
                 if let Some(g) = self.icon {
                     row = row.child(Icon::new(g).size(font * 1.05));
@@ -324,8 +324,8 @@ impl MenuItem {
         };
         Box::new(
             crate::widgets::container()
-                .direction(Direction::Row)
-                .align(Align::Center)
+                .direction("row")
+                .align("center")
                 .padding_xy(ROW_PAD_X, ROW_PAD_Y)
                 .padding_right(ROW_PAD_X + self.trailing_width(font) as f32)
                 .child(inner),
@@ -552,7 +552,7 @@ impl ContextMenu {
     fn panel_base(open: Signal<bool>) -> Base {
         let mut base = Base::new();
         base.style.layout.direction = Direction::Column;
-        base.style.layout.padding = PAD;
+        base.style.layout.padding = (PAD).into();
         base.style.layout.min_width = Some(Length::Px(MIN_W));
         base.style.layout.max_width = Some(Length::Px(MAX_W));
         base.focused = open;
@@ -861,7 +861,7 @@ impl Component for ContextMenu {
         let (accent, glow_c, foreground, muted, danger, ctrl_radius) = {
             let t = cx.theme();
             (
-                t.colors.accent,
+                cx.accent(),
                 t.colors.glow,
                 t.colors.foreground,
                 t.colors.muted,

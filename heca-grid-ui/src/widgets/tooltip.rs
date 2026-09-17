@@ -156,7 +156,7 @@ pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
     let (accent, glow_c, foreground, tip_border) = {
         let t = cx.theme();
         (
-            t.colors.accent,
+            cx.accent(),
             t.colors.glow,
             t.colors.foreground,
             t.colors.interaction.tooltip_border,

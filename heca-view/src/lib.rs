@@ -373,6 +373,90 @@ pub enum ViewSpacing {
     Lg,
 }
 
+/// **A space: a number of pixels, or a step of the theme's rhythm** — mirrors grid-ui `Space`.
+///
+/// One authoring type, because spacing is one property. It was two builders on each axis — a px
+/// `gap` beside a `gap_spacing` step, `padding` beside `pad_all` — and the docs told everyone to
+/// prefer the step while the px name stayed the shorter, more obvious one.
+///
+/// ```ignore
+/// VStack::new().gap(8)                 // eight pixels
+/// VStack::new().gap(ViewSpacing::Sm)   // a step of the rhythm
+/// VStack::new().gap("sm")              // the same step, said as JSON would
+/// ```
+///
+/// **Prefer the step.** It is resolved from the inherited font at layout, so it follows a font,
+/// size-variant or zoom change with nothing rewritten; a pixel count is tuned for one font size
+/// and wrong at every other.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ViewSpace {
+    /// Logical pixels, fixed whatever the font does.
+    Px(f32),
+    /// A step of the theme's rhythm.
+    Step(ViewSpacing),
+}
+
+impl From<ViewSpacing> for ViewSpace {
+    fn from(s: ViewSpacing) -> Self {
+        ViewSpace::Step(s)
+    }
+}
+
+impl From<f32> for ViewSpace {
+    fn from(v: f32) -> Self {
+        ViewSpace::Px(v)
+    }
+}
+
+impl From<f64> for ViewSpace {
+    /// Rust reads a bare decimal as `f64`, so without this `.gap(8.0)` does not compile.
+    fn from(v: f64) -> Self {
+        ViewSpace::Px(v as f32)
+    }
+}
+
+impl From<i32> for ViewSpace {
+    /// …and a bare integer as `i32`.
+    fn from(v: i32) -> Self {
+        ViewSpace::Px(v as f32)
+    }
+}
+
+impl From<&str> for ViewSpace {
+    /// `"sm"` for a step, `"8"` / `"8px"` for pixels — the spellings the described side reads.
+    ///
+    /// An unrecognised step name is passed through as text rather than guessed at: the realizing
+    /// side owns the vocabulary and degrades a value it cannot read, which is the rule every
+    /// untrusted value here follows.
+    fn from(t: &str) -> Self {
+        match t.trim().to_ascii_lowercase().as_str() {
+            "none" => ViewSpace::Step(ViewSpacing::None),
+            "xs" => ViewSpace::Step(ViewSpacing::Xs),
+            "sm" => ViewSpace::Step(ViewSpacing::Sm),
+            "md" => ViewSpace::Step(ViewSpacing::Md),
+            "lg" => ViewSpace::Step(ViewSpacing::Lg),
+            other => ViewSpace::Px(
+                other
+                    .strip_suffix("px")
+                    .map_or(other, str::trim_end)
+                    .parse()
+                    .unwrap_or(0.0),
+            ),
+        }
+    }
+}
+
+impl From<ViewSpace> for PropValue {
+    /// A step travels as its **name** and a length as a number — the two spellings the layout
+    /// setting reads back, so one property name carries either.
+    fn from(s: ViewSpace) -> Self {
+        match s {
+            ViewSpace::Px(v) => PropValue::Float(v as f64),
+            ViewSpace::Step(step) => step.into(),
+        }
+    }
+}
+
 /// How a [`ButtonGroup`](WidgetKind::ButtonGroup) shows its actions — mirrors grid-ui `Display`.
 ///
 /// Whatever does not fit collapses into a ⋮ menu whichever of these is chosen; this only decides
@@ -994,7 +1078,7 @@ pub type Events = BTreeMap<String, Intent>;
 ///   by putting props on *that child*.
 ///
 /// The builder just chains for ergonomics; the children are a vector underneath — `.child(n)` appends
-/// one, `.children([a, b])` appends many, so `Column().child(a).child(b)` ≡ `Column().children([a,b])`.
+/// one and `.child([a, b])` appends many, so `Column().child(a).child(b)` ≡ `Column().child([a, b])`.
 ///
 /// ```ignore
 /// ViewNode::new(WidgetKind::VStack)
@@ -1179,6 +1263,31 @@ pub struct ViewNode {
     pub children: Vec<ViewNode>,
 }
 
+/// **One node or many** — what every `child` builder takes, so a caller hands over whichever shape
+/// they happen to hold and never goes looking for a plural spelling.
+pub trait IntoNodes {
+    /// The nodes.
+    fn into_nodes(self) -> Vec<ViewNode>;
+}
+
+impl<N: Into<ViewNode>> IntoNodes for N {
+    fn into_nodes(self) -> Vec<ViewNode> {
+        vec![self.into()]
+    }
+}
+
+impl<N: Into<ViewNode>> IntoNodes for Vec<N> {
+    fn into_nodes(self) -> Vec<ViewNode> {
+        self.into_iter().map(Into::into).collect()
+    }
+}
+
+impl<N: Into<ViewNode>, const K: usize> IntoNodes for [N; K] {
+    fn into_nodes(self) -> Vec<ViewNode> {
+        self.into_iter().map(Into::into).collect()
+    }
+}
+
 impl ViewNode {
     /// **Open this menu when the node is right-clicked** — the described spelling of
     /// `ComponentExt::context_menu`, and available on every kind for the same reason it is on every
@@ -1292,16 +1401,15 @@ impl ViewNode {
         self.on("hint", intent)
     }
 
-    /// Append a child node to the [`children`](Self::children) vec. The child is a full `ViewNode`
-    /// with its own props/events — style it by putting props on *it*, not on the parent.
-    pub fn child(mut self, child: ViewNode) -> Self {
-        self.children.push(child);
-        self
-    }
-
-    /// Append several children at once — `Column().children([a, b])` ≡ `.child(a).child(b)`.
-    pub fn children(mut self, children: impl IntoIterator<Item = ViewNode>) -> Self {
-        self.children.extend(children);
+    /// **Append a child, or several** — one `ViewNode`, or a `Vec`/array of them.
+    ///
+    /// The child is a full `ViewNode` with its own props/events — style it by putting props on
+    /// *it*, not on the parent.
+    ///
+    /// One door, as on the native side: a `child` / `children` pair is two names for one idea, and
+    /// a caller reaches for whichever they saw first.
+    pub fn child(mut self, children: impl IntoNodes) -> Self {
+        self.children.extend(children.into_nodes());
         self
     }
 

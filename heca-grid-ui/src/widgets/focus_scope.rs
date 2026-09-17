@@ -155,7 +155,9 @@ impl Component for FocusScope {
         let ring = self
             .color
             .unwrap_or_else(|| cx.theme().colors.effective_focus_ring());
-        let radius = self.radius.unwrap_or_else(|| cx.theme().colors.control_radius());
+        let radius = self
+            .radius
+            .unwrap_or_else(|| cx.theme().colors.control_radius());
         cx.focus_ring(self.base.bounds, ring, radius);
     }
 
@@ -181,14 +183,14 @@ impl Parent for FocusScope {}
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::component::WidgetIntent;
     use crate::component::{Event, Handled};
     use crate::event::PointerButton;
-    use super::*;
     use crate::layout::LayoutEngine;
     use crate::reactive::SignalUpdate;
     use crate::scene::{DrawCommand, RectCmd, Scene};
     use crate::theme::Theme;
-    use crate::component::WidgetIntent;
     use crate::widgets::Flex;
     use heca_core::layout::Size;
 
@@ -210,9 +212,7 @@ mod tests {
     }
 
     fn child() -> Flex {
-        Flex::column()
-            .width(Length::Px(120.0))
-            .height(Length::Px(60.0))
+        Flex::column().width(120.0).height(60.0)
     }
 
     #[test]
@@ -233,10 +233,9 @@ mod tests {
         let rects = painted(&mut ring, &theme);
         let want = theme.colors.effective_focus_ring();
         assert!(
-            rects.iter().any(|r| r
-                .border
-                .is_some_and(|b| b.color == want
-                    && (b.width - theme.focus_border_width).abs() < 0.01)),
+            rects.iter().any(|r| r.border.is_some_and(
+                |b| b.color == want && (b.width - theme.focus_border_width).abs() < 0.01
+            )),
             "the outline is the theme's focus ring at its focus width: {rects:?}",
         );
     }
@@ -274,7 +273,9 @@ mod tests {
         let mut ring = FocusScope::new(child()).focus(signal(true)).color(mine);
         let rects = painted(&mut ring, &theme);
         assert!(
-            rects.iter().any(|r| r.border.is_some_and(|b| b.color == mine)),
+            rects
+                .iter()
+                .any(|r| r.border.is_some_and(|b| b.color == mine)),
             "an explicit colour marks a distinct kind of focus: {rects:?}",
         );
     }
@@ -364,7 +365,10 @@ mod tests {
     fn a_widget_intent_does_not_enter_an_unfocused_scope() {
         let (mut scope, seen) = dock(false);
         crate::component::dispatch(&mut scope, &Event::Widget(WidgetIntent::ScrollPageDown));
-        assert!(seen.borrow().is_empty(), "an unfocused scope is inert to keys");
+        assert!(
+            seen.borrow().is_empty(),
+            "an unfocused scope is inert to keys"
+        );
     }
 
     /// **The load-bearing one.** Two docks side by side: only the one holding the keyboard answers,
@@ -380,7 +384,10 @@ mod tests {
         let handled =
             crate::component::dispatch(&mut region, &Event::Widget(WidgetIntent::ScrollPageDown));
 
-        assert!(quiet.borrow().is_empty(), "the unfocused dock stayed out of it");
+        assert!(
+            quiet.borrow().is_empty(),
+            "the unfocused dock stayed out of it"
+        );
         assert_eq!(heard.borrow().len(), 1, "and the focused one was reached");
         // The probe declines, so nothing claims it — what matters is that the walk got there.
         assert_eq!(handled, Handled::No);
@@ -403,8 +410,14 @@ mod tests {
         };
         crate::component::dispatch(&mut open, &key);
         crate::component::dispatch(&mut shut, &key);
-        assert!(heard.borrow().is_empty(), "the key is the scope's, not its content's");
-        assert!(quiet.borrow().is_empty(), "and an unfocused scope hears nothing at all");
+        assert!(
+            heard.borrow().is_empty(),
+            "the key is the scope's, not its content's"
+        );
+        assert!(
+            quiet.borrow().is_empty(),
+            "and an unfocused scope hears nothing at all"
+        );
     }
 
     /// **The pointer is never gated.** The mouse carries its own target, so it needs no focus to
@@ -424,7 +437,10 @@ mod tests {
             crate::component::dispatch(&mut scope, &ev);
         }
         let seen = seen.borrow();
-        let kinds: Vec<&str> = seen.iter().map(|s| s.split('(').next().unwrap_or(s)).collect();
+        let kinds: Vec<&str> = seen
+            .iter()
+            .map(|s| s.split('(').next().unwrap_or(s))
+            .collect();
         for want in [
             "PointerEnter",
             "PointerMove",
@@ -451,7 +467,11 @@ mod tests {
         assert!(seen.borrow().is_empty());
         focused.set(true);
         crate::component::dispatch(&mut scope, &Event::Widget(WidgetIntent::ScrollPageDown));
-        assert_eq!(seen.borrow().len(), 1, "one signal governs the ring and the keys");
+        assert_eq!(
+            seen.borrow().len(),
+            1,
+            "one signal governs the ring and the keys"
+        );
     }
 
     #[test]

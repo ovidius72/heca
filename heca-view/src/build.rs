@@ -63,8 +63,9 @@ use crate::{
 ///   author.
 /// - **`grid_cell`** — grid placement is authored as `area` / `col` / `row` on the child, which is
 ///   what the `Grid` arm reads.
-/// - **`pad_spacing_x` / `pad_spacing_y` / `gap_spacing`** — theme `Spacing` tokens, which have no
-///   mirror in this crate yet. Use the px setters, or add the mirror when a caller needs it.
+/// - **`pad_spacing_x` / `pad_spacing_y` / `gap_spacing`** — the retired half of the old spacing
+///   pair. [`gap`](Style::gap) and [`padding`](Style::padding) take a step directly now; the old
+///   names are still read on the wire so no existing tree breaks.
 pub trait Style: Sized {
     /// The node being built. Public so the trait's defaults can reach it; not the way to author.
     #[doc(hidden)]
@@ -81,67 +82,54 @@ pub trait Style: Sized {
     }
 
     // ── Arrangement ──
-    /// Space between children, in px.
-    fn gap(self, px: f32) -> Self {
-        self.prop("gap", px)
-    }
-    /// **Space inside the box on every side, from the theme** — the one to reach for.
+    /// **Space between children** — a number of pixels, a theme step, or either said as a string.
     ///
-    /// Resolved from the inherited font at layout, so it follows a font or theme change with
-    /// nothing rewritten, and a described tree spaces itself the way the rest of the app does.
-    /// Prefer it over [`padding`](Style::padding): a pixel count is a hardcoded value that stops
-    /// matching everything around it the moment anything changes.
-    fn pad_all(self, s: crate::ViewSpacing) -> Self {
-        self.prop("pad_spacing_x", s).prop("pad_spacing_y", s)
-    }
-
-    /// Horizontal (left + right) padding from the theme. See [`pad_all`](Style::pad_all).
-    fn pad_x(self, s: crate::ViewSpacing) -> Self {
-        self.prop("pad_spacing_x", s)
-    }
-
-    /// Vertical (top + bottom) padding from the theme. See [`pad_all`](Style::pad_all).
-    fn pad_y(self, s: crate::ViewSpacing) -> Self {
-        self.prop("pad_spacing_y", s)
-    }
-
-    /// **Space between children, from the theme.** The gap counterpart of
-    /// [`pad_all`](Style::pad_all), and preferred over [`gap`](Style::gap) for the same reason.
+    /// ```ignore
+    /// VStack::new().gap(8)                 // eight pixels
+    /// VStack::new().gap(ViewSpacing::Sm)   // a step of the rhythm
+    /// VStack::new().gap("sm")              // the same step, said as JSON would
+    /// ```
     ///
-    /// Use the steps to group: a tight `Xs` inside a label-and-control couple, a roomier `Md`
-    /// between couples — no arithmetic, and no new widget.
-    fn gap_spacing(self, s: crate::ViewSpacing) -> Self {
-        self.prop("gap_spacing", s)
+    /// **Prefer the step.** It is resolved from the inherited font at layout, so a described tree
+    /// spaces itself the way the rest of the app does and follows a font, size-variant or theme
+    /// change with nothing rewritten; a pixel count is tuned for one font size and wrong at every
+    /// other. Use the steps to group: a tight `Xs` inside a label-and-control couple, a roomier
+    /// `Md` between couples — no arithmetic, and no new widget.
+    ///
+    /// It was two builders, `gap` and `gap_spacing`, writing two different properties. The docs
+    /// said prefer the step and the step was the one nobody reached for, because it had the longer
+    /// name. `"gap_spacing"` is still read on the wire, so no existing tree breaks.
+    fn gap(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("gap", v.into())
     }
 
-    /// Space inside the box on every side, **in px**. Prefer [`pad_all`](Style::pad_all), which
-    /// takes a theme step and follows a font or theme change.
-    fn padding(self, px: f32) -> Self {
-        self.prop("padding", px)
+    /// **Space inside the box on every side** — pixels or a step, exactly as [`gap`](Style::gap).
+    fn padding(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding", v.into())
     }
-    /// Horizontal padding (left + right), in px.
-    fn padding_x(self, px: f32) -> Self {
-        self.prop("padding_x", px)
+    /// Horizontal padding (left + right) — see [`padding`](Style::padding).
+    fn padding_x(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_x", v.into())
     }
-    /// Vertical padding (top + bottom), in px.
-    fn padding_y(self, px: f32) -> Self {
-        self.prop("padding_y", px)
+    /// Vertical padding (top + bottom) — see [`padding`](Style::padding).
+    fn padding_y(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_y", v.into())
     }
-    /// Left padding, in px.
-    fn padding_left(self, px: f32) -> Self {
-        self.prop("padding_left", px)
+    /// Left padding — see [`padding`](Style::padding).
+    fn padding_left(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_left", v.into())
     }
-    /// Right padding, in px.
-    fn padding_right(self, px: f32) -> Self {
-        self.prop("padding_right", px)
+    /// Right padding — see [`padding`](Style::padding).
+    fn padding_right(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_right", v.into())
     }
-    /// Top padding, in px.
-    fn padding_top(self, px: f32) -> Self {
-        self.prop("padding_top", px)
+    /// Top padding — see [`padding`](Style::padding).
+    fn padding_top(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_top", v.into())
     }
-    /// Bottom padding, in px.
-    fn padding_bottom(self, px: f32) -> Self {
-        self.prop("padding_bottom", px)
+    /// Bottom padding — see [`padding`](Style::padding).
+    fn padding_bottom(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_bottom", v.into())
     }
     /// Space outside the box on every side, in px.
     fn margin(self, px: f32) -> Self {
@@ -462,6 +450,27 @@ pub trait Style: Sized {
     }
 
     // ── Appearance ──
+    /// **Override the accent — for this node and everything inside it.**
+    ///
+    /// Focus rings, hover and press fills, selected washes, scrollbar thumbs, a caret: everything
+    /// that would otherwise be the theme's accent. A panel with a hue of its own says it once and
+    /// every control inside follows, with nothing told twice.
+    ///
+    /// ```ignore
+    /// Surface::new().accent("danger").child(Button::new().text("Delete"))
+    /// ```
+    ///
+    /// **The theme is always first.** Set nothing and everything reads the theme's accent. The
+    /// order is: this node's own → the nearest ancestor that set one → the theme.
+    ///
+    /// A theme token name (`"danger"`) or a literal (`"#ff8800"`) — prefer a token, which follows a
+    /// theme reload where a literal does not.
+    ///
+    /// ⚠️ It does **not** redefine a declared meaning: a badge's `accent` variant, an alert's
+    /// `info`, a destructive button. Those keep the colour their variant names.
+    fn accent(self, colour: &str) -> Self {
+        self.prop("accent", PropValue::Color(colour.to_string()))
+    }
     /// Background colour: a theme token name (`"accent"`) or a literal (`"#ff8800"`).
     ///
     /// Prefer a token — it follows a theme reload, a literal does not.
@@ -508,16 +517,10 @@ pub trait Style: Sized {
 /// A `Toast` draws its own card and takes none, so it has no `child`. That is the same rule as the
 /// properties: if the widget cannot do it, the builder cannot say it.
 pub trait Parent: Style {
-    /// Append a child.
-    fn child(mut self, child: impl Into<ViewNode>) -> Self {
-        self.node_mut().children.push(child.into());
-        self
-    }
-
-    /// Append several children.
-    fn children<C: Into<ViewNode>>(mut self, children: impl IntoIterator<Item = C>) -> Self {
-        let node = self.node_mut();
-        node.children.extend(children.into_iter().map(Into::into));
+    /// **Append a child, or several** — one node, or a `Vec`/array of them. One door, the same as
+    /// `ViewNode::child` and the native `Parent::child`.
+    fn child(mut self, children: impl crate::IntoNodes) -> Self {
+        self.node_mut().children.extend(children.into_nodes());
         self
     }
 }
@@ -984,22 +987,12 @@ impl Button {
     pub fn icon_only(self, on: bool) -> Self {
         self.prop("icon_only", on)
     }
-    /// **The hue this button reads in**, overriding what its variant would use — a theme token name
-    /// or a literal. A button can be *about* something dangerous without being drawn as a boxed
-    /// destructive control, which in a row of quiet buttons is the odd one out.
-    pub fn tone(self, colour: &str) -> Self {
-        self.prop("tone", colour)
-    }
 }
 
 impl IconButton {
     /// The cell's square size in px.
     pub fn cell(self, px: f32) -> Self {
         self.prop("cell", px)
-    }
-    /// Icon colour: a theme token name or a literal.
-    pub fn tone(self, colour: &str) -> Self {
-        self.prop("tone", PropValue::Color(colour.to_string()))
     }
     /// A glow halo.
     pub fn glowing(self, on: bool) -> Self {
@@ -1541,5 +1534,45 @@ mod tests {
     fn an_event_is_bound_under_its_canonical_name() {
         let node = Row::new().on_press(Intent::new("docker.select")).into_node();
         assert_eq!(node.events.get("press").map(|i| i.action.as_str()), Some("docker.select"));
+    }
+
+    /// **One builder writes ONE property, whichever kind of space it was given.**
+    ///
+    /// The retired names are still read on the far side, so a tree emitting `"gap_spacing"` keeps
+    /// working — which means nothing downstream can tell you the builder picked the wrong name.
+    /// This is the only place that can, so it pins the name rather than the effect.
+    #[test]
+    fn spacing_is_written_under_one_property_name() {
+        let px = VStack::new().gap(8).into_node();
+        assert_eq!(px.props.get("gap"), Some(&PropValue::Float(8.0)));
+        assert!(
+            !px.props.contains_key("gap_spacing"),
+            "the retired name must not be emitted — it is read, not written",
+        );
+
+        let step = VStack::new().gap(crate::ViewSpacing::Sm).into_node();
+        assert_eq!(
+            step.props.get("gap"),
+            Some(&PropValue::Text("sm".into())),
+            "a step travels as its name, under the same property",
+        );
+        assert!(!step.props.contains_key("gap_spacing"));
+    }
+
+    /// Padding does the same, and a string is read as either kind.
+    #[test]
+    fn padding_is_written_under_one_property_name() {
+        let node = Surface::new().padding("md").padding_x(4).into_node();
+        assert_eq!(
+            node.props.get("padding"),
+            Some(&PropValue::Text("md".into()))
+        );
+        assert_eq!(node.props.get("padding_x"), Some(&PropValue::Float(4.0)));
+        for retired in ["pad_spacing_x", "pad_spacing_y"] {
+            assert!(
+                !node.props.contains_key(retired),
+                "{retired} must not be emitted"
+            );
+        }
     }
 }

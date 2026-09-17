@@ -164,7 +164,6 @@ pub struct Button {
     /// [`icon_only`](Self::icon_only).
     label: String,
     /// Overrides the hue this button reads in. See [`tone`](Self::tone).
-    tone: Option<Color>,
     /// **This button is about something destructive.** Set by the `Destructive` variant, which
     /// carries the whole look — hue and frame together — and a container never strips either.
     /// What it decides beyond the variant's own painting is the hue of the held-on frame, so an
@@ -206,7 +205,6 @@ impl Button {
             icon_only: false,
             dangerous: false,
             label: String::new(),
-            tone: None,
             glyph: None,
         };
         button.remeasure();
@@ -311,9 +309,8 @@ impl Button {
     /// control. In a row of quiet ghost buttons, a `Destructive` variant is the odd one out — it
     /// carries a border the others do not — where a ghost button in the danger hue reads as a cue.
     #[heca_grid_ui_macros::prop]
-    pub fn tone(mut self, c: Color) -> Self {
-        self.tone = Some(c);
-        self
+    pub fn accent(self, c: Color) -> Self {
+        crate::builders::ComponentExt::accent(self, c)
     }
 
     /// **Show only the icon, keeping the words.** The label is not drawn and takes no space, and
@@ -422,7 +419,7 @@ impl Button {
     /// content whatever it is, instead of a width faked from a character count.
     fn content_box(&self) -> Rectangle {
         let b = self.base.bounds;
-        let pad = self.base.style.layout.padding_x.unwrap_or(self.base.style.layout.padding) as f64;
+        let pad = self.base.style.layout.pad_left(self.base.font) as f64;
         Rectangle::new(
             Point::new(b.loc.x + pad, b.loc.y),
             Size::new((b.size.w - 2.0 * pad).max(0.0), b.size.h),
@@ -541,7 +538,7 @@ impl Component for Button {
     fn remeasure(&mut self) {
         let fs = self.base.font;
         let pad = BASE_PAD * self.base.size_scale();
-        self.base.style.layout.padding = pad;
+        self.base.style.layout.padding = (pad).into();
         // The extra horizontal room is there for **text**. With the words off it is padding around
         // nothing, which is what made a group of icon-only buttons read as too big.
         let side = if self.icon_only {
@@ -549,9 +546,9 @@ impl Component for Button {
         } else {
             pad + fs * MONO_ADVANCE_RATIO
         };
-        self.base.style.layout.padding_x = Some(side);
-        self.base.style.layout.padding_y = Some(pad);
-        self.base.style.layout.gap = fs * GAP_RATIO;
+        self.base.style.layout.padding_x = Some((side).into());
+        self.base.style.layout.padding_y = Some((pad).into());
+        self.base.style.layout.gap = (fs * GAP_RATIO).into();
         self.base.style.layout.width = Length::Auto;
         self.base.style.layout.height = Length::Auto;
         // **Showing only an icon, it says it cannot give way** — CSS `flex-shrink: 0`.
@@ -600,9 +597,9 @@ impl Component for Button {
             // severity-toned card follows the card, the way a `Label`'s ink already follows its
             // content colour. `None` unless a container asked, which is everywhere today, so a
             // button on its own is the theme accent exactly as before (F003/P096/T484).
-            let tone = cx.control_tone();
+            let accent = cx.accent();
+            let tone = cx.published_accent();
             let t = cx.theme();
-            let accent = tone.unwrap_or(t.colors.accent);
             (
                 t.colors.surface,
                 accent,
@@ -631,10 +628,11 @@ impl Component for Button {
         let (accent, danger) = if disabled { (muted, muted) } else { (accent, danger) };
         // An explicit tone replaces the variant's hue wherever the variant would have used the
         // accent — content, hover wash, held-on frame — without changing which variant this is.
+        // A tone the caller set is already in `accent` — `PaintCx::accent` resolved it, the same
+        // way it resolves one a container published. Only the variant's own meaning is left to
+        // decide here.
         let accent = if disabled {
             accent
-        } else if let Some(tone) = self.tone {
-            tone
         } else if self.dangerous {
             // The theme's danger, read at paint, so it follows a reload like every other colour.
             danger
@@ -661,7 +659,7 @@ impl Component for Button {
         // a held button stays legible with decorative borders switched off: this is a status cue,
         // not decoration.
         if self.active && !disabled {
-            let tone = cx.control_tone().unwrap_or(accent);
+            let tone = cx.accent();
             let line_w = cx.theme().focus_border_width;
             let frame = (line_w > 0.0).then_some(Border {
                 color: tone.with_alpha(ia.control_active_border),

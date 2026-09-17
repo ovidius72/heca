@@ -23,8 +23,8 @@ impl Card {
     pub fn new(title: impl Into<String>) -> Self {
         let mut base = Base::new();
         base.style.layout.direction = Direction::Column;
-        base.style.layout.padding = 18.0;
-        base.style.layout.gap = 10.0;
+        base.style.layout.padding = (18.0).into();
+        base.style.layout.gap = (10.0).into();
         base.children
             .push(Box::new(Label::new(title).font_scale(TITLE_SCALE)));
         Self { base }

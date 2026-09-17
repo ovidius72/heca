@@ -106,8 +106,8 @@ impl ToastStack {
         base.style.layout.width = Length::Auto;
         base.style.layout.height = Length::Auto;
         base.style.layout.direction = Direction::Column;
-        base.style.layout.padding = DEFAULT_MARGIN;
-        base.style.layout.gap = DEFAULT_GAP;
+        base.style.layout.padding = (DEFAULT_MARGIN).into();
+        base.style.layout.gap = (DEFAULT_GAP).into();
         let mut stack = Self {
             base,
             items,
@@ -140,7 +140,7 @@ impl ToastStack {
     #[heca_grid_ui_macros::prop]
     pub fn gap(mut self, gap: f32) -> Self {
         self.gap = gap;
-        self.base.style.layout.gap = gap;
+        self.base.style.layout.gap = (gap).into();
         self
     }
 
@@ -148,7 +148,7 @@ impl ToastStack {
     #[heca_grid_ui_macros::prop]
     pub fn margin(mut self, margin: f32) -> Self {
         self.margin = margin;
-        self.base.style.layout.padding = margin;
+        self.base.style.layout.padding = (margin).into();
         self
     }
 

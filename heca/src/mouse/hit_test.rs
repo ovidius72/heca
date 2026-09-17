@@ -5,6 +5,7 @@
 
 use crate::app_state::AppState;
 use heca_core::layout::PaneId;
+use heca_core::layout::types::{Point, Rectangle};
 
 /// Find which pane (if any) is under the cursor.
 /// Floating panes are tested before scrolling panes.
@@ -20,24 +21,15 @@ pub(crate) fn hit_test_pane_excluding(
     exclude: Option<PaneId>,
 ) -> Option<PaneId> {
     let chrome = crate::chrome::ChromeConfig::of(state);
-    let (win_w, win_h) = (chrome.window().w as f32, chrome.window().h as f32);
     let pane_area = chrome.content_rect();
 
-    let sidebar_left_w = if state.chrome_state.left_visible() {
-        chrome.left_sidebar_width
-    } else {
-        40.0
-    };
-    if pos.0 < sidebar_left_w {
-        return None;
-    }
-    if pos.1 < chrome.tab_bar_height || pos.1 > win_h - chrome.status_bar_height {
-        return None;
-    }
-    if pos.0 > win_h / 2.0
-        && state.chrome_state.right_visible()
-        && pos.0 > win_w - chrome.right_sidebar_width
-    {
+    // **The pane area answers where it is.** Every edge this used to test by hand — the sidebar on
+    // each side, the tab bar above, the status bar below — is already `content_rect`, so asking it
+    // is one question instead of four copies that can disagree with the thing they describe. Two
+    // did: a hidden left sidebar left a 40px strip nothing could be clicked in (a rail's width,
+    // for a rail that was deleted), and the right edge was guarded by an **x** compared against
+    // half the window's **height**.
+    if !pane_area.contains(at(pos)) {
         return None;
     }
 
@@ -50,16 +42,8 @@ pub(crate) fn hit_test_pane_excluding(
 
     if let Some(ws) = state.session.active_workspace() {
         for float in &ws.floating_panes {
-            let fx = pane_area.loc.x as f32 + ws_offset.0 + float.position.x as f32;
-            let fy = pane_area.loc.y as f32 + ws_offset.1 + float.position.y as f32;
-            let fw = float.size.w as f32;
-            let fh = float.size.h as f32;
-            if pos.0 >= fx
-                && pos.0 < fx + fw
-                && pos.1 >= fy
-                && pos.1 < fy + fh
-                && Some(float.pane.id) != exclude
-            {
+            let seat = placed(pane_area, ws_offset, float.position, float.size);
+            if seat.contains(at(pos)) && Some(float.pane.id) != exclude {
                 return Some(float.pane.id);
             }
         }
@@ -72,19 +56,34 @@ pub(crate) fn hit_test_pane_excluding(
         .unwrap_or_default();
 
     for (pane_id, rect) in &pane_positions {
-        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
-        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
-        let pw = rect.size.w as f32;
-        let ph = rect.size.h as f32;
-        if pos.0 >= px
-            && pos.0 < px + pw
-            && pos.1 >= py
-            && pos.1 < py + ph
-            && Some(*pane_id) != exclude
-        {
+        let seat = placed(pane_area, ws_offset, rect.loc, rect.size);
+        if seat.contains(at(pos)) && Some(*pane_id) != exclude {
             return Some(*pane_id);
         }
     }
 
     None
+}
+
+/// The cursor as a point the layout types can answer about.
+fn at(pos: (f32, f32)) -> Point {
+    Point::new(pos.0 as f64, pos.1 as f64)
+}
+
+/// **Where a pane actually sits on the glass**: its place within the workspace, offset by where the
+/// workspace sits in the pane area. One spelling for a float and a tiled pane alike — they differ
+/// in where their rectangle comes from, never in how it is put on screen.
+fn placed(
+    pane_area: Rectangle,
+    ws_offset: (f32, f32),
+    loc: heca_core::layout::types::Point,
+    size: heca_core::layout::types::Size,
+) -> Rectangle {
+    Rectangle::new(
+        Point::new(
+            pane_area.loc.x + ws_offset.0 as f64 + loc.x,
+            pane_area.loc.y + ws_offset.1 as f64 + loc.y,
+        ),
+        size,
+    )
 }

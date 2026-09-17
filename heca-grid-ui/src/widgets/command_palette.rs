@@ -950,7 +950,7 @@ impl Component for CommandPalette {
             let t = cx.theme();
             (
                 t.colors.background,
-                t.colors.accent,
+                cx.accent(),
                 t.colors.glow,
                 t.colors.foreground,
                 t.colors.muted,

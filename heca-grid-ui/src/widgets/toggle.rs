@@ -101,7 +101,6 @@ impl Toggle {
             f(Action::value("toggle-change", SignalData::Bool(new)));
         }
     }
-
 }
 
 impl Component for Toggle {
@@ -126,7 +125,15 @@ impl Component for Toggle {
         let disabled = self.base.disabled.get_untracked();
         let (surface, accent, glow_c, muted, foreground, theme_radius, ia) = {
             let t = cx.theme();
-            (t.colors.surface, t.colors.accent, t.colors.glow, t.colors.muted, t.colors.foreground, t.colors.border_radius, t.colors.interaction)
+            (
+                t.colors.surface,
+                cx.accent(),
+                t.colors.glow,
+                t.colors.muted,
+                t.colors.foreground,
+                t.colors.border_radius,
+                t.colors.interaction,
+            )
         };
         let p = self.progress.clamp(0.0, 1.0);
         let track = self.base.bounds;

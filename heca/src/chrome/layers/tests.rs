@@ -1038,8 +1038,8 @@ fn a_key_dispatched_at_the_window_root_reaches_a_placed_surface() {
 #[test]
 fn a_menu_seated_as_a_surface_keeps_its_own_height() {
     use heca_core::layout::Size;
-    use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
     use heca_grid_ui::LayoutEngine;
+    use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
 
     let viewport = Size::new(1400.0, 900.0);
     let menu = ContextMenu::new("pane")
@@ -1141,9 +1141,7 @@ fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
     // The chrome: a plain child of the window root, and the thing the pointer must reach.
     crate::chrome::seat_chrome(
         &mut window,
-        Flex::row()
-            .width(Length::Percent(1.0))
-            .height(Length::Percent(1.0)),
+        Flex::row().width(Length::FULL).height(Length::FULL),
     );
     // The stack, seated **exactly as the app seats it** — wrapped in its picker group, and empty,
     // as it is nearly always. The wrapper is the point: a first version of this guard placed a bare

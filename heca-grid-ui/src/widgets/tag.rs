@@ -47,7 +47,7 @@ pub struct Tag {
 
 /// Build an empty segment container (a centered row of slots).
 fn segment() -> Flex {
-    Flex::row().align(Align::Center).gap(SLOT_GAP)
+    Flex::row().align("center").gap(SLOT_GAP)
 }
 
 #[heca_grid_ui_macros::props]
@@ -59,9 +59,9 @@ impl Tag {
         base.style.layout.direction = Direction::Row;
         base.style.layout.align = Align::Center;
         base.style.layout.justify = Justify::Center;
-        base.style.layout.padding_x = Some(PAD_X);
-        base.style.layout.padding_y = Some(PAD_Y);
-        base.style.layout.gap = SEG_GAP;
+        base.style.layout.padding_x = Some((PAD_X).into());
+        base.style.layout.padding_y = Some((PAD_Y).into());
+        base.style.layout.gap = (SEG_GAP).into();
         let label = Label::new(label).font_scale(FONT_SCALE);
         let label_signal = label.text_signal();
         base.children.push(Box::new(segment().child(label)));

@@ -34,7 +34,6 @@ pub struct IconButton {
     /// Explicit square size (px); otherwise hugs the icon + padding.
     cell: Option<f32>,
     /// Hover/press hue (default: theme accent).
-    tone: Option<Color>,
     /// Held-on visual: a persistent tone-tinted frame marking the button as a
     /// toggled-on status (e.g. a zoomed column / floating pane). Independent of hover.
     active: bool,
@@ -64,7 +63,7 @@ impl IconButton {
         base.style.layout.direction = Direction::Row;
         base.style.layout.align = Align::Center;
         base.style.layout.justify = Justify::Center;
-        base.style.layout.padding = DEFAULT_PAD;
+        base.style.layout.padding = (DEFAULT_PAD).into();
         // **An icon is not negotiable.** The layout makes every child willing to give way once its
         // row is out of room — without that, a long title shoves a caret or a drag handle clean
         // outside its frame — and the escape clause is that a widget which must keep its size says
@@ -79,7 +78,6 @@ impl IconButton {
             base,
             name,
             cell: None,
-            tone: None,
             active: false,
             show_glow: true,
             progress: 0.0,
@@ -98,11 +96,13 @@ impl IconButton {
         self
     }
 
-    /// Override the hover/press hue (default: theme accent).
+    /// Override the hover/press hue (default: the hue a container published, else theme accent).
+    ///
+    /// The same property [`ComponentExt::tone`](crate::builders::ComponentExt::tone) sets on any
+    /// widget — one field, so "my hue" and "the hue inside me" cannot drift apart.
     #[heca_grid_ui_macros::prop]
-    pub fn tone(mut self, c: Color) -> Self {
-        self.tone = Some(c);
-        self
+    pub fn accent(self, c: Color) -> Self {
+        crate::builders::ComponentExt::accent(self, c)
     }
 
     /// Enable or disable the hover glow (default: enabled).
@@ -165,7 +165,7 @@ impl Component for IconButton {
     /// grows/shrinks together without this widget copying the variant into its child.
     fn remeasure(&mut self) {
         let size = self.base.style.layout.size;
-        self.base.style.layout.padding = DEFAULT_PAD * size.pad_scale();
+        self.base.style.layout.padding = (DEFAULT_PAD * size.pad_scale()).into();
         let len = self.cell.map(Length::Px).unwrap_or(Length::Auto);
         self.base.style.layout.width = len;
         self.base.style.layout.height = len;
@@ -176,14 +176,19 @@ impl Component for IconButton {
             return;
         }
         let disabled = self.base.disabled.get_untracked();
-        let (accent, glow_c, ctrl_radius, border_width, focus_border_width, ia) = {
+        let (glow_c, ctrl_radius, border_width, focus_border_width, ia) = {
             let t = cx.theme();
-            (t.colors.accent, t.colors.glow, t.colors.control_radius(), t.colors.border_width, t.focus_border_width, t.colors.interaction)
+            (
+                t.colors.glow,
+                t.colors.control_radius(),
+                t.colors.border_width,
+                t.focus_border_width,
+                t.colors.interaction,
+            )
         };
-        // **Own tone → the tone a container published → the theme accent** — the same chain a
-        // `Label`'s ink follows, applied to chrome. `None` unless a container asked (nothing does
-        // by default), so a button on its own looks exactly as it did (F003/P096/T484).
-        let tone = self.tone.or_else(|| cx.control_tone()).unwrap_or(accent);
+        // **Own tone → the tone a container published → the theme accent.** The last two steps are
+        // `PaintCx::accent`, so this widget states only the part that is its own.
+        let tone = cx.accent();
         let p = self.progress.clamp(0.0, 1.0);
         let b = self.base.bounds;
         let radius = ctrl_radius.min((b.size.h / 2.0) as f32);
@@ -192,7 +197,10 @@ impl Component for IconButton {
         // hover frame fading in by `p`, whichever is stronger. Hover layers on top of
         // active so an engaged button still brightens under the cursor.
         let (active_fill, active_border) = if self.active {
-            (ia.control_active_fill as f32, ia.control_active_border as f32)
+            (
+                ia.control_active_fill as f32,
+                ia.control_active_border as f32,
+            )
         } else {
             (0.0, 0.0)
         };
@@ -210,9 +218,15 @@ impl Component for IconButton {
             // cue) use `focus_border_width` so it stays visible even with decorative
             // borders off; a transient hover frame follows the global `border_width`
             // and vanishes at 0. The tone-tinted fill stays either way.
-            let line_w = if self.active { focus_border_width } else { border_width };
-            let frame_border = (line_w > 0.0)
-                .then_some(Border { color: tone.with_alpha(border_a as u8), width: line_w });
+            let line_w = if self.active {
+                focus_border_width
+            } else {
+                border_width
+            };
+            let frame_border = (line_w > 0.0).then_some(Border {
+                color: tone.with_alpha(border_a as u8),
+                width: line_w,
+            });
             cx.rect(b, tone.with_alpha(fill_a as u8), frame_border, radius, g);
         }
 
@@ -241,7 +255,10 @@ impl Component for IconButton {
             return Handled::No;
         }
         match ev {
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } => {
                 self.activate();
                 Handled::Yes
             }

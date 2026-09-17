@@ -44,8 +44,8 @@ impl Panel {
     pub fn new() -> Self {
         let mut base = Base::new();
         base.style.layout.direction = Direction::Column;
-        base.style.layout.padding = PADDING;
-        base.style.layout.gap = GAP;
+        base.style.layout.padding = (PADDING).into();
+        base.style.layout.gap = (GAP).into();
         // The header and its rule exist from the start and hide themselves until there is a
         // title, so setting a title never has to splice children in at the front after content
         // has been attached.

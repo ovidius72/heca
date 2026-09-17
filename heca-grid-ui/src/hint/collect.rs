@@ -125,7 +125,21 @@ pub(crate) fn is_target(c: &dyn Component) -> bool {
 /// had drifted, and the global picker lettered an ordinary button where a surface's own picker did
 /// not, so a plugin owning a picker over a panel of buttons got no letters and nothing said why.
 pub(crate) fn is_target_of(c: &dyn Component, scope: Option<&str>) -> bool {
-    in_scope(c, scope) && c.base().hintable && (c.base().hint.is_some() || actionable(c))
+    in_scope(c, scope) && is_addressable(c)
+}
+
+/// **Could a letter land on this at all** — the same question with the picker's scope left out.
+///
+/// A scope answers *which collected picker may letter this*. **Naming a target outright is not a
+/// collection**, so it is not the scope's business: a host that asks for `col:3` or `workspaces` by
+/// name has already decided what it means, and the target has no set to be excluded from.
+///
+/// Keeping the two apart is what lets a target be taken out of `prefix+/` without also
+/// disappearing from the pick that owns it: the workspaces dock is a keyboard destination for
+/// `prefix+Shift+e` and nothing the ordinary picker should spend a letter on, and it could not be
+/// both until this was separated (Antonio, driving, 2026-09-14).
+pub(crate) fn is_addressable(c: &dyn Component) -> bool {
+    c.base().hintable && (c.base().hint.is_some() || actionable(c))
 }
 
 /// **Does this target belong to the picker asking?**
@@ -168,8 +182,26 @@ pub(crate) fn foreign_picker(c: &dyn Component, scope: Option<&str>) -> bool {
 /// id outlives the frame it was collected in — a retained tree rebuilt between the letters
 /// appearing and one being picked simply offers a fresh set.
 pub fn collect_hints(root: &dyn Component) -> Vec<(Vec<usize>, Rectangle)> {
+    collect_hints_scoped(root, None)
+}
+
+/// **The same walk, asked by a picker with a scope of its own.**
+///
+/// `None` is the ordinary picker — `prefix+/` in heca. A name is a surface's own verb, and only
+/// targets declaring it answer.
+///
+/// It exists because [`KeyHintGroup`](crate::widgets::KeyHintGroup) had a **second walk** of its
+/// own. The two had already disagreed once about what a target even *is*, which was fixed by
+/// sharing the predicate — but the walk stayed duplicated, so every rule the collector learned
+/// afterwards reached one picker and not the other. The wrapper rule was the next one: a surface's
+/// own picker lettered both a `KeyHint` wrapper and the widget inside it, two keycaps on one card
+/// (Antonio, driving the exposé, 2026-09-15).
+pub fn collect_hints_scoped(
+    root: &dyn Component,
+    scope: Option<&str>,
+) -> Vec<(Vec<usize>, Rectangle)> {
     let mut out = Vec::new();
-    hints_into(root, &mut Vec::new(), None, None, &mut out);
+    hints_into(root, &mut Vec::new(), None, None, scope, &mut out);
     out.into_iter().flatten().collect()
 }
 
@@ -337,6 +369,7 @@ fn hints_into(
     // node from that target down to here holds exactly one child, so they are all one thing.
     wrapping: Option<(usize, bool)>,
     clip: Option<Rectangle>,
+    scope: Option<&str>,
     out: &mut Vec<Option<(Vec<usize>, Rectangle)>>,
 ) {
     if skip(node) {
@@ -344,14 +377,14 @@ fn hints_into(
     }
     // **A surface that owns its own picker keeps its targets.** Walking into it would letter, in
     // the ordinary picker, things that answer to that surface's verb instead.
-    if foreign_picker(node, None) {
+    if foreign_picker(node, scope) {
         return;
     }
     // **A target nobody can see is not a target** — dropped here rather than at the letter, so it
     // does not spend one of the 52 either. Hidden by an ancestor's clip, or squeezed to nothing of
     // its own: one question, asked once (see [`unseen`]).
     let mut here = wrapping;
-    if is_target(node) && !unseen(node, clip) {
+    if is_target_of(node, scope) && !unseen(node, clip) {
         let declares = node.base().hint.is_some();
         // **Among layers of one thing, a declaration outranks mere actionability.** Saying what a
         // pick does is precisely saying it is *not* the click — a sidebar row is activated and left
@@ -370,15 +403,23 @@ fn hints_into(
             here = Some((out.len() - 1, declares));
         }
     }
-    // Only a node holding exactly one child passes the chain on: anything holding more is a real
-    // container, and its children are things of their own.
-    let pass = (node.base().children.len() == 1).then_some(here).flatten();
+    // **Only a transparent wrapper passes the chain on** — it is the widget inside it, so the two
+    // are layers of one thing. A real container's children are things of their own, and it is a
+    // thing of its own too.
+    //
+    // This used to count children: a node holding exactly one was *assumed* to be a wrapper. So
+    // whether a container kept its own letter depended on how many things were inside it — the
+    // workspaces dock wore one with two workspaces and none with one, because with one the chain
+    // ran unbroken down to the workspace row, which declared a pick and replaced it. A parent
+    // counting its children to work out what it is is the pattern this codebase forbids
+    // everywhere else; `Base::transparent` is the node answering for itself instead.
+    let pass = node.base().transparent.then_some(here).flatten();
     // Judged per node rather than by pruning the subtree: a transparent wrapper can carry bounds
     // its child does not, and pruning on one would silently take every letter beneath it.
     let clip = narrowed(clip, node);
     for (i, child) in node.base().children.iter().enumerate() {
         path.push(i);
-        hints_into(child.as_ref(), path, pass, clip, out);
+        hints_into(child.as_ref(), path, pass, clip, scope, out);
         path.pop();
     }
 }

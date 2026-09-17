@@ -206,12 +206,12 @@ fn a_button_with_no_words_is_not_padded_for_them() {
     let wide = {
         let mut b = Button::new("Zoom").icon(Glyph::FrameCorners);
         LayoutEngine::new().base_font(13.0).compute(&mut b, Size::new(400.0, 60.0));
-        b.base().style.layout.padding_x
+        b.base().style.layout.pad_left(b.base().font)
     };
     let snug = {
         let mut b = Button::new("Zoom").icon(Glyph::FrameCorners).icon_only(true);
         LayoutEngine::new().base_font(13.0).compute(&mut b, Size::new(400.0, 60.0));
-        b.base().style.layout.padding_x
+        b.base().style.layout.pad_left(b.base().font)
     };
     assert!(
         snug < wide,

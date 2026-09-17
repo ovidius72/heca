@@ -10,7 +10,7 @@
 
 use crate::builders::{LayoutExt, Parent};
 use crate::component::{Base, Component};
-use crate::style::{Direction, Length};
+use crate::style::Direction;
 
 /// A layout-only flexible container of child components.
 pub struct Flex {
@@ -33,7 +33,7 @@ impl Flex {
     /// slot, or a [`DockFrame`](super::DockFrame) header-controls slot) until a
     /// real component replaces it.
     pub fn empty() -> Self {
-        Self::row().width(Length::Px(0.0)).height(Length::Px(0.0))
+        Self::row().width(0.0).height(0.0)
     }
 
     fn with_direction(direction: Direction) -> Self {
@@ -80,6 +80,20 @@ impl Component for Flex {
         fn text_leaf(c: &dyn Component) -> Option<&dyn Component> {
             if c.measure_text().is_some() {
                 return Some(c);
+            }
+            // **Only through a transparent wrapper** — a node that exists to stand for the one
+            // inside it. `Base::transparent` is the same answer the picker uses to the same
+            // question, so there is one notion of "this node is not a thing in its own right".
+            //
+            // ⚠️ Recursing into ANY container is what made this wrong: a row whose children are
+            // layouts rather than text runs — the exposé's strip, whose children are columns of
+            // pane cards — found the first label buried somewhere inside each column and treated
+            // them as words on one line. A column of two cards has its first label halfway down
+            // its first card, a column of one has it halfway down the column, so the shallower
+            // baseline was "corrected" downwards and a whole column of panes was drawn below the
+            // box it belongs to.
+            if !c.base().transparent {
+                return None;
             }
             c.base().children.iter().find_map(|k| text_leaf(k.as_ref()))
         }
@@ -139,6 +153,65 @@ pub fn container() -> Flex {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **A row aligns text runs on its line — not whole layouts that happen to contain text.**
+    ///
+    /// The baseline pass exists so a name and a dimmed `(program)` suffix sit on one line. It hunts
+    /// for the text inside each child, because a run is often wrapped. Hunting through *any*
+    /// container made every child of every row a candidate, so a row of columns — the exposé's
+    /// strip — had its columns treated as words: the first label of a column of two panes sits
+    /// halfway down its first card, the label of a column of one sits halfway down the column, and
+    /// the shallower of the two was pushed down to "meet" the deeper. A whole column of panes was
+    /// drawn below the box it belongs to (Antonio, driving, 2026-09-16).
+    ///
+    /// ⚠️ Ran red first: without the wrapper check the second column drops by half a card.
+    #[test]
+    fn a_row_does_not_baseline_align_children_that_are_layouts() {
+        use crate::builders::{LayoutExt, Parent};
+        use crate::style::{Justify, Length};
+        use crate::widgets::{Flex, Label};
+        use crate::{Component, LayoutEngine};
+        use heca_core::layout::Size;
+
+        // A card: a share of its column with its label centred inside it.
+        let card = || {
+            Flex::column()
+                .grow(1.0)
+                .height(0.0)
+                .shrink(1.0)
+                .justify(Justify::Center)
+                .child(Label::new("zsh"))
+        };
+        let column = |n: usize| {
+            let mut f = Flex::column();
+            for _ in 0..n {
+                f = f.child(card());
+            }
+            f.width(Length::Percent(0.5))
+        };
+
+        let mut root: Box<dyn Component> = Box::new(
+            Flex::row()
+                .width(Length::Percent(1.0))
+                .height(Length::Percent(1.0))
+                .child(column(2))
+                .child(column(1)),
+        );
+        LayoutEngine::new().compute(root.as_mut(), Size::new(1000.0, 1000.0));
+
+        for (i, col) in root.base().children.iter().enumerate() {
+            let b = col.base().bounds;
+            assert_eq!(
+                b.loc.y, 0.0,
+                "column {i} starts at the top of the row, not pushed down to meet a baseline",
+            );
+            assert!(
+                b.loc.y + b.size.h <= 1000.5,
+                "column {i} stays inside the row: {b:?}",
+            );
+        }
+    }
+
     use crate::builders::Parent;
     use crate::widgets::{Label, Visibility};
     use crate::{Component, LayoutEngine};

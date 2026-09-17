@@ -32,6 +32,13 @@ pub struct Presence {
     open: bool,
     /// How it arrives and leaves. `None` ⇒ it cuts.
     animation: Option<Box<dyn Animate>>,
+    /// **An exit is playing and has not been settled yet.**
+    ///
+    /// Set when [`leave`](Self::leave) starts a gesture that will take frames, cleared by the
+    /// [`tick`](Self::tick) that sees it end — which is the moment the surface may finally be taken
+    /// down. Without it, "has finished leaving" is indistinguishable from "was never up", and a
+    /// widget that never used a presence at all looks like one whose exit just completed.
+    exit_pending: bool,
 }
 
 impl Presence {
@@ -75,6 +82,9 @@ impl Presence {
                 animation.leave();
             }
         }
+        // A gesture that will take frames has to be settled when it ends; one that cuts is already
+        // settled by the caller this returned `true` to.
+        self.exit_pending = self.is_leaving();
         !self.is_leaving()
     }
 
@@ -112,6 +122,20 @@ impl Presence {
     /// Advance by `dt` seconds. `true` while the surface is still moving.
     pub fn tick(&mut self, dt: f32) -> bool {
         self.animation.as_mut().is_some_and(|a| a.tick(dt))
+    }
+
+    /// **Did an exit finish on this tick?** — the one moment a surface that animates out may be
+    /// taken down.
+    ///
+    /// Answers `true` exactly once per exit, and never for a surface that was never up: a widget
+    /// with no presence in play has no exit pending, so it is never mistaken for one that has just
+    /// finished going away. Call it after [`tick`](Self::tick).
+    pub fn take_finished_exit(&mut self) -> bool {
+        let finished = self.exit_pending && !self.is_leaving();
+        if finished {
+            self.exit_pending = false;
+        }
+        finished
     }
 
     /// What to draw this frame — [`AnimationFrame::IDENTITY`] unless an animation is playing.
@@ -193,5 +217,57 @@ mod tests {
         assert!(!p.enter(), "it refuses");
         assert_eq!(p.frame().opacity, mid, "the exit carries on from where it was");
         assert!(p.is_leaving());
+    }
+
+    /// **An exit that animates reports, exactly once, the frame it ends** — the moment a surface
+    /// may be taken down.
+    ///
+    /// `close` leaves a surface `visible` while its exit plays, so something has to end it.
+    /// Nothing did: a surface with an exit animation stayed visible forever after its first close,
+    /// and the exposé kept being offered letters by `prefix+/` long after it was shut (Antonio,
+    /// driving, 2026-09-15).
+    #[test]
+    fn an_animated_exit_reports_finishing_once() {
+        let mut p = Presence::new();
+        p.set_animation(Some(Box::new(Fade::new().seconds(0.2))));
+        p.enter();
+        assert!(!p.take_finished_exit(), "nothing has left yet");
+
+        p.leave();
+        assert!(p.is_leaving(), "the gesture holds it while it plays");
+        assert!(!p.take_finished_exit(), "…and it has not finished");
+
+        p.tick(1.0);
+        assert!(p.take_finished_exit(), "the frame the exit ends");
+        assert!(
+            !p.take_finished_exit(),
+            "and only that frame — a surface is taken down once",
+        );
+    }
+
+    /// **A presence nobody ever used never reports an exit.** "Not open and not leaving" is also
+    /// true of a widget that was never up, and reading it that way hid the entire tree on the first
+    /// tick — which is why the question is asked of the presence instead of inferred.
+    #[test]
+    fn a_presence_that_was_never_up_never_finishes_an_exit() {
+        let mut p = Presence::new();
+        p.tick(1.0);
+        assert!(!p.take_finished_exit());
+
+        let mut animated = Presence::new();
+        animated.set_animation(Some(Box::new(Fade::new().seconds(0.2))));
+        animated.tick(1.0);
+        assert!(!animated.take_finished_exit());
+    }
+
+    /// A surface that **cuts** is settled by the caller `leave` returned `true` to, so it must not
+    /// also be reported here — that would be two answers to one question.
+    #[test]
+    fn an_exit_that_cuts_is_not_reported_as_finishing_later() {
+        let mut p = Presence::new();
+        p.enter();
+        assert!(p.leave(), "with nothing to play, it may go now");
+        p.tick(1.0);
+        assert!(!p.take_finished_exit());
     }
 }

@@ -52,7 +52,7 @@ impl Pane {
     pub fn new() -> Self {
         let mut base = Base::new();
         base.style.layout.direction = Direction::Column;
-        base.style.layout.padding = 8.0;
+        base.style.layout.padding = (8.0).into();
         Self {
             base,
             frame: FrameStyle::Bordered,

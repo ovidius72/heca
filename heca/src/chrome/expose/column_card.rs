@@ -104,7 +104,7 @@ mod tests {
         }
         .build();
         // The width a row would give it; the height is the box it must divide.
-        lay_out(stack.width(Length::Percent(1.0)).height(Length::Percent(1.0)), 400.0, 600.0)
+        lay_out(stack.width(Length::FULL).height(Length::FULL), 400.0, 600.0)
     }
 
     /// **A pane takes the share of its column its real height is worth.** A stack the user dragged

@@ -126,14 +126,17 @@ impl LayoutEngine {
         let style = &root.base().style.layout;
         // A **percentage** margin resolves against the parent box, and a root has none — so on the
         // root it can only mean a fraction of the space the root was given.
-        let root_margin = |side: Option<crate::style::Length>, uniform: f32, space: f64| match side {
+        let root_margin = |side: Option<crate::style::Length>, uniform: f32, space: f64| match side
+        {
             Some(crate::style::Length::Px(px)) => px as f64,
             Some(crate::style::Length::Percent(f)) => f as f64 * space,
             Some(crate::style::Length::Auto) | None => uniform as f64,
         };
+        let root_font = root.base().font;
+        let uniform_margin = style.margin.resolve(root_font);
         let origin = Point::new(
-            root_margin(style.margin_left, style.margin, available.w),
-            root_margin(style.margin_top, style.margin, available.h),
+            root_margin(style.margin_left, uniform_margin, available.w),
+            root_margin(style.margin_top, uniform_margin, available.h),
         );
         self.assign(root, origin);
         // The first layout pass that sees a widget is the first moment it is both in a live tree
@@ -164,7 +167,11 @@ impl LayoutEngine {
         // own `remeasure` / `Base::size_scale` see the effective variant without extra plumbing.
         let size = {
             let s = &c.base().style.layout;
-            if s.size_explicit { s.size } else { inherited_size }
+            if s.size_explicit {
+                s.size
+            } else {
+                inherited_size
+            }
         };
         c.base_mut().style.layout.size = size;
 
@@ -185,30 +192,11 @@ impl LayoutEngine {
         // The tree's own base, unscaled by any size variant — what a widget floats *beside* itself
         // is a small panel belonging to the surface, not a part of the control.
         c.base_mut().root_font = self.base_font;
-        // Resolve theme spacing tokens (font-relative) into concrete padding px, so a
-        // container takes its padding from the theme instead of a hand-computed value.
-        //
-        // **Rounded to whole pixels, and that is what makes air look even.** A token is a fraction
-        // of the font (`Xs` is a quarter of it), so it lands on halves at most sizes — and the two
-        // sides of a boundary between siblings then round in different directions. Percentage-sized
-        // siblings put the air in their padding rather than a gap (a gap is added *outside* a
-        // percentage and overflows it), so every boundary in such a row is made of two paddings, and
-        // half a pixel each side became a gap of 6, 7 or 8 where all of them should have been 7.
-        // Measured across fourteen equal columns of the exposé; uniform once the token resolves to a
-        // whole pixel. A widget's own padding moves by at most half a pixel, which is under what the
-        // screen can draw; the rhythm between siblings is the thing an eye actually reads.
-        {
-            let s = &mut c.base_mut().style.layout;
-            if let Some(sp) = s.pad_spacing_x {
-                s.padding_x = Some((resolved * sp.scale()).round());
-            }
-            if let Some(sp) = s.pad_spacing_y {
-                s.padding_y = Some((resolved * sp.scale()).round());
-            }
-            if let Some(sp) = s.gap_spacing {
-                s.gap = (resolved * sp.scale()).round();
-            }
-        }
+        // A step of the theme's rhythm becomes pixels in `Space::resolve`, against the font just
+        // written above — the one place that conversion happens, reached from `taffy_style` below
+        // and from any widget measuring its own padding. It used to be copied back into the px
+        // fields here, which destroyed the authored step after the first pass: a font change then
+        // had nothing left to re-resolve.
         c.remeasure();
         let style = c.taffy_style();
         // **A viewport's content does not give way — that is what a viewport is for.**
@@ -226,12 +214,30 @@ impl LayoutEngine {
         // palette: that widget positions its own rows in a pass with no definite width
         // (F003/P082/T438).
         let caps_children = !matches!(c.base().style.layout.width, crate::style::Length::Auto);
+        // **A child's grid placement is settled here, against the parent that holds it.**
+        //
+        // A child says `1 / -1` or `grid-area: title` about itself, as in CSS — and neither means
+        // anything until you know the template. Resolving it in the layout pass is what lets a
+        // child be built before its parent, and lets a template change re-place children without
+        // rebuilding any of them. A child of something that is not a grid is left alone.
+        let placement = c.grid_template().map(|t| (t.counts(), c.base().children.iter()
+            .map(|k| k.base().grid_area.as_ref().and_then(|n| t.area(n)))
+            .collect::<Vec<_>>()));
         let child_count = c.base().children.len();
         let mut child_nodes = Vec::with_capacity(child_count);
         for i in 0..child_count {
             {
+                let named = placement.as_ref().and_then(|(_, areas)| areas[i]);
+                let counts = placement.as_ref().map(|(counts, _)| *counts);
                 let child = &mut c.base_mut().children[i];
                 let s = &mut child.base_mut().style.layout;
+                // A named area places the child outright; otherwise whatever it said about its own
+                // column and row stands, with `ALL` spans given the real track counts.
+                if let Some(cell) = named {
+                    s.grid_cell = Some(cell);
+                } else if let (Some(cell), Some((cols, rows))) = (s.grid_cell, counts) {
+                    s.grid_cell = Some(cell.resolved(cols, rows));
+                }
                 if content_may_overflow {
                     s.flex_shrink = s.flex_shrink.or(Some(0.0));
                 } else {
@@ -407,8 +413,8 @@ mod tests {
     #[test]
     fn the_root_is_offset_by_its_own_margin() {
         let mut root = Flex::row()
-            .width(Length::Px(100.0))
-            .height(Length::Px(50.0))
+            .width(100.0)
+            .height(50.0)
             .margin_left(600.0)
             .margin_top(100.0);
         LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
@@ -420,11 +426,11 @@ mod tests {
     #[test]
     fn a_root_margin_moves_the_whole_subtree() {
         let mut root = Flex::row()
-            .width(Length::Px(100.0))
-            .height(Length::Px(50.0))
+            .width(100.0)
+            .height(50.0)
             .margin_left(600.0)
             .margin_top(100.0)
-            .child(Flex::row().width(Length::Px(20.0)).height(Length::Px(20.0)));
+            .child(Flex::row().width(20.0).height(20.0));
         LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
         let child = root.base().children[0].base().bounds.loc;
         assert_eq!(child, Point::new(600.0, 100.0));
@@ -434,7 +440,7 @@ mod tests {
     /// shift.
     #[test]
     fn a_root_without_a_margin_starts_at_the_origin() {
-        let mut root = Flex::row().width(Length::Px(100.0)).height(Length::Px(50.0));
+        let mut root = Flex::row().width(100.0).height(50.0);
         LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
         assert_eq!(root.base().bounds.loc, Point::new(0.0, 0.0));
     }
@@ -452,20 +458,20 @@ mod tests {
     /// percentage margins on both axes, and nothing in the API says which axis it means.
     #[test]
     fn a_percentage_margin_resolves_against_the_parents_width_on_both_axes() {
-        let mut root = Flex::row()
-            .width(Length::Px(800.0))
-            .height(Length::Px(400.0))
-            .child(
-                Flex::row()
-                    .width(Length::Px(10.0))
-                    .height(Length::Px(10.0))
-                    .margin_left(Length::Percent(0.25))
-                    .margin_top(Length::Percent(0.25)),
-            );
+        let mut root = Flex::row().width(800.0).height(400.0).child(
+            Flex::row()
+                .width(10.0)
+                .height(10.0)
+                .margin_left(Length::Percent(0.25))
+                .margin_top(Length::Percent(0.25)),
+        );
         LayoutEngine::new().compute(&mut root, Size::new(800.0, 400.0));
         // A quarter of the width on **both** — not (200, 100), which is what a
         // per-axis reading would give.
-        assert_eq!(root.base().children[0].base().bounds.loc, Point::new(200.0, 200.0));
+        assert_eq!(
+            root.base().children[0].base().bounds.loc,
+            Point::new(200.0, 200.0)
+        );
     }
 
     /// **`at_rect` is the answer the margin could not give**: a fractional rect where each
@@ -474,16 +480,14 @@ mod tests {
     #[test]
     fn a_fractional_rect_resolves_each_percentage_against_its_own_axis() {
         let mut root = Flex::row()
-            .width(Length::Px(800.0))
-            .height(Length::Px(400.0))
-            .child(
-                Flex::row().at_rect(
-                    Length::Percent(0.25),
-                    Length::Percent(0.25),
-                    Length::Percent(0.5),
-                    Length::Percent(0.5),
-                ),
-            );
+            .width(800.0)
+            .height(400.0)
+            .child(Flex::row().at_rect(
+                Length::Percent(0.25),
+                Length::Percent(0.25),
+                Length::Percent(0.5),
+                Length::Percent(0.5),
+            ));
         LayoutEngine::new().compute(&mut root, Size::new(800.0, 400.0));
         let placed = root.base().children[0].base().bounds;
         assert_eq!(placed.loc, Point::new(200.0, 100.0));
@@ -501,25 +505,20 @@ mod tests {
     #[test]
     fn a_placement_that_leaves_an_axis_auto_keeps_the_widgets_own_size() {
         let mut root = Flex::row()
-            .width(Length::Px(800.0))
-            .height(Length::Px(400.0))
+            .width(800.0)
+            .height(400.0)
             // Sizes itself, like a menu panel: the seat must not touch it.
-            .child(
-                Flex::row()
-                    .width(Length::Px(220.0))
-                    .height(Length::Px(90.0))
-                    .at_rect(
-                        Length::Percent(0.0),
-                        Length::Percent(0.0),
-                        Length::Auto,
-                        Length::Auto,
-                    ),
-            )
+            .child(Flex::row().width(220.0).height(90.0).at_rect(
+                Length::Percent(0.0),
+                Length::Percent(0.0),
+                Length::Auto,
+                Length::Auto,
+            ))
             // Declares itself the whole window, like every layer-shaped surface.
             .child(
                 Flex::row()
-                    .width(Length::Percent(1.0))
-                    .height(Length::Percent(1.0))
+                    .width(Length::FULL)
+                    .height(Length::FULL)
                     .at_rect(
                         Length::Percent(0.0),
                         Length::Percent(0.0),
@@ -553,9 +552,9 @@ mod tests {
         use crate::widgets::{Ellipsis, Label};
 
         let mut row = Flex::row()
-            .width(Length::Px(60.0))
-            .height(Length::Px(30.0))
-            .child(Flex::row().width(Length::Px(40.0)).height(Length::Px(20.0)))
+            .width(60.0)
+            .height(30.0)
+            .child(Flex::row().width(40.0).height(20.0))
             .child(Label::new("a title far too long for this").truncate(Ellipsis::End));
         LayoutEngine::new().compute(&mut row, Size::new(200.0, 100.0));
 
@@ -577,15 +576,10 @@ mod tests {
     #[test]
     fn a_widget_that_refuses_to_shrink_is_left_alone() {
         let mut row = Flex::row()
-            .width(Length::Px(60.0))
-            .height(Length::Px(30.0))
-            .child(
-                Flex::row()
-                    .width(Length::Px(40.0))
-                    .height(Length::Px(20.0))
-                    .shrink(0.0),
-            )
-            .child(Flex::row().width(Length::Px(40.0)).height(Length::Px(20.0)));
+            .width(60.0)
+            .height(30.0)
+            .child(Flex::row().width(40.0).height(20.0).shrink(0.0))
+            .child(Flex::row().width(40.0).height(20.0));
         LayoutEngine::new().compute(&mut row, Size::new(200.0, 100.0));
         assert_eq!(row.base().children[0].base().bounds.size.w, 40.0);
     }
@@ -596,13 +590,9 @@ mod tests {
     #[test]
     fn a_placed_box_takes_no_space_from_its_siblings() {
         let mut root = Flex::row()
-            .width(Length::Px(800.0))
-            .height(Length::Px(400.0))
-            .child(
-                Flex::row()
-                    .width(Length::Percent(1.0))
-                    .height(Length::Percent(1.0)),
-            )
+            .width(800.0)
+            .height(400.0)
+            .child(Flex::row().width(Length::FULL).height(Length::FULL))
             .child(Flex::row().at_rect(
                 Length::Percent(0.5),
                 Length::Percent(0.5),
@@ -611,9 +601,14 @@ mod tests {
             ));
         LayoutEngine::new().compute(&mut root, Size::new(800.0, 400.0));
         // The in-flow sibling still has the whole row…
-        assert_eq!(root.base().children[0].base().bounds.size, Size::new(800.0, 400.0));
+        assert_eq!(
+            root.base().children[0].base().bounds.size,
+            Size::new(800.0, 400.0)
+        );
         // …and the placed box sits on top of it at its own rect.
-        assert_eq!(root.base().children[1].base().bounds.loc, Point::new(400.0, 200.0));
+        assert_eq!(
+            root.base().children[1].base().bounds.loc,
+            Point::new(400.0, 200.0)
+        );
     }
 }
-

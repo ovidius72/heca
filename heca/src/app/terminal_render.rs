@@ -30,7 +30,6 @@ pub(crate) struct PaneRenderState {
     pub(crate) y: f32,
     pub(crate) w: f32,
     pub(crate) h: f32,
-    pub(crate) is_active: bool,
     pub(crate) content_rect: Option<Rectangle>,
     pub(crate) mount: Option<TerminalMount>,
 }
@@ -599,12 +598,11 @@ pub(crate) struct TerminalPaneShell {
     pub(crate) y: f32,
     pub(crate) w: f32,
     pub(crate) h: f32,
-    /// The pane's frame colour — its **identity** (active / floating / resting), which the pane's
-    /// accent is derived from. The frame itself is drawn by the retained shell from its own style,
-    /// so its width and radius are not carried here: they belong to that widget, not to a theme
-    /// every control inside the pane would then read as its own.
-    pub(crate) border_color: [f32; 4],
 }
+
+// The pane's frame colour is **not** carried here any more. The retained shell holds it — as its
+// border, its glow, and the hue it publishes to everything it contains — so passing it to the
+// paint call was handing over a fact the widget already owned.
 
 /// Extra **top** content padding (logical px) taken by the pane's header, so terminal content
 /// starts below it. Zero when the pane has no header. Shared by the render path and the mouse→cell
@@ -692,9 +690,8 @@ pub(crate) fn paint_terminal_pane_shell(
         y,
         w,
         h,
-        border_color,
     } = shell;
-    let theme = terminal_pane_gui_theme(state, border_color);
+    let theme = terminal_pane_gui_theme(state);
     // The frame is the pane's **retained** shell (`chrome::sync_panes`), not a tree built here and
     // thrown away: the picker writes a letter into it when it opens and reads it back a keystroke
     // later, so a tree that does not outlive the frame cannot carry one. That is why the pane
@@ -853,10 +850,9 @@ fn to_gui_color(color: [f32; 4]) -> GuiColor {
     )
 }
 
-fn terminal_pane_gui_theme(state: &AppState, border_color: [f32; 4]) -> GuiTheme {
+fn terminal_pane_gui_theme(state: &AppState) -> GuiTheme {
     pane_gui_theme(
         crate::chrome::chrome_gui_theme(state),
-        border_color,
         to_gui_color(state.theme.background.to_f32x4()),
     )
 }
@@ -868,8 +864,11 @@ fn terminal_pane_gui_theme(state: &AppState, border_color: [f32; 4]) -> GuiTheme
 /// as a comment (`&AppState` needs a window, and a function that takes one is a function nobody can
 /// check).
 ///
-/// - **`accent`** becomes the pane's frame colour, because an active pane really does mean to
-///   re-tint what it holds — that is its identity.
+/// - **`accent` is no longer touched here.** An active pane really does mean to re-tint what it
+///   holds — that is its identity — but it says so by **publishing its hue on its own shell**
+///   (`chrome::pane::shell::focus_state_to` sets `tone`), which reaches the same widgets through
+///   the ordinary paint walk. Swapping it into the theme meant the host had to paint each pane
+///   under its own theme, and therefore that no container could ever paint one of its children.
 /// - **`background`** becomes the real window backdrop, which is what sits behind a pane's reserved
 ///   title strip; the `Cut` title style matches against it.
 /// - **`border`, `border_width` and `border_radius` are left exactly as they are.** They used to be
@@ -879,12 +878,7 @@ fn terminal_pane_gui_theme(state: &AppState, border_color: [f32; 4]) -> GuiTheme
 ///   button drew a border on hover in the active pane and none anywhere else (Antonio, driving,
 ///   2026-09-04). Nothing is lost: the shell states its frame as its own style
 ///   (`chrome::pane::shell`), which is where a widget's own look belongs.
-fn pane_gui_theme(
-    mut theme: GuiTheme,
-    border_color: [f32; 4],
-    window_background: GuiColor,
-) -> GuiTheme {
-    theme.colors.accent = to_gui_color(border_color);
+fn pane_gui_theme(mut theme: GuiTheme, window_background: GuiColor) -> GuiTheme {
     theme.colors.background = window_background;
     theme
 }
@@ -900,17 +894,15 @@ mod pane_theme_tests {
     #[test]
     fn a_panes_frame_does_not_become_the_border_every_control_inside_it_reads() {
         let chrome = GuiTheme::default();
-        let frame = [1.0, 0.0, 0.0, 1.0];
-        let themed = pane_gui_theme(chrome.clone(), frame, GuiColor::rgb(1, 2, 3));
+        let themed = pane_gui_theme(chrome.clone(), GuiColor::rgb(1, 2, 3));
 
         assert_eq!(
-            themed.colors.accent,
-            to_gui_color(frame),
-            "the frame colour is the pane's accent — its identity, which its contents follow"
+            themed.colors.accent, chrome.colors.accent,
+            "the pane's own hue is published on its shell, not swapped into the theme here"
         );
         assert_eq!(
             themed.colors.border, chrome.colors.border,
-            "…but the border token every control reads is the chrome's, whatever this pane's frame is"
+            "…and the border token every control reads is the chrome's, whatever this pane's frame is"
         );
         assert_eq!(
             themed.colors.border_width, chrome.colors.border_width,
@@ -1057,9 +1049,9 @@ pub(super) fn build_selection_overlay(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_selection_overlay, graphics_signature, image_row_ranges, merge_row_ranges,
-        ranges_overlap, retained_damage_to_apply, retained_terminal_texture_size,
-        terminal_damage_copy_bands, terminal_layer_render_key, TerminalCopyBand,
+        TerminalCopyBand, build_selection_overlay, graphics_signature, image_row_ranges,
+        merge_row_ranges, ranges_overlap, retained_damage_to_apply, retained_terminal_texture_size,
+        terminal_damage_copy_bands, terminal_layer_render_key,
     };
     use crate::app::selection_model::{
         SelectionOwner, SelectionRegion, SelectionSource, SelectionState,

@@ -17,6 +17,7 @@
 //! not a `:before`/`:after` pair.
 
 use crate::color::Color;
+use crate::builders::LayoutExt;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{Signal, SignalGet, signal};
 use crate::style::Length;
@@ -227,6 +228,13 @@ impl Component for NfIcon {
         false
     }
 }
+
+/// **An icon places and sizes itself like any other widget.**
+///
+/// It had no builder trait at all, so it could only be positioned by whatever held it — which was
+/// survivable while a grid placed its children, and stopped being so the moment placement became
+/// the child's own property, as CSS has it.
+impl LayoutExt for NfIcon {}
 
 #[cfg(test)]
 mod tests {

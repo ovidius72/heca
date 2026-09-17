@@ -120,8 +120,8 @@ impl Toast {
         base.style.layout.width = Length::Px(DEFAULT_WIDTH);
         base.style.layout.direction = Direction::Row;
         base.style.layout.align = Align::Start; // icon, text and × all sit on the title line
-        base.style.layout.padding = PAD;
-        base.style.layout.gap = ICON_GAP;
+        base.style.layout.padding = (PAD).into();
+        base.style.layout.gap = (ICON_GAP).into();
 
         // The title is a real child, so the card composes like every other widget: the engine
         // lays the three columns out, each paints itself, and the text can be cut by the label's
@@ -252,7 +252,7 @@ impl Toast {
                     .gap(ACTION_GAP)
                     // The row hugs its buttons — a column would otherwise stretch it edge to edge
                     // and the actions would read as a banner rather than as things to press.
-                    .align_self(Align::Start)
+                    .align_self("start")
                     // And when the card is too narrow for them all, they take a second line
                     // rather than being squeezed to ellipses or laid out past the edge.
                     .wrap(true)
@@ -494,7 +494,7 @@ impl Component for Toast {
         // inherited colour and the controls as an inherited tone, so the icon, the title, the
         // actions and the × all take the card's hue without the card drawing any of them — and a
         // control's hover, press and focus ring are its own, which is what they are for.
-        cx.with_control_tone(tone, |cx| {
+        cx.with_accent(tone, |cx| {
             cx.with_content_color(tone, |cx| {
                 crate::component::paint_child(self.base.children[ICON].as_ref(), cx);
             });
@@ -546,7 +546,7 @@ impl Component for Toast {
         // A bound signal is as good as a call: one flip of it is an arrival or a dismissal, and
         // neither may be the only way the animation starts.
         self.base.presence.follow(self.base.open.get_untracked());
-        let mut animating = self.base.presence.tick(dt);
+        let mut animating = self.base.tick_presence(dt);
         animating |= self.flash.tick(dt);
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);

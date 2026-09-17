@@ -336,7 +336,7 @@ fn paint_keycap_content(
     let (accent, glow_c, background, ctrl_radius, keycap_alpha) = {
         let t = cx.theme();
         (
-            t.colors.accent,
+            cx.accent(),
             t.colors.glow,
             t.colors.background,
             t.colors.control_radius(),

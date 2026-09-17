@@ -11,8 +11,8 @@ use crate::drag::DropSide;
 use crate::hint::DeclaredAction;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{
-    Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, RectCmd, ScanlineCmd, Scene,
-    Shadow, TextAlign, TextCmd, TextStyle,
+    Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, RectCmd, ScanlineCmd,
+    Scene, Shadow, TextAlign, TextCmd, TextStyle,
 };
 use crate::style::Style;
 use crate::theme::Theme;
@@ -271,6 +271,15 @@ pub struct Base {
     /// [`nav::key_at`](crate::nav::key_at). Opaque here — nothing in this library parses it.
     pub key: Option<String>,
 
+    /// **The grid area this node belongs in** — CSS `grid-area: title`, said by the child about
+    /// itself rather than written into it by its parent.
+    ///
+    /// It lives here beside [`key`](Self::key) rather than in [`Style`] because a name is a
+    /// `String` and `Layout` is `Copy`. Resolved during layout against the template of whichever
+    /// grid turns out to hold it, so a child can be built before its parent exists — and a template
+    /// change replaces no children.
+    pub grid_area: Option<String>,
+
     /// **This node was seated as a surface** — placed above the page rather than laid out in it.
     /// A host sets it when it seats one; no author ever writes it and no widget behaves
     /// differently for having it.
@@ -516,6 +525,19 @@ pub struct Base {
     /// names it either. One flag, set where the action is wired, is the only thing a walk over the
     /// tree can read (F003/P082/T441).
     pub activatable: bool,
+    /// **This widget exists only to carry the one inside it** — a wrapper, not a thing of its own.
+    ///
+    /// Set by [`wrap_transparently`], which every such wrapper already calls, so no widget opts in
+    /// separately and a new one gets the answer by being written the same way.
+    ///
+    /// Read by the pick collector: a wrapper and what it wraps must not both spend a letter, so the
+    /// chain of "these are layers of one thing" passes through a transparent node and stops at a
+    /// real container. It used to be inferred from **child count** — a node holding exactly one
+    /// child was assumed to be a wrapper — which made a real container's letter appear and vanish
+    /// with the number of things inside it: the workspaces dock wore a letter with two workspaces
+    /// and none with one. Counting children to tell what a node IS is the pattern this codebase
+    /// forbids, and this is it removed from the one place it was left.
+    pub transparent: bool,
     /// **The letter currently offered for [`hint`](Self::hint)** — `Some("a")` while a picker is
     /// open, `None` otherwise. Set by the host through
     /// [`offer_hint`](crate::hint::offer_hint); drawn by the widget that declared the hint.
@@ -574,7 +596,8 @@ pub struct Base {
     /// It is separate from [`needs_paint`](Base::needs_paint) because they cost different things:
     /// a repaint is per-frame and cheap, a layout pass walks and re-measures the whole tree. A
     /// widget that merely changed colour must not trigger one.
-    needs_layout: Cell<bool>}
+    needs_layout: Cell<bool>,
+}
 
 impl Base {
     /// **The name this widget declares itself by** — its [`key`](Self::key), or its
@@ -609,6 +632,7 @@ impl Base {
     pub fn new() -> Self {
         Self {
             style: Style::default(),
+            grid_area: None,
             node: None,
             bounds: Rectangle::from_size(Size::new(0.0, 0.0)),
             visible: signal(true),
@@ -646,6 +670,7 @@ impl Base {
             tooltip: None,
             hintable: true,
             activatable: false,
+            transparent: false,
             hint_label: crate::reactive::signal(None),
             hint_style: crate::widgets::HintStyle::default(),
             actions: Vec::new(),
@@ -799,16 +824,43 @@ impl Base {
     /// above and below it.
     ///
     /// Every widget that draws an inset highlight asks here, so the rule holds for the next one too.
+    /// **Advance this widget's presence, and finish the exit when it has played out.**
+    ///
+    /// An exit holds the surface on screen while it plays: [`Component::close`] leaves `visible`
+    /// **true** so the frames can be drawn, and something has to take it down when the gesture
+    /// ends. Nothing did. A surface with an exit animation therefore stayed `visible` forever after
+    /// its first close — inert and invisible to the eye, but still up as far as every walk over the
+    /// tree was concerned.
+    ///
+    /// What that cost: the exposé's cards kept being offered letters by `prefix+/` after it had
+    /// been opened once and closed — a full-window target sitting over everything you could
+    /// actually see (Antonio, driving, 2026-09-15).
+    ///
+    /// It lives beside `close` because it is the other half of that rule, and splitting them is
+    /// how they came to disagree: two widgets had hand-written `presence.tick` and neither ended
+    /// the exit, which is a rule in two call sites and therefore in the wrong place.
+    pub fn tick_presence(&mut self, dt: f32) -> bool {
+        let animating = self.presence.tick(dt);
+        // **Exactly the frame an exit ends.** Asked of the presence rather than inferred from
+        // "not open and not leaving", which is also true of a widget that was never up — and which
+        // hid the whole tree on the first tick when it was tried that way.
+        if self.presence.take_finished_exit() {
+            crate::reactive::SignalUpdate::set(&self.visible, false);
+        }
+        animating
+    }
+
     pub fn highlight_rect(&self, inset: f64) -> Rectangle {
         let b = self.bounds;
         let l = &self.style.layout;
+        let font = self.font;
         let (left, right) = (
-            inset.min(l.pad_left() as f64),
-            inset.min(l.pad_right() as f64),
+            inset.min(l.pad_left(font) as f64),
+            inset.min(l.pad_right(font) as f64),
         );
         let (top, bottom) = (
-            inset.min(l.pad_top() as f64),
-            inset.min(l.pad_bottom() as f64),
+            inset.min(l.pad_top(font) as f64),
+            inset.min(l.pad_bottom(font) as f64),
         );
         Rectangle::new(
             Point::new(b.loc.x + left, b.loc.y + top),
@@ -985,7 +1037,10 @@ pub trait Component {
     /// Open it if it is closed, dismiss it if it is open. The default reads
     /// [`presence`](Self::presence), so a surface gets it for free.
     fn toggle(&mut self) {
-        match self.presence().is_some_and(crate::animation::Presence::is_open) {
+        match self
+            .presence()
+            .is_some_and(crate::animation::Presence::is_open)
+        {
             true => self.close(),
             false => self.show(),
         }
@@ -1159,7 +1214,6 @@ pub trait Component {
         self.base().focused_by_keyboard()
     }
 
-
     /// The rect this widget occupies **for input**, or `None` when it takes none at all.
     ///
     /// The default is [`bounds`](Base::bounds), which is right for every widget drawn where it is
@@ -1199,6 +1253,19 @@ pub trait Component {
         false
     }
 
+    /// **This component arranges its children as a grid** — its column and row tracks, and its
+    /// named areas as written.
+    ///
+    /// The layout pass asks each parent this before building its children, because a child says
+    /// where it goes in terms only its parent can settle: `1 / -1` is "every column there are", and
+    /// `grid-area: title` is a name from this template. Answering here rather than reading a style
+    /// field keeps the template with the widget that owns it, and keeps [`Style`] `Copy`.
+    ///
+    /// `None` — the default — means "not a grid", and a child's grid placement means nothing.
+    fn grid_template(&self) -> Option<crate::style::GridTemplate<'_>> {
+        None
+    }
+
     /// Called when this component gains keyboard focus. Default: set the focus
     /// flag (which drives the focus ring). Override to add behaviour.
     /// `visible` is true for keyboard focus (show the ring), false for mouse.
@@ -1218,7 +1285,7 @@ pub trait Component {
     /// taffy config (e.g. [`Grid`](crate::widgets::Grid) injecting `display:
     /// grid` + track templates) override this.
     fn taffy_style(&self) -> taffy::Style {
-        self.base().style.layout.to_taffy()
+        self.base().style.layout.to_taffy(self.base().font)
     }
 
     /// Recompute size from the resolved font ([`Base::font`]). Widgets whose
@@ -1260,7 +1327,10 @@ pub trait Component {
     /// the time to its next change via [`next_redraw`](Self::next_redraw), so the
     /// host can sleep until then rather than redrawing every frame.
     fn tick(&mut self, dt: f32) -> bool {
-        let mut animating = false;
+        // **Presence is advanced here, for every widget.** It used to be advanced only by the two
+        // widgets that override this, so a surface shown through `Component::show`/`close` without
+        // being one of those two never finished its exit — see [`Base::tick_presence`].
+        let mut animating = self.base_mut().tick_presence(dt);
         for child in self.base_mut().children.iter_mut() {
             animating |= child.tick(dt);
         }
@@ -1601,6 +1671,18 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
     if c.base().node.is_none() {
         return;
     }
+    // **A published hue covers the whole subtree, and this is the only place that can apply it.**
+    // Every widget's paint passes through here, so a container states `tone` once and nothing
+    // inside opts in — the alternative is each publisher wrapping its own `paint`, which is how
+    // the tone ended up with consumers and no publishers at all.
+    match c.base().style.visual.accent {
+        Some(tone) => cx.with_accent(tone, |cx| paint_subtree(c, cx)),
+        None => paint_subtree(c, cx),
+    }
+}
+
+/// The paint itself, once the inherited hue is in place — see [`paint_child`].
+fn paint_subtree(c: &dyn Component, cx: &mut PaintCx) {
     c.paint(cx);
     crate::widgets::key_hint::paint_hint_label(c, cx);
     crate::widgets::tooltip::paint_tooltip(c, cx);
@@ -1641,7 +1723,13 @@ fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
         // holds it (Antonio, 2026-09-01). Faded here, outlined there, and the chip under the cursor
         // says which is which.
         let bg = cx.theme().colors.background;
-        cx.rect(b.bounds, bg.with_alpha(160), None, cx.theme().colors.border_radius, None);
+        cx.rect(
+            b.bounds,
+            bg.with_alpha(160),
+            None,
+            cx.theme().colors.border_radius,
+            None,
+        );
         // A picture of what was picked up, offset off the cursor and vertically centred on it, in
         // the overlay band so nothing this widget sits inside can clip it.
         let at = b.pointer.drag_pos();
@@ -1714,9 +1802,9 @@ pub struct PaintCx<'a> {
     /// [`with_content_color`](Self::with_content_color). `None` at the root.
     content_color: Option<Color>,
     /// The inherited **control tone** for the subtree currently being painted — see
-    /// [`with_control_tone`](Self::with_control_tone). `None` at the root, and `None` almost
+    /// [`with_accent`](Self::with_accent). `None` at the root, and `None` almost
     /// everywhere: a container has to say it wants the controls inside it to follow its hue.
-    control_tone: Option<Color>,
+    published_accent: Option<Color>,
     content_glow: Option<Glow>,
     /// Translation applied to every draw emitted through this context — see
     /// [`with_translate`](Self::with_translate). `(0, 0)` normally: a widget paints at its bounds.
@@ -1761,6 +1849,9 @@ pub struct PaintCx<'a> {
 /// Adopting whatever the child declares keeps the chain unbroken, and a child that hugs still hugs,
 /// because then there is nothing to adopt.
 pub fn wrap_transparently(base: &mut Base, child: &dyn Component) {
+    // **Saying it once, here.** A wrapper is transparent to layout *and* to the picker — it is the
+    // widget inside it, so the two must not disagree about what it is.
+    base.transparent = true;
     let child = child.base().style.layout;
     if !matches!(child.width, crate::style::Length::Auto) {
         base.style.layout.width = child.width;
@@ -1792,7 +1883,10 @@ pub fn wrap_transparently(base: &mut Base, child: &dyn Component) {
 /// further away; it is a different, wronger picture. `fade_command` beside it is the same idea for
 /// colour.
 fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangle) -> DrawCommand {
-    let glow = |g: Glow| Glow { radius: g.radius * k, ..g };
+    let glow = |g: Glow| Glow {
+        radius: g.radius * k,
+        ..g
+    };
     let shadow = |s: Shadow| Shadow {
         radius: s.radius * k,
         dx: s.dx * k,
@@ -1813,7 +1907,10 @@ fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangl
         DrawCommand::Rect(r) => DrawCommand::Rect(RectCmd {
             rect: place(r.rect),
             radius: r.radius * k,
-            border: r.border.map(|b| Border { width: b.width * k, ..b }),
+            border: r.border.map(|b| Border {
+                width: b.width * k,
+                ..b
+            }),
             glow: r.glow.map(glow),
             shadow: r.shadow.map(shadow),
             ..r
@@ -1847,22 +1944,40 @@ fn fade_command(cmd: DrawCommand, a: f32) -> DrawCommand {
     match cmd {
         // Host work composites at its own strength times the context's opacity, so a surface or a
         // frost inside a fading overlay fades with it.
-        DrawCommand::Host(h) => DrawCommand::Host(HostCmd { alpha: h.alpha * a, ..h }),
+        DrawCommand::Host(h) => DrawCommand::Host(HostCmd {
+            alpha: h.alpha * a,
+            ..h
+        }),
         DrawCommand::Rect(r) => DrawCommand::Rect(RectCmd {
             fill: dim(r.fill),
-            border: r.border.map(|b| Border { color: dim(b.color), ..b }),
-            glow: r.glow.map(|g| Glow { color: dim(g.color), ..g }),
-            shadow: r.shadow.map(|s| Shadow { color: dim(s.color), ..s }),
+            border: r.border.map(|b| Border {
+                color: dim(b.color),
+                ..b
+            }),
+            glow: r.glow.map(|g| Glow {
+                color: dim(g.color),
+                ..g
+            }),
+            shadow: r.shadow.map(|s| Shadow {
+                color: dim(s.color),
+                ..s
+            }),
             ..r
         }),
         DrawCommand::Text(t) => DrawCommand::Text(TextCmd {
             color: dim(t.color),
-            glow: t.glow.map(|g| Glow { color: dim(g.color), ..g }),
+            glow: t.glow.map(|g| Glow {
+                color: dim(g.color),
+                ..g
+            }),
             ..t
         }),
         DrawCommand::Brackets(b) => DrawCommand::Brackets(BracketCmd {
             color: dim(b.color),
-            glow: b.glow.map(|g| Glow { color: dim(g.color), ..g }),
+            glow: b.glow.map(|g| Glow {
+                color: dim(g.color),
+                ..g
+            }),
             ..b
         }),
         DrawCommand::Scanline(s) => DrawCommand::Scanline(ScanlineCmd {
@@ -1882,7 +1997,7 @@ impl<'a> PaintCx<'a> {
             theme,
             viewport: Size::new(f64::MAX, f64::MAX),
             content_color: None,
-            control_tone: None,
+            published_accent: None,
             content_glow: None,
             offset: (0.0, 0.0),
             opacity: 1.0,
@@ -1974,10 +2089,7 @@ impl<'a> PaintCx<'a> {
         }
         Rectangle::new(
             self.scaled_point(r.loc),
-            Size::new(
-                r.size.w * self.scale as f64,
-                r.size.h * self.scale as f64,
-            ),
+            Size::new(r.size.w * self.scale as f64, r.size.h * self.scale as f64),
         )
     }
 
@@ -1991,7 +2103,8 @@ impl<'a> PaintCx<'a> {
             scale_command(cmd, self.scale, |r| self.scaled_rect(r))
         };
         let a = self.opacity;
-        self.scene.push(if a >= 1.0 { cmd } else { fade_command(cmd, a) });
+        self.scene
+            .push(if a >= 1.0 { cmd } else { fade_command(cmd, a) });
     }
 
     /// Apply the active [translation](Self::with_translate) to a rect on its way to the scene.
@@ -2049,10 +2162,9 @@ impl<'a> PaintCx<'a> {
         // the **overlay band**, which starts unclipped on purpose (`Scene::begin_overlay`). A
         // widget drawing there asks `clip()` and keeps itself inside by hand.
         let outer = self.clip.replace(match self.clip {
-            Some(outer) => outer.intersection(rect).unwrap_or(Rectangle::new(
-                rect.loc,
-                Size::new(0.0, 0.0),
-            )),
+            Some(outer) => outer
+                .intersection(rect)
+                .unwrap_or(Rectangle::new(rect.loc, Size::new(0.0, 0.0))),
             None => rect,
         });
         f(self);
@@ -2133,17 +2245,43 @@ impl<'a> PaintCx<'a> {
     /// The tone is a **theme token resolved by the publisher at paint**, never a colour stored at
     /// build time, so a theme reload re-tones what is already on screen. Nesting restores the
     /// outer value on exit.
-    pub fn with_control_tone(&mut self, tone: Color, f: impl FnOnce(&mut PaintCx<'a>)) {
-        let previous = self.control_tone.replace(tone);
+    pub fn with_accent(&mut self, tone: Color, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = self.published_accent.replace(tone);
         f(self);
-        self.control_tone = previous;
+        self.published_accent = previous;
     }
 
     /// The inherited control tone, if a container published one via
-    /// [`with_control_tone`](Self::with_control_tone). A control resolves its hue as: **its own
+    /// [`with_accent`](Self::with_accent). A control resolves its hue as: **its own
     /// explicit tone → this → the theme accent.**
-    pub fn control_tone(&self) -> Option<Color> {
-        self.control_tone
+    ///
+    /// Prefer [`accent`](Self::accent), which applies the last two steps for you. Reach for this
+    /// only when a widget has its own tone to try first: `self.tone.unwrap_or_else(|| cx.accent())`.
+    pub fn published_accent(&self) -> Option<Color> {
+        self.published_accent
+    }
+
+    /// **The accent to paint chrome with** — the hue a container published, else the theme's.
+    ///
+    /// This is the accessor for the accent as a *hue*: a focus ring, a hover fill, a selected
+    /// wash, a scrollbar thumb, a caret. Reading `cx.theme().colors.accent` for those is the bug
+    /// it replaces — it ignores whatever the containing composition asked for, so a control inside
+    /// a toned subtree stayed the global accent while the button beside it followed. The rule
+    /// (**own tone → inherited → theme**) was written out by hand in three widgets and nowhere
+    /// else; it lives here now, so the next widget gets it without knowing it exists.
+    ///
+    /// ⚠️ **Not for the accent as a NAME.** `BadgeVariant::Accent`, `AlertVariant::Info`,
+    /// `ToastSeverity::Info` and `HintTone::Accent` are *declared meanings* — what the author said
+    /// the thing IS — and a container's hue does not get to redefine them, exactly as a
+    /// destructive button stays destructive inside a warning-toned panel. Those keep reading the
+    /// theme directly.
+    ///
+    /// **Why it matters beyond styling**: a subtree that needed its own accent used to get it by
+    /// being painted under a *swapped theme*, which forces a separate paint call per subtree and is
+    /// what stopped a container from ever painting its own children. With the hue inherited
+    /// instead, painting is the same walk for everything.
+    pub fn accent(&self) -> Color {
+        self.published_accent.unwrap_or(self.theme.colors.accent)
     }
 
     /// Paint the closure's subtree with `glow` as the **inherited content glow** — the
@@ -2297,7 +2435,13 @@ impl<'a> PaintCx<'a> {
             radius: 3.0,
             intensity: 0.3,
         });
-        self.rect(outset, Color::TRANSPARENT, Some(border), radius + OFFSET, glow);
+        self.rect(
+            outset,
+            Color::TRANSPARENT,
+            Some(border),
+            radius + OFFSET,
+            glow,
+        );
     }
 
     /// Queue a text run within `rect` at an explicit logical `size`. The renderer
@@ -2402,7 +2546,13 @@ impl<'a> PaintCx<'a> {
             return;
         }
         let a = (amount.clamp(0.0, 1.0) * 255.0).round() as u8;
-        self.rect(rect, self.theme.colors.foreground.with_alpha(a), None, radius, None);
+        self.rect(
+            rect,
+            self.theme.colors.foreground.with_alpha(a),
+            None,
+            radius,
+            None,
+        );
     }
 
     /// Draw the **drag ghost** — the small labelled chip that follows the cursor
@@ -2414,21 +2564,40 @@ impl<'a> PaintCx<'a> {
     /// as [`swap_indicator`](Self::swap_indicator) — so the cursor-following chip tells
     /// the user this drag is an **exchange**, not a move (there is no OS "swap" cursor).
     pub fn drag_ghost(&mut self, rect: Rectangle, text: &str, swap: bool) {
-        let (accent, bg, radius) = (self.theme.colors.accent, self.theme.colors.background, self.theme.colors.border_radius);
+        let (accent, bg, radius) = (
+            self.accent(),
+            self.theme.colors.background,
+            self.theme.colors.border_radius,
+        );
         let font = (rect.size.h as f32 * 0.55).clamp(10.0, 15.0);
         self.with_overlay(|cx| {
             cx.rect(rect, accent.with_alpha(217), None, radius, None);
-            cx.rect(rect, Color::TRANSPARENT, Some(Border { color: accent, width: 1.5 }), radius, None);
+            cx.rect(
+                rect,
+                Color::TRANSPARENT,
+                Some(Border {
+                    color: accent,
+                    width: 1.5,
+                }),
+                radius,
+                None,
+            );
             if swap {
                 let inset = 3.0_f64;
                 let inner = Rectangle::new(
                     Point::new(rect.loc.x + inset, rect.loc.y + inset),
-                    Size::new((rect.size.w - inset * 2.0).max(0.0), (rect.size.h - inset * 2.0).max(0.0)),
+                    Size::new(
+                        (rect.size.w - inset * 2.0).max(0.0),
+                        (rect.size.h - inset * 2.0).max(0.0),
+                    ),
                 );
                 cx.rect(
                     inner,
                     Color::TRANSPARENT,
-                    Some(Border { color: bg.with_alpha(180), width: 1.0 }),
+                    Some(Border {
+                        color: bg.with_alpha(180),
+                        width: 1.0,
+                    }),
                     (radius - inset as f32).max(0.0),
                     None,
                 );
@@ -2442,14 +2611,23 @@ impl<'a> PaintCx<'a> {
     /// [`DropSide::Onto`]. Theme-driven (derives from `accent`); the app calls this
     /// over the bounds returned by [`resolve_at`](crate::drag::resolve_at).
     pub fn drop_indicator(&mut self, bounds: Rectangle, side: DropSide) {
-        let accent = self.theme.colors.accent;
+        let accent = self.accent();
         match side {
             DropSide::Onto => {
-                self.rect(bounds, accent.with_alpha(45), None, self.theme.colors.border_radius, None);
+                self.rect(
+                    bounds,
+                    accent.with_alpha(45),
+                    None,
+                    self.theme.colors.border_radius,
+                    None,
+                );
                 self.rect(
                     bounds,
                     Color::TRANSPARENT,
-                    Some(Border { color: accent, width: 1.5 }),
+                    Some(Border {
+                        color: accent,
+                        width: 1.5,
+                    }),
                     self.theme.colors.border_radius,
                     None,
                 );
@@ -2462,7 +2640,10 @@ impl<'a> PaintCx<'a> {
                     bounds.loc.y + bounds.size.h - thickness / 2.0
                 };
                 self.rect(
-                    Rectangle::new(Point::new(bounds.loc.x, y), Size::new(bounds.size.w, thickness)),
+                    Rectangle::new(
+                        Point::new(bounds.loc.x, y),
+                        Size::new(bounds.size.w, thickness),
+                    ),
                     accent,
                     None,
                     1.0,
@@ -2479,7 +2660,7 @@ impl<'a> PaintCx<'a> {
     /// insertion line or `Onto` wash — a distinct cue that the whole item is the target.
     /// Theme-driven (derives from `accent` / `radius` / `border_width`).
     pub fn swap_indicator(&mut self, bounds: Rectangle) {
-        let accent = self.theme.colors.accent;
+        let accent = self.accent();
         let radius = self.theme.colors.border_radius;
         // Faint wash + bold outer frame.
         self.rect(bounds, accent.with_alpha(28), None, radius, None);
@@ -2487,7 +2668,10 @@ impl<'a> PaintCx<'a> {
         self.rect(
             bounds,
             Color::TRANSPARENT,
-            Some(Border { color: accent, width: outer_w }),
+            Some(Border {
+                color: accent,
+                width: outer_w,
+            }),
             radius,
             None,
         );
@@ -2504,7 +2688,10 @@ impl<'a> PaintCx<'a> {
         self.rect(
             inner,
             Color::TRANSPARENT,
-            Some(Border { color: accent.with_alpha(120), width: 1.0 }),
+            Some(Border {
+                color: accent.with_alpha(120),
+                width: 1.0,
+            }),
             (radius - inset as f32).max(0.0),
             None,
         );
@@ -2538,7 +2725,10 @@ impl<'a> PaintCx<'a> {
     /// carries its own width/radius (e.g. a self-themed sidebar shell), use
     /// [`bracket_frame_with`](Self::bracket_frame_with).
     pub fn bracket_frame(&mut self, rect: Rectangle) {
-        let (radius, border_width) = (self.theme.colors.border_radius, self.theme.colors.border_width);
+        let (radius, border_width) = (
+            self.theme.colors.border_radius,
+            self.theme.colors.border_width,
+        );
         self.bracket_frame_with(rect, border_width, radius);
     }
 
@@ -2547,7 +2737,7 @@ impl<'a> PaintCx<'a> {
     /// reticle (the per-widget `Pane::border_width`/radius overrides). The accent
     /// color still comes from the theme. `border_width <= 0.0` ⇒ no frame.
     pub fn bracket_frame_with(&mut self, rect: Rectangle, border_width: f32, radius: f32) {
-        let accent = self.theme.colors.accent;
+        let accent = self.accent();
         // Borders off (`border_width == 0`) ⇒ no frame at all, like every other
         // widget. A container that needs definition without a border should carry
         // a fill, not a forced hairline.
@@ -2580,7 +2770,10 @@ impl<'a> PaintCx<'a> {
         let keep = f64::from(radius + BRACKET_ARM_LEN);
         let m = f64::from(bracket_width);
         let (x, y, w, h) = (b.loc.x, b.loc.y, b.size.w, b.size.h);
-        let bright = Border { color: accent, width: bracket_width };
+        let bright = Border {
+            color: accent,
+            width: bracket_width,
+        };
 
         let corners = [
             Point::new(x - m, y - m),               // top-left
@@ -2666,6 +2859,10 @@ mod tests {
 
         base.mark_needs_paint();
         assert!(base.needs_paint(), "marking re-sets the repaint flag");
-        assert_eq!(frames.get(), 1, "marking asks the host for exactly one frame");
+        assert_eq!(
+            frames.get(),
+            1,
+            "marking asks the host for exactly one frame"
+        );
     }
 }

@@ -39,7 +39,7 @@
 use crate::builders::{ComponentExt as _, LayoutExt, Parent};
 use crate::component::{Base, Component, Event, GridKey, Handled, WidgetIntent};
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
-use crate::style::{Justify, Length, Spacing};
+use crate::style::{Length, Spacing};
 use crate::widgets::{Flex, Label, Overlay};
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -193,8 +193,8 @@ impl Dialog {
         if style.flex_grow == 0.0 {
             style.flex_grow = 1.0;
         }
-        if style.gap == 0.0 && style.gap_spacing.is_none() {
-            style.gap_spacing = Some(Spacing::Md);
+        if style.gap == crate::style::Space::Px(0.0) {
+            style.gap = Spacing::Md.into();
         }
     }
 
@@ -205,7 +205,7 @@ impl Dialog {
     pub fn action(mut self, button: impl Component + 'static) -> Self {
         if !self.has_actions {
             // Lazily create the right-aligned action row on first use.
-            let row = Flex::row().gap(DIALOG_BTN_GAP).justify(Justify::End);
+            let row = Flex::row().gap(DIALOG_BTN_GAP).justify("end");
             self.panel_mut().children.push(Box::new(row));
             self.has_actions = true;
         }

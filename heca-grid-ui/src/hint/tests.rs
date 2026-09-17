@@ -2,12 +2,12 @@
 
 #[cfg(test)]
 mod declarations {
-    use crate::hint::*;
-    use heca_core::layout::Rectangle;
-    use crate::component::Component;
     use crate::builders::ComponentExt as _;
+    use crate::component::Component;
+    use crate::hint::*;
     use crate::reactive::SignalUpdate;
     use crate::widgets::{Flex, KeyHint, Surface};
+    use heca_core::layout::Rectangle;
     use heca_core::layout::{Point, Size};
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -128,6 +128,125 @@ mod declarations {
         );
     }
 
+    /// **A container keeps its own letter whether it holds one thing or many.**
+    ///
+    /// Found by Antonio driving `prefix+/` (screenshot): the workspaces dock wore a letter with two
+    /// workspaces in it and none with one. Nothing about the dock changed — only how many things
+    /// were inside it.
+    ///
+    /// The cause was the rule that stops a wrapper and what it wraps both spending a letter. It
+    /// decided "this is a mere layer of the thing below" by **counting children** — exactly one
+    /// meant wrapper — so with a single workspace the chain ran unbroken from the dock down to the
+    /// workspace row, which declares a pick and replaced the dock's entry. A parent counting its
+    /// children to work out what it is is the pattern this codebase forbids everywhere else.
+    ///
+    /// A node answers for itself now (`Base::transparent`, set by `wrap_transparently`), so shape
+    /// decides nothing.
+    #[test]
+    fn a_real_container_keeps_its_letter_however_many_children_it_holds() {
+        use crate::builders::ComponentExt;
+
+        // A dock that is actionable but declares nothing — heca's focus wrapper — holding a list
+        // with `n` workspace rows, each of which names itself and declares its own pick.
+        let dock_with = |rows: usize| {
+            let mut list = Flex::column();
+            for i in 0..rows {
+                let row = KeyHint::new(Surface::new().key(format!("ws:{i}")).on_click(|_| {}))
+                    .on_hint(|| {});
+                list.base_mut().children.push(Box::new(row));
+            }
+            let mut dock = Flex::column().key("workspaces").on_click(|_| {});
+            dock.base_mut().children.push(Box::new(list));
+            let mut root = Flex::column();
+            root.base_mut().children.push(Box::new(dock));
+            root
+        };
+
+        let named = |root: &Flex| -> Vec<String> {
+            collect_hints(root)
+                .into_iter()
+                .filter_map(|(path, _)| crate::nav::identity_of(root, &path))
+                .collect()
+        };
+
+        let one = named(&dock_with(1));
+        let two = named(&dock_with(2));
+        assert!(
+            one.iter().any(|n| n == "workspaces"),
+            "the dock is a target with one row in it: {one:?}",
+        );
+        assert!(
+            two.iter().any(|n| n == "workspaces"),
+            "…and with two, which is the half that already worked: {two:?}",
+        );
+        assert!(
+            one.iter().any(|n| n.ends_with("ws:0")),
+            "and the row inside still gets its own — a name nests under its container: {one:?}",
+        );
+    }
+
+    /// **A scope keeps a target out of the ordinary picker without making it unreachable.**
+    ///
+    /// A scope answers *which collected picker may letter this*. Naming a target outright is not a
+    /// collection — the host has already decided what it means — so the two questions are separate.
+    ///
+    /// Without the separation the workspaces dock could not be both things it needs to be: a
+    /// keyboard destination `prefix+Shift+e` letters by name, and not something `prefix+/` spends
+    /// one of its 52 on. Scoping it removed it from both at once, and the dock pick went dark.
+    #[test]
+    fn a_scoped_target_is_still_reachable_when_it_is_named() {
+        use crate::builders::ComponentExt;
+        use crate::reactive::SignalGet;
+
+        let dock = Surface::new()
+            .key("workspaces")
+            .on_click(|_| {})
+            .hint_scope(["dock.destination"]);
+        let mut root = Flex::column();
+        root.base_mut().children.push(Box::new(dock));
+
+        let collected: Vec<String> = collect_hints(&root)
+            .into_iter()
+            .filter_map(|(path, _)| crate::nav::identity_of(&root, &path))
+            .collect();
+        assert!(
+            collected.is_empty(),
+            "the ordinary picker does not letter a target that named a scope: {collected:?}",
+        );
+
+        assert!(
+            offer_hint_by_key(&root, "workspaces", Some("a".into())),
+            "…and naming it outright still reaches it — that is not a collection",
+        );
+        assert_eq!(
+            root.base().children[0]
+                .base()
+                .hint_label
+                .get_untracked()
+                .as_deref(),
+            Some("a"),
+        );
+    }
+
+    /// **A wrapper and what it wraps still spend only one letter.** The rule the child count was
+    /// standing in for, kept — a transparent wrapper says so, so the pair is still one thing.
+    #[test]
+    fn a_transparent_wrapper_does_not_spend_a_letter_of_its_own() {
+        use crate::builders::ComponentExt;
+
+        let inner = Surface::new().key("pane:7").on_click(|_| {});
+        let wrapped = KeyHint::new(inner).on_hint(|| {});
+        let mut root = Flex::column();
+        root.base_mut().children.push(Box::new(wrapped));
+
+        let targets = collect_hints(&root);
+        assert_eq!(
+            targets.len(),
+            1,
+            "the wrapper and the widget inside it are one thing, so one letter",
+        );
+    }
+
     /// The pane inside still gets its **own** letter, by its own name. The boundary stops a letter
     /// crossing into somebody else; it does not make a nested target unreachable.
     #[test]
@@ -171,11 +290,17 @@ mod declarations {
 
         let targets = collect_hints(&root);
         assert_eq!(
-            targets.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>(),
+            targets
+                .iter()
+                .map(|(path, _)| path.clone())
+                .collect::<Vec<_>>(),
             vec![vec![0], vec![1]],
             "document order, addressed by path"
         );
-        assert_eq!(targets[1].1.loc.y, 50.0, "…each with the rect its letter goes over");
+        assert_eq!(
+            targets[1].1.loc.y, 50.0,
+            "…each with the rect its letter goes over"
+        );
 
         assert!(fire_hint(&mut root, &targets[1].0));
         assert_eq!(*log.borrow(), vec!["second"]);
@@ -274,7 +399,10 @@ mod declarations {
 
         let targets = collect_hints(&root);
         assert_eq!(
-            targets.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>(),
+            targets
+                .iter()
+                .map(|(path, _)| path.clone())
+                .collect::<Vec<_>>(),
             vec![vec![0, 0]],
             "a silent parent is transparent; a hidden declaration is skipped"
         );
@@ -283,8 +411,8 @@ mod declarations {
 
 #[cfg(test)]
 mod actionable_tests {
-    use crate::hint::*;
     use crate::builders::{ComponentExt, Parent};
+    use crate::hint::*;
     use crate::widgets::{Button, Flex, Label};
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -322,15 +450,14 @@ mod actionable_tests {
         assert!(fire_hint(&mut tree, &targets[0].0));
         assert_eq!(*ran.borrow(), 1, "the button's own click handler ran");
     }
-
 }
 
 /// **The pick is an event, and it behaves like one** (F003/P082/T432).
 #[cfg(test)]
 mod pick_delivery_tests {
-    use crate::hint::*;
     use crate::builders::{ComponentExt, Parent};
     use crate::event::EventKind;
+    use crate::hint::*;
     use crate::widgets::{Flex, Row};
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -396,7 +523,11 @@ mod pick_delivery_tests {
         );
 
         let targets = collect_hints(&tree);
-        assert_eq!(targets.len(), 2, "the listener declares nothing, so it gets no letter");
+        assert_eq!(
+            targets.len(),
+            2,
+            "the listener declares nothing, so it gets no letter"
+        );
 
         assert!(fire_hint(&mut tree, &targets[1].0));
         assert_eq!(
@@ -445,10 +576,10 @@ mod pick_delivery_tests {
 
 #[cfg(test)]
 mod offer_tests {
+    use crate::builders::{ComponentExt, Parent};
+    use crate::component::Component;
     use crate::hint::*;
     use crate::reactive::SignalGet;
-    use crate::component::Component;
-    use crate::builders::{ComponentExt, Parent};
     use crate::widgets::{Flex, KeyHint, Label, Row};
 
     /// **The pick is on the PARENT** — a row names itself and the `KeyHint` wrapping it says what a
@@ -456,9 +587,8 @@ mod offer_tests {
     /// all of them dark under `prefix+q` while the docks lit correctly.
     #[test]
     fn a_named_row_wrapped_in_a_keyhint_is_letterable() {
-        let tree = Flex::column().child(
-            KeyHint::new(Row::new().key("pane:7").child(Label::new("zsh"))).on_hint(|| {}),
-        );
+        let tree = Flex::column()
+            .child(KeyHint::new(Row::new().key("pane:7").child(Label::new("zsh"))).on_hint(|| {}));
 
         assert!(offer_hint_by_key(&tree, "pane:7", Some("a".into())));
         let hint = &tree.base().children[0];
@@ -477,7 +607,10 @@ mod offer_tests {
 
         assert!(offer_hint_by_key(&tree, "workspaces", Some("b".into())));
         let inner = &tree.base().children[0].base().children[0];
-        assert_eq!(inner.base().hint_label.get_untracked().as_deref(), Some("b"));
+        assert_eq!(
+            inner.base().hint_label.get_untracked().as_deref(),
+            Some("b")
+        );
     }
 
     /// **The same target shown twice must be lettered twice** — one pane listed in the left
@@ -494,7 +627,11 @@ mod offer_tests {
         assert!(offer_hint_by_key(&tree, "pane:7", Some("a".into())));
         let left = &tree.base().children[0];
         let right = &tree.base().children[1];
-        assert_eq!(left.base().hint_label.get_untracked().as_deref(), Some("a"), "the first one");
+        assert_eq!(
+            left.base().hint_label.get_untracked().as_deref(),
+            Some("a"),
+            "the first one"
+        );
         assert_eq!(
             right.base().hint_label.get_untracked().as_deref(),
             Some("a"),
@@ -521,13 +658,12 @@ mod offer_tests {
 /// scroll region.
 #[cfg(test)]
 mod clipped_away {
-    use crate::hint::*;
+    use crate::LayoutEngine;
     use crate::builders::{ComponentExt as _, LayoutExt as _, Parent as _};
     use crate::component::Component;
+    use crate::hint::*;
     use crate::reactive::SignalGet;
-    use crate::style::Length;
     use crate::widgets::{Flex, Label, Row, ScrollRegion};
-    use crate::LayoutEngine;
     use heca_core::layout::Size;
 
     /// Six 40px rows in a 100px viewport, scrolled to the bottom: the first rows are above the
@@ -536,16 +672,13 @@ mod clipped_away {
         let rows = (0..6).fold(Flex::column(), |c, i| {
             c.child(
                 Row::new()
-                    .height(Length::Px(40.0))
+                    .height(40.0)
                     .key(format!("pane:{i}"))
                     .child(Label::new(format!("zsh {i}")))
                     .on_hint(|| {}),
             )
         });
-        let mut region = ScrollRegion::new()
-            .width(Length::Px(200.0))
-            .height(Length::Px(100.0))
-            .child(rows);
+        let mut region = ScrollRegion::new().width(200.0).height(100.0).child(rows);
         LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
         region.scroll_to(120.0);
         LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
@@ -571,7 +704,11 @@ mod clipped_away {
         );
 
         assert!(!offer_hint_by_key(&region, "pane:0", Some("a".into())));
-        assert_eq!(letter(&region, 0), None, "no keycap to paint over the chrome above");
+        assert_eq!(
+            letter(&region, 0),
+            None,
+            "no keycap to paint over the chrome above"
+        );
     }
 
     /// **A row you can half see keeps its letter**, so you can peek at it (Antonio, 2026-08-23:
@@ -586,7 +723,11 @@ mod clipped_away {
             })
             .expect("one row straddles the top of the viewport");
 
-        assert!(offer_hint_by_key(&region, &format!("pane:{straddling}"), Some("s".into())));
+        assert!(offer_hint_by_key(
+            &region,
+            &format!("pane:{straddling}"),
+            Some("s".into())
+        ));
         assert_eq!(letter(&region, straddling).as_deref(), Some("s"));
     }
 
@@ -612,7 +753,10 @@ mod clipped_away {
             "row 5 has scrolled below the fold while wearing its letter",
         );
 
-        assert!(offer_hint_by_key(&region, "pane:5", None), "the withdrawal still lands");
+        assert!(
+            offer_hint_by_key(&region, "pane:5", None),
+            "the withdrawal still lands"
+        );
         assert_eq!(letter(&region, 5), None);
     }
 
@@ -624,11 +768,20 @@ mod clipped_away {
     #[test]
     fn a_tree_with_no_layout_yet_is_not_clipped_to_nothing() {
         let rows = (0..3).fold(Flex::column(), |c, i| {
-            c.child(Row::new().key(format!("pane:{i}")).child(Label::new("zsh")).on_hint(|| {}))
+            c.child(
+                Row::new()
+                    .key(format!("pane:{i}"))
+                    .child(Label::new("zsh"))
+                    .on_hint(|| {}),
+            )
         });
         let region = ScrollRegion::new().child(rows); // never laid out: all bounds are 0x0
 
-        assert_eq!(collect_hints(&region).len(), 3, "the rows are still candidates");
+        assert_eq!(
+            collect_hints(&region).len(),
+            3,
+            "the rows are still candidates"
+        );
         assert!(offer_hint_by_key(&region, "pane:1", Some("a".into())));
     }
 
@@ -644,7 +797,10 @@ mod clipped_away {
                 "a candidate outside the viewport was collected at {path:?} ({bounds:?})",
             );
         }
-        assert!(!found.is_empty(), "the rows still in view are still candidates");
+        assert!(
+            !found.is_empty(),
+            "the rows still in view are still candidates"
+        );
     }
 }
 
@@ -1210,10 +1366,10 @@ mod scoped_pickers {
             .on_click(|| {})
             .hint_scope(["close", "other"]);
         // Asked through what a picker actually calls, not the scope test underneath it.
-        assert!(crate::hint::is_target_of(&button, Some("close")));
-        assert!(crate::hint::is_target_of(&button, Some("other")));
+        assert!(crate::hint::collect::is_target_of(&button, Some("close")));
+        assert!(crate::hint::collect::is_target_of(&button, Some("other")));
         assert!(
-            !crate::hint::is_target_of(&button, None),
+            !crate::hint::collect::is_target_of(&button, None),
             "still out of the ordinary picker"
         );
     }

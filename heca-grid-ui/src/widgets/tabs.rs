@@ -80,7 +80,7 @@ impl Tabs {
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
         // One control = one Tab stop: focus never descends into the tabs.
         base.focus_barrier = true;
-        base.style.layout.gap = TAB_GAP;
+        base.style.layout.gap = (TAB_GAP).into();
         // Hug the tabs instead of stretching to fill a column parent (the width is `Auto`, and the
         // default cross-axis alignment is `Stretch`).
         base.style.layout.align_self = Some(Align::Start);
@@ -244,7 +244,7 @@ impl Component for Tabs {
     fn remeasure(&mut self) {
         self.base.style.layout.width = Length::Auto;
         self.base.style.layout.height = Length::Auto;
-        self.base.style.layout.gap = TAB_GAP * self.base.size_scale();
+        self.base.style.layout.gap = (TAB_GAP * self.base.size_scale()).into();
         let band = (UNDERLINE_H as f32 + UNDERLINE_GAP) * self.base.size_scale();
         for child in self.base.children.iter_mut() {
             child.base_mut().style.layout.margin_bottom = Some(band.into());
@@ -266,7 +266,7 @@ impl Component for Tabs {
         let disabled = self.base.disabled.get_untracked();
         let (accent, glow_c) = {
             let t = cx.theme();
-            (t.colors.accent, t.colors.glow)
+            (cx.accent(), t.colors.glow)
         };
         let b = self.base.bounds;
 

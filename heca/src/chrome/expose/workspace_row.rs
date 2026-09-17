@@ -14,7 +14,7 @@
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::builders::{LayoutExt, Parent};
-use heca_grid_ui::style::{Align, Justify, Length};
+use heca_grid_ui::style::Length;
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Flex, GridCell};
 
@@ -152,7 +152,10 @@ impl WorkspaceRow<'_> {
         // The row's whole allotment. The strip is centred in it on both axes: horizontally so a
         // workspace narrower than the widest sits in the middle rather than against the edge,
         // vertically so the air it reserved splits evenly above and below.
-        let row = Flex::row().justify(Justify::Center).align(Align::Center).child(strip);
+        let row = Flex::row()
+            .justify("center")
+            .align("center")
+            .child(strip);
         (row, columns_of_cells)
     }
 }
@@ -166,7 +169,13 @@ mod tests {
     use heca_core::layout::PaneId;
 
     fn pane(id: u64, h: f64) -> ExposePane {
-        ExposePane { pane_id: PaneId(id), name: format!("p{id}"), folder: None, active: false, height: h }
+        ExposePane {
+            pane_id: PaneId(id),
+            name: format!("p{id}"),
+            folder: None,
+            active: false,
+            height: h,
+        }
     }
 
     fn workspace(widths: &[f64], floats: Vec<ExposeFloating>) -> ExposeWorkspace {
@@ -206,11 +215,7 @@ mod tests {
             cb: &cb,
         }
         .build();
-        lay_out(
-            row.width(Length::Percent(1.0)).height(Length::Percent(1.0)),
-            w,
-            h,
-        )
+        lay_out(row.width(Length::FULL).height(Length::FULL), w, h)
     }
 
     /// **A column takes the share of the row its real width is worth** — measured against the
@@ -243,7 +248,10 @@ mod tests {
         let root = row(&ws, 1600.0, 1600.0, 600.0);
         let card = card_of(root.as_ref(), &pane_key(PaneId(1))).expect("the only card");
         let mid = card.loc.x + card.size.w / 2.0;
-        assert!((mid - 800.0).abs() < 4.0, "centred across a 1600 map, got {mid}: {card:?}");
+        assert!(
+            (mid - 800.0).abs() < 4.0,
+            "centred across a 1600 map, got {mid}: {card:?}"
+        );
     }
 
     /// **A float lands at its own fraction of the row** — across the strip, and down the screen.
@@ -318,7 +326,10 @@ mod tests {
                 && (before.size.h - after.size.h).abs() < 1.0,
             "a float displaces nothing: {before:?} vs {after:?}",
         );
-        assert!(after.size.h > 100.0, "and the tiled card keeps its height: {after:?}");
+        assert!(
+            after.size.h > 100.0,
+            "and the tiled card keeps its height: {after:?}"
+        );
     }
 
     /// A float reaching past the end of the strip still has to fit: it widens the row's extent, so
@@ -338,7 +349,11 @@ mod tests {
                 h: 300.0,
             }],
         );
-        assert_eq!(extent(&ws), 800.0, "the float reaches to 800, past the 400-wide strip");
+        assert_eq!(
+            extent(&ws),
+            800.0,
+            "the float reaches to 800, past the 400-wide strip"
+        );
         let root = row(&ws, 800.0, 800.0, 600.0);
         let f = card_of(root.as_ref(), &pane_key(PaneId(9))).expect("the float");
         assert!(
@@ -380,3 +395,4 @@ mod tests {
         );
     }
 }
+

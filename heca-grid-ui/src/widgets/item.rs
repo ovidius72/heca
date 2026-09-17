@@ -104,8 +104,8 @@ impl Item {
         base.style.layout.direction = Direction::Row;
         base.style.layout.justify = Justify::Start; // the growing label pushes the trailing slot right
         base.style.layout.align = Align::Center; // center slots vertically (kbd hint, dot)
-        base.style.layout.padding = PAD_H as f32;
-        base.style.layout.gap = GAP as f32;
+        base.style.layout.padding = (PAD_H as f32).into();
+        base.style.layout.gap = (GAP as f32).into();
         base.style.layout.height = Length::Px(ROW_H);
         // One control = one Tab stop: focus never descends into the composed content.
         base.focus_barrier = true;
@@ -258,7 +258,7 @@ impl Component for Item {
         let (accent, glow_c, foreground, muted_c, border_c, ctrl_radius, bw) = {
             let t = cx.theme();
             (
-                t.colors.accent,
+                cx.accent(),
                 t.colors.glow,
                 t.colors.foreground,
                 t.colors.muted,

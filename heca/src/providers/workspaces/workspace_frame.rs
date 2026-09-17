@@ -15,7 +15,6 @@ use super::{
     ChromeDragItem, WorkspaceEntry, MENU_WORKSPACE,
 };
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
-use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, HintTone};
 
 /// A `.frameless(true)` [`DockFrame`] whose header carries the workspace's total pane count, and
@@ -71,9 +70,9 @@ impl WorkspaceFrame<'_> {
             })
             .header(
                 Flex::row()
-                    .align(Align::Center)
+                    .align("center")
                     .child(badge)
-                    .child(Flex::row().width(Length::Px(6.0))),
+                    .child(Flex::row().width(6.0)),
             );
         // Light accent wash over the whole active workspace area (+ the accent count badge).
         // Signal-driven like every other state here, so it flips in place via

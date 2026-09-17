@@ -42,11 +42,16 @@ use std::rc::Rc;
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::widgets::{CardGrid, ContextMenu, GridCell, Menu, MenuItem};
-use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, KeyHintGroup, Label, LayoutExt, MarkerGroup, Overlay, Panel, PropInput, RailCell, Row as GridRow, NfGlyph, NfIcon, ProgressBar, ScrollRegion, Select, Separator, SetProp, SignalData, Spinner, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastPosition, ToastSeverity, Toggle, Track, WidgetSize};
-
-use heca_view::{
-    Intent, PropMap, PropValue, ViewNode, ViewSize, ViewVariant, WidgetKind,
+use heca_grid_ui::{
+    Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component,
+    DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, KeyHintGroup,
+    Label, LayoutExt, MarkerGroup, NfGlyph, NfIcon, Overlay, Panel, ProgressBar, PropInput,
+    RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, Spinner,
+    StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastPosition, ToastSeverity, Toggle, Track,
+    WidgetSize,
 };
+
+use heca_view::{Intent, PropMap, PropValue, ViewNode, ViewSize, ViewVariant, WidgetKind};
 
 /// Where a realized tree's intents go: a widget fires the node's own [`Intent`], and the host
 /// wraps it in whatever it dispatches (the app wraps it as `InteractionIntent::View`).
@@ -354,10 +359,13 @@ pub fn realize(
         }
         let emit = emit.clone();
         let run = carrier.clone();
-        realized.base_mut().actions.push(heca_grid_ui::DeclaredAction {
-            name: name.clone(),
-            run: Box::new(move || emit(run.clone())),
-        });
+        realized
+            .base_mut()
+            .actions
+            .push(heca_grid_ui::DeclaredAction {
+                name: name.clone(),
+                run: Box::new(move || emit(run.clone())),
+            });
     }
     realized
 }
@@ -377,6 +385,26 @@ pub fn realize(
 /// Total for untrusted input, as the rest of `realize` is: an unknown key is skipped, and a value
 /// that does not fit its field is dropped *individually* — one bad property never discards the
 /// good ones and never panics.
+/// **A property name a description may still be written with.**
+///
+/// The described vocabulary IS the layout field list — there is no table of allowed names, which
+/// is what lets a new layout setting reach plugins with nothing to update (`plugins.md` §8). The
+/// cost of that is a *renamed* field: the old spelling stops naming anything and is dropped in
+/// silence. Spacing was written as two settings — a px `gap` beside a `gap_spacing` step — and is
+/// now one that takes either, so the retired names are mapped onto the surviving one here rather
+/// than left to fail quietly.
+///
+/// This is the whole list, and it should stay short: renaming a layout field is a wire break, and
+/// the alternative to this map is telling every plugin author to rewrite their tree.
+fn retired_name(key: &str) -> String {
+    match key {
+        "gap_spacing" => "gap".to_string(),
+        "pad_spacing_x" => "padding_x".to_string(),
+        "pad_spacing_y" => "padding_y".to_string(),
+        other => other.to_string(),
+    }
+}
+
 fn merge_style_half<T>(node: &ViewNode, theme: &Theme, current: T) -> Option<T>
 where
     T: serde::Serialize + serde::de::DeserializeOwned,
@@ -389,9 +417,10 @@ where
     };
     // Only keys that name a real field of this half; `current` IS that field list, derived not
     // written. A key that names neither half's field is simply not a style property.
-    let incoming: Vec<(&String, serde_json::Value)> = node
+    let incoming: Vec<(String, serde_json::Value)> = node
         .props
         .iter()
+        .map(|(key, value)| (retired_name(key), value))
         .filter(|(key, _)| current.contains_key(key.as_str()))
         .filter_map(|(key, value)| prop_to_json(value, theme).map(|v| (key, v)))
         .collect();
@@ -401,7 +430,7 @@ where
 
     let mut merged = current.clone();
     for (key, value) in &incoming {
-        merged.insert((*key).clone(), value.clone());
+        merged.insert(key.clone(), value.clone());
     }
     // Fast path: everything fits. Otherwise fall back to applying one key at a time so a single
     // bad value costs only itself.
@@ -442,7 +471,10 @@ fn prop_to_json(value: &PropValue, theme: &Theme) -> Option<serde_json::Value> {
         PropValue::Variant(v) => serde_json::to_value(v).ok()?,
         PropValue::Align(a) => serde_json::to_value(a).ok()?,
         PropValue::List(items) => serde_json::Value::Array(
-            items.iter().filter_map(|i| prop_to_json(i, theme)).collect(),
+            items
+                .iter()
+                .filter_map(|i| prop_to_json(i, theme))
+                .collect(),
         ),
         // A struct-shaped property (`border`, `glow`) — handed to the field's own deserializer as
         // an object. Recursive, so a colour nested inside is a theme token like any other and is
@@ -458,7 +490,6 @@ fn prop_to_json(value: &PropValue, theme: &Theme) -> Option<serde_json::Value> {
         ),
     })
 }
-
 
 /// A colour property as the hex string `Color`'s own deserializer accepts.
 ///
@@ -602,9 +633,7 @@ fn realize_kind(
         WidgetKind::Card => {
             attach_children(Box::new(Card::new(text_of(node))), node, theme, emit, forms)
         }
-        WidgetKind::Surface => {
-            attach_children(Box::new(Surface::new()), node, theme, emit, forms)
-        }
+        WidgetKind::Surface => attach_children(Box::new(Surface::new()), node, theme, emit, forms),
         // `Panel` used to be an alias for `Surface`, which is why the published examples showed
         // `Panel::new().title(..)` against a widget that had no title (F003/P017/T008). It is its
         // own widget now; `text` is the heading, as it is for `Card` and `DockFrame`.
@@ -670,9 +699,7 @@ fn realize_kind(
         // `orientation` and `length` both arrive through the generated surface, and the widget
         // recomputes both axes from the pair, so neither has to come first.
         WidgetKind::Separator => Box::new(with_props(Separator::horizontal(), node, theme)),
-        WidgetKind::Gauge => {
-            Box::new(with_props(Gauge::new(), node, theme))
-        }
+        WidgetKind::Gauge => Box::new(with_props(Gauge::new(), node, theme)),
         // **Nobody knows how long** — no properties of its own: it animates off the frame clock,
         // and its diameter is `width`/`height`, which the generic style merge already carries.
         WidgetKind::Spinner => Box::new(Spinner::new()),
@@ -718,7 +745,10 @@ fn realize_kind(
             let mut input = with_props(Input::new().value(text_of(node)), node, theme);
             if let Some(name) = name_prop(node) {
                 let sig = input.text();
-                forms.bind(name.clone(), Box::new(move || PropValue::Text(sig.get_untracked())));
+                forms.bind(
+                    name.clone(),
+                    Box::new(move || PropValue::Text(sig.get_untracked())),
+                );
                 // Also expose the live signal for reactive validation (disabled submit button).
                 forms.bind_text_signal(name, sig);
             }
@@ -834,7 +864,9 @@ fn realize_kind(
                 forms.bind(
                     name,
                     Box::new(move || {
-                        PropValue::Text(values.get(idx.get_untracked()).cloned().unwrap_or_default())
+                        PropValue::Text(
+                            values.get(idx.get_untracked()).cloned().unwrap_or_default(),
+                        )
                     }),
                 );
             }
@@ -991,7 +1023,10 @@ fn attach_children(
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
     for child in &node.children {
-        container.base_mut().children.push(realize(child, theme, emit, forms));
+        container
+            .base_mut()
+            .children
+            .push(realize(child, theme, emit, forms));
     }
     container
 }
@@ -1010,7 +1045,9 @@ fn press_intent(node: &ViewNode) -> Option<Intent> {
 /// events: heca's own sidebar row activates the pane and leaves on a click, and stays in the
 /// sidebar on a hint pick. Pointing one intent at both is what made `prefix+/` leave the sidebar.
 fn hint_intent(node: &ViewNode) -> Option<Intent> {
-    node.intent("hint").or_else(|| node.intent("press")).cloned()
+    node.intent("hint")
+        .or_else(|| node.intent("press"))
+        .cloned()
 }
 
 /// The node's `"change"` intent as a carrier (value widgets — input/toggle/checkbox). Not a pick
@@ -1034,7 +1071,9 @@ fn realize_flex(
     for child in &node.children {
         // `child()` takes an `impl Component` and boxes it; a `Box<dyn Component>` isn't
         // `Component`, so push the already-boxed child directly.
-        flex.base_mut().children.push(realize(child, theme, emit, forms));
+        flex.base_mut()
+            .children
+            .push(realize(child, theme, emit, forms));
     }
     Box::new(flex)
 }
@@ -1285,9 +1324,8 @@ fn realize_card_grid(
     }
     if let Some(intent) = node.events.get("move") {
         let (intent, emit) = (intent.clone(), emit.clone());
-        grid = grid.on_move(move |key| {
-            emit(intent.clone().arg("key", PropValue::Text(key.to_string())))
-        });
+        grid = grid
+            .on_move(move |key| emit(intent.clone().arg("key", PropValue::Text(key.to_string()))));
     }
     if let Some(intent) = node.events.get("dismiss") {
         let (intent, emit) = (intent.clone(), emit.clone());
@@ -1304,37 +1342,36 @@ fn realize_grid(
 ) -> Box<dyn Component> {
     let mut grid = Grid::new();
     if let Some(columns) = track_list(node, "columns") {
-        grid = grid.columns(columns);
+        grid = grid.template_column(columns);
     }
     if let Some(rows) = track_list(node, "rows") {
-        grid = grid.rows(rows);
+        grid = grid.template_row(rows);
     }
     // Areas must be defined before a child can be placed into one by name.
     if let Some(areas) = string_list(node, "areas") {
-        grid = grid.areas(areas.iter().map(String::as_str));
+        grid = grid.template_area(areas);
     }
     // How the items sit inside their cells — `align` vertically, `justify_items` horizontally —
     // arrives through the generic layout merge in `realize`, like every other layout property.
     // Both default to `Stretch`, which pins an explicitly-sized item to the top-left of its cell,
     // so a row of mixed-height content needs `align: center` to share a centre line.
+    // **A described child places itself, exactly as a native one does.** `area`, `col`/`row` and
+    // the spans are properties of the CHILD — CSS's `grid-area` and `grid-column`/`grid-row` — so
+    // the grid only holds them. A name is resolved during layout, against whichever template ends
+    // up holding the child.
     for child in &node.children {
-        let realized = realize(child, theme, emit, forms);
-        match child.props.get("area").and_then(PropValue::as_text) {
-            Some(area) => grid = grid.area(realized, area),
-            None => match (usize_prop(child, "col"), usize_prop(child, "row")) {
-                (Some(col), Some(row)) => {
-                    grid = grid.cell(
-                        realized,
-                        col as u16,
-                        row as u16,
-                        usize_prop(child, "col_span").unwrap_or(1) as u16,
-                        usize_prop(child, "row_span").unwrap_or(1) as u16,
-                    )
-                }
-                // Neither an area nor a cell: let the grid auto-place it.
-                _ => grid.base_mut().children.push(realized),
-            },
+        let mut realized = realize(child, theme, emit, forms);
+        if let Some(area) = child.props.get("area").and_then(PropValue::as_text) {
+            realized.base_mut().grid_area = Some(area.to_string());
+        } else if let (Some(col), Some(row)) = (usize_prop(child, "col"), usize_prop(child, "row")) {
+            realized.base_mut().style.layout.grid_cell = Some(heca_grid_ui::style::GridCell {
+                col: col as u16,
+                row: row as u16,
+                col_span: usize_prop(child, "col_span").unwrap_or(1) as u16,
+                row_span: usize_prop(child, "row_span").unwrap_or(1) as u16,
+            });
         }
+        grid.base_mut().children.push(realized);
     }
     Box::new(grid)
 }
@@ -1361,35 +1398,24 @@ fn string_list(node: &ViewNode, key: &str) -> Option<Vec<String>> {
     )
 }
 
-/// Parse one CSS-like grid track: `"22px"` (or a bare `Int`/`Float` — pixels) · `"1fr"` · `"auto"` ·
-/// `"min"`/`"min-content"` · `"max"`/`"max-content"`.
+/// Read one grid track from a described value — **through [`Track`]'s own parser**, never a second
+/// copy of it.
+///
+/// A string goes to [`Track::from_str`](std::str::FromStr::from_str) and a bare number is pixels.
+/// This function used to hold the whole vocabulary itself, which meant native Rust could not reach
+/// any of it: a plugin wrote `"1fr"` while a `Grid` in the app had to write `Track::Fr(1.0)` by
+/// hand, one variant per track. The parser lives on the type now, so both sides read the same word
+/// the same way.
 ///
 /// **Anything unrecognised degrades to [`Track::Auto`]** — never a panic, never an error. The model
 /// is untrusted input (a plugin, an RPC caller), so a typo costs that author a differently-sized
 /// track, not a broken host.
 fn parse_track(value: &PropValue) -> Track {
-    let text = match value {
-        PropValue::Text(s) => s.trim().to_ascii_lowercase(),
-        // A bare number is pixels, the same forgiving reading the size parser gives config.
-        PropValue::Int(i) => return Track::Px(*i as f32),
-        PropValue::Float(f) => return Track::Px(*f as f32),
-        _ => return Track::Auto,
-    };
-    match text.as_str() {
-        "auto" => Track::Auto,
-        "min" | "min-content" => Track::MinContent,
-        "max" | "max-content" => Track::MaxContent,
-        _ => {
-            if let Some(px) = text.strip_suffix("px").and_then(|n| n.trim().parse().ok()) {
-                Track::Px(px)
-            } else if let Some(fr) = text.strip_suffix("fr").and_then(|n| n.trim().parse().ok()) {
-                Track::Fr(fr)
-            } else if let Ok(px) = text.parse() {
-                Track::Px(px)
-            } else {
-                Track::Auto
-            }
-        }
+    match value {
+        PropValue::Text(s) => Track::from(s.as_str()),
+        PropValue::Int(i) => Track::Px(*i as f32),
+        PropValue::Float(f) => Track::Px(*f as f32),
+        _ => Track::Auto,
     }
 }
 
@@ -1614,10 +1640,10 @@ mod tests {
     use super::*;
     // The fixed value sets are used by the tests, not by the mapper: a widget's own enum parses the
     // name, so `realize` never names these types.
+    use heca_grid_ui::{Justify, Length};
     use heca_view::{
         ViewLabelSide, ViewMarker, ViewOrientation, ViewScrollAxes, ViewSeverity, ViewTextAlign,
     };
-    use heca_grid_ui::{Justify, Length};
     use std::rc::Rc;
 
     /// **What the framework's picker will find in a realized tree**, in document order: one path
@@ -1648,7 +1674,10 @@ mod tests {
             .child(ViewNode::new(WidgetKind::Label).text("MAP"));
         let mut surface = realize(&node, &theme, &emit, &mut forms);
 
-        assert!(surface.presence().is_some(), "a described overlay is a surface a host can drive");
+        assert!(
+            surface.presence().is_some(),
+            "a described overlay is a surface a host can drive"
+        );
         surface.close();
         assert!(
             surface.presence().is_some_and(|p| p.is_leaving()),
@@ -1659,7 +1688,10 @@ mod tests {
             frames += 1;
         }
         assert!(frames > 1, "it played rather than cutting: {frames} frames");
-        assert!(!surface.presence().is_some_and(|p| p.is_leaving()), "and then it is gone");
+        assert!(
+            !surface.presence().is_some_and(|p| p.is_leaving()),
+            "and then it is gone"
+        );
 
         // Untrusted input stays total: an unknown name leaves the surface with its default.
         let unknown = ViewNode::new(WidgetKind::Overlay)
@@ -1668,7 +1700,10 @@ mod tests {
         let mut cut = realize(&unknown, &theme, &emit, &mut forms);
         cut.show();
         cut.close();
-        assert!(!cut.presence().is_some_and(|p| p.is_leaving()), "a cut, not a panic");
+        assert!(
+            !cut.presence().is_some_and(|p| p.is_leaving()),
+            "a cut, not a panic"
+        );
     }
 
     /// **A described surface can ask for the frost the exposé uses** — the plugin half of the
@@ -1710,8 +1745,16 @@ mod tests {
                 .count()
         };
 
-        assert_eq!(backdrops(true), 1, "the described surface asked for its blur");
-        assert_eq!(backdrops(false), 0, "and one that did not ask pays for no pass");
+        assert_eq!(
+            backdrops(true),
+            1,
+            "the described surface asked for its blur"
+        );
+        assert_eq!(
+            backdrops(false),
+            0,
+            "and one that did not ask pays for no pass"
+        );
     }
 
     /// A confirm-dialog-shaped tree: a column with a message label + a row of two action
@@ -1754,7 +1797,12 @@ mod tests {
     /// through `base_mut().children` (the `Box<dyn Component>` push path).
     #[test]
     fn realizes_nested_structure() {
-        let root = realize(&confirm_tree(), &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let root = realize(
+            &confirm_tree(),
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         assert_eq!(root.base().children.len(), 2, "column: label + row");
         let row = &root.base().children[1];
         assert_eq!(row.base().children.len(), 2, "row: two buttons");
@@ -1766,7 +1814,12 @@ mod tests {
     #[test]
     fn actionable_nodes_declare_the_hint_their_click_would_fire() {
         let (emit, fired) = recording_emitter();
-        let mut root = realize(&confirm_tree(), &Theme::default(), &emit, &mut FormBindings::default());
+        let mut root = realize(
+            &confirm_tree(),
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         let found = hints(root.as_ref());
         assert_eq!(
             found.len(),
@@ -1791,10 +1844,19 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Row)
             .on_press(Intent::new("activate_and_leave"))
             .on_hint(Intent::new("hint_and_stay"));
-        let mut row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let mut row = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         assert!(heca_grid_ui::fire_hint(row.as_mut(), &[]));
         assert_eq!(
-            fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
+            fired
+                .borrow()
+                .iter()
+                .map(|i| i.action.clone())
+                .collect::<Vec<_>>(),
             vec!["hint_and_stay"],
         );
     }
@@ -1821,15 +1883,28 @@ mod tests {
                     .child(ViewNode::new(WidgetKind::Label).text("Ctrl+D")),
             );
 
-        let button = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let button = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         let column = &button.base().children;
         assert_eq!(column.len(), 1, "the button holds its composed subtree");
         let column = &column[0].base().children;
-        assert_eq!(column.len(), 2, "column: the icon+label row, then the accelerator label");
+        assert_eq!(
+            column.len(),
+            2,
+            "column: the icon+label row, then the accelerator label"
+        );
         assert_eq!(column[0].base().children.len(), 2, "row: icon + label");
 
         // The button is still one pick target, whatever it composes.
-        assert_eq!(hints(button.as_ref()), vec![Vec::<usize>::new()], "the button, not its content");
+        assert_eq!(
+            hints(button.as_ref()),
+            vec![Vec::<usize>::new()],
+            "the button, not its content"
+        );
     }
 
     /// A **childless** Button node falls back to the scalar sugar — `text` (+ an optional leading
@@ -1840,7 +1915,12 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Button)
             .text("Delete")
             .prop("icon", PropValue::Glyph("trash".into()));
-        let button = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let button = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         assert_eq!(
             button.base().children.len(),
             2,
@@ -1865,7 +1945,10 @@ mod tests {
             &mut FormBindings::default(),
         );
         let visual = w.base().style.visual;
-        assert_eq!(visual.fill, Some(heca_grid_ui::Color::rgb(0xff, 0x88, 0x00)));
+        assert_eq!(
+            visual.fill,
+            Some(heca_grid_ui::Color::rgb(0xff, 0x88, 0x00))
+        );
         assert_eq!(visual.radius, 12.0);
         assert_eq!(visual.font_size, 18.0);
     }
@@ -1908,23 +1991,20 @@ mod tests {
         light.colors.accent = heca_grid_ui::Color::rgb(0xee, 0xdd, 0xcc);
 
         let fill_of = |node: &ViewNode, theme: &Theme| {
-            realize(
-                node,
-                theme,
-                &noop_emitter(),
-                &mut FormBindings::default(),
-            )
-            .base()
-            .style
-            .visual
-            .fill
+            realize(node, theme, &noop_emitter(), &mut FormBindings::default())
+                .base()
+                .style
+                .visual
+                .fill
         };
 
-        let token = ViewNode::new(WidgetKind::Surface).prop("fill", PropValue::Color("accent".into()));
+        let token =
+            ViewNode::new(WidgetKind::Surface).prop("fill", PropValue::Color("accent".into()));
         assert_eq!(fill_of(&token, &dark), Some(dark.colors.accent));
         assert_eq!(fill_of(&token, &light), Some(light.colors.accent));
 
-        let hex = ViewNode::new(WidgetKind::Surface).prop("fill", PropValue::Color("#ff0000".into()));
+        let hex =
+            ViewNode::new(WidgetKind::Surface).prop("fill", PropValue::Color("#ff0000".into()));
         let literal = Some(heca_grid_ui::Color::rgb(0xff, 0, 0));
         assert_eq!(fill_of(&hex, &dark), literal);
         assert_eq!(fill_of(&hex, &light), literal, "a literal is not a token");
@@ -1935,15 +2015,29 @@ mod tests {
     #[test]
     fn the_token_vocabulary_is_the_themes_own_fields() {
         let theme = Theme::default();
-        for token in ["accent", "foreground", "muted", "border", "danger", "warning", "success"] {
+        for token in [
+            "accent",
+            "foreground",
+            "muted",
+            "border",
+            "danger",
+            "warning",
+            "success",
+        ] {
             assert!(
                 resolve_color(token, &theme).is_some(),
                 "{token} is a theme colour and should resolve",
             );
         }
-        assert!(resolve_color("chartreuse", &theme).is_none(), "not a theme colour");
+        assert!(
+            resolve_color("chartreuse", &theme).is_none(),
+            "not a theme colour"
+        );
         // A non-colour theme field cannot be named by accident.
-        assert!(resolve_color("name", &theme).is_none(), "the theme's NAME is not a colour");
+        assert!(
+            resolve_color("name", &theme).is_none(),
+            "the theme's NAME is not a colour"
+        );
     }
 
     /// A token reaches a **widget's own colour builder**, not just `Visual`.
@@ -1958,14 +2052,9 @@ mod tests {
         theme.colors.danger = heca_grid_ui::Color::rgb(0xc0, 0x10, 0x20);
 
         let painted = |node: &ViewNode, theme: &Theme| {
-            use heca_grid_ui::{LayoutEngine, PaintCx, Scene};
             use heca_core::layout::Size;
-            let mut w = realize(
-                node,
-                theme,
-                &noop_emitter(),
-                &mut FormBindings::default(),
-            );
+            use heca_grid_ui::{LayoutEngine, PaintCx, Scene};
+            let mut w = realize(node, theme, &noop_emitter(), &mut FormBindings::default());
             LayoutEngine::new().compute(w.as_mut(), Size::new(300.0, 40.0));
             let mut scene = Scene::new();
             {
@@ -2026,10 +2115,20 @@ mod tests {
             &noop_emitter(),
             &mut FormBindings::default(),
         );
-        let border = w.base().style.visual.border.expect("a described border reaches the widget");
+        let border = w
+            .base()
+            .style
+            .visual
+            .border
+            .expect("a described border reaches the widget");
         assert_eq!(border.width, 2.0);
         assert_eq!(border.color, heca_grid_ui::Color::rgb(0xff, 0x88, 0x00));
-        let glow = w.base().style.visual.glow.expect("a described glow reaches the widget");
+        let glow = w
+            .base()
+            .style
+            .visual
+            .glow
+            .expect("a described glow reaches the widget");
         assert_eq!(glow.radius, 12.0);
         assert_eq!(glow.intensity, 0.4);
         assert_eq!(glow.color, heca_grid_ui::Color::rgb(0x00, 0xcc, 0xff));
@@ -2130,45 +2229,31 @@ mod tests {
         const NOT_IN_SDK: &[(&str, &str, &str)] = &[
             (
                 "Button",
+                "accent",
+                "on Style already — the accent is a style property every kind carries, and it \
+                 reaches the subtree too, so a per-kind copy would be a second way to say it",
+            ),
+            (
+                "IconButton",
+                "accent",
+                "on Style already — see Button::accent",
+            ),
+            (
+                "Button",
                 "font_size",
                 "on Style already — every kind takes font_size, so a per-kind copy would be a \
                  second way to say the same thing",
             ),
-            (
-                "Input",
-                "font_size",
-                "on Style already",
-            ),
-            (
-                "Select",
-                "font_size",
-                "on Style already",
-            ),
-            (
-                "Tabs",
-                "font_size",
-                "on Style already",
-            ),
-            (
-                "Item",
-                "font_size",
-                "on Style already",
-            ),
-            (
-                "Label",
-                "font_size",
-                "on Style already",
-            ),
-            (
-                "Label",
-                "font_scale",
-                "on Style already",
-            ),
+            ("Input", "font_size", "on Style already"),
+            ("Select", "font_size", "on Style already"),
+            ("Tabs", "font_size", "on Style already"),
+            ("Item", "font_size", "on Style already"),
+            ("Label", "font_size", "on Style already"),
+            ("Label", "font_scale", "on Style already"),
         ];
 
         let sdk = std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../heca-view/src/build.rs"),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../heca-view/src/build.rs"),
         )
         .expect("the SDK source is where it is expected");
 
@@ -2194,7 +2279,7 @@ mod tests {
                 }
                 // A setter reaches the property if it writes that key, whatever the method is
                 // called: `Button::glowing` sets "glow", because `glow` on Style means the halo.
-                let writes_key = block.contains(&format!("self.prop(\"{prop}\"")) 
+                let writes_key = block.contains(&format!("self.prop(\"{prop}\""))
                     || block.contains(&format!("props.insert(\"{prop}\""));
                 if !writes_key {
                     missing.push(format!("{widget}::{prop} (builder {sdk_name})"));
@@ -2204,25 +2289,45 @@ mod tests {
 
         check("Alert", <Alert as SetProp>::PROP_NAMES, "Alert");
         check("Badge", <Badge as SetProp>::PROP_NAMES, "Badge");
-        check("BadgeButton", <BadgeButton as SetProp>::PROP_NAMES, "BadgeButton");
+        check(
+            "BadgeButton",
+            <BadgeButton as SetProp>::PROP_NAMES,
+            "BadgeButton",
+        );
         check("Button", <Button as SetProp>::PROP_NAMES, "Button");
         check("Checkbox", <Checkbox as SetProp>::PROP_NAMES, "Checkbox");
         check("Choice", <Choice as SetProp>::PROP_NAMES, "Choice");
         check("DockFrame", <DockFrame as SetProp>::PROP_NAMES, "DockFrame");
         check("Gauge", <Gauge as SetProp>::PROP_NAMES, "Gauge");
         check("Icon", <Icon as SetProp>::PROP_NAMES, "Icon");
-        check("IconButton", <IconButton as SetProp>::PROP_NAMES, "IconButton");
+        check(
+            "IconButton",
+            <IconButton as SetProp>::PROP_NAMES,
+            "IconButton",
+        );
         check("Input", <Input as SetProp>::PROP_NAMES, "Input");
         check("Item", <Item as SetProp>::PROP_NAMES, "Item");
         check("ItemGroup", <ItemGroup as SetProp>::PROP_NAMES, "ItemGroup");
-        check("KeyHintGroup", <KeyHintGroup as SetProp>::PROP_NAMES, "KeyHintGroup");
+        check(
+            "KeyHintGroup",
+            <KeyHintGroup as SetProp>::PROP_NAMES,
+            "KeyHintGroup",
+        );
         check("Label", <Label as SetProp>::PROP_NAMES, "Label");
-        check("MarkerGroup", <MarkerGroup as SetProp>::PROP_NAMES, "MarkerGroup");
+        check(
+            "MarkerGroup",
+            <MarkerGroup as SetProp>::PROP_NAMES,
+            "MarkerGroup",
+        );
         check("Overlay", <Overlay as SetProp>::PROP_NAMES, "Overlay");
         check("Panel", <Panel as SetProp>::PROP_NAMES, "Panel");
         check("RailCell", <RailCell as SetProp>::PROP_NAMES, "RailCell");
         check("Row", <GridRow as SetProp>::PROP_NAMES, "Row");
-        check("ScrollRegion", <ScrollRegion as SetProp>::PROP_NAMES, "Scroll");
+        check(
+            "ScrollRegion",
+            <ScrollRegion as SetProp>::PROP_NAMES,
+            "Scroll",
+        );
         check("Select", <Select as SetProp>::PROP_NAMES, "Select");
         check("Separator", <Separator as SetProp>::PROP_NAMES, "Separator");
         check("Tabs", <Tabs as SetProp>::PROP_NAMES, "Tabs");
@@ -2500,7 +2605,11 @@ mod tests {
                     .child(ViewNode::new(WidgetKind::Label).text("x")),
             )
         };
-        assert_ne!(row(ViewMarker::Check), row(ViewMarker::Bar), "marker reached the row");
+        assert_ne!(
+            row(ViewMarker::Check),
+            row(ViewMarker::Bar),
+            "marker reached the row"
+        );
 
         let label = |a: ViewTextAlign| {
             painted(
@@ -2553,7 +2662,6 @@ mod tests {
         );
     }
 
-
     /// A theme token **nested inside** an object is still a token.
     ///
     /// This is the part that had to be got right: resolution happens per value, at any depth, so a
@@ -2569,26 +2677,29 @@ mod tests {
                     ("width".into(), PropValue::Float(1.0)),
                 ])),
             );
-            realize(
-                &node,
-                theme,
-                &noop_emitter(),
-                &mut FormBindings::default(),
-            )
-            .base()
-            .style
-            .visual
-            .border
-            .expect("the token resolved")
-            .color
+            realize(&node, theme, &noop_emitter(), &mut FormBindings::default())
+                .base()
+                .style
+                .visual
+                .border
+                .expect("the token resolved")
+                .color
         };
 
         let theme = Theme::default();
-        assert_eq!(bordered(&theme), theme.colors.accent, "the token is the theme's accent");
+        assert_eq!(
+            bordered(&theme),
+            theme.colors.accent,
+            "the token is the theme's accent"
+        );
 
         let mut other = Theme::default();
         other.colors.accent = heca_grid_ui::Color::rgb(0x10, 0xc0, 0x20);
-        assert_eq!(bordered(&other), other.colors.accent, "and it follows the theme");
+        assert_eq!(
+            bordered(&other),
+            other.colors.accent,
+            "and it follows the theme"
+        );
     }
 
     /// A malformed member costs only itself, at depth too.
@@ -2612,7 +2723,11 @@ mod tests {
             &noop_emitter(),
             &mut FormBindings::default(),
         );
-        assert_eq!(w.base().style.visual.radius, 5.0, "the neighbouring property still applied");
+        assert_eq!(
+            w.base().style.visual.radius,
+            5.0,
+            "the neighbouring property still applied"
+        );
         assert!(
             w.base().style.visual.border.is_none(),
             "a border with no usable colour is dropped, not fatal",
@@ -2632,8 +2747,15 @@ mod tests {
             &noop_emitter(),
             &mut FormBindings::default(),
         );
-        assert_eq!(w.base().style.visual.radius, 7.0, "the good one still applied");
-        assert!(w.base().style.visual.fill.is_none(), "the bad one was dropped, not fatal");
+        assert_eq!(
+            w.base().style.visual.radius,
+            7.0,
+            "the good one still applied"
+        );
+        assert!(
+            w.base().style.visual.fill.is_none(),
+            "the bad one was dropped, not fatal"
+        );
     }
 
     /// **A described key lands in the very slot a native `.key(..)` writes.** That is the whole of
@@ -2647,7 +2769,12 @@ mod tests {
             .key("pane:7")
             .on_press(Intent::new("focus_pane"));
 
-        let row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let row = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         assert_eq!(row.base().key.as_deref(), Some("pane:7"));
     }
 
@@ -2665,8 +2792,17 @@ mod tests {
             WidgetKind::VStack,
         ] {
             let node = ViewNode::new(kind).key("k");
-            let w = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
-            assert_eq!(w.base().key.as_deref(), Some("k"), "{kind:?} dropped its key");
+            let w = realize(
+                &node,
+                &Theme::default(),
+                &emit,
+                &mut FormBindings::default(),
+            );
+            assert_eq!(
+                w.base().key.as_deref(),
+                Some("k"),
+                "{kind:?} dropped its key"
+            );
         }
     }
 
@@ -2676,7 +2812,12 @@ mod tests {
     fn a_node_with_no_key_declares_none() {
         let emit: IntentEmitter = Rc::new(|_| {});
         let node = ViewNode::new(WidgetKind::Row).on_press(Intent::new("focus_pane"));
-        let row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let row = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         assert_eq!(row.base().key, None);
     }
 
@@ -2690,7 +2831,12 @@ mod tests {
             .prop("hintable", PropValue::Bool(false))
             .on_press(Intent::new("close"));
 
-        let w = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         assert!(!w.base().hintable);
         assert!(
             realize(
@@ -2714,8 +2860,8 @@ mod tests {
     /// `docs/chrome-and-ui.md` shipped an example that assumed otherwise.
     #[test]
     fn a_described_row_is_clickable_and_keyboard_activatable() {
-        use heca_grid_ui::{Event, GridKey, LayoutEngine};
         use heca_core::layout::{Point, Size};
+        use heca_grid_ui::{Event, GridKey, LayoutEngine};
         use std::cell::RefCell;
 
         let fired: Rc<RefCell<Vec<Intent>>> = Rc::new(RefCell::new(Vec::new()));
@@ -2728,27 +2874,56 @@ mod tests {
             .child(ViewNode::new(WidgetKind::Label).text("nginx"))
             .child(ViewNode::new(WidgetKind::Badge).text("UP"));
 
-        let mut row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let mut row = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         LayoutEngine::new().compute(row.as_mut(), Size::new(400.0, 40.0));
 
-        assert_eq!(row.base().children.len(), 2, "it holds its composed content");
+        assert_eq!(
+            row.base().children.len(),
+            2,
+            "it holds its composed content"
+        );
         assert!(row.base().focusable, "an actionable row is focusable");
-        assert_eq!(hints(row.as_ref()), vec![Vec::<usize>::new()], "one pick target: the row itself");
+        assert_eq!(
+            hints(row.as_ref()),
+            vec![Vec::<usize>::new()],
+            "one pick target: the row itself"
+        );
 
         let b = row.base().bounds;
         // A click is a press and the release that completes it — pressing and dragging off the row
         // cancels, the way every other control behaves.
         let at = Point::new(b.loc.x + 5.0, b.loc.y + b.size.h / 2.0);
-        heca_grid_ui::dispatch(row.as_mut(), &Event::pointer_pressed(at, heca_grid_ui::PointerButton::Left));
-        heca_grid_ui::dispatch(row.as_mut(), &Event::pointer_released(at, heca_grid_ui::PointerButton::Left));
+        heca_grid_ui::dispatch(
+            row.as_mut(),
+            &Event::pointer_pressed(at, heca_grid_ui::PointerButton::Left),
+        );
+        heca_grid_ui::dispatch(
+            row.as_mut(),
+            &Event::pointer_released(at, heca_grid_ui::PointerButton::Left),
+        );
         // A raw key reaches only the widget that owns the keyboard — a real surface focuses the row
         // before sending one, and an unfocused row taking Enter is what let a card eat the key
         // meant for the list around it.
         heca_grid_ui::reactive::SignalUpdate::set(&row.base_mut().focused, true);
-        heca_grid_ui::dispatch(row.as_mut(), &Event::Key { key: GridKey::Enter, pressed: true });
+        heca_grid_ui::dispatch(
+            row.as_mut(),
+            &Event::Key {
+                key: GridKey::Enter,
+                pressed: true,
+            },
+        );
 
         let fired = fired.borrow();
-        assert_eq!(fired.len(), 2, "a click and an Enter each fire it: {fired:?}");
+        assert_eq!(
+            fired.len(),
+            2,
+            "a click and an Enter each fire it: {fired:?}"
+        );
         for intent in fired.iter() {
             assert_eq!(intent.action, "docker.select");
             assert_eq!(intent.args.get("id"), Some(&PropValue::Text("web".into())));
@@ -2761,7 +2936,12 @@ mod tests {
     fn a_described_row_without_a_press_intent_is_inert() {
         let node = ViewNode::new(WidgetKind::Row)
             .child(ViewNode::new(WidgetKind::Label).text("just content"));
-        let row = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let row = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         assert!(!row.base().focusable);
         assert!(hints(row.as_ref()).is_empty());
         assert_eq!(row.base().children.len(), 1, "it still holds its content");
@@ -2773,9 +2953,17 @@ mod tests {
     #[test]
     fn deferred_kind_is_empty_not_panic() {
         let node = ViewNode::new(WidgetKind::Grid);
-        let realized = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let realized = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         assert_eq!(realized.base().children.len(), 0);
-        assert!(hints(realized.as_ref()).is_empty(), "an empty fallback declares no hint");
+        assert!(
+            hints(realized.as_ref()).is_empty(),
+            "an empty fallback declares no hint"
+        );
     }
 
     // ── Options (Choice / Select / Tabs) ──
@@ -2797,7 +2985,12 @@ mod tests {
             .child(option_node("low", "LOW"))
             .child(option_node("high", "HIGH"));
 
-        let select = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let select = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         let options = &select.base().children;
         assert_eq!(options.len(), 2, "one option per Choice child");
         assert_eq!(
@@ -2818,8 +3011,8 @@ mod tests {
     /// `{"value": "high"}`.
     #[test]
     fn the_change_intent_carries_the_chosen_options_value_not_its_index() {
-        use heca_grid_ui::{Event, LayoutEngine};
         use heca_core::layout::{Point, Size};
+        use heca_grid_ui::{Event, LayoutEngine};
         use std::cell::RefCell;
 
         let fired: Rc<RefCell<Vec<Intent>>> = Rc::new(RefCell::new(Vec::new()));
@@ -2830,14 +3023,31 @@ mod tests {
             .on("change", Intent::new("set_level"))
             .child(option_node("low", "LOW"))
             .child(option_node("high", "HIGH"));
-        let mut select = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let mut select = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         LayoutEngine::new().compute(select.as_mut(), Size::new(400.0, 300.0));
 
         // Open the dropdown, then click the second option where it actually is (its real bounds).
         let trigger = select.base().bounds;
-        heca_grid_ui::dispatch(select.as_mut(), &Event::pointer_pressed(Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0), heca_grid_ui::PointerButton::Left));
+        heca_grid_ui::dispatch(
+            select.as_mut(),
+            &Event::pointer_pressed(
+                Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0),
+                heca_grid_ui::PointerButton::Left,
+            ),
+        );
         let high = select.base().children[1].base().bounds;
-        heca_grid_ui::dispatch(select.as_mut(), &Event::pointer_pressed(Point::new(high.loc.x + 5.0, high.loc.y + high.size.h / 2.0), heca_grid_ui::PointerButton::Left));
+        heca_grid_ui::dispatch(
+            select.as_mut(),
+            &Event::pointer_pressed(
+                Point::new(high.loc.x + 5.0, high.loc.y + high.size.h / 2.0),
+                heca_grid_ui::PointerButton::Left,
+            ),
+        );
 
         let fired = fired.borrow();
         let [intent] = fired.as_slice() else {
@@ -2855,8 +3065,8 @@ mod tests {
     /// consumers.
     #[test]
     fn tabs_node_realizes_choice_children_and_reports_the_chosen_value() {
-        use heca_grid_ui::{Event, LayoutEngine, WidgetIntent};
         use heca_core::layout::Size;
+        use heca_grid_ui::{Event, LayoutEngine, WidgetIntent};
         use std::cell::RefCell;
 
         let fired: Rc<RefCell<Vec<Intent>>> = Rc::new(RefCell::new(Vec::new()));
@@ -2867,7 +3077,12 @@ mod tests {
             .on("change", Intent::new("show_tab"))
             .child(option_node("files", "FILES"))
             .child(option_node("issues", "ISSUES"));
-        let mut tabs = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let mut tabs = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         LayoutEngine::new().compute(tabs.as_mut(), Size::new(400.0, 100.0));
         assert_eq!(tabs.base().children.len(), 2, "one tab per Choice child");
 
@@ -2881,7 +3096,10 @@ mod tests {
             panic!("expected exactly one intent, got {fired:?}");
         };
         assert_eq!(intent.action, "show_tab");
-        assert_eq!(intent.args.get("value"), Some(&PropValue::Text("issues".into())));
+        assert_eq!(
+            intent.args.get("value"),
+            Some(&PropValue::Text("issues".into()))
+        );
     }
 
     /// A **childless** `Choice` falls back to the scalar sugar — `text` → one `Label` child, the very
@@ -2891,8 +3109,17 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Choice)
             .prop("value", PropValue::Text("high".into()))
             .text("HIGH");
-        let choice = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
-        assert_eq!(choice.base().children.len(), 1, "text desugars to a Label child");
+        let choice = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
+        assert_eq!(
+            choice.base().children.len(),
+            1,
+            "text desugars to a Label child"
+        );
         assert_eq!(choice.text_summary().as_deref(), Some("HIGH"));
     }
 
@@ -2904,7 +3131,12 @@ mod tests {
             .child(option_node("low", "LOW"))
             .child(ViewNode::new(WidgetKind::Button).text("I am not an option"))
             .child(option_node("high", "HIGH"));
-        let select = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let select = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         assert_eq!(
             select.base().children.len(),
             2,
@@ -2918,8 +3150,8 @@ mod tests {
     /// widget's own header is `children[0]`, so the rows follow it.
     #[test]
     fn item_group_node_realizes_its_header_and_rows() {
-        use heca_grid_ui::LayoutEngine;
         use heca_core::layout::Size;
+        use heca_grid_ui::LayoutEngine;
 
         let node = ViewNode::new(WidgetKind::ItemGroup)
             .text("EXPLORER")
@@ -2927,7 +3159,12 @@ mod tests {
             .child(ViewNode::new(WidgetKind::Item).text("src"))
             .child(ViewNode::new(WidgetKind::Item).text("tests"));
 
-        let mut group = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let mut group = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         // The group applies its expanded state during layout (`remeasure`), like the native widget.
         LayoutEngine::new().compute(group.as_mut(), Size::new(300.0, 200.0));
         assert_eq!(
@@ -2936,7 +3173,10 @@ mod tests {
             "the group's own header, then the two realized rows",
         );
         // Collapsed: the rows leave layout (`display: none`), the header stays.
-        assert!(!group.base().children[0].base().style.layout.hidden, "the header stays");
+        assert!(
+            !group.base().children[0].base().style.layout.hidden,
+            "the header stays"
+        );
         assert!(
             group.base().children[1..]
                 .iter()
@@ -2950,8 +3190,8 @@ mod tests {
     /// one action and learns which way it went.
     #[test]
     fn the_toggle_intent_carries_the_new_expanded_state() {
-        use heca_grid_ui::{Event, LayoutEngine};
         use heca_core::layout::{Point, Size};
+        use heca_grid_ui::{Event, LayoutEngine};
         use std::cell::RefCell;
 
         let fired: Rc<RefCell<Vec<Intent>>> = Rc::new(RefCell::new(Vec::new()));
@@ -2962,14 +3202,25 @@ mod tests {
             .text("EXPLORER")
             .on("toggle", Intent::new("fold_group"))
             .child(ViewNode::new(WidgetKind::Item).text("src"));
-        let mut group = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let mut group = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         LayoutEngine::new().compute(group.as_mut(), Size::new(300.0, 200.0));
 
         // Click the header (it starts expanded) → it collapses.
         let header = group.base().children[0].base().bounds;
         let at = Point::new(header.loc.x + 5.0, header.loc.y + header.size.h / 2.0);
-        heca_grid_ui::dispatch(group.as_mut(), &Event::pointer_pressed(at, heca_grid_ui::PointerButton::Left));
-        heca_grid_ui::dispatch(group.as_mut(), &Event::pointer_released(at, heca_grid_ui::PointerButton::Left));
+        heca_grid_ui::dispatch(
+            group.as_mut(),
+            &Event::pointer_pressed(at, heca_grid_ui::PointerButton::Left),
+        );
+        heca_grid_ui::dispatch(
+            group.as_mut(),
+            &Event::pointer_released(at, heca_grid_ui::PointerButton::Left),
+        );
 
         let fired = fired.borrow();
         let [intent] = fired.as_slice() else {
@@ -2993,9 +3244,17 @@ mod tests {
             .child(ViewNode::new(WidgetKind::Item).text("pane 1"))
             .child(ViewNode::new(WidgetKind::Item).text("pane 2"));
 
-        let markers = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let markers = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         assert_eq!(markers.base().children.len(), 2, "the two realized rows");
-        assert!(hints(markers.as_ref()).is_empty(), "an indicator is not a pick target");
+        assert!(
+            hints(markers.as_ref()).is_empty(),
+            "an indicator is not a pick target"
+        );
     }
 
     // ── Grid (tracks / areas / placement) ──
@@ -3014,7 +3273,11 @@ mod tests {
         assert_eq!(text("min-content"), Track::MinContent);
         assert_eq!(text("max"), Track::MaxContent);
         assert_eq!(text("max-content"), Track::MaxContent);
-        assert_eq!(text("  1FR  "), Track::Fr(1.0), "trimmed + case-insensitive");
+        assert_eq!(
+            text("  1FR  "),
+            Track::Fr(1.0),
+            "trimmed + case-insensitive"
+        );
         assert_eq!(text("22"), Track::Px(22.0), "a bare number is pixels");
         // Garbage of every shape.
         assert_eq!(text("minmax(1fr, 2fr)"), Track::Auto);
@@ -3033,7 +3296,10 @@ mod tests {
         };
         let node = ViewNode::new(WidgetKind::Grid)
             .prop("columns", tracks(["auto", "1fr", "auto"]))
-            .prop("rows", PropValue::List(vec![PropValue::Text("auto".into())]))
+            .prop(
+                "rows",
+                PropValue::List(vec![PropValue::Text("auto".into())]),
+            )
             .prop(
                 "areas",
                 PropValue::List(vec![
@@ -3058,19 +3324,53 @@ mod tests {
             // Neither → auto-placed.
             .child(ViewNode::new(WidgetKind::Label).text("~/proj"));
 
-        let grid = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let grid = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
+        // **A described child carries its own placement**, exactly as a native one does: the area
+        // by name, the explicit cell as numbers. The name is resolved during layout, against
+        // whichever template ends up holding it — so it is still a name here.
+        {
+            let children = &grid.base().children;
+            assert_eq!(children.len(), 3);
+            assert_eq!(
+                children[0].base().grid_area.as_deref(),
+                Some("icon"),
+                "the child names its area; the grid does not write a cell into it",
+            );
+            assert_eq!(
+                children[0].base().style.layout.grid_cell, None,
+                "and nothing is resolved before there is a layout to resolve it against",
+            );
+        }
+
+        let mut grid = grid;
+        heca_grid_ui::LayoutEngine::new()
+            .compute(grid.as_mut(), heca_grid_ui::Size::new(300.0, 200.0));
         let children = &grid.base().children;
-        assert_eq!(children.len(), 3);
 
         // The `icon` area spans both rows of column 1 (it appears twice in the template).
         assert_eq!(
             children[0].base().style.layout.grid_cell,
-            Some(heca_grid_ui::GridCell { col: 1, row: 1, col_span: 1, row_span: 2 }),
-            "placed into the named area, spanning what the template gives it",
+            Some(heca_grid_ui::GridCell {
+                col: 1,
+                row: 1,
+                col_span: 1,
+                row_span: 2
+            }),
+            "laid out, the name became the cell the template gives it",
         );
         assert_eq!(
             children[1].base().style.layout.grid_cell,
-            Some(heca_grid_ui::GridCell { col: 2, row: 1, col_span: 2, row_span: 1 }),
+            Some(heca_grid_ui::GridCell {
+                col: 2,
+                row: 1,
+                col_span: 2,
+                row_span: 1
+            }),
             "placed by explicit cell; an omitted span defaults to 1",
         );
         assert_eq!(
@@ -3098,9 +3398,18 @@ mod tests {
                     .prop("justify_self", PropValue::Align(ViewAlign::End)),
             );
 
-        let grid = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let grid = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         let style = grid.base().style.layout;
-        assert_eq!(style.align, Align::Center, "vertical: the items in their cells");
+        assert_eq!(
+            style.align,
+            Align::Center,
+            "vertical: the items in their cells"
+        );
         assert_eq!(
             style.justify_items,
             Some(Align::Center),
@@ -3115,13 +3424,21 @@ mod tests {
     #[test]
     fn grid_child_in_an_unknown_area_auto_places() {
         let node = ViewNode::new(WidgetKind::Grid)
-            .prop("areas", PropValue::List(vec![PropValue::Text("a b".into())]))
+            .prop(
+                "areas",
+                PropValue::List(vec![PropValue::Text("a b".into())]),
+            )
             .child(
                 ViewNode::new(WidgetKind::Label)
                     .text("x")
                     .prop("area", PropValue::Text("nope".into())),
             );
-        let grid = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let grid = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         assert_eq!(grid.base().children[0].base().style.layout.grid_cell, None);
     }
 
@@ -3135,11 +3452,16 @@ mod tests {
             .prop("italic", PropValue::Bool(true))
             .prop("strikethrough", PropValue::Bool(true));
 
-        let label = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let label = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         // Realize hands back a `Box<dyn Component>`, so read the state through the scene: paint it
         // and check the run carries the font attributes and the strike is drawn as a rect.
-        use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, TextStyle, Theme};
         use heca_core::layout::Size;
+        use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, TextStyle, Theme};
         let mut label = label;
         LayoutEngine::new().compute(label.as_mut(), Size::new(200.0, 40.0));
         let theme = Theme::default();
@@ -3182,7 +3504,12 @@ mod tests {
             .child(ViewNode::new(WidgetKind::Item).text("src"))
             .child(ViewNode::new(WidgetKind::Item).text("tests"));
 
-        let dock = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let dock = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         // The widget's own shape: children[0] = header row [toggle, CONTROLS], children[1] = body.
         let header_controls = &dock.base().children[0].base().children[1];
         assert_eq!(
@@ -3220,10 +3547,19 @@ mod tests {
                     .prop("slot", PropValue::Text("bogus".into())), // unknown → ignored
             );
 
-        let item = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let item = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         // The widget's own shape: [LEADING, LABEL, TRAILING].
         let slots = &item.base().children;
-        assert_eq!(slots.len(), 3, "the row keeps its three slots — nothing appended");
+        assert_eq!(
+            slots.len(),
+            3,
+            "the row keeps its three slots — nothing appended"
+        );
         assert_eq!(
             slots[2].text_summary().as_deref(),
             Some("M"),
@@ -3248,12 +3584,20 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Toast)
             .text("Build failed")
             .prop("severity", PropValue::Text("danger".into()))
-            .prop("body_text", PropValue::Text("3 errors in heca-grid-ui".into()))
+            .prop(
+                "body_text",
+                PropValue::Text("3 errors in heca-grid-ui".into()),
+            )
             .prop("action_text", PropValue::Text("RETRY".into()))
             .on("action", Intent::new("rebuild"))
             .on("dismiss", Intent::new("close_toast"));
 
-        let toast = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let toast = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         assert_eq!(toast.base().children.len(), 3, "icon, text column, dismiss");
 
         // An unknown severity degrades to the widget's default rather than erroring.
@@ -3301,7 +3645,12 @@ mod tests {
                     .on_press(Intent::new("open_log")),
             );
 
-        let toast = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let toast = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         let column = toast_column(toast.as_ref());
         assert_eq!(
             column[1].text_summary().as_deref(),
@@ -3359,7 +3708,12 @@ mod tests {
                     .on_press(Intent::new("composed")),
             );
 
-        let toast = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let toast = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         let column = toast_column(toast.as_ref());
         assert_eq!(
             column[1].text_summary().as_deref(),
@@ -3367,7 +3721,11 @@ mod tests {
             "the text sugar overwrote a composed body",
         );
         let actions = &column[2].base().children;
-        assert_eq!(actions.len(), 1, "action_text built a second control beside the composed one");
+        assert_eq!(
+            actions.len(),
+            1,
+            "action_text built a second control beside the composed one"
+        );
         assert_eq!(actions[0].text_summary().as_deref(), Some("Composed"));
     }
 
@@ -3380,7 +3738,12 @@ mod tests {
                 .text("typo")
                 .prop("slot", PropValue::Text("bodyy".into())),
         );
-        let toast = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let toast = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         assert_eq!(
             toast_column(toast.as_ref())[1].text_summary().as_deref(),
             Some("typo"),
@@ -3483,7 +3846,11 @@ mod tests {
             // the picker to be worth anything — so the sample carries a hint, not a press.
             WidgetKind::KeyHintGroup => node
                 .prop("opens_on", PropValue::Text("sample.pick".into()))
-                .child(ViewNode::new(WidgetKind::Label).text("target").on_hint(Intent::new("noop"))),
+                .child(
+                    ViewNode::new(WidgetKind::Label)
+                        .text("target")
+                        .on_hint(Intent::new("noop")),
+                ),
 
             // Host-only — see the coverage test.
             WidgetKind::ScrollBar => node,
@@ -3662,8 +4029,8 @@ mod tests {
     /// asserts it realizes to *nothing*, so that decision is pinned rather than merely documented.
     #[test]
     fn every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones() {
-        use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Theme};
         use heca_core::layout::Size;
+        use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Theme};
 
         let theme = Theme::default();
         for &kind in WidgetKind::ALL {
@@ -3714,8 +4081,17 @@ mod tests {
             .on_hint(Intent::new("docker.reveal").arg("id", PropValue::Text("abc".into())))
             .into();
 
-        let mut widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
-        assert_eq!(hints(widget.as_ref()), vec![Vec::<usize>::new()], "the label is a target");
+        let mut widget = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
+        assert_eq!(
+            hints(widget.as_ref()),
+            vec![Vec::<usize>::new()],
+            "the label is a target"
+        );
         assert!(heca_grid_ui::fire_hint(widget.as_mut(), &[]));
         assert_eq!(
             fired.borrow()[0].args.get("id"),
@@ -3744,8 +4120,8 @@ mod tests {
     /// drawn *somewhere*, across its neighbour.
     #[test]
     fn no_kind_paints_outside_the_box_it_is_given() {
-        use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Theme};
         use heca_core::layout::{Point, Rectangle, Size};
+        use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Theme};
 
         let theme = Theme::default();
         let mut escapes: Vec<String> = Vec::new();
@@ -3759,12 +4135,8 @@ mod tests {
                 // A parent that hands it a definite width: a kind sized as a share has nothing to
                 // be a share *of* at the root of a layout.
                 let node = ViewNode::new(WidgetKind::VStack).child(sample_node(kind));
-                let mut root = realize(
-                    &node,
-                    &theme,
-                    &noop_emitter(),
-                    &mut FormBindings::default(),
-                );
+                let mut root =
+                    realize(&node, &theme, &noop_emitter(), &mut FormBindings::default());
                 root.base_mut().style.layout.width = heca_grid_ui::Length::Px(box_w as f32);
                 LayoutEngine::new().compute(root.as_mut(), Size::new(box_w, 200.0));
 
@@ -3776,11 +4148,9 @@ mod tests {
                 // The kinds that escape all do so at widths where they *did* have room
                 // (F003/P096/T483).
                 // The kind itself, not the wrapper that hands it a definite width.
-                let pad = root
-                    .base()
-                    .children
-                    .first()
-                    .map_or(0.0, |kind| kind.base().style.layout.padding as f64);
+                let pad = root.base().children.first().map_or(0.0, |kind| {
+                    kind.base().style.layout.padding.resolve(kind.base().font) as f64
+                });
                 let one_control = (theme.font_size * 2.0) as f64;
                 if box_w - 2.0 * pad < one_control {
                     continue;
@@ -3797,7 +4167,11 @@ mod tests {
                 }
             }
         }
-        assert!(escapes.is_empty(), "these draw outside their box:\n{}", escapes.join("\n"));
+        assert!(
+            escapes.is_empty(),
+            "these draw outside their box:\n{}",
+            escapes.join("\n")
+        );
     }
 
     /// **A widget with content never renders as nothing** — every kind, with room to spare.
@@ -3808,8 +4182,8 @@ mod tests {
     /// anywhere asserted against it.
     #[test]
     fn no_kind_with_content_renders_as_nothing() {
-        use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Theme};
         use heca_core::layout::Size;
+        use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Theme};
 
         let theme = Theme::default();
         let mut silent: Vec<String> = Vec::new();
@@ -3860,7 +4234,12 @@ mod tests {
             .child(build::Row::new().on_hint(Intent::new("docker.restart")))
             .into();
 
-        let mut picker = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let mut picker = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
 
         // 1. The verb is on screen, so the host's `[[keys.surface]] pick = "s"` can reach it —
         //    by name, with no path to go stale when the tree is rebuilt.
@@ -3868,7 +4247,10 @@ mod tests {
             heca_grid_ui::collect_actions(picker.as_ref()),
             vec!["mypanel.pick".to_string()],
         );
-        assert!(!heca_grid_ui::fire_action(picker.as_ref(), "heca.expose.pick"), "its own name only");
+        assert!(
+            !heca_grid_ui::fire_action(picker.as_ref(), "heca.expose.pick"),
+            "its own name only"
+        );
 
         // 2. Running it opens the picker and letters what is beneath it.
         assert!(heca_grid_ui::fire_action(picker.as_ref(), "mypanel.pick"));
@@ -3883,7 +4265,11 @@ mod tests {
         // 3. And the letter runs the row's own intent, back out to the plugin.
         picker.on_event_capture(&heca_grid_ui::Event::TextInput("a".to_string()));
         assert_eq!(
-            fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
+            fired
+                .borrow()
+                .iter()
+                .map(|i| i.action.clone())
+                .collect::<Vec<_>>(),
             vec!["docker.restart"],
         );
     }
@@ -3903,10 +4289,19 @@ mod tests {
             .on_action("mypanel.reload", Intent::new("docker.refresh"))
             .into();
 
-        let panel = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let panel = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         assert!(heca_grid_ui::fire_action(panel.as_ref(), "mypanel.reload"));
         assert_eq!(
-            fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
+            fired
+                .borrow()
+                .iter()
+                .map(|i| i.action.clone())
+                .collect::<Vec<_>>(),
             vec!["docker.refresh"],
             "the verb the surface named fired the intent it was bound to",
         );
@@ -3927,7 +4322,12 @@ mod tests {
             .on_action("mypanel.reload", Intent::new("mypanel.reload"))
             .into();
 
-        let panel = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let panel = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         assert!(
             heca_grid_ui::collect_actions(panel.as_ref()).is_empty(),
             "a self-naming verb is not declared at all, so nothing can reach it",
@@ -3951,14 +4351,23 @@ mod tests {
             .child(build::Label::new("row").on_hint(Intent::new("the_row")))
             .into();
 
-        let mut widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let mut widget = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
         let inner = hints(widget.as_ref())
             .into_iter()
             .find(|p| !p.is_empty())
             .expect("the nested label is its own target");
         assert!(heca_grid_ui::fire_hint(widget.as_mut(), &inner));
         assert_eq!(
-            fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
+            fired
+                .borrow()
+                .iter()
+                .map(|i| i.action.clone())
+                .collect::<Vec<_>>(),
             vec!["the_row"],
             "the card it sits in must not answer for it",
         );
@@ -3985,7 +4394,12 @@ mod tests {
                 "Close",
                 Intent::new("plugin.close"),
             )]);
-            let widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+            let widget = realize(
+                &node,
+                &Theme::default(),
+                &emit,
+                &mut FormBindings::default(),
+            );
             if widget.base().context_menu.is_none() {
                 missing.push(format!("{kind:?}"));
             }
@@ -4243,8 +4657,8 @@ mod tests {
 
         let (emit, _fired) = recording_emitter();
         let node: ViewNode = build::Surface::new()
-            .pad_all(ViewSpacing::Md)
-            .gap_spacing(ViewSpacing::Xs)
+            .padding(ViewSpacing::Md)
+            .gap(ViewSpacing::Xs)
             .into();
         let w = realize(
             &node,
@@ -4253,9 +4667,101 @@ mod tests {
             &mut FormBindings::default(),
         );
         let layout = &w.base().style.layout;
-        assert_eq!(layout.pad_spacing_x, Some(Spacing::Md), "padding is a step");
-        assert_eq!(layout.pad_spacing_y, Some(Spacing::Md), "on both axes");
-        assert_eq!(layout.gap_spacing, Some(Spacing::Xs), "and so is the gap");
+        use heca_grid_ui::style::Space;
+        assert_eq!(
+            layout.padding,
+            Space::Step(Spacing::Md),
+            "padding is a step"
+        );
+        assert_eq!(layout.gap, Space::Step(Spacing::Xs), "and so is the gap");
+    }
+
+    /// **A tree written against the old property names still works.**
+    ///
+    /// Spacing was two settings — a px `gap` beside a `gap_spacing` step — and is now one that
+    /// takes either. The described vocabulary IS the layout field list, with no table of allowed
+    /// names, so a renamed field stops naming anything and would be dropped in silence: a plugin's
+    /// spacing would quietly vanish rather than fail. The retired spellings are mapped onto the
+    /// surviving one instead.
+    #[test]
+    fn the_retired_spacing_names_still_reach_the_setting_that_replaced_them() {
+        use heca_grid_ui::style::{Space, Spacing};
+
+        let node = ViewNode::new(WidgetKind::VStack)
+            .prop("gap_spacing", PropValue::Text("xs".into()))
+            .prop("pad_spacing_x", PropValue::Text("md".into()))
+            .prop("pad_spacing_y", PropValue::Text("lg".into()));
+
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
+        let l = w.base().style.layout;
+        assert_eq!(
+            l.gap,
+            Space::Step(Spacing::Xs),
+            "gap_spacing still means the gap"
+        );
+        assert_eq!(l.padding_x, Some(Space::Step(Spacing::Md)));
+        assert_eq!(l.padding_y, Some(Space::Step(Spacing::Lg)));
+    }
+
+    /// **The surviving name takes either spelling** — which is the whole point of merging them.
+    #[test]
+    fn one_described_name_reads_a_number_and_a_step() {
+        use heca_grid_ui::style::{Space, Spacing};
+
+        let of = |v: PropValue| {
+            let node = ViewNode::new(WidgetKind::VStack).prop("gap", v);
+            realize(
+                &node,
+                &Theme::default(),
+                &noop_emitter(),
+                &mut FormBindings::default(),
+            )
+            .base()
+            .style
+            .layout
+            .gap
+        };
+        assert_eq!(of(PropValue::Int(8)), Space::Px(8.0), "a number is pixels");
+        assert_eq!(
+            of(PropValue::Text("sm".into())),
+            Space::Step(Spacing::Sm),
+            "and a step name is a step — the thing the wire could not say before",
+        );
+        assert_eq!(
+            of(PropValue::Text("nonsense".into())),
+            Space::Px(0.0),
+            "an unreadable value still costs only itself",
+        );
+    }
+
+    /// **A described node overrides the accent for everything inside it.**
+    ///
+    /// The accent is a style property, so it needs no arm here and no entry in any list — that is
+    /// the whole point of reading layout and appearance off the style types. This pins that it
+    /// actually arrives, and that a theme token name is resolved rather than passed through.
+    #[test]
+    fn a_described_node_publishes_an_accent_to_its_subtree() {
+        let theme = Theme::default();
+        let node = ViewNode::new(WidgetKind::Surface)
+            .prop("accent", PropValue::Color("danger".into()))
+            .child(ViewNode::new(WidgetKind::Button).text("Delete"));
+
+        let w = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default());
+        assert_eq!(
+            w.base().style.visual.accent,
+            Some(theme.colors.danger),
+            "the token was resolved against the theme the tree was built with",
+        );
+        assert_eq!(
+            w.base().children[0].base().style.visual.accent,
+            None,
+            "the child says nothing — it inherits at paint, it is not stamped at build",
+        );
     }
 
     /// **A tooltip declared on ANY kind reaches the node itself** (F003/P097/T501, C3).
@@ -4435,13 +4941,22 @@ mod tests {
             }
             let (emit, fired) = recording_emitter();
             let node = sample_node(kind).on_hint(Intent::new("picked"));
-            let mut widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+            let mut widget = realize(
+                &node,
+                &Theme::default(),
+                &emit,
+                &mut FormBindings::default(),
+            );
             if !heca_grid_ui::fire_hint(widget.as_mut(), &[]) {
-                unreachable.push(format!("{kind:?} (no hint declaration on the realized widget)"));
+                unreachable.push(format!(
+                    "{kind:?} (no hint declaration on the realized widget)"
+                ));
                 continue;
             }
             if fired.borrow().iter().all(|i| i.action != "picked") {
-                unreachable.push(format!("{kind:?} (declared a hint that fired something else)"));
+                unreachable.push(format!(
+                    "{kind:?} (declared a hint that fired something else)"
+                ));
             }
         }
         assert!(
@@ -4481,7 +4996,9 @@ mod tests {
         // `with_event!` is the one table that gives a builder its event setters, so this asks the
         // table rather than looking for a method: `Row { on_press => "press", on_hint => "hint" }`.
         let events = {
-            let start = sdk.find("with_event!(").expect("the SDK binds its events in one table");
+            let start = sdk
+                .find("with_event!(")
+                .expect("the SDK binds its events in one table");
             let rest = &sdk[start..];
             let end = rest.find("\n);").unwrap_or(rest.len());
             rest[..end].to_string()
@@ -4528,8 +5045,17 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Surface)
             .child(ViewNode::new(WidgetKind::Label).text("a"))
             .child(ViewNode::new(WidgetKind::Label).text("b"));
-        let realized = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
-        assert_eq!(realized.base().children.len(), 2, "surface holds its two content children");
+        let realized = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
+        assert_eq!(
+            realized.base().children.len(),
+            2,
+            "surface holds its two content children"
+        );
 
         // `Card` prepends a title child, so title + 2 content = 3.
         let card = realize(
@@ -4553,7 +5079,10 @@ mod tests {
             &noop_emitter(),
             &mut FormBindings::default(),
         );
-        assert!(hints(input.as_ref()).is_empty(), "a change binding is not a pick target");
+        assert!(
+            hints(input.as_ref()).is_empty(),
+            "a change binding is not a pick target"
+        );
 
         let item = realize(
             &ViewNode::new(WidgetKind::Item)
@@ -4563,7 +5092,11 @@ mod tests {
             &noop_emitter(),
             &mut FormBindings::default(),
         );
-        assert_eq!(hints(item.as_ref()), vec![Vec::<usize>::new()], "an actionable Item is");
+        assert_eq!(
+            hints(item.as_ref()),
+            vec![Vec::<usize>::new()],
+            "an actionable Item is"
+        );
     }
 
     /// A value widget with a `"name"` prop is bound into the form; `collect()` reads its current
@@ -4675,8 +5208,14 @@ mod tests {
             .prop("name", PropValue::Text("name".into()));
         let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut forms);
 
-        let sig = forms.text_signal("name").expect("named input exposes its signal");
-        assert_eq!(sig.get_untracked(), "term", "signal reflects the initial value");
+        let sig = forms
+            .text_signal("name")
+            .expect("named input exposes its signal");
+        assert_eq!(
+            sig.get_untracked(),
+            "term",
+            "signal reflects the initial value"
+        );
         // The signal is live: updating it is what `collect()` / validation later read.
         sig.set("renamed".to_string());
         assert_eq!(
@@ -4703,13 +5242,22 @@ mod tests {
             .prop("flex_grow", PropValue::Float(1.0))
             .prop("margin", PropValue::Float(6.0));
 
-        let w = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         let l = w.base().style.layout;
-        assert_eq!(l.padding, 12.0, "padding — in the original design doc, never implemented");
+        assert_eq!(
+            l.padding,
+            heca_grid_ui::style::Space::Px(12.0),
+            "padding — in the original design doc, never implemented",
+        );
         assert_eq!(l.width, Length::Px(240.0));
         assert_eq!(l.justify, Justify::SpaceBetween, "enum by name, snake_case");
         assert_eq!(l.flex_grow, 1.0);
-        assert_eq!(l.margin, 6.0);
+        assert_eq!(l.margin, heca_grid_ui::style::Space::Px(6.0));
     }
 
     /// `Length` reads the way an author would write it: a bare number is px, `"auto"` is auto,
@@ -4718,11 +5266,16 @@ mod tests {
     fn length_accepts_the_spelling_an_author_would_reach_for() {
         let case = |p: PropValue| {
             let node = ViewNode::new(WidgetKind::Surface).prop("width", p);
-            realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default())
-                .base()
-                .style
-                .layout
-                .width
+            realize(
+                &node,
+                &Theme::default(),
+                &noop_emitter(),
+                &mut FormBindings::default(),
+            )
+            .base()
+            .style
+            .layout
+            .width
         };
         assert_eq!(case(PropValue::Int(240)), Length::Px(240.0));
         assert_eq!(case(PropValue::Float(12.5)), Length::Px(12.5));
@@ -4743,11 +5296,29 @@ mod tests {
             .prop("justify", PropValue::Text("sideways".into()))
             .prop("margin", PropValue::Float(4.0));
 
-        let w = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
         let l = w.base().style.layout;
-        assert_eq!(l.gap, 8.0, "good property survives a bad neighbour");
-        assert_eq!(l.margin, 4.0, "and so does one declared after the bad ones");
-        assert_eq!(l.padding, 0.0, "bad value ignored — the default stands");
+        use heca_grid_ui::style::Space;
+        assert_eq!(
+            l.gap,
+            Space::Px(8.0),
+            "good property survives a bad neighbour"
+        );
+        assert_eq!(
+            l.margin,
+            Space::Px(4.0),
+            "and so does one declared after the bad ones"
+        );
+        assert_eq!(
+            l.padding,
+            Space::Px(0.0),
+            "bad value ignored — the default stands"
+        );
         assert_eq!(l.width, Length::Auto, "unparseable length ignored");
         assert_eq!(l.justify, Justify::Start, "unknown enum name ignored");
     }
@@ -4759,13 +5330,30 @@ mod tests {
     fn merging_preserves_layout_the_widget_set_in_its_constructor() {
         let node = ViewNode::new(WidgetKind::Scroll).prop("padding", PropValue::Int(4));
 
-        let w = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
+        use heca_grid_ui::style::Space;
         let l = w.base().style.layout;
-        assert_eq!(l.padding, 4.0, "the property the node did carry");
-        assert_eq!(l.min_height, Some(Length::Px(0.0)), "constructor value survives");
+        assert_eq!(l.padding, Space::Px(4.0), "the property the node did carry");
+        assert_eq!(
+            l.min_height,
+            Some(Length::Px(0.0)),
+            "constructor value survives"
+        );
         assert_eq!(l.min_width, Some(Length::Px(0.0)));
-        assert_eq!(l.flex_shrink, Some(1.0), "without this a scroll region cannot shrink");
-        assert!(l.gap_spacing.is_some(), "theme spacing token survives");
+        assert_eq!(
+            l.flex_shrink,
+            Some(1.0),
+            "without this a scroll region cannot shrink"
+        );
+        assert!(
+            matches!(l.gap, Space::Step(_)),
+            "theme spacing step survives"
+        );
     }
 
     /// **A described node can place itself at a fractional rect** — the declarative half of
@@ -4792,12 +5380,26 @@ mod tests {
             ),
         );
 
-        let w = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
-        let placement = w.base().style.layout.placement.expect("the rect was authored");
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
+        let placement = w
+            .base()
+            .style
+            .layout
+            .placement
+            .expect("the rect was authored");
         assert_eq!(placement.left, Length::Percent(0.25));
         assert_eq!(placement.top, Length::Percent(0.10));
         assert_eq!(placement.width, Length::Percent(0.5));
-        assert_eq!(placement.height, Length::Px(120.0), "a bare number is pixels");
+        assert_eq!(
+            placement.height,
+            Length::Px(120.0),
+            "a bare number is pixels"
+        );
     }
 
     /// A node with no properties leaves the widget exactly as its constructor built it.
@@ -4809,7 +5411,10 @@ mod tests {
             &noop_emitter(),
             &mut FormBindings::default(),
         );
-        assert_eq!(bare.base().style.layout, ScrollRegion::new().base().style.layout);
+        assert_eq!(
+            bare.base().style.layout,
+            ScrollRegion::new().base().style.layout
+        );
     }
 
     // ── The generated surface, end to end (F003/P017/T3) ─────────────────────────────────
@@ -4826,7 +5431,11 @@ mod tests {
 
         let input = with_props(Input::new().value(text_of(&node)), &node, &Theme::default());
         assert_eq!(input.placeholder_str(), "type to filter…");
-        assert_eq!(input.value_str(), "current", "the value still lands alongside it");
+        assert_eq!(
+            input.value_str(),
+            "current",
+            "the value still lands alongside it"
+        );
     }
 
     /// A scroll region's axes. `ScrollRegion` has supported both all along — the showcase's own
@@ -4839,7 +5448,12 @@ mod tests {
             heca_grid_ui::ScrollAxes::Both,
         );
         assert_eq!(
-            with_props(ScrollRegion::new(), &ViewNode::new(WidgetKind::Scroll), &Theme::default()).clone_axes(),
+            with_props(
+                ScrollRegion::new(),
+                &ViewNode::new(WidgetKind::Scroll),
+                &Theme::default()
+            )
+            .clone_axes(),
             heca_grid_ui::ScrollAxes::Vertical,
             "unset still means the widget's own default",
         );
@@ -4851,7 +5465,10 @@ mod tests {
     fn the_generated_surface_ignores_what_it_cannot_use() {
         let node = ViewNode::new(WidgetKind::Scroll)
             .prop("axes", PropValue::Text("sideways".into()))
-            .prop("placeholder", PropValue::Text("not a scroll property".into()))
+            .prop(
+                "placeholder",
+                PropValue::Text("not a scroll property".into()),
+            )
             .prop("gap", PropValue::Int(6));
 
         assert_eq!(
@@ -4859,8 +5476,17 @@ mod tests {
             heca_grid_ui::ScrollAxes::Vertical,
             "unknown variant name keeps the default",
         );
-        let w = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
-        assert_eq!(w.base().style.layout.gap, 6.0, "the good property still lands");
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
+        assert_eq!(
+            w.base().style.layout.gap,
+            heca_grid_ui::style::Space::Px(6.0),
+            "the good property still lands",
+        );
     }
 
     /// The two tests above read the widget through `with_props`, which is the surface but not the
@@ -4970,8 +5596,16 @@ mod tests {
             ))
         };
 
-        assert_eq!(described(Some("both")), native(ScrollAxes::Both), "same widget, same scene");
-        assert_eq!(described(None), native(ScrollAxes::Vertical), "unset = the widget's default");
+        assert_eq!(
+            described(Some("both")),
+            native(ScrollAxes::Both),
+            "same widget, same scene"
+        );
+        assert_eq!(
+            described(None),
+            native(ScrollAxes::Vertical),
+            "unset = the widget's default"
+        );
         assert_ne!(
             described(Some("both")),
             described(None),
@@ -5013,8 +5647,14 @@ mod tests {
             );
             LayoutEngine::new().compute(region.as_mut(), Size::new(120.0, 80.0));
             // The wheel is hover-gated (`Event::Scroll` carries no position), so hover it first.
-            heca_grid_ui::dispatch(region.as_mut(), &Event::pointer_moved(Point::new(60.0, 40.0)));
-            heca_grid_ui::dispatch(region.as_mut(), &Event::wheel(Point::new(60.0, 40.0), -1.0, 0.0))
+            heca_grid_ui::dispatch(
+                region.as_mut(),
+                &Event::pointer_moved(Point::new(60.0, 40.0)),
+            );
+            heca_grid_ui::dispatch(
+                region.as_mut(),
+                &Event::wheel(Point::new(60.0, 40.0), -1.0, 0.0),
+            )
         };
 
         assert_eq!(
@@ -5055,13 +5695,13 @@ mod tests {
             .default_focus("cancel")
             .child(
                 build::Surface::new()
-                    .pad_all(ViewSpacing::Lg)
-                    .gap_spacing(ViewSpacing::Md)
+                    .padding(ViewSpacing::Lg)
+                    .gap(ViewSpacing::Md)
                     .child(build::Label::new("Delete pane?"))
                     .child(build::Label::new("This cannot be undone."))
                     .child(
                         build::HStack::new()
-                            .gap_spacing(ViewSpacing::Sm)
+                            .gap(ViewSpacing::Sm)
                             .justify(ViewJustify::End)
                             .child(
                                 build::Button::new()
@@ -5154,14 +5794,15 @@ mod tests {
         let panel = surface.base().children[0].as_ref();
         let layout = &panel.base().style.layout;
 
+        use heca_grid_ui::style::Space;
         assert_eq!(
-            layout.pad_spacing_x,
-            Some(DIALOG_PAD),
+            layout.padding,
+            Space::Step(DIALOG_PAD),
             "the panel's padding"
         );
         assert_eq!(
-            layout.gap_spacing,
-            Some(DIALOG_GAP),
+            layout.gap,
+            Space::Step(DIALOG_GAP),
             "title to message to actions"
         );
 
@@ -5171,8 +5812,8 @@ mod tests {
             .last()
             .expect("the action row is the panel's last child");
         assert_eq!(
-            actions.base().style.layout.gap_spacing,
-            Some(DIALOG_BTN_GAP),
+            actions.base().style.layout.gap,
+            Space::Step(DIALOG_BTN_GAP),
             "and the space between the buttons — the one that was missing entirely",
         );
         assert_eq!(

@@ -135,6 +135,11 @@ fn focus_and_pick(
     };
     Box::new(
         focus_scope
+            // **The dock's own letter belongs to the dock pick, not the ordinary one.** Clicking
+            // this wrapper focuses the container, which is what makes it actionable and therefore
+            // lettered — but that is a keyboard destination `prefix+Shift+e` already offers, so in
+            // `prefix+/` it was a letter per placement pointing at something with its own key.
+            .hint_scope([crate::chrome::DOCK_PICK_SCOPE])
             .focus(ctx.state().container_keyboard_target(container))
             // Still declared: `offer_hint_by_key` matches it so the DOCK PICK can letter this
             // container (`chrome/hint/letters.rs`). It is no longer read by any hit-test.
@@ -174,10 +179,7 @@ pub(super) fn build_region_content(
                 // The share goes on the OUTERMOST node, so it has to be applied after the wrappers:
                 // a share set on the body would leave the wrapper content-sized and divide nothing
                 // (F003/P011/T021's lesson, one level up).
-                Some(with_share(
-                    focus_and_pick(body, &c.id, c.grow, ctx),
-                    c.grow,
-                ))
+                Some(with_share(focus_and_pick(body, &c.id, c.grow, ctx), c.grow))
             }
             _ => None,
         })
@@ -250,8 +252,8 @@ pub(super) fn build_sidebar_shell(
         .border_style(border_style.into())
         .border_width(border_width)
         .radius(border_radius)
-        .width(Length::Px(inner_w))
-        .height(Length::Px(inner_h))
+        .width(inner_w)
+        .height(inner_h)
         .padding(10.0)
         .gap(8.0)
         .background(shell_bg);
@@ -269,17 +271,14 @@ pub(super) fn build_sidebar_shell(
         // take their shares of it, and each scrolls inside what it got.
         body = body.child(content);
     }
-    Flex::column()
-        .width(Length::Px(region_w))
-        .height(Length::Px(sidebar_h))
-        .child(
-            Surface::column()
-                .width(Length::Px(region_w))
-                .height(Length::Px(sidebar_h))
-                .background(shell_bg)
-                .padding(sidebar_gap)
-                .child(body),
-        )
+    Flex::column().width(region_w).height(sidebar_h).child(
+        Surface::column()
+            .width(region_w)
+            .height(sidebar_h)
+            .background(shell_bg)
+            .padding(sidebar_gap)
+            .child(body),
+    )
 }
 
 /// The chrome frame's geometry, colors, and status text — grouped so the assembly
@@ -310,7 +309,7 @@ pub(super) fn sidebar_toggle_button(
     catalog: &crate::actions::ActionCatalog,
     emit: ChromeIntentEmitter,
     color: Color,
-) -> KeyHint {
+) -> IconButton {
     use crate::app::interaction::InteractionIntent;
     // Label from the action descriptor (catalog-owned), never re-spelled here.
     let label = catalog.label(action_name).unwrap_or(action_name);
@@ -334,8 +333,12 @@ pub(super) fn sidebar_toggle_button(
     let button = IconButton::new(Icon::new(glyph).color(color))
         .key(action_name)
         .size(WidgetSize::Small)
-        .on_click(fire);
-    action_tooltip(KeyHint::new(button).on_hint(hint), action_name, label, shortcuts)
+        .on_click(fire)
+        // Declares its own pick — `on_hint` is on `ComponentExt`, so every widget has it. A
+        // `KeyHint` wrapper here used to be a second pick target on top of the button's own
+        // actionability (AGENTS § 5a).
+        .on_hint(hint);
+    action_tooltip(button, action_name, label, shortcuts)
 }
 
 /// Assemble the chrome root widget tree (no layout/paint): a transparent tab band
@@ -347,8 +350,8 @@ fn chrome_root(
     frame: &ChromeFrame,
     left_sidebar: Option<Flex>,
     right_sidebar: Option<Flex>,
-    left_toggle: Option<KeyHint>,
-    right_toggle: Option<KeyHint>,
+    left_toggle: Option<IconButton>,
+    right_toggle: Option<IconButton>,
     signals: &mut ChromeSignals,
 ) -> Flex {
     let ChromeFrame {
@@ -365,9 +368,7 @@ fn chrome_root(
     // Middle row: the full-height sidebar shell (when expanded) + a transparent
     // spacer over the content area (panes are drawn by the hand-drawn path under
     // this scene). The shell sizes its own width/height.
-    let mut middle = Flex::row()
-        .width(Length::Px(w))
-        .height(Length::Px(middle_h));
+    let mut middle = Flex::row().width(w).height(middle_h);
     if let Some(shell) = left_sidebar {
         middle = middle.child(shell);
     }
@@ -376,7 +377,7 @@ fn chrome_root(
         middle = middle.child(shell);
     }
 
-    let mut root = Flex::column().width(Length::Px(w)).height(Length::Px(h));
+    let mut root = Flex::column().width(w).height(h);
     // Transparent tab band — the hand-drawn tab bar paints underneath. Omitted
     // entirely when the top bar is hidden (`show_top_bar = false`).
     if tab_bar_height > 0.0 {
@@ -385,9 +386,9 @@ fn chrome_root(
         // Edge inset from a theme spacing token (resolved from the font at layout — no
         // hand-computed px). Vertical breathing room comes from centering a `Small` toggle.
         let mut band = Flex::row()
-            .width(Length::Px(w))
-            .height(Length::Px(tab_bar_height))
-            .align(Align::Center)
+            .width(w)
+            .height(tab_bar_height)
+            .align("center")
             .padding_x(Spacing::Sm);
         if let Some(t) = left_toggle {
             band = band.child(t);
@@ -411,11 +412,11 @@ fn chrome_root(
         signals.status = Some(status_signal);
         root = root.child(
             Surface::row()
-                .width(Length::Px(w))
-                .height(Length::Px(status_bar_height))
+                .width(w)
+                .height(status_bar_height)
                 .background(side_bg)
                 .radius(0.0)
-                .align(Align::Center)
+                .align("center")
                 .padding_xy(8.0, 0.0)
                 .child(status_watch),
         );
@@ -440,7 +441,6 @@ pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiThem
 /// Keycap glyph size (logical px) for follow-link hints — compact so a label sits
 /// legibly over a single terminal cell.
 const LINK_HINT_FONT: f32 = 13.0;
-
 
 /// Peak alpha of the visual-bell flash overlay (faded out over the flash window).
 const BELL_FLASH_MAX_ALPHA: u8 = 56;
@@ -470,7 +470,13 @@ pub(crate) fn paint_bell_flash(
         return;
     }
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    cx.rect(content_rect, theme.colors.accent.with_alpha(alpha), None, 0.0, None);
+    cx.rect(
+        content_rect,
+        theme.colors.accent.with_alpha(alpha),
+        None,
+        0.0,
+        None,
+    );
 }
 
 /// Paint follow-link keycaps over the focused terminal's hyperlinks while
@@ -513,7 +519,6 @@ pub(crate) fn paint_link_hints(
     }
 }
 
-
 /// Peak alpha for a non-current search-match highlight; the current match is bolder.
 const SEARCH_HL_ALPHA: u8 = 64;
 const SEARCH_HL_CURRENT_ALPHA: u8 = 150;
@@ -536,7 +541,14 @@ pub(crate) fn paint_search(
     // Every pane that has a search draws its own highlights and bar. They are
     // independent, so a search in one pane never disturbs another's.
     for (&pane_id, search) in &state.searches {
-        paint_pane_search(state, &mut cx, pane_id, search, theme, Size::new(w as f64, h as f64));
+        paint_pane_search(
+            state,
+            &mut cx,
+            pane_id,
+            search,
+            theme,
+            Size::new(w as f64, h as f64),
+        );
     }
 }
 
@@ -618,11 +630,10 @@ pub(super) fn search_bar_tree(
 ) -> Flex {
     // The query slot, then the match position as a separate chip so it reads as
     // distinct information rather than as part of what was typed.
-    let mut row = Flex::row().align(Align::Center).gap(Spacing::Sm).child(
-        Flex::row()
-            .width(Length::Px(field.w as f32))
-            .height(Length::Px(field.h as f32)),
-    );
+    let mut row = Flex::row()
+        .align("center")
+        .gap(Spacing::Sm)
+        .child(Flex::row().width(field.w as f32).height(field.h as f32));
     if let Some(count) = count {
         row = row.child(Tag::new(count).color(theme.colors.accent));
     }
@@ -631,10 +642,10 @@ pub(super) fn search_bar_tree(
     // into its bottom-right corner. The engine does the positioning; nothing here
     // measures text or computes a coordinate.
     Flex::row()
-        .justify(Justify::End)
-        .align(Align::End)
-        .width(Length::Px(pane.size.w as f32))
-        .height(Length::Px(pane.size.h as f32))
+        .justify("end")
+        .align("end")
+        .width(pane.size.w as f32)
+        .height(pane.size.h as f32)
         .margin_left(pane.loc.x as f32)
         .margin_top(pane.loc.y as f32)
         .padding(Spacing::Sm.scale() * theme.font_size)
@@ -730,7 +741,12 @@ pub(super) fn chrome_scene(
 pub(crate) fn build_chrome_root(
     state: &crate::app_state::AppState,
     chrome: ChromeConfig,
-) -> (Flex, ChromeSignals, DragItemRegistry, crate::app::interaction::InteractionSource) {
+) -> (
+    Flex,
+    ChromeSignals,
+    DragItemRegistry,
+    crate::app::interaction::InteractionSource,
+) {
     let phys = state.window.inner_size();
     let scale = state.scale_factor as f32;
     let w = phys.width as f32 / scale;
@@ -752,8 +768,12 @@ pub(crate) fn build_chrome_root(
     // `WorkspacesContainer`, the right is an empty placeholder until it gains a Provider.
     let sidebar_gap = state.appearance.effective_sidebar_gap(&state.theme);
     let border_style = state.appearance.effective_sidebar_border_style();
-    let border_width = state.appearance.effective_sidebar_border_width(&state.theme);
-    let border_radius = state.appearance.effective_sidebar_border_radius(&state.theme);
+    let border_width = state
+        .appearance
+        .effective_sidebar_border_width(&state.theme);
+    let border_radius = state
+        .appearance
+        .effective_sidebar_border_radius(&state.theme);
     let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
 
     // The region body is whatever the `ChromeHost` has seated in that region — the app

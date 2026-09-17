@@ -2,7 +2,7 @@
 
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::reactive::Signal;
-use heca_grid_ui::style::{Align, Length, Spacing};
+use heca_grid_ui::style::{Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, Visibility};
 
@@ -65,13 +65,13 @@ impl FolderLine<'_> {
         let text = label.text_signal();
         let widget = Visibility::new(
             Flex::row()
-                .align(Align::Center)
+                .align("center")
                 .gap(GAP)
                 // Inside the `Visibility`, never around it — see `indent`.
                 .padding_x(self.indent)
                 // Never wider than what holds it — see `PaneName`. The line is commonly centred,
                 // and a centred child is sized by its content unless it says otherwise.
-                .max_width(Length::Percent(1.0))
+                .max_width(Length::FULL)
                 // **This line absorbs the squeeze**, which is how a widget asks for it here
                 // (`Style::flex_shrink`: nothing shrinks unless it says so). A path is the longest
                 // thing on a card and the first that should give way — without this the line keeps

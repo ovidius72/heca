@@ -530,7 +530,7 @@ impl Component for Label {
         let lines = self.drawn_indexed();
         let bounds = self.base.bounds;
         let runs = self.run_rects();
-        let mark_color = self.mark_color.unwrap_or_else(|| cx.theme().colors.accent);
+        let mark_color = self.mark_color.unwrap_or_else(|| cx.accent());
         let marks = self.marks.get_untracked();
         let wrapping = self.wrap.get_untracked();
         // A plain label draws into its whole box, exactly as before — the alignment and vertical

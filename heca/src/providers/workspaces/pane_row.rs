@@ -26,7 +26,7 @@ use crate::chrome::{
 use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect, signal};
-use heca_grid_ui::style::{Align, Spacing};
+use heca_grid_ui::style::Spacing;
 use heca_grid_ui::widgets::{
     Flex, Glyph, HintPlacement, Icon, Label, Row, StatusDot, Tooltip, TooltipSide, Visibility,
 };
@@ -129,7 +129,7 @@ impl PaneRow<'_> {
         let add_label = add_label_widget.text_signal();
         let add_segment = Visibility::new(
             Flex::row()
-                .align(Align::Center)
+                .align("center")
                 .gap(4.0)
                 .child(Icon::new(Glyph::Plus).size(12.0).color(theme.colors.success))
                 .child(add_label_widget),
@@ -142,7 +142,7 @@ impl PaneRow<'_> {
         let modified_label = modified_label_widget.text_signal();
         let modified_segment = Visibility::new(
             Flex::row()
-                .align(Align::Center)
+                .align("center")
                 .gap(4.0)
                 .child(
                     Icon::new(Glyph::Warning)
@@ -159,7 +159,7 @@ impl PaneRow<'_> {
         let deleted_label = deleted_label_widget.text_signal();
         let deleted_segment = Visibility::new(
             Flex::row()
-                .align(Align::Center)
+                .align("center")
                 .gap(4.0)
                 .child(Icon::new(Glyph::Minus).size(12.0).color(theme.colors.danger))
                 .child(deleted_label_widget),
@@ -168,7 +168,7 @@ impl PaneRow<'_> {
         let deleted_text_visible_signal = deleted_segment.visible_signal();
         let git_row = Visibility::new(
             Flex::row()
-                .align(Align::Center)
+                .align("center")
                 .gap(6.0)
                 .padding_x(META_INDENT)
                 .child(
@@ -214,7 +214,7 @@ impl PaneRow<'_> {
         // other — CSS's `align-items: center`. Measured: the name's box is 18 tall and the
         // suffix's 14, and centring puts both mid-lines on the same pixel.
         let title_area = Flex::row()
-            .align(Align::Center)
+            .align("center")
             .gap(heca_grid_ui::style::Spacing::Sm)
             .child(title_label)
             .child(process_hint);
@@ -239,10 +239,10 @@ impl PaneRow<'_> {
         // The pane's identity row (status dots + program icon + name) — shared by every card
         // layout so the cwd and git rows just stack beneath it in one column.
         let name_row = Flex::row()
-            .align(Align::Center)
+            .align("center")
             .gap(8.0)
             .child(status_dot)
-            .child(Flex::row().align(Align::Center).child(icon_widget))
+            .child(Flex::row().align("center").child(icon_widget))
             .child(title_area);
         // One column: the name row, then the metadata lines under it.
         //

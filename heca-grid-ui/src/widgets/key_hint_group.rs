@@ -26,16 +26,23 @@
 //!
 //! ```
 //! use heca_grid_ui::prelude::*;
-//! use heca_grid_ui::widgets::{Flex, KeyHint, KeyHintGroup, Label, Row};
+//! use heca_grid_ui::widgets::{Flex, KeyHintGroup, Label, Row};
 //!
 //! # fn choose(_: u32) {}
 //! let picker = KeyHintGroup::new(
 //!     Flex::column()
-//!         .child(KeyHint::new(Row::new().child(Label::new("one"))).on_hint(|| choose(1)))
-//!         .child(KeyHint::new(Row::new().child(Label::new("two"))).on_hint(|| choose(2))),
+//!         .child(Row::new().child(Label::new("one")).on_hint(|| choose(1)))
+//!         .child(Row::new().child(Label::new("two")).on_hint(|| choose(2))),
 //! )
 //! .opens_on("mypanel.pick");   // config binds the key: [[keys.surface]] name = "mypanel"
 //! ```
+//!
+//! ⚠️ **A row says its own pick — do not wrap it in a [`KeyHint`](super::KeyHint).** `on_hint`,
+//! `hint_placement`, `hint_tone` and `hintable` are on *every* widget
+//! ([`ComponentExt`](crate::builders::ComponentExt)); the wrapper is only for a region that is not a
+//! widget you can put a builder on. Wrapping a widget that could declare for itself puts **two**
+//! targets where the author wrote one, and a picker letters both. This example taught the wrapper
+//! shape until 2026-09-15, and heca's own exposé had it — two keycaps on every card.
 //!
 //! # …and the same picker, described
 //!
@@ -48,10 +55,10 @@
 //!   "children": [ { "kind": "Row", "events": { "hint": { "action": "docker.restart" } } } ] }
 //! ```
 
+use crate::PaintCx;
 use crate::component::{Base, Component};
 use crate::event::{Event, Handled, WidgetIntent};
-use crate::PaintCx;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::{Direction, Length};
 
 /// **The letters a picker hands out when its caller does not say otherwise**, in order.
@@ -72,8 +79,7 @@ use crate::style::{Direction, Length};
 ///
 /// It is public so a host can hand the same order to its own pickers instead of keeping a second
 /// copy of this decision.
-pub const DEFAULT_LETTERS: &str =
-    "asdfghjklbceimnopqrtuvwxyzASDFGHJKLBCEIMNOPQRTUVWXYZ";
+pub const DEFAULT_LETTERS: &str = "asdfghjklbceimnopqrtuvwxyzASDFGHJKLBCEIMNOPQRTUVWXYZ";
 
 /// A picker over the subtree it wraps: while open, every hint declaration beneath it wears a
 /// letter, and typing one runs it.
@@ -111,7 +117,12 @@ impl KeyHintGroup {
         // subtree sized as a share does not turn that share into a content size.
         crate::component::wrap_transparently(&mut base, child.as_ref());
         base.children.push(child);
-        Self { base, open: signal(false), seen: false, letters: DEFAULT_LETTERS.chars().collect() }
+        Self {
+            base,
+            open: signal(false),
+            seen: false,
+            letters: DEFAULT_LETTERS.chars().collect(),
+        }
     }
 
     /// Bind the **host-owned** open signal. Set it from an action — which is how a surface gives
@@ -143,7 +154,9 @@ impl KeyHintGroup {
     ///
     /// Still exactly one keystroke per pick: a target past the end of the sequence gets no letter
     /// rather than a longer one. See [`DEFAULT_LETTERS`].
-    #[heca_grid_ui_macros::host_only("an app's choice of alphabet, not data a described tree carries")]
+    #[heca_grid_ui_macros::host_only(
+        "an app's choice of alphabet, not data a described tree carries"
+    )]
     pub fn letters(mut self, letters: impl IntoIterator<Item = char>) -> Self {
         self.letters = letters.into_iter().collect();
         self
@@ -177,7 +190,8 @@ impl KeyHintGroup {
     pub fn opens_on(self, action: impl Into<String>) -> Self {
         use crate::builders::ComponentExt as _;
         let open = self.open;
-        self.open_when(open).on_action(action, move || open.set(true))
+        self.open_when(open)
+            .on_action(action, move || open.set(true))
     }
 
     /// **Which scope this picker letters.** Unset — the default — means the ordinary set: every
@@ -222,14 +236,17 @@ impl KeyHintGroup {
     /// had its own inlined "skip hidden" test and would have needed a second inlined clip test
     /// beside it.
     fn targets(&self) -> Vec<Vec<usize>> {
-        let mut out = Vec::new();
-        let clip = crate::hint::narrowed(None, self);
-        let scope = self.base.picker_scope.as_deref();
-        for (i, child) in self.base.children.iter().enumerate() {
-            let mut here = vec![i];
-            collect(child.as_ref(), &mut here, clip, scope, &mut out);
-        }
-        out
+        // **The collector's walk, with this picker's scope** — not a second one of our own.
+        //
+        // There used to be a copy here. The two had already disagreed once about what a target
+        // *is*, which was fixed by sharing the predicate; the walk stayed duplicated, so every rule
+        // the collector learned afterwards reached `prefix+/` and not a surface's own picker. The
+        // wrapper rule was the next one, and the exposé drew two keycaps on every card — one for a
+        // `KeyHint` wrapper and one for the widget inside it (Antonio, driving, 2026-09-15).
+        crate::hint::collect_hints_scoped(self, self.base.picker_scope.as_deref())
+            .into_iter()
+            .map(|(path, _)| path)
+            .collect()
     }
 
     /// Hand out the letters, or take them all back.
@@ -268,40 +285,6 @@ impl KeyHintGroup {
         Some(node)
     }
 }
-
-fn collect(
-    node: &dyn Component,
-    path: &mut Vec<usize>,
-    clip: Option<crate::Rectangle>,
-    scope: Option<&str>,
-    out: &mut Vec<Vec<usize>>,
-) {
-    if crate::hint::skip(node) {
-        return;
-    }
-    // **Stop at somebody else's picker.** Two verbs over one tree is what scopes are for, and a
-    // picker that walked into another's subtree would letter targets answering to that one.
-    if crate::hint::foreign_picker(node, scope) {
-        return;
-    }
-    // **The same question the global picker asks** — `hint::is_target`: anything actionable, plus
-    // anything that declared what a pick does, minus anything that said `hintable(false)`.
-    //
-    // This used to ask only whether a declaration was present, so the two walks disagreed about
-    // what a target even is: `prefix+/` lettered an ordinary button and a surface's own picker did
-    // not. A plugin owning a picker over a panel of buttons got no letters and nothing said why —
-    // "being pickable is not opt-in" held on one path and not the other. One rule, in one place.
-    if crate::hint::is_target_of(node, scope) && !crate::hint::out_of_view(node, clip) {
-        out.push(path.clone());
-    }
-    let clip = crate::hint::narrowed(clip, node);
-    for (i, child) in node.base().children.iter().enumerate() {
-        path.push(i);
-        collect(child.as_ref(), path, clip, scope, out);
-        path.pop();
-    }
-}
-
 impl Component for KeyHintGroup {
     fn base(&self) -> &Base {
         &self.base
@@ -338,14 +321,11 @@ impl Component for KeyHintGroup {
             // Typed text, not a key: `a` and `A` are the same *key* and differ only as text, which
             // is what lets the alphabet run past twenty-six without a modifier.
             Event::TextInput(typed) => {
-                let picked = self
-                    .targets()
-                    .into_iter()
-                    .find(|path| {
-                        self.at(path)
-                            .and_then(|n| n.base().hint_label.get_untracked())
-                            .is_some_and(|l| l == *typed)
-                    });
+                let picked = self.targets().into_iter().find(|path| {
+                    self.at(path)
+                        .and_then(|n| n.base().hint_label.get_untracked())
+                        .is_some_and(|l| l == *typed)
+                });
                 // Closed before firing, and the letters come down with it: running a pick may tear
                 // the tree down, and a keycap must not outlive the picker that put it up.
                 self.open.set(false);
@@ -381,7 +361,6 @@ impl Component for KeyHintGroup {
             crate::component::paint_child(child.as_ref(), cx);
         }
     }
-
 }
 
 impl crate::builders::LayoutExt for KeyHintGroup {}
@@ -461,7 +440,11 @@ mod tests {
         g.tick(0.0);
 
         assert_eq!(label_of(&g, 0).as_deref(), Some("x"));
-        assert_eq!(label_of(&g, 1), None, "no letter rather than a two-key sequence");
+        assert_eq!(
+            label_of(&g, 1),
+            None,
+            "no letter rather than a two-key sequence"
+        );
         assert_eq!(label_of(&g, 2), None);
     }
 
@@ -497,7 +480,11 @@ mod tests {
         let handled = g.on_event_capture(&Event::TextInput("s".to_string()));
 
         assert_eq!(handled, Handled::Yes, "the picker claims the letter");
-        assert_eq!(*picks.borrow(), vec![2], "the second row's own declaration ran");
+        assert_eq!(
+            *picks.borrow(),
+            vec![2],
+            "the second row's own declaration ran"
+        );
         assert!(!g.is_open(), "and the picker closed behind it");
         assert_eq!(label_of(&g, 0), None, "with every letter taken back");
     }
@@ -563,16 +550,26 @@ mod tests {
             KeyHint::new(Row::new().child(Label::new(format!("row {id}"))))
                 .on_hint(move || picks.borrow_mut().push(id))
         };
-        let mut g = KeyHintGroup::new(Flex::column().child(row(1)).child(row(2)))
-            .opens_on("mypanel.pick");
+        let mut g =
+            KeyHintGroup::new(Flex::column().child(row(1)).child(row(2))).opens_on("mypanel.pick");
 
         assert!(!g.is_open(), "closed until its verb is run");
-        assert!(!crate::fire_action(&g, "mypanel.other"), "and it answers to its own name only");
+        assert!(
+            !crate::fire_action(&g, "mypanel.other"),
+            "and it answers to its own name only"
+        );
 
-        assert!(crate::fire_action(&g, "mypanel.pick"), "the tree declares the verb");
+        assert!(
+            crate::fire_action(&g, "mypanel.pick"),
+            "the tree declares the verb"
+        );
         g.tick(0.0);
         assert!(g.is_open());
-        assert_eq!(label_of(&g, 0).as_deref(), Some("a"), "and the letters are up");
+        assert_eq!(
+            label_of(&g, 0).as_deref(),
+            Some("a"),
+            "and the letters are up"
+        );
 
         g.on_event_capture(&Event::TextInput("a".to_string()));
         assert_eq!(*picks.borrow(), vec![1]);
@@ -584,7 +581,10 @@ mod tests {
     #[test]
     fn the_declared_verb_also_takes_the_keyboard() {
         let g = KeyHintGroup::new(Flex::column()).opens_on("mypanel.pick");
-        assert!(!g.base().focused.get_untracked(), "closed, focus is elsewhere");
+        assert!(
+            !g.base().focused.get_untracked(),
+            "closed, focus is elsewhere"
+        );
         assert!(crate::fire_action(&g, "mypanel.pick"));
         assert!(
             g.base().focused.get_untracked(),
@@ -599,30 +599,30 @@ mod tests {
     /// inlined copy of the clip test beside it.
     #[test]
     fn a_picker_skips_what_its_subtree_has_scrolled_out_of_view() {
+        use crate::LayoutEngine;
         use crate::builders::LayoutExt as _;
         use crate::widgets::ScrollRegion;
-        use crate::LayoutEngine;
         use heca_core::layout::Size as CoreSize;
 
         let picks: Picks = Rc::new(RefCell::new(Vec::new()));
         let rows = (0..6).fold(Flex::column(), |c, i| {
             let picks = picks.clone();
             c.child(
-                KeyHint::new(Row::new().height(Length::Px(40.0)).child(Label::new("row")))
+                KeyHint::new(Row::new().height(40.0).child(Label::new("row")))
                     .on_hint(move || picks.borrow_mut().push(i)),
             )
         });
-        let region = ScrollRegion::new()
-            .width(Length::Px(200.0))
-            .height(Length::Px(100.0))
-            .child(rows);
+        let region = ScrollRegion::new().width(200.0).height(100.0).child(rows);
 
         let open = signal(false);
         let mut g = KeyHintGroup::new(region).open_when(open);
         LayoutEngine::new().compute(&mut g, CoreSize::new(200.0, 100.0));
 
         let all = g.targets().len();
-        assert!(all < 6, "six rows, a 100px viewport: {all} of them cannot all be visible");
+        assert!(
+            all < 6,
+            "six rows, a 100px viewport: {all} of them cannot all be visible"
+        );
         assert!(all > 0, "the rows still in view are still targets");
     }
 

@@ -449,7 +449,7 @@ impl Component for Input {
             let t = cx.theme();
             (
                 t.colors.surface,
-                t.colors.accent,
+                cx.accent(),
                 t.colors.muted,
                 t.colors.foreground,
                 t.colors.control_radius(),

@@ -590,7 +590,7 @@ impl Component for Select {
             let t = cx.theme();
             (
                 t.colors.surface,
-                t.colors.accent,
+                cx.accent(),
                 t.colors.glow,
                 t.colors.muted,
                 t.colors.foreground,

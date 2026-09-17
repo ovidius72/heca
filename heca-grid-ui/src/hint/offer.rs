@@ -3,7 +3,7 @@
 //! draws it in its own paint.
 
 use crate::component::Component;
-use super::collect::{is_target, narrowed, skip, unseen};
+use super::collect::{is_addressable, narrowed, skip, unseen};
 use crate::reactive::SignalUpdate;
 use heca_core::layout::Rectangle;
 
@@ -57,7 +57,7 @@ pub fn offer_hint(root: &dyn Component, path: &[usize], label: Option<String>) -
             None => return false,
         }
     }
-    if !is_target(node) {
+    if !is_addressable(node) {
         return false;
     }
     give(node, &label, clip)
@@ -103,7 +103,7 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
         }
         // The nearest hint *above* the target, remembered on the way down so it is there if the
         // named node turns out to be inside a wrapper that declared one.
-        let enclosing = if is_target(node) {
+        let enclosing = if is_addressable(node) {
             Some(node)
         } else {
             enclosing
@@ -235,7 +235,7 @@ fn label_nearest_matching(
     if skip(node) {
         return false;
     }
-    if is_target(node) && pick(node) && give(node, label, clip) {
+    if is_addressable(node) && pick(node) && give(node, label, clip) {
         return true;
     }
     let clip = narrowed(clip, node);
@@ -254,7 +254,7 @@ fn label_nearest_matching(
 /// the picker and closing it still has its letter taken away. A stale keycap left over a card is
 /// the failure this prevents.
 pub fn clear_hints(root: &dyn Component) {
-    if is_target(root) {
+    if is_addressable(root) {
         root.base().hint_label.set(None);
     }
     for child in &root.base().children {

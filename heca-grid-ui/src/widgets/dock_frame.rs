@@ -40,8 +40,8 @@ use crate::action::{Action, SignalData};
 use crate::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::style::{Align, Direction, Justify};
 use crate::scene::{Border, Glow};
+use crate::style::Direction;
 use crate::widgets::{Flex, Glyph, Icon, Item, Label, RegionMode};
 
 /// Chevron glyphs for expanded / collapsed states.
@@ -123,7 +123,7 @@ impl DockFrame {
         // Leading slot: drag grip + chevron. Body visibility + chevron are synced
         // in `remeasure`/`event` (which have `&mut self`).
         let leading = Flex::row()
-            .align(Align::Center)
+            .align("center")
             .gap(LEADING_GAP)
             .child(Label::new(GRIP))
             .child(chevron_label);
@@ -149,7 +149,7 @@ impl DockFrame {
         // Item — so an interactive control (e.g. a search Input) still receives
         // events: `event` routes to the header's children, controls-first.
         let header = Flex::row()
-            .align(Align::Center)
+            .align("center")
             .child(toggle)
             .child(Flex::empty());
 
@@ -159,8 +159,8 @@ impl DockFrame {
         let mut base = Base::new();
         base.style.layout.direction = Direction::Column;
         // Inset content from the brackets and space the title bar off the body.
-        base.style.layout.padding = CONTENT_PAD;
-        base.style.layout.gap = HEADER_BODY_GAP;
+        base.style.layout.padding = (CONTENT_PAD).into();
+        base.style.layout.gap = (HEADER_BODY_GAP).into();
         base.children.push(Box::new(header));
         base.children.push(Box::new(body));
         // Invariant relied on by `header`/`child`/`sync` index access below.
@@ -313,7 +313,7 @@ impl DockFrame {
         self.rail_mode = Some(mode);
         // Stretch the wrapper across the rail's width and center the glyph in it.
         let icon = Flex::row()
-            .justify(Justify::Center)
+            .justify("center")
             .child(Icon::new(glyph).size(RAIL_ICON_SIZE));
         if self.base.children.len() > RAIL {
             self.base.children[RAIL] = Box::new(icon);
@@ -334,7 +334,9 @@ impl DockFrame {
             .rail_mode
             .is_some_and(|m| m.get_untracked() == RegionMode::CollapsedRail);
         self.base.children[HEADER].base_mut().set_hidden(rail);
-        self.base.children[BODY].base_mut().set_hidden(rail || !open);
+        self.base.children[BODY]
+            .base_mut()
+            .set_hidden(rail || !open);
         if self.base.children.len() > RAIL {
             self.base.children[RAIL].base_mut().set_hidden(!rail);
         }
@@ -346,7 +348,8 @@ impl DockFrame {
             FRAMELESS_PAD
         } else {
             CONTENT_PAD
-        };
+        }
+        .into();
     }
 }
 
@@ -386,7 +389,12 @@ impl Component for DockFrame {
         // (StyleExt) wins; otherwise the theme rest glow gives the frame the
         // shared neon identity at rest, scaled by `glow_size` (T011).
         if let Some(f) = fill {
-            let glow = self.base.style.visual.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
+            let glow = self
+                .base
+                .style
+                .visual
+                .glow
+                .or_else(|| cx.rest_glow(GLOW_RADIUS));
             cx.rect(b, f, None, radius, glow);
         }
 
@@ -404,7 +412,13 @@ impl Component for DockFrame {
             // siblings in exactly the workspace it was meant to be found in (Antonio, driving, both
             // dark themes, 2026-08-13). So this is derived from `active_wash_alpha`, the theme's own
             // answer for how faint a container hint is, and sits below it.
-            cx.rect(b, cx.theme().colors.effective_workspace_previous_background(), None, radius, None);
+            cx.rect(
+                b,
+                cx.theme().colors.effective_workspace_previous_background(),
+                None,
+                radius,
+                None,
+            );
         }
         if self.active.get_untracked() {
             // **A faint WASH of the selected colour — never the panel itself.**
@@ -416,7 +430,13 @@ impl Component for DockFrame {
             // only the column's marker bar still said which row it was (Antonio, driving, with
             // three themes, 2026-08-13). `active_wash_alpha` is the theme's own answer to how
             // faint a container hint should be.
-            cx.rect(b, cx.theme().colors.effective_workspace_active_background(), None, radius, None);
+            cx.rect(
+                b,
+                cx.theme().colors.effective_workspace_active_background(),
+                None,
+                radius,
+                None,
+            );
         }
 
         // Nav-cursor outline — a thick border + faint fill marking the cursor on this frame.
@@ -431,7 +451,13 @@ impl Component for DockFrame {
         if self.nav.get_untracked() {
             let (cursor_c, glow, border_w, nav_wash, nav_outline) = {
                 let t = cx.theme();
-                (t.colors.accent, t.colors.glow, t.focus_border_width, t.colors.interaction.nav_wash, t.colors.interaction.nav_outline)
+                (
+                    cx.accent(),
+                    t.colors.glow,
+                    t.focus_border_width,
+                    t.colors.interaction.nav_wash,
+                    t.colors.interaction.nav_outline,
+                )
             };
             cx.rect(
                 b,
@@ -441,7 +467,11 @@ impl Component for DockFrame {
                     width: (border_w * 2.0).max(2.5),
                 }),
                 radius,
-                Some(Glow { color: glow, radius: 8.0, intensity: 0.25 }),
+                Some(Glow {
+                    color: glow,
+                    radius: 8.0,
+                    intensity: 0.25,
+                }),
             );
         }
 

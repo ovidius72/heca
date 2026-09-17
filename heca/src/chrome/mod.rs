@@ -5,22 +5,22 @@
 
 pub(crate) mod theme;
 pub(crate) use theme::{
-    alpha_u8, chrome_colors, chrome_gui_theme, chrome_status,
-    left_sidebar_shell_background_color, right_sidebar_shell_background_color,
+    alpha_u8, chrome_colors, chrome_gui_theme, chrome_status, left_sidebar_shell_background_color,
+    right_sidebar_shell_background_color,
 };
 pub(crate) mod signals;
-pub(crate) use signals::{sync_chrome_signals, sync_chrome_state, ChromeSignals};
+pub(crate) use signals::{ChromeSignals, sync_chrome_signals, sync_chrome_state};
 pub(crate) mod column;
 pub(crate) use column::{
-    clear_column_hints, clear_columns, offer_to_columns, sync_columns, RetainedColumn,
+    RetainedColumn, clear_column_hints, clear_columns, offer_to_columns, sync_columns,
 };
 pub(crate) mod pane;
-pub(crate) use pane::{clear_panes, header_height as pane_header_height, sync_panes, RetainedPane};
+pub(crate) use pane::{RetainedPane, clear_panes, header_height as pane_header_height, sync_panes};
 pub(crate) mod pane_header;
 pub(crate) use pane_header::{
-    action_tooltip, build_pane_headers, home_relative_path, pane_info_view,
-    sync_pane_viewport_widgets, truncate_path_left, ActionShortcuts,
-    RetainedPaneViewportWidgets, CARD_META_FONT_SCALE,
+    ActionShortcuts, CARD_META_FONT_SCALE, RetainedPaneViewportWidgets, action_tooltip,
+    build_pane_headers, home_relative_path, pane_info_view, sync_pane_viewport_widgets,
+    truncate_path_left,
 };
 pub(crate) mod drag;
 pub(crate) use drag::{ChromeDragItem, DragItemRegistry};
@@ -28,33 +28,32 @@ pub(crate) mod hint;
 // The hint half of the chrome — declarations, the visibility rule, and who is lettering what.
 // Re-exported so call sites keep naming `crate::chrome::…` while the code lives where it belongs.
 pub(crate) use hint::{
-    active_hint_targets, clear_hint_letters, fire_hint, fire_widget_action,
+    HintTarget, active_hint_targets, clear_hint_letters, fire_hint, fire_widget_action,
     target_identity,
-    HintTarget,
 };
-mod contribution;
 pub(crate) mod context_menu;
+mod contribution;
 mod events;
 mod expose;
 pub(crate) use expose::register as register_expose;
 
-mod focus;
 mod dispatch;
+mod focus;
 mod scene;
-#[allow(unused_imports)]
-use scene::{
-    build_region_content, build_sidebar_shell, pass_box_down, search_bar_tree, search_field_slot,
-    sidebar_toggle_button, with_share, ChromeFrame,
-};
-#[cfg(test)]
-use scene::chrome_scene;
-pub(crate) use scene::{
-    build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints, paint_search,
-};
 pub(crate) use dispatch::{
     cancel_every_tree, deliver, deliver_to_pane_viewports, deliver_to_panes,
     dispatch_surface_pointer, drag_in_flight, drain_pending_drops, drain_pending_menus,
     next_redraw_across_trees, open_declared_menu_for_focus, pane_viewport_at,
+};
+#[cfg(test)]
+use scene::chrome_scene;
+#[allow(unused_imports)]
+use scene::{
+    ChromeFrame, build_region_content, build_sidebar_shell, pass_box_down, search_bar_tree,
+    search_field_slot, sidebar_toggle_button, with_share,
+};
+pub(crate) use scene::{
+    build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints, paint_search,
 };
 mod layers_glue;
 pub(crate) use layers_glue::rebuild_named_layer;
@@ -73,7 +72,7 @@ mod state;
 // confirm dialog as a layer, plugins) — some names not yet referenced in-binary.
 #[allow(unused_imports)]
 pub(crate) use expose::record_expose_cursor;
-pub(crate) use layers::{surface_key_of, LayerId, LayerKind, LayerRegistry};
+pub(crate) use layers::{LayerId, LayerKind, LayerRegistry, surface_key_of};
 // Declarative UI model (plugin-task-ui-1); consumed by `realize` (ui-3) + Modal body (ui-4).
 // It lives in the `heca-view` crate since F003/P017/T009 — a plugin depends on that crate, and it
 // cannot depend on this binary. Re-exported here so the app keeps one path to the vocabulary.
@@ -86,30 +85,30 @@ pub(crate) use heca_view::{
 // can render a described tree, the showcase included. The app supplies the two seams it takes:
 // `ViewHintTargets` for pick registration, a wrapping closure for the click sink.
 #[allow(unused_imports)]
-pub(crate) use heca_view_realize::{realize, FormBindings, IntentEmitter};
+pub(crate) use heca_view_realize::{FormBindings, IntentEmitter, realize};
 // Host-owned overlay stack (plugin-task-ui-4, §2.7.1/§2.7.2), built on `LayerRegistry`.
 // `OverlayId` is pub (carried by `WmAction`); the rest is crate-internal.
 pub use overlay::OverlayId;
 #[allow(unused_imports)]
 pub(crate) use overlay::{
-    collect_form as collect_overlay_form, open_dropdown, open_modal, resolve as resolve_overlay,
-    content_covered, top_modal, DropdownItem, DropdownSpec, ModalAction, ModalResult, ModalSpec,
-    OverlayHost,
+    DropdownItem, DropdownSpec, ModalAction, ModalResult, ModalSpec, OverlayHost,
+    collect_form as collect_overlay_form, content_covered, open_dropdown, open_modal,
+    resolve as resolve_overlay, top_modal,
 };
 // Context-menu resolution: ContextPath + ContextTarget + ContextMenuRegistry + the unified
 // `open_context_menu_for`. Built-in providers seeded at startup; a provider attaches its own
 // entries via `Provider::context_menus` (context-menu-5).
+pub use context_menu::MenuBuild;
 #[allow(unused_imports)]
 pub(crate) use context_menu::{
-    open_context_menu_for, resolve_active_context, ContextMenuProvider, ContextMenuRegistry,
-    ContextPath, ContextTarget,
+    ContextMenuProvider, ContextMenuRegistry, ContextPath, ContextTarget, open_context_menu_for,
+    resolve_active_context,
 };
-pub use context_menu::MenuBuild;
 // The command palette: every registered action, searchable, dispatched through the one door
 // (F003/P085/T358).
-pub(crate) use palette::open_command_palette;
 pub use contribution::{ContextMenuContribution, Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
+pub(crate) use palette::open_command_palette;
 // Chrome keyboard focus: which dock the keyboard is aimed at (F003/P011/T020).
 pub(crate) use focus::{dock_candidates, navigable_dock, placement_for, region_on_screen};
 pub use host::ChromeHost;
@@ -307,17 +306,19 @@ use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
+use heca_grid_ui::style::{Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
     BadgeButton, Flex, FocusScope, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label, Pane,
-    ScrollBar, Separator, Surface, Tag,
-    TooltipSide,
+    ScrollBar, Separator, Surface, Tag, TooltipSide,
 };
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::rc::Rc;
 
-pub(crate) fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option<PaneRuntime> {
+pub(crate) fn runtime_snapshot(
+    state: &WorkspacesContainerState,
+    pane_id: PaneId,
+) -> Option<PaneRuntime> {
     state.pane_runtime(pane_id)
 }
 
@@ -338,7 +339,12 @@ pub(crate) fn truncate_sidebar_git_branch(branch: &str) -> String {
 #[derive(Clone)]
 pub(crate) struct ChromeIntentEmitter {
     source: crate::app::interaction::InteractionSource,
-    sink: Rc<dyn Fn(crate::app::interaction::InteractionSource, crate::app::interaction::InteractionIntent)>,
+    sink: Rc<
+        dyn Fn(
+            crate::app::interaction::InteractionSource,
+            crate::app::interaction::InteractionIntent,
+        ),
+    >,
 }
 
 impl ChromeIntentEmitter {
@@ -361,10 +367,15 @@ impl ChromeIntentEmitter {
     #[cfg(test)]
     pub(crate) fn of(
         source: crate::app::interaction::InteractionSource,
-        sink: impl Fn(crate::app::interaction::InteractionSource, crate::app::interaction::InteractionIntent)
-            + 'static,
+        sink: impl Fn(
+            crate::app::interaction::InteractionSource,
+            crate::app::interaction::InteractionIntent,
+        ) + 'static,
     ) -> Self {
-        Self { source, sink: Rc::new(sink) }
+        Self {
+            source,
+            sink: Rc::new(sink),
+        }
     }
 
     /// **Where intents from this tree come from.**
@@ -472,7 +483,6 @@ impl Component for RepaintWatch {
     }
 }
 
-
 /// A **retained** chrome tree + the signature of the state that produced it. The
 /// tree is rebuilt only when [`chrome_signature`] changes; otherwise it is just
 /// re-laid-out and painted each frame. This keeps the widget signals alive across
@@ -507,9 +517,7 @@ pub(crate) struct RetainedChrome {
 /// a surface placed beside it takes itself out of the flow, so this level changes no geometry. It
 /// exists to **outlive** the chrome, not to lay anything out.
 pub(crate) fn new_window_root() -> Flex {
-    Flex::column()
-        .width(Length::Percent(1.0))
-        .height(Length::Percent(1.0))
+    Flex::column().width(Length::FULL).height(Length::FULL)
 }
 
 /// **The chrome subtree's identity in the window root.** Its slot is found by this, never by
@@ -524,6 +532,18 @@ pub(crate) const CHROME_KEY: &str = "heca.chrome";
 /// having selected nothing. Addressing it by key is unaffected: that names `col:<id>` outright
 /// rather than collecting a set.
 pub(crate) const COLUMN_PICK_SCOPE: &str = "column.destination";
+
+/// **The scope a mounted dock's own letter belongs to** — "a place the keyboard can go".
+///
+/// The host wraps every mounted container in a focus scope that clicks to `FocusDock`, which makes
+/// the whole dock actionable and therefore lettered. That letter is a *destination for the
+/// keyboard*, which `prefix+Shift+e` already offers on every dock — so in `prefix+/` it spent one
+/// of the 52 on something with its own binding, once per placement, while the rows inside it were
+/// the things you actually wanted to reach (Antonio, driving, 2026-09-14).
+///
+/// Naming the scope keeps it out of `prefix+/`. The dock pick is unaffected: it addresses the
+/// container by key rather than collecting a set, exactly as the column pick does.
+pub(crate) const DOCK_PICK_SCOPE: &str = "dock.destination";
 
 /// **Seat a freshly built chrome subtree in the window root**, keeping every surface beside it.
 ///
@@ -712,7 +732,9 @@ pub(crate) fn picks(mount: &str, intent: Intent, emit: &ChromeIntentEmitter) -> 
     let run = seated.clone();
     let emit = emit.clone();
     heca_grid_ui::Hint::of(seated, move || {
-        emit.fire(crate::app::interaction::InteractionIntent::View(run.clone()))
+        emit.fire(crate::app::interaction::InteractionIntent::View(
+            run.clone(),
+        ))
     })
 }
 
@@ -726,8 +748,6 @@ fn seated(mount: &str, mut intent: Intent) -> Intent {
     );
     intent
 }
-
-
 
 /// The pane a press at `pos` (logical window coords) would start dragging, found by
 /// hit-testing the **retained** chrome tree's real laid-out bounds (F4.5) — replaces
@@ -816,7 +836,10 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     // frame), so a config reload that changes it must rebuild the retained tree.
     // (The border WIDTH is read at paint via `chrome_gui_theme`, so it live-reloads
     // without a rebuild.)
-    state.appearance.effective_sidebar_border_style().hash(&mut hsh);
+    state
+        .appearance
+        .effective_sidebar_border_style()
+        .hash(&mut hsh);
     // The sidebar border WIDTH/RADIUS and background are baked into the retained
     // tree at build time (per-widget Pane overrides + the shell fill), so a config
     // reload that changes them must rebuild the tree.
@@ -895,12 +918,23 @@ mod tests {
 
         let shortcuts = ActionShortcuts::default();
         let catalog = crate::actions::ActionCatalog::with_builtins();
-        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            |_, _| {},
+        );
 
         // The bar as it is built: the two toggles side by side, in document order.
         let bar = |left_open: bool, right_open: bool| {
-            let left_glyph = if left_open { Glyph::ArrowLineLeft } else { Glyph::ArrowLineRight };
-            let right_glyph = if right_open { Glyph::ArrowLineRight } else { Glyph::ArrowLineLeft };
+            let left_glyph = if left_open {
+                Glyph::ArrowLineLeft
+            } else {
+                Glyph::ArrowLineRight
+            };
+            let right_glyph = if right_open {
+                Glyph::ArrowLineRight
+            } else {
+                Glyph::ArrowLineLeft
+            };
             Flex::row()
                 .child(sidebar_toggle_button(
                     left_glyph,
@@ -935,10 +969,7 @@ mod tests {
                 .map(|(path, _bounds)| path)
                 .collect();
             assert_eq!(paths.len(), 2, "one pick target per toggle");
-            (
-                identity_of(&tree, &paths[0]),
-                identity_of(&tree, &paths[1]),
-            )
+            (identity_of(&tree, &paths[0]), identity_of(&tree, &paths[1]))
         };
 
         let (l_open, r_open) = ids(true, true);
@@ -965,10 +996,10 @@ mod tests {
     /// containers would each lose height to a 1px line.
     #[test]
     fn a_rule_separates_containers_without_taking_a_share() {
-        use heca_grid_ui::LayoutEngine;
         use heca_core::layout::Size as CoreSize;
+        use heca_grid_ui::LayoutEngine;
 
-        let body = || -> WidgetModel { Box::new(Flex::column().height(Length::Px(40.0))) };
+        let body = || -> WidgetModel { Box::new(Flex::column().height(40.0)) };
         let mut stack = Flex::column().gap(8.0).grow(1.0);
         {
             let layout = &mut stack.base_mut().style.layout;
@@ -980,12 +1011,16 @@ mod tests {
         stack = stack.child(Separator::horizontal());
         stack.base_mut().children.push(with_share(body(), 1.0));
 
-        let mut root = Flex::column().height(Length::Px(600.0)).child(stack);
+        let mut root = Flex::column().height(600.0).child(stack);
         LayoutEngine::new().compute(&mut root, CoreSize::new(300.0, 600.0));
 
         let kids = &root.base().children[0].base().children;
         assert_eq!(kids.len(), 3, "container, rule, container");
-        assert_eq!(kids[1].base().style.layout.flex_grow, 0.0, "the rule takes no share");
+        assert_eq!(
+            kids[1].base().style.layout.flex_grow,
+            0.0,
+            "the rule takes no share"
+        );
         assert!(
             kids[1].base().bounds.size.h < 10.0,
             "the rule keeps its own thin height: {:?}",
@@ -996,7 +1031,9 @@ mod tests {
         assert!(
             (kids[0].base().bounds.size.h - kids[2].base().bounds.size.h).abs() <= 1.0,
             "and the containers still share equally around it: {:?}",
-            kids.iter().map(|k| k.base().bounds.size.h).collect::<Vec<_>>(),
+            kids.iter()
+                .map(|k| k.base().bounds.size.h)
+                .collect::<Vec<_>>(),
         );
     }
 
@@ -1012,14 +1049,14 @@ mod tests {
     /// layout was wrong.
     #[test]
     fn shares_divide_the_region_even_with_content_taller_than_it() {
-        use heca_grid_ui::LayoutEngine;
         use heca_core::layout::Size as CoreSize;
+        use heca_grid_ui::LayoutEngine;
 
         // A body far shorter than the content it holds, as a sidebar is.
         let tall = || -> WidgetModel {
             let mut inner = Flex::column();
             for _ in 0..20 {
-                inner = inner.child(Flex::column().height(Length::Px(60.0)));
+                inner = inner.child(Flex::column().height(60.0));
             }
             Box::new(heca_grid_ui::ScrollRegion::new().child(inner))
         };
@@ -1033,7 +1070,7 @@ mod tests {
         for _ in 0..2 {
             stack.base_mut().children.push(with_share(tall(), 1.0));
         }
-        let mut body = Flex::column().height(Length::Px(600.0)).child(stack);
+        let mut body = Flex::column().height(600.0).child(stack);
         LayoutEngine::new().compute(&mut body, CoreSize::new(300.0, 600.0));
 
         let stack = &body.base().children[0];
@@ -1108,7 +1145,7 @@ mod tests {
         let tall = || -> WidgetModel {
             let mut inner = Flex::column();
             for _ in 0..20 {
-                inner = inner.child(Flex::column().height(Length::Px(60.0)));
+                inner = inner.child(Flex::column().height(60.0));
             }
             Box::new(heca_grid_ui::ScrollRegion::new().grow(1.0).child(inner))
         };
@@ -1130,7 +1167,7 @@ mod tests {
         for _ in 0..2 {
             stack.base_mut().children.push(with_share(wrapped(), 1.0));
         }
-        let mut body = Flex::column().height(Length::Px(600.0)).child(stack);
+        let mut body = Flex::column().height(600.0).child(stack);
         LayoutEngine::new().compute(&mut body, CoreSize::new(300.0, 600.0));
 
         let stack = &body.base().children[0];
@@ -1171,18 +1208,17 @@ mod tests {
         use heca_grid_ui::LayoutEngine;
         use heca_grid_ui::widgets::{FocusScope, KeyHint};
 
-        let body: WidgetModel = Box::new(Flex::column().height(Length::Px(120.0)));
+        let body: WidgetModel = Box::new(Flex::column().height(120.0));
         // What `focus_and_pick` does with `share = 0.0`: wrap, and touch no layout.
         let wrapped: WidgetModel =
             Box::new(FocusScope::new(KeyHint::new(body)).focus(signal(false)));
-        let mut region = Flex::column()
-            .height(Length::Px(600.0))
-            .child(with_share(wrapped, 0.0));
+        let mut region = Flex::column().height(600.0).child(with_share(wrapped, 0.0));
         LayoutEngine::new().compute(&mut region, CoreSize::new(300.0, 600.0));
 
         let ring = &region.base().children[0];
         assert_eq!(
-            ring.base().bounds.size.h, 120.0,
+            ring.base().bounds.size.h,
+            120.0,
             "content-sized means the content's height, not zero and not the region's",
         );
     }
@@ -1339,10 +1375,7 @@ mod tests {
             tron.effective_top_bottom_pane_background()
         );
         assert_eq!(super::theme::chrome_surface_color(&tron), tron.surface);
-        assert_eq!(
-            super::theme::chrome_surface_color(&latte),
-            latte.surface
-        );
+        assert_eq!(super::theme::chrome_surface_color(&latte), latte.surface);
         assert_ne!(
             latte.effective_left_sidebar_background(),
             super::theme::chrome_surface_color(&latte)
@@ -1398,7 +1431,7 @@ mod tests {
     /// has every level.
     fn one_pane_tree(pane_id: u64) -> crate::providers::workspaces::WorkspaceTree {
         use crate::app_state::SidebarItemState;
-        use crate::providers::workspaces::{ColumnEntry, PaneEntry, WorkspaceTree, WorkspaceEntry};
+        use crate::providers::workspaces::{ColumnEntry, PaneEntry, WorkspaceEntry, WorkspaceTree};
 
         let mut tree = WorkspaceTree::new();
         tree.workspaces.push(WorkspaceEntry {
@@ -1436,8 +1469,13 @@ mod tests {
         drag: &mut super::DragItemRegistry,
     ) -> Option<super::WidgetModel> {
         let mut host = super::ChromeHost::new(chrome.events());
-        host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
-        let emit: super::ChromeIntentEmitter = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
+        host.register(Box::new(
+            crate::providers::WorkspacesContainerProvider::new(),
+        ));
+        let emit: super::ChromeIntentEmitter = ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            |_, _| {},
+        );
         // The component reads its model from its own state, so the fixture puts it there rather
         // than handing it to the context (F003/P086/T367).
         *chrome.workspaces.tree_mut() = tree.clone();
@@ -1546,9 +1584,9 @@ mod tests {
 
         let scene = super::paint_chrome_root(&mut shell, 280.0, 600.0, &theme);
         let found = scene.iter().any(|c| match c {
-            DrawCommand::Rect(r) => r
-                .border
-                .is_some_and(|b| b.color == theme.colors.border && (b.width - border_w).abs() < 0.01),
+            DrawCommand::Rect(r) => r.border.is_some_and(|b| {
+                b.color == theme.colors.border && (b.width - border_w).abs() < 0.01
+            }),
             _ => false,
         });
         assert!(
@@ -1616,6 +1654,54 @@ mod tests {
         );
     }
 
+    /// **A mounted dock does not spend one of `prefix+/`'s letters.**
+    ///
+    /// The host wraps every mounted container in a focus scope that clicks to `FocusDock`. That
+    /// makes the whole dock actionable, so the ordinary picker lettered it — a letter per
+    /// *placement*, pointing at a keyboard destination `prefix+Shift+e` already offers on every
+    /// dock, while the rows inside it were the things worth reaching (Antonio, driving,
+    /// 2026-09-14: "hitting it selects the dockview").
+    ///
+    /// Naming its scope is what keeps it out. Its own pick still reaches it by name — that is
+    /// `a_docks_pick_letter_is_stamped_over_it`, and the two must stay true together.
+    #[test]
+    fn a_mounted_dock_is_not_a_target_of_the_ordinary_picker() {
+        let tree = one_pane_tree(1);
+        let theme = GuiTheme::default();
+        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let mut signals = super::ChromeSignals::default();
+        let content = region_body(
+            &tree,
+            &theme,
+            &chrome,
+            &mut signals,
+            &mut super::DragItemRegistry::default(),
+        );
+        let shell = super::build_sidebar_shell(
+            280.0,
+            600.0,
+            theme.colors.background,
+            8.0,
+            heca_config::appearance::BorderStyle::Bracketed,
+            1.0,
+            12.0,
+            content,
+        );
+
+        let named: Vec<String> = heca_grid_ui::collect_hints(&shell)
+            .into_iter()
+            .filter_map(|(path, _)| heca_grid_ui::identity_of(&shell, &path))
+            .collect();
+        assert!(
+            !named.iter().any(|n| n.ends_with("workspaces")),
+            "the dock itself must not be offered by the ordinary picker: {named:?}",
+        );
+        assert!(
+            named.iter().any(|n| n.contains("ws:")),
+            "…while the rows inside it still are: {named:?}",
+        );
+    }
+
     /// A dock's pick letter reaches the tree: the host registers the signal, and setting it stamps a
     /// keycap over that dock. The letters themselves come from the pick candidates
     /// (`dock_keycap`), projected each frame by `sync_chrome_signals`.
@@ -1663,7 +1749,10 @@ mod tests {
             "the dock's letter is stamped over it while the pick is open",
         );
         heca_grid_ui::offer_hint_by_key(&shell, "workspaces", None);
-        assert!(!letter_drawn(&mut shell), "and withdrawn when the pick ends");
+        assert!(
+            !letter_drawn(&mut shell),
+            "and withdrawn when the pick ends"
+        );
     }
 
     #[test]
@@ -1930,12 +2019,14 @@ mod tests {
         // Pane-parameterized actions carry the pane/column and don't need focus. Icons
         // resolve from the action catalog (close = FolderSimpleMinus; add-pane = the
         // add_pane_to_column identity → FolderSimplePlus).
-        let (g, a, _, focus) = super::pane_header::pane_action_spec(&catalog, PaneAction::Close, pid, 2, 3);
+        let (g, a, _, focus) =
+            super::pane_header::pane_action_spec(&catalog, PaneAction::Close, pid, 2, 3);
         assert_eq!(g, Glyph::FolderSimpleMinus);
         assert_eq!(a, WmAction::ClosePaneById { pane_id: pid });
         assert!(!focus);
 
-        let (g, a, _, focus) = super::pane_header::pane_action_spec(&catalog, PaneAction::Split, pid, 2, 3);
+        let (g, a, _, focus) =
+            super::pane_header::pane_action_spec(&catalog, PaneAction::Split, pid, 2, 3);
         assert_eq!(g, Glyph::FolderSimplePlus);
         assert_eq!(
             a,
@@ -1947,12 +2038,14 @@ mod tests {
         assert!(!focus);
 
         // Active-targeted actions use the requested icons + need focus-first.
-        let (g, a, _, focus) = super::pane_header::pane_action_spec(&catalog, PaneAction::Zoom, pid, 0, 0);
+        let (g, a, _, focus) =
+            super::pane_header::pane_action_spec(&catalog, PaneAction::Zoom, pid, 0, 0);
         assert_eq!(g, Glyph::FrameCorners);
         assert_eq!(a, WmAction::ZoomColumn);
         assert!(focus);
 
-        let (g, a, _, focus) = super::pane_header::pane_action_spec(&catalog, PaneAction::Float, pid, 0, 0);
+        let (g, a, _, focus) =
+            super::pane_header::pane_action_spec(&catalog, PaneAction::Float, pid, 0, 0);
         assert_eq!(g, Glyph::Cards);
         assert_eq!(a, WmAction::Float);
         assert!(focus);
@@ -1964,12 +2057,30 @@ mod tests {
         let catalog = crate::actions::ActionCatalog::with_builtins();
         // Driven by the action policy: float/close are focused-pane-local (kept),
         // split/zoom/move are tiled-only (hidden when floating).
-        assert!(super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::Float));
-        assert!(super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::Close));
-        assert!(!super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::Split));
-        assert!(!super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::Zoom));
-        assert!(!super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::MoveLeft));
-        assert!(!super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::MoveRight));
+        assert!(super::pane_header::pane_action_visible_when_floating(
+            &catalog,
+            PaneAction::Float
+        ));
+        assert!(super::pane_header::pane_action_visible_when_floating(
+            &catalog,
+            PaneAction::Close
+        ));
+        assert!(!super::pane_header::pane_action_visible_when_floating(
+            &catalog,
+            PaneAction::Split
+        ));
+        assert!(!super::pane_header::pane_action_visible_when_floating(
+            &catalog,
+            PaneAction::Zoom
+        ));
+        assert!(!super::pane_header::pane_action_visible_when_floating(
+            &catalog,
+            PaneAction::MoveLeft
+        ));
+        assert!(!super::pane_header::pane_action_visible_when_floating(
+            &catalog,
+            PaneAction::MoveRight
+        ));
     }
 
     #[test]
@@ -2015,7 +2126,9 @@ mod tests {
             }
         }
         let base = super::pane_header::pane_header_key(
-            &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
+            &content(
+                &programs, &segments, &actions, &runtime, &hints, &catalog, 0,
+            ),
             15.0,
             300.0,
         );
@@ -2023,7 +2136,9 @@ mod tests {
         assert_eq!(
             base,
             super::pane_header::pane_header_key(
-                &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
+                &content(
+                    &programs, &segments, &actions, &runtime, &hints, &catalog, 0
+                ),
                 15.0,
                 300.0
             )
@@ -2032,7 +2147,9 @@ mod tests {
         assert_ne!(
             base,
             super::pane_header::pane_header_key(
-                &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 1),
+                &content(
+                    &programs, &segments, &actions, &runtime, &hints, &catalog, 1
+                ),
                 15.0,
                 300.0
             )
@@ -2066,7 +2183,9 @@ mod tests {
         assert_ne!(
             base,
             super::pane_header::pane_header_key(
-                &content(&programs, &segments, &actions, &no_branch, &hints, &catalog, 0),
+                &content(
+                    &programs, &segments, &actions, &no_branch, &hints, &catalog, 0
+                ),
                 15.0,
                 300.0
             ),
@@ -2081,7 +2200,9 @@ mod tests {
         assert_eq!(
             base,
             super::pane_header::pane_header_key(
-                &content(&programs, &segments, &actions, &running, &hints, &catalog, 0),
+                &content(
+                    &programs, &segments, &actions, &running, &hints, &catalog, 0
+                ),
                 15.0,
                 300.0
             ),
@@ -2097,7 +2218,9 @@ mod tests {
             assert_eq!(
                 base,
                 super::pane_header::pane_header_key(
-                    &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
+                    &content(
+                        &programs, &segments, &actions, &runtime, &hints, &catalog, 0
+                    ),
                     15.0,
                     w
                 ),
@@ -2105,7 +2228,6 @@ mod tests {
             );
         }
     }
-
 }
 
 #[cfg(test)]
@@ -2177,7 +2299,10 @@ mod search_bar_tests {
     fn a_wider_field_makes_a_wider_bar() {
         let narrow = laid_out_bar_bounds(field(80.0), None).size.w;
         let wide = laid_out_bar_bounds(field(300.0), None).size.w;
-        assert!(wide > narrow, "wide bar {wide} should exceed narrow {narrow}");
+        assert!(
+            wide > narrow,
+            "wide bar {wide} should exceed narrow {narrow}"
+        );
     }
 
     /// **The field must land in the slot the tree reserved**, or the caret and the

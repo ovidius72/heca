@@ -50,7 +50,7 @@ impl Component for Spinner {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let accent = cx.theme().colors.accent;
+        let accent = cx.accent();
         let b = self.base.bounds;
         let cx_pt = b.loc.x + b.size.w / 2.0;
         let cy_pt = b.loc.y + b.size.h / 2.0;
