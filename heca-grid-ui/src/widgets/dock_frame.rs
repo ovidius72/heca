@@ -37,7 +37,7 @@
 //! write-via-actions* contract — the host's toggle action expands the rail back.
 
 use crate::action::{Action, SignalData};
-use crate::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
+use crate::builders::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
@@ -70,15 +70,23 @@ const BODY_GAP: f32 = 4.0;
 /// Size (logical px) of the centered glyph shown in [`RegionMode::CollapsedRail`].
 const RAIL_ICON_SIZE: f32 = 22.0;
 
-/// Index of the header (a [`Flex`] row) / body within `base.children`. The rail
-/// icon, when configured via [`DockFrame::rail`], is appended at [`RAIL`].
-const HEADER: usize = 0;
-const BODY: usize = 1;
-const RAIL: usize = 2;
-/// Index of the controls slot within the header row (after the toggle [`Item`]).
-/// The header row's first child: the title Item that folds the frame.
-const TOGGLE: usize = 0;
-const CONTROLS: usize = 1;
+/// **The frame's parts, named.** Each says which one it is
+/// ([`PlaceExt::area`](crate::builders::PlaceExt::area)) and the frame asks by name through
+/// [`area`](crate::component::area) — never by its position in `children`.
+///
+/// An index is right only for the arrangement it was written for: insert a part and every index
+/// after it is wrong, while nothing fails, because the indices are still valid indices. These used
+/// to be `HEADER = 0`, `BODY = 1`, `RAIL = 2`, `TOGGLE = 0`, `CONTROLS = 1`, documented as an
+/// invariant and asserted at construction — which is the shape a template removes the need for.
+pub const HEADER_AREA: &str = "header";
+/// The dock's content.
+pub const BODY_AREA: &str = "body";
+/// The single glyph shown instead of everything else in [`RegionMode::CollapsedRail`].
+pub const RAIL_AREA: &str = "rail";
+/// The title row's fold toggle.
+pub const TOGGLE_AREA: &str = "toggle";
+/// The title row's slot for a caller's own affordances.
+pub const CONTROLS_AREA: &str = "controls";
 /// A titled, collapsible, bracket-framed container for a Dock.
 pub struct DockFrame {
     base: Base,
@@ -150,11 +158,12 @@ impl DockFrame {
         // events: `event` routes to the header's children, controls-first.
         let header = Flex::row()
             .align("center")
-            .child(toggle)
-            .child(Flex::empty());
+            .child(toggle.area(TOGGLE_AREA))
+            .child(Flex::empty().area(CONTROLS_AREA))
+            .area(HEADER_AREA);
 
         // Body holds the dock content; folds out of layout when collapsed.
-        let body = Flex::column().gap(BODY_GAP);
+        let body = Flex::column().gap(BODY_GAP).area(BODY_AREA);
 
         let mut base = Base::new();
         base.style.layout.direction = Direction::Column;
@@ -163,13 +172,6 @@ impl DockFrame {
         base.style.layout.gap = (HEADER_BODY_GAP).into();
         base.children.push(Box::new(header));
         base.children.push(Box::new(body));
-        // Invariant relied on by `header`/`child`/`sync` index access below.
-        debug_assert_eq!(base.children.len(), 2, "DockFrame children: [HEADER, BODY]");
-        debug_assert_eq!(
-            base.children[HEADER].base().children.len(),
-            2,
-            "DockFrame header children: [toggle, CONTROLS]"
-        );
         Self {
             base,
             expanded,
@@ -213,7 +215,11 @@ impl DockFrame {
     /// field). Interactive controls work: events reach the slot before the toggle.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn header(mut self, c: impl crate::builders::IntoComponent) -> Self {
-        self.base.children[HEADER].base_mut().children[CONTROLS] = c.into_component();
+        let mut fresh = c.into_component();
+        fresh.base_mut().grid_area = Some(CONTROLS_AREA.to_string());
+        if let Some(slot) = crate::component::area_slot(&mut self.base, CONTROLS_AREA) {
+            *slot = fresh;
+        }
         self
     }
 
@@ -221,10 +227,9 @@ impl DockFrame {
     /// uses to make the frame draggable via the shipped `drag/` framework.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn child(mut self, c: impl crate::builders::IntoComponent) -> Self {
-        self.base.children[BODY]
-            .base_mut()
-            .children
-            .push(c.into_component());
+        if let Some(body) = crate::component::area_slot(&mut self.base, BODY_AREA) {
+            body.base_mut().children.push(c.into_component());
+        }
         self
     }
 
@@ -243,7 +248,8 @@ impl DockFrame {
     /// ```
     #[heca_grid_ui_macros::prop]
     pub fn fold_hint_tone(mut self, tone: crate::widgets::HintTone) -> Self {
-        self.base.children[HEADER].base_mut().children[TOGGLE]
+        crate::component::area_slot(&mut self.base, TOGGLE_AREA)
+            .expect("the title row always holds its toggle")
             .base_mut()
             .hint_style
             .tone = Some(tone);
@@ -315,10 +321,10 @@ impl DockFrame {
         let icon = Flex::row()
             .justify("center")
             .child(Icon::new(glyph).size(RAIL_ICON_SIZE));
-        if self.base.children.len() > RAIL {
-            self.base.children[RAIL] = Box::new(icon);
-        } else {
-            self.base.children.push(Box::new(icon));
+        let icon = icon.area(RAIL_AREA);
+        match crate::component::area_slot(&mut self.base, RAIL_AREA) {
+            Some(slot) => *slot = Box::new(icon),
+            None => self.base.children.push(Box::new(icon)),
         }
         self.sync();
         self
@@ -333,13 +339,14 @@ impl DockFrame {
         let rail = self
             .rail_mode
             .is_some_and(|m| m.get_untracked() == RegionMode::CollapsedRail);
-        self.base.children[HEADER].base_mut().set_hidden(rail);
-        self.base.children[BODY]
-            .base_mut()
-            .set_hidden(rail || !open);
-        if self.base.children.len() > RAIL {
-            self.base.children[RAIL].base_mut().set_hidden(!rail);
-        }
+        let hide = |base: &mut Base, name: &str, hidden: bool| {
+            if let Some(part) = crate::component::area_slot(base, name) {
+                part.base_mut().set_hidden(hidden);
+            }
+        };
+        hide(&mut self.base, HEADER_AREA, rail);
+        hide(&mut self.base, BODY_AREA, rail || !open);
+        hide(&mut self.base, RAIL_AREA, !rail);
         // Tighten the frame inset in the rail so the icon fits the thin column;
         // frameless docks tighten too since there are no brackets to clear.
         self.base.style.layout.padding = if rail {

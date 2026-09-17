@@ -62,9 +62,9 @@ pub(crate) const ACTIVE_GLOW_STRENGTH: f32 = 0.55;
 /// three numbers or sit wrong (Antonio, driving, 2026-09-02).
 ///
 /// The shell builds the pane as a column of two when there is a header: the header at its natural
-/// height, then the content taking the rest. One child means no header.
+/// height, then the content taking the rest — and a pane with no header has no node claiming that
+/// row, which is how "there is no header" answers.
 pub(crate) fn header_height(state: &crate::app_state::AppState, pane_id: PaneId) -> f32 {
-    use heca_grid_ui::Component;
     let Some(retained) = state.panes.get(&pane_id) else {
         return 0.0;
     };
@@ -74,13 +74,8 @@ pub(crate) fn header_height(state: &crate::app_state::AppState, pane_id: PaneId)
     //
     // It used to ask "does this pane have two children?" — which AGENTS § 0 and docs/layout.md both
     // name as never right, because the answer changes with anything else put in the body.
-    fn area(n: &dyn Component, name: &str) -> Option<f32> {
-        if n.base().grid_area.as_deref() == Some(name) {
-            return Some(n.base().bounds.size.h as f32);
-        }
-        n.base().children.iter().find_map(|c| area(c.as_ref(), name))
-    }
-    area(&retained.root, shell::PANE_HEADER_AREA).unwrap_or(0.0)
+    heca_grid_ui::area(&retained.root, shell::PANE_HEADER_AREA)
+        .map_or(0.0, |h| h.base().bounds.size.h as f32)
 }
 
 pub(crate) fn clear_panes(state: &mut crate::app_state::AppState) {

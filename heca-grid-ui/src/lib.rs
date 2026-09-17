@@ -62,7 +62,7 @@ pub use builders::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
 pub use color::Color;
 pub use component::{
     holds_keyboard, Base, Component, Event, GridKey, Handled, Modifiers, PaintCx,
-    WidgetIntent, collect_damage, needs_layout,
+    WidgetIntent, area, area_slot, collect_damage, needs_layout,
     deliver, dispatch, overlay_occluded_at, paint_child, shift_subtree,
     install_frame_request, request_frame,
 };

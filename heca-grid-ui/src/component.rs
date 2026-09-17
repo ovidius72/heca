@@ -129,6 +129,47 @@ pub fn overlay_occluded_at(root: &dyn Component, pos: Point) -> bool {
 ///     self.layout_dirty = true;
 /// }
 /// ```
+/// **The part of a tree that named itself `name`** — its grid area, read back.
+///
+/// A widget with several parts asks for each one by the name it gave it, rather than by its
+/// position in `children`. An index is right only for the arrangement it was written for: insert a
+/// part and every index after it is wrong, and nothing fails, because the indices are still valid
+/// indices. A name is wrong only if nothing carries it, which is exactly the question "is there a
+/// header?" should be asking.
+///
+/// Depth-first, so a part nested inside a wrapper is still found. `None` means no part claims that
+/// name — which is how a missing part answers.
+pub fn area<'a>(root: &'a dyn Component, name: &str) -> Option<&'a dyn Component> {
+    if root.base().grid_area.as_deref() == Some(name) {
+        return Some(root);
+    }
+    root.base()
+        .children
+        .iter()
+        .find_map(|c| area(c.as_ref(), name))
+}
+
+/// [`area`], for a widget that has to CHANGE the part it finds — hide it, hand it a signal, or
+/// swap its contents outright.
+///
+/// It hands back the **slot** rather than the component, because replacing a part means replacing
+/// the box: `*slot = Box::new(new_thing)`. Searching from a [`Base`] rather than a `Component` is
+/// what lets a widget ask about its own parts while it is still being built.
+pub fn area_slot<'a>(base: &'a mut Base, name: &str) -> Option<&'a mut Box<dyn Component>> {
+    for child in base.children.iter_mut() {
+        if child.base().grid_area.as_deref() == Some(name) {
+            return Some(child);
+        }
+        // Take the borrow apart so the recursive call can have it: the child either answers or its
+        // own children do, and only one of those borrows is live at a time.
+        let found = area_slot(child.base_mut(), name).is_some();
+        if found {
+            return area_slot(child.base_mut(), name);
+        }
+    }
+    None
+}
+
 pub fn needs_layout(root: &dyn Component) -> bool {
     fn walk(c: &dyn Component, found: &mut bool) {
         let b = c.base();
