@@ -388,6 +388,9 @@ are already 16 and they are being deleted.
 ### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase
 
 - **Before building ANY UI**, look at what already exists:
+  - **Laying things out:** [`docs/layout.md`](docs/layout.md) — Grid, Flex, Surface, sizes, spaces,
+    alignment and shares, in the spellings the builders actually take. **Read it before arranging
+    anything with more than one part.**
   - **Widget catalog + recipes:** [`docs/widgets.md`](docs/widgets.md) (every widget + a "Drag and drop" section + patterns).
   - **Layering / overlays / KeyHint visibility:** [`docs/surface-compositor.md`](docs/surface-compositor.md) — the surface-tree model that decides which layers/buttons are interactive, and [`docs/overlay-design.md`](docs/overlay-design.md). **Required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface.**
   - **The living reference:** run the showcase — `cargo run -p heca-renderer --example showcase` —
@@ -917,15 +920,23 @@ row = row.child(action_tooltip(button, action_name, label, &state.action_shortcu
   the macOS `⌃⌥⇧⌘` form. Rebinding in `config.toml` + reload updates every tooltip.
 - Result: `tip = "<label>  <shortcut(s)>"`, or the label alone when unbound.
 
-**2. KeyHint (vimium-style `prefix+/` pick)** — declare **what a pick does** on the
-wrapper that draws the letter. One line, no id, no registry:
+**2. The pick (vimium-style `prefix+/`)** — declare **what a pick does** on the widget
+itself. One line, no id, no registry, **no wrapper**:
 
 ```rust
 let fire = crate::chrome::fires(pane_row_press(pane_id), emit);   // the click
 let hint = crate::chrome::fires(row_hint(pane_key(pane_id)), emit); // the pick
-let row = Row::new().on_activate(fire);
-KeyHint::new(row).on_hint(hint)
+Row::new().on_activate(fire).on_hint(hint)
 ```
+
+⛔ **Do not wrap it in `KeyHint` to do this.** A wrapper round a widget that is already
+actionable is a **second pick target**: the wrapper declares, the widget inside is
+actionable, so a picker offers two letters where the author wrote one. It also hides the
+widget's `key` one level in, so anything looking the widget up by name finds an anonymous
+wrapper — which is how every pane came to be rebuilt every frame. `KeyHint` is only for a
+region that is **not** a widget you can put a builder on, such as a boxed `WidgetModel`
+whose type is unknown. Which to reach for, with a symptom→cause table:
+[`docs/hint-architecture.md` § 5a](docs/hint-architecture.md).
 
 The slot is `Base::hint`, universal, and so is the **builder**: `on_hint` is on
 `ComponentExt`, so every widget takes one and `KeyHint` stays what it
@@ -939,7 +950,8 @@ nothing has to be un-registered when a tree rebuilds; a candidate is a
 letters are up. The pick path is `handle_hint_pick` → `chrome::active_hint_targets`
 (eligibility, once) and `chrome::paint_hint_letters` (live bounds, every frame); both
 walk the chrome tree, every `state.pane_headers` tree and every visible layer. See
-`sidebar_toggle_button` for a complete example (tooltip + hint together).
+`sidebar_toggle_button` for a complete example (tooltip + hint together, declared on the
+`IconButton` itself).
 
 - **A pick is not a click.** They are different gestures and a region may answer them
   differently: a sidebar row activates the pane and *leaves* on a click, and stays in the

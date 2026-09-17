@@ -1,5 +1,9 @@
 # Writing a plugin for heca
 
+> **Laying things out — [`layout.md`](layout.md).** Every size, space, track and alignment
+> spelling below is the one the app's own builders take; that guide is the full reference.
+
+
 **The plugin author's manual.** Everything here is about the interface *you* write and what the host
 does with it. The chrome's own architecture — how the sidebar, the regions, the overlays and the
 containers are built — is not your business and lives in
@@ -16,7 +20,7 @@ containers are built — is not your business and lives in
 | the rules an author actually trips over | [§3](#3-the-rules) |
 | what a description cannot set today, and why | [§4](#4-what-a-description-cannot-set-today-and-why) |
 | worked screens — a panel, a table, a modal with a form, menus and hints | [§5](#5-writing-a-screen) |
-| values: sizes, colours, enums | [§6](#6-values) — and **the full size reference is [`widgets.md` → Sizes](widgets.md)** |
+| values: sizes, spaces, colours, enums | [§6](#6-values) — and the full references are [`widgets.md` → Writing a size](widgets.md#writing-a-size--one-vocabulary-native-and-described-alike) and [→ Writing a space](widgets.md#writing-a-space) |
 | every widget's own properties and events | [`widgets.md`](widgets.md) |
 | a plugin that is only a config file | [the section at the end of the map](#the-plugin-that-needs-no-code-at-all) |
 ---
@@ -508,7 +512,48 @@ nothing for the letter to run.
   The enum's own variants are the accepted list, so adding a variant accepts it with no list to
   update anywhere.
 - A size as a plain number (pixels), `"auto"`, or a percentage string like `"50%"`.
+- A space — `gap`, `padding`, `margin`, and their per-axis and per-side forms — as a plain number
+  (pixels), `"8px"`, or a **step of the theme's rhythm** by name: `"none"` / `"xs"` / `"sm"` /
+  `"md"` / `"lg"`.
+
+  **Prefer the step.** It is a fraction of the inherited font, resolved when the tree is laid out,
+  so your panel breathes like the rest of the app and follows a font, theme or zoom change with
+  nothing rewritten. A pixel count is tuned for one font size and wrong at every other. Use the
+  steps to group — a tight `"xs"` inside a label-and-control couple, a roomier `"md"` between
+  couples — which is a form layout with no arithmetic.
+
+  One parser reads these and the app's own builders take the identical spellings, so what you write
+  is what native code gets. They are **not a plugin dialect**. Full reference:
+  [`widgets.md` → Writing a space](widgets.md#writing-a-space).
+
+  ⚠️ The retired names `gap_spacing`, `pad_spacing_x` and `pad_spacing_y` are still read so older
+  trees keep working. Nothing writes them; do not use them in anything new.
+- A **grid track** as `"auto"`, `"1fr"`, `"200px"`, a bare number (pixels), `"min-content"` /
+  `"max-content"`, or `"repeat(3, 1fr)"`, in the `columns` and `rows` lists of a `Grid`. A child
+  places itself with `area`, or `col`/`row` plus `col_span`/`row_span` — properties of the **child**,
+  as CSS has them, resolved against the grid that holds it. Same rule as everything above:
+  one parser, and the app's own `Grid::template("auto 1fr")` reads the identical words — the
+  vocabulary used to live only on this side, which meant native code could not say `"1fr"` at all.
+- A **layout keyword** — `direction`, `justify`, `align` — as the word a stylesheet would write:
+  `"row"` / `"column"`, `"start"` / `"center"` / `"end"` / `"space-between"` / `"space-around"` /
+  `"space-evenly"`, `"stretch"` / `"baseline"`. A hyphen and an underscore are the same character
+  here, so `"space-between"` and `"space_between"` both land.
 - A colour as `"#rrggbb"`, `"#rrggbbaa"`, or a theme name.
+- `accent` — **the accent this node and everything inside it paints its chrome with**: focus rings,
+  hover fills, selected washes, scrollbar thumbs, a caret. A panel with a hue of its own sets it
+  once and every control inside follows, with nothing told twice.
+
+  ```jsonc
+  { "kind": "surface", "props": { "accent": "danger" },
+    "children": [ { "kind": "button", "props": { "text": "Delete" } } ] }
+  ```
+
+  **The theme is always first**: set nothing and everything reads the theme's accent. The order is
+  the node's own → the nearest ancestor that set one → the theme. Prefer a **theme name** over a
+  literal, as with every colour here: a name follows a theme reload, a literal does not.
+
+  ⚠️ It does not redefine a declared meaning — a badge's `accent` variant, an alert's `info`, a
+  destructive button. Those keep the colour their variant names.
 
 Anything the model does not understand is ignored and the widget keeps its own default. A single
 bad value costs only itself — the good properties on the same node still apply. The model is

@@ -313,6 +313,91 @@ is the whole source of the confusion — but one is **a target** and the other i
 
 ---
 
+## 5a. ⭐ Which one do I reach for
+
+### `on_hint(..)` — on the widget itself
+
+**This is the normal way, and almost always the only thing you need.** Every widget has it, from
+`ComponentExt`, along with `hintable`, `hint_placement`, `hint_tone` and `hint_offset_y`.
+
+```rust
+Row::new().child(Label::new("editor"))
+    .on_hint(|| choose(id))                 // what a PICK does
+    .hint_placement(HintPlacement::TopLeft) // where its cap goes
+```
+
+You do not need it to be pickable at all: **anything actionable already is** (§ 2). Declaring
+`on_hint` says a pick means something *other* than acting on the widget — heca's sidebar row is
+activated and left by a click, and peeked at without leaving by a pick. Leave it unbound and a pick
+does what a press does.
+
+### `hintable(false)` — the opt-out
+
+For something actionable that should not spend one of the 52 letters. A `×` on every row of a long
+list is the case it exists for.
+
+```rust
+Button::new("×").hintable(false)
+```
+
+It is the **only** lever that removes a letter, and it removes it from every collected picker. If
+you want a target in one picker and not another, that is `hint_scope`, not this.
+
+### `KeyHint` — rarely, and never around a widget
+
+**Only for a region that is not a widget you can put a builder on.** If the thing can say
+`on_hint` itself, it must.
+
+```rust
+// ✅ a bare region the host draws, with no widget of its own
+KeyHint::new(some_raw_region).on_hint(..)
+
+// ❌ a widget that could have declared for itself
+KeyHint::new(Row::new().child(Label::new("editor"))).on_hint(..)
+```
+
+**Why the second is wrong, and it is not style.** The wrapper declares a pick, so it is a target.
+The `Row` inside is actionable, so it is a target too. **Two targets where the author wrote one
+thing**, and a picker letters both — two keycaps on one row. `prefix+/` hides this, because it
+collapses a transparent wrapper into the thing it wraps; a surface's own picker did not, and the
+exposé drew two caps on every card until 2026-09-15.
+
+The collapse rule is a safety net for wrappers that still exist, not permission to add more.
+
+### `KeyHintGroup` — when you want a picker of your own
+
+A surface with its own pick key — the exposé's `s`, a plugin's panel. It opens on an action, letters
+every declaration beneath it, takes the keyboard, and runs the one you type.
+
+```rust
+KeyHintGroup::new(
+    Flex::column()
+        .child(Row::new().child(Label::new("one")).on_hint(|| choose(1)))
+        .child(Row::new().child(Label::new("two")).on_hint(|| choose(2))),
+)
+.opens_on("mypanel.pick")   // config binds the key: [[keys.surface]] name = "mypanel"
+```
+
+**Its children declare their own picks. Do not wrap them.** The group is the picker; the rows are
+the targets. That is the whole shape.
+
+`prefix+/` is this same widget's behaviour at screen scope, with one extra question only the host
+can answer — *which surfaces are eligible* (is this card covered by the sidebar? is there a modal
+above it?). A plugin's picker is the same behaviour scoped to its own panel, and the two share one
+walk so a rule learned by either reaches both.
+
+### Common mistakes
+
+| symptom | cause |
+|---|---|
+| two caps on one row | a `KeyHint` wrapped a widget that could declare for itself |
+| a cap on something you never declared | that is the rule — **anything actionable is pickable** (§ 2). `hintable(false)` if it should not be |
+| your picker letters nothing | its children declare nothing *and* are not actionable — a plain `Surface` is neither |
+| a target appears in `prefix+/` when it belongs to your pick | give it `hint_scope([..])`; naming a scope takes it out of the ordinary picker |
+| a cap on a zero-width thing, or outside its box | it was squeezed to nothing; the collector drops those, and so does a surface picker |
+
+---
+
 ## 6. Library vs app — where the line falls
 
 Hint must survive `heca-grid-ui` becoming a standalone reusable UI library.

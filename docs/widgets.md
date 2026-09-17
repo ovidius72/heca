@@ -32,6 +32,10 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 
 ---
 
+> **Laying things out — [`layout.md`](layout.md).** Which container to reach for, how to say a size,
+> a space and an alignment, and the traps that cost real defects. Read it before arranging anything
+> with more than one part.
+
 ## Mental model
 
 ```
@@ -595,6 +599,74 @@ vocabulary follows, because these spellings arrive from a plugin and from config
 Rust: a typo costs its author a differently-sized box rather than taking the host down. Use
 `"…".parse::<Length>()` when you want to be told instead.
 
+<a id="writing-a-space"></a>
+#### Writing a space — one vocabulary, native and described alike
+
+Every spacing builder takes `impl Into<Space>`, so a space is written the way it is said:
+
+```rust
+.gap(8)                  .gap(8.0)         // pixels — integer or decimal
+.gap("8px")              .gap("8")         // the px suffix is optional
+.gap("sm")                                 // a step of the theme's rhythm
+.gap(Spacing::Sm)                          // the same step, named
+```
+
+The builders, all of which take either kind:
+
+| Builder | Sets |
+|---|---|
+| `.gap(..)` | Space **between** children. |
+| `.padding(..)` | Space **inside** the box, every side. |
+| `.padding_x(..)` / `.padding_y(..)` / `.padding_xy(x, y)` | Inside, per axis. |
+| `.padding_left/right/top/bottom(..)` | Inside, one side — overrides its axis and the uniform value. |
+| `.margin(..)` | Space **outside** the box, every side. |
+| `.margin_x(..)` / `.margin_y(..)` | Outside, per axis. |
+
+| written | means |
+|---|---|
+| `8` / `8.0` / `"8"` / `"8px"` | logical pixels, fixed whatever the font does |
+| `"sm"` / `Spacing::Sm` | a step of the theme's rhythm — `none` / `xs` / `sm` / `md` / `lg` |
+
+**Prefer the step.** It is a fraction of the inherited font, resolved when the tree is laid out, so
+it scales with the font, the size variant and UI zoom. A pixel gap is tuned for one font size and
+wrong at every other. Use a number when you can say why this space should *not* move with the font
+— a hairline rule, a scrollbar gutter, a value the window manager owns.
+
+Use the steps to **group**, which is what they are for: a tight `Xs` inside a label-and-control
+couple, a roomier `Md` between couples. That is a form layout with no arithmetic and no new widget.
+
+**There is exactly one parser** (`Space: FromStr`), and `Deserialize` calls it — so a call site, a
+plugin's description, an RPC message and `config.toml` can never come to disagree about what
+`"sm"` means. The same arrangement `Length` has, for the same reason.
+
+**Pixels are produced in exactly one place** — `Space::resolve(font)`, reached from the four
+padding-cascade accessors and from `to_taffy(font)`, which is why those take a font. Nothing else
+can: a step is meaningless without knowing the font it is a fraction of.
+
+⚠️ **A step is rounded to a whole pixel, and that is what makes air look even.** `Xs` is a quarter
+of the font, so it lands on halves at most sizes — and the two sides of a boundary between siblings
+then round in opposite directions. Percentage-sized siblings put their air in padding rather than a
+gap (a gap is added *outside* a percentage and overflows it), so every boundary in such a row is
+made of two paddings: half a pixel each side produced gaps of 6, 7 and 8 where all of them should
+have been 7. Measured across fourteen equal columns of the exposé.
+
+⚠️ **The authored value survives layout.** Resolving a step does not consume it, so a font, theme
+or zoom change re-resolves from the step rather than from a number baked in on the first pass. The
+old code copied the resolved pixels back over the authored field, which is exactly the bug that
+made spacing stop following the font. Held by `resolving_a_step_does_not_consume_it`.
+
+⚠️ **A string nobody can read becomes no space at all, it does not panic** — the same rule
+`Length` and the grid's track vocabulary follow, because these spellings arrive from a plugin and
+from config as well as from Rust. Use `"…".parse::<Space>()` when you want to be told instead.
+
+**It used to be two builders per property** — a px `.gap(8.0)` beside a `.gap_spacing(Spacing::Sm)`,
+and `.padding(6.0)` beside `.pad_all` / `.pad_x` / `.pad_y`. Two paths over one property, inside the
+library itself, and the counts showed what that costs: `.gap` was used 112 times against
+`.gap_spacing`'s 8, while the docs said *prefer the token*. Advice loses to whichever name is
+shorter and more obvious. One builder is what makes the advice land.
+
+Described trees say it the same way — see [Spaces on the wire](#spaces-on-the-wire).
+
 **`StyleExt`** (visual decoration — *surfaces only*: `Surface`, `Card`, `Button`):
 
 | Method | Effect |
@@ -609,9 +681,58 @@ Rust: a typo costs its author a differently-sized box rather than taking the hos
 > Layout-only `Flex` deliberately does **not** implement `StyleExt` — wrap content in a
 > `Surface`/`Card` to give it a background.
 
+<a id="accent"></a>
+#### Overriding the accent — for a widget and everything inside it
+
+`.accent(Color)` — on **any** widget, from `ComponentExt`.
+
+```rust
+Surface::new().accent(theme.colors.danger)   // this card is a danger card
+    .child(Button::new("Delete"))            // …and this follows, without being told
+```
+
+**The theme is always first.** Set nothing and every widget reads the theme's accent, which is what
+almost everything should do. The order is:
+
+| | |
+|---|---|
+| 1 | the widget's **own** `.accent(..)` |
+| 2 | the nearest **ancestor** that set one |
+| 3 | the **theme** |
+
+So it is an override on top of the theme, exactly like `background`, `border` and `glow` — not a
+second source of colour. Read back with `PaintCx::accent()`, which applies that whole order;
+applied to the subtree by `paint_child`, so no widget opts in and none can forget.
+
+**What it reaches**: a control's own chrome — focus rings, hover and press fills, selected washes,
+scrollbar thumbs, a caret. Everything that would otherwise be the theme accent.
+
+⚠️ **It does not redefine a declared meaning.** `Badge::accent`, `Alert::info`, `ToastSeverity::Info`
+and a destructive `Button` keep the colour their variant *names* — what the author said the thing
+IS, which a container does not get to restyle. A `Delete` inside a warning-toned panel is still a
+`Delete`.
+
+⚠️ **`accent` is spelled twice on `Badge` and `BadgeButton`, meaning different things.**
+`Badge::accent("3")` *constructs* the accent-coloured variant; `.accent(colour)` *overrides* the
+hue. A meaning and a value — told apart by their arguments, and by this note.
+
+⚠️ **A literal colour does not follow a theme reload**, the trade every colour override makes. Pass
+a colour read from the theme as you build, and rewrite it when the theme changes — which is what a
+pane does every frame.
+
+**Why it exists.** A subtree needing its own accent used to get one by being painted under a *copy
+of the theme* with the accent swapped. That forces a separate paint call per subtree, which is what
+stopped any container from painting its own children — the reason a column could not own the panes
+inside it. Inherited instead, painting is one walk for everything.
+
+Not to be confused with `.hint_tone(HintTone)`, which declares what a **keycap means**
+(`accent`/`muted`/`warning`/`success`/`danger`) and lets the theme pick its colour, or
+`.hint_color(Color)`, which sets a keycap's colour outright.
+
 <a id="componentext--what-every-widget-gets"></a>
 **`ComponentExt`** — **everything every component gets**: handlers (what happens to it), `key`
-(who it is), `hintable` (whether the picker may reach it) and the drag slots. It was four traits — `ComponentExt`, `ComponentExt`, `DragExt`, `HintExt` —
+(who it is), `accent` (the hue it and its subtree paint chrome with), `hintable` (whether the
+picker may reach it) and the drag slots. It was four traits — `ComponentExt`, `ComponentExt`, `DragExt`, `HintExt` —
 split by nothing but the order they were added in; all four were unconditional, so the split carried
 no rule. The two that remain separate do carry one, enforced by the type system: `StyleExt` is
 surfaces only, `Parent` is containers only.
@@ -723,10 +844,28 @@ its letter**, and the keycap is drawn whole rather than cut, so you can still re
 | `.hint_tone(HintTone::Muted)` | **what the letter means**, coloured by the theme. A fold or a close is `Muted`; a place to go is `Accent`. Use this, not `hint_color`, inside a widget — it has no theme at build time |
 
 > **Every picker asks this same question** — the global `prefix+/` and a surface's own
-> [`KeyHintGroup`](#keyhintgroup) alike. They had drifted: the group used to letter only nodes with
-> an explicit `on_hint`, so "being pickable is not opt-in" held on one path and not the other, and a
-> plugin that put a panel of ordinary buttons behind its own verb got no letters with nothing to say
-> why. One rule, one definition, the scope passed in.
+> [`KeyHintGroup`](#keyhintgroup) alike. They had drifted twice. First about *what a target is*: the
+> group lettered only nodes with an explicit `on_hint`, so "being pickable is not opt-in" held on one
+> path and not the other, and a plugin that put a panel of ordinary buttons behind its own verb got
+> no letters with nothing to say why. Then about every rule learned afterwards, because the
+> *predicate* was shared and the **walk** was still a private copy. It is one walk now, with the
+> picker's scope passed in.
+
+⚠️ **Do not wrap a widget in a [`KeyHint`](#keyhint) to make it pickable.** Everything above —
+`on_hint`, `hintable`, `hint_placement`, `hint_tone` — is on **every** widget, so a row says its own
+pick:
+
+```rust
+Row::new().child(Label::new("editor")).on_hint(|| choose(id))   // ✅ one target
+KeyHint::new(Row::new().child(Label::new("editor"))).on_hint(…) // ❌ two
+```
+
+The wrapper declares a pick, so it is a target; the widget inside is actionable, so it is a target
+too. **Two targets where you wrote one thing**, and a picker letters both — two keycaps on one row.
+`KeyHint` is only for a region that is *not* a widget you can put a builder on.
+
+Full reference — which of `on_hint` / `hintable` / `KeyHint` / `KeyHintGroup` to reach for, and the
+symptoms when the wrong one is used: [`hint-architecture.md` § 5a](hint-architecture.md).
 
 **"Actionable" is `Base::activatable`**, set wherever an action is wired: once in `ComponentExt::on`
 for the generic listeners (`Click`, `DoubleClick`, `Key` — so `on_click`, `on_double_click`,
@@ -965,10 +1104,12 @@ distinction here. The declarative boundary just falls on the same line.
 
 **`Style.layout` — arrangement + the semantic `size` variant.** The half a declarative
 [`ViewNode`](#declarative-ui-model-viewnode) may set: `direction`, `justify`, `align` (default
-`Stretch`), `align_self` (`Option<Align>`, default `None` ⇒ follow the parent), `gap` (+
-`gap_spacing`), `margin` (+ per-side overrides), `padding` (+ per-axis + spacing tokens),
+`Stretch`), `align_self` (`Option<Align>`, default `None` ⇒ follow the parent), `gap`, `margin`
+(+ per-axis and per-side overrides), `padding` (+ per-axis and per-side overrides),
 `width`/`height` (`Length`), min/max sizes, `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`,
-`size`. `to_taffy()` lives here, because these are the fields it reads.
+`size`. Every space is a `Space` — a number of pixels **or** a step of the theme's rhythm, in one
+field. `to_taffy(font)` lives here, because these are the fields it reads, and it takes the font
+because that is the only thing that can turn a step into pixels.
 
 **Two rules the layout pass applies for you, so no widget has to.** A child of a container that is
 *not* a scroll viewport gets, unless it said otherwise:
@@ -1631,8 +1772,9 @@ a parent that counts its children to tell them apart.
   times against the other's 112.
 - **Padding**: `.padding(..)`, `.padding_x(..)` / `.padding_y(..)`, `.padding_xy(x, y)` — each takes
   a number or a token, the same way.
+- **Margin**: `.margin(..)`, `.margin_x(..)` / `.margin_y(..)` — a number or a token, like padding.
 - **Sizing** (from `LayoutExt`, shared by every widget): `.width(..)` / `.height(..)`
-  (`Auto` / `Px` / `Percent`), `.grow(f32)` (flex-grow, absorb leftover space), `.margin*`.
+  (`Auto` / `Px` / `Percent`), `.grow(f32)` (flex-grow, absorb leftover space).
 - **Traits**: `LayoutExt`, `Parent`. **No `StyleExt`, deliberately** — a `Flex` arranges, it does
   not paint, so `.background(..)` on one is a compile error rather than a missing feature. Put the
   colour on a [`Surface`](#surface) and the `Flex` inside it. See
@@ -1844,11 +1986,30 @@ per-child placement. Pure layout (no styling) — the building block for rich co
 >
 > ```rust
 > Grid::new()
->     .rows([Track::Auto, Track::Fr(1.0), Track::Auto])   // header · body · footer
->     .cell(header,  1, 1, 1, 1)
->     .cell(body,    1, 2, 1, 1)
->     .cell(footer,  1, 3, 1, 1)
+>     .template_row("auto 1fr auto")   // header · body · footer
+>     .child([header, body, footer])   // auto-placed, in order — as in HTML
 > ```
+>
+> **Each axis is named** — `.template_row(..)` and `.template_column(..)` — because a bare
+> `template` cannot say which axis it means and a reader should never have to remember.
+>
+> A track is written the way a stylesheet writes it — `"auto"`, `"1fr"`, `"200px"`, `"22"`,
+> `"min-content"` — through one parser shared with the wire, so the line above is the same line a
+> plugin writes in JSON. The `Track::{Px, Fr, Auto, MinContent, MaxContent}` variants still work and
+> are what the strings parse *to*; you should not need to type one.
+>
+> **A child that needs a particular place says so about itself**, as CSS has it — `grid-column` on
+> the item, never a coordinate the parent writes into it:
+>
+> ```rust
+> Grid::new()
+>     .template_row("auto 1fr")
+>     .template_column("auto 1fr auto")
+>     .child([icon, title, badge])          // row 1, auto-placed across the columns
+>     .child(body.column("1 / -1").row(2))  // row 2, the whole width
+> ```
+>
+> Full reference: [`layout.md`](layout.md).
 >
 > **Why this and not a `Flex`.** The template says the whole arrangement in one line a reader can
 > check against the picture. A flex stack says it in as many tuned numbers as there are children,
@@ -1866,11 +2027,22 @@ per-child placement. Pure layout (no styling) — the building block for rich co
 > — where the children are interchangeable and no one of them has a job the others don't.
 
 - **Construct**: `Grid::new()`.
-- **Builders**: `.columns([Track])`, `.rows([Track])` (`Track::{Px(f32), Fr(f32), Auto,
-  MinContent, MaxContent}`); `.areas(["a b", "a c"])` named template areas (`.` or `_` = an empty
-  cell); `.area(child, "name")` places a child in an area; `.cell(child, col, row, col_span,
-  row_span)` explicit 1-based placement. A child placed by neither gets taffy's auto-placement; an
-  unknown area name falls back to it too.
+- **Builders (the grid holds only its template)**: `.template_row(..)` and `.template_column(..)`
+  set each axis's tracks — one stylesheet line (`"auto 1fr"`, `"repeat(3, 1fr)"`) or a list
+  (`["auto", "1fr"]`, `[200, 100]`, `[Track::Auto, ..]`), whichever shape you hold.
+  `.template_area(..)` names areas from one row (`"dot title tag"`) or several
+  (`["dot title tag", ".  sub  ."]`), `.` or `_` marking an empty cell. `.child(..)` adds one child
+  or many, auto-placed in order.
+- **Builders (on any child — placement is the item's own property, as in CSS)**: `.column(..)` /
+  `.row(..)` (`2`, `"1 / -1"`, `"1 / span 2"`), `.column_span(..)` / `.row_span(..)`
+  (`Span::All` for every track), `.area("title")`, and `.align_self(..)` / `.justify_self(..)`.
+  A child that says nothing is auto-placed; an unknown area name falls back to that too. Names and
+  `1 / -1` are resolved during **layout**, against whichever grid holds the child.
+  ⚠️ An unreadable track is `auto` rather than a panic — these arrive from config and from plugins,
+  so a typo costs its author a track size, not the host. `"1fr".parse::<Track>()` when you want to
+  be told.
+  ⚠️ There is no `.cell(child, …)` or `.row(child)` on the grid: a parent writing a position into
+  its child is the inversion this replaced. Full reference: [`layout.md`](layout.md).
 - **Traits**: `LayoutExt`, `Parent`.
 
 **Native:**
@@ -1878,10 +2050,11 @@ per-child placement. Pure layout (no styling) — the building block for rich co
 ```rust
 // icon · title · tag on the top row; subtitle under the title
 Grid::new()
-    .columns([Track::Px(22.0), Track::Fr(1.0), Track::Auto])
-    .rows([Track::Auto, Track::Auto])
-    .areas(["dot title tag", ".  sub   ."])
-    .gap(4.0)
+    .template_column("22px 1fr auto")
+    .template_row("auto auto")
+    .template_area(["dot title tag",
+                    ".   sub   ."])
+    .gap("xs")
     .area(Icon::new(Glyph::Terminal), "dot")
     .area(Label::new("nvim"), "title")
     .area(Badge::success("RUN"), "tag");
@@ -1918,7 +2091,7 @@ this vocabulary and plugin authors know it.)
 
 #### The `areas` template defines the structure — `rows` / `columns` only *size* it
 
-`.areas([...])` is the source of truth for the grid's shape: one string per row, one token per
+`.template_area([...])` is the source of truth for the grid's shape: one string per row, one token per
 column. `.rows(...)` / `.columns(...)` merely give sizes to the tracks the template implies. So if
 the template has **more rows than there are row tracks**, the extra rows still exist — taffy creates
 them **implicitly** (`Auto`-sized). Nothing errors; the grid just has more rows than you declared.
@@ -1929,15 +2102,15 @@ That is the source of the classic "my text isn't vertically centred" bug:
 // WRONG — one row track, but a TWO-row template. `icon` spans both rows (the second is implicit),
 // so it is centred over a taller area than `title` and the two stop sharing a centre line.
 Grid::new()
-    .rows([Track::Auto])
-    .areas(["icon title status",
+    .template_row("auto")
+    .template_area(["icon title status",
             "icon subtext ."])           // ← this line still creates a row
     .align(Align::Center)
 
 // RIGHT — one row: one line in the template.
 Grid::new()
-    .rows([Track::Auto])
-    .areas(["icon title status"])
+    .template_row("auto")
+    .template_area(["icon title status"])
     .align(Align::Center)
 ```
 
@@ -1971,9 +2144,9 @@ item fill the cell, and pins a fixed-size one to the start.
 
 ```rust
 Grid::new()
-    .columns([Track::Auto, Track::Fr(1.0), Track::Auto])
-    .rows([Track::Auto, Track::Auto])
-    .areas(["icon title   status",
+    .template_column("auto 1fr auto")
+    .template_row("auto auto")
+    .template_area(["icon title   status",
             "icon subtext ."])
     .gap(8.0)
     // Vertical: centre every item in its cell. The icon spans both rows, so it centres across the
@@ -4100,6 +4273,12 @@ ViewNode::new(WidgetKind::RailCell)
 
 ### KeyHint
 
+> 📖 **When to reach for this, and when not:**
+> [`hint-architecture.md` § 5a — Which one do I reach for](hint-architecture.md). `KeyHint` is only
+> for a **region that is not a widget you can put a builder on**. A widget says its own pick with
+> `.on_hint(..)`; wrapping one that could declare for itself puts two targets where you wrote one
+> thing, and a picker letters both.
+
 > **From a plugin:** the leader/pick overlay is **host-owned and universal**. A described node with
 > a `press` intent is reachable by `prefix+/` with nothing written, and a node that wants a pick to
 > mean something *else* binds `hint` (see the declarative example below). Likewise a **context
@@ -4337,6 +4516,10 @@ paint_keycap(cx, cap, "a", font, Some(accent), KeycapVariant::Bordered); // on a
 target and the host stamps the keycap for it.
 
 ### KeyHintGroup
+
+> 📖 **How to use it, and the mistakes it invites:**
+> [`hint-architecture.md` § 5a — Which one do I reach for](hint-architecture.md). Its children
+> declare their own picks — **do not wrap them in `KeyHint`**.
 
 A **picker you can declare**, over a subtree you choose. [`KeyHint`](#keyhint) carries one region's
 declaration; this opens a picker over *many*: while open it letters every target beneath it, holds
@@ -5550,18 +5733,19 @@ is how a plugin declares UI (it can't ship Rust widgets), and the ergonomic nati
 **Props are per-node.** `.prop("gap", …)` on a `Column` styles *the column*, not its children — the
 props sitting next to `.child(…)` calls belong to the node you called `.prop` on (the container). A
 child is styled by putting props on *that child*. The builder chains for ergonomics but children are
-a plain vector: `.child(n)` appends one, `.children([a,b])` appends many — `Column().child(a).child(b)`
-≡ `Column().children([a,b])`.
+a plain vector, and **one builder takes either shape**: `.child(n)` appends one and `.child([a,b])`
+appends many, so `Column().child(a).child(b)` ≡ `Column().child([a,b])`. Same on the native side
+(`Parent::child`), so neither authoring path has a plural spelling to discover.
 
 ### Style props — every kind, no list
 
 **Any field of [`Style`](#style--layout-enums) is a prop on any kind**, spelled exactly as the
 field is — both halves:
 
-- **Layout**: `padding`, `margin` (+ per-side), `gap`, `gap_spacing`, `align`, `align_self`,
+- **Layout**: `padding`, `margin` (+ per-axis and per-side), `gap`, `align`, `align_self`,
   `justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
   `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
-- **Appearance**: `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
+- **Appearance**: `fill`, `border`, `glow`, `accent`, `radius`, `font_size`, `font_scale`.
 
 `realize` never enumerates them — it merges by name against each half's own fields. Add a field to
 either and a description can set it with **no change to the mapper**.
@@ -5611,12 +5795,43 @@ ViewNode::new(WidgetKind::VStack)
     .prop("padding", PropValue::Int(12))                     // px
     .prop("width",   PropValue::Text("50%".into()))          // "auto" | 240 | "50%"
     .prop("justify", PropValue::Text("space_between".into())) // enums by name, snake_case
-    .prop("gap_spacing", PropValue::Text("md".into()))        // theme token, scales with the font
+    .prop("gap", PropValue::Text("md".into()))                // theme step, scales with the font
 ```
 
 The merge lands **on top of** the constructed widget, so a widget's own constructor settings survive
 any property the node doesn't mention — a `Scroll` keeps the zeroed min-sizes and shrink factor that
 let a viewport be smaller than its content.
+
+<a id="spaces-on-the-wire"></a>
+#### Spaces on the wire: a number, or a step of the rhythm
+
+A space — `gap`, `padding`, `margin`, and their per-axis and per-side overrides — takes either
+form, the same two a call site writes (full reference: [Writing a space](#writing-a-space)):
+
+```jsonc
+"gap": 8          // eight pixels
+"gap": "8px"      // the same
+"gap": "sm"       // a step of the theme's rhythm — none | xs | sm | md | lg
+```
+
+**Prefer the step.** It is resolved from the inherited font when the tree is laid out, so it
+follows a font, size-variant or zoom change with nothing rewritten; a pixel count is tuned for one
+font size and wrong at every other.
+
+A value neither form can read is ignored and the widget keeps its own default, like every other
+property here — one bad value costs only itself.
+
+**There is no list of allowed property names**, here or anywhere: a property is accepted when its
+value fits that layout field's type, which is why `gap` learning a second spelling needed no table
+to be updated. That is the rule in [`plugins.md` § 8](plugins.md); it is also why **renaming** a
+layout field is a wire break.
+
+⚠️ **Two retired names are still read**, so no existing tree breaks: `gap_spacing` → `gap`, and
+`pad_spacing_x` / `pad_spacing_y` → `padding_x` / `padding_y`. They were the step half of the old
+two-property pair. **Nothing writes them** — the SDK builders emit only the surviving name, held by
+`spacing_is_written_under_one_property_name` — and they should not appear in anything new. They are
+mapped in one place, in the property merge; that map is the cost of the rename and should stay
+short.
 
 #### Sizes: the three spellings, and the one number written two ways
 
