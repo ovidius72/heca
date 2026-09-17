@@ -68,16 +68,19 @@ pub(crate) fn header_height(state: &crate::app_state::AppState, pane_id: PaneId)
     let Some(retained) = state.panes.get(&pane_id) else {
         return 0.0;
     };
-    // ⚠️ **This counts children to tell them apart**, which AGENTS § 0 names as never right: the
-    // pane holds `[header, content]` or just `[content]`, so a second thing in the body would make
-    // the content look like a header. It is written down rather than fixed here because the fix is
-    // a `header` SLOT on `Pane` — what `DockFrame::header` already is — and that is a library
-    // addition to agree, not to slip in.
-    let children = &retained.root.base().children;
-    match children.len() {
-        2 => children[0].base().bounds.size.h as f32,
-        _ => 0.0,
+    // **The header is found by NAME.** It says which row of the pane's template it is
+    // (`shell::PANE_HEADER_AREA`), so a second thing in the body cannot be mistaken for it and a
+    // pane without one simply has no node carrying that name.
+    //
+    // It used to ask "does this pane have two children?" — which AGENTS § 0 and docs/layout.md both
+    // name as never right, because the answer changes with anything else put in the body.
+    fn area(n: &dyn Component, name: &str) -> Option<f32> {
+        if n.base().grid_area.as_deref() == Some(name) {
+            return Some(n.base().bounds.size.h as f32);
+        }
+        n.base().children.iter().find_map(|c| area(c.as_ref(), name))
     }
+    area(&retained.root, shell::PANE_HEADER_AREA).unwrap_or(0.0)
 }
 
 pub(crate) fn clear_panes(state: &mut crate::app_state::AppState) {

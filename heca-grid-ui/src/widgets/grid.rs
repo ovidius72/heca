@@ -136,6 +136,7 @@ impl Parent for Grid {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::builders::PlaceExt;
     use crate::style::Track;
 
     /// **A track list arrives in whichever shape the caller holds it** — one stylesheet line, or a

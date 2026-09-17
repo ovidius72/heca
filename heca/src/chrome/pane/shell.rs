@@ -11,7 +11,7 @@
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::widgets::{HintPlacement, Pane as UiPane};
-use heca_grid_ui::{ComponentExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
 
 use super::model::PaneShellModel;
 
@@ -50,6 +50,12 @@ pub(crate) struct PaneShell<'a> {
     /// pane.
     pub(crate) content: Option<Box<dyn heca_grid_ui::Component>>,
 }
+
+/// **The pane's two rows, named.** The parts say which one they are and the host asks by name —
+/// see [`crate::chrome::pane::header_height`], which used to count children instead.
+pub(crate) const PANE_HEADER_AREA: &str = "header";
+/// The row that takes whatever the header does not.
+pub(crate) const PANE_CONTENT_AREA: &str = "content";
 
 impl PaneShell<'_> {
     /// Build the retained tree for one pane.
@@ -137,18 +143,32 @@ impl PaneShell<'_> {
                 )
             });
 
-        // **Two rows: the header at its own height, the content taking the rest.** The header is
-        // whatever the thing running in this pane wants along its top; the shell neither builds it
-        // nor knows what it is.
-        if let Some(header) = self.header {
-            pane = pane.child(header);
-        }
-        // The content row. It grows, which is what holds the header to a strip at the top rather
-        // than letting it centre itself down the middle of the pane.
-        pane = match self.content {
-            Some(content) => pane.child(content),
-            None => pane.child(heca_grid_ui::widgets::Flex::column().grow(1.0)),
+        // **The pane is a FRAME; the arrangement is a template.** The header takes its own
+        // height, the content takes the rest, and each part says which row it is by name.
+        //
+        // A `header` slot would answer exactly this one shape — and then Header | Content | Footer
+        // would need a second slot, and the next part a third. A track template answers all of
+        // them in one line, and it is the same line a dock, a palette or a plugin's panel writes
+        // (docs/layout.md). It also ends the question the host used to ask: "does this pane have
+        // two children, so is the first one a header?" — put a second thing in the body and the
+        // first was mistaken for one. A part is in the area it named, and a missing part is a
+        // missing row.
+        let content: Box<dyn heca_grid_ui::Component> = match self.content {
+            Some(content) => content,
+            None => Box::new(heca_grid_ui::widgets::Flex::column().grow(1.0)),
         };
+        let body = match self.header {
+            Some(header) => heca_grid_ui::widgets::Grid::new()
+                .template_row("auto 1fr")
+                .template_area([PANE_HEADER_AREA, PANE_CONTENT_AREA])
+                .child([header.area(PANE_HEADER_AREA), content.area(PANE_CONTENT_AREA)]),
+            // **A missing part is a missing row**, not a flag and not a zero-height placeholder.
+            None => heca_grid_ui::widgets::Grid::new()
+                .template_row("1fr")
+                .template_area([PANE_CONTENT_AREA])
+                .child(content.area(PANE_CONTENT_AREA)),
+        };
+        pane = pane.child(body.width(heca_grid_ui::Length::Percent(1.0)).height(heca_grid_ui::Length::Percent(1.0)));
 
         let pick = self.cb.pick.clone();
         // **Say what the pick IS, not only what it runs** (F003/P082/T432). The closure emits
@@ -244,6 +264,59 @@ mod tests {
     use crate::chrome::pane::testing::{model, recording_callbacks};
     use heca_grid_ui::Component;
     use heca_grid_ui::{LayoutEngine, Size};
+
+    /// **A second thing in the body is not mistaken for a header.**
+    ///
+    /// The pane's parts say which row of its template they are, so the host asks by name. It used
+    /// to count children — `len() == 2` meant "there is a header" — which is the answer that
+    /// changes the moment anything else is put in the body.
+    ///
+    /// ⚠️ Ran red first: with the parts unnamed, a two-child body reports the first child's height
+    /// as a header that is not there.
+    #[test]
+    fn a_second_thing_in_the_body_is_not_mistaken_for_a_header() {
+        use heca_grid_ui::widgets::Flex;
+        use heca_grid_ui::{LayoutEngine, Size};
+
+        let named = |n: &dyn Component, name: &str| -> bool {
+            fn walk(n: &dyn Component, name: &str) -> bool {
+                n.base().grid_area.as_deref() == Some(name)
+                    || n.base().children.iter().any(|c| walk(c.as_ref(), name))
+            }
+            walk(n, name)
+        };
+
+        // A body holding two things and NO header.
+        let (cb, _) = recording_callbacks();
+        let m = model(9);
+        let mut tree = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: None,
+            content: Some(Box::new(
+                Flex::column().child([Flex::column().height(20.0), Flex::column().height(20.0)]),
+            )),
+        }
+        .build();
+        LayoutEngine::new().compute(&mut tree, Size::new(200.0, 200.0));
+
+        assert!(
+            !named(&tree, PANE_HEADER_AREA),
+            "no part claims the header row, however many things the body holds",
+        );
+        assert!(named(&tree, PANE_CONTENT_AREA), "the body is in the content row");
+
+        // And with a header, it is the one that says so.
+        let mut with_header = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: Some(Box::new(Flex::row().height(18.0))),
+            content: Some(Box::new(Flex::column())),
+        }
+        .build();
+        LayoutEngine::new().compute(&mut with_header, Size::new(200.0, 200.0));
+        assert!(named(&with_header, PANE_HEADER_AREA));
+    }
 
     /// It renders what it was given: the pane's own identity, from its id.
     #[test]

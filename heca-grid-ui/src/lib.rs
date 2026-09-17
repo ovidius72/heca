@@ -58,7 +58,7 @@ pub mod widgets;
 pub use heca_core::layout::{Point, Rectangle, Size};
 
 pub use action::{Action, SignalData};
-pub use builders::{ComponentExt, LayoutExt, Parent, StyleExt};
+pub use builders::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
 pub use color::Color;
 pub use component::{
     holds_keyboard, Base, Component, Event, GridKey, Handled, Modifiers, PaintCx,
@@ -111,7 +111,7 @@ pub mod prelude {
     pub use crate::animation::{
         Animate, Animation, AnimationFrame, Fade, Sequence, Slide, SlideFrom, Zoom, ZoomFade,
     };
-    pub use crate::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
+    pub use crate::builders::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers, WidgetIntent};
     pub use crate::event::{DragEvent, EventCx, EventKind, PointerButton, PointerEvent};
