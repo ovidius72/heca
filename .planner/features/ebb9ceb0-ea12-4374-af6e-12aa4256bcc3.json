@@ -11,8 +11,8 @@
   "contextReadyReason": "",
   "startDate": "",
   "endDate": "",
-  "workDone": "F003's priority-0 phase P097 has delivered its core: pointer input reaches every surface through one tree walk instead of 16 hand-written per-surface functions, and the picker now letters anything actionable wherever it sits. T494, T495, T496 and T497 are closed; T498 canceled as a duplicate.",
-  "workRemaining": "P097 still owes T499 (the picker's app half — deleting the HintSurface enum that enumerates surfaces), T500 (Antonio driving every surface as a regression pass) and T501/T502 (the plugin-capability half: a described plugin overlay gets input for free, but still cannot build what the expose builds). Elsewhere in F003: P082's five open bugs and its file-split tasks, P096's T504/T505, and P035's StateView and host-API namespace work.",
+  "workDone": "",
+  "workRemaining": "",
   "acceptedDecisions": [],
   "phaseIds": [
     "09bcb3cf-f8ea-454a-913e-ea377c53d37e",
@@ -42,46 +42,8 @@
     "b4da797f-fbe4-443e-8c8c-68e001f7f48d"
   ],
   "dependsOn": [],
-  "statusLog": [
-    {
-      "id": "48b1361e-0938-45f0-9f67-9055a132106f",
-      "date": "2026-09-04T13:52:47.937Z",
-      "fromStatus": "planned",
-      "toStatus": "in-progress",
-      "title": "planned → in-progress",
-      "description": ""
-    }
-  ],
+  "statusLog": [],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-09-14T12:20:33.774Z",
-  "sessionInfo": [
-    {
-      "sessionId": "mcp-process:8b24b106-84c9-4960-9cde-3b0cb31552b3",
-      "createdAt": "2026-09-14T12:28:01.544Z"
-    },
-    {
-      "sessionId": "mcp-process:a70b4e20-9380-4450-9aa5-4d6c767bb1aa",
-      "createdAt": "2026-09-11T14:13:19.873Z"
-    },
-    {
-      "sessionId": "mcp-process:65b2ab93-5391-4cfe-920d-9ee1153fe084",
-      "createdAt": "2026-09-09T06:54:09.290Z"
-    },
-    {
-      "sessionId": "mcp-process:689b3f53-6000-4ff5-bdbf-863af99fa381",
-      "createdAt": "2026-09-08T13:36:47.326Z"
-    },
-    {
-      "sessionId": "mcp-process:af580e98-cc45-42af-86e1-fcbc96719b07",
-      "createdAt": "2026-09-07T12:41:04.632Z"
-    },
-    {
-      "sessionId": "mcp-process:4292a20d-dae1-4a5c-8ec5-0bd49c30cf12",
-      "createdAt": "2026-09-06T10:16:07.319Z"
-    },
-    {
-      "sessionId": "mcp-process:eff48494-6d25-4c97-a1ac-3c57241b7a93",
-      "createdAt": "2026-09-05T21:12:03.664Z"
-    }
-  ]
+  "updatedAt": "2026-09-16T14:34:05.468Z",
+  "sessionInfo": []
 }
