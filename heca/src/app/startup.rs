@@ -404,6 +404,15 @@ pub(crate) async fn init_state(
             crate::chrome::RegionId::RightSidebar,
         ),
     ));
+    // A **third placement, beside the first**, so two docks share one region. One dock per sidebar
+    // never shows whether two of them divide the height, hold their own space as one folds, or line
+    // their title rows up with each other — which is the whole of what a region has to get right.
+    chrome_host.register(Box::new(
+        crate::providers::WorkspacesContainerProvider::placed(
+            "workspaces.left2",
+            crate::chrome::RegionId::LeftSidebar,
+        ),
+    ));
 
     // Loaded from disk when `[settings] search_history` allows it; a missing, corrupt or
     // unknown-version file is simply an empty store, so a first run and a broken file behave

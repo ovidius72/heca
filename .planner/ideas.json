@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 2,
+  "nextIdeaNumber": 6,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -10,6 +10,16 @@
       "promotion": null,
       "createdAt": "2026-09-08T19:15:04.880Z",
       "updatedAt": "2026-09-08T19:15:04.880Z"
+    },
+    {
+      "id": "6364292d-87d2-4a9c-afda-afbadf013550",
+      "number": 5,
+      "shortId": "VECMD",
+      "title": "Auto Update",
+      "description": "add an autoupdate command heca --update that download the lastes version",
+      "promotion": null,
+      "createdAt": "2026-09-17T19:28:41.211Z",
+      "updatedAt": "2026-09-17T19:28:41.211Z"
     }
   ]
 }
