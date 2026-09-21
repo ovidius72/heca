@@ -419,6 +419,29 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             None => return,
         };
 
+        state.frame_log.record_event(match &event {
+            WindowEvent::RedrawRequested => "win:RedrawRequested",
+            WindowEvent::CursorMoved { .. } => "win:CursorMoved",
+            WindowEvent::MouseInput { .. } => "win:MouseInput",
+            WindowEvent::MouseWheel { .. } => "win:MouseWheel",
+            WindowEvent::KeyboardInput { .. } => "win:KeyboardInput",
+            WindowEvent::ModifiersChanged(..) => "win:ModifiersChanged",
+            WindowEvent::Resized(..) => "win:Resized",
+            WindowEvent::Moved(..) => "win:Moved",
+            WindowEvent::Focused(..) => "win:Focused",
+            WindowEvent::Occluded(..) => "win:Occluded",
+            WindowEvent::CursorEntered { .. } => "win:CursorEntered",
+            WindowEvent::CursorLeft { .. } => "win:CursorLeft",
+            WindowEvent::ScaleFactorChanged { .. } => "win:ScaleFactorChanged",
+            WindowEvent::AxisMotion { .. } => "win:AxisMotion",
+            WindowEvent::TouchpadPressure { .. } => "win:TouchpadPressure",
+            WindowEvent::PinchGesture { .. } => "win:PinchGesture",
+            WindowEvent::PanGesture { .. } => "win:PanGesture",
+            WindowEvent::DoubleTapGesture { .. } => "win:DoubleTapGesture",
+            WindowEvent::RotationGesture { .. } => "win:RotationGesture",
+            _ => "win:other",
+        });
+
         handle_window_event(
             event_loop,
             &self.registry,
@@ -452,6 +475,12 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             return;
         };
 
+        state.frame_log.record_event(match &event {
+            AppEvent::BackendWake => "BackendWake",
+            AppEvent::RequestRedraw => "RequestRedraw",
+            AppEvent::ChromeIntent { .. } => "ChromeIntent",
+            AppEvent::RaiseNotification { .. } => "RaiseNotification",
+        });
         match event {
             AppEvent::BackendWake => {
                 let backend_poll = poll_backends(state);

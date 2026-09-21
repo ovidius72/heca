@@ -64,7 +64,7 @@ pub use component::{
     holds_keyboard, Base, Component, Event, GridKey, Handled, Modifiers, PaintCx,
     WidgetIntent, area, area_slot, collect_damage, needs_layout,
     deliver, dispatch, overlay_occluded_at, paint_child, shift_subtree,
-    install_frame_request, request_frame,
+    frame_served, install_frame_request, request_frame,
 };
 pub use event::{
     DragEvent, EventCx, EventKind, Handlers, PointerButton, PointerEvent, RawPointer,

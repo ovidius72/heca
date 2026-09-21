@@ -142,6 +142,11 @@ fn ring_system_bell() {
 }
 
 pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut AppState) {
+    // **Take the standing frame request, so the next one gets through.** Widgets coalesce their
+    // asks into one (`heca_grid_ui::request_frame`); this is the point at which that one has been
+    // received and a fresh ask is meaningful again. Anything marking itself further down this pass
+    // is asking for the *next* frame and must be able to wake us.
+    heca_grid_ui::frame_served();
     let should_timeout = matches!(
         state.input_mode,
         InputMode::Prefix | InputMode::Chord { .. }
@@ -239,36 +244,47 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     let terminal_animating = backend_poll.terminal_animating;
     // An animated inline image (GIF/APNG) keeps the loop ticking so frames advance.
     let image_animating = state.has_animated_images;
-    let needs_frame = state.needs_redraw
-        || backend_poll.has_data
-        || backend_poll.closed_any
-        || chrome_runtime_changed
-        || bell_flashing
-        || state.session.are_animations_ongoing()
-        || terminal_animating
-        || image_animating
-        || chrome_animating
-        || widget_due;
-    if needs_frame {
+    // **Every reason, by name** — see `frame_reasons`. It was a ten-term `||` chain, which cannot
+    // say which term was true, so a loop that spins at 100% with nothing happening had no way to
+    // name what was asking. `HECA_LOG_FRAMES=1` now prints exactly that.
+    let reasons = super::frame_reasons::FrameReasons {
+        marked: state.needs_redraw,
+        backend_data: backend_poll.has_data,
+        backend_closed: backend_poll.closed_any,
+        chrome_runtime: chrome_runtime_changed,
+        bell_flashing,
+        session_animating: state.session.are_animations_ongoing(),
+        terminal_animating,
+        image_animating,
+        chrome_animating,
+        widget_due,
+    };
+    state.frame_log.record(reasons, Instant::now());
+    if reasons.any() {
         state.window.request_redraw();
     }
 
+    let wake_animating = state.session.are_animations_ongoing()
+        || terminal_animating
+        || image_animating
+        || chrome_animating;
+    let toast_expiry = match state.notifications.is_hovered() {
+        true => None,
+        false => state.notifications.next_expiry(),
+    };
+    state
+        .frame_log
+        .record_wake(wake_animating, widget_wake, toast_expiry);
     let schedule = next_wake(
         Instant::now(),
         WakeRequests {
-            animating: state.session.are_animations_ongoing()
-                || terminal_animating
-                || image_animating
-                || chrome_animating,
+            animating: wake_animating,
             widget_in: widget_wake,
             // **Nothing to wake for while the pointer rests on the stack.** The deadlines are
             // frozen, so waking at one would find nothing due and re-arm at the same instant — a
             // spin, for as long as the pointer stayed. What ends the hold is a pointer event,
             // which wakes the loop on its own.
-            toast_expiry: match state.notifications.is_hovered() {
-                true => None,
-                false => state.notifications.next_expiry(),
-            },
+            toast_expiry,
         },
     );
     state.widget_frame_due = schedule.widget_frame_due;

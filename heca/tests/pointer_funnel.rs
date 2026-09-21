@@ -441,13 +441,16 @@ fn the_loop_wakes_for_what_the_widgets_are_waiting_for() {
     // because it is due *now* — so the loop wakes and goes straight back to sleep. The first attempt
     // at this fix scheduled the wake correctly and changed nothing on screen for exactly that
     // reason.
-    let needs_frame = src
-        .split_once("let needs_frame")
-        .and_then(|(_, rest)| rest.split_once(';'))
+    //
+    // The reasons are named fields now (`app/frame_reasons.rs`) rather than a `||` chain, so this
+    // reads the set the loop builds and checks the wake is in it.
+    let reasons = src
+        .split_once("FrameReasons {")
+        .and_then(|(_, rest)| rest.split_once("};"))
         .map(|(decl, _)| decl)
-        .expect("the frame loop decides with a `needs_frame`");
+        .expect("the frame loop decides with a `FrameReasons` set");
     assert!(
-        needs_frame.contains("widget_due"),
+        reasons.contains("widget_due"),
         "reaching a widget's wake is not itself a reason to draw, so the loop wakes for it and \
          then does nothing"
     );
