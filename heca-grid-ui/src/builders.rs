@@ -410,6 +410,18 @@ pub trait LayoutExt: Component + Sized {
         self
     }
 
+    /// **Take this much of the room the parent has to give.**
+    ///
+    /// One builder for "a share of whatever holds me": in a flex container it becomes
+    /// `flex: <n> 1 0`; in a grid it is nothing, because the track already sized the cell. Say it
+    /// once and the engine decides which — see [`Layout::share`](crate::style::Layout::share).
+    ///
+    /// `.share(1.0)` beside `.share(2.0)` is a third and two thirds. `0.0` is content-sized.
+    fn share(mut self, of_the_parent: f32) -> Self {
+        self.base_mut().style.layout.share = Some(of_the_parent);
+        self
+    }
+
     /// **What this item starts from before it grows or shrinks** (CSS `flex-basis`) — pixels, a
     /// percentage, or `"auto"`.
     ///

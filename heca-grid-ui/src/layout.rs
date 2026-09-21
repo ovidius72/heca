@@ -220,6 +220,31 @@ impl LayoutEngine {
         // anything until you know the template. Resolving it in the layout pass is what lets a
         // child be built before its parent, and lets a template change re-place children without
         // rebuilding any of them. A child of something that is not a grid is left alone.
+        // **A share means "take the room this parent has to give", and the parent decides how.**
+        //
+        // In a grid the track already sized the cell and the item stretches into it, so a share is
+        // nothing. In anything else it is CSS `flex: <n> 1 0` — grow alone distributes only free
+        // space, so a column of grown children collapses to its content instead of dividing itself.
+        //
+        // Resolved here, against the parent, because a caller cannot know which kind of parent will
+        // end up holding them — and writing the flex spelling by hand put a *definite zero height*
+        // in a grid cell, which drew a whole container as its title row and nothing else.
+        let in_a_grid = c.grid_template().is_some();
+        let child_count_for_share = c.base().children.len();
+        for i in 0..child_count_for_share {
+            let s = &mut c.base_mut().children[i].base_mut().style.layout;
+            let Some(share) = s.share else { continue };
+            if in_a_grid {
+                continue;
+            }
+            s.flex_grow = share;
+            if share > 0.0 {
+                s.flex_basis = Some(crate::style::Length::Px(0.0));
+                s.min_height = s.min_height.or(Some(crate::style::Length::Px(0.0)));
+                s.flex_shrink = s.flex_shrink.or(Some(1.0));
+            }
+        }
+
         let placement = c.grid_template().map(|t| (t.counts(), c.base().children.iter()
             .map(|k| k.base().grid_area.as_ref().and_then(|n| t.area(n)))
             .collect::<Vec<_>>()));

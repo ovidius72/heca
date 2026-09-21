@@ -756,7 +756,13 @@ impl Track {
         use taffy::prelude::*;
         match self {
             Track::Px(v) => length(v),
-            Track::Fr(v) => fr(v),
+            // **A fraction is `minmax(0, <n>fr)`, which is what an author means by it.**
+            //
+            // A bare `fr` track carries an automatic minimum of its own CONTENT, so a track holding
+            // something tall grows past its share and pushes its neighbours out of the box — two
+            // docks in one sidebar, and the second one off the bottom. The floor has to go for the
+            // fraction to be a fraction, and it goes here so no grid, and no caller, meets it.
+            Track::Fr(v) => minmax(length(0.0), fr(v)),
             Track::Auto => auto(),
             Track::MinContent => min_content(),
             Track::MaxContent => max_content(),
@@ -1155,6 +1161,23 @@ pub struct Layout {
     /// Maximum height — see [`max_width`](Style::max_width).
     pub max_height: Option<Length>,
     pub flex_grow: f32,
+
+    /// **Take this much of the room the parent has to give** — a share, whatever kind of parent
+    /// that turns out to be.
+    ///
+    /// The mechanism differs and the meaning does not, which is the whole reason this is a property
+    /// and not an idiom a caller writes:
+    /// - **in a flex container** it becomes `flex: <n> 1 0` — grow, a zero basis and permission to
+    ///   shrink — because grow alone distributes only free space and a column of them collapses to
+    ///   its content;
+    /// - **in a grid** it is nothing at all. The track already sized the cell, and the item stretches
+    ///   into it.
+    ///
+    /// Writing the flex spelling by hand is what broke two docks in one sidebar: a zero base size
+    /// is a *definite zero height* in a grid cell, so each container drew its title row and nothing
+    /// else. Resolved in [`crate::layout`], against the parent, so no caller has to know which case
+    /// they are in.
+    pub share: Option<f32>,
     /// Flex shrink factor. `None` ⇒ **`1.0`**, as flexbox has it: an item gives way when its line
     /// is too small, and a widget that must **not** be squeezed opts out with `Some(0.0)`.
     ///
@@ -1268,6 +1291,7 @@ impl Default for Layout {
             max_width: None,
             max_height: None,
             flex_grow: 0.0,
+            share: None,
             flex_shrink: None,
             flex_basis: None,
             size: WidgetSize::Normal,
@@ -1462,6 +1486,21 @@ impl Layout {
         s.display = taffy::Display::Grid;
         s.grid_template_columns = columns.iter().map(|t| t.to_taffy()).collect();
         s.grid_template_rows = rows.iter().map(|t| t.to_taffy()).collect();
+        // **A track nobody wrote still fills the box.**
+        //
+        // Say only `template_row("auto 1fr")` and the COLUMN is implicit — and an implicit track is
+        // `auto`, which sizes to its content. So a grid templated down one axis drew its contents
+        // at their natural width and left the rest of the box empty, which is not what anyone means
+        // by templating the rows. The implicit track takes the room instead, on whichever axis was
+        // left unsaid.
+        use taffy::style_helpers::{fr, length, minmax};
+        let fill = minmax(length(0.0), fr(1.0));
+        if columns.is_empty() {
+            s.grid_auto_columns = vec![fill];
+        }
+        if rows.is_empty() {
+            s.grid_auto_rows = vec![fill];
+        }
         s
     }
 }

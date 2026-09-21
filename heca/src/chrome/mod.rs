@@ -1116,15 +1116,19 @@ mod tests {
             "saying nothing means one equal share",
         );
 
-        assert_eq!(with_share(body(), 1.0).base().style.layout.flex_grow, 1.0);
+        // **The body asks for a share; what that means is the engine's answer, not this code's.**
+        // A flex region divides itself by it and a templated one ignores it, because the track has
+        // already sized the cell — which is why the number is read back here rather than the flex
+        // spelling it used to be written as.
+        assert_eq!(with_share(body(), 1.0).base().style.layout.share, Some(1.0));
         assert_eq!(
-            with_share(body(), 2.0).base().style.layout.flex_grow,
-            2.0,
+            with_share(body(), 2.0).base().style.layout.share,
+            Some(2.0),
             "twice the share of a 1.0 beside it",
         );
         assert_eq!(
-            with_share(body(), 0.0).base().style.layout.flex_grow,
-            0.0,
+            with_share(body(), 0.0).base().style.layout.share,
+            Some(0.0),
             "content-sized: no share of the leftover",
         );
     }

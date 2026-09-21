@@ -27,11 +27,7 @@ use super::*;
 /// `share(n)` setter in the library; this exists so a *transparent* wrapper stays transparent until
 /// then, rather than each caller rediscovering the combination.
 pub(super) fn pass_box_down(node: &mut dyn Component) {
-    let layout = &mut node.base_mut().style.layout;
-    layout.flex_grow = 1.0;
-    layout.height = heca_grid_ui::Length::Px(0.0);
-    layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
-    layout.flex_shrink = Some(1.0);
+    node.base_mut().style.layout.share = Some(1.0);
 }
 
 /// Give a container body its declared share of the region's **main axis**, as a flex grow factor
@@ -44,26 +40,7 @@ pub(super) fn pass_box_down(node: &mut dyn Component) {
 /// Set by the region rather than by the container, because a share only means anything relative to
 /// its siblings — which a container cannot see and should not have to.
 pub(super) fn with_share(mut body: WidgetModel, grow: f32) -> WidgetModel {
-    let layout = &mut body.base_mut().style.layout;
-    layout.flex_grow = grow;
-    if grow > 0.0 {
-        // A share has to be **of the region**, not of what is left over after the content.
-        //
-        // `flex_grow` alone distributes only *positive* free space, and a container's content is
-        // routinely taller than the sidebar — so two containers measured 1214px each inside a 600px
-        // body, overflowed the frame, and got no share at all. In CSS this is `flex: 1 1 0`; there
-        // is no `flex_basis` in this vocabulary, so the equivalent is a **zero base size** plus
-        // permission to shrink. Then the free space is the whole region and the shares divide it:
-        // 296px each, measured.
-        //
-        // Safe because a shared container is expected to scroll its own content — it nests its own
-        // scroll area, so being handed less height than its content is the normal case, not a
-        // squeeze. A container that asked for `0.0` is saying "size me to my content" and keeps its
-        // natural height.
-        layout.height = heca_grid_ui::Length::Px(0.0);
-        layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
-        layout.flex_shrink = Some(1.0);
-    }
+    body.base_mut().style.layout.share = Some(grow);
     body
 }
 
@@ -169,7 +146,6 @@ pub(super) fn build_region_content(
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
 ) -> Option<WidgetModel> {
-    let templated = host.layout(region).is_set();
     let mut bodies = host
         .contributions(region)
         .iter()
@@ -180,16 +156,10 @@ pub(super) fn build_region_content(
                 // The share goes on the OUTERMOST node, so it has to be applied after the wrappers:
                 // a share set on the body would leave the wrapper content-sized and divide nothing
                 // (F003/P011/T021's lesson, one level up).
-                let seated = focus_and_pick(body, &c.id, c.grow, ctx);
-                // **A share is a flex idiom, and a templated region is not flex.** `with_share`
-                // gives a child a zero base size so a column can divide itself; in a grid cell that
-                // zero is a definite height, so the container collapses to its title row instead of
-                // filling the track the template gave it. The tracks are the answer there.
-                Some(if templated {
-                    seated
-                } else {
-                    with_share(seated, c.grow)
-                })
+                // **The container asks for its share and the engine decides what that means** —
+                // a flex region divides itself by it, a templated one has already sized the track
+                // and ignores it. Neither this code nor a plugin has to know which it is in.
+                Some(with_share(focus_and_pick(body, &c.id, c.grow, ctx), c.grow))
             }
             _ => None,
         })
@@ -208,7 +178,12 @@ pub(super) fn build_region_content(
         // pins the first to its content and gives the rest to the second, whatever either asked for.
         _ if host.layout(region).is_set() => {
             let arrangement = host.layout(region);
-            let mut grid = heca_grid_ui::widgets::Grid::new().grow(1.0);
+            // **The body fills the region on both axes.** The share covers the main one; across it
+            // a grid is auto-sized, so without this it drew at its content's width and left the
+            // rest of the sidebar empty.
+            let mut grid = heca_grid_ui::widgets::Grid::new()
+                .share(1.0)
+                .width(heca_grid_ui::Length::Percent(1.0));
             if let Some(rows) = &arrangement.rows {
                 grid = grid.template_row(rows.as_str());
             }
