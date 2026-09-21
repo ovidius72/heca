@@ -41,7 +41,7 @@ use crate::builders::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
-use crate::style::Direction;
+use crate::style::Track;
 use crate::widgets::{Flex, Glyph, Icon, Item, Label, RegionMode};
 
 /// Chevron glyphs for expanded / collapsed states.
@@ -117,6 +117,10 @@ pub struct DockFrame {
     /// tightened — for docks hosted inside an already-framed container (e.g. a
     /// sidebar shell) where per-dock brackets would be a redundant double border.
     frameless: bool,
+    /// The named rows of [`ROWS`], as a stylesheet writes `grid-template-areas`: the title
+    /// then the body. Held rather than made per call because
+    /// [`grid_template`](Component::grid_template) hands out a borrow of it.
+    areas: Vec<String>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -166,7 +170,6 @@ impl DockFrame {
         let body = Flex::column().gap(BODY_GAP).area(BODY_AREA);
 
         let mut base = Base::new();
-        base.style.layout.direction = Direction::Column;
         // Inset content from the brackets and space the title bar off the body.
         base.style.layout.padding = (CONTENT_PAD).into();
         base.style.layout.gap = (HEADER_BODY_GAP).into();
@@ -183,6 +186,7 @@ impl DockFrame {
             on_toggle: None,
             rail_mode: None,
             frameless: false,
+            areas: vec![HEADER_AREA.to_string(), BODY_AREA.to_string()],
         }
     }
 
@@ -321,7 +325,10 @@ impl DockFrame {
         let icon = Flex::row()
             .justify("center")
             .child(Icon::new(glyph).size(RAIL_ICON_SIZE));
-        let icon = icon.area(RAIL_AREA);
+        // The rail replaces everything, so it covers both tracks. It is not in the template's
+        // areas — it is not a third part beside the other two, it is what is there instead of
+        // them — so it says where it sits itself.
+        let icon = icon.area(RAIL_AREA).row(1).row_span(crate::style::Span::All);
         match crate::component::area_slot(&mut self.base, RAIL_AREA) {
             Some(slot) => *slot = Box::new(icon),
             None => self.base.children.push(Box::new(icon)),
@@ -364,11 +371,38 @@ fn chevron_for(open: bool) -> &'static str {
     if open { CHEVRON_OPEN } else { CHEVRON_CLOSED }
 }
 
+/// **The frame's shape, as a stylesheet would write it: a title at its own height over a body
+/// that takes the rest.**
+///
+/// It used to be a flex column, which meant the body sized to its rows — so a dock given half a
+/// sidebar drew a 914px body inside a 450px frame, its rows ran off the bottom, and its own scroll
+/// area, handed more height than it held, had nothing left to scroll. `1fr` is the whole of that:
+/// what the title leaves, and no more, whatever is inside it.
+const ROWS: [Track; 2] = [Track::Auto, Track::Fr(1.0)];
+
 impl Component for DockFrame {
     /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
     /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
     fn wants_visible(&self) -> bool {
         self.nav.get_untracked() || self.base.focused_by_keyboard()
+    }
+
+    /// The frame arranges its parts; [`ROWS`] says how.
+    fn taffy_style(&self) -> taffy::Style {
+        self.base
+            .style
+            .layout
+            .to_taffy_grid(self.base.font, &[], &ROWS)
+    }
+
+    /// **The header and the body are placed by NAME, against this.** The column track is left
+    /// unsaid on purpose: an implicit track fills, so the frame's parts are as wide as the frame.
+    fn grid_template(&self) -> Option<crate::style::GridTemplate<'_>> {
+        Some(crate::style::GridTemplate {
+            columns: &[],
+            rows: &ROWS,
+            areas: &self.areas,
+        })
     }
 
     fn base(&self) -> &Base {
