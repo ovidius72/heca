@@ -19,7 +19,40 @@ pub enum RegionId {
     BottomBar,
 }
 
+/// **A region, as a caller says it**: `Region::LeftSidebar.child(Workspaces::new())`.
+///
+/// The same type as [`RegionId`] — one region vocabulary, not two — under the name that reads at a
+/// call site, where `Id` said nothing.
+pub use RegionId as Region;
+
 impl RegionId {
+    /// **Put a container in this region** — one, or several.
+    ///
+    /// ```ignore
+    /// Region::LeftSidebar.child(Workspaces::new());
+    /// Region::LeftSidebar.child([workspaces, docker]);
+    /// ```
+    ///
+    /// It ADDS to the region that is already on screen; it never builds one. The region is the
+    /// receiver rather than an argument, so a container stops declaring which parent it belongs to
+    /// — the same inversion the grid's placement lost.
+    ///
+    /// A plugin writes this identical line, which is the point: no `Box`, no host object to reach,
+    /// no `::placed` constructor, and no mount id unless the caller wants to name that placement.
+    ///
+    /// **It works before the host exists.** The containers queue here and [`ChromeHost`] takes them
+    /// when it is built, so load order stops mattering — a plugin adding one at startup and one an
+    /// hour later write the same call.
+    ///
+    /// [`ChromeHost`]: crate::chrome::ChromeHost
+    pub fn child(self, containers: impl IntoProviders) -> Self {
+        PENDING.with(|q| {
+            q.borrow_mut()
+                .extend(containers.into_providers().into_iter().map(|p| (self, p)))
+        });
+        self
+    }
+
     /// All four regions in canonical order.
     pub const ALL: [RegionId; 4] = [
         RegionId::LeftSidebar,
@@ -327,4 +360,51 @@ mod tests {
         assert_eq!(typed.borrow().as_slice(), ["pane.active.changed"]);
         assert_eq!(all.borrow().as_slice(), ["pane.active.changed"]);
     }
+}
+
+
+/// **One container or several** — what [`RegionId::child`] takes, so a caller hands over whichever
+/// shape they hold and never goes looking for a plural spelling.
+pub trait IntoProviders {
+    /// The containers, boxed once.
+    fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>>;
+}
+
+impl<P: crate::providers::Provider + 'static> IntoProviders for P {
+    fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>> {
+        vec![Box::new(self)]
+    }
+}
+
+impl IntoProviders for Box<dyn crate::providers::Provider> {
+    fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>> {
+        vec![self]
+    }
+}
+
+impl<P: IntoProviders> IntoProviders for Vec<P> {
+    fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>> {
+        self.into_iter().flat_map(IntoProviders::into_providers).collect()
+    }
+}
+
+impl<P: IntoProviders, const N: usize> IntoProviders for [P; N] {
+    fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>> {
+        self.into_iter().flat_map(IntoProviders::into_providers).collect()
+    }
+}
+
+thread_local! {
+    /// Containers named by [`RegionId::child`] before a [`ChromeHost`](crate::chrome::ChromeHost)
+    /// existed to hold them.
+    ///
+    /// Thread-local rather than a global with a lock: the chrome is built and mutated on the UI
+    /// thread only, and a lock here would be a promise the rest of the chrome does not keep.
+    static PENDING: std::cell::RefCell<Vec<(RegionId, Box<dyn crate::providers::Provider>)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Take everything [`RegionId::child`] has queued. The host calls this; nothing else should.
+pub(crate) fn take_pending() -> Vec<(RegionId, Box<dyn crate::providers::Provider>)> {
+    PENDING.with(|q| std::mem::take(&mut *q.borrow_mut()))
 }

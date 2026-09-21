@@ -107,7 +107,7 @@ pub(crate) use context_menu::{
 // The command palette: every registered action, searchable, dispatched through the one door
 // (F003/P085/T358).
 pub use contribution::{ContextMenuContribution, Contribution, RegionSet};
-pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
+pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, Region, RegionId, SidebarSelection};
 pub(crate) use palette::open_command_palette;
 // Chrome keyboard focus: which dock the keyboard is aimed at (F003/P011/T020).
 pub(crate) use focus::{dock_candidates, navigable_dock, placement_for, region_on_screen};

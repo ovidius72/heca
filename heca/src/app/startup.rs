@@ -389,7 +389,8 @@ pub(crate) async fn init_state(
     // from whatever the host has seated in it (`chrome::build_region_content`), so this
     // registration is *why* there is a workspace tree in the sidebar at all. Move the
     // container to the right region and its UI goes with it.
-    chrome_host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
+    crate::chrome::Region::LeftSidebar
+        .child(crate::providers::WorkspacesContainerProvider::new());
     // A **second placement** of the same container, in the right sidebar (F003/P085/T359, user
     // 2026-07-30). Not scaffolding: with one dock on screen none of this phase is observable — not
     // a letter per dock, not focus moving between them, not "the focused one answers and every
@@ -398,21 +399,17 @@ pub(crate) async fn init_state(
     //
     // It is also the only thing that exercises the kind/mount split for real: same content, same
     // bindings, separate cursor / scroll / focus, because those are keyed by mount id.
-    chrome_host.register(Box::new(
-        crate::providers::WorkspacesContainerProvider::placed(
-            "workspaces.right",
-            crate::chrome::RegionId::RightSidebar,
-        ),
-    ));
+    crate::chrome::Region::RightSidebar
+        .child(crate::providers::WorkspacesContainerProvider::named("workspaces.right"));
     // A **third placement, beside the first**, so two docks share one region. One dock per sidebar
     // never shows whether two of them divide the height, hold their own space as one folds, or line
     // their title rows up with each other — which is the whole of what a region has to get right.
-    chrome_host.register(Box::new(
-        crate::providers::WorkspacesContainerProvider::placed(
-            "workspaces.left2",
-            crate::chrome::RegionId::LeftSidebar,
-        ),
-    ));
+    crate::chrome::Region::LeftSidebar
+        .child(crate::providers::WorkspacesContainerProvider::named("workspaces.left2"));
+
+    // Everything named above was queued before this host existed — which is the point: a plugin
+    // adding a container at load time writes the same call and does not have to find the host.
+    chrome_host.mount_pending();
 
     // Loaded from disk when `[settings] search_history` allows it; a missing, corrupt or
     // unknown-version file is simply an empty store, so a first run and a broken file behave

@@ -169,11 +169,17 @@ impl ChromeHost {
     /// `default_order`. Reads only provider metadata — the render seam
     /// (`build_contribution`) is not touched here.
     pub fn register(&mut self, provider: Box<dyn Provider>) {
-        let id = provider.id().to_string();
         let region = provider.default_region();
+        self.seat(region, provider);
+    }
+
+    /// Seat one container in `region` — the one place a container enters the host, whether it came
+    /// from [`Region::child`](super::Region::child) or from its own default region.
+    fn seat(&mut self, region: RegionId, provider: Box<dyn Provider>) {
+        let id = provider.id().to_string();
         debug_assert!(
             provider.supported_regions().contains(region),
-            "ChromeHost::register: provider '{}' default_region {:?} not in supported_regions {:?}",
+            "a container was seated in a region it does not support: '{}' in {:?}, supports {:?}",
             provider.id(),
             region,
             provider.supported_regions(),
@@ -184,6 +190,19 @@ impl ChromeHost {
         };
         self.regions[region.index()].insert_ordered(mc);
         self.placement.insert(id, region);
+    }
+
+    /// **Take whatever [`Region::child`] has queued** and seat it.
+    ///
+    /// A caller names a region before this host exists — a plugin loading at startup, the app's own
+    /// wiring — so the containers wait and are seated here. Called when the host is built, and
+    /// again whenever something may have added one since.
+    ///
+    /// [`Region::child`]: super::Region::child
+    pub fn mount_pending(&mut self) {
+        for (region, provider) in super::events::take_pending() {
+            self.seat(region, provider);
+        }
     }
 
     /// The ordered containers currently mounted in `region`.
@@ -330,6 +349,60 @@ impl ChromeHost {
     /// Is a region host-level visible?
     pub fn is_region_visible(&self, region: RegionId) -> bool {
         self.regions[region.index()].visible
+    }
+}
+
+#[cfg(test)]
+mod region_child_tests {
+    use super::*;
+    use crate::chrome::Region;
+    use crate::providers::WorkspacesContainerProvider;
+
+    /// **A container is added to the region that is already there** — the region is the receiver,
+    /// so nothing declares its own parent, and one call or a list both work.
+    ///
+    /// ⚠️ Ran red first: this read
+    /// `host.register(Box::new(Provider::placed("id", RegionId::LeftSidebar)))` — a box, a host to
+    /// reach, and the parent named by the child.
+    #[test]
+    fn a_region_takes_one_container_or_several_and_the_host_seats_them() {
+        let _ = crate::chrome::events::take_pending(); // start from empty
+
+        Region::LeftSidebar.child(WorkspacesContainerProvider::named("one"));
+        Region::RightSidebar.child([
+            WorkspacesContainerProvider::named("two"),
+            WorkspacesContainerProvider::named("three"),
+        ]);
+
+        let mut host = ChromeHost::new(ChromeEventBus::default());
+        host.mount_pending();
+
+        let ids = |r: RegionId| -> Vec<String> {
+            host.contributions(r)
+                .iter()
+                .map(|c| c.provider.id().to_string())
+                .collect()
+        };
+        assert_eq!(ids(RegionId::LeftSidebar), ["one"]);
+        assert_eq!(ids(RegionId::RightSidebar), ["two", "three"], "a list lands in order");
+        assert_eq!(
+            host.placement("two"),
+            Some(RegionId::RightSidebar),
+            "it sits where it was put, not where the container would default to",
+        );
+    }
+
+    /// **Naming a region before the host exists still works** — which is what lets a plugin add a
+    /// container at load time without finding the host first.
+    #[test]
+    fn a_container_named_before_the_host_existed_is_still_seated() {
+        let _ = crate::chrome::events::take_pending();
+        Region::RightSidebar.child(WorkspacesContainerProvider::named("early"));
+
+        // The host is built only now, after the call above.
+        let mut host = ChromeHost::new(ChromeEventBus::default());
+        host.mount_pending();
+        assert_eq!(host.placement("early"), Some(RegionId::RightSidebar));
     }
 }
 

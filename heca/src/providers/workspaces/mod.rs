@@ -54,25 +54,25 @@ pub struct WorkspacesContainerProvider {
 }
 
 impl WorkspacesContainerProvider {
-    /// The default placement: id `workspaces`, seated in the left sidebar.
+    /// This container, under its own name.
     pub fn new() -> Self {
-        Self::placed("workspaces", RegionId::LeftSidebar)
+        Self::named("workspaces")
     }
 
-    /// **Place this container**, with its own mount id, in `region`.
+    /// **Name this placement.** Everything that belongs to one seating keys off it — the cursor,
+    /// the scroll offset, whether it holds chrome focus — so two of these are two placements of one
+    /// container, not two containers.
     ///
-    /// A widget is a component and placing one is placing it — so a second placement is this call,
-    /// not a second implementation of the provider. The build hook is one plain `fn` that reads
-    /// everything off the contexts, so it already serves every placement; what a placement needs of
-    /// its own is an id (state that is per mount, like its scroll position, is keyed by it) and
-    /// somewhere to sit.
+    /// Where it sits is said by whoever puts it somewhere:
+    /// `Region::RightSidebar.child(WorkspacesContainerProvider::named("workspaces.right"))`. It
+    /// used to be an argument here, which had the container declaring its own parent.
     ///
     /// The **content is the same either way**: the workspaces come from the shared store, exactly as
     /// two renders of one component show the same data.
-    pub fn placed(id: impl Into<String>, region: RegionId) -> Self {
+    pub fn named(id: impl Into<String>) -> Self {
         Self {
             id: id.into(),
-            region,
+            region: RegionId::LeftSidebar,
         }
     }
 }
