@@ -146,6 +146,8 @@ pub struct ChromeHost {
     regions: [RegionHost; 4],
     /// Reverse index: which region each container currently lives in.
     placement: HashMap<ContainerId, RegionId>,
+    /// What each region was told about arranging its own contents, by [`RegionId::index`].
+    layouts: [super::events::RegionLayout; 4],
     events: ChromeEventBus,
 }
 
@@ -161,6 +163,7 @@ impl ChromeHost {
                 RegionHost::new(),
             ],
             placement: HashMap::new(),
+            layouts: Default::default(),
             events,
         }
     }
@@ -203,6 +206,15 @@ impl ChromeHost {
         for (region, provider) in super::events::take_pending() {
             self.seat(region, provider);
         }
+        for (region, layout) in super::events::take_pending_layout() {
+            self.layouts[region.index()] = layout;
+        }
+    }
+
+    /// **How this region was told to arrange its contents**, if anything was said. The render path
+    /// asks this when it builds the region's body.
+    pub fn layout(&self, region: RegionId) -> &super::events::RegionLayout {
+        &self.layouts[region.index()]
     }
 
     /// The ordered containers currently mounted in `region`.
@@ -389,6 +401,32 @@ mod region_child_tests {
             host.placement("two"),
             Some(RegionId::RightSidebar),
             "it sits where it was put, not where the container would default to",
+        );
+    }
+
+    /// **A region says how it arranges what is in it**, in one line, and the host keeps it.
+    ///
+    /// ⚠️ Ran red first: a region had no say at all — the containers stacked and divided it by the
+    /// share each had asked for, so two docks could only be arranged by editing both of them.
+    #[test]
+    fn a_region_holds_the_arrangement_it_was_given() {
+        let _ = crate::chrome::events::take_pending();
+        let _ = crate::chrome::events::take_pending_layout();
+
+        Region::LeftSidebar
+            .template_row("1fr 1fr")
+            .gap("sm")
+            .child(WorkspacesContainerProvider::named("a"));
+
+        let mut host = ChromeHost::new(ChromeEventBus::default());
+        host.mount_pending();
+
+        let arrangement = host.layout(RegionId::LeftSidebar);
+        assert_eq!(arrangement.rows.as_deref(), Some("1fr 1fr"));
+        assert!(arrangement.is_set(), "the region has something to say about itself");
+        assert!(
+            !host.layout(RegionId::TopBar).is_set(),
+            "a region nobody arranged stacks as it always did",
         );
     }
 

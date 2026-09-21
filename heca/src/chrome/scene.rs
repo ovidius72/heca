@@ -193,6 +193,30 @@ pub(super) fn build_region_content(
         // `reorder`/`move_container` maintain), each keeping its own body and its own share. The
         // stack itself must be allowed to shrink to the region, or it takes its content's height
         // and overflows before the shares are ever divided.
+        // **The region said how to arrange them**, so it is a grid and the template is the answer.
+        // Each container still carries its own share, which the tracks may override — `"auto 1fr"`
+        // pins the first to its content and gives the rest to the second, whatever either asked for.
+        _ if host.layout(region).is_set() => {
+            let arrangement = host.layout(region);
+            let mut grid = heca_grid_ui::widgets::Grid::new().grow(1.0);
+            if let Some(rows) = &arrangement.rows {
+                grid = grid.template_row(rows.as_str());
+            }
+            if let Some(columns) = &arrangement.columns {
+                grid = grid.template_column(columns.as_str());
+            }
+            if let Some(gap) = arrangement.gap {
+                grid = grid.gap(gap);
+            }
+            {
+                let layout = &mut grid.base_mut().style.layout;
+                layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
+                layout.flex_shrink = Some(1.0);
+            }
+            // No rule between them: a caller that chose the arrangement chose what separates the
+            // parts, and a `Separator` injected here would be a row the template did not ask for.
+            Some(Box::new(grid.child(bodies)))
+        }
         _ => {
             let mut stack = Flex::column().gap(8.0).grow(1.0);
             {

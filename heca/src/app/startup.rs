@@ -404,7 +404,11 @@ pub(crate) async fn init_state(
     // A **third placement, beside the first**, so two docks share one region. One dock per sidebar
     // never shows whether two of them divide the height, hold their own space as one folds, or line
     // their title rows up with each other — which is the whole of what a region has to get right.
+    // **The region says how its two docks divide it**, in one line rather than in each dock's own
+    // share: equal halves with air between them.
     crate::chrome::Region::LeftSidebar
+        .template_row("1fr 1fr")
+        .gap("sm")
         .child(crate::providers::WorkspacesContainerProvider::named("workspaces.left2"));
 
     // Everything named above was queued before this host existed — which is the point: a plugin

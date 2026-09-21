@@ -53,6 +53,34 @@ impl RegionId {
         self
     }
 
+    /// **How this region arranges what is in it** — a track template, as a stylesheet writes one.
+    ///
+    /// ```ignore
+    /// Region::LeftSidebar.template_row("1fr 1fr").gap("sm").child([workspaces, docker]);
+    /// ```
+    ///
+    /// Without one the containers stack and divide the region by the share each asked for, which is
+    /// what they did before this existed. With one, the region says the arrangement in a line a
+    /// reader can check against the picture — `"auto 1fr"` for a fixed dock above one that takes
+    /// the rest — and a part that is not there is a missing row rather than a number to revisit.
+    pub fn template_row(self, tracks: &str) -> Self {
+        LAYOUT.with(|l| l.borrow_mut().entry(self).or_default().rows = Some(tracks.to_string()));
+        self
+    }
+
+    /// The column tracks, for a region arranged across rather than down.
+    pub fn template_column(self, tracks: &str) -> Self {
+        LAYOUT.with(|l| l.borrow_mut().entry(self).or_default().columns = Some(tracks.to_string()));
+        self
+    }
+
+    /// **Air between the containers in this region** — a number of pixels, a step of the theme's
+    /// rhythm (`"sm"`), or a string, exactly as everywhere else.
+    pub fn gap(self, gap: impl Into<heca_grid_ui::style::Space>) -> Self {
+        LAYOUT.with(|l| l.borrow_mut().entry(self).or_default().gap = Some(gap.into()));
+        self
+    }
+
     /// All four regions in canonical order.
     pub const ALL: [RegionId; 4] = [
         RegionId::LeftSidebar,
@@ -407,4 +435,36 @@ thread_local! {
 /// Take everything [`RegionId::child`] has queued. The host calls this; nothing else should.
 pub(crate) fn take_pending() -> Vec<(RegionId, Box<dyn crate::providers::Provider>)> {
     PENDING.with(|q| std::mem::take(&mut *q.borrow_mut()))
+}
+
+
+/// **What a region says about arranging its own contents.** Empty unless a caller said something,
+/// in which case the region's body is built as a grid rather than a stack.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RegionLayout {
+    /// The row tracks (`"auto 1fr"`, `"repeat(2, 1fr)"`).
+    pub rows: Option<String>,
+    /// The column tracks.
+    pub columns: Option<String>,
+    /// Air between the containers.
+    pub gap: Option<heca_grid_ui::style::Space>,
+}
+
+impl RegionLayout {
+    /// Did anyone say anything about this region?
+    pub fn is_set(&self) -> bool {
+        self.rows.is_some() || self.columns.is_some() || self.gap.is_some()
+    }
+}
+
+thread_local! {
+    /// What each region was told about arranging itself, before a host existed to hold it —
+    /// alongside [`PENDING`], and taken by the same call.
+    static LAYOUT: std::cell::RefCell<std::collections::HashMap<RegionId, RegionLayout>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Take the arrangements [`RegionId::template_row`] and friends have queued.
+pub(crate) fn take_pending_layout() -> std::collections::HashMap<RegionId, RegionLayout> {
+    LAYOUT.with(|l| std::mem::take(&mut *l.borrow_mut()))
 }
