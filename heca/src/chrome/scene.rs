@@ -169,6 +169,7 @@ pub(super) fn build_region_content(
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
 ) -> Option<WidgetModel> {
+    let templated = host.layout(region).is_set();
     let mut bodies = host
         .contributions(region)
         .iter()
@@ -179,7 +180,16 @@ pub(super) fn build_region_content(
                 // The share goes on the OUTERMOST node, so it has to be applied after the wrappers:
                 // a share set on the body would leave the wrapper content-sized and divide nothing
                 // (F003/P011/T021's lesson, one level up).
-                Some(with_share(focus_and_pick(body, &c.id, c.grow, ctx), c.grow))
+                let seated = focus_and_pick(body, &c.id, c.grow, ctx);
+                // **A share is a flex idiom, and a templated region is not flex.** `with_share`
+                // gives a child a zero base size so a column can divide itself; in a grid cell that
+                // zero is a definite height, so the container collapses to its title row instead of
+                // filling the track the template gave it. The tracks are the answer there.
+                Some(if templated {
+                    seated
+                } else {
+                    with_share(seated, c.grow)
+                })
             }
             _ => None,
         })
