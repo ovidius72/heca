@@ -302,6 +302,13 @@ at several sizes and child counts. In the exposé that is
 `the_whole_map_never_exceeds_the_box_it_is_given` — the one assertion that would have caught all
 seven failures. Fixtures live in `testing.rs` so each test reads as its assertion, not its setup.
 
+**Then break the thing the test protects, on purpose, and check the test goes red.** Put the bug
+back in — change the number, delete the line, return the wrong branch — run the test, see it fail,
+then undo it. A test that still passes while the bug is present proves nothing, and you will not
+find that out by reading it. Three tests in this codebase passed with their own fix deleted, and one
+did not exist until breaking the code showed there was nothing watching it. Copy the file before you
+break it; never `git checkout --` a file you have uncommitted work in.
+
 #### 8. It moves to `heca/src/components/` on the SECOND caller
 
 A move, never a copy. See § 0b.
