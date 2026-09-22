@@ -17,18 +17,18 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
+use heca_grid_ui::reactive::{SignalGet, SignalUpdate, create_effect};
 use heca_grid_ui::widgets::{ContextMenu, Menu, MenuAnchor};
 use heca_grid_ui::{Button, ButtonVariant, Component, ComponentExt as _, Dialog, Point};
 
-use heca_view::{PropMap, ViewNode, WidgetKind};
 use super::{ChromeIntentEmitter, FormBindings, LayerId, LayerKind};
-use crate::host::App;
-use crate::providers::ChromeCtx;
 use crate::actions::ActionRegistry;
 use crate::app::interaction::{InteractionIntent, InteractionSource};
 use crate::app_state::AppState;
+use crate::host::App;
 use crate::input::WmAction;
+use crate::providers::ChromeCtx;
+use heca_view::{PropMap, ViewNode, WidgetKind};
 
 /// Opaque, stable id for an open overlay — the same value as its backing
 /// [`LayerId`](super::LayerId). Public because [`WmAction`] carries it (an action targets a
@@ -454,14 +454,8 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     // builds the rows and anchors it — but *how a menu is built* must not depend on that, or the
     // two drift: they already had, one with quick-pick keycaps and one without, which is how the
     // same menu came to have two shapes on screen (Antonio, 2026-08-07).
-    let items = super::context_menu::menu_from_items(
-        "",
-        "",
-        "",
-        spec.items,
-        &state.action_catalog,
-        &emit,
-    );
+    let items =
+        super::context_menu::menu_from_items("", "", "", spec.items, &state.action_catalog, &emit);
     let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
     let emit_dismiss = emit.clone();
     let dismiss_close = close.clone();
@@ -590,8 +584,8 @@ pub(crate) fn resolve(
 
 #[cfg(test)]
 mod tests {
-    use heca_view::Intent;
     use super::*;
+    use heca_view::Intent;
     use heca_view::PropValue;
 
     fn noop_emit() -> ChromeIntentEmitter {
@@ -651,7 +645,10 @@ mod tests {
         assert_eq!(close.id, "close");
         assert_eq!(close.label, "Close pane");
         assert_eq!(close.intent.action, "close", "id doubles as the action");
-        assert!(close.danger && close.enabled, "danger set, enabled by default");
+        assert!(
+            close.danger && close.enabled,
+            "danger set, enabled by default"
+        );
 
         let disabled = DropdownItem::new("dup", "Duplicate").enabled(false);
         assert!(!disabled.enabled && !disabled.danger);
@@ -701,7 +698,14 @@ mod tests {
                 fired.borrow_mut().push(intent)
             })
         };
-        let mut root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &emit, &shortcuts, &mut FormBindings::default());
+        let mut root = build_modal_root(
+            &spec,
+            id,
+            &heca_grid_ui::Theme::default(),
+            &emit,
+            &shortcuts,
+            &mut FormBindings::default(),
+        );
 
         let targets = heca_grid_ui::collect_hints(root.as_ref());
         assert_eq!(targets.len(), 2, "two actions → two pick targets");
@@ -723,7 +727,11 @@ mod tests {
         let overlay = &root.base().children[0];
         let panel = &overlay.base().children[0];
         assert_eq!(panel.base().children.len(), 3, "title + body + action row");
-        assert_eq!(panel.base().children[2].base().children.len(), 2, "two buttons");
+        assert_eq!(
+            panel.base().children[2].base().children.len(),
+            2,
+            "two buttons"
+        );
     }
 
     /// **A modal's action button is one pick target, not two** (docs/hint-architecture.md § 5a).

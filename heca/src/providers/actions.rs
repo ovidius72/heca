@@ -15,9 +15,9 @@ use std::rc::Rc;
 
 use crate::actions::{ActionRegistry, DuplicateAction, register_dynamic, unregister_dynamic};
 use crate::app::conflicts::{ActionConflict, Conflicts};
-use crate::keymap::KeymapRegistry;
 use crate::app_state::AppState;
 use crate::chrome::Intent;
+use crate::keymap::KeymapRegistry;
 use crate::providers::ProviderCx;
 use heca_grid_ui::reactive::SignalGet;
 
@@ -117,7 +117,11 @@ pub(crate) fn bind_provider_keybindings(
 /// A component keeping genuinely independent cursors per placement is a later change to its own
 /// model; this mirrors what is true today.
 fn mirror_cursor_to_siblings(state: &mut AppState, mount: &str) {
-    let Some(kind) = state.chrome_host.provider(mount).map(|p| p.kind().to_string()) else {
+    let Some(kind) = state
+        .chrome_host
+        .provider(mount)
+        .map(|p| p.kind().to_string())
+    else {
         return;
     };
     let cursor = state.chrome_state.container_cursor(mount).get_untracked();

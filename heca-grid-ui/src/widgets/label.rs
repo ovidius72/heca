@@ -278,7 +278,11 @@ impl Label {
                 .collect();
         }
         let whole = |chars: &[char]| -> Vec<(char, Option<usize>)> {
-            chars.iter().enumerate().map(|(i, &c)| (c, Some(i))).collect()
+            chars
+                .iter()
+                .enumerate()
+                .map(|(i, &c)| (c, Some(i)))
+                .collect()
         };
         let chars: Vec<char> = text.chars().collect();
         let mode = self.truncate;
@@ -403,7 +407,11 @@ impl Label {
         let font = self.base.font as f64;
         // A wrapped label's box is N lines tall, so a run is one line; a plain label's run is its
         // whole box, which is what keeps a stretched single-line label centring as it always did.
-        let line_h = if self.wrap.get_untracked() { self.line_h() } else { bounds.size.h };
+        let line_h = if self.wrap.get_untracked() {
+            self.line_h()
+        } else {
+            bounds.size.h
+        };
         self.drawn_lines()
             .iter()
             .enumerate()

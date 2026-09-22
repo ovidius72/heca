@@ -389,9 +389,9 @@ mod tests {
         build_event_combo, normalize_key_text, prefix_combo_to_literal_input, typed_candidate_char,
         winit_key_to_backend_event,
     };
-    use winit::keyboard::Key;
     use crate::keymap::KeyCombo;
     use heca_core::backend::BackendKeyCode;
+    use winit::keyboard::Key;
     use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 
     /// **A binding on `Alt+l` must match the L key**, whatever Option turned the character into.

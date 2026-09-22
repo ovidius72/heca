@@ -8,7 +8,7 @@
 //! returns. It is reached only through that seam — nothing in `chrome` calls it.
 
 use super::seams::{DockRegistries, DockSeams};
-use super::{container_items, workspace_frame::WorkspaceFrame, WorkspaceTree, MENU_CONTAINER};
+use super::{MENU_CONTAINER, WorkspaceTree, container_items, workspace_frame::WorkspaceFrame};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::widgets::{Flex, ScrollRegion};
@@ -88,8 +88,8 @@ impl DockView<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::testing::{self, Fixture};
+    use super::*;
 
     /// One frame per workspace, in the tree's own order.
     #[test]
@@ -118,7 +118,9 @@ mod tests {
         let declared = testing::declared_keys(&root);
         for ws_idx in [0, 1] {
             assert!(
-                declared.contains(&super::super::workspace_key(heca_core::layout::WorkspaceId(ws_idx as u64))),
+                declared.contains(&super::super::workspace_key(
+                    heca_core::layout::WorkspaceId(ws_idx as u64)
+                )),
                 "workspace {ws_idx} has no frame: {declared:?}",
             );
         }

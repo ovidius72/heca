@@ -231,7 +231,11 @@ impl ChromeHost {
     /// `supported_regions`; a no-op (still `Ok`) if it's already there. Emits
     /// [`ChromeEvent::ContainerPlacementChanged`] on a real move.
     pub fn move_container(&mut self, id: &str, to: RegionId) -> Result<(), MoveError> {
-        let from = self.placement.get(id).copied().ok_or(MoveError::UnknownContainer)?;
+        let from = self
+            .placement
+            .get(id)
+            .copied()
+            .ok_or(MoveError::UnknownContainer)?;
         let idx = self.regions[from.index()]
             .contributions
             .iter()
@@ -265,7 +269,11 @@ impl ChromeHost {
     /// "put X before Y" fails loudly rather than silently appending. Emits
     /// [`ChromeEvent::ContainerPlacementChanged`].
     pub fn reorder(&mut self, id: &str, before: Option<&str>) -> Result<(), MoveError> {
-        let region = self.placement.get(id).copied().ok_or(MoveError::UnknownContainer)?;
+        let region = self
+            .placement
+            .get(id)
+            .copied()
+            .ok_or(MoveError::UnknownContainer)?;
         let list = &mut self.regions[region.index()].contributions;
         let from = list
             .iter()
@@ -305,7 +313,11 @@ impl ChromeHost {
     /// container not in the region is an error ([`MoveError::TargetNotFound`]); when `after` is the
     /// last container, X lands at the end. Emits [`ChromeEvent::ContainerPlacementChanged`].
     pub fn reorder_after(&mut self, id: &str, after: &str) -> Result<(), MoveError> {
-        let region = self.placement.get(id).copied().ok_or(MoveError::UnknownContainer)?;
+        let region = self
+            .placement
+            .get(id)
+            .copied()
+            .ok_or(MoveError::UnknownContainer)?;
         let list = &self.regions[region.index()].contributions;
         // The container that follows `after` is the one to insert before; none ⇒ append (`None`).
         let after_idx = list
@@ -396,7 +408,11 @@ mod region_child_tests {
                 .collect()
         };
         assert_eq!(ids(RegionId::LeftSidebar), ["one"]);
-        assert_eq!(ids(RegionId::RightSidebar), ["two", "three"], "a list lands in order");
+        assert_eq!(
+            ids(RegionId::RightSidebar),
+            ["two", "three"],
+            "a list lands in order"
+        );
         assert_eq!(
             host.placement("two"),
             Some(RegionId::RightSidebar),
@@ -423,7 +439,10 @@ mod region_child_tests {
 
         let arrangement = host.layout(RegionId::LeftSidebar);
         assert_eq!(arrangement.rows.as_deref(), Some("1fr 1fr"));
-        assert!(arrangement.is_set(), "the region has something to say about itself");
+        assert!(
+            arrangement.is_set(),
+            "the region has something to say about itself"
+        );
         assert!(
             !host.layout(RegionId::TopBar).is_set(),
             "a region nobody arranged stacks as it always did",
@@ -533,11 +552,17 @@ mod tests {
         let mut h = host();
         let seen: Rc<RefCell<Vec<(String, RegionId)>>> = Rc::new(RefCell::new(Vec::new()));
         let log = seen.clone();
-        let _sub = h.events.subscribe("chrome.container.placement.changed", move |e| {
-            if let ChromeEvent::ContainerPlacementChanged { container_id, region } = e {
-                log.borrow_mut().push((container_id.clone(), *region));
-            }
-        });
+        let _sub = h
+            .events
+            .subscribe("chrome.container.placement.changed", move |e| {
+                if let ChromeEvent::ContainerPlacementChanged {
+                    container_id,
+                    region,
+                } = e
+                {
+                    log.borrow_mut().push((container_id.clone(), *region));
+                }
+            });
 
         h.register(Box::new(TestProvider::new(
             "ws",
@@ -550,7 +575,10 @@ mod tests {
         assert!(h.contributions(RegionId::LeftSidebar).is_empty());
         assert_eq!(ids(&h, RegionId::RightSidebar), ["ws"]);
         assert_eq!(h.placement("ws"), Some(RegionId::RightSidebar));
-        assert_eq!(seen.borrow().as_slice(), [("ws".to_string(), RegionId::RightSidebar)]);
+        assert_eq!(
+            seen.borrow().as_slice(),
+            [("ws".to_string(), RegionId::RightSidebar)]
+        );
     }
 
     #[test]
@@ -626,10 +654,7 @@ mod tests {
         h.reorder_after("c", "a").unwrap();
         assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "c", "b"]);
         // A missing target errors and leaves the order untouched.
-        assert_eq!(
-            h.reorder_after("a", "zzz"),
-            Err(MoveError::TargetNotFound)
-        );
+        assert_eq!(h.reorder_after("a", "zzz"), Err(MoveError::TargetNotFound));
         assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "c", "b"]);
     }
 

@@ -22,7 +22,12 @@ pub(crate) fn render(index: &BindingIndex, json: bool) -> String {
     }
     // Width from the content, so a long plugin id does not push every column off the terminal and a
     // short list is not padded to a width nothing needs.
-    let name_width = index.keys().map(|a| a.len()).max().unwrap_or(0).clamp(8, 40);
+    let name_width = index
+        .keys()
+        .map(|a| a.len())
+        .max()
+        .unwrap_or(0)
+        .clamp(8, 40);
     let key_width = index
         .values()
         .flatten()
@@ -88,8 +93,18 @@ mod tests {
     fn index() -> BindingIndex {
         let mut index = BindingIndex::new();
         index_binding(&mut index, "close", "[keys]", "prefix+x");
-        index_binding(&mut index, "workspaces.cursor_down", "[[keys.component]] workspaces", "j");
-        index_binding(&mut index, "workspaces.cursor_down", "[[keys.mode]] sidebar", "j");
+        index_binding(
+            &mut index,
+            "workspaces.cursor_down",
+            "[[keys.component]] workspaces",
+            "j",
+        );
+        index_binding(
+            &mut index,
+            "workspaces.cursor_down",
+            "[[keys.mode]] sidebar",
+            "j",
+        );
         index_binding(&mut index, "docker.restart", "plugin", "r");
         index
     }

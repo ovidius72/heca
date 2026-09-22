@@ -21,7 +21,7 @@
 //! handler on the group: the same one, so the visible button and the menu row cannot drift.
 
 use crate::builders::{ComponentExt, LayoutExt, StyleExt};
-use crate::component::{paint_child, Base, Component, PaintCx};
+use crate::component::{Base, Component, PaintCx, paint_child};
 use crate::reactive::SignalGet;
 use crate::style::{Align, Direction, Justify};
 use crate::widgets::button::ButtonVariant;

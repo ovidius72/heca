@@ -135,8 +135,14 @@ fn a_hidden_sidebar_leaves_no_strip_the_panes_do_not_own() {
     )
     .content_rect();
 
-    assert!(r.contains(Point::new(1.0, 100.0)), "the left edge is the window's");
-    assert!(r.contains(Point::new(1279.0, 100.0)), "and so is the right edge");
+    assert!(
+        r.contains(Point::new(1.0, 100.0)),
+        "the left edge is the window's"
+    );
+    assert!(
+        r.contains(Point::new(1279.0, 100.0)),
+        "and so is the right edge"
+    );
     assert!(
         r.contains(Point::new(700.0, 100.0)),
         "a point past half the window's height is still in the panes"

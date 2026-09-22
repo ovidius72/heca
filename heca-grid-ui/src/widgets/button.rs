@@ -373,7 +373,6 @@ impl Button {
         self.base.pointer.hovered
     }
 
-
     /// Border that eases from semi-opaque (rest) to solid (hover) by `p`. The
     /// stroke `width` is the theme's `border_width` (so `border_width == 0` means
     /// no border, like every other surface).
@@ -448,10 +447,7 @@ impl Button {
         let content = self.content_box();
         let y = content.loc.y + content.size.h / 2.0 + (self.base.font as f64 * 0.5);
         cx.rect(
-            Rectangle::new(
-                Point::new(content.loc.x, y),
-                Size::new(content.size.w, 1.5),
-            ),
+            Rectangle::new(Point::new(content.loc.x, y), Size::new(content.size.w, 1.5)),
             color,
             None,
             0.0,
@@ -624,8 +620,16 @@ impl Component for Button {
         // vivid accent/danger chrome to `muted` so the whole affordance — border and fill, not
         // just the label — reads as inactive on every variant.
         let disabled = self.base.disabled.get_untracked();
-        let p = if disabled { 0.0 } else { self.progress.clamp(0.0, 1.0) };
-        let (accent, danger) = if disabled { (muted, muted) } else { (accent, danger) };
+        let p = if disabled {
+            0.0
+        } else {
+            self.progress.clamp(0.0, 1.0)
+        };
+        let (accent, danger) = if disabled {
+            (muted, muted)
+        } else {
+            (accent, danger)
+        };
         // An explicit tone replaces the variant's hue wherever the variant would have used the
         // accent — content, hover wash, held-on frame — without changing which variant this is.
         // A tone the caller set is already in `accent` — `PaintCx::accent` resolved it, the same
@@ -734,7 +738,12 @@ impl Component for Button {
                 cx.rect(
                     b,
                     fill,
-                    self.animated_border(muted.lerp(accent, p), p, border_width, ia.control_rest_border as f32),
+                    self.animated_border(
+                        muted.lerp(accent, p),
+                        p,
+                        border_width,
+                        ia.control_rest_border as f32,
+                    ),
                     radius,
                     g,
                 );

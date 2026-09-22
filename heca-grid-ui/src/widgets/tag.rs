@@ -176,7 +176,12 @@ impl Component for Tag {
         }
         let (muted, radius_tok, border_w, ia) = {
             let t = cx.theme();
-            (t.colors.muted, t.colors.border_radius, t.colors.border_width, t.colors.interaction)
+            (
+                t.colors.muted,
+                t.colors.border_radius,
+                t.colors.border_width,
+                t.colors.interaction,
+            )
         };
         let c = self.color.unwrap_or(muted);
         let pill = self.base.bounds;

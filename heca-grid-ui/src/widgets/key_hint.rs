@@ -254,7 +254,6 @@ impl KeycapContent<'_> {
             }
         }
     }
-
 }
 
 /// One cap of a keyboard chord: a **Nerd Font key glyph** where the key has a picture (shift,
@@ -396,7 +395,6 @@ pub struct KeyHint {
 
 #[heca_grid_ui_macros::props]
 impl KeyHint {
-
     // `on_hint` is **not here any more** (F003/P082/T432). It is
     // [`ComponentExt::on_hint`](crate::builders::ComponentExt::on_hint), on every widget — so a
     // `KeyHint::new(row).on_hint(…)` call still reads exactly the same, and a widget that can carry
@@ -483,7 +481,6 @@ impl KeyHint {
     pub fn offset_y(self, px: f64) -> Self {
         crate::builders::ComponentExt::hint_offset_y(self, px)
     }
-
 }
 
 /// The cap font for a target of `bounds` at inherited `font`, under `style`.
@@ -719,10 +716,17 @@ mod tests {
     #[test]
     fn an_unclipped_cap_is_left_where_it_was_placed() {
         let cap = rect(180.0, 10.0, 20.0, 20.0);
-        assert_eq!(fit_into_view(cap, rect(0.0, 0.0, 200.0, 40.0), None), Some(cap));
+        assert_eq!(
+            fit_into_view(cap, rect(0.0, 0.0, 200.0, 40.0), None),
+            Some(cap)
+        );
         // …and so is one whose row is fully inside the clip.
         assert_eq!(
-            fit_into_view(cap, rect(0.0, 0.0, 200.0, 40.0), Some(rect(0.0, 0.0, 200.0, 400.0))),
+            fit_into_view(
+                cap,
+                rect(0.0, 0.0, 200.0, 40.0),
+                Some(rect(0.0, 0.0, 200.0, 400.0))
+            ),
             Some(cap),
         );
     }
@@ -744,7 +748,10 @@ mod tests {
             fitted.loc.y + fitted.size.h <= clip.loc.y + clip.size.h,
             "and inside the dock: {fitted:?}",
         );
-        assert!(fitted.loc.y >= row.loc.y, "still within its own row, not the one above");
+        assert!(
+            fitted.loc.y >= row.loc.y,
+            "still within its own row, not the one above"
+        );
     }
 
     /// **Too little of the row left to hold a letter, so none is drawn.** Nudging it any further
@@ -781,7 +788,10 @@ mod tests {
         );
 
         let fitted = fit_into_view(cap, permitted, Some(clip)).expect("the caption band holds it");
-        assert_eq!(fitted, cap, "and the clamp leaves it beside the icon, not on it");
+        assert_eq!(
+            fitted, cap,
+            "and the clamp leaves it beside the icon, not on it"
+        );
     }
 
     /// **…and flips above only when below would fall off the viewport.**

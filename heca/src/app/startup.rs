@@ -65,21 +65,25 @@ pub(crate) fn layout_options_from(
 ) -> heca_core::layout::types::LayoutOptions {
     use heca_core::layout::types::CenterFocusedColumn as C;
     heca_core::layout::types::LayoutOptions {
-            gaps: app_config
-                .config
-                .appearance
-                .effective_pane_gap(&app_config.theme) as f64,
-            always_center_single_column: app_config.config.settings.always_center_single_column,
-            // Clamped like niri's, so a typo in a config file cannot produce a map at 4000% or 0%.
-            overview_zoom_from: app_config.config.settings.overview_zoom_from.clamp(0.2, 4.0),
-            overview_gap: app_config.config.settings.overview_gap.clamp(0.0, 1.0),
-            center_focused_column: match app_config.config.settings.center_focused_column {
-                heca_config::settings::CenterFocusedColumn::Never => C::Never,
-                heca_config::settings::CenterFocusedColumn::OnOverflow => C::OnOverflow,
-                heca_config::settings::CenterFocusedColumn::Always => C::Always,
-            },
-            ..Default::default()
-        }
+        gaps: app_config
+            .config
+            .appearance
+            .effective_pane_gap(&app_config.theme) as f64,
+        always_center_single_column: app_config.config.settings.always_center_single_column,
+        // Clamped like niri's, so a typo in a config file cannot produce a map at 4000% or 0%.
+        overview_zoom_from: app_config
+            .config
+            .settings
+            .overview_zoom_from
+            .clamp(0.2, 4.0),
+        overview_gap: app_config.config.settings.overview_gap.clamp(0.0, 1.0),
+        center_focused_column: match app_config.config.settings.center_focused_column {
+            heca_config::settings::CenterFocusedColumn::Never => C::Never,
+            heca_config::settings::CenterFocusedColumn::OnOverflow => C::OnOverflow,
+            heca_config::settings::CenterFocusedColumn::Always => C::Always,
+        },
+        ..Default::default()
+    }
 }
 
 pub(crate) fn apply_window_vibrancy(
@@ -389,8 +393,7 @@ pub(crate) async fn init_state(
     // from whatever the host has seated in it (`chrome::build_region_content`), so this
     // registration is *why* there is a workspace tree in the sidebar at all. Move the
     // container to the right region and its UI goes with it.
-    crate::chrome::Region::LeftSidebar
-        .child(crate::providers::WorkspacesContainerProvider::new());
+    crate::chrome::Region::LeftSidebar.child(crate::providers::WorkspacesContainerProvider::new());
     // A **second placement** of the same container, in the right sidebar (F003/P085/T359, user
     // 2026-07-30). Not scaffolding: with one dock on screen none of this phase is observable — not
     // a letter per dock, not focus moving between them, not "the focused one answers and every
@@ -399,8 +402,9 @@ pub(crate) async fn init_state(
     //
     // It is also the only thing that exercises the kind/mount split for real: same content, same
     // bindings, separate cursor / scroll / focus, because those are keyed by mount id.
-    crate::chrome::Region::RightSidebar
-        .child(crate::providers::WorkspacesContainerProvider::named("workspaces.right"));
+    crate::chrome::Region::RightSidebar.child(
+        crate::providers::WorkspacesContainerProvider::named("workspaces.right"),
+    );
     // A **third placement, beside the first**, so two docks share one region. One dock per sidebar
     // never shows whether two of them divide the height, hold their own space as one folds, or line
     // their title rows up with each other — which is the whole of what a region has to get right.
@@ -409,7 +413,9 @@ pub(crate) async fn init_state(
     crate::chrome::Region::LeftSidebar
         .template_row("1fr 1fr")
         .gap("sm")
-        .child(crate::providers::WorkspacesContainerProvider::named("workspaces.left2"));
+        .child(crate::providers::WorkspacesContainerProvider::named(
+            "workspaces.left2",
+        ));
 
     // Everything named above was queued before this host existed — which is the point: a plugin
     // adding a container at load time writes the same call and does not have to find the host.
@@ -424,7 +430,10 @@ pub(crate) async fn init_state(
             history: app_config.config.settings.search_history_size,
             usage: app_config.config.settings.search_usage_size,
         };
-        match (app_config.config.settings.search_history, crate::search_state::default_path()) {
+        match (
+            app_config.config.settings.search_history,
+            crate::search_state::default_path(),
+        ) {
             (true, Some(path)) => crate::search_state::load(&path, caps),
             _ => (
                 heca_grid_ui::search::SearchStore::with_caps(caps),
@@ -534,7 +543,11 @@ pub(crate) async fn init_state(
         notifications: crate::notification::NotificationRuntime::with_capacity(
             50,
             std::time::Duration::from_millis(
-                app_config.config.settings.notification_system.auto_dismiss_ms,
+                app_config
+                    .config
+                    .settings
+                    .notification_system
+                    .auto_dismiss_ms,
             ),
             app_config.config.settings.notification_system.mode,
             app_config.config.settings.notification_system.max_visible,
@@ -553,7 +566,8 @@ pub(crate) async fn init_state(
     {
         let event_proxy = state.event_proxy.clone();
         crate::notification::install_notification_sink(move |draft| {
-            let _ = event_proxy.send_event(crate::app::events::AppEvent::RaiseNotification { draft });
+            let _ =
+                event_proxy.send_event(crate::app::events::AppEvent::RaiseNotification { draft });
         });
     }
     // Register the exposé under `heca.expose`, hidden, so `toggle_layer` has something to reach

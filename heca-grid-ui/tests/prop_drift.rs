@@ -18,22 +18,61 @@ use std::path::{Path, PathBuf};
 /// unless someone consciously excuses it here and says why. That is the opposite of the list that
 /// caused the original defect, which required someone to remember to *add* to it.
 const NO_SURFACE_REQUIRED: &[(&str, &str)] = &[
-    ("ScrollBar", "host-only: its state is live host signals, which static data cannot drive"),
-    ("Flex", "layout-only container; everything it takes comes from Style.layout"),
-    ("Surface", "same — a bare styled box, no properties of its own"),
+    (
+        "ScrollBar",
+        "host-only: its state is live host signals, which static data cannot drive",
+    ),
+    (
+        "Flex",
+        "layout-only container; everything it takes comes from Style.layout",
+    ),
+    (
+        "Surface",
+        "same — a bare styled box, no properties of its own",
+    ),
     ("Visibility", "wrapper around a signal"),
-    ("ToastStack", "host-owned queue, driven by the notification store"),
-    ("CommandPalette", "host-owned overlay, fed by the command registry"),
-    ("ContextMenu", "host-owned overlay: it holds a Menu and shows it; the Menu's items are the property surface"),
-    ("Menu", "its rows are MenuItem values carrying closures, which static data cannot supply — the items are the property surface"),
-    ("KeyHint", "host-owned overlay, targets come from the hint registry"),
-    ("Dialog", "host-owned overlay; body/actions arrive as realized subtrees"),
-    ("Grid", "track templates are List-valued and handled by the Grid arm"),
+    (
+        "ToastStack",
+        "host-owned queue, driven by the notification store",
+    ),
+    (
+        "CommandPalette",
+        "host-owned overlay, fed by the command registry",
+    ),
+    (
+        "ContextMenu",
+        "host-owned overlay: it holds a Menu and shows it; the Menu's items are the property surface",
+    ),
+    (
+        "Menu",
+        "its rows are MenuItem values carrying closures, which static data cannot supply — the items are the property surface",
+    ),
+    (
+        "KeyHint",
+        "host-owned overlay, targets come from the hint registry",
+    ),
+    (
+        "Dialog",
+        "host-owned overlay; body/actions arrive as realized subtrees",
+    ),
+    (
+        "Grid",
+        "track templates are List-valued and handled by the Grid arm",
+    ),
     ("Spinner", "no configurable properties"),
-    ("ToastSpec", "a value describing a toast, not a widget; the Toast built from it carries the properties"),
-    ("ToastAction", "one entry in a ToastSpec's list, not a widget. A DESCRIBED toast declares its actions as children (an ordinary described Button per action), so the description path never meets this type"),
+    (
+        "ToastSpec",
+        "a value describing a toast, not a widget; the Toast built from it carries the properties",
+    ),
+    (
+        "ToastAction",
+        "one entry in a ToastSpec's list, not a widget. A DESCRIBED toast declares its actions as children (an ordinary described Button per action), so the description path never meets this type",
+    ),
     ("ActiveMarker", "an enum, not a widget"),
-    ("GridCell", "a value describing one cell, and everything it carries is a live host signal — a selection light and a hover — which static data cannot supply"),
+    (
+        "GridCell",
+        "a value describing one cell, and everything it carries is a live host signal — a selection light and a hover — which static data cannot supply",
+    ),
 ];
 
 fn widgets_dir() -> PathBuf {
@@ -65,7 +104,10 @@ fn widget_sources() -> Vec<(String, String)> {
                 Some(folder) => format!("{}/{name}", folder.to_string_lossy()),
                 None => name,
             };
-            out.push((label, std::fs::read_to_string(&path).expect("read widget source")));
+            out.push((
+                label,
+                std::fs::read_to_string(&path).expect("read widget source"),
+            ));
         }
     }
     let mut out = Vec::new();
@@ -88,8 +130,12 @@ fn impl_blocks_with_builders(src: &str) -> Vec<(String, bool)> {
     let lines: Vec<&str> = src.lines().collect();
     let mut found = Vec::new();
     for (i, line) in lines.iter().enumerate() {
-        let Some(rest) = line.strip_prefix("impl ") else { continue };
-        let Some(ty) = rest.strip_suffix(" {") else { continue };
+        let Some(rest) = line.strip_prefix("impl ") else {
+            continue;
+        };
+        let Some(ty) = rest.strip_suffix(" {") else {
+            continue;
+        };
         // Skip trait impls (`impl Trait for Type`) and generics — only inherent blocks matter.
         if ty.contains(" for ") || ty.contains('<') || !ty.chars().all(|c| c.is_alphanumeric()) {
             continue;
@@ -146,7 +192,8 @@ fn every_exception_still_names_a_real_type() {
         .iter()
         .map(|(t, _)| *t)
         .filter(|t| {
-            !sources.contains(&format!("pub struct {t}")) && !sources.contains(&format!("pub enum {t}"))
+            !sources.contains(&format!("pub struct {t}"))
+                && !sources.contains(&format!("pub enum {t}"))
         })
         .collect();
     assert!(
@@ -155,7 +202,6 @@ fn every_exception_still_names_a_real_type() {
          future type reusing the name would be excused without anyone deciding that.",
     );
 }
-
 
 /// **Nothing writes `style.layout.hidden` by hand.**
 ///
@@ -184,7 +230,11 @@ fn nothing_sets_hidden_without_asking_for_the_layout_it_needs() {
                 continue;
             }
             // `style.rs` defines the field; `component.rs` holds the one setter allowed to write it.
-            let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            let name = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
             if name == "style.rs" || name == "component.rs" {
                 continue;
             }

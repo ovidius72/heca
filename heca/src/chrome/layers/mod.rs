@@ -21,7 +21,7 @@
 mod layer;
 mod order;
 
-pub(crate) use layer::{layer_name, DynamicLayer, LayerId, LayerKind, HOST_OWNER};
+pub(crate) use layer::{DynamicLayer, HOST_OWNER, LayerId, LayerKind, layer_name};
 
 use heca_grid_ui::Component;
 use heca_view::ViewNode;
@@ -37,7 +37,10 @@ use heca_view::ViewNode;
 ///
 /// It is also the key such a surface will declare on **itself** once it is a node in the one tree
 /// and there is no registry left to ask (`docs/surface-compositor.md` § 0.8).
-pub(crate) fn surface_key_of(name: Option<&str>, id: LayerId) -> crate::app::interaction::SurfaceKey {
+pub(crate) fn surface_key_of(
+    name: Option<&str>,
+    id: LayerId,
+) -> crate::app::interaction::SurfaceKey {
     crate::app::interaction::SurfaceKey::of(
         &name.map_or_else(|| format!("surface:{}", id.raw()), str::to_owned),
     )
@@ -471,7 +474,11 @@ impl LayerRegistry {
     }
 
     /// Is the layer named `name` participating this frame?
-    pub(crate) fn is_visible_named(&self, window: &heca_grid_ui::widgets::Flex, name: &str) -> bool {
+    pub(crate) fn is_visible_named(
+        &self,
+        window: &heca_grid_ui::widgets::Flex,
+        name: &str,
+    ) -> bool {
         self.layers
             .iter()
             .any(|l| l.name.as_deref() == Some(name) && l.is_active(self.is_leaving(window, l.id)))
@@ -484,7 +491,10 @@ impl LayerRegistry {
     /// Host-owned only, by the [`HOST_OWNER`] prefix the naming scheme already guarantees: a
     /// plugin's layer is rebuilt by the plugin, and calling into one from a mutation hook would
     /// make every layout change run foreign code.
-    pub(crate) fn visible_host_layer_names(&self, window: &heca_grid_ui::widgets::Flex) -> Vec<String> {
+    pub(crate) fn visible_host_layer_names(
+        &self,
+        window: &heca_grid_ui::widgets::Flex,
+    ) -> Vec<String> {
         let prefix = format!("{HOST_OWNER}.");
         self.layers
             .iter()
@@ -614,9 +624,7 @@ impl LayerRegistry {
         // coarse mechanism: an exclusive surface makes everything beneath it dormant, while the
         // base context keeps several surfaces live together. A non-modal overlay — a dropdown, a
         // toast — is a child of the context, never one itself.
-        if captures_keyboard(window, id)
-            && self.layers.iter().any(|l| l.id == id && l.visible)
-        {
+        if captures_keyboard(window, id) && self.layers.iter().any(|l| l.id == id && l.visible) {
             self.enter_context(id);
         }
     }
@@ -678,7 +686,6 @@ impl LayerRegistry {
     pub(crate) fn get_mut(&mut self, id: LayerId) -> Option<&mut DynamicLayer> {
         self.layers.iter_mut().find(|l| l.id == id)
     }
-
 }
 
 #[cfg(test)]

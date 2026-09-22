@@ -24,7 +24,9 @@ impl LayerRegistry {
         // walk is bounded by the layer count regardless so a malformed registry cannot hang a frame.
         for _ in 0..=self.layers.len() {
             let Some(this) = at else { break };
-            let Some(layer) = self.layers.iter().find(|l| l.id == this) else { break };
+            let Some(layer) = self.layers.iter().find(|l| l.id == this) else {
+                break;
+            };
             let among = self
                 .layers
                 .iter()

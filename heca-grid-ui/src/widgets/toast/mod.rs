@@ -35,9 +35,9 @@ pub use severity::ToastSeverity;
 pub use spec::{ToastAction, ToastSpec};
 pub use stack::ToastStack;
 
+use crate::animation::Animation;
 use crate::builders::{LayoutExt, Parent};
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
-use crate::animation::Animation;
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use crate::scene::TextAlign;
@@ -126,7 +126,9 @@ impl Toast {
         // The title is a real child, so the card composes like every other widget: the engine
         // lays the three columns out, each paints itself, and the text can be cut by the label's
         // own ellipsis instead of being drawn wherever a computed origin happened to land.
-        let title = Label::new(title).align(TextAlign::Start).truncate(Ellipsis::End);
+        let title = Label::new(title)
+            .align(TextAlign::Start)
+            .truncate(Ellipsis::End);
         let title_signal = title.text_signal();
         let column = Flex::column()
             .grow(1.0)
@@ -201,7 +203,9 @@ impl Toast {
     }
 
     /// Hide the leading icon entirely.
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
     pub fn no_icon(mut self) -> Self {
         self.show_icon = false;
         self.sync_icon();
@@ -332,7 +336,9 @@ impl Toast {
 
     /// **How it arrives and leaves** — `Animation::Fade`, `ZoomFade`, or one of your own. Undeclared
     /// it cuts: on screen the frame it opens, gone the frame it hides.
-    #[heca_grid_ui_macros::host_only("an animation is a behaviour object, not a value static data carries")]
+    #[heca_grid_ui_macros::host_only(
+        "an animation is a behaviour object, not a value static data carries"
+    )]
     pub fn animation(mut self, animation: crate::animation::Animation) -> Self {
         self.base.presence.set_animation(animation.build());
         self
@@ -371,7 +377,12 @@ impl Toast {
     /// carries the severity, the body is secondary text, the actions are controls that tone
     /// themselves from what the card published. The card built both levels, so it addresses them
     /// the way `Item` addresses its slots.
-    fn paint_column(&self, cx: &mut PaintCx, tone: crate::color::Color, muted: crate::color::Color) {
+    fn paint_column(
+        &self,
+        cx: &mut PaintCx,
+        tone: crate::color::Color,
+        muted: crate::color::Color,
+    ) {
         let column = self.column();
         let paint = |cx: &mut PaintCx, i: usize, colour: crate::color::Color| {
             if let Some(child) = column.children.get(i) {
@@ -469,7 +480,12 @@ impl Component for Toast {
         }
         let (surface, muted, card_radius, toast_tint) = {
             let t = cx.theme();
-            (t.colors.surface, t.colors.muted, t.colors.border_radius, t.colors.interaction.toast_tint)
+            (
+                t.colors.surface,
+                t.colors.muted,
+                t.colors.border_radius,
+                t.colors.interaction.toast_tint,
+            )
         };
         // The severity says which token; the token is read from the theme in front of us, so a
         // reload re-tones a card that is already on screen.
@@ -487,35 +503,44 @@ impl Component for Toast {
         // the whole card — chrome and content — rather than half of it.
         let frame = self.base.presence.frame();
         frame.apply(cx, b.loc, |cx| {
-        cx.rect(b, surface.lerp(tone, toast_tint as f32 / 255.0), None, card_radius, glow);
-        cx.bracket_frame(b);
+            cx.rect(
+                b,
+                surface.lerp(tone, toast_tint as f32 / 255.0),
+                None,
+                card_radius,
+                glow,
+            );
+            cx.bracket_frame(b);
 
-        // **Everything else is published, not painted.** The severity reaches the content as an
-        // inherited colour and the controls as an inherited tone, so the icon, the title, the
-        // actions and the × all take the card's hue without the card drawing any of them — and a
-        // control's hover, press and focus ring are its own, which is what they are for.
-        cx.with_accent(tone, |cx| {
-            cx.with_content_color(tone, |cx| {
-                crate::component::paint_child(self.base.children[ICON].as_ref(), cx);
+            // **Everything else is published, not painted.** The severity reaches the content as an
+            // inherited colour and the controls as an inherited tone, so the icon, the title, the
+            // actions and the × all take the card's hue without the card drawing any of them — and a
+            // control's hover, press and focus ring are its own, which is what they are for.
+            cx.with_accent(tone, |cx| {
+                cx.with_content_color(tone, |cx| {
+                    crate::component::paint_child(self.base.children[ICON].as_ref(), cx);
+                });
+                self.paint_column(cx, tone, muted);
+                // The × rests quiet in the muted token and lights up on its own.
+                cx.with_content_color(muted, |cx| {
+                    crate::component::paint_child(self.base.children[DISMISS].as_ref(), cx);
+                });
             });
-            self.paint_column(cx, tone, muted);
-            // The × rests quiet in the muted token and lights up on its own.
-            cx.with_content_color(muted, |cx| {
-                crate::component::paint_child(self.base.children[DISMISS].as_ref(), cx);
-            });
-        });
 
-        // The card's own press — `on_click` or the keyboard. The actions and the × flash
-        // themselves, so this is never their press.
-        let amount = self.flash.amount();
-        if amount > 0.0 {
-            cx.flash(b, amount * 0.4, card_radius);
-        }
-        // Focus ring when clickable + focused (theme-aware shift of the toast tone).
-        if self.focusable() && self.base.shows_focus_ring() && cx.theme().colors.show_focus_border {
-            let ring = cx.theme().colors.focus_ring_tone(tone);
-            cx.focus_ring(b, ring, card_radius);
-        }
+            // The card's own press — `on_click` or the keyboard. The actions and the × flash
+            // themselves, so this is never their press.
+            let amount = self.flash.amount();
+            if amount > 0.0 {
+                cx.flash(b, amount * 0.4, card_radius);
+            }
+            // Focus ring when clickable + focused (theme-aware shift of the toast tone).
+            if self.focusable()
+                && self.base.shows_focus_ring()
+                && cx.theme().colors.show_focus_border
+            {
+                let ring = cx.theme().colors.focus_ring_tone(tone);
+                cx.focus_ring(b, ring, card_radius);
+            }
         });
     }
 
@@ -532,9 +557,10 @@ impl Component for Toast {
                 self.activate_body();
                 Handled::Yes
             }
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true }
-                if self.focusable() =>
-            {
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } if self.focusable() => {
                 self.activate_body();
                 Handled::Yes
             }

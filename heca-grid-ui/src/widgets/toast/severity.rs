@@ -25,7 +25,9 @@ pub enum ToastSeverity {
 #[heca_grid_ui_macros::props]
 impl ToastSeverity {
     /// The default leading glyph for this severity (overridable via [`Toast::icon`](super::Toast::icon)).
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
     pub(crate) fn default_glyph(self) -> Glyph {
         match self {
             ToastSeverity::Info => Glyph::Info,
@@ -39,7 +41,9 @@ impl ToastSeverity {
     ///
     /// Asked at paint, never stored: a card built under one theme and still on screen after a
     /// reload must say what the *current* theme says, and a colour captured at build time cannot.
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
     pub(crate) fn tone(self, theme: &Theme) -> Color {
         match self {
             ToastSeverity::Info => theme.colors.accent,

@@ -462,15 +462,7 @@ fn render_terminal_lines(
                     }
                 }
 
-                draw_underline_style(
-                    primitive_renderer,
-                    cell.underline,
-                    x,
-                    y,
-                    width,
-                    cell_h,
-                    fg,
-                );
+                draw_underline_style(primitive_renderer, cell.underline, x, y, width, cell_h, fg);
                 if is_link {
                     draw_hyperlink_decoration(
                         primitive_renderer,

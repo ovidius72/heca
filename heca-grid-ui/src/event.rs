@@ -1009,7 +1009,9 @@ pub fn typed_text(key_text: Option<&str>, mods: Modifiers) -> Option<String> {
     if mods.ctrl || mods.meta || text.is_empty() {
         return None;
     }
-    text.chars().all(|c| !c.is_control()).then(|| text.to_string())
+    text.chars()
+        .all(|c| !c.is_control())
+        .then(|| text.to_string())
 }
 
 /// A widget's registered event handlers, keyed by [`EventKind`].
@@ -1049,7 +1051,11 @@ impl Handlers {
             }
         }
         HandlerOutcome {
-            handled: if cx.stopped() { Handled::Yes } else { Handled::No },
+            handled: if cx.stopped() {
+                Handled::Yes
+            } else {
+                Handled::No
+            },
             default_prevented: cx.default_prevented(),
         }
     }

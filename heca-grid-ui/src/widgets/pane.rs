@@ -93,21 +93,27 @@ impl Pane {
     }
 
     /// Shorthand: set frame to [`FrameStyle::Bordered`].
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
     pub fn bordered(mut self) -> Self {
         self.frame = FrameStyle::Bordered;
         self
     }
 
     /// Shorthand: set frame to [`FrameStyle::Bracketed`].
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
     pub fn bracketed(mut self) -> Self {
         self.frame = FrameStyle::Bracketed;
         self
     }
 
     /// Shorthand: set frame to [`FrameStyle::None`].
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
     pub fn frameless(mut self) -> Self {
         self.frame = FrameStyle::None;
         self
@@ -150,7 +156,12 @@ impl Component for Pane {
         // Surface glow: an explicit `.glow(..)` (StyleExt) wins; otherwise the
         // theme rest glow (`PaintCx::rest_glow`) gives the pane the shared neon
         // identity at rest, scaled by the `glow_size` setting (T011).
-        let glow = self.base.style.visual.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
+        let glow = self
+            .base
+            .style
+            .visual
+            .glow
+            .or_else(|| cx.rest_glow(GLOW_RADIUS));
 
         match self.frame {
             FrameStyle::None => {
@@ -171,13 +182,17 @@ impl Component for Pane {
                     let t = cx.theme();
                     (t.colors.border, t.colors.border_width)
                 };
-                let color = self.base.style.visual.border.map_or(tb_color, |bd| bd.color);
+                let color = self
+                    .base
+                    .style
+                    .visual
+                    .border
+                    .map_or(tb_color, |bd| bd.color);
                 // Width: per-widget override (`.border_width(w)`) when set, else the
                 // live theme width (so the global BORDER control still drives panes
                 // that don't opt out).
                 let width = self.border_width.unwrap_or(tb_width);
-                let border =
-                    (width > 0.0).then_some(crate::scene::Border { color, width });
+                let border = (width > 0.0).then_some(crate::scene::Border { color, width });
                 if let Some(f) = fill {
                     cx.rect(b, f, border, radius, glow);
                 } else if border.is_some() {

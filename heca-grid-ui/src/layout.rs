@@ -245,9 +245,16 @@ impl LayoutEngine {
             }
         }
 
-        let placement = c.grid_template().map(|t| (t.counts(), c.base().children.iter()
-            .map(|k| k.base().grid_area.as_ref().and_then(|n| t.area(n)))
-            .collect::<Vec<_>>()));
+        let placement = c.grid_template().map(|t| {
+            (
+                t.counts(),
+                c.base()
+                    .children
+                    .iter()
+                    .map(|k| k.base().grid_area.as_ref().and_then(|n| t.area(n)))
+                    .collect::<Vec<_>>(),
+            )
+        });
         let child_count = c.base().children.len();
         let mut child_nodes = Vec::with_capacity(child_count);
         for i in 0..child_count {

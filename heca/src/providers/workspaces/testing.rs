@@ -35,7 +35,10 @@ impl Default for Fixture {
         Self {
             theme: GuiTheme::default(),
             programs: std::rc::Rc::new(ProgramsConfig::default()),
-            emit: crate::chrome::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {}),
+            emit: crate::chrome::ChromeIntentEmitter::of(
+                crate::app::interaction::InteractionSource::Keyboard,
+                |_, _| {},
+            ),
             catalog: ActionCatalog::with_builtins(),
             store,
             signals: ChromeSignals::default(),
@@ -51,10 +54,7 @@ impl Fixture {
     /// **differently**: the seams are shared and the registries are exclusive, so handing them out
     /// separately would overlap. Splitting them here, as disjoint fields, is the same reason
     /// `BuildCx` exposes plain fields instead of accessor methods.
-    pub(crate) fn split<'a>(
-        &'a mut self,
-        mount: &'a str,
-    ) -> (DockSeams<'a>, DockRegistries<'a>) {
+    pub(crate) fn split<'a>(&'a mut self, mount: &'a str) -> (DockSeams<'a>, DockRegistries<'a>) {
         let ws_state: &WorkspacesContainerState = &self.store.workspaces;
         (
             DockSeams {

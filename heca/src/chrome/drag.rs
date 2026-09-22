@@ -53,4 +53,3 @@ impl DragItemRegistry {
         self.items.values().cloned().collect()
     }
 }
-

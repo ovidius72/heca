@@ -97,8 +97,8 @@ impl FolderLine<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use heca_grid_ui::reactive::SignalGet;
     use heca_grid_ui::Component;
+    use heca_grid_ui::reactive::SignalGet;
 
     fn built(path: Option<&str>, show: bool) -> BuiltFolderLine {
         FolderLine {
@@ -128,7 +128,13 @@ mod tests {
     /// are the same absence rather than an empty row with a folder icon in it.
     #[test]
     fn it_is_hidden_when_there_is_no_path_or_the_setting_is_off() {
-        assert!(!built(None, true).visible.get_untracked(), "no cwd reported");
-        assert!(!built(Some("~/x"), false).visible.get_untracked(), "setting off");
+        assert!(
+            !built(None, true).visible.get_untracked(),
+            "no cwd reported"
+        );
+        assert!(
+            !built(Some("~/x"), false).visible.get_untracked(),
+            "setting off"
+        );
     }
 }

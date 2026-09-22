@@ -40,10 +40,10 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{
-    paint_child, shift_subtree, Base, Component, Event, Handled, PaintCx, WidgetIntent,
+    Base, Component, Event, Handled, PaintCx, WidgetIntent, paint_child, shift_subtree,
 };
 use crate::effects::Eased;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::{Direction, Length, Spacing};
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -422,14 +422,18 @@ impl ScrollRegion {
     }
 
     /// Scroll horizontally only (children overflow left↔right).
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
     pub fn horizontal(mut self) -> Self {
         self.axes = ScrollAxes::Horizontal;
         self
     }
 
     /// Scroll on both axes.
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
     pub fn both(mut self) -> Self {
         self.axes = ScrollAxes::Both;
         self
@@ -596,10 +600,7 @@ impl ScrollRegion {
     /// it is user input: what has to track the input is the thing under the finger, and a wheel has
     /// nothing under it.
     fn snap_if_driven(&mut self, cause: Option<&Event>) {
-        if !matches!(
-            cause,
-            Some(Event::PointerMove(_) | Event::PointerDown(_))
-        ) {
+        if !matches!(cause, Some(Event::PointerMove(_) | Event::PointerDown(_))) {
             return;
         }
         let (x, y) = self.desired_shift();
@@ -617,8 +618,7 @@ impl ScrollRegion {
             self.fire(self.on_scroll_start.as_deref(), cause);
         }
         // A gesture with a release ends on that release; a wheel ends on silence.
-        self.wheel_idle = matches!(cause, Some(Event::Scroll(_)) | None)
-            .then_some(WHEEL_IDLE_END);
+        self.wheel_idle = matches!(cause, Some(Event::Scroll(_)) | None).then_some(WHEEL_IDLE_END);
         self.fire(self.on_scroll.as_deref(), cause);
     }
 
@@ -760,8 +760,8 @@ impl ScrollRegion {
                 } else {
                     return; // thumb reached the cursor — pause
                 };
-                let next = self.scroll_offset_x.get_untracked() as f64
-                    + dir * self.base.bounds.size.w;
+                let next =
+                    self.scroll_offset_x.get_untracked() as f64 + dir * self.base.bounds.size.w;
                 self.set_offset_x(next as f32, cause);
             }
         } else if let Some(thumb) = self.thumb_rect() {
@@ -916,7 +916,10 @@ impl ScrollRegion {
         let target = crate::component::reveal_target_in(&self.base.children)
             .map(|r| {
                 Rectangle::new(
-                    Point::new(r.loc.x + self.applied_offset_x, r.loc.y + self.applied_offset),
+                    Point::new(
+                        r.loc.x + self.applied_offset_x,
+                        r.loc.y + self.applied_offset,
+                    ),
                     r.size,
                 )
             })
@@ -1014,7 +1017,11 @@ impl ScrollRegion {
         if !self.axes.is_vertical() {
             return 0.0;
         }
-        let reserve = if self.scrollbars && self.h_overflow() { SCROLLBAR_GUTTER } else { 0.0 };
+        let reserve = if self.scrollbars && self.h_overflow() {
+            SCROLLBAR_GUTTER
+        } else {
+            0.0
+        };
         (self.content_extent() + reserve - self.base.bounds.size.h).max(0.0)
     }
 
@@ -1042,7 +1049,11 @@ impl ScrollRegion {
         if !self.axes.is_horizontal() {
             return 0.0;
         }
-        let reserve = if self.scrollbars && self.v_overflow() { SCROLLBAR_GUTTER } else { 0.0 };
+        let reserve = if self.scrollbars && self.v_overflow() {
+            SCROLLBAR_GUTTER
+        } else {
+            0.0
+        };
         (self.content_extent_x() + reserve - self.base.bounds.size.w).max(0.0)
     }
 
@@ -1069,7 +1080,12 @@ impl ScrollRegion {
         }
         let vp = self.base.bounds;
         let content_h = self.content_extent();
-        let track_h = vp.size.h - if self.h_overflow() { SCROLLBAR_GUTTER } else { 0.0 };
+        let track_h = vp.size.h
+            - if self.h_overflow() {
+                SCROLLBAR_GUTTER
+            } else {
+                0.0
+            };
         let thumb_h = ((vp.size.h / content_h) * track_h)
             .max(MIN_THUMB)
             .min(track_h);
@@ -1109,7 +1125,12 @@ impl ScrollRegion {
         }
         let vp = self.base.bounds;
         let content_w = self.content_extent_x();
-        let track_w = vp.size.w - if self.v_overflow() { SCROLLBAR_GUTTER } else { 0.0 };
+        let track_w = vp.size.w
+            - if self.v_overflow() {
+                SCROLLBAR_GUTTER
+            } else {
+                0.0
+            };
         let thumb_w = ((vp.size.w / content_w) * track_w)
             .max(MIN_THUMB)
             .min(track_w);
@@ -1217,7 +1238,9 @@ impl ScrollRegion {
     /// value-plus-`tick` shape every animated widget here embeds.
     fn advance_eased(&mut self, dt: f32) -> bool {
         let (dx, dy) = self.clamp_visible(self.desired_shift());
-        let Some((ex, ey)) = self.eased.as_mut() else { return false };
+        let Some((ex, ey)) = self.eased.as_mut() else {
+            return false;
+        };
         ex.set(dx);
         ey.set(dy);
         let moving = ex.tick(dt) | ey.tick(dt);
@@ -1539,10 +1562,7 @@ impl ScrollRegion {
             rect.loc.x + self.applied_offset_x,
             rect.loc.y + self.applied_offset,
         );
-        self.last_reveal_rect = Some(Rectangle::new(
-            Point::new(natural.0, natural.1),
-            rect.size,
-        ));
+        self.last_reveal_rect = Some(Rectangle::new(Point::new(natural.0, natural.1), rect.size));
         if self.last_revealed == Some(natural) {
             return;
         }
@@ -1566,71 +1586,71 @@ impl ScrollRegion {
     fn press_capture(&mut self, pos: Point, vp: Rectangle, cause: &Event) -> Handled {
         {
             let pos = &pos;
-                // A fresh press means any previous gesture is over — so a grab can never survive
-                // one, even if this region never saw the release that should have ended it.
-                //
-                // It should always see that release: `PointerReleased` is part of the pointer set
-                // a host owes any tree it mounts, and `release_grabs` below does not care where
-                // the release landed. But a host that forwards a subset produces a thumb welded to
-                // the cursor with no way back, and that has now happened in three different
-                // surfaces. The widget stops being the thing that pays for it: the worst a missing
-                // release can do here is survive until the next click.
-                self.release_grabs();
-                // Grab the thumb via its wider hit lane (the thin visible thumb is
-                // easy to miss); `thumb_grab` stores the grab point relative to the
-                // *visible* thumb top so the cursor stays pinned to it.
-                if let Some(hit) = self.thumb_hit_rect()
-                    && hit.contains(*pos)
-                {
-                    let t = self.thumb_rect().expect("scrollable: thumb exists");
-                    self.thumb_grab = Some(pos.y - t.loc.y);
-                    self.thumb_hovered = true;
-                    self.base.mark_needs_paint();
+            // A fresh press means any previous gesture is over — so a grab can never survive
+            // one, even if this region never saw the release that should have ended it.
+            //
+            // It should always see that release: `PointerReleased` is part of the pointer set
+            // a host owes any tree it mounts, and `release_grabs` below does not care where
+            // the release landed. But a host that forwards a subset produces a thumb welded to
+            // the cursor with no way back, and that has now happened in three different
+            // surfaces. The widget stops being the thing that pays for it: the worst a missing
+            // release can do here is survive until the next click.
+            self.release_grabs();
+            // Grab the thumb via its wider hit lane (the thin visible thumb is
+            // easy to miss); `thumb_grab` stores the grab point relative to the
+            // *visible* thumb top so the cursor stays pinned to it.
+            if let Some(hit) = self.thumb_hit_rect()
+                && hit.contains(*pos)
+            {
+                let t = self.thumb_rect().expect("scrollable: thumb exists");
+                self.thumb_grab = Some(pos.y - t.loc.y);
+                self.thumb_hovered = true;
+                self.base.mark_needs_paint();
+                return Handled::Yes;
+            }
+            if let Some(hit) = self.h_thumb_hit_rect()
+                && hit.contains(*pos)
+            {
+                let t = self.h_thumb_rect().expect("scrollable-x: thumb exists");
+                self.h_thumb_grab = Some(pos.x - t.loc.x);
+                self.h_thumb_hovered = true;
+                self.base.mark_needs_paint();
+                return Handled::Yes;
+            }
+            // Click in the scrollbar TRACK but off the thumb → page toward the
+            // click (a screenful in that direction), the standard scrollbar
+            // affordance — and ARM the press-and-hold repeat: holding the press
+            // keeps paging (see `tick`) until release. The thumb-grab checks
+            // above already returned for a hit on the thumb itself, so reaching
+            // here means the empty track.
+            if self.thumb_rect().is_some() {
+                let lane_x = vp.loc.x + vp.size.w - THUMB_HIT_W;
+                if pos.x >= lane_x && vp.contains(*pos) {
+                    self.page_toward(false, *pos, Some(cause));
+                    self.track_repeat = Some(TrackRepeat {
+                        horizontal: false,
+                        pos: *pos,
+                        next_in: TRACK_REPEAT_DELAY,
+                    });
                     return Handled::Yes;
                 }
-                if let Some(hit) = self.h_thumb_hit_rect()
-                    && hit.contains(*pos)
-                {
-                    let t = self.h_thumb_rect().expect("scrollable-x: thumb exists");
-                    self.h_thumb_grab = Some(pos.x - t.loc.x);
-                    self.h_thumb_hovered = true;
-                    self.base.mark_needs_paint();
+            }
+            if self.h_thumb_rect().is_some() {
+                let lane_y = vp.loc.y + vp.size.h - THUMB_HIT_W;
+                if pos.y >= lane_y && vp.contains(*pos) {
+                    self.page_toward(true, *pos, Some(cause));
+                    self.track_repeat = Some(TrackRepeat {
+                        horizontal: true,
+                        pos: *pos,
+                        next_in: TRACK_REPEAT_DELAY,
+                    });
                     return Handled::Yes;
                 }
-                // Click in the scrollbar TRACK but off the thumb → page toward the
-                // click (a screenful in that direction), the standard scrollbar
-                // affordance — and ARM the press-and-hold repeat: holding the press
-                // keeps paging (see `tick`) until release. The thumb-grab checks
-                // above already returned for a hit on the thumb itself, so reaching
-                // here means the empty track.
-                if self.thumb_rect().is_some() {
-                    let lane_x = vp.loc.x + vp.size.w - THUMB_HIT_W;
-                    if pos.x >= lane_x && vp.contains(*pos) {
-                        self.page_toward(false, *pos, Some(cause));
-                        self.track_repeat = Some(TrackRepeat {
-                            horizontal: false,
-                            pos: *pos,
-                            next_in: TRACK_REPEAT_DELAY,
-                        });
-                        return Handled::Yes;
-                    }
-                }
-                if self.h_thumb_rect().is_some() {
-                    let lane_y = vp.loc.y + vp.size.h - THUMB_HIT_W;
-                    if pos.y >= lane_y && vp.contains(*pos) {
-                        self.page_toward(true, *pos, Some(cause));
-                        self.track_repeat = Some(TrackRepeat {
-                            horizontal: true,
-                            pos: *pos,
-                            next_in: TRACK_REPEAT_DELAY,
-                        });
-                        return Handled::Yes;
-                    }
-                }
-                // Not a scrollbar gesture: let it through. The children are walked by `dispatch`,
-                // and `clips_children` already stops a press outside the viewport reaching content
-                // that has been scrolled out of sight.
-                Handled::No
+            }
+            // Not a scrollbar gesture: let it through. The children are walked by `dispatch`,
+            // and `clips_children` already stops a press outside the viewport reaching content
+            // that has been scrolled out of sight.
+            Handled::No
         }
     }
 
@@ -1638,64 +1658,63 @@ impl ScrollRegion {
     fn move_capture(&mut self, pos: Point, vp: Rectangle, cause: &Event) -> Handled {
         {
             let pos = &pos;
-                // Track thumb-lane hover for the highlight affordance. A drag in
-                // progress keeps handling moves even after the cursor leaves.
-                let lane_hit = self.thumb_hit_rect().is_some_and(|h| h.contains(*pos));
-                if lane_hit != self.thumb_hovered {
-                    self.thumb_hovered = lane_hit;
-                    self.base.mark_needs_paint();
-                }
-                let h_lane_hit = self.h_thumb_hit_rect().is_some_and(|h| h.contains(*pos));
-                if h_lane_hit != self.h_thumb_hovered {
-                    self.h_thumb_hovered = h_lane_hit;
-                    self.base.mark_needs_paint();
-                }
-                if let Some(grab) = self.thumb_grab {
-                    let content_h = self.content_extent();
-                    let max_off = (content_h - vp.size.h).max(0.0);
-                    let track_h = vp.size.h;
-                    let thumb_h = ((vp.size.h / content_h) * track_h).max(MIN_THUMB);
-                    let thumb_top = pos.y - grab;
-                    let frac = if track_h - thumb_h > 0.0 {
-                        ((thumb_top - vp.loc.y) / (track_h - thumb_h)).clamp(0.0, 1.0)
-                    } else {
-                        0.0
-                    };
-                    self.set_offset_y((frac * max_off) as f32, Some(cause));
-                    Handled::Yes
-                } else if let Some(grab) = self.h_thumb_grab {
-                    let content_w = self.content_extent_x();
-                    let max_off = (content_w - vp.size.w).max(0.0);
-                    let track_w = vp.size.w;
-                    let thumb_w = ((vp.size.w / content_w) * track_w).max(MIN_THUMB);
-                    let thumb_left = pos.x - grab;
-                    let frac = if track_w - thumb_w > 0.0 {
-                        ((thumb_left - vp.loc.x) / (track_w - thumb_w)).clamp(0.0, 1.0)
-                    } else {
-                        0.0
-                    };
-                    self.set_offset_x((frac * max_off) as f32, Some(cause));
-                    Handled::Yes
-                } else if let Some(tr) = &mut self.track_repeat {
-                    // A held track press is a grab: track the cursor (the repeat
-                    // pages toward wherever it is now) and consume the move.
-                    tr.pos = *pos;
-                    Handled::Yes
-                } else if self.in_scrollbar_lane(*pos, vp) {
-                    // The cursor is over a scrollbar lane, so the lane owns it: without this the
-                    // move falls through and the row *underneath* the scrollbar lights up as
-                    // hovered, which reads as pointing at content the user is not pointing at.
-                    // The whole lane, not just the thumb — the track is part of the control (a
-                    // press there pages), so it is not content either.
-                    Handled::Yes
+            // Track thumb-lane hover for the highlight affordance. A drag in
+            // progress keeps handling moves even after the cursor leaves.
+            let lane_hit = self.thumb_hit_rect().is_some_and(|h| h.contains(*pos));
+            if lane_hit != self.thumb_hovered {
+                self.thumb_hovered = lane_hit;
+                self.base.mark_needs_paint();
+            }
+            let h_lane_hit = self.h_thumb_hit_rect().is_some_and(|h| h.contains(*pos));
+            if h_lane_hit != self.h_thumb_hovered {
+                self.h_thumb_hovered = h_lane_hit;
+                self.base.mark_needs_paint();
+            }
+            if let Some(grab) = self.thumb_grab {
+                let content_h = self.content_extent();
+                let max_off = (content_h - vp.size.h).max(0.0);
+                let track_h = vp.size.h;
+                let thumb_h = ((vp.size.h / content_h) * track_h).max(MIN_THUMB);
+                let thumb_top = pos.y - grab;
+                let frac = if track_h - thumb_h > 0.0 {
+                    ((thumb_top - vp.loc.y) / (track_h - thumb_h)).clamp(0.0, 1.0)
                 } else {
-                    // No drag in flight: the children get it (walked by `dispatch`, and skipped
-                    // entirely when the cursor is outside this region — see `clips_children`).
-                    Handled::No
-                }
+                    0.0
+                };
+                self.set_offset_y((frac * max_off) as f32, Some(cause));
+                Handled::Yes
+            } else if let Some(grab) = self.h_thumb_grab {
+                let content_w = self.content_extent_x();
+                let max_off = (content_w - vp.size.w).max(0.0);
+                let track_w = vp.size.w;
+                let thumb_w = ((vp.size.w / content_w) * track_w).max(MIN_THUMB);
+                let thumb_left = pos.x - grab;
+                let frac = if track_w - thumb_w > 0.0 {
+                    ((thumb_left - vp.loc.x) / (track_w - thumb_w)).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                self.set_offset_x((frac * max_off) as f32, Some(cause));
+                Handled::Yes
+            } else if let Some(tr) = &mut self.track_repeat {
+                // A held track press is a grab: track the cursor (the repeat
+                // pages toward wherever it is now) and consume the move.
+                tr.pos = *pos;
+                Handled::Yes
+            } else if self.in_scrollbar_lane(*pos, vp) {
+                // The cursor is over a scrollbar lane, so the lane owns it: without this the
+                // move falls through and the row *underneath* the scrollbar lights up as
+                // hovered, which reads as pointing at content the user is not pointing at.
+                // The whole lane, not just the thumb — the track is part of the control (a
+                // press there pages), so it is not content either.
+                Handled::Yes
+            } else {
+                // No drag in flight: the children get it (walked by `dispatch`, and skipped
+                // entirely when the cursor is outside this region — see `clips_children`).
+                Handled::No
+            }
         }
     }
-
 }
 
 impl LayoutExt for ScrollRegion {}
@@ -1704,8 +1723,8 @@ impl Parent for ScrollRegion {}
 
 #[cfg(test)]
 mod tests {
-    use crate::event::PointerButton;
     use super::*;
+    use crate::event::PointerButton;
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -1734,10 +1753,18 @@ mod tests {
         let mut r = region_with_children(&[40.0, 40.0]); // content 80, viewport 100
         r.overscroll = true;
         assert_eq!(r.max_offset(), 0.0, "the fixture must actually fit");
-        assert_eq!(r.offset_bounds_y(), (0.0, 0.0), "so there is nowhere to scroll");
+        assert_eq!(
+            r.offset_bounds_y(),
+            (0.0, 0.0),
+            "so there is nowhere to scroll"
+        );
 
         r.scroll_by(500.0, None);
-        assert_eq!(r.scroll_offset.get_untracked(), 0.0, "and the wheel moves nothing");
+        assert_eq!(
+            r.scroll_offset.get_untracked(),
+            0.0,
+            "and the wheel moves nothing"
+        );
     }
 
     /// The counterpart: real overflow still gets its cushion, so the map can be pushed past its
@@ -1748,7 +1775,10 @@ mod tests {
         r.overscroll = true;
         assert!(r.max_offset() > 0.0, "the fixture must actually overflow");
         let (min, max) = r.offset_bounds_y();
-        assert!(min < 0.0 && max > r.max_offset(), "a viewport of cushion each way: {min}..{max}");
+        assert!(
+            min < 0.0 && max > r.max_offset(),
+            "a viewport of cushion each way: {min}..{max}"
+        );
     }
 
     fn region_with_children(child_heights: &[f64]) -> ScrollRegion {
@@ -1762,8 +1792,7 @@ mod tests {
         let mut y = 0.0;
         for &h in child_heights {
             let mut child = crate::widgets::Flex::column();
-            child.base_mut().bounds =
-                Rectangle::new(Point::new(0.0, y), Size::new(200.0, h));
+            child.base_mut().bounds = Rectangle::new(Point::new(0.0, y), Size::new(200.0, h));
             r.base.children.push(Box::new(child));
             y += h;
         }
@@ -1781,9 +1810,14 @@ mod tests {
     fn the_grab_lane_does_not_reach_over_the_content() {
         // Three 60px children in a 100px viewport ⇒ it overflows, so the bar shows.
         let r = region_with_children(&[60.0, 60.0, 60.0]);
-        assert!(r.v_overflow(), "the fixture must overflow for a bar to exist");
+        assert!(
+            r.v_overflow(),
+            "the fixture must overflow for a bar to exist"
+        );
 
-        let lane = r.thumb_hit_rect().expect("a scrollable region has a grab lane");
+        let lane = r
+            .thumb_hit_rect()
+            .expect("a scrollable region has a grab lane");
         let content_right = r.base.bounds.loc.x + r.base.bounds.size.w - SCROLLBAR_GUTTER;
         assert!(
             lane.loc.x >= content_right,
@@ -1809,20 +1843,42 @@ mod tests {
         let mut r = region_with_children(&[100.0, 100.0, 100.0]); // 300 of content in a 100 viewport
         let page = PAGE_STEP_FRAC * 100.0; // 90
 
-        assert_eq!(r.scroll_intent(WidgetIntent::ScrollPageDown, &Event::Widget(WidgetIntent::ScrollPageDown)), Handled::Yes);
-        assert!((r.scroll_offset.get_untracked() as f64 - page).abs() < 0.01, "one page down");
+        assert_eq!(
+            r.scroll_intent(
+                WidgetIntent::ScrollPageDown,
+                &Event::Widget(WidgetIntent::ScrollPageDown)
+            ),
+            Handled::Yes
+        );
+        assert!(
+            (r.scroll_offset.get_untracked() as f64 - page).abs() < 0.01,
+            "one page down"
+        );
 
-        r.scroll_intent(WidgetIntent::ScrollPageUp, &Event::Widget(WidgetIntent::ScrollPageUp));
-        assert_eq!(r.scroll_offset.get_untracked(), 0.0, "back to the top, not past it");
+        r.scroll_intent(
+            WidgetIntent::ScrollPageUp,
+            &Event::Widget(WidgetIntent::ScrollPageUp),
+        );
+        assert_eq!(
+            r.scroll_offset.get_untracked(),
+            0.0,
+            "back to the top, not past it"
+        );
 
-        r.scroll_intent(WidgetIntent::ScrollToBottom, &Event::Widget(WidgetIntent::ScrollToBottom));
+        r.scroll_intent(
+            WidgetIntent::ScrollToBottom,
+            &Event::Widget(WidgetIntent::ScrollToBottom),
+        );
         assert_eq!(
             r.scroll_offset.get_untracked() as f64,
             r.max_offset(),
             "the bottom is the last scrollable pixel, clamped by the widget",
         );
 
-        r.scroll_intent(WidgetIntent::ScrollToTop, &Event::Widget(WidgetIntent::ScrollToTop));
+        r.scroll_intent(
+            WidgetIntent::ScrollToTop,
+            &Event::Widget(WidgetIntent::ScrollToTop),
+        );
         assert_eq!(r.scroll_offset.get_untracked(), 0.0);
     }
 
@@ -1837,7 +1893,10 @@ mod tests {
         // Vertical-only (the default), so horizontal intents are not ours.
         let mut r = region_with_children(&[100.0, 100.0, 100.0]);
         assert_eq!(
-            r.scroll_intent(WidgetIntent::ScrollPageRight, &Event::Widget(WidgetIntent::ScrollPageRight)),
+            r.scroll_intent(
+                WidgetIntent::ScrollPageRight,
+                &Event::Widget(WidgetIntent::ScrollPageRight)
+            ),
             Handled::No,
             "a vertical-only region declines a horizontal page",
         );
@@ -1846,14 +1905,20 @@ mod tests {
         // Content that fits: nothing to scroll on either axis.
         let mut fits = region_with_children(&[40.0]);
         assert_eq!(
-            fits.scroll_intent(WidgetIntent::ScrollPageDown, &Event::Widget(WidgetIntent::ScrollPageDown)),
+            fits.scroll_intent(
+                WidgetIntent::ScrollPageDown,
+                &Event::Widget(WidgetIntent::ScrollPageDown)
+            ),
             Handled::No,
             "content that fits declines, so an outer region gets its turn",
         );
 
         // A non-scroll intent is never ours.
         assert_eq!(
-            r.scroll_intent(WidgetIntent::Activate, &Event::Widget(WidgetIntent::Activate)),
+            r.scroll_intent(
+                WidgetIntent::Activate,
+                &Event::Widget(WidgetIntent::Activate)
+            ),
             Handled::No,
         );
     }
@@ -1869,17 +1934,30 @@ mod tests {
         let ev = Event::Widget(WidgetIntent::ScrollPageDown);
 
         let mut unwired = region_with_children(&[100.0, 100.0, 100.0]);
-        assert_eq!(unwired.scroll_intent(WidgetIntent::ScrollPageDown, &ev), Handled::Yes);
+        assert_eq!(
+            unwired.scroll_intent(WidgetIntent::ScrollPageDown, &ev),
+            Handled::Yes
+        );
 
         let focused = crate::reactive::signal(true);
         let mut target = region_with_children(&[100.0, 100.0, 100.0]).keyboard_target(focused);
-        assert_eq!(target.scroll_intent(WidgetIntent::ScrollPageDown, &ev), Handled::Yes);
+        assert_eq!(
+            target.scroll_intent(WidgetIntent::ScrollPageDown, &ev),
+            Handled::Yes
+        );
 
         // The same region, once the keyboard is somewhere else — it must not move.
         focused.set(false);
         let before = target.scroll_offset.get_untracked();
-        assert_eq!(target.scroll_intent(WidgetIntent::ScrollPageDown, &ev), Handled::No);
-        assert_eq!(target.scroll_offset.get_untracked(), before, "and it did not scroll");
+        assert_eq!(
+            target.scroll_intent(WidgetIntent::ScrollPageDown, &ev),
+            Handled::No
+        );
+        assert_eq!(
+            target.scroll_offset.get_untracked(),
+            before,
+            "and it did not scroll"
+        );
     }
 
     /// The intents reach the region through normal dispatch, after the children.
@@ -1893,9 +1971,10 @@ mod tests {
     /// tree with nothing focused has nowhere to deliver one.
     #[test]
     fn a_scroll_intent_arrives_through_dispatch() {
-        let mut r =
-            region_with_children(&[100.0, 100.0, 100.0]).keyboard_target(crate::reactive::signal(true));
-        let handled = crate::component::dispatch(&mut r, &Event::Widget(WidgetIntent::ScrollPageDown));
+        let mut r = region_with_children(&[100.0, 100.0, 100.0])
+            .keyboard_target(crate::reactive::signal(true));
+        let handled =
+            crate::component::dispatch(&mut r, &Event::Widget(WidgetIntent::ScrollPageDown));
         assert_eq!(handled, Handled::Yes);
         assert!(r.scroll_offset.get_untracked() > 0.0, "it scrolled");
     }
@@ -1930,7 +2009,10 @@ mod tests {
         let r = region_with_children(&[60.0, 60.0]);
         let t = r.thumb_rect().expect("scrollable → thumb");
         let hit = r.thumb_hit_rect().expect("scrollable → hit lane");
-        assert!(hit.size.w > t.size.w, "hit lane is wider than the visible thumb");
+        assert!(
+            hit.size.w > t.size.w,
+            "hit lane is wider than the visible thumb"
+        );
         assert_eq!(hit.size.w as i32, THUMB_HIT_W as i32);
         // The visible thumb sits inside the lane horizontally.
         assert!(t.loc.x >= hit.loc.x - 0.001);
@@ -1948,9 +2030,13 @@ mod tests {
         let t = r.thumb_rect().expect("scrollable → thumb");
         // A point just left of the visible thumb, inside the hit lane.
         let pos = Point::new(t.loc.x - 4.0, t.loc.y + 4.0);
-        assert!(r.thumb_hit_rect().unwrap().contains(pos), "pos is in the hit lane");
+        assert!(
+            r.thumb_hit_rect().unwrap().contains(pos),
+            "pos is in the hit lane"
+        );
         assert!(!t.contains(pos), "pos is NOT on the thin visible thumb");
-        let handled = crate::component::dispatch(&mut r, &Event::pointer_pressed(pos, PointerButton::Left));
+        let handled =
+            crate::component::dispatch(&mut r, &Event::pointer_pressed(pos, PointerButton::Left));
         assert_eq!(handled, Handled::Yes, "press in the lane grabs the thumb");
         assert!(r.thumb_grab.is_some(), "a drag started");
     }
@@ -2045,7 +2131,10 @@ mod tests {
     fn center_on_puts_the_target_in_the_middle_even_when_it_is_already_visible() {
         let mut r = region_with_children(&[60.0, 60.0, 60.0, 60.0]); // vp 100, content 240
         // child[1] natural 60..120: its middle is 90, the viewport's is 50.
-        r.center_on(Rectangle::new(Point::new(0.0, 60.0), Size::new(200.0, 60.0)));
+        r.center_on(Rectangle::new(
+            Point::new(0.0, 60.0),
+            Size::new(200.0, 60.0),
+        ));
         assert!(
             (r.scroll_offset.get_untracked() - 40.0_f32).abs() < 1e-6,
             "90 (target middle) - 50 (viewport middle) = 40, not the 0 a minimal reveal would leave",
@@ -2059,8 +2148,14 @@ mod tests {
     fn center_on_clamps_at_the_ends_instead_of_scrolling_into_nothing() {
         let mut r = region_with_children(&[60.0, 60.0, 60.0, 60.0]);
         r.center_on(Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 60.0)));
-        assert!(r.scroll_offset.get_untracked().abs() < 1e-6, "the first child cannot go lower");
-        r.center_on(Rectangle::new(Point::new(0.0, 180.0), Size::new(200.0, 60.0)));
+        assert!(
+            r.scroll_offset.get_untracked().abs() < 1e-6,
+            "the first child cannot go lower"
+        );
+        r.center_on(Rectangle::new(
+            Point::new(0.0, 180.0),
+            Size::new(200.0, 60.0),
+        ));
         assert!(
             (r.scroll_offset.get_untracked() - 140.0_f32).abs() < 1e-6,
             "the last child stops at max_offset (240 content - 100 viewport)",
@@ -2081,8 +2176,14 @@ mod tests {
         r.sync_shift();
 
         let b = r.base.children[0].base().bounds;
-        assert!((b.loc.x - 60.0).abs() < 1e-9, "(200 - 80) / 2 = 60 from the left, got {b:?}");
-        assert!((b.loc.y - 30.0).abs() < 1e-9, "(100 - 40) / 2 = 30 from the top, got {b:?}");
+        assert!(
+            (b.loc.x - 60.0).abs() < 1e-9,
+            "(200 - 80) / 2 = 60 from the left, got {b:?}"
+        );
+        assert!(
+            (b.loc.y - 30.0).abs() < 1e-9,
+            "(100 - 40) / 2 = 30 from the top, got {b:?}"
+        );
         assert!(
             r.scroll_offset.get_untracked().abs() < 1e-6
                 && r.scroll_offset_x.get_untracked().abs() < 1e-6,
@@ -2113,7 +2214,10 @@ mod tests {
         r.base.children[0].base_mut().bounds =
             Rectangle::new(Point::new(0.0, 0.0), Size::new(600.0, 60.0));
         // A card at x 300..400 — its middle is 350, the viewport's is 100.
-        r.center_on(Rectangle::new(Point::new(300.0, 0.0), Size::new(100.0, 60.0)));
+        r.center_on(Rectangle::new(
+            Point::new(300.0, 0.0),
+            Size::new(100.0, 60.0),
+        ));
         assert!(
             (r.scroll_offset_x.get_untracked() - 250.0_f32).abs() < 1e-6,
             "350 - 100 = 250 horizontally",
@@ -2143,7 +2247,10 @@ mod tests {
         while r.tick(1.0 / 60.0) && frames < 120 {
             frames += 1;
         }
-        assert!(frames > 1, "it took more than one frame — that is the animation");
+        assert!(
+            frames > 1,
+            "it took more than one frame — that is the animation"
+        );
         assert!(frames < 120, "and it finished rather than easing forever");
         assert!(
             (r.applied_offset - 80.0).abs() < 0.5,
@@ -2199,7 +2306,11 @@ mod tests {
     fn a_wheel_does_not_move_an_overscrolling_region_whose_content_fits() {
         let mut r = region_with_children(&[40.0]).overscroll(true);
         r.reveal_align = RevealAlign::Center;
-        assert_eq!(r.max_offset(), 0.0, "the content fits — there is nothing to scroll *into*");
+        assert_eq!(
+            r.max_offset(),
+            0.0,
+            "the content fits — there is nothing to scroll *into*"
+        );
         r.on_event(&wheel(0.0, 3.0));
         assert_eq!(
             r.scroll_offset.get_untracked(),
@@ -2275,9 +2386,15 @@ mod tests {
     #[test]
     fn a_region_with_scrollbars_off_paints_no_thumb() {
         let with = region_with_children(&[60.0, 60.0, 60.0]);
-        assert!(with.thumb_rect().is_some(), "overflowing, so it would normally show one");
+        assert!(
+            with.thumb_rect().is_some(),
+            "overflowing, so it would normally show one"
+        );
         let without = region_with_children(&[60.0, 60.0, 60.0]).scrollbars(false);
-        assert!(without.thumb_rect().is_none(), "and none at all when they are off");
+        assert!(
+            without.thumb_rect().is_none(),
+            "and none at all when they are off"
+        );
     }
 
     /// The alignment travels as a property, so a described surface reaches it — the capability
@@ -2285,8 +2402,12 @@ mod tests {
     #[test]
     fn the_reveal_alignment_is_a_property_and_defaults_to_minimal() {
         use crate::prop::{PropInput, SetProp};
-        assert_eq!(ScrollRegion::new().clone_reveal_align(), RevealAlign::Minimal);
-        let centred = ScrollRegion::new().set_prop("reveal_align", &PropInput::Text("center".into()));
+        assert_eq!(
+            ScrollRegion::new().clone_reveal_align(),
+            RevealAlign::Minimal
+        );
+        let centred =
+            ScrollRegion::new().set_prop("reveal_align", &PropInput::Text("center".into()));
         assert_eq!(centred.clone_reveal_align(), RevealAlign::Center);
     }
 
@@ -2295,11 +2416,11 @@ mod tests {
         let mut r = region_with_children(&[60.0, 60.0]);
         r.scroll_to(0.0);
         // child[0] natural 0..60 → visual 0..60, fully inside vp 0..100.
-        r.ensure_visible(Rectangle::new(
-            Point::new(0.0, 0.0),
-            Size::new(200.0, 60.0),
-        ));
-        assert!(r.scroll_offset.get_untracked().abs() < 1e-6, "no scroll when already visible");
+        r.ensure_visible(Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 60.0)));
+        assert!(
+            r.scroll_offset.get_untracked().abs() < 1e-6,
+            "no scroll when already visible"
+        );
     }
 
     #[test]
@@ -2343,21 +2464,36 @@ mod tests {
         let mut r = region_with_children(&[300.0, 300.0]);
         // Press in the vertical track lane, below the thumb.
         let pos = Point::new(195.0, 90.0);
-        assert_eq!(crate::component::dispatch(&mut r, &Event::pointer_pressed(pos, PointerButton::Left)), Handled::Yes);
-        assert!((r.scroll_offset.get_untracked() - 100.0).abs() < 1e-3, "first page fires on press");
+        assert_eq!(
+            crate::component::dispatch(&mut r, &Event::pointer_pressed(pos, PointerButton::Left)),
+            Handled::Yes
+        );
+        assert!(
+            (r.scroll_offset.get_untracked() - 100.0).abs() < 1e-3,
+            "first page fires on press"
+        );
         // Held but before the initial delay: animating, no extra page.
         assert!(r.tick(0.2), "held press keeps the host ticking");
         assert!((r.scroll_offset.get_untracked() - 100.0).abs() < 1e-3);
         // Past the delay: a repeat fires.
         r.tick(0.2);
-        assert!((r.scroll_offset.get_untracked() - 200.0).abs() < 1e-3, "repeat after the delay");
+        assert!(
+            (r.scroll_offset.get_untracked() - 200.0).abs() < 1e-3,
+            "repeat after the delay"
+        );
         // Steady repeat at the interval.
         r.tick(0.1);
-        assert!((r.scroll_offset.get_untracked() - 300.0).abs() < 1e-3, "repeat at the interval");
+        assert!(
+            (r.scroll_offset.get_untracked() - 300.0).abs() < 1e-3,
+            "repeat at the interval"
+        );
         // Release disarms it: no further paging however long we tick.
         crate::component::dispatch(&mut r, &Event::pointer_released(pos, PointerButton::Left));
         assert!(!r.tick(1.0));
-        assert!((r.scroll_offset.get_untracked() - 300.0).abs() < 1e-3, "stopped on release");
+        assert!(
+            (r.scroll_offset.get_untracked() - 300.0).abs() < 1e-3,
+            "stopped on release"
+        );
     }
 
     // ── Horizontal axis ──
@@ -2404,7 +2540,10 @@ mod tests {
     #[test]
     fn scroll_to_x_clamps_to_bounds() {
         let mut r = h_region_with_widths(ScrollAxes::Both, &[80.0, 80.0]); // max_x 60
-        assert!((r.scroll_to_x(1000.0) - 60.0).abs() < f32::EPSILON, "clamped to max");
+        assert!(
+            (r.scroll_to_x(1000.0) - 60.0).abs() < f32::EPSILON,
+            "clamped to max"
+        );
         assert!((r.scroll_to_x(-5.0)).abs() < f32::EPSILON, "clamped to 0");
     }
 
@@ -2425,8 +2564,7 @@ mod tests {
         outer.base.children.push(Box::new(inner));
         // Filler that makes the OUTER content overflow too.
         let mut filler = crate::widgets::Flex::column();
-        filler.base_mut().bounds =
-            Rectangle::new(Point::new(0.0, 50.0), Size::new(200.0, 250.0));
+        filler.base_mut().bounds = Rectangle::new(Point::new(0.0, 50.0), Size::new(200.0, 250.0));
         outer.base.children.push(Box::new(filler));
 
         // The wheel is routed by position now: over the inner region, it is the inner region's.
@@ -2461,9 +2599,15 @@ mod tests {
         let mut child = crate::widgets::Flex::column();
         child.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(300.0, 500.0));
         r.base.children.push(Box::new(child));
-        assert!(r.thumb_rect().is_none(), "vertical axis disabled → no vertical thumb");
+        assert!(
+            r.thumb_rect().is_none(),
+            "vertical axis disabled → no vertical thumb"
+        );
         assert_eq!(r.max_offset(), 0.0);
-        assert!(r.h_thumb_rect().is_some(), "horizontal overflow → horizontal thumb");
+        assert!(
+            r.h_thumb_rect().is_some(),
+            "horizontal overflow → horizontal thumb"
+        );
     }
 
     // ── Reporting the position (F004/P011/T3) ──────────────────────────────────────────────
@@ -2507,7 +2651,11 @@ mod tests {
         r.scroll_to(1e9);
         let n = log.borrow().len();
         r.scroll_to(1e9);
-        assert_eq!(log.borrow().len(), n, "already at the bottom the second time");
+        assert_eq!(
+            log.borrow().len(),
+            n,
+            "already at the bottom the second time"
+        );
     }
 
     /// The wheel carries its event through, and `on_scroll` fires per movement.
@@ -2516,7 +2664,10 @@ mod tests {
         let (log, mut r) = recorder();
         crate::component::dispatch(&mut r, &Event::pointer_moved(Point::new(50.0, 50.0)));
         crate::component::dispatch(&mut r, &wheel(0.0, 1.0));
-        assert_eq!(log.borrow().as_slice(), &[("start", true), ("scroll", true)]);
+        assert_eq!(
+            log.borrow().as_slice(),
+            &[("start", true), ("scroll", true)]
+        );
     }
 
     /// A wheel gesture has no release, so its end is a **pause**: `tick` must reach the idle
@@ -2527,14 +2678,20 @@ mod tests {
         crate::component::dispatch(&mut r, &Event::pointer_moved(Point::new(50.0, 50.0)));
         crate::component::dispatch(&mut r, &wheel(0.0, 1.0));
 
-        assert!(r.tick(WHEEL_IDLE_END / 2.0), "still pending: keep the frames coming");
+        assert!(
+            r.tick(WHEEL_IDLE_END / 2.0),
+            "still pending: keep the frames coming"
+        );
         assert!(
             !log.borrow().iter().any(|(k, _)| *k == "end"),
             "half the idle time is not the end of a gesture",
         );
         r.tick(WHEEL_IDLE_END);
         assert_eq!(log.borrow().last(), Some(&("end", false)), "settled");
-        assert!(!r.tick(1.0), "and it stops asking for frames once it has settled");
+        assert!(
+            !r.tick(1.0),
+            "and it stops asking for frames once it has settled"
+        );
     }
 
     /// A thumb drag ends on its release — no timer involved, and the release is the event reported.
@@ -2542,13 +2699,29 @@ mod tests {
     fn a_thumb_drag_ends_on_the_release() {
         let (log, mut r) = recorder();
         let lane_x = r.base.bounds.loc.x + r.base.bounds.size.w - 2.0;
-        crate::component::dispatch(&mut r, &Event::pointer_pressed(Point::new(lane_x, 5.0), PointerButton::Left));
+        crate::component::dispatch(
+            &mut r,
+            &Event::pointer_pressed(Point::new(lane_x, 5.0), PointerButton::Left),
+        );
         crate::component::dispatch(&mut r, &Event::pointer_moved(Point::new(lane_x, 40.0)));
-        assert!(log.borrow().iter().any(|(k, _)| *k == "scroll"), "the drag scrolled it");
-        assert!(!log.borrow().iter().any(|(k, _)| *k == "end"), "not while the button is down");
+        assert!(
+            log.borrow().iter().any(|(k, _)| *k == "scroll"),
+            "the drag scrolled it"
+        );
+        assert!(
+            !log.borrow().iter().any(|(k, _)| *k == "end"),
+            "not while the button is down"
+        );
 
-        crate::component::dispatch(&mut r, &Event::pointer_released(Point::new(900.0, 900.0), PointerButton::Left));
-        assert_eq!(log.borrow().last(), Some(&("end", true)), "the release ended it");
+        crate::component::dispatch(
+            &mut r,
+            &Event::pointer_released(Point::new(900.0, 900.0), PointerButton::Left),
+        );
+        assert_eq!(
+            log.borrow().last(),
+            Some(&("end", true)),
+            "the release ended it"
+        );
     }
 
     /// The payload answers the questions a listener would otherwise have to ask the region.
@@ -2561,7 +2734,10 @@ mod tests {
         });
         r.scroll_to(1e9);
         let (offset_y, max_y, content_h, viewport_h) = seen.borrow().expect("reported");
-        assert_eq!(offset_y, max_y, "scrolled to the bottom, and it says so without asking");
+        assert_eq!(
+            offset_y, max_y,
+            "scrolled to the bottom, and it says so without asking"
+        );
         assert_eq!(content_h, 400.0);
         assert_eq!(viewport_h, 100.0);
         assert_eq!(max_y, (content_h - viewport_h) as f32);

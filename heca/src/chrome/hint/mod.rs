@@ -30,13 +30,12 @@ mod surfaces;
 mod targets;
 mod visibility;
 
-pub(crate) use letters::{sync_offered_letters, OfferedLetters};
-#[cfg(test)]
-pub(crate) use letters::wanted_for_tests;
 #[cfg(test)]
 pub(crate) use letters::Offer;
+#[cfg(test)]
+pub(crate) use letters::wanted_for_tests;
+pub(crate) use letters::{OfferedLetters, sync_offered_letters};
 pub(crate) use surfaces::{
-    clear_hint_letters, fire_hint, fire_widget_action, target_identity,
-    HintTarget,
+    HintTarget, clear_hint_letters, fire_hint, fire_widget_action, target_identity,
 };
 pub(crate) use targets::active_hint_targets;

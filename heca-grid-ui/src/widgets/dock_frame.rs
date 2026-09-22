@@ -328,7 +328,10 @@ impl DockFrame {
         // The rail replaces everything, so it covers both tracks. It is not in the template's
         // areas — it is not a third part beside the other two, it is what is there instead of
         // them — so it says where it sits itself.
-        let icon = icon.area(RAIL_AREA).row(1).row_span(crate::style::Span::All);
+        let icon = icon
+            .area(RAIL_AREA)
+            .row(1)
+            .row_span(crate::style::Span::All);
         match crate::component::area_slot(&mut self.base, RAIL_AREA) {
             Some(slot) => *slot = Box::new(icon),
             None => self.base.children.push(Box::new(icon)),

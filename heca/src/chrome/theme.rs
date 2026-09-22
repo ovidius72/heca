@@ -128,9 +128,7 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     // Focus-outline visibility (config `show_focus_border`, theme fallback) — the
     // app-wide focus-ring kill switch; rings additionally show only on keyboard
     // focus (focus-visible), never on click.
-    theme.colors.show_focus_border = state
-        .appearance
-        .effective_show_focus_border(&state.theme);
+    theme.colors.show_focus_border = state.appearance.effective_show_focus_border(&state.theme);
     // Overlay-panel frame style (config `overlay_border_style`, theme fallback) —
     // bracket reticle / plain edge / none for dialogs, dropdowns, context menus and
     // the command palette. Read at paint time, so it live-reloads like the rest.
@@ -181,4 +179,3 @@ pub(crate) fn chrome_status(state: &crate::app_state::AppState) -> String {
     };
     format!("{pane_count} panes | {focus_title} | {mode_str}{tail}")
 }
-

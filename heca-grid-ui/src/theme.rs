@@ -94,7 +94,10 @@ impl Theme {
     /// Derived from the config-driven `colors.shadow` token (color + alpha),
     /// exposed as a [`Color`] for the renderer boundary.
     pub fn shadow_color(&self) -> Color {
-        self.colors.shadow.color.with_alpha_f32(self.colors.shadow.alpha)
+        self.colors
+            .shadow
+            .color
+            .with_alpha_f32(self.colors.shadow.alpha)
     }
 }
 #[cfg(test)]

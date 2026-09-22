@@ -198,7 +198,11 @@ mod tests {
         p.tick(0.05);
         let mid = p.frame().opacity;
         p.enter(); // said again — the exposé's rebuild path
-        assert_eq!(p.frame().opacity, mid, "the arrival carries on from where it was");
+        assert_eq!(
+            p.frame().opacity,
+            mid,
+            "the arrival carries on from where it was"
+        );
     }
 
     /// **A surface on its way out is not resurrected** — the rule a host used to have to know.
@@ -215,7 +219,11 @@ mod tests {
         assert!(mid < 1.0, "on its way out: {mid}");
 
         assert!(!p.enter(), "it refuses");
-        assert_eq!(p.frame().opacity, mid, "the exit carries on from where it was");
+        assert_eq!(
+            p.frame().opacity,
+            mid,
+            "the exit carries on from where it was"
+        );
         assert!(p.is_leaving());
     }
 

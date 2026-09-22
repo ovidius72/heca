@@ -97,13 +97,15 @@
 use crate::builders::{LayoutExt, Parent};
 use crate::color::Color;
 use crate::component::{
-    paint_child, shift_subtree, Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent,
+    Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent, paint_child, shift_subtree,
 };
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::style::{Direction, Length};
-use crate::widgets::key_hint::{keycap_size, paint_keycap, KeycapVariant};
-use crate::widgets::{paint_panel_chrome, place_at_point, Glyph, Icon, Label, PanelChrome, PanelElevation};
+use crate::widgets::key_hint::{KeycapVariant, keycap_size, paint_keycap};
+use crate::widgets::{
+    Glyph, Icon, Label, PanelChrome, PanelElevation, paint_panel_chrome, place_at_point,
+};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 use std::rc::Rc;
@@ -213,7 +215,9 @@ impl MenuItem {
     /// subtree is owned — see the [module docs](self#the-two-forms-of-a-row-and-why-child-takes-a-closure).
     /// The subtree becomes a real child of the panel, so the layout engine sizes it exactly as it
     /// would anywhere else.
-    #[heca_grid_ui_macros::host_only("a subtree builder — composed content crosses as ViewNode children")]
+    #[heca_grid_ui_macros::host_only(
+        "a subtree builder — composed content crosses as ViewNode children"
+    )]
     pub fn child<C: Component + 'static>(mut self, f: impl Fn() -> C + 'static) -> Self {
         self.content = Some(Rc::new(move || Box::new(f()) as Box<dyn Component>));
         self
@@ -295,7 +299,9 @@ impl MenuItem {
             w += SHORTCUT_GAP + s.chars().count() as f64 * adv;
         }
         if let Some(k) = self.key {
-            w += SHORTCUT_GAP + keycap_size(font * KEYCAP_FONT_SCALE, &k.to_string()).w + KEYCAP_INSET;
+            w += SHORTCUT_GAP
+                + keycap_size(font * KEYCAP_FONT_SCALE, &k.to_string()).w
+                + KEYCAP_INSET;
         }
         w
     }
@@ -711,7 +717,11 @@ impl ContextMenu {
             if self.menu.items[i].enabled {
                 return Some(i);
             }
-            i = if forward { (i + 1) % n } else { (i + n - 1) % n };
+            i = if forward {
+                (i + 1) % n
+            } else {
+                (i + n - 1) % n
+            };
         }
         None
     }
@@ -886,7 +896,11 @@ impl Component for ContextMenu {
                 panel,
                 PanelChrome {
                     border: panel_border,
-                    glow: Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
+                    glow: Some(Glow {
+                        color: glow_c,
+                        radius: 12.0,
+                        intensity: 0.3,
+                    }),
                     elevation: PanelElevation::Panel,
                 },
             );
@@ -895,8 +909,8 @@ impl Component for ContextMenu {
                 let row = self.row_rect(i);
                 let is_sel = i == self.selected && e.enabled;
                 if is_sel {
-                    let row_border =
-                        cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_row_border));
+                    let row_border = cx
+                        .border(accent.with_alpha(cx.theme().colors.interaction.panel_row_border));
                     cx.rect(
                         row,
                         accent.with_alpha(cx.theme().colors.interaction.panel_row_fill),
@@ -1025,7 +1039,10 @@ impl Component for ContextMenu {
             },
             // Raw keys are only quick-pick letters: a letter activates its entry
             // directly (case-insensitive).
-            Event::Key { key: GridKey::Char(c), pressed: true } => {
+            Event::Key {
+                key: GridKey::Char(c),
+                pressed: true,
+            } => {
                 if let Some(i) = self
                     .menu
                     .items
@@ -1084,7 +1101,6 @@ impl Component for ContextMenu {
             _ => Handled::No,
         }
     }
-
 }
 
 impl LayoutExt for ContextMenu {}

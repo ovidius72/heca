@@ -235,9 +235,7 @@ impl InputMode {
     }
 
     /// Column pick candidates (letter → `(ws_idx, col_idx)`) while a `ColumnPick` is active.
-    pub fn col_candidates(
-        &self,
-    ) -> Option<&[(char, usize, usize, heca_core::layout::ColumnId)]> {
+    pub fn col_candidates(&self) -> Option<&[(char, usize, usize, heca_core::layout::ColumnId)]> {
         match self {
             InputMode::ColumnPick { candidates, .. } => Some(candidates),
             _ => None,
@@ -1039,9 +1037,7 @@ pub struct AppState {
     pub notification_pick_open: heca_grid_ui::reactive::Signal<bool>,
 }
 
-
 impl AppState {
-
     /// The scrollback search for `pane`, if it has one.
     pub fn search_for(&self, pane: PaneId) -> Option<&SearchState> {
         self.searches.get(&pane)

@@ -66,15 +66,24 @@ mod tests {
 
         let both: ConfirmConfig =
             toml::from_str("delete_pane = false\nclose = true\n").expect("parse [confirm]");
-        assert!(both.enabled("close", false), "the current name wins when both are set");
+        assert!(
+            both.enabled("close", false),
+            "the current name wins when both are set"
+        );
     }
 
     #[test]
     fn table_overrides_the_default() {
         let c: ConfirmConfig =
             toml::from_str("close = false\ndelete_column = true\n").expect("parse [confirm]");
-        assert!(!c.enabled("close", true), "user false wins over default true");
-        assert!(c.enabled("delete_column", false), "user true wins over default false");
+        assert!(
+            !c.enabled("close", true),
+            "user false wins over default true"
+        );
+        assert!(
+            c.enabled("delete_column", false),
+            "user true wins over default false"
+        );
         assert!(c.enabled("delete_workspace", true), "unset → default");
     }
 }

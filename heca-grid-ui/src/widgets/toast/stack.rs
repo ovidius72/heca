@@ -274,7 +274,10 @@ impl ToastStack {
         for spec in &specs {
             if !self.slots.iter().any(|s| s.id == spec.id) {
                 let card = self.build(spec).default_open(false);
-                self.slots.push(Slot { id: spec.id, leaving: false });
+                self.slots.push(Slot {
+                    id: spec.id,
+                    leaving: false,
+                });
                 self.base.children.push(Box::new(card));
                 // A new card has to be measured and placed before it can arrive.
                 self.base.mark_needs_layout();
@@ -283,10 +286,17 @@ impl ToastStack {
 
         // 4. The live cards take the host's order; the leaving ones hold the slots they are in.
         let mut order: Vec<usize> = (0..self.slots.len()).collect();
-        let live: Vec<usize> = order.iter().copied().filter(|&i| !self.slots[i].leaving).collect();
+        let live: Vec<usize> = order
+            .iter()
+            .copied()
+            .filter(|&i| !self.slots[i].leaving)
+            .collect();
         let mut wanted: Vec<usize> = live.clone();
         wanted.sort_by_key(|&i| {
-            specs.iter().position(|s| s.id == self.slots[i].id).unwrap_or(usize::MAX)
+            specs
+                .iter()
+                .position(|s| s.id == self.slots[i].id)
+                .unwrap_or(usize::MAX)
         });
         for (at, from) in live.iter().zip(wanted) {
             order[*at] = from;
@@ -296,7 +306,8 @@ impl ToastStack {
             let mut cards: Vec<Option<Box<dyn Component>>> =
                 self.base.children.drain(..).map(Some).collect();
             for from in order {
-                self.slots.push(slots[from].take().expect("each index is used once"));
+                self.slots
+                    .push(slots[from].take().expect("each index is used once"));
                 self.base
                     .children
                     .push(cards[from].take().expect("each index is used once"));

@@ -708,7 +708,9 @@ impl AppearanceConfig {
     /// sidebar and as the fallback for panes. The app-wide equivalent of the
     /// showcase BORDER control.
     pub fn effective_border_width(&self, theme: &Theme) -> f32 {
-        self.border_width.unwrap_or(theme.border_width).clamp(0.0, 10.0)
+        self.border_width
+            .unwrap_or(theme.border_width)
+            .clamp(0.0, 10.0)
     }
 
     /// Effective **global** decorative border color: config `border_color`
@@ -761,7 +763,9 @@ impl AppearanceConfig {
     /// active or inactive, so they read as a distinct layer). Config override →
     /// `theme.float_accent`.
     pub fn effective_pane_floating_border_color(&self, theme: &Theme) -> Color {
-        self.pane.floating_border_color.unwrap_or(theme.float_accent)
+        self.pane
+            .floating_border_color
+            .unwrap_or(theme.float_accent)
     }
 
     /// Effective gap between tiled panes (logical px). Config override → 8.0.
@@ -790,7 +794,10 @@ impl AppearanceConfig {
     /// `[0, 20]`. Snug by default now that the rounded content-clip (stencil)
     /// handles corners — a small straight-edge gap no longer overflows.
     pub fn effective_pane_padding(&self, theme: &Theme) -> f32 {
-        self.pane.padding.unwrap_or(theme.pane_padding).clamp(0.0, 20.0)
+        self.pane
+            .padding
+            .unwrap_or(theme.pane_padding)
+            .clamp(0.0, 20.0)
     }
 
     /// Effective sidebar gap. Config override → 12.0.
@@ -1175,29 +1182,23 @@ intensity = "off""#,
 
     #[test]
     fn terminal_scrollbar_visibility_parses_snake_case() {
-        let cfg: AppearanceConfig = toml::from_str(
-            "[terminal]\nshow_scrollbar = \"always\"\n",
-        )
-        .expect("terminal show_scrollbar should parse");
+        let cfg: AppearanceConfig = toml::from_str("[terminal]\nshow_scrollbar = \"always\"\n")
+            .expect("terminal show_scrollbar should parse");
         assert_eq!(cfg.terminal.show_scrollbar, ScrollbarVisibility::Always);
 
-        let cfg: AppearanceConfig = toml::from_str(
-            "[terminal]\nshow_scrollbar = \"never\"\n",
-        )
-        .expect("terminal show_scrollbar should parse never");
+        let cfg: AppearanceConfig = toml::from_str("[terminal]\nshow_scrollbar = \"never\"\n")
+            .expect("terminal show_scrollbar should parse never");
         assert_eq!(cfg.terminal.show_scrollbar, ScrollbarVisibility::Never);
     }
 
     #[test]
     fn terminal_scrolled_up_badge_setting_parses() {
-        let cfg: AppearanceConfig =
-            toml::from_str("[terminal]\nshow_scrolled_up_badge = false\n")
-                .expect("terminal show_scrolled_up_badge should parse");
+        let cfg: AppearanceConfig = toml::from_str("[terminal]\nshow_scrolled_up_badge = false\n")
+            .expect("terminal show_scrolled_up_badge should parse");
         assert!(!cfg.terminal.show_scrolled_up_badge);
 
-        let cfg: AppearanceConfig =
-            toml::from_str("[terminal]\nshow_scrolled_up_badge = true\n")
-                .expect("terminal show_scrolled_up_badge should parse true");
+        let cfg: AppearanceConfig = toml::from_str("[terminal]\nshow_scrolled_up_badge = true\n")
+            .expect("terminal show_scrolled_up_badge should parse true");
         assert!(cfg.terminal.show_scrolled_up_badge);
     }
 
@@ -1302,7 +1303,10 @@ theme = "mocha"
 
         // The theme, not the config, moves it when the user hasn't overridden.
         theme.overlay_frame = FrameStyle::None;
-        assert_eq!(dflt.effective_overlay_border_style(&theme), FrameStyle::None);
+        assert_eq!(
+            dflt.effective_overlay_border_style(&theme),
+            FrameStyle::None
+        );
 
         // A config override wins over the theme, and parses snake_case.
         let cfg: AppearanceConfig = toml::from_str("overlay_border_style = \"bordered\"")
@@ -1329,7 +1333,10 @@ theme = "mocha"
         // Defaults match the current app look: panes bordered, sidebar bracketed.
         let dflt = AppearanceConfig::default();
         assert_eq!(dflt.effective_pane_border_style(), BorderStyle::Bordered);
-        assert_eq!(dflt.effective_sidebar_border_style(), BorderStyle::Bracketed);
+        assert_eq!(
+            dflt.effective_sidebar_border_style(),
+            BorderStyle::Bracketed
+        );
     }
 
     #[test]
@@ -1403,7 +1410,10 @@ theme = "mocha"
         assert_eq!(dflt.effective_pane_border_width(&theme), theme.border_width);
 
         // Global override drives both chrome and the pane fallback.
-        let g = AppearanceConfig { border_width: Some(3.0), ..Default::default() };
+        let g = AppearanceConfig {
+            border_width: Some(3.0),
+            ..Default::default()
+        };
         assert_eq!(g.effective_border_width(&theme), 3.0);
         assert_eq!(g.effective_pane_border_width(&theme), 3.0);
 

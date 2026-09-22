@@ -279,7 +279,10 @@ mod tests {
 
     #[test]
     fn a_combo_reads_back_the_way_a_user_writes_it() {
-        assert_eq!(format_combo(&KeyCombo::parse("Ctrl+Shift+k")), "Ctrl+Shift+k");
+        assert_eq!(
+            format_combo(&KeyCombo::parse("Ctrl+Shift+k")),
+            "Ctrl+Shift+k"
+        );
         assert_eq!(format_combo(&KeyCombo::parse("Alt+PageUp")), "Alt+pageup");
     }
 

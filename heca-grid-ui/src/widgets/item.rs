@@ -227,7 +227,6 @@ impl Item {
         self.on_activate.is_some()
     }
 
-
     fn activate(&mut self) {
         self.flash.trigger();
         if let Some(f) = &self.on_activate {

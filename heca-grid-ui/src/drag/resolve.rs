@@ -276,14 +276,24 @@ mod tests {
             dispatch(&mut root, &Event::ModifiersChanged(m));
             DropAction::held()
         };
-        let shift = Modifiers { shift: true, ..Modifiers::default() };
-        let alt = Modifiers { alt: true, ..Modifiers::default() };
+        let shift = Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        };
+        let alt = Modifiers {
+            alt: true,
+            ..Modifiers::default()
+        };
 
         assert_eq!(hold(shift), DropAction::Swap, "Shift by default");
 
         crate::drag::set_swap_rule(|m| m.alt);
         assert_eq!(hold(alt), DropAction::Swap, "the host moved swap onto Alt");
-        assert_eq!(hold(shift), DropAction::Move, "and Shift stopped meaning it");
+        assert_eq!(
+            hold(shift),
+            DropAction::Move,
+            "and Shift stopped meaning it"
+        );
 
         // A host whose own gesture claims every candidate can say nothing means swap.
         crate::drag::set_swap_rule(|_| false);
@@ -309,7 +319,10 @@ mod tests {
         let mut held = |shift: bool| {
             dispatch(
                 &mut root,
-                &Event::ModifiersChanged(Modifiers { shift, ..Modifiers::default() }),
+                &Event::ModifiersChanged(Modifiers {
+                    shift,
+                    ..Modifiers::default()
+                }),
             );
             DropAction::held()
         };
@@ -335,7 +348,10 @@ mod tests {
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 80.0));
         dispatch(
             &mut root,
-            &Event::ModifiersChanged(Modifiers { shift: true, ..Modifiers::default() }),
+            &Event::ModifiersChanged(Modifiers {
+                shift: true,
+                ..Modifiers::default()
+            }),
         );
 
         // Built the way every host convenience constructor builds one: no modifiers attached.
@@ -459,7 +475,10 @@ mod tests {
             "with no drag, the row under the pointer hovers",
         );
 
-        dispatch(&mut root, &Event::pointer_pressed(at(20.0), PointerButton::Left));
+        dispatch(
+            &mut root,
+            &Event::pointer_pressed(at(20.0), PointerButton::Left),
+        );
         dispatch(&mut root, &Event::pointer_moved(at(60.0)));
         assert!(
             !root.base().children[1].base().pointer.is_hovered(),
@@ -494,7 +513,10 @@ mod tests {
 
         // Picked up and moved: it is no longer a place to put itself, so the walk reaches the
         // workspace that holds it.
-        dispatch(&mut ws, &Event::pointer_pressed(Point::new(50.0, 30.0), PointerButton::Left));
+        dispatch(
+            &mut ws,
+            &Event::pointer_pressed(Point::new(50.0, 30.0), PointerButton::Left),
+        );
         dispatch(&mut ws, &Event::pointer_moved(Point::new(50.0, 50.0)));
         assert_eq!(
             resolve_at_for(&ws, Point::new(50.0, 30.0), Some("column")).map(|h| h.key),
@@ -508,7 +530,12 @@ mod tests {
     fn a_sibling_target_is_two_halves_and_a_container_is_three_bands() {
         let mut sibling = Surface::new().key("col:1").accepts_beside(["column"]);
         sibling.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(90.0, 90.0));
-        for (y, want) in [(20.0, DropSide::Before), (44.0, DropSide::Before), (46.0, DropSide::After), (70.0, DropSide::After)] {
+        for (y, want) in [
+            (20.0, DropSide::Before),
+            (44.0, DropSide::Before),
+            (46.0, DropSide::After),
+            (70.0, DropSide::After),
+        ] {
             assert_eq!(
                 resolve_at_for(&sibling, Point::new(45.0, y), Some("column")).map(|h| h.side),
                 Some(want),
@@ -524,7 +551,6 @@ mod tests {
             "a container keeps a real middle — a pane dropped onto a pane means something",
         );
     }
-
 
     /// **A target that will not take it is never offered** — so a line is never drawn over
     /// something a release would then ignore.
@@ -584,9 +610,15 @@ mod tests {
         root.base_mut().children.push(Box::new(b));
 
         let at = |x: f64, y: f64| Point::new(x, y);
-        dispatch(&mut root, &Event::pointer_pressed(at(50.0, 20.0), PointerButton::Left));
+        dispatch(
+            &mut root,
+            &Event::pointer_pressed(at(50.0, 20.0), PointerButton::Left),
+        );
         dispatch(&mut root, &Event::pointer_moved(at(50.0, 60.0)));
-        dispatch(&mut root, &Event::pointer_released(at(50.0, 60.0), PointerButton::Left));
+        dispatch(
+            &mut root,
+            &Event::pointer_released(at(50.0, 60.0), PointerButton::Left),
+        );
 
         let got = seen.borrow();
         assert_eq!(got.len(), 1, "exactly one drop reached the host");
@@ -610,7 +642,9 @@ mod tests {
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
         let mut row = Surface::new().draggable();
         row.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
-        row.base_mut().children.push(Box::new(Label::new("Containers")));
+        row.base_mut()
+            .children
+            .push(Box::new(Label::new("Containers")));
         root.base_mut().children.push(Box::new(row));
 
         assert!(

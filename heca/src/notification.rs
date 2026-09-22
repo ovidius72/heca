@@ -37,12 +37,12 @@
 // by construction rather than unused. Drop this allow as the consumers land.
 #![allow(dead_code)]
 
+use heca_grid_ui::widgets::{ToastSeverity, ToastSpec};
+use heca_view::Intent;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
-use heca_view::Intent;
-use heca_grid_ui::widgets::{ToastSeverity, ToastSpec};
 
 /// The closed vocabulary of notification origins.
 ///
@@ -399,8 +399,8 @@ pub struct NotificationAction {
 /// variant. An unknown name degrades to the default, matching every other untrusted-input path
 /// in this model.
 mod button_variant_as_name {
-    use heca_grid_ui::widgets::ButtonVariant;
     use heca_grid_ui::PropName;
+    use heca_grid_ui::widgets::ButtonVariant;
     use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(v: &ButtonVariant, s: S) -> Result<S::Ok, S::Error> {
@@ -749,7 +749,10 @@ impl NotificationStore {
     pub fn set_history_limit(&mut self, history_limit: usize) {
         self.history_limit = history_limit;
         while self.history.len() > self.history_limit {
-            let notification_id = self.history.pop_front().expect("history length was above its limit");
+            let notification_id = self
+                .history
+                .pop_front()
+                .expect("history length was above its limit");
             self.remove_canonical(notification_id);
         }
     }
@@ -776,8 +779,12 @@ impl NotificationStore {
             if want < store.visible.len() {
                 // Surplus goes back to the head of the queue, newest-last, so the FIFO still reads
                 // in the order the notifications were raised.
-                let surplus: Vec<NotificationId> =
-                    store.visible.split_off(want).into_iter().flatten().collect();
+                let surplus: Vec<NotificationId> = store
+                    .visible
+                    .split_off(want)
+                    .into_iter()
+                    .flatten()
+                    .collect();
                 for id in surplus.into_iter().rev() {
                     if let Some(n) = store.notifications.get_mut(&id) {
                         n.placement = NotificationPlacement::Queued;
@@ -797,12 +804,16 @@ impl NotificationStore {
     /// The store keeps ownership of all lifecycle buckets; callers receive no
     /// mutable access and cannot reorder or reinsert history entries.
     pub fn history(&self) -> impl Iterator<Item = &AppNotification> {
-        self.history.iter().filter_map(|id| self.notifications.get(id))
+        self.history
+            .iter()
+            .filter_map(|id| self.notifications.get(id))
     }
 
     /// Iterate visible notifications in stable ToastStack slot order.
     pub fn visible(&self) -> impl Iterator<Item = &AppNotification> {
-        self.visible.iter().filter_map(|id| id.and_then(|id| self.notifications.get(&id)))
+        self.visible
+            .iter()
+            .filter_map(|id| id.and_then(|id| self.notifications.get(&id)))
     }
 
     /// Return the first visible card eligible for the default dismissal action.
@@ -814,7 +825,10 @@ impl NotificationStore {
         self.visible()
             .find(|notification| {
                 notification.lifecycle.is_dismissible()
-                    && matches!(notification.lifecycle.lifetime(), NotificationLifetime::Auto(_))
+                    && matches!(
+                        notification.lifecycle.lifetime(),
+                        NotificationLifetime::Auto(_)
+                    )
             })
             .map(|notification| notification.id)
     }
@@ -867,14 +881,27 @@ impl NotificationStore {
     /// action's `intent.action` name, which doubles as its identity.
     ///
     /// Queued and archived entries deliberately have no activatable target.
-    pub fn action_for_visible(&self, notification_id: NotificationId, key: &str) -> Option<&NotificationAction> {
+    pub fn action_for_visible(
+        &self,
+        notification_id: NotificationId,
+        key: &str,
+    ) -> Option<&NotificationAction> {
         self.visible()
             .find(|notification| notification.id == notification_id)
-            .and_then(|notification| notification.actions.iter().find(|action| action.intent.action == key))
+            .and_then(|notification| {
+                notification
+                    .actions
+                    .iter()
+                    .find(|action| action.intent.action == key)
+            })
     }
 
     /// Clone the serializable action intent immediately before dispatch.
-    pub fn action_intent_for_visible(&self, notification_id: NotificationId, key: &str) -> Option<Intent> {
+    pub fn action_intent_for_visible(
+        &self,
+        notification_id: NotificationId,
+        key: &str,
+    ) -> Option<Intent> {
         self.action_for_visible(notification_id, key)
             .map(|action| action.intent.clone())
     }
@@ -914,7 +941,11 @@ impl NotificationStore {
     /// Resolve an entry from a producer/runtime path, regardless of its user
     /// dismissibility. This is intentionally crate-private: only Heca-owned
     /// runtime integrations may clear a persistent status notification.
-    pub(crate) fn resolve(&mut self, notification_id: NotificationId, now: Instant) -> NotificationDismissResult {
+    pub(crate) fn resolve(
+        &mut self,
+        notification_id: NotificationId,
+        now: Instant,
+    ) -> NotificationDismissResult {
         self.archive(notification_id, now, false)
     }
 
@@ -950,7 +981,10 @@ impl NotificationStore {
                 .notifications
                 .get_mut(&notification_id)
                 .expect("known notification must have canonical storage")
-                .placement = NotificationPlacement::History { cause, archived_at: now };
+                .placement = NotificationPlacement::History {
+                cause,
+                archived_at: now,
+            };
             store.retain_history(notification_id);
             ((), store.promote_pending(now))
         });
@@ -982,9 +1016,9 @@ impl NotificationStore {
                     .get_mut(&notification_id)
                     .expect("visible notification must have canonical storage")
                     .placement = NotificationPlacement::History {
-                        cause: NotificationArchiveCause::Expired,
-                        archived_at: now,
-                    };
+                    cause: NotificationArchiveCause::Expired,
+                    archived_at: now,
+                };
                 store.retain_history(notification_id);
             }
             ((), store.promote_pending(now))
@@ -1054,7 +1088,10 @@ impl NotificationStore {
         }
         self.history.push_back(notification_id);
         while self.history.len() > self.history_limit {
-            let evicted_id = self.history.pop_front().expect("history length was above its limit");
+            let evicted_id = self
+                .history
+                .pop_front()
+                .expect("history length was above its limit");
             self.remove_canonical(evicted_id);
         }
     }
@@ -1150,8 +1187,12 @@ impl NotificationStore {
     /// (Antonio, driving, 2026-08-31: it should append at the end and close the vacancy.)
     fn close_gaps(&mut self) -> bool {
         let before = self.visible.clone();
-        let mut occupied: Vec<Option<NotificationId>> =
-            self.visible.iter().filter(|slot| slot.is_some()).copied().collect();
+        let mut occupied: Vec<Option<NotificationId>> = self
+            .visible
+            .iter()
+            .filter(|slot| slot.is_some())
+            .copied()
+            .collect();
         occupied.resize(self.visible.len(), None);
         self.visible = occupied;
         self.visible != before
@@ -1189,23 +1230,41 @@ impl NotificationStore {
             let mut placed = std::collections::HashSet::new();
 
             for id in &self.queued {
-                assert!(placed.insert(*id), "notification id appears in multiple placements");
                 assert!(
-                    matches!(self.notifications.get(id).map(|n| n.placement), Some(NotificationPlacement::Queued)),
+                    placed.insert(*id),
+                    "notification id appears in multiple placements"
+                );
+                assert!(
+                    matches!(
+                        self.notifications.get(id).map(|n| n.placement),
+                        Some(NotificationPlacement::Queued)
+                    ),
                     "queued id must resolve to a queued notification"
                 );
             }
             for id in self.visible.iter().flatten() {
-                assert!(placed.insert(*id), "notification id appears in multiple placements");
                 assert!(
-                    matches!(self.notifications.get(id).map(|n| n.placement), Some(NotificationPlacement::Visible { .. })),
+                    placed.insert(*id),
+                    "notification id appears in multiple placements"
+                );
+                assert!(
+                    matches!(
+                        self.notifications.get(id).map(|n| n.placement),
+                        Some(NotificationPlacement::Visible { .. })
+                    ),
                     "visible slot must resolve to a visible notification"
                 );
             }
             for id in &self.history {
-                assert!(placed.insert(*id), "notification id appears in multiple placements");
                 assert!(
-                    matches!(self.notifications.get(id).map(|n| n.placement), Some(NotificationPlacement::History { .. })),
+                    placed.insert(*id),
+                    "notification id appears in multiple placements"
+                );
+                assert!(
+                    matches!(
+                        self.notifications.get(id).map(|n| n.placement),
+                        Some(NotificationPlacement::History { .. })
+                    ),
                     "history id must resolve to an archived notification"
                 );
             }
@@ -1217,7 +1276,9 @@ impl NotificationStore {
             );
             for (key, id) in &self.dedup_index {
                 assert_eq!(
-                    self.notifications.get(id).and_then(|notification| notification.dedup_key.as_deref()),
+                    self.notifications
+                        .get(id)
+                        .and_then(|notification| notification.dedup_key.as_deref()),
                     Some(key.as_str()),
                     "dedup index must resolve to the notification that owns its key"
                 );
@@ -1341,8 +1402,11 @@ pub fn project_visible_toast(notification: &AppNotification) -> Option<ToastSpec
         // Keyed by the action's own intent name — `on_action(id, key)` looks it
         // back up the same way (`AppNotification::action_for_visible`).
         spec = spec.action_with(
-            heca_grid_ui::widgets::ToastAction::new(action.intent.action.clone(), action.label.clone())
-                .variant(action.variant),
+            heca_grid_ui::widgets::ToastAction::new(
+                action.intent.action.clone(),
+                action.label.clone(),
+            )
+            .variant(action.variant),
         );
     }
 
@@ -1466,14 +1530,9 @@ impl NotificationDraft {
     /// The caller supplies both the monotonic id and creation instant; this
     /// method never calls `Instant::now()` and never marks the result visible.
     pub fn build(self, id: NotificationId, created_at: Instant) -> AppNotification {
-        let mut notification = AppNotification::new(
-            id,
-            self.source,
-            self.severity,
-            self.title,
-            created_at,
-        )
-        .lifecycle(self.lifecycle);
+        let mut notification =
+            AppNotification::new(id, self.source, self.severity, self.title, created_at)
+                .lifecycle(self.lifecycle);
         notification.body = self.body;
         notification.dedup_key = self.dedup_key;
         notification.actions = self.actions;
@@ -1623,7 +1682,10 @@ impl NotificationRuntime {
         let ids: Vec<NotificationId> = self.store.visible().map(|n| n.id).collect();
         let mut changed = false;
         for id in ids {
-            if matches!(self.store.dismiss(id, now), NotificationDismissResult::Dismissed(_)) {
+            if matches!(
+                self.store.dismiss(id, now),
+                NotificationDismissResult::Dismissed(_)
+            ) {
                 changed = true;
             }
         }
@@ -1790,7 +1852,10 @@ pub fn register_notify_action(
                     kind: ArgKind::Enum,
                     required: false,
                     description: "info (default) | success | warning | danger.".into(),
-                    values: NotificationSeverity::VALUES.iter().map(|s| s.to_string()).collect(),
+                    values: NotificationSeverity::VALUES
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect(),
                 },
                 ArgSpec {
                     name: "dedup_key".into(),
@@ -1902,16 +1967,24 @@ pub struct Notification {
 
 impl Notification {
     pub fn info(title: impl Into<String>) -> Self {
-        Self { draft: NotificationDraft::info(title) }
+        Self {
+            draft: NotificationDraft::info(title),
+        }
     }
     pub fn success(title: impl Into<String>) -> Self {
-        Self { draft: NotificationDraft::success(title) }
+        Self {
+            draft: NotificationDraft::success(title),
+        }
     }
     pub fn warning(title: impl Into<String>) -> Self {
-        Self { draft: NotificationDraft::warning(title) }
+        Self {
+            draft: NotificationDraft::warning(title),
+        }
     }
     pub fn danger(title: impl Into<String>) -> Self {
-        Self { draft: NotificationDraft::danger(title) }
+        Self {
+            draft: NotificationDraft::danger(title),
+        }
     }
 
     pub fn body(mut self, body: impl Into<String>) -> Self {
@@ -1976,12 +2049,17 @@ mod tests {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
 
-        let push = store.push(NotificationDraft::new("Connected"), now).unwrap();
+        let push = store
+            .push(NotificationDraft::new("Connected"), now)
+            .unwrap();
         let id = push.notification_id();
         assert_eq!(id.as_u64(), 1);
         assert!(push.update().visible_projection_changed());
         assert_eq!(store.visible[0], Some(id));
-        assert_eq!(store.notifications[&id].expires_at(), now.checked_add(std::time::Duration::from_secs(5)));
+        assert_eq!(
+            store.notifications[&id].expires_at(),
+            now.checked_add(std::time::Duration::from_secs(5))
+        );
         assert!(store.queued.is_empty());
     }
 
@@ -1991,14 +2069,19 @@ mod tests {
         let mut store = NotificationStore::new(100);
         let capacity = store.max_visible();
         for number in 0..capacity {
-            store.push(NotificationDraft::new(format!("Visible {number}")), now).unwrap();
+            store
+                .push(NotificationDraft::new(format!("Visible {number}")), now)
+                .unwrap();
         }
 
         let queued = store.push(NotificationDraft::new("Queued"), now).unwrap();
         let id = queued.notification_id();
         assert!(!queued.update().visible_projection_changed());
         assert_eq!(store.queued, VecDeque::from([id]));
-        assert_eq!(store.notifications[&id].placement, NotificationPlacement::Queued);
+        assert_eq!(
+            store.notifications[&id].placement,
+            NotificationPlacement::Queued
+        );
         assert!(store.notifications[&id].expires_at().is_none());
     }
 
@@ -2006,13 +2089,26 @@ mod tests {
     fn push_reuses_known_dedup_id_without_creating_a_duplicate() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
-        let first = store.push(NotificationDraft::new("Connecting").dedup_key("network"), now).unwrap();
-        let duplicate = store.push(NotificationDraft::new("Still connecting").dedup_key("network"), now).unwrap();
+        let first = store
+            .push(
+                NotificationDraft::new("Connecting").dedup_key("network"),
+                now,
+            )
+            .unwrap();
+        let duplicate = store
+            .push(
+                NotificationDraft::new("Still connecting").dedup_key("network"),
+                now,
+            )
+            .unwrap();
 
         assert_eq!(duplicate.notification_id(), first.notification_id());
         assert!(duplicate.update().visible_projection_changed());
         assert_eq!(store.notifications.len(), 1);
-        assert_eq!(store.notifications[&first.notification_id()].title, "Still connecting");
+        assert_eq!(
+            store.notifications[&first.notification_id()].title,
+            "Still connecting"
+        );
     }
 
     #[test]
@@ -2023,15 +2119,23 @@ mod tests {
         let capacity = store.max_visible();
         for number in 0..capacity {
             visible_ids.push(
-                store.push(NotificationDraft::new(format!("Visible {number}")), now)
+                store
+                    .push(NotificationDraft::new(format!("Visible {number}")), now)
                     .unwrap()
                     .notification_id(),
             );
         }
-        let queued_id = store.push(NotificationDraft::new("Queued"), now).unwrap().notification_id();
+        let queued_id = store
+            .push(NotificationDraft::new("Queued"), now)
+            .unwrap()
+            .notification_id();
 
         let released_id = store.visible[1].take().expect("second slot is visible");
-        store.notifications.get_mut(&released_id).unwrap().placement = NotificationPlacement::History { cause: NotificationArchiveCause::Dismissed, archived_at: now };
+        store.notifications.get_mut(&released_id).unwrap().placement =
+            NotificationPlacement::History {
+                cause: NotificationArchiveCause::Dismissed,
+                archived_at: now,
+            };
         store.history.push_back(released_id);
 
         let (_, update) = store.transition_at(now, |store, now| ((), store.promote_pending(now)));
@@ -2058,21 +2162,30 @@ mod tests {
         let capacity = store.max_visible();
         for number in 0..capacity {
             visible_ids.push(
-                store.push(
-                    NotificationDraft::new(format!("Visible {number}"))
-                        .lifecycle(NotificationLifecycle::auto(std::time::Duration::from_secs(1))),
-                    now,
-                )
-                .unwrap()
-                .notification_id(),
+                store
+                    .push(
+                        NotificationDraft::new(format!("Visible {number}")).lifecycle(
+                            NotificationLifecycle::auto(std::time::Duration::from_secs(1)),
+                        ),
+                        now,
+                    )
+                    .unwrap()
+                    .notification_id(),
             );
         }
-        let queued_id = store.push(NotificationDraft::new("Queued"), now).unwrap().notification_id();
+        let queued_id = store
+            .push(NotificationDraft::new("Queued"), now)
+            .unwrap()
+            .notification_id();
 
         let update = store.expire_due(later);
         assert!(update.visible_projection_changed());
         assert_eq!(store.visible[0], Some(queued_id));
-        assert!(visible_ids.iter().all(|id| store.notifications[id].is_history()));
+        assert!(
+            visible_ids
+                .iter()
+                .all(|id| store.notifications[id].is_history())
+        );
         assert_eq!(store.history.len(), capacity);
         assert_eq!(store.notifications[&queued_id].visible_since(), Some(later));
     }
@@ -2136,8 +2249,9 @@ mod tests {
         let mut store = NotificationStore::new(100);
         let id = store
             .push(
-                NotificationDraft::new("Read me")
-                    .lifecycle(NotificationLifecycle::auto(std::time::Duration::from_secs(4))),
+                NotificationDraft::new("Read me").lifecycle(NotificationLifecycle::auto(
+                    std::time::Duration::from_secs(4),
+                )),
                 now,
             )
             .unwrap()
@@ -2188,9 +2302,28 @@ mod tests {
         let mut store = NotificationStore::new(100);
         let first = now + std::time::Duration::from_secs(2);
         let second = now + std::time::Duration::from_secs(5);
-        store.push(NotificationDraft::new("Later").lifecycle(NotificationLifecycle::auto(std::time::Duration::from_secs(5))), now).unwrap();
-        store.push(NotificationDraft::new("Earlier").lifecycle(NotificationLifecycle::auto(std::time::Duration::from_secs(2))), now).unwrap();
-        store.push(NotificationDraft::new("Sticky").lifecycle(NotificationLifecycle::sticky()), now).unwrap();
+        store
+            .push(
+                NotificationDraft::new("Later").lifecycle(NotificationLifecycle::auto(
+                    std::time::Duration::from_secs(5),
+                )),
+                now,
+            )
+            .unwrap();
+        store
+            .push(
+                NotificationDraft::new("Earlier").lifecycle(NotificationLifecycle::auto(
+                    std::time::Duration::from_secs(2),
+                )),
+                now,
+            )
+            .unwrap();
+        store
+            .push(
+                NotificationDraft::new("Sticky").lifecycle(NotificationLifecycle::sticky()),
+                now,
+            )
+            .unwrap();
         assert_eq!(store.next_expiry(), Some(first));
         assert_ne!(store.next_expiry(), Some(second));
 
@@ -2202,12 +2335,19 @@ mod tests {
     fn sticky_notifications_do_not_expire() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
-        let id = store.push(
-            NotificationDraft::new("Sticky").lifecycle(NotificationLifecycle::sticky()),
-            now,
-        ).unwrap().notification_id();
+        let id = store
+            .push(
+                NotificationDraft::new("Sticky").lifecycle(NotificationLifecycle::sticky()),
+                now,
+            )
+            .unwrap()
+            .notification_id();
 
-        assert!(!store.expire_due(now + std::time::Duration::from_secs(60)).visible_projection_changed());
+        assert!(
+            !store
+                .expire_due(now + std::time::Duration::from_secs(60))
+                .visible_projection_changed()
+        );
         assert_eq!(store.visible[0], Some(id));
     }
 
@@ -2293,7 +2433,10 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(store.visible, vec![Some(ids[0]), Some(ids[1]), Some(ids[2])]);
+        assert_eq!(
+            store.visible,
+            vec![Some(ids[0]), Some(ids[1]), Some(ids[2])]
+        );
         assert_eq!(store.queued.len(), 3, "the rest are waiting, not lost");
 
         // Close the middle card: the one after it slides up, and the next queued appends.
@@ -2306,7 +2449,10 @@ mod tests {
 
         // And again, at the front this time — the whole column shifts up by one.
         store.dismiss(ids[0], now);
-        assert_eq!(store.visible, vec![Some(ids[2]), Some(ids[3]), Some(ids[4])]);
+        assert_eq!(
+            store.visible,
+            vec![Some(ids[2]), Some(ids[3]), Some(ids[4])]
+        );
         assert_eq!(store.queued.len(), 1);
     }
 
@@ -2315,12 +2461,22 @@ mod tests {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
         let visible_ids: Vec<_> = (0..store.max_visible())
-            .map(|number| store.push(NotificationDraft::new(format!("Visible {number}")), now).unwrap().notification_id())
+            .map(|number| {
+                store
+                    .push(NotificationDraft::new(format!("Visible {number}")), now)
+                    .unwrap()
+                    .notification_id()
+            })
             .collect();
-        let queued_id = store.push(NotificationDraft::new("Queued"), now).unwrap().notification_id();
+        let queued_id = store
+            .push(NotificationDraft::new("Queued"), now)
+            .unwrap()
+            .notification_id();
 
         let result = store.dismiss(visible_ids[1], now);
-        assert!(matches!(result, NotificationDismissResult::Dismissed(update) if update.visible_projection_changed()));
+        assert!(
+            matches!(result, NotificationDismissResult::Dismissed(update) if update.visible_projection_changed())
+        );
         assert!(store.notifications[&visible_ids[1]].is_history());
         assert_eq!(store.history, VecDeque::from([visible_ids[1]]));
 
@@ -2342,16 +2498,25 @@ mod tests {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
         let visible_ids: Vec<_> = (0..store.max_visible())
-            .map(|number| store.push(NotificationDraft::new(format!("Visible {number}")), now).unwrap().notification_id())
+            .map(|number| {
+                store
+                    .push(NotificationDraft::new(format!("Visible {number}")), now)
+                    .unwrap()
+                    .notification_id()
+            })
             .collect();
-        let queued_id = store.push(NotificationDraft::new("Queued"), now).unwrap().notification_id();
+        let queued_id = store
+            .push(NotificationDraft::new("Queued"), now)
+            .unwrap()
+            .notification_id();
 
         let result = store.dismiss(queued_id, now);
-        assert!(matches!(result, NotificationDismissResult::Dismissed(update) if !update.visible_projection_changed()));
+        assert!(
+            matches!(result, NotificationDismissResult::Dismissed(update) if !update.visible_projection_changed())
+        );
         assert!(store.notifications[&queued_id].is_history());
         assert!(store.queued.is_empty());
-        let expected: Vec<Option<NotificationId>> =
-            visible_ids.iter().copied().map(Some).collect();
+        let expected: Vec<Option<NotificationId>> = visible_ids.iter().copied().map(Some).collect();
         assert_eq!(store.visible, expected);
     }
 
@@ -2359,19 +2524,30 @@ mod tests {
     fn first_auto_dismissible_visible_id_skips_sticky_and_persistent_cards() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
-        let sticky = store.push(
-            NotificationDraft::new("Sticky").lifecycle(NotificationLifecycle::sticky()),
-            now,
-        ).unwrap().notification_id();
-        let persistent = store.push(
-            NotificationDraft::new("Persistent").lifecycle(NotificationLifecycle::sticky_persistent()),
-            now,
-        ).unwrap().notification_id();
+        let sticky = store
+            .push(
+                NotificationDraft::new("Sticky").lifecycle(NotificationLifecycle::sticky()),
+                now,
+            )
+            .unwrap()
+            .notification_id();
+        let persistent = store
+            .push(
+                NotificationDraft::new("Persistent")
+                    .lifecycle(NotificationLifecycle::sticky_persistent()),
+                now,
+            )
+            .unwrap()
+            .notification_id();
         assert_eq!(store.first_auto_dismissible_visible_id(), None);
-        let eligible = store.push(
-            NotificationDraft::new("Auto").action(NotificationAction::new("Retry", Intent::new("retry"))),
-            now,
-        ).unwrap().notification_id();
+        let eligible = store
+            .push(
+                NotificationDraft::new("Auto")
+                    .action(NotificationAction::new("Retry", Intent::new("retry"))),
+                now,
+            )
+            .unwrap()
+            .notification_id();
 
         assert_ne!(sticky, eligible);
         assert_ne!(persistent, eligible);
@@ -2382,13 +2558,23 @@ mod tests {
     fn dismiss_unknown_or_persistent_notification_is_a_noop() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
-        let persistent_id = store.push(
-            NotificationDraft::new("Persistent").lifecycle(NotificationLifecycle::sticky_persistent()),
-            now,
-        ).unwrap().notification_id();
+        let persistent_id = store
+            .push(
+                NotificationDraft::new("Persistent")
+                    .lifecycle(NotificationLifecycle::sticky_persistent()),
+                now,
+            )
+            .unwrap()
+            .notification_id();
 
-        assert_eq!(store.dismiss(NotificationId::from_raw(99), now), NotificationDismissResult::Unknown);
-        assert_eq!(store.dismiss(persistent_id, now), NotificationDismissResult::NotDismissible);
+        assert_eq!(
+            store.dismiss(NotificationId::from_raw(99), now),
+            NotificationDismissResult::Unknown
+        );
+        assert_eq!(
+            store.dismiss(persistent_id, now),
+            NotificationDismissResult::NotDismissible
+        );
         assert_eq!(store.visible[0], Some(persistent_id));
         assert!(store.history.is_empty());
     }
@@ -2398,12 +2584,22 @@ mod tests {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
         for index in 0..store.max_visible() {
-            store.push(NotificationDraft::new(format!("Visible {index}")), now).unwrap();
+            store
+                .push(NotificationDraft::new(format!("Visible {index}")), now)
+                .unwrap();
         }
-        let pending_id = store.push(NotificationDraft::new("Old").dedup_key("pending"), now).unwrap().notification_id();
-        let later_id = store.push(NotificationDraft::new("Later"), now).unwrap().notification_id();
+        let pending_id = store
+            .push(NotificationDraft::new("Old").dedup_key("pending"), now)
+            .unwrap()
+            .notification_id();
+        let later_id = store
+            .push(NotificationDraft::new("Later"), now)
+            .unwrap()
+            .notification_id();
 
-        let duplicate = store.push(NotificationDraft::new("Updated").dedup_key("pending"), now).unwrap();
+        let duplicate = store
+            .push(NotificationDraft::new("Updated").dedup_key("pending"), now)
+            .unwrap();
         assert_eq!(duplicate.notification_id(), pending_id);
         assert!(!duplicate.update().visible_projection_changed());
         assert_eq!(store.queued, VecDeque::from([pending_id, later_id]));
@@ -2414,10 +2610,18 @@ mod tests {
     fn dedup_history_reactivates_the_same_id() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
-        let id = store.push(NotificationDraft::new("Old").dedup_key("history"), now).unwrap().notification_id();
-        assert!(matches!(store.dismiss(id, now), NotificationDismissResult::Dismissed(_)));
+        let id = store
+            .push(NotificationDraft::new("Old").dedup_key("history"), now)
+            .unwrap()
+            .notification_id();
+        assert!(matches!(
+            store.dismiss(id, now),
+            NotificationDismissResult::Dismissed(_)
+        ));
 
-        let duplicate = store.push(NotificationDraft::new("New").dedup_key("history"), now).unwrap();
+        let duplicate = store
+            .push(NotificationDraft::new("New").dedup_key("history"), now)
+            .unwrap();
         assert_eq!(duplicate.notification_id(), id);
         assert!(duplicate.update().visible_projection_changed());
         assert_eq!(store.visible[0], Some(id));
@@ -2428,11 +2632,23 @@ mod tests {
     fn history_limit_evicts_oldest_entry_and_its_dedup_key() {
         let now = Instant::now();
         let mut store = NotificationStore::new(1);
-        let first = store.push(NotificationDraft::new("First").dedup_key("first"), now).unwrap().notification_id();
-        let second = store.push(NotificationDraft::new("Second").dedup_key("second"), now).unwrap().notification_id();
+        let first = store
+            .push(NotificationDraft::new("First").dedup_key("first"), now)
+            .unwrap()
+            .notification_id();
+        let second = store
+            .push(NotificationDraft::new("Second").dedup_key("second"), now)
+            .unwrap()
+            .notification_id();
 
-        assert!(matches!(store.dismiss(first, now), NotificationDismissResult::Dismissed(_)));
-        assert!(matches!(store.dismiss(second, now), NotificationDismissResult::Dismissed(_)));
+        assert!(matches!(
+            store.dismiss(first, now),
+            NotificationDismissResult::Dismissed(_)
+        ));
+        assert!(matches!(
+            store.dismiss(second, now),
+            NotificationDismissResult::Dismissed(_)
+        ));
         assert_eq!(store.history, VecDeque::from([second]));
         assert!(!store.notifications.contains_key(&first));
         assert!(!store.dedup_index.contains_key("first"));
@@ -2443,12 +2659,19 @@ mod tests {
     fn resolve_allows_runtime_to_clear_a_persistent_notification() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
-        let id = store.push(
-            NotificationDraft::new("Resolved error").lifecycle(NotificationLifecycle::sticky_persistent()),
-            now,
-        ).unwrap().notification_id();
+        let id = store
+            .push(
+                NotificationDraft::new("Resolved error")
+                    .lifecycle(NotificationLifecycle::sticky_persistent()),
+                now,
+            )
+            .unwrap()
+            .notification_id();
 
-        assert!(matches!(store.resolve(id, now), NotificationDismissResult::Dismissed(_)));
+        assert!(matches!(
+            store.resolve(id, now),
+            NotificationDismissResult::Dismissed(_)
+        ));
         assert!(store.notifications[&id].is_history());
         assert!(store.visible.iter().all(Option::is_none));
     }
@@ -2461,14 +2684,18 @@ mod tests {
 
         let last = store.push(NotificationDraft::new("Last"), now).unwrap();
         assert_eq!(last.notification_id().as_u64(), u64::MAX);
-        assert_eq!(store.push(NotificationDraft::new("Overflow"), now), Err(NotificationStoreError::IdExhausted));
+        assert_eq!(
+            store.push(NotificationDraft::new("Overflow"), now),
+            Err(NotificationStoreError::IdExhausted)
+        );
     }
 
     #[test]
     fn store_transition_receives_caller_time_and_reports_projection_change() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
-        let (observed_now, unchanged) = store.transition_at(now, |_, observed_now| (observed_now, false));
+        let (observed_now, unchanged) =
+            store.transition_at(now, |_, observed_now| (observed_now, false));
         assert_eq!(observed_now, now);
         assert!(!unchanged.visible_projection_changed());
 
@@ -2539,7 +2766,10 @@ mod tests {
 
     #[test]
     fn dedup_segment_falls_back_to_kind_when_id_missing_or_empty() {
-        assert_eq!(NotificationSource::of(NotificationSourceKind::App).dedup_segment(), "app");
+        assert_eq!(
+            NotificationSource::of(NotificationSourceKind::App).dedup_segment(),
+            "app"
+        );
         assert_eq!(
             NotificationSource::new(NotificationSourceKind::App, "").dedup_segment(),
             "app"
@@ -2572,7 +2802,10 @@ mod tests {
         let l = NotificationLifecycle::default();
         assert!(l.is_dismissible());
         assert!(l.expires());
-        assert_eq!(l.lifetime(), NotificationLifetime::Auto(std::time::Duration::from_secs(5)));
+        assert_eq!(
+            l.lifetime(),
+            NotificationLifetime::Auto(std::time::Duration::from_secs(5))
+        );
     }
 
     #[test]
@@ -2653,10 +2886,22 @@ mod tests {
 
     #[test]
     fn notification_severity_maps_totally_to_toast_severity() {
-        assert_eq!(NotificationSeverity::Info.as_toast_severity(), ToastSeverity::Info);
-        assert_eq!(NotificationSeverity::Success.as_toast_severity(), ToastSeverity::Success);
-        assert_eq!(NotificationSeverity::Warning.as_toast_severity(), ToastSeverity::Warning);
-        assert_eq!(NotificationSeverity::Error.as_toast_severity(), ToastSeverity::Danger);
+        assert_eq!(
+            NotificationSeverity::Info.as_toast_severity(),
+            ToastSeverity::Info
+        );
+        assert_eq!(
+            NotificationSeverity::Success.as_toast_severity(),
+            ToastSeverity::Success
+        );
+        assert_eq!(
+            NotificationSeverity::Warning.as_toast_severity(),
+            ToastSeverity::Warning
+        );
+        assert_eq!(
+            NotificationSeverity::Error.as_toast_severity(),
+            ToastSeverity::Danger
+        );
     }
 
     #[test]
@@ -2687,7 +2932,10 @@ mod tests {
         let intent = Intent::new("deploy.retry").arg("attempt", heca_view::PropValue::Int(2));
         let action = NotificationAction::new("Retry", intent).dismiss_after(true);
         assert!(action.dismiss_after);
-        assert_eq!(action.intent.args.get("attempt"), Some(&heca_view::PropValue::Int(2)));
+        assert_eq!(
+            action.intent.args.get("attempt"),
+            Some(&heca_view::PropValue::Int(2))
+        );
     }
 
     #[test]
@@ -2697,7 +2945,10 @@ mod tests {
         let json = serde_json::to_string(&action).unwrap();
         assert!(json.contains("open_log"));
         assert!(json.contains("dismiss_after"));
-        assert!(json.contains("\"ghost\""), "variant crosses as its name, not the enum: {json}");
+        assert!(
+            json.contains("\"ghost\""),
+            "variant crosses as its name, not the enum: {json}"
+        );
         let back: NotificationAction = serde_json::from_str(&json).unwrap();
         assert_eq!(back, action);
     }
@@ -2706,7 +2957,10 @@ mod tests {
     fn an_unknown_variant_name_degrades_to_the_default_rather_than_failing() {
         let json = r#"{"label":"Open","intent":{"action":"open_log"},"variant":"not_a_real_variant","dismiss_after":false}"#;
         let action: NotificationAction = serde_json::from_str(json).unwrap();
-        assert_eq!(action.variant, heca_grid_ui::widgets::ButtonVariant::default());
+        assert_eq!(
+            action.variant,
+            heca_grid_ui::widgets::ButtonVariant::default()
+        );
     }
 
     // -- the public raise door (T493) -----------------------------------
@@ -2770,7 +3024,11 @@ mod tests {
             .sticky()
             .draft;
         runtime.push(draft, now).unwrap();
-        assert_eq!(runtime.next_expiry(), None, "a sticky notification never expires");
+        assert_eq!(
+            runtime.next_expiry(),
+            None,
+            "a sticky notification never expires"
+        );
     }
 
     #[test]
@@ -2790,11 +3048,18 @@ mod tests {
             .draft;
         let fail_id = runtime.push(fail, now).unwrap().notification_id();
         assert_eq!(runtime.visible_toasts.get_untracked().len(), 1);
-        assert_eq!(runtime.next_expiry(), None, "sticky failure does not expire");
+        assert_eq!(
+            runtime.next_expiry(),
+            None,
+            "sticky failure does not expire"
+        );
 
         // Retry's `dismiss_after`.
         runtime.dismiss_one(fail_id, now);
-        assert!(runtime.visible_toasts.get_untracked().is_empty(), "Retry cleared it");
+        assert!(
+            runtime.visible_toasts.get_untracked().is_empty(),
+            "Retry cleared it"
+        );
 
         // The reload succeeded — success with the same dedup key.
         let ok = Notification::success("Configuration reloaded")
@@ -2834,7 +3099,10 @@ mod tests {
             .action_and_dismiss_after_for_visible(id, "open_pane_log")
             .expect("the visible card's action resolves by its intent name");
         assert_eq!(intent.action, "open_pane_log");
-        assert_eq!(intent.args.get("pane_id"), Some(&heca_view::PropValue::Int(7)));
+        assert_eq!(
+            intent.args.get("pane_id"),
+            Some(&heca_view::PropValue::Int(7))
+        );
         assert!(dismiss_after);
 
         assert!(
@@ -2919,7 +3187,10 @@ mod tests {
         let notice = runtime
             .system_fallback_notice()
             .expect("first raise under system mode gets the notice");
-        assert_eq!(notice.dedup_key.as_deref(), Some("notification.system.unavailable"));
+        assert_eq!(
+            notice.dedup_key.as_deref(),
+            Some("notification.system.unavailable")
+        );
         assert!(
             runtime.system_fallback_notice().is_none(),
             "and only once per mode"
@@ -2935,12 +3206,15 @@ mod tests {
 
     #[test]
     fn queued_and_history_notifications_do_not_project() {
-        let queued = NotificationDraft::new("Queued")
-            .build(NotificationId::from_raw(20), Instant::now());
+        let queued =
+            NotificationDraft::new("Queued").build(NotificationId::from_raw(20), Instant::now());
         assert!(project_visible_toast(&queued).is_none());
 
         let mut history = queued;
-        history.placement = NotificationPlacement::History { cause: NotificationArchiveCause::Dismissed, archived_at: Instant::now() };
+        history.placement = NotificationPlacement::History {
+            cause: NotificationArchiveCause::Dismissed,
+            archived_at: Instant::now(),
+        };
         assert!(project_visible_toast(&history).is_none());
     }
 
@@ -2952,7 +3226,10 @@ mod tests {
             .body("compiler exited with code 1")
             .action(NotificationAction::new("Retry", Intent::new("build.retry")))
             .build(NotificationId::from_raw(21), Instant::now());
-        notification.placement = NotificationPlacement::Visible { visible_since: Instant::now(), expires_at: None };
+        notification.placement = NotificationPlacement::Visible {
+            visible_since: Instant::now(),
+            expires_at: None,
+        };
 
         let spec = project_visible_toast(&notification).expect("visible notification projects");
         assert_eq!(spec.id, 21);
@@ -2969,13 +3246,18 @@ mod tests {
     fn same_id_payload_update_produces_a_different_spec() {
         let id = NotificationId::from_raw(22);
         let now = Instant::now();
-        let mut first = NotificationDraft::new("Connecting")
-            .build(id, now);
-        first.placement = NotificationPlacement::Visible { visible_since: now, expires_at: None };
+        let mut first = NotificationDraft::new("Connecting").build(id, now);
+        first.placement = NotificationPlacement::Visible {
+            visible_since: now,
+            expires_at: None,
+        };
         let mut second = NotificationDraft::new("Connected")
             .severity(NotificationSeverity::Success)
             .build(id, now);
-        second.placement = NotificationPlacement::Visible { visible_since: now, expires_at: None };
+        second.placement = NotificationPlacement::Visible {
+            visible_since: now,
+            expires_at: None,
+        };
 
         let first_spec = project_visible_toast(&first).unwrap();
         let second_spec = project_visible_toast(&second).unwrap();
@@ -3003,7 +3285,10 @@ mod tests {
     fn notification_draft_sets_all_optional_fields() {
         let now = Instant::now();
         let notification = NotificationDraft::new("Failed")
-            .source(NotificationSource::new(NotificationSourceKind::Plugin, "git"))
+            .source(NotificationSource::new(
+                NotificationSourceKind::Plugin,
+                "git",
+            ))
             .severity(NotificationSeverity::Error)
             .lifecycle(NotificationLifecycle::sticky())
             .dismissible(false)
@@ -3022,7 +3307,8 @@ mod tests {
 
     #[test]
     fn notification_draft_build_does_not_make_notification_visible() {
-        let n = NotificationDraft::new("Queued").build(NotificationId::from_raw(12), Instant::now());
+        let n =
+            NotificationDraft::new("Queued").build(NotificationId::from_raw(12), Instant::now());
         assert_eq!(n.placement, NotificationPlacement::Queued);
         assert!(!n.is_visible());
         assert!(n.expires_at().is_none());
@@ -3052,7 +3338,10 @@ mod tests {
 
     #[test]
     fn placement_default_is_queued() {
-        assert_eq!(NotificationPlacement::default(), NotificationPlacement::Queued);
+        assert_eq!(
+            NotificationPlacement::default(),
+            NotificationPlacement::Queued
+        );
     }
 
     #[test]
@@ -3090,7 +3379,10 @@ mod tests {
         .dedup_key("git-push")
         .body("rejected by remote")
         .lifecycle(NotificationLifecycle::sticky())
-        .action(NotificationAction::dismissing("Push", Intent::new("git.push")));
+        .action(NotificationAction::dismissing(
+            "Push",
+            Intent::new("git.push"),
+        ));
         assert_eq!(n.dedup_key.as_deref(), Some("git-push"));
         assert_eq!(n.body.as_deref(), Some("rejected by remote"));
         assert!(n.lifecycle.is_dismissible());
@@ -3110,7 +3402,10 @@ mod tests {
             Instant::now(),
         );
         let deadline = Instant::now() + std::time::Duration::from_secs(5);
-        n.placement = NotificationPlacement::Visible { visible_since: deadline - std::time::Duration::from_secs(5), expires_at: Some(deadline) };
+        n.placement = NotificationPlacement::Visible {
+            visible_since: deadline - std::time::Duration::from_secs(5),
+            expires_at: Some(deadline),
+        };
         assert!(n.is_visible());
         assert_eq!(n.expires_at(), Some(deadline));
     }
@@ -3124,7 +3419,10 @@ mod tests {
             "x",
             Instant::now(),
         );
-        n.placement = NotificationPlacement::History { cause: NotificationArchiveCause::Dismissed, archived_at: Instant::now() };
+        n.placement = NotificationPlacement::History {
+            cause: NotificationArchiveCause::Dismissed,
+            archived_at: Instant::now(),
+        };
         assert!(n.is_history());
         assert!(!n.is_visible());
         assert!(n.expires_at().is_none()); // History has no expiry

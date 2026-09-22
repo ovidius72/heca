@@ -188,7 +188,14 @@ pub(crate) fn paint_tooltip(c: &dyn Component, cx: &mut PaintCx) {
                 elevation: PanelElevation::Hover,
             },
         );
-        cx.text(rect, &text, foreground, font, TextAlign::Center, TextStyle::REGULAR);
+        cx.text(
+            rect,
+            &text,
+            foreground,
+            font,
+            TextAlign::Center,
+            TextStyle::REGULAR,
+        );
     });
 }
 

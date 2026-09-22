@@ -79,7 +79,10 @@ fn what_does_not_fit_leaves_the_row() {
         .iter()
         .filter(|c| c.base().style.layout.hidden)
         .count();
-    assert!(hidden > 0, "what cannot fit leaves the row rather than being squashed");
+    assert!(
+        hidden > 0,
+        "what cannot fit leaves the row rather than being squashed"
+    );
     assert!(
         row(&parent).base().children.len() > 3,
         "…and a trigger appears for it"
@@ -152,14 +155,19 @@ fn a_held_on_button_paints_its_status() {
 
     let painted = |active: bool| -> usize {
         let mut b = Button::new("Zoom").icon(Glyph::FrameCorners).active(active);
-        LayoutEngine::new().base_font(13.0).compute(&mut b, Size::new(300.0, 60.0));
+        LayoutEngine::new()
+            .base_font(13.0)
+            .compute(&mut b, Size::new(300.0, 60.0));
         let theme = Theme::default();
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
             heca_grid_ui::paint_child(&b, &mut cx);
         }
-        scene.iter().filter(|c| matches!(c, DrawCommand::Rect(_))).count()
+        scene
+            .iter()
+            .filter(|c| matches!(c, DrawCommand::Rect(_)))
+            .count()
     };
 
     assert!(
@@ -183,7 +191,9 @@ fn a_group_pinned_to_icons_never_renders_its_words() {
 
     // ONE pass — the state the very first frame paints.
     let mut parent = Flex::row().width(Length::Px(900.0)).child(g);
-    LayoutEngine::new().base_font(13.0).compute(&mut parent, Size::new(900.0, 60.0));
+    LayoutEngine::new()
+        .base_font(13.0)
+        .compute(&mut parent, Size::new(900.0, 60.0));
 
     let row = row(&parent);
     for child in row.base().children.iter() {
@@ -205,12 +215,18 @@ fn a_group_pinned_to_icons_never_renders_its_words() {
 fn a_button_with_no_words_is_not_padded_for_them() {
     let wide = {
         let mut b = Button::new("Zoom").icon(Glyph::FrameCorners);
-        LayoutEngine::new().base_font(13.0).compute(&mut b, Size::new(400.0, 60.0));
+        LayoutEngine::new()
+            .base_font(13.0)
+            .compute(&mut b, Size::new(400.0, 60.0));
         b.base().style.layout.pad_left(b.base().font)
     };
     let snug = {
-        let mut b = Button::new("Zoom").icon(Glyph::FrameCorners).icon_only(true);
-        LayoutEngine::new().base_font(13.0).compute(&mut b, Size::new(400.0, 60.0));
+        let mut b = Button::new("Zoom")
+            .icon(Glyph::FrameCorners)
+            .icon_only(true);
+        LayoutEngine::new()
+            .base_font(13.0)
+            .compute(&mut b, Size::new(400.0, 60.0));
         b.base().style.layout.pad_left(b.base().font)
     };
     assert!(
@@ -224,9 +240,14 @@ fn a_button_with_no_words_is_not_padded_for_them() {
 #[test]
 fn a_wordless_button_is_refused_rather_than_emptied() {
     let mut b = Button::new("Rename").icon_only(true);
-    LayoutEngine::new().base_font(13.0).compute(&mut b, Size::new(400.0, 60.0));
+    LayoutEngine::new()
+        .base_font(13.0)
+        .compute(&mut b, Size::new(400.0, 60.0));
     assert!(
-        b.base().children.iter().any(|c| !c.base().style.layout.hidden),
+        b.base()
+            .children
+            .iter()
+            .any(|c| !c.base().style.layout.hidden),
         "a button with no icon still shows something"
     );
 }
@@ -257,13 +278,16 @@ fn the_overflow_trigger_says_what_picking_it_does() {
 fn a_tooltip_does_not_inherit_an_emphasised_control_size() {
     use heca_grid_ui::ComponentExt;
     let mut big = Button::new("Zoom").tooltip("Zoom").size(WidgetSize::Header);
-    LayoutEngine::new().base_font(13.0).compute(&mut big, Size::new(400.0, 60.0));
+    LayoutEngine::new()
+        .base_font(13.0)
+        .compute(&mut big, Size::new(400.0, 60.0));
     assert!(
         big.base().font > big.base().root_font,
         "the control itself is scaled up by its variant"
     );
     assert_eq!(
-        big.base().root_font, 13.0,
+        big.base().root_font,
+        13.0,
         "…and its bubble reads the tree's own base font instead"
     );
 }
@@ -471,7 +495,6 @@ fn constructing_a_group_does_not_request_a_frame() {
     );
 }
 
-
 /// **Giving way is not one-way** — the room coming back brings the buttons back.
 #[test]
 fn a_collapsed_group_fills_up_again_when_the_room_returns() {
@@ -479,7 +502,9 @@ fn a_collapsed_group_fills_up_again_when_the_room_returns() {
     // Collapse it hard, then widen the same group and let it settle.
     let mut parent = Flex::row().width(Length::Px(40.0)).child(g);
     for _ in 0..6 {
-        LayoutEngine::new().base_font(13.0).compute(&mut parent, Size::new(40.0, 60.0));
+        LayoutEngine::new()
+            .base_font(13.0)
+            .compute(&mut parent, Size::new(40.0, 60.0));
     }
     let collapsed = row(&parent)
         .base()
@@ -490,7 +515,9 @@ fn a_collapsed_group_fills_up_again_when_the_room_returns() {
 
     parent.base_mut().style.layout.width = Length::Px(900.0);
     for _ in 0..12 {
-        LayoutEngine::new().base_font(13.0).compute(&mut parent, Size::new(900.0, 60.0));
+        LayoutEngine::new()
+            .base_font(13.0)
+            .compute(&mut parent, Size::new(900.0, 60.0));
     }
     let reopened = row(&parent)
         .base()

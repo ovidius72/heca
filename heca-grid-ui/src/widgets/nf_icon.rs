@@ -16,8 +16,8 @@
 //! **Single-layer**, unlike the duotone [`Icon`](super::Icon): a Nerd Font glyph is one codepoint,
 //! not a `:before`/`:after` pair.
 
-use crate::color::Color;
 use crate::builders::LayoutExt;
+use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{Signal, SignalGet, signal};
 use crate::style::Length;

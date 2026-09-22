@@ -47,8 +47,7 @@
 use crate::component::{Base, Component};
 use crate::drag::DropSide;
 use crate::event::{
-    DragEvent, Event, EventKind, Handled, PointerButton, PointerEvent, RawPointer,
-    RawPointerKind,
+    DragEvent, Event, EventKind, Handled, PointerButton, PointerEvent, RawPointer, RawPointerKind,
 };
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_core::layout::{Point, Rectangle};
@@ -265,27 +264,29 @@ fn route_press(root: &mut dyn Component, raw: &RawPointer) -> Handled {
 
     // The click run belongs to the widget the press landed on, so two presses on two widgets are
     // never a double click however quickly they follow each other.
-    let count = {
-        let node = node_at(root, &path);
-        let base = node.base();
-        let now = Instant::now();
-        let continues = base.pointer.run.get().is_some_and(|(at, _)| {
-            now.duration_since(at).as_secs_f32() <= MULTI_CLICK_SECS
-        }) && base
-            .pointer
-            .press
-            .get()
-            .map(|(p, _)| near(p, raw.pos))
-            .unwrap_or(true);
-        let count = if continues {
-            base.pointer.run.get().map_or(1, |(_, c)| c + 1)
-        } else {
-            1
+    let count =
+        {
+            let node = node_at(root, &path);
+            let base = node.base();
+            let now = Instant::now();
+            let continues =
+                base.pointer.run.get().is_some_and(|(at, _)| {
+                    now.duration_since(at).as_secs_f32() <= MULTI_CLICK_SECS
+                }) && base
+                    .pointer
+                    .press
+                    .get()
+                    .map(|(p, _)| near(p, raw.pos))
+                    .unwrap_or(true);
+            let count = if continues {
+                base.pointer.run.get().map_or(1, |(_, c)| c + 1)
+            } else {
+                1
+            };
+            base.pointer.run.set(Some((now, count)));
+            base.pointer.press.set(Some((raw.pos, raw.button)));
+            count
         };
-        base.pointer.run.set(Some((now, count)));
-        base.pointer.press.set(Some((raw.pos, raw.button)));
-        count
-    };
 
     let handled = deliver_targeted(root, &path, Event::PointerDown(pointer_event(raw, count)));
     if handled == Handled::Yes {
@@ -336,8 +337,7 @@ fn route_release(root: &mut dyn Component, raw: &RawPointer) -> Handled {
                 EventKind::MiddleClick => Event::MiddleClick(e),
                 _ => Event::Click(e),
             };
-            let (delivered, default_prevented) =
-                delivering(|| deliver_targeted(root, &path, base));
+            let (delivered, default_prevented) = delivering(|| deliver_targeted(root, &path, base));
             handled = or(handled, delivered);
             // **A declared menu opens because it was declared** — resolved by walking outwards
             // from the widget that was clicked to the nearest one carrying one.
@@ -620,7 +620,11 @@ fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPointer) -> Ha
         if !far {
             return Handled::No;
         }
-        node_at(root, &source_path).base().pointer.dragging.set(true);
+        node_at(root, &source_path)
+            .base()
+            .pointer
+            .dragging
+            .set(true);
         let ev = Event::DragStart(drag_event(&item, raw, DropSide::Onto));
         let _ = deliver_path(root, &source_path, &ev);
     }
@@ -680,7 +684,11 @@ fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled {
         }
     }
     clear_drag_over(root);
-    node_at(root, &source_path).base().pointer.dragging.set(false);
+    node_at(root, &source_path)
+        .base()
+        .pointer
+        .dragging
+        .set(false);
     let side = hit.as_ref().map_or(DropSide::Onto, |h| h.side);
     let ev = Event::DragEnd(drag_event(&item, raw, side));
     or(handled, deliver_path(root, &source_path, &ev))

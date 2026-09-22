@@ -2,8 +2,8 @@
 //! nothing more: assign the letters and hand each one to the widget that declared the pick, which
 //! draws it in its own paint.
 
-use crate::component::Component;
 use super::collect::{is_addressable, narrowed, skip, unseen};
+use crate::component::Component;
 use crate::reactive::SignalUpdate;
 use heca_core::layout::Rectangle;
 
@@ -337,4 +337,3 @@ pub fn set_selected_by_key(root: &dyn Component, keys: &[String], lit: Option<&s
     walk(root, keys, lit, &mut any);
     any
 }
-

@@ -652,7 +652,9 @@ mod tests {
         );
 
         // Unsized, the same body makes the panel grow instead (nothing to scroll).
-        let mut unsized_dialog = Dialog::new("Long list").body(long_body()).default_open(true);
+        let mut unsized_dialog = Dialog::new("Long list")
+            .body(long_body())
+            .default_open(true);
         crate::LayoutEngine::new().compute(&mut unsized_dialog, viewport);
         assert!(
             unsized_dialog.panel_bounds().size.h > panel.size.h,

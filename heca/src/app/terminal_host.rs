@@ -8,9 +8,9 @@ use crate::actions::ActionRegistry;
 use crate::app::backend_store::BackendStore;
 use crate::app::interaction::{InteractionSource, dispatch_action};
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
+use crate::app_state::{AppState, InputMode, InteractiveMovePhase};
 use heca_grid_ui::Component as _;
 use heca_grid_ui::reactive::SignalUpdate as _;
-use crate::app_state::{AppState, InputMode, InteractiveMovePhase};
 
 /// Default cell height in logical pixels for PixelDelta → line conversion
 /// fallback when the terminal backend cannot be queried for real cell metrics.
@@ -177,7 +177,8 @@ pub(crate) fn forward_mouse_button(
         state.needs_redraw = true;
     }
 
-    if started_interactive_move(state, button, button_state) || crate::chrome::drag_in_flight(state) {
+    if started_interactive_move(state, button, button_state) || crate::chrome::drag_in_flight(state)
+    {
         return;
     }
 
@@ -497,8 +498,9 @@ pub(crate) fn move_focused_terminal_selection(
     // the current viewport offset:
     //   newest = viewport_top_stable_row + viewport_offset + rows - 1
     //   oldest = newest - scrollback_rows + 1
-    let content_base =
-        snapshot.viewport_top_stable_row + snapshot.viewport_offset as isize + snapshot.rows as isize;
+    let content_base = snapshot.viewport_top_stable_row
+        + snapshot.viewport_offset as isize
+        + snapshot.rows as isize;
     let min_stable = content_base - snapshot.scrollback_rows as isize; // oldest
     let max_stable = content_base - 1; // newest
 
@@ -893,10 +895,17 @@ pub(crate) fn run_scrollback_search(state: &mut AppState) {
     let Some(pane_id) = state.search_target_pane() else {
         return;
     };
-    let Some(query) = state.search_for(pane_id).map(|s| s.input.borrow().value_str()) else {
+    let Some(query) = state
+        .search_for(pane_id)
+        .map(|s| s.input.borrow().value_str())
+    else {
         return;
     };
-    let cols = match state.backends.get(pane_id).and_then(|b| b.terminal_snapshot()) {
+    let cols = match state
+        .backends
+        .get(pane_id)
+        .and_then(|b| b.terminal_snapshot())
+    {
         Some(snap) => snap.cols,
         None => return,
     };
@@ -961,7 +970,11 @@ fn jump_to_current_match(state: &mut AppState) {
     state
         .selection
         .set_caret(SelectionOwner::Pane(pane_id), m.stable_row, m.start_col);
-    if let Some(snapshot) = state.backends.get(pane_id).and_then(|b| b.terminal_snapshot()) {
+    if let Some(snapshot) = state
+        .backends
+        .get(pane_id)
+        .and_then(|b| b.terminal_snapshot())
+    {
         ensure_caret_visible(state, pane_id, m.stable_row, &snapshot);
     }
     state.needs_redraw = true;
@@ -1247,15 +1260,9 @@ mod tests {
     fn hit_test_matches_inclusive_start_and_exclusive_end() {
         let links = [span(2, 4, 9, "https://example.com")];
         // Inclusive start.
-        assert_eq!(
-            hyperlink_at_cell(&links, 2, 4),
-            Some("https://example.com")
-        );
+        assert_eq!(hyperlink_at_cell(&links, 2, 4), Some("https://example.com"));
         // Interior cell.
-        assert_eq!(
-            hyperlink_at_cell(&links, 2, 8),
-            Some("https://example.com")
-        );
+        assert_eq!(hyperlink_at_cell(&links, 2, 8), Some("https://example.com"));
         // end_col is exclusive: the cell at end_col is not part of the link.
         assert_eq!(hyperlink_at_cell(&links, 2, 9), None);
         // Just before the start.

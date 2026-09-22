@@ -197,7 +197,13 @@ impl Component for Choice {
         if selected {
             cx.rect(b, accent.with_alpha(ia.row_active_fill), None, radius, None);
         } else if self.base.hovered() {
-            cx.rect(b, foreground.with_alpha(ia.row_hover_fill), None, radius, None);
+            cx.rect(
+                b,
+                foreground.with_alpha(ia.row_hover_fill),
+                None,
+                radius,
+                None,
+            );
         }
 
         // The composed content paints itself, under the option's state color: chosen → accent,

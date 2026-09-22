@@ -228,7 +228,9 @@ impl Column {
         // Per-pane floor: MIN_PANE_HEIGHT, but degrade gracefully when the column
         // genuinely can't fit every pane at the min (tiny window / many panes) —
         // never let a pane collapse to a ~1px sliver and disappear (#4).
-        let min_h = MIN_PANE_HEIGHT.min(available_height / pane_count as f64).max(1.0);
+        let min_h = MIN_PANE_HEIGHT
+            .min(available_height / pane_count as f64)
+            .max(1.0);
 
         // First pass: assign fixed heights, count auto panes.
         for (i, pane) in self.panes.iter().enumerate() {

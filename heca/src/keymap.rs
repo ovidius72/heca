@@ -201,7 +201,10 @@ impl KeymapRegistry {
     // Transitional: will be used for config reload / RPC in Phase 5.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "used by tests and reserved for config reload and RPC workflows")
+        expect(
+            dead_code,
+            reason = "used by tests and reserved for config reload and RPC workflows"
+        )
     )]
     pub fn rebind(&mut self, mode: &str, old: &KeyCombo, new: KeyCombo) {
         if let Some(map) = self.modes.get_mut(mode)
@@ -225,7 +228,10 @@ impl KeymapRegistry {
     /// it is pressed.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "used by tests and reserved for config reload and RPC workflows")
+        expect(
+            dead_code,
+            reason = "used by tests and reserved for config reload and RPC workflows"
+        )
     )]
     pub fn resolve_builtin(&self, mode: &str, combo: &KeyCombo) -> Option<&WmAction> {
         match self.resolve(mode, combo)? {
@@ -242,7 +248,10 @@ impl KeymapRegistry {
 
     /// Check whether a mode exists (has any bindings).
     // Transitional: will be used for config reload / RPC in Phase 5.
-    #[expect(dead_code, reason = "used by tests and reserved for config reload and RPC workflows")]
+    #[expect(
+        dead_code,
+        reason = "used by tests and reserved for config reload and RPC workflows"
+    )]
     pub fn has_mode(&self, mode: &str) -> bool {
         self.modes.contains_key(mode)
     }
@@ -280,7 +289,11 @@ mod tests {
     fn test_unbind() {
         let mut reg = KeymapRegistry::new();
         let combo = KeyCombo::parse("x");
-        reg.bind("normal", combo.clone(), ActionRef::Builtin(WmAction::ClosePane));
+        reg.bind(
+            "normal",
+            combo.clone(),
+            ActionRef::Builtin(WmAction::ClosePane),
+        );
         assert!(reg.resolve_builtin("normal", &combo).is_some());
         reg.unbind("normal", &combo);
         assert!(reg.resolve_builtin("normal", &combo).is_none());
@@ -291,20 +304,41 @@ mod tests {
         let mut reg = KeymapRegistry::new();
         let old = KeyCombo::parse("h");
         let new = KeyCombo::parse("Left");
-        reg.bind("normal", old.clone(), ActionRef::Builtin(WmAction::FocusLeft));
+        reg.bind(
+            "normal",
+            old.clone(),
+            ActionRef::Builtin(WmAction::FocusLeft),
+        );
         reg.rebind("normal", &old, new.clone());
         assert!(reg.resolve_builtin("normal", &old).is_none());
-        assert_eq!(reg.resolve_builtin("normal", &new), Some(&WmAction::FocusLeft));
+        assert_eq!(
+            reg.resolve_builtin("normal", &new),
+            Some(&WmAction::FocusLeft)
+        );
     }
 
     #[test]
     fn test_multiple_modes() {
         let mut reg = KeymapRegistry::new();
         let combo = KeyCombo::parse("j");
-        reg.bind("normal", combo.clone(), ActionRef::Builtin(WmAction::FocusDown));
-        reg.bind("selection", combo.clone(), ActionRef::Builtin(WmAction::FocusUp));
-        assert_eq!(reg.resolve_builtin("normal", &combo), Some(&WmAction::FocusDown));
-        assert_eq!(reg.resolve_builtin("selection", &combo), Some(&WmAction::FocusUp));
+        reg.bind(
+            "normal",
+            combo.clone(),
+            ActionRef::Builtin(WmAction::FocusDown),
+        );
+        reg.bind(
+            "selection",
+            combo.clone(),
+            ActionRef::Builtin(WmAction::FocusUp),
+        );
+        assert_eq!(
+            reg.resolve_builtin("normal", &combo),
+            Some(&WmAction::FocusDown)
+        );
+        assert_eq!(
+            reg.resolve_builtin("selection", &combo),
+            Some(&WmAction::FocusUp)
+        );
     }
 
     #[test]
@@ -319,7 +353,11 @@ mod tests {
             alt: false,
             super_: false,
         };
-        reg.bind("normal", config_combo, ActionRef::Builtin(WmAction::SplitHorizontal));
+        reg.bind(
+            "normal",
+            config_combo,
+            ActionRef::Builtin(WmAction::SplitHorizontal),
+        );
         assert_eq!(
             reg.resolve_builtin("normal", &event_combo),
             Some(&WmAction::SplitHorizontal)
@@ -338,7 +376,11 @@ mod tests {
             alt: false,
             super_: false,
         };
-        reg.bind("normal", config_combo, ActionRef::Builtin(WmAction::SwapPane));
+        reg.bind(
+            "normal",
+            config_combo,
+            ActionRef::Builtin(WmAction::SwapPane),
+        );
         assert_eq!(
             reg.resolve_builtin("normal", &event_combo),
             Some(&WmAction::SwapPane)

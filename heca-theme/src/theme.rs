@@ -680,17 +680,15 @@ impl Theme {
     /// The "you were just here" row, explicit or derived — the selected panel carried most of the
     /// way back toward the surface, so the two read as one family at two strengths.
     pub fn effective_previous_background(&self) -> Color {
-        self.previous_background.unwrap_or_else(|| {
-            self.surface.lerp(self.accent, PREVIOUS_LIFT)
-        })
+        self.previous_background
+            .unwrap_or_else(|| self.surface.lerp(self.accent, PREVIOUS_LIFT))
     }
 
     /// The current workspace's frame, explicit or derived. **Container-scale**: a frame covers
     /// every row inside it, so it lifts far less than a row does or the marks within it vanish.
     pub fn effective_workspace_active_background(&self) -> Color {
-        self.workspace_active_background.unwrap_or_else(|| {
-            self.surface.lerp(self.accent, WORKSPACE_ACTIVE_LIFT)
-        })
+        self.workspace_active_background
+            .unwrap_or_else(|| self.surface.lerp(self.accent, WORKSPACE_ACTIVE_LIFT))
     }
 
     /// The **card** back-and-forth would return to, explicit or derived. See
@@ -704,9 +702,8 @@ impl Theme {
     /// The workspace back-and-forth would return to, explicit or derived — fainter than the active
     /// frame.
     pub fn effective_workspace_previous_background(&self) -> Color {
-        self.workspace_previous_background.unwrap_or_else(|| {
-            self.surface.lerp(self.accent, WORKSPACE_PREVIOUS_LIFT)
-        })
+        self.workspace_previous_background
+            .unwrap_or_else(|| self.surface.lerp(self.accent, WORKSPACE_PREVIOUS_LIFT))
     }
 
     /// Corner radius for small controls — a fraction of the base [`radius`](Theme::radius).
@@ -771,7 +768,8 @@ impl Theme {
     /// (see [`focus_ring_tone`](Self::focus_ring_tone)) so the ring reads distinct from an accent
     /// border on both dark and light themes.
     pub fn effective_focus_ring(&self) -> Color {
-        self.focus_ring.unwrap_or_else(|| self.focus_ring_tone(self.accent))
+        self.focus_ring
+            .unwrap_or_else(|| self.focus_ring_tone(self.accent))
     }
 
     /// The **picker's letter colour** — the theme's `hint_color` token when set, else the accent.
@@ -874,19 +872,26 @@ mod tests {
         dark.focus_ring = None;
         let d = dark.effective_focus_ring();
         assert_ne!(d, dark.accent);
-        assert!(d.luminance() > dark.accent.luminance(), "dark theme: ring brighter than accent");
+        assert!(
+            d.luminance() > dark.accent.luminance(),
+            "dark theme: ring brighter than accent"
+        );
 
         // Light theme (latte): the SAME logic derives a *darker* ring (shifted toward the dark
         // foreground) — the direction flips automatically, no hardcoded light/dark.
         let light: Theme = toml::from_str(include_str!("themes/latte.toml"))
             .expect("bundled latte.toml must parse into Theme");
         let l = light.effective_focus_ring();
-        assert!(l.luminance() < light.accent.luminance(), "light theme: ring darker than accent");
+        assert!(
+            l.luminance() < light.accent.luminance(),
+            "light theme: ring darker than accent"
+        );
 
         // Any tone derives via the same helper (this is how the destructive/danger ring is built).
         assert_eq!(
             dark.focus_ring_tone(dark.danger),
-            dark.danger.lerp(dark.foreground, FOCUS_RING_CONTRAST_FACTOR)
+            dark.danger
+                .lerp(dark.foreground, FOCUS_RING_CONTRAST_FACTOR)
         );
 
         // The `focus_ring` token overrides only the default/accent case, verbatim.

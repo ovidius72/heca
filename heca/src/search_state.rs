@@ -68,7 +68,9 @@ pub fn default_path() -> Option<PathBuf> {
 }
 
 fn now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -121,7 +123,10 @@ pub fn load(path: &Path, caps: Caps) -> (SearchStore, Baseline) {
 
 /// Parse the file at `path`, or an empty one — the single place a bad file becomes a fresh start.
 fn read_file(path: &Path) -> Persisted {
-    let empty = || Persisted { version: VERSION, ..Default::default() };
+    let empty = || Persisted {
+        version: VERSION,
+        ..Default::default()
+    };
     let Ok(text) = std::fs::read_to_string(path) else {
         return empty();
     };
@@ -156,7 +161,10 @@ fn store_from(file: &Persisted, caps: Caps) -> SearchStore {
         let mut uses: Vec<&PersistedUse> = scope.uses.iter().collect();
         uses.sort_by_key(|u| u.last_used_at);
         let seq = uses.len() as u64;
-        let entries = uses.iter().enumerate().map(|(i, u)| (u.id.clone(), u.count, i as u64 + 1));
+        let entries = uses
+            .iter()
+            .enumerate()
+            .map(|(i, u)| (u.id.clone(), u.count, i as u64 + 1));
         store.insert(
             name.clone(),
             Scope {
@@ -180,7 +188,10 @@ pub fn save(path: &Path, store: &SearchStore, baseline: &Baseline) -> std::io::R
     // Re-read: another instance may have written since we loaded, and its work is not ours to
     // discard. This re-read is the whole difference between merging and overwriting.
     let disk = read_file(path);
-    let mut merged = Persisted { version: VERSION, scopes: BTreeMap::new() };
+    let mut merged = Persisted {
+        version: VERSION,
+        scopes: BTreeMap::new(),
+    };
 
     let names: std::collections::BTreeSet<String> = store
         .scopes()
@@ -234,8 +245,10 @@ pub fn save(path: &Path, store: &SearchStore, baseline: &Baseline) -> std::io::R
             let slot = when.entry(q.clone()).or_insert(0);
             *slot = (*slot).max(at);
         }
-        let mut history: Vec<PersistedQuery> =
-            when.into_iter().map(|(query, at)| PersistedQuery { query, at }).collect();
+        let mut history: Vec<PersistedQuery> = when
+            .into_iter()
+            .map(|(query, at)| PersistedQuery { query, at })
+            .collect();
         history.sort_by_key(|q| q.at);
         let overflow = history.len().saturating_sub(caps.history);
         history.drain(..overflow);
@@ -319,7 +332,8 @@ fn forget_on_disk(path: &Path, scope: Option<&str>, what: Forget) -> std::io::Re
         }
         None => file.scopes.values_mut().for_each(strip),
     }
-    file.scopes.retain(|_, s| !s.history.is_empty() || !s.uses.is_empty());
+    file.scopes
+        .retain(|_, s| !s.history.is_empty() || !s.uses.is_empty());
     write_file(path, &file)?;
     Ok(Baseline(file))
 }
@@ -351,7 +365,10 @@ pub fn persist_if_changed(state: &mut crate::app_state::AppState) {
     };
     match saved {
         Ok(baseline) => state.search_baseline = baseline,
-        Err(e) => eprintln!("[heca] could not save the search history to {}: {e}", path.display()),
+        Err(e) => eprintln!(
+            "[heca] could not save the search history to {}: {e}",
+            path.display()
+        ),
     }
 }
 
@@ -413,8 +430,11 @@ mod tests {
         std::fs::write(&path, r#"{"version":99,"scopes":{}}"#).expect("write");
         assert!(empty(&path), "a version this build does not know");
         // v1 — the process-local `seq` layout — is discarded, not read leniently.
-        std::fs::write(&path, r#"{"version":1,"scopes":{"command":{"history":["x"]}}}"#)
-            .expect("write");
+        std::fs::write(
+            &path,
+            r#"{"version":1,"scopes":{"command":{"history":["x"]}}}"#,
+        )
+        .expect("write");
         assert!(empty(&path), "the previous schema");
     }
 
@@ -445,8 +465,14 @@ mod tests {
         assert_eq!(close.count, 5, "1 seeded + 2 from each instance, not 3");
 
         let queries: Vec<&str> = scope.history.iter().map(|q| q.query.as_str()).collect();
-        assert!(queries.contains(&"from_a"), "A's search survived B's save: {queries:?}");
-        assert!(queries.contains(&"from_b"), "and B's is there too: {queries:?}");
+        assert!(
+            queries.contains(&"from_a"),
+            "A's search survived B's save: {queries:?}"
+        );
+        assert!(
+            queries.contains(&"from_b"),
+            "and B's is there too: {queries:?}"
+        );
     }
 
     /// A save that recorded nothing must not inflate what is already there.
@@ -459,7 +485,11 @@ mod tests {
         save(&path, &store.borrow(), &base).expect("save again");
 
         let file = read_file(&path);
-        let close = file.scopes["command"].uses.iter().find(|u| u.id == "close").expect("close");
+        let close = file.scopes["command"]
+            .uses
+            .iter()
+            .find(|u| u.id == "close")
+            .expect("close");
         assert_eq!(close.count, 1, "an unchanged store must not add to itself");
     }
 
@@ -474,8 +504,16 @@ mod tests {
         save(&path, &store.borrow(), &Baseline::default()).expect("save");
         let file = read_file(&path);
         let scope = file.scopes.get("command").expect("the scope");
-        assert!(scope.history.len() <= Caps::default().history, "history: {}", scope.history.len());
-        assert!(scope.uses.len() <= Caps::default().usage, "uses: {}", scope.uses.len());
+        assert!(
+            scope.history.len() <= Caps::default().history,
+            "history: {}",
+            scope.history.len()
+        );
+        assert!(
+            scope.uses.len() <= Caps::default().usage,
+            "uses: {}",
+            scope.uses.len()
+        );
     }
 
     /// **Forgetting removes; it does not merge.** A cleared store saved normally would have the old
@@ -495,7 +533,10 @@ mod tests {
         assert_eq!(scope.uses.len(), 1, "…and what you use is not");
 
         forget_on_disk(&path, None, Forget::Ranking).expect("forget");
-        assert!(read_file(&path).scopes.is_empty(), "an empty scope is dropped entirely");
+        assert!(
+            read_file(&path).scopes.is_empty(),
+            "an empty scope is dropped entirely"
+        );
     }
 
     /// A scope names which surface to forget — the others keep theirs.
@@ -509,8 +550,15 @@ mod tests {
 
         forget_on_disk(&path, Some("command"), Forget::Queries).expect("forget");
         let file = read_file(&path);
-        assert!(file.scopes["command"].history.is_empty(), "the named scope is forgotten");
-        assert_eq!(file.scopes["symbol"].history.len(), 1, "the others are untouched");
+        assert!(
+            file.scopes["command"].history.is_empty(),
+            "the named scope is forgotten"
+        );
+        assert_eq!(
+            file.scopes["symbol"].history.len(),
+            1,
+            "the others are untouched"
+        );
     }
 
     /// The write is atomic: no temp file is left behind for the next load to trip over.
@@ -521,6 +569,9 @@ mod tests {
         model(&store).record_run("q", Some("id"));
         save(&path, &store.borrow(), &Baseline::default()).expect("save");
         assert!(path.exists());
-        assert!(!path.with_extension("json.tmp").exists(), "the temp file was renamed, not left");
+        assert!(
+            !path.with_extension("json.tmp").exists(),
+            "the temp file was renamed, not left"
+        );
     }
 }

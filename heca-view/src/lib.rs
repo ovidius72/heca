@@ -1518,7 +1518,6 @@ fn walk_unkeyed(node: &ViewNode, path: &mut Vec<usize>, out: &mut Vec<UnkeyedIte
     }
 }
 
-
 /// One entry of a dropdown / context menu. The author supplies id/label/action; the host resolves
 /// the icon from the action registry (`ActionCatalog::icon`) and wires the intent + quick-pick —
 /// the same centralized path as [`ModalAction`], with **no hand-picked glyph and no `prefix+X`
@@ -1639,7 +1638,10 @@ mod tests {
         assert_eq!(found[2].path, vec![2]);
         assert_eq!(found[0].kind, WidgetKind::Row);
         assert_eq!(found[0].action, "focus_pane");
-        assert_eq!(found[0].siblings, 3, "what the author has to look at to see the collection");
+        assert_eq!(
+            found[0].siblings, 3,
+            "what the author has to look at to see the collection"
+        );
     }
 
     /// Keying the items is the fix, and it is the only thing the report ever asks for.
@@ -1682,7 +1684,11 @@ mod tests {
     fn a_lone_pressable_child_is_not_a_collection() {
         let tree = ViewNode::new(WidgetKind::HStack)
             .child(ViewNode::new(WidgetKind::Label).text("Delete pane?"))
-            .child(ViewNode::new(WidgetKind::Button).text("OK").on_press(Intent::new("confirm_ok")));
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("OK")
+                    .on_press(Intent::new("confirm_ok")),
+            );
 
         assert_eq!(unkeyed_collection_items(&tree), vec![]);
     }
@@ -1693,8 +1699,16 @@ mod tests {
     #[test]
     fn a_pair_of_buttons_is_a_collection_of_two() {
         let tree = ViewNode::new(WidgetKind::HStack)
-            .child(ViewNode::new(WidgetKind::Button).text("Cancel").on_press(Intent::new("cancel")))
-            .child(ViewNode::new(WidgetKind::Button).text("OK").on_press(Intent::new("confirm_ok")));
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("Cancel")
+                    .on_press(Intent::new("cancel")),
+            )
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("OK")
+                    .on_press(Intent::new("confirm_ok")),
+            );
 
         let found = unkeyed_collection_items(&tree);
         assert_eq!(found.len(), 2);
@@ -1735,7 +1749,10 @@ mod tests {
     fn a_key_is_an_ordinary_prop_read_back_by_name() {
         let node = ViewNode::new(WidgetKind::Row).key("pane:7");
         assert_eq!(node.declared_key(), Some("pane:7"));
-        assert_eq!(node.props.get("key"), Some(&PropValue::Text("pane:7".into())));
+        assert_eq!(
+            node.props.get("key"),
+            Some(&PropValue::Text("pane:7".into()))
+        );
         assert_eq!(ViewNode::new(WidgetKind::Row).declared_key(), None);
     }
 
@@ -1802,7 +1819,10 @@ mod tests {
         let tree = confirm_tree();
         let json = serde_json::to_string(&tree).expect("serialize");
         let back: ViewNode = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(tree, back, "ViewNode must round-trip through JSON (WASM boundary)");
+        assert_eq!(
+            tree, back,
+            "ViewNode must round-trip through JSON (WASM boundary)"
+        );
         // Spot-check the shape survived.
         assert_eq!(back.kind, WidgetKind::VStack);
         assert_eq!(back.children.len(), 2);
@@ -1858,10 +1878,17 @@ mod tests {
     /// exist to remove. `ALL` comes from the same list as `name`, so this cannot miss a variant.
     #[test]
     fn a_value_sets_name_matches_how_it_serializes() {
-        fn check<T: Copy + Serialize + std::fmt::Debug>(all: &[T], name: impl Fn(T) -> &'static str) {
+        fn check<T: Copy + Serialize + std::fmt::Debug>(
+            all: &[T],
+            name: impl Fn(T) -> &'static str,
+        ) {
             for &v in all {
                 let json = serde_json::to_value(v).unwrap();
-                assert_eq!(json.as_str(), Some(name(v)), "{v:?}: name() and serde disagree");
+                assert_eq!(
+                    json.as_str(),
+                    Some(name(v)),
+                    "{v:?}: name() and serde disagree"
+                );
             }
         }
         check(ViewOrientation::ALL, ViewOrientation::name);
@@ -1893,7 +1920,10 @@ mod tests {
             PropValue::from(ViewOrientation::Vertical),
             PropValue::Text("vertical".into()),
         );
-        assert_eq!(PropValue::from(ViewSeverity::Danger), PropValue::Text("danger".into()));
+        assert_eq!(
+            PropValue::from(ViewSeverity::Danger),
+            PropValue::Text("danger".into())
+        );
         assert_eq!(
             PropValue::from(ViewGlyph::GitBranch),
             PropValue::Glyph("git_branch".into()),

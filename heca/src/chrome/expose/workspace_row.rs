@@ -152,10 +152,7 @@ impl WorkspaceRow<'_> {
         // The row's whole allotment. The strip is centred in it on both axes: horizontally so a
         // workspace narrower than the widest sits in the middle rather than against the edge,
         // vertically so the air it reserved splits evenly above and below.
-        let row = Flex::row()
-            .justify("center")
-            .align("center")
-            .child(strip);
+        let row = Flex::row().justify("center").align("center").child(strip);
         (row, columns_of_cells)
     }
 }
@@ -395,4 +392,3 @@ mod tests {
         );
     }
 }
-

@@ -75,8 +75,13 @@ pub(crate) fn create_command_backend_for_state(
         state.terminal_scrollback_lines,
         state.terminal_scroll_animations_enabled,
     );
-    let mut backend =
-        create_command_backend_with_options(cols, rows, state.terminal_cell_size, command, options)?;
+    let mut backend = create_command_backend_with_options(
+        cols,
+        rows,
+        state.terminal_cell_size,
+        command,
+        options,
+    )?;
     backend.set_link_detection(state.appearance.terminal.link_detection);
     backend.set_image_capture(state.appearance.terminal.images);
     Ok(backend)

@@ -268,7 +268,12 @@ mod tests {
 
     impl Slide {
         fn new(distance: f64) -> Self {
-            Self { distance, left: None, leaving: false, duration: 0.2 }
+            Self {
+                distance,
+                left: None,
+                leaving: false,
+                duration: 0.2,
+            }
         }
     }
 
@@ -323,7 +328,11 @@ mod tests {
     #[test]
     fn an_animation_written_outside_this_crate_needs_nothing_added_to_it() {
         let mut slide = Slide::new(120.0);
-        assert_eq!(slide.frame(), AnimationFrame::IDENTITY, "at rest it is where it belongs");
+        assert_eq!(
+            slide.frame(),
+            AnimationFrame::IDENTITY,
+            "at rest it is where it belongs"
+        );
 
         slide.enter();
         assert_eq!(slide.frame().offset.0, 120.0, "an arrival starts away");
@@ -331,21 +340,35 @@ mod tests {
         assert_eq!(slide.frame(), AnimationFrame::IDENTITY, "and lands home");
 
         slide.leave();
-        assert!(slide.is_leaving(), "an exit holds the surface while it plays");
+        assert!(
+            slide.is_leaving(),
+            "an exit holds the surface while it plays"
+        );
         while slide.tick(0.05) {}
         assert!(!slide.is_leaving(), "…and releases it when done");
-        assert_eq!(slide.frame().offset.0, 120.0, "a finished exit rests AWAY, not back home");
+        assert_eq!(
+            slide.frame().offset.0,
+            120.0,
+            "a finished exit rests AWAY, not back home"
+        );
     }
 
     /// Composition is multiplication, exactly as nesting two `PaintCx` transforms is.
     #[test]
     fn frames_compose_the_way_the_painter_nests() {
         let dim = AnimationFrame::opacity(0.5);
-        let small = AnimationFrame { opacity: 0.5, scale: 0.5, offset: (10.0, -4.0) };
+        let small = AnimationFrame {
+            opacity: 0.5,
+            scale: 0.5,
+            offset: (10.0, -4.0),
+        };
         let both = dim.over(small);
         assert_eq!(both.opacity, 0.25, "two halves make a quarter");
         assert_eq!(both.scale, 0.5);
         assert_eq!(both.offset, (10.0, -4.0));
-        assert!(AnimationFrame::IDENTITY.over(small) == small, "identity changes nothing");
+        assert!(
+            AnimationFrame::IDENTITY.over(small) == small,
+            "identity changes nothing"
+        );
     }
 }

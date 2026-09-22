@@ -775,10 +775,7 @@ impl TextRenderer {
         let scaled_size = font_size * scale;
         let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
-        buffer.set_size(
-            Some(scaled_size * 4.0),
-            Some(metrics.line_height * 2.0),
-        );
+        buffer.set_size(Some(scaled_size * 4.0), Some(metrics.line_height * 2.0));
         let attrs = Attrs::new()
             .family(Family::Name(font_family))
             .weight(Weight::NORMAL)
@@ -1334,16 +1331,7 @@ impl TextRenderer {
             let gh = g.h / scale;
             let top_x = gx + faux_italic_skew * 0.5;
             let bottom_x = gx - faux_italic_skew * 0.5;
-            push_quad(
-                &mut verts,
-                g.rel_x,
-                g.rel_y,
-                g.w,
-                g.h,
-                g.uv,
-                cmd.color,
-                0.0,
-            );
+            push_quad(&mut verts, g.rel_x, g.rel_y, g.w, g.h, g.uv, cmd.color, 0.0);
             bx0 = bx0.min(bottom_x);
             by0 = by0.min(gy);
             bx1 = bx1.max(top_x + gw);
@@ -1376,7 +1364,10 @@ impl TextRenderer {
         scaled_size: f32,
         scale: f32,
     ) -> Emitted {
-        let run = cmd.run.as_ref().expect("build_run_emission requires run info");
+        let run = cmd
+            .run
+            .as_ref()
+            .expect("build_run_emission requires run info");
         let key = LabelKey {
             text: cmd.text.clone(),
             size_bits: scaled_size.to_bits(),
@@ -1443,11 +1434,7 @@ impl TextRenderer {
                     ) else {
                         continue; // whitespace / no bitmap
                     };
-                    let col = run
-                        .byte_cols
-                        .get(glyph.start)
-                        .copied()
-                        .unwrap_or(last_col);
+                    let col = run.byte_cols.get(glyph.start).copied().unwrap_or(last_col);
                     let top = physical.y - ag.top;
                     raw.push((col, physical.x, ag.left, top, ag));
                 }

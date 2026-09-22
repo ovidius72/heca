@@ -1,6 +1,5 @@
 #![allow(clippy::module_inception)]
 
-
 use super::*;
 use crate::app_state::SidebarItemState;
 use heca_core::layout::{
@@ -320,7 +319,10 @@ fn test_column_expand_collapse() {
 
     // Collapse the column.
     tree.toggle_expand(&chrome.workspaces);
-    if let WorkspaceRow::Column { ws_idx, col_idx: c, .. } = tree.flat_items[tree.cursor] {
+    if let WorkspaceRow::Column {
+        ws_idx, col_idx: c, ..
+    } = tree.flat_items[tree.cursor]
+    {
         assert!(
             tree.workspaces[ws_idx].columns[c].collapsed,
             "column should be collapsed"
@@ -329,7 +331,10 @@ fn test_column_expand_collapse() {
 
     // Expand it back.
     tree.toggle_expand(&chrome.workspaces);
-    if let WorkspaceRow::Column { ws_idx, col_idx: c, .. } = tree.flat_items[tree.cursor] {
+    if let WorkspaceRow::Column {
+        ws_idx, col_idx: c, ..
+    } = tree.flat_items[tree.cursor]
+    {
         assert!(
             !tree.workspaces[ws_idx].columns[c].collapsed,
             "column should be expanded"
@@ -374,7 +379,9 @@ fn test_collapse_column_moves_cursor_to_column_row() {
         .flat_items
         .iter()
         .find_map(|item| match item {
-            WorkspaceRow::Column { ws_idx, col_idx, .. } => Some((*ws_idx, *col_idx)),
+            WorkspaceRow::Column {
+                ws_idx, col_idx, ..
+            } => Some((*ws_idx, *col_idx)),
             _ => None,
         })
         .expect("should have a column row");
@@ -436,7 +443,9 @@ fn test_toggle_column_collapsed_by_index_updates_cursor() {
         .flat_items
         .iter()
         .find_map(|item| match item {
-            WorkspaceRow::Column { ws_idx, col_idx, .. } => Some((*ws_idx, *col_idx)),
+            WorkspaceRow::Column {
+                ws_idx, col_idx, ..
+            } => Some((*ws_idx, *col_idx)),
             _ => None,
         })
         .expect("should have a column row");
@@ -497,7 +506,6 @@ fn test_collapse_persists_across_rebuild() {
     );
 }
 
-
 // ── Nav selection: the chrome store owns it ───────────────────────────────────
 //
 // `cursor` is a positional index into `flat_items`, which `sync_from_session` rebuilds
@@ -512,11 +520,17 @@ fn selection_projects_the_row_under_the_cursor() {
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     // The cursor starts on the first row; the projection names that same row.
-    let item = tree.current_item().cloned().expect("a row under the cursor");
+    let item = tree
+        .current_item()
+        .cloned()
+        .expect("a row under the cursor");
     assert_eq!(tree.selection(), Some(item.selection()));
 
     tree.cursor_down();
-    let moved = tree.current_item().cloned().expect("a row under the cursor");
+    let moved = tree
+        .current_item()
+        .cloned()
+        .expect("a row under the cursor");
     assert_eq!(
         tree.selection(),
         Some(moved.selection()),

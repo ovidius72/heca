@@ -4,10 +4,10 @@
 //! focused on application lifecycle and event dispatch.
 
 use crate::actions::ActionRegistry;
+use crate::app::conflicts::{BindingConflict, Conflicts};
 use crate::handlers::*;
 use crate::input::{self, SpawnKind, WmAction, action_from_name, build_action};
-use crate::app::conflicts::{BindingConflict, Conflicts};
-use crate::keymap::{index_binding, ActionRef, BindingIndex, KeyCombo, KeymapRegistry};
+use crate::keymap::{ActionRef, BindingIndex, KeyCombo, KeymapRegistry, index_binding};
 use heca_core::layout::PaneId;
 use heca_core::runtime::PaneClosePolicy;
 use std::collections::{BTreeMap, HashMap};
@@ -207,7 +207,6 @@ pub fn register_component_keybinding(
     }
 }
 
-
 /// What is wrong with a binding's `args` table, judged against what the action declares it takes.
 ///
 /// Empty for an action heca does not know (a provider's, a plugin's, or a typo in the action name)
@@ -240,7 +239,6 @@ fn log_arg_problems(name: &str, args: &HashMap<String, String>) {
         eprintln!("[heca] binding '{name}' cannot be built and will do nothing when pressed");
     }
 }
-
 
 /// Convert a parsed [`KeyCombo`] into a renderer-agnostic `heca_grid_ui` chord
 /// (`GridKey` + `Modifiers`), or `None` for a key name grid-ui does not model. Handles both
@@ -277,7 +275,10 @@ pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui:
     // Edit shortcuts bound before the nav overload (so `Ctrl+h` resolves EditDeleteBack first).
     let entries = [
         ("edit_delete_back", WidgetIntent::EditDeleteBack),
-        ("edit_delete_to_line_start", WidgetIntent::EditDeleteToLineStart),
+        (
+            "edit_delete_to_line_start",
+            WidgetIntent::EditDeleteToLineStart,
+        ),
         ("edit_select_all", WidgetIntent::EditSelectAll),
         ("item_previous", WidgetIntent::ItemPrevious),
         ("item_next", WidgetIntent::ItemNext),
@@ -391,7 +392,11 @@ pub fn build_keymap(
 
     for combo_str in config.keys.unbind.keys() {
         let trimmed = combo_str.trim();
-        let mode = if trimmed.starts_with("prefix+") { "normal" } else { "global" };
+        let mode = if trimmed.starts_with("prefix+") {
+            "normal"
+        } else {
+            "global"
+        };
         unbind_and_deindex(&mut keymap, mode, "[keys]", trimmed, index);
     }
 
@@ -641,7 +646,11 @@ pub fn build_component_keymaps(
                     &layer_name,
                     KeyCombo::parse(key_str.trim()),
                     action.clone(),
-                    Written { action: &id, layer: &label, key: key_str.trim() },
+                    Written {
+                        action: &id,
+                        layer: &label,
+                        key: key_str.trim(),
+                    },
                     conflicts,
                     index,
                 );
@@ -655,7 +664,11 @@ pub fn build_component_keymaps(
                     &layer_name,
                     KeyCombo::parse(key_str),
                     action.clone(),
-                    Written { action: &id, layer: &bind_label, key: key_str },
+                    Written {
+                        action: &id,
+                        layer: &bind_label,
+                        key: key_str,
+                    },
                     conflicts,
                     index,
                 );
@@ -764,12 +777,7 @@ pub fn build_modes(
     // them by the loop above.
     if !mode_keymaps.contains_key(crate::app::input::LAYER_FLOOR) {
         let mut floor = KeymapRegistry::new();
-        assert_escape_floor(
-            &mut floor,
-            crate::app::input::LAYER_FLOOR,
-            conflicts,
-            index,
-        );
+        assert_escape_floor(&mut floor, crate::app::input::LAYER_FLOOR, conflicts, index);
         mode_keymaps.insert(crate::app::input::LAYER_FLOOR.to_string(), floor);
     }
 
@@ -803,7 +811,9 @@ fn assert_escape_floor(
     index: &mut BindingIndex,
 ) {
     let (action, name) = match mode {
-        crate::app::input::FOCUS_LAYER => (ActionRef::Builtin(WmAction::UnfocusDock), "unfocus_dock"),
+        crate::app::input::FOCUS_LAYER => {
+            (ActionRef::Builtin(WmAction::UnfocusDock), "unfocus_dock")
+        }
         crate::app::input::LAYER_FLOOR => (
             ActionRef::Builtin(WmAction::CloseOverlay { overlay: None }),
             "close_overlay",
@@ -854,7 +864,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SplitVertical, handle_split_vertical);
     registry.register(&WmAction::ZoomColumn, handle_zoom_column);
     registry.register(
-        &WmAction::ZoomColumnAtIndex { ws_idx: 0, col_idx: 0 },
+        &WmAction::ZoomColumnAtIndex {
+            ws_idx: 0,
+            col_idx: 0,
+        },
         handle_zoom_column_at_index,
     );
     registry.register(&WmAction::OpenContextMenu, handle_open_context_menu);
@@ -1143,7 +1156,10 @@ pub fn build_registry() -> ActionRegistry {
 
     // ── System ──
     registry.register(
-        &WmAction::CommandPalette { mode: None, query: None },
+        &WmAction::CommandPalette {
+            mode: None,
+            query: None,
+        },
         handle_command_palette,
     );
     registry.register(
@@ -1151,9 +1167,18 @@ pub fn build_registry() -> ActionRegistry {
         crate::handlers::handle_close_overlay,
     );
     for act in [
-        WmAction::ShowLayer { name: None, dock: None },
-        WmAction::HideLayer { name: None, dock: None },
-        WmAction::ToggleLayer { name: None, dock: None },
+        WmAction::ShowLayer {
+            name: None,
+            dock: None,
+        },
+        WmAction::HideLayer {
+            name: None,
+            dock: None,
+        },
+        WmAction::ToggleLayer {
+            name: None,
+            dock: None,
+        },
     ] {
         registry.register(&act, crate::handlers::handle_layer_visibility);
     }
@@ -1171,19 +1196,23 @@ pub fn build_registry() -> ActionRegistry {
         &WmAction::NotificationDismissOne { notification_id: 0 },
         handle_notification_dismiss_one,
     );
-    registry.register(&WmAction::NotificationDismissAll, handle_notification_dismiss_all);
-    registry.register(&WmAction::NotificationDismissLast, handle_notification_dismiss_last);
+    registry.register(
+        &WmAction::NotificationDismissAll,
+        handle_notification_dismiss_all,
+    );
+    registry.register(
+        &WmAction::NotificationDismissLast,
+        handle_notification_dismiss_last,
+    );
     registry.register(&WmAction::NotificationPick, handle_notification_pick);
     registry.register(
-        &WmAction::NotificationActionRelay { notification_id: 0, key: String::new() },
+        &WmAction::NotificationActionRelay {
+            notification_id: 0,
+            key: String::new(),
+        },
         handle_notification_action_relay,
     );
-    registry.register(
-        &WmAction::OpenLink {
-            url: String::new(),
-        },
-        handle_open_link,
-    );
+    registry.register(&WmAction::OpenLink { url: String::new() }, handle_open_link);
 
     // ── Font zoom (terminal) ──
     registry.register(
@@ -1225,10 +1254,7 @@ pub fn build_registry() -> ActionRegistry {
         &WmAction::DeleteWorkspace { ws_idx: 0 },
         handle_delete_workspace,
     );
-    registry.register(
-        &WmAction::DeleteCurrentColumn,
-        handle_delete_current_column,
-    );
+    registry.register(&WmAction::DeleteCurrentColumn, handle_delete_current_column);
 
     // ── Take ──
     // (registered above with PaneTake/PaneTakeAndFocus)
@@ -1296,14 +1322,14 @@ pub fn build_registry() -> ActionRegistry {
 
 #[cfg(test)]
 mod tests {
-    use heca_config::keys::BindingValue;
     use super::{
-        action_ref_from_config, bind_global_focus, binding_arg_problems,
-        build_component_keymaps, build_keymap, build_modes, build_registry, build_widget_keymap,
+        action_ref_from_config, bind_global_focus, binding_arg_problems, build_component_keymaps,
+        build_keymap, build_modes, build_registry, build_widget_keymap,
     };
     use crate::app::conflicts::{Conflicts, format_combo};
     use crate::input::WmAction;
     use crate::keymap::{ActionRef, BindingIndex, KeyCombo, KeymapRegistry};
+    use heca_config::keys::BindingValue;
     use heca_config::theme::{KeyModeConfig, ModeBindingConfig};
     use std::collections::HashMap;
 
@@ -1311,25 +1337,58 @@ mod tests {
     fn widget_keymap_maps_default_bindings_by_axis() {
         use heca_grid_ui::{GridKey, Modifiers, WidgetIntent};
         let km = build_widget_keymap(&heca_config::theme::Config::default());
-        let ctrl = Modifiers { ctrl: true, ..Default::default() };
-        let meta = Modifiers { meta: true, ..Default::default() };
+        let ctrl = Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
+        let meta = Modifiers {
+            meta: true,
+            ..Default::default()
+        };
         let none = Modifiers::default();
         // Horizontal item_* (←/→, Ctrl+h/l).
-        assert_eq!(km.resolve(GridKey::ArrowRight, none), &[WidgetIntent::ItemNext]);
-        assert_eq!(km.resolve(GridKey::Char('l'), ctrl), &[WidgetIntent::ItemNext]);
-        assert_eq!(km.resolve(GridKey::ArrowLeft, none), &[WidgetIntent::ItemPrevious]);
+        assert_eq!(
+            km.resolve(GridKey::ArrowRight, none),
+            &[WidgetIntent::ItemNext]
+        );
+        assert_eq!(
+            km.resolve(GridKey::Char('l'), ctrl),
+            &[WidgetIntent::ItemNext]
+        );
+        assert_eq!(
+            km.resolve(GridKey::ArrowLeft, none),
+            &[WidgetIntent::ItemPrevious]
+        );
         // Vertical menu_* (↑/↓, Ctrl+k/j) — what an open context menu / palette / Select
         // navigates by (see `ContextMenu::event`, which acts on these intents).
-        assert_eq!(km.resolve(GridKey::ArrowDown, none), &[WidgetIntent::MenuDown]);
+        assert_eq!(
+            km.resolve(GridKey::ArrowDown, none),
+            &[WidgetIntent::MenuDown]
+        );
         assert_eq!(km.resolve(GridKey::ArrowUp, none), &[WidgetIntent::MenuUp]);
-        assert_eq!(km.resolve(GridKey::Char('j'), ctrl), &[WidgetIntent::MenuDown]);
-        assert_eq!(km.resolve(GridKey::Char('k'), ctrl), &[WidgetIntent::MenuUp]);
+        assert_eq!(
+            km.resolve(GridKey::Char('j'), ctrl),
+            &[WidgetIntent::MenuDown]
+        );
+        assert_eq!(
+            km.resolve(GridKey::Char('k'), ctrl),
+            &[WidgetIntent::MenuUp]
+        );
         // Shared + edits.
         assert_eq!(km.resolve(GridKey::Enter, none), &[WidgetIntent::Activate]);
         assert_eq!(km.resolve(GridKey::Escape, none), &[WidgetIntent::Dismiss]);
-        assert_eq!(km.resolve(GridKey::Char('u'), ctrl), &[WidgetIntent::EditDeleteToLineStart]);
-        assert_eq!(km.resolve(GridKey::Char('a'), ctrl), &[WidgetIntent::EditSelectAll]);
-        assert_eq!(km.resolve(GridKey::Char('a'), meta), &[WidgetIntent::EditSelectAll]);
+        assert_eq!(
+            km.resolve(GridKey::Char('u'), ctrl),
+            &[WidgetIntent::EditDeleteToLineStart]
+        );
+        assert_eq!(
+            km.resolve(GridKey::Char('a'), ctrl),
+            &[WidgetIntent::EditSelectAll]
+        );
+        assert_eq!(
+            km.resolve(GridKey::Char('a'), meta),
+            &[WidgetIntent::EditSelectAll]
+        );
         // The Ctrl+h overload: edit-first (field-first), then the horizontal nav.
         assert_eq!(
             km.resolve(GridKey::Char('h'), ctrl),
@@ -1506,7 +1565,11 @@ mod tests {
         let registry = build_registry();
         let mut missing = Vec::new();
         for descriptor in ActionRegistry::ALL {
-            let args: Vec<ArgSpec> = descriptor.args.iter().map(ArgSpec::from_descriptor).collect();
+            let args: Vec<ArgSpec> = descriptor
+                .args
+                .iter()
+                .map(ArgSpec::from_descriptor)
+                .collect();
             let Some(action) = action_from_name(descriptor.name)
                 .or_else(|| build_action(descriptor.name, &sample_args(&args)))
             else {
@@ -1762,7 +1825,8 @@ mod tests {
     fn default_font_size_modes_build_with_triggers_and_keys() {
         use crate::input::FontZoomStep;
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let (mode_keymaps, mode_triggers) =
+            build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         // Both modes exist, are sticky, and are entered by prefix+! / prefix+@.
         let (app_trigger, app_sticky) = mode_triggers
@@ -1969,7 +2033,10 @@ mod tests {
         );
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("p")),
-            Some(&WmAction::CommandPalette { mode: None, query: None })
+            Some(&WmAction::CommandPalette {
+                mode: None,
+                query: None
+            })
         );
     }
 
@@ -1994,14 +2061,18 @@ mod tests {
         // to avoid colliding with established keys; users bind it in config.
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("p")),
-            Some(&WmAction::CommandPalette { mode: None, query: None })
+            Some(&WmAction::CommandPalette {
+                mode: None,
+                query: None
+            })
         );
     }
 
     #[test]
     fn default_selection_mode_bindings_resolve() {
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let (mode_keymaps, _) =
+            build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let keymap = mode_keymaps
             .get("selection")
             .expect("selection mode exists");
@@ -2058,7 +2129,6 @@ mod tests {
         build_component_keymaps(config, conflicts, index).0
     }
 
-
     /// Build a config carrying these `[[keys.component]]` entries, as TOML would produce.
     fn with_layers(
         layers: Vec<heca_config::theme::SurfaceKeysConfig>,
@@ -2104,10 +2174,14 @@ mod tests {
             &[("docker.restart_selected", "r"), ("next_pane", "n")],
         ));
         let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
-        let docker = maps.get("docker").expect("an id-less entry is keyed by name");
+        let docker = maps
+            .get("docker")
+            .expect("an id-less entry is keyed by name");
 
         match docker.resolve("docker", &KeyCombo::parse("r")) {
-            Some(ActionRef::Dynamic(intent)) => assert_eq!(intent.action, "docker.restart_selected"),
+            Some(ActionRef::Dynamic(intent)) => {
+                assert_eq!(intent.action, "docker.restart_selected")
+            }
             other => panic!("its own action resolves at press time: {other:?}"),
         }
         assert_eq!(
@@ -2125,7 +2199,10 @@ mod tests {
             layer_of(
                 "docker",
                 None,
-                &[("docker.restart_selected", "r"), ("docker.stop_selected", "s")],
+                &[
+                    ("docker.restart_selected", "r"),
+                    ("docker.stop_selected", "s"),
+                ],
             ),
             layer_of("docker", None, &[("docker.stop_selected", "x")]),
         ]);
@@ -2170,7 +2247,10 @@ mod tests {
         );
         match layer.resolve("workspaces", &KeyCombo::parse("Space")) {
             Some(ActionRef::Dynamic(intent)) => {
-                assert_eq!(intent.action, "workspaces.peek_selected", "never qualified twice")
+                assert_eq!(
+                    intent.action, "workspaces.peek_selected",
+                    "never qualified twice"
+                )
             }
             other => panic!("an already-qualified name is left alone: {other:?}"),
         }
@@ -2193,11 +2273,15 @@ mod tests {
             build_component_keymaps(&config, &mut Conflicts::default(), &mut index);
 
         assert!(
-            layers["docker"].resolve("docker", &KeyCombo::parse("d")).is_none(),
+            layers["docker"]
+                .resolve("docker", &KeyCombo::parse("d"))
+                .is_none(),
             "a key that takes focus is useless in the layer that needs focus first",
         );
         assert!(
-            layers["docker"].resolve("docker", &KeyCombo::parse("r")).is_some(),
+            layers["docker"]
+                .resolve("docker", &KeyCombo::parse("r"))
+                .is_some(),
             "…while its ordinary bindings are untouched",
         );
 
@@ -2209,7 +2293,9 @@ mod tests {
             // toggle belongs to the binding rather than to the verb (F003/P082/T444). `FocusDock`
             // only focuses, so a click, an RPC call and the palette cannot release a dock by asking
             // to focus it.
-            Some(&WmAction::ToggleDock { dock: Some("docker".to_string()) }),
+            Some(&WmAction::ToggleDock {
+                dock: Some("docker".to_string())
+            }),
             "`prefix+d` lands in the leader map, aimed at this container",
         );
         assert!(
@@ -2226,21 +2312,34 @@ mod tests {
     fn an_id_aims_global_focus_at_one_placement() {
         let config = with_layers(vec![
             layer_of("docker", None, &[("global_focus", "prefix+d")]),
-            layer_of("docker", Some("docker.right"), &[("global_focus", "prefix+Shift+d")]),
+            layer_of(
+                "docker",
+                Some("docker.right"),
+                &[("global_focus", "prefix+Shift+d")],
+            ),
         ]);
         let (_, global) =
             build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let mut flat = KeymapRegistry::new();
-        bind_global_focus(&mut flat, &global, &mut Conflicts::default(), &mut BindingIndex::new());
+        bind_global_focus(
+            &mut flat,
+            &global,
+            &mut Conflicts::default(),
+            &mut BindingIndex::new(),
+        );
 
         assert_eq!(
             flat.resolve_builtin("normal", &KeyCombo::parse("Shift+d")),
-            Some(&WmAction::ToggleDock { dock: Some("docker.right".to_string()) }),
+            Some(&WmAction::ToggleDock {
+                dock: Some("docker.right".to_string())
+            }),
             "the narrowed entry names its placement",
         );
         assert_eq!(
             flat.resolve_builtin("normal", &KeyCombo::parse("d")),
-            Some(&WmAction::ToggleDock { dock: Some("docker".to_string()) }),
+            Some(&WmAction::ToggleDock {
+                dock: Some("docker".to_string())
+            }),
             "the id-less entry names the component, resolved at press time",
         );
     }
@@ -2369,7 +2468,8 @@ mod tests {
                     args: Default::default(),
                 }],
             });
-            let (modes, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+            let (modes, _) =
+                build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
             let map = modes.get("spelling").expect("the mode");
             ["q", "Ctrl+q"].map(|k| {
                 map.resolve_builtin("spelling", &KeyCombo::parse(k))
@@ -2420,7 +2520,9 @@ mod tests {
         // globally was wrong twice over.
         for key in ["q", "Ctrl+q"] {
             assert_eq!(
-                keymaps.flat.resolve_builtin("global", &KeyCombo::parse(key)),
+                keymaps
+                    .flat
+                    .resolve_builtin("global", &KeyCombo::parse(key)),
                 None,
                 "{key} belongs to the program in the pane, not to the whole app",
             );
@@ -2428,7 +2530,8 @@ mod tests {
                 keymaps
                     .modes
                     .get(crate::app::input::LAYER_FLOOR)
-                    .and_then(|m| m.resolve_builtin(crate::app::input::LAYER_FLOOR, &KeyCombo::parse(key))),
+                    .and_then(|m| m
+                        .resolve_builtin(crate::app::input::LAYER_FLOOR, &KeyCombo::parse(key))),
                 Some(&WmAction::CloseOverlay { overlay: None }),
                 "{key} closes the front-most overlay while one holds the keyboard",
             );
@@ -2439,7 +2542,11 @@ mod tests {
     /// and the layer — and an `unbind` must take its entry out with it (F003/P086/T366).
     #[test]
     fn the_index_records_the_qualified_id_and_forgets_what_is_unbound() {
-        let mut layer = layer_of("workspaces", None, &[("cursor_up", "k"), ("cursor_down", "j")]);
+        let mut layer = layer_of(
+            "workspaces",
+            None,
+            &[("cursor_up", "k"), ("cursor_down", "j")],
+        );
         layer.unbind.insert("j".to_string(), true);
         let mut index = BindingIndex::new();
         build_component_keymaps(&with_layer(layer), &mut Conflicts::default(), &mut index);
@@ -2492,19 +2599,30 @@ mod tests {
             layer_of(
                 "docker",
                 None,
-                &[("docker.restart_selected", "r"), ("docker.stop_selected", "s")],
+                &[
+                    ("docker.restart_selected", "r"),
+                    ("docker.stop_selected", "s"),
+                ],
             ),
-            layer_of("docker", Some("docker.right"), &[("docker.stop_selected", "x")]),
+            layer_of(
+                "docker",
+                Some("docker.right"),
+                &[("docker.stop_selected", "x")],
+            ),
         ]);
         let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         let right = &maps["docker.right"];
         assert!(
-            right.resolve("docker.right", &KeyCombo::parse("x")).is_some(),
+            right
+                .resolve("docker.right", &KeyCombo::parse("x"))
+                .is_some(),
             "the narrowed binding applies to this placement",
         );
         assert!(
-            right.resolve("docker.right", &KeyCombo::parse("r")).is_some(),
+            right
+                .resolve("docker.right", &KeyCombo::parse("r"))
+                .is_some(),
             "and the base came with it — one lookup, no merging at press time",
         );
 
@@ -2524,7 +2642,11 @@ mod tests {
     #[test]
     fn a_placement_is_seeded_from_the_finished_base() {
         let config = with_layers(vec![
-            layer_of("docker", Some("docker.right"), &[("docker.stop_selected", "x")]),
+            layer_of(
+                "docker",
+                Some("docker.right"),
+                &[("docker.stop_selected", "x")],
+            ),
             // Written *after* the placement entry, and still part of what it inherits.
             layer_of("docker", None, &[("docker.restart_selected", "r")]),
         ]);
@@ -2598,8 +2720,16 @@ mod tests {
     fn a_component_layer_unbinds_by_combo() {
         let mut layer = layer_of("docker", None, &[("docker.stop_selected", "s")]);
         layer.unbind.insert("s".to_string(), true);
-        let maps = layers_only(&with_layer(layer), &mut Conflicts::default(), &mut BindingIndex::new());
-        assert!(maps["docker"].resolve("docker", &KeyCombo::parse("s")).is_none());
+        let maps = layers_only(
+            &with_layer(layer),
+            &mut Conflicts::default(),
+            &mut BindingIndex::new(),
+        );
+        assert!(
+            maps["docker"]
+                .resolve("docker", &KeyCombo::parse("s"))
+                .is_none()
+        );
     }
 
     /// The focus layer ships the keys the **widgets** answer, and is never enterable by a trigger
@@ -2607,7 +2737,8 @@ mod tests {
     #[test]
     fn the_focus_layer_ships_the_scroll_keys_and_the_way_out() {
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let (mode_keymaps, mode_triggers) =
+            build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let focus = mode_keymaps
             .get(crate::app::input::FOCUS_LAYER)
             .expect("the focus layer is a built-in mode keymap");
@@ -2646,7 +2777,8 @@ mod tests {
             sticky: true,
             bindings: Vec::new(),
         });
-        let (_, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let (_, mode_triggers) =
+            build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         assert!(!mode_triggers.contains_key(crate::app::input::FOCUS_LAYER));
     }
 
@@ -2664,10 +2796,15 @@ mod tests {
             }],
         });
 
-        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let (mode_keymaps, mode_triggers) =
+            build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let resize = mode_keymaps.get("resize").expect("resize mode exists");
 
-        assert!(resize.resolve_builtin("resize", &KeyCombo::parse("h")).is_some());
+        assert!(
+            resize
+                .resolve_builtin("resize", &KeyCombo::parse("h"))
+                .is_some()
+        );
         assert_eq!(
             resize.resolve_builtin("resize", &KeyCombo::parse("x")),
             Some(&WmAction::ResizeIncrease)

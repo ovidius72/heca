@@ -16,8 +16,8 @@
 //! [`secondary_color`](Icon::secondary_color). Only the font *bytes* are static (embedded); the
 //! look is configurable.
 
-use crate::color::Color;
 use crate::builders::LayoutExt;
+use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{Signal, SignalGet, signal};
 use crate::scene::Glow;
@@ -175,24 +175,64 @@ impl Glyph {
     /// it to render a full gallery or document the set; `secondary()` gives each one's
     /// codepoint.
     pub const ALL: &'static [Glyph] = &[
-        Glyph::Folder, Glyph::FolderOpen, Glyph::File, Glyph::FileCode,
-        Glyph::GitBranch, Glyph::GitCommit, Glyph::GitMerge, Glyph::GitPullRequest,
-        Glyph::Terminal, Glyph::Gear, Glyph::Search, Glyph::Close,
-        Glyph::Check, Glyph::CaretRight, Glyph::CaretLeft, Glyph::CaretDown, Glyph::CaretUp,
+        Glyph::Folder,
+        Glyph::FolderOpen,
+        Glyph::File,
+        Glyph::FileCode,
+        Glyph::GitBranch,
+        Glyph::GitCommit,
+        Glyph::GitMerge,
+        Glyph::GitPullRequest,
+        Glyph::Terminal,
+        Glyph::Gear,
+        Glyph::Search,
+        Glyph::Close,
+        Glyph::Check,
+        Glyph::CaretRight,
+        Glyph::CaretLeft,
+        Glyph::CaretDown,
+        Glyph::CaretUp,
         Glyph::Play,
-        Glyph::Pause, Glyph::Stop, Glyph::Warning, Glyph::WarningCircle,
-        Glyph::Info, Glyph::Circle, Glyph::Lightning, Glyph::List,
-        Glyph::Sidebar, Glyph::DotsThreeVertical, Glyph::ArrowRight, Glyph::ArrowLineLeft,
-        Glyph::ArrowLineRight, Glyph::Plus, Glyph::Minus, Glyph::SquareSplitVertical,
-        Glyph::XSquare, Glyph::FrameCorners, Glyph::Cards, Glyph::Pencil,
-        Glyph::NotePencil, Glyph::Backspace, Glyph::Trash, Glyph::XCircle,
-        Glyph::PlusCircle, Glyph::FolderSimpleMinus, Glyph::FolderSimplePlus,
-        Glyph::StackPlus, Glyph::StackMinus, Glyph::ColumnsPlusLeft, Glyph::ColumnsPlusRight,
-        Glyph::SquareHalf, Glyph::SquareSplitHorizontal, Glyph::SquareHalfBottom,
+        Glyph::Pause,
+        Glyph::Stop,
+        Glyph::Warning,
+        Glyph::WarningCircle,
+        Glyph::Info,
+        Glyph::Circle,
+        Glyph::Lightning,
+        Glyph::List,
+        Glyph::Sidebar,
+        Glyph::DotsThreeVertical,
+        Glyph::ArrowRight,
+        Glyph::ArrowLineLeft,
+        Glyph::ArrowLineRight,
+        Glyph::Plus,
+        Glyph::Minus,
+        Glyph::SquareSplitVertical,
+        Glyph::XSquare,
+        Glyph::FrameCorners,
+        Glyph::Cards,
+        Glyph::Pencil,
+        Glyph::NotePencil,
+        Glyph::Backspace,
+        Glyph::Trash,
+        Glyph::XCircle,
+        Glyph::PlusCircle,
+        Glyph::FolderSimpleMinus,
+        Glyph::FolderSimplePlus,
+        Glyph::StackPlus,
+        Glyph::StackMinus,
+        Glyph::ColumnsPlusLeft,
+        Glyph::ColumnsPlusRight,
+        Glyph::SquareHalf,
+        Glyph::SquareSplitHorizontal,
+        Glyph::SquareHalfBottom,
     ];
 
     /// The secondary-layer (`:before`) codepoint; the primary layer is this `+ 1`.
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
     const fn secondary(self) -> u32 {
         match self {
             Glyph::Folder => 0xe24a,
@@ -233,21 +273,21 @@ impl Glyph {
             Glyph::FrameCorners => 0xe626,
             Glyph::Cards => 0xe0f8,
             // Phosphor Duotone v2.1 `:before` codepoints (verified against the embedded font).
-            Glyph::Pencil => 0xe3ae,                 // pencil
-            Glyph::NotePencil => 0xe34c,             // note-pencil (the "edit" icon)
-            Glyph::Backspace => 0xe0ae,              // backspace
-            Glyph::Trash => 0xe4a6,                  // trash
-            Glyph::XCircle => 0xe4f8,                // x-circle
-            Glyph::PlusCircle => 0xe3d6,             // plus-circle
-            Glyph::FolderSimpleMinus => 0xe25c,      // folder-simple-minus
-            Glyph::FolderSimplePlus => 0xe25e,       // folder-simple-plus
-            Glyph::StackPlus => 0xedf6,              // stack-plus
-            Glyph::StackMinus => 0xedf4,             // stack-minus
-            Glyph::ColumnsPlusLeft => 0xe544,        // columns-plus-left
-            Glyph::ColumnsPlusRight => 0xe542,       // columns-plus-right
-            Glyph::SquareHalf => 0xe462,             // square-half
-            Glyph::SquareSplitHorizontal => 0xe870,  // square-split-horizontal
-            Glyph::SquareHalfBottom => 0xeb16,       // square-half-bottom
+            Glyph::Pencil => 0xe3ae,                // pencil
+            Glyph::NotePencil => 0xe34c,            // note-pencil (the "edit" icon)
+            Glyph::Backspace => 0xe0ae,             // backspace
+            Glyph::Trash => 0xe4a6,                 // trash
+            Glyph::XCircle => 0xe4f8,               // x-circle
+            Glyph::PlusCircle => 0xe3d6,            // plus-circle
+            Glyph::FolderSimpleMinus => 0xe25c,     // folder-simple-minus
+            Glyph::FolderSimplePlus => 0xe25e,      // folder-simple-plus
+            Glyph::StackPlus => 0xedf6,             // stack-plus
+            Glyph::StackMinus => 0xedf4,            // stack-minus
+            Glyph::ColumnsPlusLeft => 0xe544,       // columns-plus-left
+            Glyph::ColumnsPlusRight => 0xe542,      // columns-plus-right
+            Glyph::SquareHalf => 0xe462,            // square-half
+            Glyph::SquareSplitHorizontal => 0xe870, // square-split-horizontal
+            Glyph::SquareHalfBottom => 0xeb16,      // square-half-bottom
         }
     }
 
@@ -255,7 +295,9 @@ impl Glyph {
     /// draw a single-layer icon manually via [`PaintCx::icon`](crate::component::PaintCx::icon)
     /// (e.g. command-palette rows). Duotone rendering uses both layers; this is the
     /// foreground one.
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
     pub fn primary_char(self) -> Option<char> {
         char::from_u32(self.secondary() + PRIMARY_OFFSET)
     }
@@ -505,7 +547,10 @@ mod tests {
         /// Opting in puts the halo on the glyph run for the renderer to realize.
         #[test]
         fn opting_in_carries_a_halo_on_the_glyph_run() {
-            let glow = primary_glow(Icon::new(super::Glyph::Search).glow(true), GlowLevel::Medium);
+            let glow = primary_glow(
+                Icon::new(super::Glyph::Search).glow(true),
+                GlowLevel::Medium,
+            );
             assert!(glow.is_some(), "glow(true) emitted no halo");
         }
 

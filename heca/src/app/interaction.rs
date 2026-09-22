@@ -187,10 +187,11 @@ pub(crate) enum InteractionIntent {
     /// Start dragging a sidebar item (no WmAction equivalent).
     ///
     /// Policy-routed only — the drag itself is initiated in the mouse layer.
-    #[expect(dead_code, reason = "constructed from mouse/sidebar in future wiring pass")]
-    StartSidebarDrag {
-        pane_id: PaneId,
-    },
+    #[expect(
+        dead_code,
+        reason = "constructed from mouse/sidebar in future wiring pass"
+    )]
+    StartSidebarDrag { pane_id: PaneId },
     /// A declarative [`ViewNode`](crate::chrome::ViewNode) intent — the universal
     /// invocation currency for click / KeyHint / RPC / plugin (plan §2.7.2, "everything
     /// is an action"). Carries a `view::Intent { action, args }`; `dispatch_intent`
@@ -256,7 +257,10 @@ pub(crate) enum Domain {
 /// - otherwise the session's own `Tiled | Floating`.
 pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain {
     if base_context_is_dormant(
-        state.layers.top_modal_id(&state.window_root).map(|id| state.layers.surface_key(id)),
+        state
+            .layers
+            .top_modal_id(&state.window_root)
+            .map(|id| state.layers.surface_key(id)),
         crate::chrome::content_covered(state),
         source,
     ) {
@@ -278,9 +282,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
     // (F004/P084/T400). Here the layer claims only the keyboard, and `ActionPolicy` decides the
     // rest — `Global` actions still run, `ContainerFocused` ones do not.
     let modal_holds_keyboard = state.layers.top_modal_id(&state.window_root).is_some();
-    if keyboard_driven
-        && !modal_holds_keyboard
-        && state.chrome_state.focused_container().is_some()
+    if keyboard_driven && !modal_holds_keyboard && state.chrome_state.focused_container().is_some()
     {
         return Domain::Container;
     }
@@ -833,7 +835,10 @@ pub(crate) fn is_floating_domain(session: &heca_core::layout::Session) -> bool {
 /// rather than just checking `is_floating_domain()`.
 #[cfg_attr(
     not(test),
-    expect(dead_code, reason = "consumed by handlers and sidebar routing in Phase E")
+    expect(
+        dead_code,
+        reason = "consumed by handlers and sidebar routing in Phase E"
+    )
 )]
 pub(crate) fn active_focus_domain(session: &heca_core::layout::Session) -> FocusDomain {
     session
@@ -860,7 +865,10 @@ pub(crate) fn focused_pane_id(state: &AppState) -> Option<PaneId> {
 /// Checks whether `pane_id` can receive focus from the given source.
 #[cfg_attr(
     not(test),
-    expect(dead_code, reason = "consumed by handlers and sidebar routing in Phase E")
+    expect(
+        dead_code,
+        reason = "consumed by handlers and sidebar routing in Phase E"
+    )
 )]
 pub(crate) fn can_focus_pane(
     session: &heca_core::layout::Session,
@@ -952,7 +960,12 @@ pub(crate) fn dispatch_intent(
                 None => return,
             },
         };
-        crate::chrome::resolve_overlay(state, registry, overlay, crate::chrome::ModalResult::Dismissed);
+        crate::chrome::resolve_overlay(
+            state,
+            registry,
+            overlay,
+            crate::chrome::ModalResult::Dismissed,
+        );
         return;
     }
 
@@ -967,7 +980,12 @@ pub(crate) fn dispatch_intent(
     // Composite: focus the pane, then run the action — each half policy-routed on its
     // own (mirrors what an active-targeted pane button does across two events on click).
     if let InteractionIntent::FocusPaneThenAction { pane_id, action } = intent {
-        dispatch_intent(state, registry, source, InteractionIntent::FocusPane { pane_id });
+        dispatch_intent(
+            state,
+            registry,
+            source,
+            InteractionIntent::FocusPane { pane_id },
+        );
         dispatch_intent(
             state,
             registry,
@@ -1238,10 +1256,7 @@ pub(crate) fn dispatch_view_intent(
 /// Extracted so that *running* an intent and *judging* one resolve it the same way. Two copies of
 /// this line would be two answers to "what does this name mean", and the one nobody exercises is
 /// the one that drifts.
-fn builtin_of(
-    name: &str,
-    args: &std::collections::HashMap<String, String>,
-) -> Option<WmAction> {
+fn builtin_of(name: &str, args: &std::collections::HashMap<String, String>) -> Option<WmAction> {
     crate::input::build_action(name, args).or_else(|| crate::input::action_from_name(name))
 }
 
@@ -1474,7 +1489,10 @@ mod tests {
             WmAction::ZoomColumn,
             WmAction::SidebarLeft,
             WmAction::WorkspaceNext,
-            WmAction::CommandPalette { mode: None, query: None },
+            WmAction::CommandPalette {
+                mode: None,
+                query: None,
+            },
             WmAction::FocusToggleLocal,
             WmAction::PaneSelect,
             WmAction::FloatAt {
@@ -1507,7 +1525,12 @@ mod tests {
         let mut session = test_session();
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
 
-        let actions = [WmAction::Float, WmAction::ClosePane, WmAction::RenamePane, WmAction::OpenContextMenu];
+        let actions = [
+            WmAction::Float,
+            WmAction::ClosePane,
+            WmAction::RenamePane,
+            WmAction::OpenContextMenu,
+        ];
         for action in &actions {
             let decision = route_in_domain(
                 &session,
@@ -1544,7 +1567,12 @@ mod tests {
         // binding is.
         let args = std::collections::HashMap::from([("pane_id".to_string(), "99".to_string())]);
         let action = builtin_of("focus_pane", &args).expect("focus_pane is a built-in");
-        assert_eq!(action, WmAction::FocusPane { pane_id: PaneId(99) });
+        assert_eq!(
+            action,
+            WmAction::FocusPane {
+                pane_id: PaneId(99)
+            }
+        );
 
         let decision = route_in_domain(
             &session,
@@ -1673,8 +1701,16 @@ mod tests {
     /// the tiled area means the panes are not what the user is looking at.
     #[test]
     fn coverage_still_decides_when_no_surface_holds_the_keyboard() {
-        assert!(base_context_is_dormant(None, true, InteractionSource::Keyboard));
-        assert!(!base_context_is_dormant(None, false, InteractionSource::Keyboard));
+        assert!(base_context_is_dormant(
+            None,
+            true,
+            InteractionSource::Keyboard
+        ));
+        assert!(!base_context_is_dormant(
+            None,
+            false,
+            InteractionSource::Keyboard
+        ));
     }
 
     /// A component's cursor verb is reachable **only while its dock is being driven** — which is
@@ -1837,7 +1873,10 @@ mod tests {
             WmAction::WorkspacePrev,
             WmAction::CreateWorkspace,
             WmAction::RenameWorkspace,
-            WmAction::CommandPalette { mode: None, query: None },
+            WmAction::CommandPalette {
+                mode: None,
+                query: None,
+            },
             WmAction::ReloadConfig,
             WmAction::NotificationDismissAll,
             WmAction::NotificationDismissLast,
@@ -1882,7 +1921,10 @@ mod tests {
 
         let param_actions = [
             WmAction::NotificationDismissOne { notification_id: 0 },
-            WmAction::NotificationActionRelay { notification_id: 0, key: String::new() },
+            WmAction::NotificationActionRelay {
+                notification_id: 0,
+                key: String::new(),
+            },
             WmAction::FocusPane { pane_id: PaneId(0) },
             WmAction::FocusWorkspace { ws_idx: 0 },
             WmAction::Swap {
@@ -2028,7 +2070,10 @@ mod tests {
             ActionPolicy::FocusedPaneLocal
         );
         assert_eq!(
-            action_policy(&WmAction::CommandPalette { mode: None, query: None }),
+            action_policy(&WmAction::CommandPalette {
+                mode: None,
+                query: None
+            }),
             ActionPolicy::AlwaysAllowed
         );
         assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
@@ -2223,9 +2268,7 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
 
         // Sidebar actions should be blocked when floating.
-        let actions = [
-            WmAction::SidebarLeft,
-        ];
+        let actions = [WmAction::SidebarLeft];
         for action in &actions {
             // Test via MouseLeftSidebar source (same result as Keyboard, but testing the source explicitly)
             let decision = route_in_domain(
@@ -2402,10 +2445,7 @@ mod tests {
     #[test]
     fn tiled_sidebar_action_allowed_via_mouse_sidebar() {
         let session = test_session();
-        let actions = [
-            WmAction::SidebarLeft,
-            WmAction::SidebarRight,
-        ];
+        let actions = [WmAction::SidebarLeft, WmAction::SidebarRight];
         for action in &actions {
             let decision = route_in_domain(
                 &session,
@@ -2502,7 +2542,10 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
 
         let actions = [
-            WmAction::CommandPalette { mode: None, query: None },
+            WmAction::CommandPalette {
+                mode: None,
+                query: None,
+            },
             WmAction::SpawnCommand {
                 command: String::new(),
                 kind: crate::input::SpawnKind::Terminal,

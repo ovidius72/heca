@@ -53,8 +53,6 @@ pub(crate) struct ChromeSignals {
     pub(crate) status: Option<Signal<String>>,
 }
 
-
-
 pub(crate) fn sync_pane_runtime_state(
     session: &heca_core::layout::Session,
     workspaces: &WorkspacesContainerState,
@@ -129,7 +127,11 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     // change-guarded chokepoint, so calling it every frame is cheap.
     if state.container_cursor_visible() {
         let selection = state.chrome_state.workspaces.nav_selection();
-        state.chrome_state.workspaces.tree_mut().apply_nav_selection(selection);
+        state
+            .chrome_state
+            .workspaces
+            .tree_mut()
+            .apply_nav_selection(selection);
     } else {
         state.chrome_state.workspaces.set_nav_selection(None);
     }
@@ -222,4 +224,3 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
         }
     }
 }
-

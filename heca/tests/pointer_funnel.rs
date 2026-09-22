@@ -23,9 +23,18 @@ const FUNNEL: &str = "dispatch_surface_pointer";
 
 /// The winit branches that carry pointer input. Each must reach the funnel.
 const POINTER_BRANCHES: &[(&str, &str)] = &[
-    ("WindowEvent::CursorMoved", "a move is the hover gate — a region ignores a wheel without it"),
-    ("WindowEvent::MouseInput", "press AND release; a lost release leaves a thumb stuck to the cursor"),
-    ("WindowEvent::MouseWheel", "the wheel itself — without it a scroll region simply does not scroll"),
+    (
+        "WindowEvent::CursorMoved",
+        "a move is the hover gate — a region ignores a wheel without it",
+    ),
+    (
+        "WindowEvent::MouseInput",
+        "press AND release; a lost release leaves a thumb stuck to the cursor",
+    ),
+    (
+        "WindowEvent::MouseWheel",
+        "the wheel itself — without it a scroll region simply does not scroll",
+    ),
 ];
 
 fn events_rs() -> PathBuf {
@@ -231,12 +240,10 @@ fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
     let body = branch_body(&src, "WindowEvent::MouseInput")
         .expect("the button branch is still a `WindowEvent::MouseInput` arm");
 
-    let ends = body
-        .find("resize::on_release")
-        .expect(
-            "the button branch no longer ends the divider resize. It must: the press starts the \
+    let ends = body.find("resize::on_release").expect(
+        "the button branch no longer ends the divider resize. It must: the press starts the \
              drag here, so the release has to end it here too, or the drag outlives the button.",
-        );
+    );
     // Searched FORWARD from where the resize ends, not from the top of the branch: the viewport
     // widgets are given the press too, further up, and that call cannot swallow a release. What
     // has to hold is that the swallowing call comes after the resize has been told.

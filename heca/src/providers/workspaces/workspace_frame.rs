@@ -11,8 +11,8 @@
 
 use super::seams::{DockRegistries, DockSeams};
 use super::{
-    column_group::ColumnGroup, pane_row::PaneRow, row_hint, workspace_key, workspace_row_items,
-    ChromeDragItem, WorkspaceEntry, MENU_WORKSPACE,
+    ChromeDragItem, MENU_WORKSPACE, WorkspaceEntry, column_group::ColumnGroup, pane_row::PaneRow,
+    row_hint, workspace_key, workspace_row_items,
 };
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
 use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, HintTone};
@@ -66,7 +66,9 @@ impl WorkspaceFrame<'_> {
             .gap(4.0) // tighten the workspace header → body spacing
             .expanded(!seams.ws_state.is_ws_collapsed(ws_idx))
             .on_toggle(move |_| {
-                emit.fire(crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx });
+                emit.fire(
+                    crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx },
+                );
             })
             .header(
                 Flex::row()
@@ -107,8 +109,12 @@ impl WorkspaceFrame<'_> {
             .chain(&ws.floating_panes)
             .map(|p| p.pane_id)
             .collect::<Vec<_>>();
-        reg.signals.ws_active.push((ws_pane_ids, dock.active_state()));
-        reg.signals.ws_previous.push((ws_idx, dock.previous_state()));
+        reg.signals
+            .ws_active
+            .push((ws_pane_ids, dock.active_state()));
+        reg.signals
+            .ws_previous
+            .push((ws_idx, dock.previous_state()));
         reg.signals.row_nav.push((
             seams.mount.to_string(),
             workspace_key(ws_id),
@@ -158,8 +164,8 @@ impl WorkspaceFrame<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::testing::{self, Fixture};
+    use super::*;
     use heca_core::layout::PaneId;
 
     /// A floating pane is a row in the frame's body beside the columns — **not** a second row
@@ -207,10 +213,7 @@ mod tests {
             .build(&seams, &mut reg);
         }
 
-        assert!(
-            !fx.signals.ws_active.is_empty(),
-            "the workspace you are in",
-        );
+        assert!(!fx.signals.ws_active.is_empty(), "the workspace you are in",);
         assert!(
             fx.signals.ws_previous.iter().any(|(idx, _)| *idx == 0),
             "and the one prefix+Shift+i would return to",

@@ -81,7 +81,6 @@ pub struct BuildCx<'a> {
 // takes them should follow `row_nav` — a row already declares one identity (`key`), and that is
 // the key both registries want.
 
-
 impl<'a> BuildCx<'a> {
     /// Borrow the host's per-build registries for one container build.
     pub(crate) fn new(

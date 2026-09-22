@@ -408,6 +408,9 @@ mod tests {
         let (m, w, h) = dot();
         let (_, _, _, narrow) = blur_mask(&m, w, h, 1.0);
         let (_, _, _, wide) = blur_mask(&m, w, h, 4.0);
-        assert!(wide > narrow, "sigma 4 padded {wide}, sigma 1 padded {narrow}");
+        assert!(
+            wide > narrow,
+            "sigma 4 padded {wide}, sigma 1 padded {narrow}"
+        );
     }
 }

@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn pane_exited_notification_maps_severity_and_keys_per_pane() {
-        use crate::notification::{install_notification_sink, NotificationDraft, NotificationId};
+        use crate::notification::{NotificationDraft, NotificationId, install_notification_sink};
         let captured: Rc<RefCell<Vec<NotificationDraft>>> = Rc::new(RefCell::new(Vec::new()));
         let sink = captured.clone();
         install_notification_sink(move |d| sink.borrow_mut().push(d));
@@ -220,14 +220,20 @@ mod tests {
         let clean = drafts[0]
             .clone()
             .build(NotificationId::from_raw(1), std::time::Instant::now());
-        assert_eq!(clean.severity, crate::notification::NotificationSeverity::Info);
+        assert_eq!(
+            clean.severity,
+            crate::notification::NotificationSeverity::Info
+        );
         assert_eq!(clean.dedup_key.as_deref(), Some("pane.exited:7"));
         assert_eq!(clean.actions.len(), 1, "carries a Focus action");
 
         let crashed = drafts[1]
             .clone()
             .build(NotificationId::from_raw(2), std::time::Instant::now());
-        assert_eq!(crashed.severity, crate::notification::NotificationSeverity::Warning);
+        assert_eq!(
+            crashed.severity,
+            crate::notification::NotificationSeverity::Warning
+        );
         assert_eq!(crashed.body.as_deref(), Some("exit code 137"));
         assert_eq!(crashed.dedup_key.as_deref(), Some("pane.exited:9"));
     }

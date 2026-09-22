@@ -902,9 +902,6 @@ impl SharedChromeState {
         sig.set(key);
     }
 
-
-
-
     /// Construct the store with initial region modes + widths (mirroring the
     /// `SidebarState` defaults during migration). Signals are created here — requires
     /// the reactive runtime, available on the UI thread at `AppState` construction.
@@ -1049,7 +1046,6 @@ mod tests {
         s.workspaces.set_ws_collapsed(1, false);
         assert!(!s.workspaces.is_ws_collapsed(1));
     }
-
 
     #[test]
     fn selection_defaults_none_then_set() {
@@ -1209,7 +1205,10 @@ mod tests {
         let s = state();
         let a = s.container_keyboard_target("dock.a");
         let b = s.container_keyboard_target("dock.b");
-        assert!(!a.get_untracked() && !b.get_untracked(), "no focus, no target");
+        assert!(
+            !a.get_untracked() && !b.get_untracked(),
+            "no focus, no target"
+        );
 
         s.set_focused_container(Some("dock.a".into()));
         assert!(a.get_untracked());
@@ -1227,7 +1226,10 @@ mod tests {
 
         s.set_focused_container(None);
         for (id, sig) in [("dock.a", a), ("dock.b", b), ("dock.c", c)] {
-            assert!(!sig.get_untracked(), "{id} keeps no target once focus is cleared");
+            assert!(
+                !sig.get_untracked(),
+                "{id} keeps no target once focus is cleared"
+            );
         }
     }
 
@@ -1240,9 +1242,11 @@ mod tests {
         let again = s.container_keyboard_target("workspaces");
         assert!(first.get_untracked() && again.get_untracked());
         s.set_focused_container(None);
-        assert!(!again.get_untracked(), "and it is the same signal, not a copy");
+        assert!(
+            !again.get_untracked(),
+            "and it is the same signal, not a copy"
+        );
     }
-
 
     /// Focus emits once per real change, and never for a repeat.
     ///
@@ -1402,8 +1406,7 @@ mod tests {
         assert_eq!(s.workspaces.terminal_viewport(pane), None);
 
         // After a viewport write, it returns the expected values.
-        s.workspaces
-            .set_pane_viewport(pane, 42, false, 200);
+        s.workspaces.set_pane_viewport(pane, 42, false, 200);
         let vp = s.workspaces.terminal_viewport(pane).unwrap();
         assert_eq!(
             vp,
@@ -1426,20 +1429,15 @@ mod tests {
         let pane = PaneId(11);
 
         // First write -> terminal.viewport.changed emitted.
-        s.workspaces
-            .set_pane_viewport(pane, 10, false, 50);
+        s.workspaces.set_pane_viewport(pane, 10, false, 50);
         // Identical write -> no event.
-        s.workspaces
-            .set_pane_viewport(pane, 10, false, 50);
+        s.workspaces.set_pane_viewport(pane, 10, false, 50);
         // Single field change -> event fired.
-        s.workspaces
-            .set_pane_viewport(pane, 11, false, 50);
+        s.workspaces.set_pane_viewport(pane, 11, false, 50);
         // All fields changed -> single event.
-        s.workspaces
-            .set_pane_viewport(pane, 0, true, 100);
+        s.workspaces.set_pane_viewport(pane, 0, true, 100);
         // Back to the last values -> event fired (still a change from current).
-        s.workspaces
-            .set_pane_viewport(pane, 11, false, 50);
+        s.workspaces.set_pane_viewport(pane, 11, false, 50);
 
         assert_eq!(
             seen.borrow().as_slice(),
@@ -1458,8 +1456,7 @@ mod tests {
         let s = state();
         let pane = PaneId(12);
         // set_pane_viewport on a fresh pane without set_pane_runtime should work.
-        s.workspaces
-            .set_pane_viewport(pane, 5, true, 30);
+        s.workspaces.set_pane_viewport(pane, 5, true, 30);
         let vp = s.workspaces.terminal_viewport(pane).unwrap();
         assert_eq!(vp.viewport_offset, 5);
         assert!(vp.at_bottom);

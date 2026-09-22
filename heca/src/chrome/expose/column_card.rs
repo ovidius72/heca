@@ -72,8 +72,8 @@ impl ColumnCard<'_> {
 mod tests {
     use super::*;
     use crate::chrome::expose::model::ExposePane;
-    use crate::chrome::expose::testing::{callbacks, card_of, lay_out, theme};
     use crate::chrome::expose::pane_card::pane_key;
+    use crate::chrome::expose::testing::{callbacks, card_of, lay_out, theme};
     use heca_grid_ui::style::Length;
 
     fn column(heights: &[f64]) -> Box<dyn heca_grid_ui::Component> {

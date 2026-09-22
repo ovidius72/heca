@@ -17,14 +17,17 @@
 //! configurable keys. Open/close is a host-owned [`Signal<bool>`](crate::reactive::Signal).
 
 use crate::builders::{LayoutExt, Parent};
-use crate::style::WidgetSize;
 use crate::component::{Base, Component, Event, Handled, PaintCx, WidgetIntent};
 use crate::font::MONO_LINE_RATIO;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::search::{Ranked, SearchAction, SearchModel};
 use crate::scene::{Glow, TextAlign, TextStyle};
+use crate::search::{Ranked, SearchAction, SearchModel};
+use crate::style::WidgetSize;
 use crate::style::{Direction, Length};
-use crate::widgets::{paint_panel_chrome, Ellipsis, Flex, Glyph, Input, KeyCap, KeycapVariant, Label, PanelChrome, PanelElevation};
+use crate::widgets::{
+    Ellipsis, Flex, Glyph, Input, KeyCap, KeycapVariant, Label, PanelChrome, PanelElevation,
+    paint_panel_chrome,
+};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::{Cell, RefCell};
 
@@ -518,7 +521,12 @@ impl CommandPalette {
         // materialising them per keystroke costs nothing measurable.
         let items: Vec<(Option<&str>, String)> = of_mode
             .iter()
-            .map(|&i| (self.commands[i].id.as_deref(), self.title_text[i].get_untracked()))
+            .map(|&i| {
+                (
+                    self.commands[i].id.as_deref(),
+                    self.title_text[i].get_untracked(),
+                )
+            })
             .collect();
         let mut out = self
             .search
@@ -564,7 +572,9 @@ impl CommandPalette {
             let (_, scope, query) = self.active();
             let id = cmd.id.clone();
             (cmd.on_run)();
-            self.search.with_scope(scope).record_run(&query, id.as_deref());
+            self.search
+                .with_scope(scope)
+                .record_run(&query, id.as_deref());
         }
         self.close();
     }
@@ -786,7 +796,12 @@ impl CommandPalette {
     ///
     /// The one place row geometry is computed. Paint draws these, hover-select and the click
     /// hit-test read them — so a row can never be drawn in one place and clicked in another.
-    fn row_rects(&self, results: &[Ranked], panel: Rectangle, list_top: f64) -> Vec<(usize, Rectangle)> {
+    fn row_rects(
+        &self,
+        results: &[Ranked],
+        panel: Rectangle,
+        list_top: f64,
+    ) -> Vec<(usize, Rectangle)> {
         let mut out = Vec::new();
         let mut y = list_top;
         let window = results
@@ -907,7 +922,6 @@ impl CommandPalette {
         let list_top = query.loc.y + query_h + PAD;
         (panel, query, list_top)
     }
-
 }
 
 impl Default for CommandPalette {
@@ -972,12 +986,19 @@ impl Component for CommandPalette {
             } else {
                 panel
             };
-            cx.rect(scrim, background.with_alpha(cx.theme().colors.interaction.scrim), None, 0.0, None);
+            cx.rect(
+                scrim,
+                background.with_alpha(cx.theme().colors.interaction.scrim),
+                None,
+                0.0,
+                None,
+            );
             // The SHARED overlay panel chrome (drop shadow + theme surface fill +
             // bracket reticle) so the palette reads as the same surface as every
             // other overlay panel, plus its own accent edge and glow. The scrim
             // above is the blocking LAYER's, not part of the panel chrome.
-            let panel_border = cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_border));
+            let panel_border =
+                cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_border));
             paint_panel_chrome(
                 cx,
                 panel,
@@ -1023,8 +1044,15 @@ impl Component for CommandPalette {
                 let cmd = &self.commands[m.index];
                 let is_sel = ri == self.selected;
                 if is_sel {
-                    let row_border = cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_row_border));
-                    cx.rect(row, accent.with_alpha(cx.theme().colors.interaction.panel_row_fill), row_border, ctrl_radius, None);
+                    let row_border = cx
+                        .border(accent.with_alpha(cx.theme().colors.interaction.panel_row_border));
+                    cx.rect(
+                        row,
+                        accent.with_alpha(cx.theme().colors.interaction.panel_row_fill),
+                        row_border,
+                        ctrl_radius,
+                        None,
+                    );
                     // Left accent bar.
                     cx.rect(
                         Rectangle::new(
@@ -1089,10 +1117,8 @@ impl Component for CommandPalette {
                     let mut x = right_edge - self.chord_w(chord);
                     for cap in chord {
                         let cs = cap.size(cap_font);
-                        let chip = Rectangle::new(
-                            Point::new(x, line_top + (line - cs.h) / 2.0),
-                            cs,
-                        );
+                        let chip =
+                            Rectangle::new(Point::new(x, line_top + (line - cs.h) / 2.0), cs);
                         // The bordered chip — the same primitive the context-menu quick-pick draws,
                         // never hand-rolled here.
                         cap.paint(
@@ -1360,11 +1386,9 @@ impl Component for CommandPalette {
             tip
         }
     }
-
 }
 
 impl LayoutExt for CommandPalette {}
 
 #[cfg(test)]
-mod tests {
-}
+mod tests {}

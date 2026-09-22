@@ -149,7 +149,11 @@ pub fn wrap_indexed(text: &str, cells: usize) -> Vec<Vec<(char, usize)>> {
         let word_len = end - start;
         let current = line.len();
         // Does it fit after what is already on this line (plus the joining space)?
-        let needed = if current == 0 { word_len } else { current + 1 + word_len };
+        let needed = if current == 0 {
+            word_len
+        } else {
+            current + 1 + word_len
+        };
         if needed <= cells {
             if current > 0 {
                 line.push((' ', start.saturating_sub(1)));

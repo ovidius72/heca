@@ -355,7 +355,11 @@ next_item = "n"
             toml::from_str(&format!("[keys]\n{src}")).expect("parses");
         let component = &wrapper["keys"].component;
 
-        assert_eq!(component.len(), 2, "both entries survive — an array, not a table");
+        assert_eq!(
+            component.len(),
+            2,
+            "both entries survive — an array, not a table"
+        );
         assert_eq!(component[0].id, None);
         assert_eq!(component[1].id.as_deref(), Some("workspaces.right"));
         assert_eq!(
@@ -380,7 +384,10 @@ do_thing = "u"
             toml::from_str(&format!("[keys]\n{src}")).expect("parses");
         let keys = &wrapper["keys"];
 
-        assert!(keys.unbind["prefix+w"], "the real [keys.unbind] is untouched");
+        assert!(
+            keys.unbind["prefix+w"],
+            "the real [keys.unbind] is untouched"
+        );
         assert_eq!(keys.component[0].name, "unbind");
         assert_eq!(keys.component[0].bindings["do_thing"].keys(), vec!["u"]);
     }

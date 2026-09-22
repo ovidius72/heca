@@ -159,8 +159,13 @@ pub enum SidebarSelection {
         col_idx: usize,
         col_id: heca_core::layout::ColumnId,
     },
-    Pane { pane_id: PaneId },
-    FloatingPane { pane_id: PaneId, ws_idx: usize },
+    Pane {
+        pane_id: PaneId,
+    },
+    FloatingPane {
+        pane_id: PaneId,
+        ws_idx: usize,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -390,7 +395,6 @@ mod tests {
     }
 }
 
-
 /// **One container or several** — what [`RegionId::child`] takes, so a caller hands over whichever
 /// shape they hold and never goes looking for a plural spelling.
 pub trait IntoProviders {
@@ -412,13 +416,17 @@ impl IntoProviders for Box<dyn crate::providers::Provider> {
 
 impl<P: IntoProviders> IntoProviders for Vec<P> {
     fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>> {
-        self.into_iter().flat_map(IntoProviders::into_providers).collect()
+        self.into_iter()
+            .flat_map(IntoProviders::into_providers)
+            .collect()
     }
 }
 
 impl<P: IntoProviders, const N: usize> IntoProviders for [P; N] {
     fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>> {
-        self.into_iter().flat_map(IntoProviders::into_providers).collect()
+        self.into_iter()
+            .flat_map(IntoProviders::into_providers)
+            .collect()
     }
 }
 
@@ -436,7 +444,6 @@ thread_local! {
 pub(crate) fn take_pending() -> Vec<(RegionId, Box<dyn crate::providers::Provider>)> {
     PENDING.with(|q| std::mem::take(&mut *q.borrow_mut()))
 }
-
 
 /// **What a region says about arranging its own contents.** Empty unless a caller said something,
 /// in which case the region's body is built as a grid rather than a stack.

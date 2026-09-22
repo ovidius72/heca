@@ -43,11 +43,9 @@
 //! which is the defect this whole phase exists to remove.
 
 use crate::{
-    Intent, PropMap, PropValue, ViewAlign, ViewEllipsis, ViewGlyph, ViewJustify, ViewLabelSide, ViewMarker,
-    ViewAnimation, ViewNode, ViewOrientation, ViewRevealAlign, ViewScrollAxes, ViewSeverity,
-    ViewSize,
-    ViewTextAlign, ViewVariant,
-    WidgetKind,
+    Intent, PropMap, PropValue, ViewAlign, ViewAnimation, ViewEllipsis, ViewGlyph, ViewJustify,
+    ViewLabelSide, ViewMarker, ViewNode, ViewOrientation, ViewRevealAlign, ViewScrollAxes,
+    ViewSeverity, ViewSize, ViewTextAlign, ViewVariant, WidgetKind,
 };
 
 /// The properties every kind shares — arrangement (`Layout`) and appearance (`Visual`).
@@ -1517,7 +1515,10 @@ mod tests {
             .radius(6.0)
             .into_node();
 
-        assert_eq!(node.props.get("fill"), Some(&PropValue::Color("accent".into())));
+        assert_eq!(
+            node.props.get("fill"),
+            Some(&PropValue::Color("accent".into()))
+        );
         assert!(matches!(node.props.get("border"), Some(PropValue::Map(_))));
         assert!(matches!(node.props.get("glow"), Some(PropValue::Map(_))));
     }
@@ -1526,14 +1527,22 @@ mod tests {
     #[test]
     fn a_percentage_width_is_written_the_way_length_reads_it() {
         let node = Surface::new().width_pct(0.5).into_node();
-        assert_eq!(node.props.get("width"), Some(&PropValue::Text("50%".into())));
+        assert_eq!(
+            node.props.get("width"),
+            Some(&PropValue::Text("50%".into()))
+        );
     }
 
     /// An event lands under the name `realize` looks for.
     #[test]
     fn an_event_is_bound_under_its_canonical_name() {
-        let node = Row::new().on_press(Intent::new("docker.select")).into_node();
-        assert_eq!(node.events.get("press").map(|i| i.action.as_str()), Some("docker.select"));
+        let node = Row::new()
+            .on_press(Intent::new("docker.select"))
+            .into_node();
+        assert_eq!(
+            node.events.get("press").map(|i| i.action.as_str()),
+            Some("docker.select")
+        );
     }
 
     /// **One builder writes ONE property, whichever kind of space it was given.**

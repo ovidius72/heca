@@ -637,11 +637,17 @@ impl std::str::FromStr for Track {
         }
         let low = t.to_ascii_lowercase();
         if let Some(fr) = low.strip_suffix("fr") {
-            return fr.trim().parse().map(Track::Fr).map_err(|_| TrackParseError);
+            return fr
+                .trim()
+                .parse()
+                .map(Track::Fr)
+                .map_err(|_| TrackParseError);
         }
         // `px` is optional and means the same as no suffix — the rule `Length` and `Space` follow.
         let px = low.strip_suffix("px").map_or(low.as_str(), str::trim_end);
-        px.parse::<f32>().map(Track::Px).map_err(|_| TrackParseError)
+        px.parse::<f32>()
+            .map(Track::Px)
+            .map_err(|_| TrackParseError)
     }
 }
 
@@ -704,7 +710,8 @@ impl<'de> Deserialize<'de> for Track {
                 f.write_str("a track size: \"auto\", \"1fr\", \"22px\", a number, \"min-content\" or \"max-content\"")
             }
             fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Track, E> {
-                v.parse().map_err(|_| E::custom(format!("not a track size: {v}")))
+                v.parse()
+                    .map_err(|_| E::custom(format!("not a track size: {v}")))
             }
             fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Track, E> {
                 Ok(Track::Px(v as f32))
@@ -825,7 +832,10 @@ impl GridTemplate<'_> {
 
     /// How many columns and rows there are — what [`GridCell::ALL`] resolves to.
     pub fn counts(&self) -> (u16, u16) {
-        (self.columns.len().max(1) as u16, self.rows.len().max(1) as u16)
+        (
+            self.columns.len().max(1) as u16,
+            self.rows.len().max(1) as u16,
+        )
     }
 }
 
@@ -892,13 +902,19 @@ pub struct GridLine {
 
 impl From<u16> for GridLine {
     fn from(start: u16) -> Self {
-        GridLine { start: start.max(1), span: Span::Of(1) }
+        GridLine {
+            start: start.max(1),
+            span: Span::Of(1),
+        }
     }
 }
 
 impl From<i32> for GridLine {
     fn from(start: i32) -> Self {
-        GridLine { start: start.max(1) as u16, span: Span::Of(1) }
+        GridLine {
+            start: start.max(1) as u16,
+            span: Span::Of(1),
+        }
     }
 }
 
@@ -925,7 +941,10 @@ impl From<&str> for GridLine {
                 _ => Span::All,
             },
         };
-        GridLine { start: start_line, span }
+        GridLine {
+            start: start_line,
+            span,
+        }
     }
 }
 
@@ -940,8 +959,16 @@ impl GridCell {
     /// This cell with every `ALL` span replaced by the real track counts.
     pub(crate) fn resolved(self, columns: u16, rows: u16) -> Self {
         Self {
-            col_span: if self.col_span == Self::ALL { columns.max(1) } else { self.col_span },
-            row_span: if self.row_span == Self::ALL { rows.max(1) } else { self.row_span },
+            col_span: if self.col_span == Self::ALL {
+                columns.max(1)
+            } else {
+                self.col_span
+            },
+            row_span: if self.row_span == Self::ALL {
+                rows.max(1)
+            } else {
+                self.row_span
+            },
             ..self
         }
     }
@@ -1202,7 +1229,6 @@ pub struct Layout {
     /// answer to anything that measures the container's content.
     pub flex_basis: Option<Length>,
 
-
     /// Overall size variant — scales font + intrinsic padding together. Composes
     /// with [`Visual::font_scale`] (both multiply the base font).
     ///
@@ -1421,7 +1447,10 @@ impl Layout {
                         width: axis(p.width, self.width),
                         height: axis(p.height, self.height),
                     },
-                    None => Size { width: self.width.to_taffy(), height: self.height.to_taffy() },
+                    None => Size {
+                        width: self.width.to_taffy(),
+                        height: self.height.to_taffy(),
+                    },
                 }
             },
             // Out of the flow when placed: an absolutely positioned child takes no space from its
@@ -1530,14 +1559,34 @@ mod length_spellings {
     /// builders took `Length` by value.
     #[test]
     fn every_spelling_a_size_is_written_in_means_the_same_size() {
-        assert_eq!(Length::from(200), Length::Px(200.0), "a bare integer is pixels");
-        assert_eq!(Length::from(200.0), Length::Px(200.0), "a bare decimal is pixels");
+        assert_eq!(
+            Length::from(200),
+            Length::Px(200.0),
+            "a bare integer is pixels"
+        );
+        assert_eq!(
+            Length::from(200.0),
+            Length::Px(200.0),
+            "a bare decimal is pixels"
+        );
         assert_eq!(Length::from("200"), Length::Px(200.0));
-        assert_eq!(Length::from("200px"), Length::Px(200.0), "the px suffix is optional");
-        assert_eq!(Length::from(" 200 px "), Length::Px(200.0), "and forgiving of spaces");
+        assert_eq!(
+            Length::from("200px"),
+            Length::Px(200.0),
+            "the px suffix is optional"
+        );
+        assert_eq!(
+            Length::from(" 200 px "),
+            Length::Px(200.0),
+            "and forgiving of spaces"
+        );
         assert_eq!(Length::from("auto"), Length::Auto);
         assert_eq!(Length::from("AUTO"), Length::Auto, "case is not a spelling");
-        assert_eq!(Length::from("50%"), Length::Percent(0.5), "the wire spelling is a fraction");
+        assert_eq!(
+            Length::from("50%"),
+            Length::Percent(0.5),
+            "the wire spelling is a fraction"
+        );
         assert_eq!(Length::from("100%"), Length::FULL);
     }
 

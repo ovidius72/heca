@@ -153,7 +153,15 @@ mod tests {
     fn grid(rows: &[ExposeWorkspace], w: f64, h: f64) -> Box<dyn heca_grid_ui::Component> {
         let (cb, _sink) = callbacks();
         let theme = theme();
-        let g = ExposeGrid { rows, gap_frac: 0.1, start: None, previous: None, theme: &theme, cb: &cb }.build();
+        let g = ExposeGrid {
+            rows,
+            gap_frac: 0.1,
+            start: None,
+            previous: None,
+            theme: &theme,
+            cb: &cb,
+        }
+        .build();
         lay_out(g, w, h)
     }
 
@@ -219,7 +227,12 @@ mod tests {
     /// says so, rather than a comment claiming it.
     #[test]
     fn the_whole_map_never_exceeds_the_box_it_is_given() {
-        let sizes = [(1280.0, 800.0), (1900.0, 1200.0), (640.0, 480.0), (2560.0, 700.0)];
+        let sizes = [
+            (1280.0, 800.0),
+            (1900.0, 1200.0),
+            (640.0, 480.0),
+            (2560.0, 700.0),
+        ];
         let sessions: Vec<Vec<ExposeWorkspace>> = vec![
             vec![ws(0, 1, (800.0, 600.0))],
             vec![ws(0, 2, (800.0, 600.0)), ws(1, 6, (800.0, 600.0))],
@@ -234,7 +247,10 @@ mod tests {
             // gives each column exactly one pane, which is the one shape this defect cannot appear
             // in: the deeper column was pushed down by the difference and drawn past the bottom.
             vec![ws_of(0, &[2, 1, 1], (800.0, 600.0))],
-            vec![ws_of(0, &[1, 3, 2], (1600.0, 900.0)), ws_of(1, &[4, 1], (800.0, 600.0))],
+            vec![
+                ws_of(0, &[1, 3, 2], (1600.0, 900.0)),
+                ws_of(1, &[4, 1], (800.0, 600.0)),
+            ],
         ];
         for rows in &sessions {
             for (w, h) in sizes {
@@ -341,7 +357,11 @@ mod tests {
                 .compute(root.as_mut(), heca_grid_ui::Size::new(1200.0, 900.0));
         }
         assert!(
-            seen.iter().filter(|s| s.is_some()).collect::<std::collections::HashSet<_>>().len() > 1,
+            seen.iter()
+                .filter(|s| s.is_some())
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                > 1,
             "the focused card must CHANGE as the cursor moves, got {seen:?}",
         );
     }
@@ -384,9 +404,9 @@ mod tests {
             .borrow()
             .iter()
             .filter_map(|i| match i {
-                crate::app::interaction::InteractionIntent::FocusPaneThenAction { pane_id, .. } => {
-                    Some(*pane_id)
-                }
+                crate::app::interaction::InteractionIntent::FocusPaneThenAction {
+                    pane_id, ..
+                } => Some(*pane_id),
                 _ => None,
             })
             .collect();

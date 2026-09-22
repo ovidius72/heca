@@ -120,7 +120,8 @@ impl Component for Badge {
         let chars = label.chars().count() as f32;
         let fs = self.base.font;
         let s = self.base.size_scale();
-        self.base.style.layout.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
+        self.base.style.layout.width =
+            Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
         self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V * s);
     }
 
@@ -153,7 +154,12 @@ impl Component for Badge {
                 radius: GLOW_RADIUS,
                 intensity: GLOW_INTENSITY,
             });
-            (c.with_alpha(cx.theme().colors.interaction.badge_fill), c, c.lerp(foreground, 0.25), glow)
+            (
+                c.with_alpha(cx.theme().colors.interaction.badge_fill),
+                c,
+                c.lerp(foreground, 0.25),
+                glow,
+            )
         };
 
         let border = cx.border(border_c);

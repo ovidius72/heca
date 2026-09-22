@@ -121,7 +121,9 @@ impl PtyHandle {
             .openpty(size)
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
 
-        let shell = shell_override.map(str::to_string).unwrap_or_else(default_shell);
+        let shell = shell_override
+            .map(str::to_string)
+            .unwrap_or_else(default_shell);
         let cmd = command_for_shell(&shell, shell_integration.as_ref(), env_clear, env);
         Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
     }

@@ -112,7 +112,6 @@ pub(crate) struct DynamicLayer {
     pub(crate) node: Option<ViewNode>,
 }
 
-
 impl DynamicLayer {
     /// Is this layer **still in charge** — capturing input, covering the panes, answering as the
     /// front-most modal?
@@ -128,8 +127,6 @@ impl DynamicLayer {
     pub(crate) fn is_active(&self, leaving: bool) -> bool {
         self.visible && !leaving
     }
-
-
 }
 
 #[cfg(test)]
@@ -141,10 +138,24 @@ mod tests {
     /// a dot.
     #[test]
     fn a_layer_name_is_stamped_from_its_owner_and_cannot_be_forged() {
-        assert_eq!(layer_name("docker", "expose").as_deref(), Some("docker.expose"));
-        assert_eq!(layer_name(HOST_OWNER, "expose").as_deref(), Some("heca.expose"));
-        assert_eq!(layer_name("docker", "expose.thing"), None, "no smuggled second segment");
-        assert_eq!(layer_name("docker", "heca.expose"), None, "cannot claim another namespace");
+        assert_eq!(
+            layer_name("docker", "expose").as_deref(),
+            Some("docker.expose")
+        );
+        assert_eq!(
+            layer_name(HOST_OWNER, "expose").as_deref(),
+            Some("heca.expose")
+        );
+        assert_eq!(
+            layer_name("docker", "expose.thing"),
+            None,
+            "no smuggled second segment"
+        );
+        assert_eq!(
+            layer_name("docker", "heca.expose"),
+            None,
+            "cannot claim another namespace"
+        );
         assert_eq!(layer_name("docker", ""), None);
     }
 }

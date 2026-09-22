@@ -23,7 +23,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, ImplItem, ItemImpl, Type};
+use syn::{Data, DeriveInput, Fields, ImplItem, ItemImpl, Type, parse_macro_input};
 
 /// Generate `SetProp` for an `impl` block from the builders inside it marked `#[prop]`.
 ///
@@ -68,7 +68,10 @@ pub fn props(_attr: TokenStream, item: TokenStream) -> TokenStream {
             // "host-only", which is how a capability goes missing: nobody decides, so nobody
             // notices. Requiring the decision is the whole point of this phase, one level down.
             let Some(idx) = f.attrs.iter().position(|a| {
-                a.path().segments.last().is_some_and(|s| s.ident == "host_only")
+                a.path()
+                    .segments
+                    .last()
+                    .is_some_and(|s| s.ident == "host_only")
             }) else {
                 return syn::Error::new_spanned(
                     &f.sig,
@@ -103,7 +106,9 @@ pub fn props(_attr: TokenStream, item: TokenStream) -> TokenStream {
             .into();
         }
         let key = name.to_string();
-        let Some(arg) = f.sig.inputs.iter().nth(1) else { continue };
+        let Some(arg) = f.sig.inputs.iter().nth(1) else {
+            continue;
+        };
         let conversion = match arg_conversion(arg) {
             Some(c) => c,
             None => continue,
@@ -143,7 +148,9 @@ fn takes_self_by_value(f: &syn::ImplItemFn) -> bool {
 /// that cannot come from static data (closures, boxed components) — those stay host-only even if
 /// someone marks them, rather than generating code that would not compile.
 fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
-    let syn::FnArg::Typed(pat) = arg else { return None };
+    let syn::FnArg::Typed(pat) = arg else {
+        return None;
+    };
     let ty: &Type = &pat.ty;
     let text = quote!(#ty).to_string().replace(' ', "");
 
@@ -161,7 +168,11 @@ fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
         // A colour arrives as text and parses through `Color`'s own `FromStr` (`#rgb`, `#rrggbb`,
         // `#rrggbbaa`). A THEME TOKEN NAME never reaches here: the host resolves it to hex first,
         // where it has the theme — the library stays free of any notion of a token.
-        "Color" => quote!(value.as_text().and_then(|s| s.parse::<::heca_theme::Color>().ok())),
+        "Color" => quote!(
+            value
+                .as_text()
+                .and_then(|s| s.parse::<::heca_theme::Color>().ok())
+        ),
         // Anything else is an enum carried by NAME, the same way glyphs and colours already
         // travel. `PropName` supplies the lookup, so the enum's variants are the vocabulary and
         // nobody maintains a parallel list of strings.
@@ -191,10 +202,14 @@ pub fn derive_prop_name(item: TokenStream) -> TokenStream {
         let snake = to_snake_case(&ident.to_string());
         Some(quote!(#snake => Some(Self::#ident),))
     });
-    let names = data.variants.iter().filter(|v| matches!(v.fields, Fields::Unit)).map(|v| {
-        let s = to_snake_case(&v.ident.to_string());
-        quote!(#s)
-    });
+    let names = data
+        .variants
+        .iter()
+        .filter(|v| matches!(v.fields, Fields::Unit))
+        .map(|v| {
+            let s = to_snake_case(&v.ident.to_string());
+            quote!(#s)
+        });
 
     quote! {
         impl ::heca_grid_ui::PropName for #name {

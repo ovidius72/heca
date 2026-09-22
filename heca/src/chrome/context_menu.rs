@@ -13,7 +13,7 @@
 
 use crate::app::interaction::InteractionSource;
 use crate::app_state::AppState;
-use crate::chrome::{open_dropdown, DropdownItem, DropdownSpec, Intent, PropValue};
+use crate::chrome::{DropdownItem, DropdownSpec, Intent, PropValue, open_dropdown};
 use crate::host::App;
 use crate::providers::ChromeCtx;
 use heca_core::layout::{PaneId, Point};
@@ -112,7 +112,11 @@ impl ContextMenuRegistry {
     pub fn with_builtins() -> Self {
         let mut r = Self::default();
         // Weight 0, so a component's or plugin's entries (weight 1 upwards) merge after it.
-        r.register(ContextPath::PANE, vec![0], std::rc::Rc::new(build_pane_menu));
+        r.register(
+            ContextPath::PANE,
+            vec![0],
+            std::rc::Rc::new(build_pane_menu),
+        );
         r
     }
 
@@ -261,7 +265,6 @@ pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, C
     ))
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 //  Built-in providers
 // ──────────────────────────────────────────────────────────────────────────────
@@ -329,7 +332,9 @@ pub(crate) fn menu_from_items(
         &|intent| {
             let emit = emit.clone();
             Box::new(move || {
-                emit.fire(crate::app::interaction::InteractionIntent::View(intent.clone()))
+                emit.fire(crate::app::interaction::InteractionIntent::View(
+                    intent.clone(),
+                ))
             })
         },
     )
@@ -431,10 +436,9 @@ mod tests {
     /// An observe-only facade over an empty chrome store — what a provider's `build` receives.
     fn test_ctx() -> ChromeCtx<'static> {
         // Leaked deliberately: a test-only store that must outlive the borrow in `App`.
-        let store: &'static crate::chrome::SharedChromeState =
-            Box::leak(Box::new(crate::chrome::SharedChromeState::new(
-                300.0, true, 300.0, false,
-            )));
+        let store: &'static crate::chrome::SharedChromeState = Box::leak(Box::new(
+            crate::chrome::SharedChromeState::new(300.0, true, 300.0, false),
+        ));
         ChromeCtx::new(App::new(store))
     }
 
@@ -528,11 +532,15 @@ mod tests {
     fn reset_name_entries_are_conditional_on_a_custom_name() {
         // "Use process name" only when the pane has a custom name.
         assert!(
-            pane_action_items(true).iter().any(|i| i.id == "reset_pane_name"),
+            pane_action_items(true)
+                .iter()
+                .any(|i| i.id == "reset_pane_name"),
             "reset shows with a custom name"
         );
         assert!(
-            !pane_action_items(false).iter().any(|i| i.id == "reset_pane_name"),
+            !pane_action_items(false)
+                .iter()
+                .any(|i| i.id == "reset_pane_name"),
             "reset hidden without a custom name"
         );
         // "Use default name" only when the workspace has a custom name.
@@ -710,7 +718,10 @@ mod tests {
         let new_pane = items.iter().find(|i| i.id == "add_pane_to_column").unwrap();
         assert_eq!(new_pane.intent.action, "add_pane_to_column");
         assert_eq!(new_pane.intent.args.get("ws_idx"), Some(&PropValue::Int(2)));
-        assert_eq!(new_pane.intent.args.get("col_idx"), Some(&PropValue::Int(3)));
+        assert_eq!(
+            new_pane.intent.args.get("col_idx"),
+            Some(&PropValue::Int(3))
+        );
     }
 
     /// Every built-in entry's intent must actually RESOLVE — a name + args that `build_action` (or
@@ -822,7 +833,6 @@ mod tests {
     // The three row menus moved into the component that owns those rows (F003/P086/T365); these
     // tests assert on their content, so they reach for them there.
     use crate::providers::workspaces::{column_row_items, pane_row_items, workspace_row_items};
-
 
     #[test]
     fn context_menus_differ_by_where_opened() {

@@ -60,7 +60,11 @@ impl Probe {
         base.style.layout.width = Length::Px(120.0);
         base.style.layout.height = Length::Px(80.0);
         (
-            Self { base, seen: seen.clone(), bounds: bounds.clone() },
+            Self {
+                base,
+                seen: seen.clone(),
+                bounds: bounds.clone(),
+            },
             seen,
             bounds,
         )
@@ -104,8 +108,14 @@ fn deliver(mut host: Box<dyn Component>, bounds: &Rc<Cell<Rectangle>>) {
     let b = bounds.get();
     let pos = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::pointer_moved(pos));
-    let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::pointer_pressed(pos, PointerButton::Left));
-    let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::pointer_released(pos, PointerButton::Left));
+    let _ = heca_grid_ui::dispatch(
+        host.as_mut(),
+        &Event::pointer_pressed(pos, PointerButton::Left),
+    );
+    let _ = heca_grid_ui::dispatch(
+        host.as_mut(),
+        &Event::pointer_released(pos, PointerButton::Left),
+    );
     let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::wheel(pos, 0.0, 1.0));
 }
 
@@ -132,7 +142,12 @@ fn assert_full_set(
 #[test]
 fn a_plain_container_delivers_the_whole_pointer_set() {
     let (probe, seen, bounds) = Probe::new();
-    assert_full_set("Flex", Box::new(Flex::column().child(probe)), &seen, &bounds);
+    assert_full_set(
+        "Flex",
+        Box::new(Flex::column().child(probe)),
+        &seen,
+        &bounds,
+    );
 }
 
 /// The modal case: a `Dialog` body is where a described scroll region actually lands.
@@ -190,11 +205,18 @@ fn the_wheel_scrolls_the_region_it_is_over() {
     let mut region = ScrollRegion::new()
         .width(Length::Px(200.0))
         .height(Length::Px(100.0))
-        .child(Flex::column().width(Length::Px(180.0)).height(Length::Px(600.0)));
+        .child(
+            Flex::column()
+                .width(Length::Px(180.0))
+                .height(Length::Px(600.0)),
+        );
     let offset = region.scroll_offset();
 
     LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
-    heca_grid_ui::dispatch(&mut region, &Event::wheel(Point::new(100.0, 50.0), 0.0, 1.0));
+    heca_grid_ui::dispatch(
+        &mut region,
+        &Event::wheel(Point::new(100.0, 50.0), 0.0, 1.0),
+    );
 
     assert!(offset.get_untracked() > 0.0, "the wheel scrolled it");
 }
@@ -206,18 +228,28 @@ fn a_thumb_drag_ends_on_a_release_outside_the_region() {
     let mut region = ScrollRegion::new()
         .width(Length::Px(200.0))
         .height(Length::Px(100.0))
-        .child(Flex::column().width(Length::Px(180.0)).height(Length::Px(600.0)));
+        .child(
+            Flex::column()
+                .width(Length::Px(180.0))
+                .height(Length::Px(600.0)),
+        );
     let offset = region.scroll_offset();
     LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
 
     // Grab the thumb in its lane at the right edge, drag down.
-    heca_grid_ui::dispatch(&mut region, &Event::pointer_pressed(Point::new(196.0, 10.0), PointerButton::Left));
+    heca_grid_ui::dispatch(
+        &mut region,
+        &Event::pointer_pressed(Point::new(196.0, 10.0), PointerButton::Left),
+    );
     heca_grid_ui::dispatch(&mut region, &Event::pointer_moved(Point::new(196.0, 60.0)));
     let dragged = offset.get_untracked();
     assert!(dragged > 0.0, "the drag scrolled it");
 
     // Release far outside, then keep moving: the thumb must not follow any more.
-    heca_grid_ui::dispatch(&mut region, &Event::pointer_released(Point::new(900.0, 900.0), PointerButton::Left));
+    heca_grid_ui::dispatch(
+        &mut region,
+        &Event::pointer_released(Point::new(900.0, 900.0), PointerButton::Left),
+    );
     heca_grid_ui::dispatch(&mut region, &Event::pointer_moved(Point::new(196.0, 95.0)));
     assert_eq!(
         offset.get_untracked(),
@@ -233,18 +265,32 @@ fn a_press_recovers_a_grab_whose_release_never_arrived() {
     let mut region = ScrollRegion::new()
         .width(Length::Px(200.0))
         .height(Length::Px(100.0))
-        .child(Flex::column().width(Length::Px(180.0)).height(Length::Px(600.0)));
+        .child(
+            Flex::column()
+                .width(Length::Px(180.0))
+                .height(Length::Px(600.0)),
+        );
     let offset = region.scroll_offset();
     LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
 
-    heca_grid_ui::dispatch(&mut region, &Event::pointer_pressed(Point::new(196.0, 10.0), PointerButton::Left));
+    heca_grid_ui::dispatch(
+        &mut region,
+        &Event::pointer_pressed(Point::new(196.0, 10.0), PointerButton::Left),
+    );
     heca_grid_ui::dispatch(&mut region, &Event::pointer_moved(Point::new(196.0, 60.0)));
     // No release — the host dropped it.
-    heca_grid_ui::dispatch(&mut region, &Event::pointer_pressed(Point::new(20.0, 20.0), PointerButton::Left));
+    heca_grid_ui::dispatch(
+        &mut region,
+        &Event::pointer_pressed(Point::new(20.0, 20.0), PointerButton::Left),
+    );
     let after = offset.get_untracked();
     heca_grid_ui::dispatch(&mut region, &Event::pointer_moved(Point::new(196.0, 95.0)));
 
-    assert_eq!(offset.get_untracked(), after, "the stale grab did not survive the next press");
+    assert_eq!(
+        offset.get_untracked(),
+        after,
+        "the stale grab did not survive the next press"
+    );
 }
 
 // ── Following the cursor, and not fighting the wheel ─────────────────────────────────────────
@@ -272,7 +318,10 @@ fn marked_row(current: &Rc<Cell<bool>>) -> Marked {
     let mut base = Base::new();
     base.style.layout.height = Length::Px(40.0);
     base.style.layout.width = Length::Px(180.0);
-    Marked { base, current: current.clone() }
+    Marked {
+        base,
+        current: current.clone(),
+    }
 }
 
 /// **A scroll region follows the cursor, in every region, forever.** The host wires nothing: the
@@ -295,7 +344,10 @@ fn a_region_scrolls_to_a_descendant_that_asks_to_be_visible() {
 
     off_screen.set(true);
     LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
-    assert!(offset.get_untracked() > 0.0, "the region came to the cursor");
+    assert!(
+        offset.get_untracked() > 0.0,
+        "the region came to the cursor"
+    );
 }
 
 /// And having followed it, it stops: scrolling away by hand must not snap back, or the view would
@@ -316,7 +368,11 @@ fn following_the_cursor_does_not_fight_the_wheel() {
 
     region.scroll_to(0.0); // the user scrolls back up; the selection has not moved
     LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
-    assert_eq!(offset.get_untracked(), 0.0, "it stayed where the user put it");
+    assert_eq!(
+        offset.get_untracked(),
+        0.0,
+        "it stayed where the user put it"
+    );
 }
 
 /// Hovering a scrollbar lane must not light up the row behind it — the lane owns the pointer while
@@ -327,7 +383,12 @@ fn the_scrollbar_lane_does_not_leak_hover_to_the_content_behind_it() {
     let mut region = ScrollRegion::new()
         .width(Length::Px(200.0))
         .height(Length::Px(100.0))
-        .child(Flex::column().width(Length::Px(180.0)).height(Length::Px(600.0)).child(probe));
+        .child(
+            Flex::column()
+                .width(Length::Px(180.0))
+                .height(Length::Px(600.0))
+                .child(probe),
+        );
     LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
 
     // Over the content: the probe hears about it.

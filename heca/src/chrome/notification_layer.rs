@@ -29,7 +29,7 @@
 use heca_grid_ui::widgets::{KeyHintGroup, ToastPosition, ToastStack};
 use heca_view::{Intent, PropValue};
 
-use super::layers::{layer_name, HOST_OWNER};
+use super::layers::{HOST_OWNER, layer_name};
 use super::{layer_emitter, place_surface};
 use crate::app::interaction::SurfaceKey;
 use crate::app_state::AppState;
@@ -90,9 +90,8 @@ pub(crate) fn mount_notification_stack(state: &mut AppState) {
             }
         });
 
-    let mut root: Box<dyn heca_grid_ui::Component> = Box::new(
-        KeyHintGroup::new(stack).open_when(state.notification_pick_open),
-    );
+    let mut root: Box<dyn heca_grid_ui::Component> =
+        Box::new(KeyHintGroup::new(stack).open_when(state.notification_pick_open));
     // **It says what it is, like every other surface** — and what it says is "nothing"
     // (F003/P097/T499). The stack spans the window because that is how it *positions* its cards in
     // a corner, not because it covers the screen: it neither stands in front of the page nor takes

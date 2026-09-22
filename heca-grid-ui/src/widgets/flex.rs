@@ -248,7 +248,11 @@ mod tests {
                 .child(Label::new("(zsh)").font_scale(0.8))
                 .child(Label::new("tiny").font_scale(0.6)),
         );
-        let mut seen = row.base().children.iter().filter_map(|c| baseline(c.as_ref()));
+        let mut seen = row
+            .base()
+            .children
+            .iter()
+            .filter_map(|c| baseline(c.as_ref()));
         let first = seen.next().expect("the row has text in it");
         for other in seen {
             assert!(
@@ -282,7 +286,11 @@ mod tests {
     /// taller sibling already claimed.
     #[test]
     fn sharing_a_baseline_does_not_grow_the_row() {
-        let tall = laid_out(Flex::row().child(Label::new("NAME").bold(true))).base().bounds.size.h;
+        let tall = laid_out(Flex::row().child(Label::new("NAME").bold(true)))
+            .base()
+            .bounds
+            .size
+            .h;
         let mixed = laid_out(
             Flex::row()
                 .child(Label::new("NAME").bold(true))

@@ -1363,7 +1363,8 @@ fn realize_grid(
         let mut realized = realize(child, theme, emit, forms);
         if let Some(area) = child.props.get("area").and_then(PropValue::as_text) {
             realized.base_mut().grid_area = Some(area.to_string());
-        } else if let (Some(col), Some(row)) = (usize_prop(child, "col"), usize_prop(child, "row")) {
+        } else if let (Some(col), Some(row)) = (usize_prop(child, "col"), usize_prop(child, "row"))
+        {
             realized.base_mut().style.layout.grid_cell = Some(heca_grid_ui::style::GridCell {
                 col: col as u16,
                 row: row as u16,
@@ -3342,7 +3343,8 @@ mod tests {
                 "the child names its area; the grid does not write a cell into it",
             );
             assert_eq!(
-                children[0].base().style.layout.grid_cell, None,
+                children[0].base().style.layout.grid_cell,
+                None,
                 "and nothing is resolved before there is a layout to resolve it against",
             );
         }

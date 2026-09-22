@@ -4,8 +4,6 @@
 //! preserving the existing key handling behavior.
 
 use crate::actions::ActionRegistry;
-use heca_grid_ui::Component as _;
-use heca_grid_ui::reactive::SignalUpdate as _;
 use crate::app::interaction::InteractionSource;
 use crate::app::interaction::{dispatch_action, dispatch_action_ref};
 use crate::app::keyboard::{
@@ -17,6 +15,8 @@ use crate::app_state::{AppState, InputMode, WorkspacePickTarget};
 use crate::input::WmAction;
 use crate::keymap::{KeyCombo, KeymapRegistry, Keymaps};
 use heca_core::layout::PaneId;
+use heca_grid_ui::Component as _;
+use heca_grid_ui::reactive::SignalUpdate as _;
 use std::collections::HashMap;
 use winit::keyboard::{Key, NamedKey, PhysicalKey};
 
@@ -171,8 +171,8 @@ pub(crate) fn handle_keyboard_input(
                 // Skip modifier-only keys (Shift, Ctrl, Alt alone) so that
                 // e.g. Shift+click mouse selection works after scrolling
                 // with direct bindings.
-                let is_modifier_only =
-                    ctx.key_text.is_empty() && crate::app::keyboard::is_modifier_key(ctx.logical_key);
+                let is_modifier_only = ctx.key_text.is_empty()
+                    && crate::app::keyboard::is_modifier_key(ctx.logical_key);
                 if !is_modifier_only {
                     backend.scroll_to_bottom();
                 }
@@ -299,22 +299,19 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
     }
     let key = combo_key;
     let keymap = state.widget_keymap.clone();
-    keymap.dispatch(key, mods, |ev| {
-        match state.active_search_mut() {
-            Some(search) => {
-                let handled = heca_grid_ui::dispatch(&mut *search.input.borrow_mut(), ev);
-                edited |= handled == heca_grid_ui::Handled::Yes;
-                handled
-            }
-            None => heca_grid_ui::Handled::No,
+    keymap.dispatch(key, mods, |ev| match state.active_search_mut() {
+        Some(search) => {
+            let handled = heca_grid_ui::dispatch(&mut *search.input.borrow_mut(), ev);
+            edited |= handled == heca_grid_ui::Handled::Yes;
+            handled
         }
+        None => heca_grid_ui::Handled::No,
     });
     if edited {
         crate::app::terminal_host::run_scrollback_search(state);
     }
     state.needs_redraw = true;
 }
-
 
 /// The action a key resolves to in **one named surface's** binding layer — a dock's `kind()`, a
 /// placement id, or a layer's own name (F003/P082/T416).
@@ -898,7 +895,6 @@ fn mode_combo(ctx: KeyInputContext<'_>) -> KeyCombo {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1007,12 +1003,19 @@ mod tests {
         for key in ["q", "Ctrl+q"] {
             assert_eq!(
                 surface_action(&layer, &modes, &components, &KeyCombo::parse(key)),
-                Some(crate::keymap::ActionRef::Builtin(WmAction::CloseOverlay { overlay: None })),
+                Some(crate::keymap::ActionRef::Builtin(WmAction::CloseOverlay {
+                    overlay: None
+                })),
                 "{key} closes the overlay in front of you",
             );
             // …and in the scrolling area nobody claims it, which is what sends it to the program.
             assert_eq!(
-                surface_action(&FocusedSurface::Panes, &modes, &components, &KeyCombo::parse(key)),
+                surface_action(
+                    &FocusedSurface::Panes,
+                    &modes,
+                    &components,
+                    &KeyCombo::parse(key)
+                ),
                 None,
                 "{key} belongs to the pane when no overlay is up",
             );
@@ -1025,7 +1028,12 @@ mod tests {
     fn a_dock_is_consulted_at_its_placement_then_its_kind() {
         let (modes, components) = defaults();
         let combo = KeyCombo::parse("x");
-        let by_kind = surface_action(&dock("nowhere-in-particular", "workspaces"), &modes, &components, &combo);
+        let by_kind = surface_action(
+            &dock("nowhere-in-particular", "workspaces"),
+            &modes,
+            &components,
+            &combo,
+        );
         assert!(
             by_kind.is_some(),
             "an unknown mount still resolves through the provider's kind",

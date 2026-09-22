@@ -23,10 +23,10 @@
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, Handled, PaintCx, WidgetIntent};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::Glow;
 use crate::style::{Align, Length};
-use crate::widgets::choice::{choice_at, Choice};
+use crate::widgets::choice::{Choice, choice_at};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Gap between tabs.

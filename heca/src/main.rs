@@ -14,6 +14,7 @@ mod rpc;
 mod search_state;
 mod shortcut;
 
+use app::backend_factory::terminal_palette_defaults;
 use app::events::AppEvent;
 use app::events::handle_window_event;
 pub(crate) use app::focus::switch_workspace_tracked;
@@ -27,7 +28,6 @@ use app::registry::{build_keymaps, build_registry};
 pub(crate) use app::render::update_session_viewport;
 pub(crate) use app::selection::{collect_all_pane_candidates, find_pane_location};
 use app::startup::init_state as build_initial_state;
-use app::backend_factory::terminal_palette_defaults;
 use app::terminal_metrics::refresh_terminal_cell_size;
 use app_state::AppState;
 use heca_config::theme::AppConfig;
@@ -75,7 +75,7 @@ impl HecaApp {
     #[expect(dead_code, reason = "Reserved for the Phase 5 RPC server path.")]
     pub fn execute_rpc_command(&mut self, cmd: &str) -> Result<(), rpc::RpcError> {
         use crate::app::interaction::{
-            dispatch_action, dispatch_view_intent, InteractionSource, IntentOutcome,
+            IntentOutcome, InteractionSource, dispatch_action, dispatch_view_intent,
         };
         let state = self.state.as_mut().ok_or(rpc::RpcError::NotInitialized)?;
         match rpc::parse_rpc(cmd)? {
@@ -247,7 +247,8 @@ impl HecaApp {
             // The pane shells bake the theme too, so they are invalidated with the headers.
             crate::chrome::clear_panes(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
-            state.widget_keymap = crate::app::registry::build_widget_keymap(&self.app_config.config);
+            state.widget_keymap =
+                crate::app::registry::build_widget_keymap(&self.app_config.config);
             state.action_shortcuts = crate::chrome::ActionShortcuts::from_index(
                 &self.keymaps.by_action,
                 crate::shortcut::KeyStyle::Compact,
@@ -255,16 +256,18 @@ impl HecaApp {
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
             state.shell_integration_enabled = self.app_config.config.settings.shell_integration;
-            state.pane_renamed_add_process_name =
-                self.app_config.config.settings.pane_renamed_add_process_name;
+            state.pane_renamed_add_process_name = self
+                .app_config
+                .config
+                .settings
+                .pane_renamed_add_process_name;
             state.pane_show_cwd = self.app_config.config.settings.pane_show_cwd;
             state.terminal_scrollback_lines =
                 self.app_config.config.settings.terminal_scrollback_lines;
             state.terminal_mouse_enabled = self.app_config.config.settings.terminal_mouse;
             state.terminal_wheel_scroll_lines =
                 self.app_config.config.settings.terminal_wheel_scroll_lines;
-            state.terminal_font_zoom_step =
-                self.app_config.config.settings.terminal_font_zoom_step;
+            state.terminal_font_zoom_step = self.app_config.config.settings.terminal_font_zoom_step;
             state.mouse_wheel_change_font_size =
                 self.app_config.config.settings.mouse_wheel_change_font_size;
             state.terminal_scroll_animations_enabled =
@@ -273,16 +276,27 @@ impl HecaApp {
             state.show_right_sidebar = self.app_config.config.settings.show_right_sidebar;
             state.show_top_bar = self.app_config.config.settings.show_top_bar;
             state.show_bottom_bar = self.app_config.config.settings.show_bottom_bar;
-            state.notifications.set_auto_dismiss(std::time::Duration::from_millis(
-                self.app_config.config.settings.notification_system.auto_dismiss_ms,
-            ));
-            state.notifications.set_mode(
-                self.app_config.config.settings.notification_system.mode,
-            );
+            state
+                .notifications
+                .set_auto_dismiss(std::time::Duration::from_millis(
+                    self.app_config
+                        .config
+                        .settings
+                        .notification_system
+                        .auto_dismiss_ms,
+                ));
+            state
+                .notifications
+                .set_mode(self.app_config.config.settings.notification_system.mode);
             // Every setting in this table must be re-applied here. One that is only read at startup
             // is dead until someone remembers it — the defect `P031(F006)/T415` is filed against,
             // and `max_visible` walked straight into it the day it was added (2026-08-31).
-            let max_visible = self.app_config.config.settings.notification_system.max_visible;
+            let max_visible = self
+                .app_config
+                .config
+                .settings
+                .notification_system
+                .max_visible;
             if state
                 .notifications
                 .set_max_visible(max_visible, std::time::Instant::now())
@@ -295,10 +309,7 @@ impl HecaApp {
             for backend in state.backends.values_mut() {
                 backend.set_scroll_animations_enabled(state.terminal_scroll_animations_enabled);
                 backend.set_link_detection(link_detection);
-                backend.reload_terminal_config(
-                    palette_defaults,
-                    state.terminal_scrollback_lines,
-                );
+                backend.reload_terminal_config(palette_defaults, state.terminal_scrollback_lines);
             }
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;
@@ -419,13 +430,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             None => return,
         };
 
-        handle_window_event(
-            event_loop,
-            &self.registry,
-            &self.keymaps,
-            state,
-            event,
-        );
+        handle_window_event(event_loop, &self.registry, &self.keymaps, state, event);
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -503,7 +508,7 @@ fn main() {
 #[cfg(test)]
 mod reload_notification_tests {
     use super::notify_reload_outcome;
-    use crate::notification::{install_notification_sink, NotificationDraft, NotificationId};
+    use crate::notification::{NotificationDraft, NotificationId, install_notification_sink};
     use heca_config::loader::ConfigError;
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -526,7 +531,10 @@ mod reload_notification_tests {
             .clone()
             .build(NotificationId::from_raw(1), Instant::now());
         assert_eq!(n.title, "Configuration reloaded");
-        assert_eq!(n.severity, crate::notification::NotificationSeverity::Success);
+        assert_eq!(
+            n.severity,
+            crate::notification::NotificationSeverity::Success
+        );
         assert_eq!(n.dedup_key.as_deref(), Some("config-reload"));
         assert!(n.actions.is_empty());
         assert!(n.lifecycle.expires(), "success auto-dismisses");

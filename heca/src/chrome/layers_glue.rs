@@ -65,7 +65,10 @@ mod tests {
     /// `P097(F003)` in one assertion — there is no second pass over a parallel list of trees.
     #[test]
     fn a_frosted_surface_placed_in_the_tree_asks_for_its_blur() {
-        assert_eq!(painted(true), vec![GuiTheme::default().colors.overlay_frost_radius]);
+        assert_eq!(
+            painted(true),
+            vec![GuiTheme::default().colors.overlay_frost_radius]
+        );
     }
 
     /// **A surface that did not ask summons no blur pass.**

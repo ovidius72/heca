@@ -8,10 +8,10 @@
 //! These tests pin the half that lives here: the request is recorded, placed, clipped, faded and
 //! scaled like any other command. What the host does with it is the host's business.
 
+use heca_core::layout::{Point, Rectangle, Size};
 use heca_grid_ui::component::PaintCx;
 use heca_grid_ui::scene::{DrawCommand, HostCmd, HostDraw, Scene};
 use heca_grid_ui::theme::Theme;
-use heca_core::layout::{Point, Rectangle, Size};
 
 fn rect(x: f64, y: f64, w: f64, h: f64) -> Rectangle {
     Rectangle::new(Point::new(x, y), Size::new(w, h))
@@ -61,9 +61,21 @@ fn a_backdrop_is_recorded_after_what_it_blurs_and_before_what_it_does_not() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.rect(rect(0.0, 0.0, 100.0, 100.0), theme.colors.background, None, 0.0, None);
+        cx.rect(
+            rect(0.0, 0.0, 100.0, 100.0),
+            theme.colors.background,
+            None,
+            0.0,
+            None,
+        );
         cx.backdrop_blur(rect(0.0, 0.0, 800.0, 600.0), 12.0, 0.8);
-        cx.rect(rect(5.0, 5.0, 50.0, 50.0), theme.colors.background, None, 0.0, None);
+        cx.rect(
+            rect(5.0, 5.0, 50.0, 50.0),
+            theme.colors.background,
+            None,
+            0.0,
+            None,
+        );
     }
 
     let kinds: Vec<&str> = scene
@@ -111,7 +123,11 @@ fn host_work_fades_with_the_opacity_of_whoever_asked_for_it() {
 
     let alphas: Vec<f32> = host_cmds(&scene).iter().map(|h| h.alpha).collect();
     assert_eq!(alphas.len(), 2);
-    assert!((alphas[0] - 0.5).abs() < 1e-6, "a surface fades: {:?}", alphas[0]);
+    assert!(
+        (alphas[0] - 0.5).abs() < 1e-6,
+        "a surface fades: {:?}",
+        alphas[0]
+    );
     assert!(
         (alphas[1] - 0.3).abs() < 1e-6,
         "and a frost fades from its own strength, not to full: {:?}",
@@ -143,6 +159,13 @@ fn a_scaled_subtree_scales_the_blur_radius_and_leaves_the_rest_alone() {
         }
         other => panic!("expected a backdrop, got {other:?}"),
     }
-    assert_eq!(cmds[1].draw, HostDraw::Surface { id: 3 }, "an id does not scale");
-    assert!((cmds[0].alpha - 0.5).abs() < 1e-6, "and neither does an alpha");
+    assert_eq!(
+        cmds[1].draw,
+        HostDraw::Surface { id: 3 },
+        "an id does not scale"
+    );
+    assert!(
+        (cmds[0].alpha - 0.5).abs() < 1e-6,
+        "and neither does an alpha"
+    );
 }

@@ -371,7 +371,10 @@ pub struct SettingsConfig {
     /// visible viewport. The host scrollback viewport (see `terminal-01a`) scrolls
     /// within `[0, terminal_scrollback_lines]`. Mirrors wezterm-term's default of
     /// 3500 when unset.
-    #[serde(default = "default_terminal_scrollback_lines", alias = "terminal-scrollback-lines")]
+    #[serde(
+        default = "default_terminal_scrollback_lines",
+        alias = "terminal-scrollback-lines"
+    )]
     pub terminal_scrollback_lines: usize,
 
     /// Enable terminal mouse support for host scrollback: when `true`, wheel events
@@ -386,13 +389,19 @@ pub struct SettingsConfig {
 
     /// Number of scrollback rows per wheel notch when the host scrollback viewport
     /// is active (i.e. the wheel scrolls the host viewport, not the terminal).
-    #[serde(default = "default_terminal_wheel_scroll_lines", alias = "terminal-wheel-scroll-lines")]
+    #[serde(
+        default = "default_terminal_wheel_scroll_lines",
+        alias = "terminal-wheel-scroll-lines"
+    )]
     pub terminal_wheel_scroll_lines: usize,
 
     /// Points added/removed per terminal font-zoom step (keyboard `prefix+Ctrl/Alt`
     /// bindings and `Ctrl`/`Meta`+wheel). Applies to both the app-wide and the
     /// per-pane zoom. Non-positive values fall back to the default step.
-    #[serde(default = "default_terminal_font_zoom_step", alias = "terminal-font-zoom-step")]
+    #[serde(
+        default = "default_terminal_font_zoom_step",
+        alias = "terminal-font-zoom-step"
+    )]
     pub terminal_font_zoom_step: f32,
 
     /// Whether `Ctrl`/`Meta`+mouse-wheel changes the font size (app-wide over
@@ -406,7 +415,10 @@ pub struct SettingsConfig {
 
     /// Enable smooth animation for backend-side discrete terminal viewport jumps.
     /// When false, animated scroll APIs degrade to immediate scroll.
-    #[serde(default = "default_terminal_scroll_animations", alias = "terminal-scroll-animations")]
+    #[serde(
+        default = "default_terminal_scroll_animations",
+        alias = "terminal-scroll-animations"
+    )]
     pub terminal_scroll_animations: bool,
 
     /// Show the left sidebar region on startup. `false` starts it hidden
@@ -584,10 +596,9 @@ mod tests {
         assert_eq!(s.notification_system.auto_dismiss_ms, 4000);
 
         // `[settings.notification_system]` as a subtable overrides both.
-        let s: SettingsConfig = toml::from_str(
-            "[notification_system]\nmode = \"none\"\nauto_dismiss_ms = 8000\n",
-        )
-        .expect("notification_system subtable should parse");
+        let s: SettingsConfig =
+            toml::from_str("[notification_system]\nmode = \"none\"\nauto_dismiss_ms = 8000\n")
+                .expect("notification_system subtable should parse");
         assert_eq!(s.notification_system.mode, NotificationSystem::None);
         assert_eq!(s.notification_system.auto_dismiss_ms, 8000);
 

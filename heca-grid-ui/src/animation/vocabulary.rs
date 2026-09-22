@@ -137,7 +137,12 @@ mod tests {
     /// One word gets the gesture; the tuners refine it without a composition at the call site.
     #[test]
     fn a_named_animation_builds_the_gesture_it_says() {
-        for named in [Animation::Fade, Animation::Zoom, Animation::Slide, Animation::ZoomFade] {
+        for named in [
+            Animation::Fade,
+            Animation::Zoom,
+            Animation::Slide,
+            Animation::ZoomFade,
+        ] {
             let label = format!("{named:?}");
             let mut a = named.build().expect("a named gesture");
             a.leave();
@@ -149,20 +154,38 @@ mod tests {
             assert!(!a.is_leaving(), "{label} lets go at the end");
         }
 
-        assert!(Animation::None.build().is_none(), "no animation is an absence, not an object");
+        assert!(
+            Animation::None.build().is_none(),
+            "no animation is an absence, not an object"
+        );
 
         let mut tuned = Animation::Zoom.from(0.5).build().expect("a zoom");
         tuned.enter();
-        assert!((tuned.frame().scale - 0.5).abs() < 0.01, "it starts where it was told");
+        assert!(
+            (tuned.frame().scale - 0.5).abs() < 0.01,
+            "it starts where it was told"
+        );
     }
 
     /// **A description names the same animations**, and an unknown name is not a panic.
     #[test]
     fn the_variants_are_the_vocabulary_a_description_writes() {
-        assert!(matches!(Animation::from_prop_name("zoom_fade"), Some(Animation::ZoomFade)));
-        assert!(matches!(Animation::from_prop_name("fade"), Some(Animation::Fade)));
-        assert!(matches!(Animation::from_prop_name("slide"), Some(Animation::Slide)));
-        assert!(Animation::from_prop_name("whirl").is_none(), "unknown ⇒ the default");
+        assert!(matches!(
+            Animation::from_prop_name("zoom_fade"),
+            Some(Animation::ZoomFade)
+        ));
+        assert!(matches!(
+            Animation::from_prop_name("fade"),
+            Some(Animation::Fade)
+        ));
+        assert!(matches!(
+            Animation::from_prop_name("slide"),
+            Some(Animation::Slide)
+        ));
+        assert!(
+            Animation::from_prop_name("whirl").is_none(),
+            "unknown ⇒ the default"
+        );
         assert!(
             !Animation::VARIANT_NAMES.contains(&"custom"),
             "a live object has no name a description could write",
@@ -194,6 +217,9 @@ mod tests {
 
         let mut mine = Animation::of(Whirl(false)).build().expect("mine");
         mine.leave();
-        assert!(mine.is_leaving(), "the surface waits for a gesture the library never heard of");
+        assert!(
+            mine.is_leaving(),
+            "the surface waits for a gesture the library never heard of"
+        );
     }
 }

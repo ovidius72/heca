@@ -114,7 +114,10 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     // the per-mount `container_cursor` is what the row outlines draw from (F003/P085/T354). The
     // setters are change-guarded, so an unchanged selection costs nothing and emits nothing.
     if let Some(selection) = cursor_follow(prev_focused, state.focused_pane) {
-        state.chrome_state.workspaces.set_nav_selection(Some(selection));
+        state
+            .chrome_state
+            .workspaces
+            .set_nav_selection(Some(selection));
         let key = crate::providers::workspaces::selection_key(selection);
         // Every seating of the component, since each keeps its own cursor.
         let mounts: Vec<String> = state
@@ -181,7 +184,11 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     //   slot: this function's own contract reserves that field for the same-workspace toggle and
     //   forbids workspace switches from writing it, so reading it here would answer a different
     //   question than the binding asks.
-    let local = state.last_visited_pane_per_ws.get(current_ws).copied().flatten();
+    let local = state
+        .last_visited_pane_per_ws
+        .get(current_ws)
+        .copied()
+        .flatten();
     let global = state
         .last_visited_ws_idx
         .and_then(|ws| state.session.workspaces.get(ws))
@@ -192,7 +199,10 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .map(|slot| slot.filter(|id| find_pane_workspace(&state.session, *id).is_some()))
         .collect();
     state.chrome_state.workspaces.set_previous_panes(previous);
-    state.chrome_state.workspaces.set_previous_ws(state.last_visited_ws_idx);
+    state
+        .chrome_state
+        .workspaces
+        .set_previous_ws(state.last_visited_ws_idx);
 
     // Track global last_focused (for Prefix+Shift+l toggle).
     if focus_changed && prev_focused.is_some() {
@@ -212,13 +222,21 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .chrome_state
         .workspaces
         .with_collapsed_ws(|s| s.clone());
-    state.chrome_state.workspaces.tree_mut().apply_ws_collapsed(&collapsed, None);
+    state
+        .chrome_state
+        .workspaces
+        .tree_mut()
+        .apply_ws_collapsed(&collapsed, None);
     // Same for the canonical nav selection: the rebuild renumbers `flat_items`, so the
     // positional cursor is re-derived from the selection (which names its row and so
     // survives the rebuild) rather than being left pointing at whatever now sits at that
     // index. Collapse changes `flat_items` too, so this runs after `apply_ws_collapsed`.
     let selection = state.chrome_state.workspaces.nav_selection();
-    state.chrome_state.workspaces.tree_mut().apply_nav_selection(selection);
+    state
+        .chrome_state
+        .workspaces
+        .tree_mut()
+        .apply_nav_selection(selection);
 }
 
 /// Where a dock's cursor should move after a focus sync: to the newly active pane, and **only when

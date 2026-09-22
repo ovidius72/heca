@@ -77,10 +77,9 @@ pub(crate) fn update_cursor(state: &mut AppState, pos: (f32, f32)) {
 /// the cue and the action stay in lockstep. terminal-task-18.
 fn link_hover(state: &AppState, pos: (f32, f32)) -> bool {
     interactive_move_modifier_held(state)
-        && hit_test_pane(state, pos)
-            .is_some_and(|pane_id| {
-                crate::app::terminal_host::hyperlink_uri_at_position(state, pane_id, pos).is_some()
-            })
+        && hit_test_pane(state, pos).is_some_and(|pane_id| {
+            crate::app::terminal_host::hyperlink_uri_at_position(state, pane_id, pos).is_some()
+        })
 }
 
 /// Logical-pixel center of the app window — the anchor for keyboard/RPC-opened menus so a menu
@@ -378,8 +377,6 @@ fn content_area_origin(state: &AppState) -> (f32, f32) {
     let r = ChromeConfig::of(state).content_rect();
     (r.loc.x as f32, r.loc.y as f32)
 }
-
-
 
 fn find_pane_in_workspace(
     ws: &mut heca_core::layout::workspace::Workspace,

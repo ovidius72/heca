@@ -248,7 +248,8 @@ impl ImageRenderer {
                 Some(cached) => {
                     cached.last_used = self.generation;
                     if let Some(anim) = cached.anim.as_mut() {
-                        let desired = image.frame_index_at(now.saturating_duration_since(anim.start));
+                        let desired =
+                            image.frame_index_at(now.saturating_duration_since(anim.start));
                         if desired != anim.uploaded_frame
                             && let Some(frame) = image.frames.get(desired)
                         {
@@ -260,9 +261,10 @@ impl ImageRenderer {
                 }
                 None => {
                     let (texture, bind_group) = self.upload_one(device, queue, image);
-                    let anim = image
-                        .is_animated()
-                        .then_some(AnimPlayback { start: now, uploaded_frame: 0 });
+                    let anim = image.is_animated().then_some(AnimPlayback {
+                        start: now,
+                        uploaded_frame: 0,
+                    });
                     self.cache.insert(
                         image.id,
                         CachedImage {
@@ -531,7 +533,10 @@ mod tests {
     fn dst_rect_maps_cells_to_logical_pixels() {
         let p = placement(2, 3, 4, 5, 0);
         let rect = placement_dst_rect(&p, 10.0, 20.0, 8.0, 16.0);
-        assert_eq!(rect, [10.0 + 3.0 * 8.0, 20.0 + 2.0 * 16.0, 4.0 * 8.0, 5.0 * 16.0]);
+        assert_eq!(
+            rect,
+            [10.0 + 3.0 * 8.0, 20.0 + 2.0 * 16.0, 4.0 * 8.0, 5.0 * 16.0]
+        );
     }
 
     #[test]

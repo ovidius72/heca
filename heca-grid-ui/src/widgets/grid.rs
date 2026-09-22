@@ -18,12 +18,11 @@
 //!     .area(Label::new("~/proj"), "subtext")
 //! ```
 
-
 use crate::builders::{LayoutExt, Parent};
-use crate::style::{IntoRows, IntoTracks};
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::SignalGet;
 use crate::style::Track;
+use crate::style::{IntoRows, IntoTracks};
 
 /// A layout-only CSS-Grid container.
 pub struct Grid {
@@ -177,14 +176,21 @@ mod tests {
     #[test]
     fn a_named_area_template_takes_one_row_or_several() {
         let one = Grid::new().template_area("dot title tag");
-        assert_eq!(one.template().area("title").map(|c| (c.col, c.row)), Some((2, 1)));
+        assert_eq!(
+            one.template().area("title").map(|c| (c.col, c.row)),
+            Some((2, 1))
+        );
 
         let two = Grid::new().template_area(["dot title tag", ".   sub   ."]);
         let sub = two.template().area("sub").expect("named in row two");
         assert_eq!((sub.col, sub.row), (2, 2));
         let dot = two.template().area("dot").expect("named in row one");
         assert_eq!((dot.col, dot.row, dot.row_span), (1, 1, 1));
-        assert_eq!(two.template().area("nothing"), None, "an unknown name places nothing");
+        assert_eq!(
+            two.template().area("nothing"),
+            None,
+            "an unknown name places nothing"
+        );
     }
 
     /// **A name that spans several cells is the box around them**, as `grid-template-areas` has it.
@@ -192,7 +198,10 @@ mod tests {
     fn an_area_named_across_cells_is_the_box_around_them() {
         let grid = Grid::new().template_area(["icon title", "icon sub"]);
         let icon = grid.template().area("icon").expect("spans two rows");
-        assert_eq!((icon.col, icon.row, icon.col_span, icon.row_span), (1, 1, 1, 2));
+        assert_eq!(
+            (icon.col, icon.row, icon.col_span, icon.row_span),
+            (1, 1, 1, 2)
+        );
     }
 
     /// **Children name the area they belong in**, and the name is resolved during layout — so a
@@ -217,10 +226,19 @@ mod tests {
         LayoutEngine::new().compute(grid.as_mut(), Size::new(140.0, 40.0));
 
         let cell = |i: usize| {
-            let c = grid.base().children[i].base().style.layout.grid_cell.expect("placed by name");
+            let c = grid.base().children[i]
+                .base()
+                .style
+                .layout
+                .grid_cell
+                .expect("placed by name");
             (c.col, c.row, c.col_span, c.row_span)
         };
-        assert_eq!(cell(0), (1, 1, 1, 2), "the icon spans both rows of its column");
+        assert_eq!(
+            cell(0),
+            (1, 1, 1, 2),
+            "the icon spans both rows of its column"
+        );
         assert_eq!(cell(1), (2, 1, 1, 1));
         assert_eq!(cell(2), (2, 2, 1, 1));
     }

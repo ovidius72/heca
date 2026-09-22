@@ -346,9 +346,7 @@ pub enum HostDraw {
         id: u64,
     },
     /// **Blur whatever has been drawn behind me, here.** `radius` is in logical pixels.
-    Backdrop {
-        radius: f32,
-    },
+    Backdrop { radius: f32 },
 }
 
 /// A [`HostDraw`] and the box it applies to.
@@ -764,7 +762,11 @@ mod tests {
         s.end_overlay(); // close outer
 
         let segs: Vec<Scene> = s.overlay_segments().collect();
-        assert_eq!(segs.len(), 3, "parent segment must survive the nested child");
+        assert_eq!(
+            segs.len(),
+            3,
+            "parent segment must survive the nested child"
+        );
         assert_eq!(
             segs[0].iter().cloned().collect::<Vec<_>>(),
             vec![marker(1.0)],
@@ -795,7 +797,10 @@ mod tests {
         s.end_overlay();
         let segs: Vec<Scene> = s.overlay_segments().collect();
         assert_eq!(segs.len(), 2);
-        assert_eq!(segs[0].iter().cloned().collect::<Vec<_>>(), vec![marker(1.0)]);
+        assert_eq!(
+            segs[0].iter().cloned().collect::<Vec<_>>(),
+            vec![marker(1.0)]
+        );
         assert_eq!(
             segs[1].iter().cloned().collect::<Vec<_>>(),
             vec![marker(2.0)],

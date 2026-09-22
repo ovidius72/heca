@@ -26,8 +26,8 @@ pub(crate) const KEYS_DEFAULT: &str = include_str!("../../keybindings.default.to
 fn embedded_base() -> toml::Value {
     let config: toml::Value =
         toml::from_str(CONFIG_DEFAULT).expect("embedded config.default.toml must be valid TOML");
-    let keys: toml::Value = toml::from_str(KEYS_DEFAULT)
-        .expect("embedded keybindings.default.toml must be valid TOML");
+    let keys: toml::Value =
+        toml::from_str(KEYS_DEFAULT).expect("embedded keybindings.default.toml must be valid TOML");
     deep_merge(config, keys)
 }
 
@@ -255,12 +255,11 @@ fn read_first_toml(paths: &[Option<PathBuf>]) -> Result<Option<toml::Value>, Con
     for path in paths.iter().flatten() {
         match std::fs::read_to_string(path) {
             Ok(content) => {
-                let value = toml::from_str::<toml::Value>(&content).map_err(|e| {
-                    ConfigError::Parse {
+                let value =
+                    toml::from_str::<toml::Value>(&content).map_err(|e| ConfigError::Parse {
                         path: path.clone(),
                         source: e,
-                    }
-                })?;
+                    })?;
                 return Ok(Some(value));
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
@@ -268,7 +267,7 @@ fn read_first_toml(paths: &[Option<PathBuf>]) -> Result<Option<toml::Value>, Con
                 return Err(ConfigError::Io {
                     path: path.clone(),
                     source: e,
-                })
+                });
             }
         }
     }
@@ -439,7 +438,10 @@ color = "#112233"
             .expect("config.default.toml + keybindings.default.toml must deserialize into Config");
         assert_eq!(cfg.settings.theme, "grid_tron");
         // The active appearance numeric knobs are all the documented defaults.
-        assert_eq!(cfg.appearance, crate::appearance::AppearanceConfig::default());
+        assert_eq!(
+            cfg.appearance,
+            crate::appearance::AppearanceConfig::default()
+        );
         // The program catalog is sourced from the file.
         assert_eq!(cfg.programs.resolve("nvim").name, "Neovim");
         assert_eq!(
@@ -473,7 +475,10 @@ color = "#112233"
                 "missing default binding: {action}"
             );
         }
-        assert!(keys.bindings.len() >= 45, "expected the full default keymap");
+        assert!(
+            keys.bindings.len() >= 45,
+            "expected the full default keymap"
+        );
         // The three built-in modes are present with their bindings.
         for mode_name in ["resize", "selection"] {
             let mode = keys

@@ -14,7 +14,7 @@
 //! match marks.
 
 use crate::component::{Base, Component, Event, Handled, WidgetIntent};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 
 /// One selectable cell: the caller's key for it, and the signal that lights it.
 ///
@@ -35,7 +35,11 @@ impl GridCell {
     /// A cell **carries no body**: the caller draws the card inside the row layout it passes to
     /// [`CardGrid::row`], so there is one place the visuals live rather than two that can disagree.
     pub fn new(key: impl Into<String>, selected: Signal<bool>) -> Self {
-        Self { key: key.into(), selected, hovered: None }
+        Self {
+            key: key.into(),
+            selected,
+            hovered: None,
+        }
     }
 
     /// Wire the card's **hover** signal, so pointing at a card moves the cursor onto it.
@@ -140,7 +144,11 @@ impl CardGrid {
         self.rows.push(
             columns
                 .iter()
-                .map(|col| col.iter().map(|c| (c.key.clone(), c.selected, c.hovered)).collect())
+                .map(|col| {
+                    col.iter()
+                        .map(|c| (c.key.clone(), c.selected, c.hovered))
+                        .collect()
+                })
                 .collect(),
         );
         self.base.children.push(Box::new(layout));
@@ -201,9 +209,9 @@ impl CardGrid {
     pub fn selected(mut self, key: impl Into<String>) -> Self {
         let key = key.into();
         if let Some(at) = self.rows.iter().enumerate().find_map(|(r, row)| {
-            row.iter().enumerate().find_map(|(c, col)| {
-                col.iter().position(|(k, ..)| *k == key).map(|i| (r, c, i))
-            })
+            row.iter()
+                .enumerate()
+                .find_map(|(c, col)| col.iter().position(|(k, ..)| *k == key).map(|i| (r, c, i)))
         }) {
             self.cursor = at;
         }
@@ -374,7 +382,6 @@ impl CardGrid {
 // the widget baking in spacing it cannot know the right value for.
 impl crate::builders::LayoutExt for CardGrid {}
 
-
 impl Default for CardGrid {
     fn default() -> Self {
         Self::new()
@@ -448,7 +455,10 @@ mod tests {
     fn grid() -> CardGrid {
         let cell = |k: &str| GridCell::new(k, signal(false));
         CardGrid::new()
-            .row(vec![vec![cell("a"), cell("b")]], crate::widgets::Flex::row())
+            .row(
+                vec![vec![cell("a"), cell("b")]],
+                crate::widgets::Flex::row(),
+            )
             .row(vec![vec![cell("c")]], crate::widgets::Flex::row())
     }
 
@@ -472,11 +482,18 @@ mod tests {
             )
             .selected("a");
         let reveal = g.reveal_state();
-        assert!(reveal.get_untracked(), "an untouched grid reveals its cursor");
+        assert!(
+            reveal.get_untracked(),
+            "an untouched grid reveals its cursor"
+        );
 
         hov.set(true);
         g.follow_hover();
-        assert_eq!(g.selected_key(), Some("b"), "the cursor still follows the mouse");
+        assert_eq!(
+            g.selected_key(),
+            Some("b"),
+            "the cursor still follows the mouse"
+        );
         assert!(
             !reveal.get_untracked(),
             "but nothing asks to be scrolled to — that is what moved it away from the pointer",
@@ -549,7 +566,11 @@ mod tests {
         g.step(0, 0, 1); // down to the second row (one column)
         assert_eq!(g.selected_key(), Some("z"));
         g.step(0, 0, -1); // back up
-        assert_eq!(g.selected_key(), Some("c"), "the third column, where we left it");
+        assert_eq!(
+            g.selected_key(),
+            Some("c"),
+            "the third column, where we left it"
+        );
     }
 
     /// At the very end there is nowhere to fall through to, and the cursor stays put rather than

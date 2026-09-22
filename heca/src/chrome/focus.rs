@@ -10,9 +10,9 @@
 //! *which* dock: pure functions over the [`ChromeHost`], so they can be tested without a window and
 //! so no caller has to re-derive the order the host maintains.
 
+use super::RegionId;
 use super::contribution::ContainerId;
 use super::host::ChromeHost;
-use super::RegionId;
 
 /// The docks a pick offers, in the host's order, one letter each.
 ///
@@ -59,9 +59,7 @@ pub(crate) fn navigable_dock(
     let first = navigable.next()?;
     match focused {
         Some(id) if id == first.0 => Some(first),
-        Some(id) => navigable
-            .find(|(mounted, _)| mounted == id)
-            .or(Some(first)),
+        Some(id) => navigable.find(|(mounted, _)| mounted == id).or(Some(first)),
         None => Some(first),
     }
 }
@@ -86,10 +84,7 @@ pub(crate) fn placement_for(
     if host.provider(target).is_some() {
         return Some(target.to_string());
     }
-    let is_target = |mount: &str| {
-        host.provider(mount)
-            .is_some_and(|p| p.kind() == target)
-    };
+    let is_target = |mount: &str| host.provider(mount).is_some_and(|p| p.kind() == target);
     focused
         .filter(|m| is_target(m))
         .or_else(|| last_focused.filter(|m| is_target(m)))
@@ -299,7 +294,10 @@ mod tests {
             None,
             "a dock that only scrolls is not something to navigate",
         );
-        assert_eq!(navigable_dock(&ChromeHost::new(ChromeEventBus::default()), None), None);
+        assert_eq!(
+            navigable_dock(&ChromeHost::new(ChromeEventBus::default()), None),
+            None
+        );
     }
 
     #[test]

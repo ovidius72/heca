@@ -360,9 +360,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
         }
     }
 
-    let mut viewport_widget_panes: Vec<&PaneRenderState> = Vec::with_capacity(
-        tiled_panes.len() + floating_panes.len(),
-    );
+    let mut viewport_widget_panes: Vec<&PaneRenderState> =
+        Vec::with_capacity(tiled_panes.len() + floating_panes.len());
     viewport_widget_panes.extend(tiled_panes.iter());
     viewport_widget_panes.extend(floating_panes.iter());
     crate::chrome::sync_pane_viewport_widgets(state, &viewport_widget_panes);
@@ -594,8 +593,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 ),
                 mount,
                 Some(stencil_view),
-            )
-            {
+            ) {
                 queue_terminal_dynamic_overlays(
                     &mut state.text_renderer,
                     &mut state.primitive_renderer,
@@ -824,8 +822,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     ),
                     mount,
                     Some(stencil_view),
-                )
-                {
+                ) {
                     queue_terminal_dynamic_overlays(
                         &mut state.text_renderer,
                         &mut state.primitive_renderer,

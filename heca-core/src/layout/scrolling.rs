@@ -1613,8 +1613,14 @@ mod tests {
         space.resize_pane_height(0, 0, 60.0);
         let after: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
 
-        assert!((after[0] - (before[0] + 60.0)).abs() < 0.5, "the pane above grew by the drag");
-        assert!((after[1] - (before[1] - 60.0)).abs() < 0.5, "…and its neighbour gave exactly that");
+        assert!(
+            (after[0] - (before[0] + 60.0)).abs() < 0.5,
+            "the pane above grew by the drag"
+        );
+        assert!(
+            (after[1] - (before[1] - 60.0)).abs() < 0.5,
+            "…and its neighbour gave exactly that"
+        );
         assert!(
             (after[2] - third).abs() < 0.5,
             "the third pane is not on this boundary and must not move: {third} -> {}",
@@ -1623,7 +1629,10 @@ mod tests {
         // The column stays exactly full, so nothing is pushed past its bottom edge.
         let sum_before: f64 = before.iter().sum();
         let sum_after: f64 = after.iter().sum();
-        assert!((sum_after - sum_before).abs() < 0.5, "the column is still exactly full");
+        assert!(
+            (sum_after - sum_before).abs() < 0.5,
+            "the column is still exactly full"
+        );
     }
 
     /// The far side stops at its floor rather than the drag reaching past it for more space — which
@@ -1670,10 +1679,7 @@ mod tests {
             space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
 
             let before: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
-            let (h, gaps) = (
-                space.working_area.size.h,
-                space.options.gaps,
-            );
+            let (h, gaps) = (space.working_area.size.h, space.options.gaps);
             let col = &mut space.columns[0];
             col.active_pane_idx = active;
             col.move_active_pane_boundary(40.0, h, gaps);
@@ -1915,7 +1921,11 @@ mod tests {
         space.activate_column(0);
         let pinned = widths(&space);
         space.move_active_column_left_boundary(0.1);
-        assert_eq!(widths(&space), pinned, "no edge to the left of the first column");
+        assert_eq!(
+            widths(&space),
+            pinned,
+            "no edge to the left of the first column"
+        );
     }
 
     /// **Both of a pane's edges can be moved.** The counterpart of the column test above: plain
@@ -1932,7 +1942,10 @@ mod tests {
         space.add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
         space.add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
         let heights = |s: &ScrollingSpace| -> Vec<f64> {
-            s.panes_with_positions().iter().map(|(_, r)| r.size.h).collect()
+            s.panes_with_positions()
+                .iter()
+                .map(|(_, r)| r.size.h)
+                .collect()
         };
 
         // The middle pane: moving its BOTTOM edge down trades with the pane below.
