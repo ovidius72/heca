@@ -3,6 +3,7 @@
 #
 #   scripts/lint-changed.sh              # clippy the changed crates
 #   scripts/lint-changed.sh test         # test the changed crates
+#   scripts/lint-changed.sh fmt          # check formatting of the changed crates
 #   scripts/lint-changed.sh clippy main  # diff against a different base
 #
 # Falls back to the whole workspace only if it cannot work out the base.
@@ -78,6 +79,21 @@ if [ "$CMD" = "test" ]; then
   fi
   [ $targets -ne 0 ] && exit $targets
   exit $doc
+fi
+
+# **Formatting is asked of the CRATE, never of a file.**
+#
+# `rustfmt <file>` treats that file as its own root, and `rustfmt <crate root>` follows every `mod`
+# and formats the whole crate — and the two do not agree. Checking files one at a time said this
+# workspace was clean while `rustfmt lib.rs` rewrote 83 of them, all of it trailing commas and line
+# wrapping inside test modules. `cargo fmt` asks the crate, which is the answer that counts.
+#
+# It was also simply missing: this gate ran clippy and tests and never once looked at formatting,
+# which is why nobody knew the two answers differed.
+if [ "$CMD" = "fmt" ]; then
+  echo "==> cargo fmt ${args[*]} --check"
+  [ -n "${DRY_RUN:-}" ] && exit 0
+  exec cargo fmt "${args[@]}" --check
 fi
 
 echo "==> cargo $CMD ${args[*]} --all-targets"
