@@ -473,7 +473,6 @@ pub(crate) async fn init_state(
         pane_cell_override: std::collections::HashMap::new(),
         scale_factor,
         needs_redraw: true,
-        frame_log: Default::default(),
         status_note: None,
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,

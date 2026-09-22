@@ -752,9 +752,6 @@ pub struct AppState {
     pub pane_cell_override: HashMap<PaneId, (f32, f32)>,
     pub scale_factor: f64,
     pub needs_redraw: bool,
-    /// **What has been asking for frames**, tallied for `HECA_LOG_FRAMES=1`. Idle unless that
-    /// variable is set; see [`crate::app::frame_reasons`].
-    pub(crate) frame_log: crate::app::frame_reasons::FrameLog,
     /// **One line of feedback in the bottom bar**, shown until the next keypress.
     ///
     /// What a key did when it could not do the thing you asked — a pick with nothing to offer is

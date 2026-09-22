@@ -245,8 +245,8 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // An animated inline image (GIF/APNG) keeps the loop ticking so frames advance.
     let image_animating = state.has_animated_images;
     // **Every reason, by name** — see `frame_reasons`. It was a ten-term `||` chain, which cannot
-    // say which term was true, so a loop that spins at 100% with nothing happening had no way to
-    // name what was asking. `HECA_LOG_FRAMES=1` now prints exactly that.
+    // say which term was true, so a loop that spins with nothing happening had no way to name what
+    // was asking.
     let reasons = super::frame_reasons::FrameReasons {
         marked: state.needs_redraw,
         backend_data: backend_poll.has_data,
@@ -259,7 +259,6 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         chrome_animating,
         widget_due,
     };
-    state.frame_log.record(reasons, Instant::now());
     if reasons.any() {
         state.window.request_redraw();
     }
@@ -272,9 +271,6 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         true => None,
         false => state.notifications.next_expiry(),
     };
-    state
-        .frame_log
-        .record_wake(wake_animating, widget_wake, toast_expiry);
     let schedule = next_wake(
         Instant::now(),
         WakeRequests {
