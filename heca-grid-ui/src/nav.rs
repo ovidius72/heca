@@ -84,7 +84,6 @@ pub fn key_at(root: &dyn Component, point: Point) -> Option<String> {
         .filter(|_| root.base().bounds.contains(point))
 }
 
-
 /// **What to call the widget at `path`, whether or not anyone named it** (F003/P082/T444).
 ///
 /// Something has to recognise a widget between one frame and the next — a hint letter that stays
@@ -188,6 +187,12 @@ fn nth_named(scope_root: &dyn Component, path: &[usize], name: &str) -> usize {
         let ancestor_of_target = target.starts_with(here.as_slice());
         if !here.is_empty() && !ancestor_of_target && node.text_summary().as_deref() == Some(name) {
             *seen += 1;
+            // **What is inside it is not a second one.** `text_summary` reads a container's name
+            // *from* its content, so a row called `×` holds a label also called `×` — counting both
+            // made every row after the first jump two indices, and made an untouched row's name
+            // move when a SIBLING gained a child. The index is over the named things in this scope,
+            // and this node is the named thing; its content is where its name came from.
+            return;
         }
         for (i, child) in node.base().children.iter().enumerate() {
             here.push(i);
@@ -199,8 +204,60 @@ fn nth_named(scope_root: &dyn Component, path: &[usize], name: &str) -> usize {
         }
     }
     let (mut seen, mut done) = (0usize, false);
-    walk(scope_root, &mut Vec::new(), path, name, &mut seen, &mut done);
+    walk(
+        scope_root,
+        &mut Vec::new(),
+        path,
+        name,
+        &mut seen,
+        &mut done,
+    );
     seen
+}
+
+#[cfg(test)]
+mod derived_name_tests {
+    use super::*;
+    use crate::builders::Parent;
+    use crate::widgets::{Flex, Label};
+
+    fn row(n: usize) -> Flex {
+        let mut f = Flex::column();
+        for _ in 0..n {
+            f = f.child(Label::new("same"));
+        }
+        f
+    }
+
+    fn names(parent: &dyn Component, n: usize) -> Vec<String> {
+        (0..n)
+            .map(|i| identity_of(parent, &[i]).expect("a widget always has a name"))
+            .collect()
+    }
+
+    /// **Identical siblings are numbered from one, not from however many labels they contain.**
+    #[test]
+    fn identical_siblings_are_numbered_in_order() {
+        let parent = Flex::column().child(row(1)).child(row(1)).child(row(1));
+        assert_eq!(names(&parent, 3), ["same", "same[1]", "same[2]"]);
+    }
+
+    /// **And a name never moves because something changed ELSEWHERE** — the promise
+    /// `docs/widgets.md` makes for derived identity, and what a remembered hint letter and a
+    /// reconciled child both depend on.
+    ///
+    /// The first row gains a second label. Nothing about the other two changed, so nothing about
+    /// their names may change either.
+    #[test]
+    fn a_sibling_growing_inside_does_not_rename_the_others() {
+        let before = Flex::column().child(row(1)).child(row(1)).child(row(1));
+        let after = Flex::column().child(row(2)).child(row(1)).child(row(1));
+        assert_eq!(
+            names(&before, 3)[1..],
+            names(&after, 3)[1..],
+            "an untouched row was renamed because a sibling grew",
+        );
+    }
 }
 
 /// Two or more unkeyed siblings that answer to the **same derived name** — the one place a derived
@@ -337,7 +394,11 @@ fn walk_ambiguities(node: &dyn Component, scope: &str, out: &mut Vec<Ambiguity>)
     }
     for (name, count) in names {
         if count >= 2 {
-            out.push(Ambiguity { scope: scope.clone(), name, count });
+            out.push(Ambiguity {
+                scope: scope.clone(),
+                name,
+                count,
+            });
         }
     }
 
@@ -350,8 +411,8 @@ fn walk_ambiguities(node: &dyn Component, scope: &str, out: &mut Vec<Ambiguity>)
 mod tests {
     use super::*;
     use crate::builders::{ComponentExt, Parent};
-    use crate::widgets::{Flex, Surface};
     use crate::reactive::SignalUpdate;
+    use crate::widgets::{Flex, Surface};
     use heca_core::layout::Size;
 
     /// Force bounds on a widget (layout doesn't run in these unit tests).
@@ -370,19 +431,20 @@ mod tests {
             .children
             .push(at(Surface::new().key("pane:7"), 20.0, 20.0));
         // Undeclared rows are simply not navigable.
-        root.base_mut().children.push(at(Surface::new(), 40.0, 20.0));
+        root.base_mut()
+            .children
+            .push(at(Surface::new(), 40.0, 20.0));
         root
     }
 
-
-
     #[test]
     fn collects_declared_rows_in_document_order() {
-        let keys: Vec<String> = collect_keys(&tree())
-            .into_iter()
-            .map(|(k, _)| k)
-            .collect();
-        assert_eq!(keys, ["ws:0", "pane:7"], "and nothing for the undeclared row");
+        let keys: Vec<String> = collect_keys(&tree()).into_iter().map(|(k, _)| k).collect();
+        assert_eq!(
+            keys,
+            ["ws:0", "pane:7"],
+            "and nothing for the undeclared row"
+        );
     }
 
     #[test]
@@ -391,7 +453,8 @@ mod tests {
         root.base().children[0].base().visible.set(false);
         let keys: Vec<String> = collect_keys(&root).into_iter().map(|(k, _)| k).collect();
         assert_eq!(
-            keys, ["pane:7"],
+            keys,
+            ["pane:7"],
             "a collapsed group's rows are not steppable — which is what collapsing is for",
         );
     }
@@ -448,7 +511,10 @@ mod identity_tests {
                 .child(Label::new("zsh").key("pane:7")),
         );
 
-        assert_eq!(identity_of(&tree, &[0, 0]).as_deref(), Some("ws:0/col:1/pane:7"));
+        assert_eq!(
+            identity_of(&tree, &[0, 0]).as_deref(),
+            Some("ws:0/col:1/pane:7")
+        );
         assert_eq!(identity_of(&tree, &[0]).as_deref(), Some("ws:0/col:1"));
     }
 
@@ -476,7 +542,11 @@ mod identity_tests {
             .child(Label::new("×"));
 
         assert_eq!(identity_of(&tree, &[0]).as_deref(), Some("topbar/×"));
-        assert_eq!(identity_of(&tree, &[1]).as_deref(), Some("topbar/edit"), "a different name is not numbered");
+        assert_eq!(
+            identity_of(&tree, &[1]).as_deref(),
+            Some("topbar/edit"),
+            "a different name is not numbered"
+        );
         assert_eq!(identity_of(&tree, &[2]).as_deref(), Some("topbar/×[1]"));
     }
 
@@ -514,7 +584,10 @@ mod identity_tests {
             .child(Flex::column().key("pane:7").child(Label::new("×")))
             .child(Flex::column().key("pane:9").child(Label::new("×")));
 
-        assert_eq!(identity_of(&tree, &[0, 0]).as_deref(), Some("col:1/pane:7/×"));
+        assert_eq!(
+            identity_of(&tree, &[0, 0]).as_deref(),
+            Some("col:1/pane:7/×")
+        );
         assert_eq!(
             identity_of(&tree, &[1, 0]).as_deref(),
             Some("col:1/pane:9/×"),
@@ -537,7 +610,10 @@ mod identity_tests {
         };
         let tree = Flex::column().child(dock("left")).child(dock("right"));
 
-        assert_eq!(identity_of(&tree, &[0, 0, 0]).as_deref(), Some("left/pane:7/×"));
+        assert_eq!(
+            identity_of(&tree, &[0, 0, 0]).as_deref(),
+            Some("left/pane:7/×")
+        );
         assert_eq!(
             identity_of(&tree, &[1, 0, 0]).as_deref(),
             Some("right/pane:7/×"),
@@ -617,7 +693,11 @@ mod identity_tests {
 
         assert_eq!(
             ambiguous_identities(&tree),
-            vec![Ambiguity { scope: String::new(), name: "×".into(), count: 2 }],
+            vec![Ambiguity {
+                scope: String::new(),
+                name: "×".into(),
+                count: 2
+            }],
             "the wrapper is transparent; the control inside it is the item",
         );
     }
@@ -679,12 +759,7 @@ mod identity_tests {
     #[test]
     fn each_container_is_reported_in_its_own_scope() {
         let tree = Flex::column()
-            .child(
-                Flex::column()
-                    .key("header")
-                    .child(row("×"))
-                    .child(row("×")),
-            )
+            .child(Flex::column().key("header").child(row("×")).child(row("×")))
             .child(
                 Flex::column()
                     .key("body")
@@ -695,8 +770,16 @@ mod identity_tests {
         assert_eq!(
             ambiguous_identities(&tree),
             vec![
-                Ambiguity { scope: "header".into(), name: "×".into(), count: 2 },
-                Ambiguity { scope: "body".into(), name: "row".into(), count: 2 },
+                Ambiguity {
+                    scope: "header".into(),
+                    name: "×".into(),
+                    count: 2
+                },
+                Ambiguity {
+                    scope: "body".into(),
+                    name: "row".into(),
+                    count: 2
+                },
             ],
         );
     }
