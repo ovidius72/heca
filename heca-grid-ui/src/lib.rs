@@ -47,6 +47,7 @@ pub mod layout;
 pub mod menu;
 pub mod intent;
 pub mod reactive;
+pub mod reconcile;
 pub mod scene;
 pub mod search;
 pub mod style;
