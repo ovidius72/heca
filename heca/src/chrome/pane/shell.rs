@@ -106,6 +106,8 @@ impl PaneShell<'_> {
         // The pane's own identity, from the data — never a counter, never a position. A pane id is
         // stable across every rebuild, which is what lets a letter stay with the same pane between
         // openings of the picker (F003/P082/T445).
+        // **One pane, seen in several places.** The sidebar row and the exposé card show this
+        // same pane and declare the same key, so the three of them wear one letter between them.
         let pane = pane.key(crate::chrome::pane_key(pane_id));
 
         // **What a click on a pane means, said in one place, in the order it happens.**
@@ -161,14 +163,20 @@ impl PaneShell<'_> {
             Some(header) => heca_grid_ui::widgets::Grid::new()
                 .template_row("auto 1fr")
                 .template_area([PANE_HEADER_AREA, PANE_CONTENT_AREA])
-                .child([header.area(PANE_HEADER_AREA), content.area(PANE_CONTENT_AREA)]),
+                .child([
+                    header.area(PANE_HEADER_AREA),
+                    content.area(PANE_CONTENT_AREA),
+                ]),
             // **A missing part is a missing row**, not a flag and not a zero-height placeholder.
             None => heca_grid_ui::widgets::Grid::new()
                 .template_row("1fr")
                 .template_area([PANE_CONTENT_AREA])
                 .child(content.area(PANE_CONTENT_AREA)),
         };
-        pane = pane.child(body.width(heca_grid_ui::Length::Percent(1.0)).height(heca_grid_ui::Length::Percent(1.0)));
+        pane = pane.child(
+            body.width(heca_grid_ui::Length::Percent(1.0))
+                .height(heca_grid_ui::Length::Percent(1.0)),
+        );
 
         let pick = self.cb.pick.clone();
         // **Say what the pick IS, not only what it runs** (F003/P082/T432). The closure emits
@@ -193,8 +201,7 @@ impl PaneShell<'_> {
 
 /// **Focus this pane** — the catalogued action, named rather than performed here.
 fn focus_pane(pane_id: PaneId) -> heca_view::Intent {
-    heca_view::Intent::new("focus_pane")
-        .arg("pane_id", heca_view::PropValue::Int(pane_id.0 as i64))
+    heca_view::Intent::new("focus_pane").arg("pane_id", heca_view::PropValue::Int(pane_id.0 as i64))
 }
 
 /// **Give the shell what focus changed about it.** A per-frame input, exactly like the rect above
@@ -209,7 +216,7 @@ fn focus_pane(pane_id: PaneId) -> heca_view::Intent {
 /// This is the third thing in this file to move out of the rebuild key for the same reason; the
 /// other two are the rect and the header's words, each with the same story.
 pub(crate) fn focus_state_to(
-    root: &mut impl heca_grid_ui::Component,
+    root: &mut dyn heca_grid_ui::Component,
     active: bool,
     border_color: [f32; 4],
     accent: [f32; 4],
@@ -242,12 +249,11 @@ pub(crate) fn focus_state_to(
 /// Baking `Px(w)` into `build` instead is the regression this exists to stop — the tree kept the
 /// width it was first built at, so the border stayed put while the content moved (traced: asked
 /// 648 wide, got 380, every frame).
-pub(crate) fn size_to(root: &mut impl heca_grid_ui::Component, w: f32, h: f32) {
+pub(crate) fn size_to(root: &mut dyn heca_grid_ui::Component, w: f32, h: f32) {
     let style = &mut root.base_mut().style.layout;
     style.width = heca_grid_ui::Length::Px(w);
     style.height = heca_grid_ui::Length::Px(h);
 }
-
 
 fn to_gui_color(color: [f32; 4]) -> heca_grid_ui::Color {
     heca_grid_ui::Color::new(
@@ -304,7 +310,10 @@ mod tests {
             !named(&tree, PANE_HEADER_AREA),
             "no part claims the header row, however many things the body holds",
         );
-        assert!(named(&tree, PANE_CONTENT_AREA), "the body is in the content row");
+        assert!(
+            named(&tree, PANE_CONTENT_AREA),
+            "the body is in the content row"
+        );
 
         // And with a header, it is the one that says so.
         let mut with_header = PaneShell {
@@ -394,7 +403,10 @@ mod tests {
             .intent
             .as_ref()
             .expect("…and says what that pick is");
-        assert_eq!(intent.action, "focus_pane", "the built-in, by the name every surface uses");
+        assert_eq!(
+            intent.action, "focus_pane",
+            "the built-in, by the name every surface uses"
+        );
         assert_eq!(
             intent.args.get("pane_id"),
             Some(&heca_view::PropValue::Int(7)),

@@ -49,7 +49,12 @@ pub trait PlaceExt {
         Self: Sized,
     {
         let line = line.into();
-        let cell = self.placement_base().style.layout.grid_cell.get_or_insert(DEFAULT_CELL);
+        let cell = self
+            .placement_base()
+            .style
+            .layout
+            .grid_cell
+            .get_or_insert(DEFAULT_CELL);
         cell.col = line.start;
         cell.col_span = line.span.stored();
         self
@@ -62,7 +67,12 @@ pub trait PlaceExt {
         Self: Sized,
     {
         let line = line.into();
-        let cell = self.placement_base().style.layout.grid_cell.get_or_insert(DEFAULT_CELL);
+        let cell = self
+            .placement_base()
+            .style
+            .layout
+            .grid_cell
+            .get_or_insert(DEFAULT_CELL);
         cell.row = line.start;
         cell.row_span = line.span.stored();
         self
@@ -74,7 +84,12 @@ pub trait PlaceExt {
     where
         Self: Sized,
     {
-        let cell = self.placement_base().style.layout.grid_cell.get_or_insert(DEFAULT_CELL);
+        let cell = self
+            .placement_base()
+            .style
+            .layout
+            .grid_cell
+            .get_or_insert(DEFAULT_CELL);
         cell.col_span = span.into().stored();
         self
     }
@@ -84,7 +99,12 @@ pub trait PlaceExt {
     where
         Self: Sized,
     {
-        let cell = self.placement_base().style.layout.grid_cell.get_or_insert(DEFAULT_CELL);
+        let cell = self
+            .placement_base()
+            .style
+            .layout
+            .grid_cell
+            .get_or_insert(DEFAULT_CELL);
         cell.row_span = span.into().stored();
         self
     }
@@ -548,13 +568,17 @@ impl IntoChildren for Box<dyn Component> {
 
 impl<T: IntoComponent> IntoChildren for Vec<T> {
     fn into_children(self) -> Vec<Box<dyn Component>> {
-        self.into_iter().map(IntoComponent::into_component).collect()
+        self.into_iter()
+            .map(IntoComponent::into_component)
+            .collect()
     }
 }
 
 impl<T: IntoComponent, const N: usize> IntoChildren for [T; N] {
     fn into_children(self) -> Vec<Box<dyn Component>> {
-        self.into_iter().map(IntoComponent::into_component).collect()
+        self.into_iter()
+            .map(IntoComponent::into_component)
+            .collect()
     }
 }
 
@@ -571,7 +595,6 @@ pub trait Parent: Component + Sized {
         self.base_mut().children.extend(c.into_children());
         self
     }
-
 }
 
 /// **Event handlers, on any widget.** The one-line opt-in every widget already has for layout
@@ -707,7 +730,6 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
-
     /// **This widget can be dragged**, and what gets dragged is the identity it already declares
     /// with [`key`](ComponentExt::key) — the same one the keyboard cursor and the right-click
     /// target read.
@@ -811,7 +833,11 @@ pub trait ComponentExt: Component + Sized {
 
     /// Register `f` for `kind`. It receives an [`EventCx`](crate::event::EventCx) and consumes the
     /// event only if it calls [`stop_propagation`](crate::event::EventCx::stop_propagation).
-    fn on(mut self, kind: crate::event::EventKind, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+    fn on(
+        mut self,
+        kind: crate::event::EventKind,
+        f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static,
+    ) -> Self {
         // **Wiring an action is what makes a widget pickable** (F003/P082/T441). Set here, in the one
         // place every generic listener goes through, rather than repeated in `on_click`,
         // `on_double_click`, `on_key_down` and `on_key_up` — a rule in four call sites is a rule in
@@ -1412,7 +1438,9 @@ mod one_builder_per_slot {
     #[test]
     fn a_named_slot_takes_a_boxed_subtree_through_its_own_builder() {
         use crate::widgets::Item;
-        let it = Item::new("row").leading(subtree()).trailing(Label::new("x"));
+        let it = Item::new("row")
+            .leading(subtree())
+            .trailing(Label::new("x"));
         assert_eq!(it.base().children.len(), 3, "leading, label, trailing");
     }
 }
@@ -1591,7 +1619,11 @@ mod spacing_builders {
         assert_eq!(one.base().children.len(), 1);
 
         let many = Flex::column().child([Label::new("a"), Label::new("b"), Label::new("c")]);
-        assert_eq!(many.base().children.len(), 3, "an array lands as three children");
+        assert_eq!(
+            many.base().children.len(),
+            3,
+            "an array lands as three children"
+        );
 
         let built: Vec<Label> = (0..4).map(|i| Label::new(format!("row {i}"))).collect();
         let from_vec = Flex::column().child(built);
@@ -1639,7 +1671,11 @@ mod spacing_builders {
                     .child([item(2.0, 3), item(1.0, 1)]),
             );
             LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 900.0));
-            root.base().children.iter().map(|c| c.base().bounds.size.h).collect()
+            root.base()
+                .children
+                .iter()
+                .map(|c| c.base().bounds.size.h)
+                .collect()
         };
 
         let shares = heights(true);
@@ -1683,7 +1719,12 @@ mod spacing_builders {
         LayoutEngine::new().compute(grid.as_mut(), Size::new(600.0, 400.0));
 
         let cell = |i: usize| -> GridCell {
-            grid.base().children[i].base().style.layout.grid_cell.expect("placed")
+            grid.base().children[i]
+                .base()
+                .style
+                .layout
+                .grid_cell
+                .expect("placed")
         };
         assert_eq!((cell(0).col, cell(0).row), (1, 1));
         assert_eq!((cell(2).col, cell(2).row), (3, 1));
@@ -1701,11 +1742,16 @@ mod spacing_builders {
         );
         LayoutEngine::new().compute(wider.as_mut(), Size::new(600.0, 400.0));
         assert_eq!(
-            wider.base().children[0].base().style.layout.grid_cell.expect("placed").col_span,
+            wider.base().children[0]
+                .base()
+                .style
+                .layout
+                .grid_cell
+                .expect("placed")
+                .col_span,
             5,
             "the same child spans five columns in a five-column grid",
         );
         assert_eq!(Span::from("all").stored(), GridCell::ALL);
     }
-
 }

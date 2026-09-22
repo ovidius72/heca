@@ -18,10 +18,10 @@
 //! state means adding both lines, and this is the file where that is visible.
 
 use super::seams::{DockRegistries, DockSeams};
-use super::{pane_key, pane_row_items, pane_row_press, row_hint, PaneEntry, MENU_PANE};
+use super::{MENU_PANE, PaneEntry, pane_key, pane_row_items, pane_row_press, row_hint};
 use crate::chrome::{
-    alpha_u8, home_relative_path, pane_info_view, runtime_snapshot, truncate_sidebar_git_branch,
-    ChromeDragItem, RepaintWatch, CARD_META_FONT_SCALE,
+    CARD_META_FONT_SCALE, ChromeDragItem, RepaintWatch, alpha_u8, home_relative_path,
+    pane_info_view, runtime_snapshot, truncate_sidebar_git_branch,
 };
 use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
@@ -91,7 +91,9 @@ impl PaneRow<'_> {
         // same one (F003/P086/T365). A **pick** is declared separately, on the wrapper below: it is a
         // different gesture and this row answers it differently.
         let press = crate::chrome::fires(seams.mount, pane_row_press(pane_id), seams.emit);
-        let icon_widget = Icon::new(info.icon).size(14.0).color(theme.colors.foreground);
+        let icon_widget = Icon::new(info.icon)
+            .size(14.0)
+            .color(theme.colors.foreground);
         let icon_signal = icon_widget.glyph_signal();
         // The pane's name — ONE label, not one per colour. Its colour follows the row's selected
         // state through the content colour the `Row` publishes each paint, which unstyled labels
@@ -131,7 +133,11 @@ impl PaneRow<'_> {
             Flex::row()
                 .align("center")
                 .gap(4.0)
-                .child(Icon::new(Glyph::Plus).size(12.0).color(theme.colors.success))
+                .child(
+                    Icon::new(Glyph::Plus)
+                        .size(12.0)
+                        .color(theme.colors.success),
+                )
                 .child(add_label_widget),
             info.git_added.is_some(),
         );
@@ -161,7 +167,11 @@ impl PaneRow<'_> {
             Flex::row()
                 .align("center")
                 .gap(4.0)
-                .child(Icon::new(Glyph::Minus).size(12.0).color(theme.colors.danger))
+                .child(
+                    Icon::new(Glyph::Minus)
+                        .size(12.0)
+                        .color(theme.colors.danger),
+                )
                 .child(deleted_label_widget),
             info.git_deleted.is_some(),
         );
@@ -340,11 +350,9 @@ impl PaneRow<'_> {
         reg.signals
             .pane_previous
             .push((pane_id, card.previous_state()));
-        reg.signals.row_nav.push((
-            seams.mount.to_string(),
-            pane_key(pane_id),
-            card.nav_state(),
-        ));
+        reg.signals
+            .row_nav
+            .push((seams.mount.to_string(), pane_key(pane_id), card.nav_state()));
         // A move/swap/take pick stamps this pane's letter over the card. **The letter is offered
         // by key** (`chrome::hint`) and drawn by `paint_child` on the card itself — which is why
         // there is no wrapper: the card is a widget, so it can simply say so.
@@ -526,8 +534,8 @@ pub(crate) fn dot_status(status: ProcessStatus) -> heca_grid_ui::DotStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::testing::{self, Fixture};
+    use super::*;
     use heca_core::layout::PaneId;
 
     /// **The bug class this whole split exists for** (F003/P082/T426, three rounds).
@@ -556,7 +564,10 @@ mod tests {
             "selected is a signal, so focus can flip it without a rebuild",
         );
         assert!(
-            fx.signals.pane_previous.iter().any(|(p, _)| *p == PaneId(7)),
+            fx.signals
+                .pane_previous
+                .iter()
+                .any(|(p, _)| *p == PaneId(7)),
             "last-visited is a signal too — this is the one that was read at build time and froze",
         );
         assert!(

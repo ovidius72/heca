@@ -37,10 +37,7 @@ use super::*;
 /// continue would deliver one press twice — pairing a click out of the halves twice with it. So
 /// the question is asked *before* the event moves: owned ⇒ deliver here and stop; not owned ⇒
 /// touch nothing and let the page run.
-pub(crate) fn dispatch_surface_pointer(
-    state: &mut crate::app_state::AppState,
-    ev: &Event,
-) -> bool {
+pub(crate) fn dispatch_surface_pointer(state: &mut crate::app_state::AppState, ev: &Event) -> bool {
     debug_assert!(
         matches!(ev, Event::Raw(_)),
         "dispatch_surface_pointer is the pointer path; keys go through the keymap",
@@ -69,8 +66,8 @@ pub(crate) fn dispatch_surface_pointer(
 /// that started a gesture wherever the cursor has drifted to since.
 pub(crate) fn deliver_to_panes(state: &mut crate::app_state::AppState, ev: &Event) -> bool {
     let mut handled = false;
-    for pane in state.panes.values_mut() {
-        handled |= heca_grid_ui::dispatch(&mut pane.root, ev) == heca_grid_ui::Handled::Yes;
+    for root in crate::chrome::pane_roots_mut(state) {
+        handled |= heca_grid_ui::dispatch(root, ev) == heca_grid_ui::Handled::Yes;
     }
     handled
 }
@@ -235,8 +232,8 @@ pub(crate) fn drag_in_flight(state: &crate::app_state::AppState) -> bool {
 pub(crate) fn next_redraw_across_trees(state: &crate::app_state::AppState) -> Option<f32> {
     use heca_grid_ui::component::soonest_redraw;
     let mut soonest = state.window_root.next_redraw();
-    for pane in state.panes.values() {
-        soonest = soonest_redraw(soonest, pane.root.next_redraw());
+    for root in crate::chrome::pane_roots(state) {
+        soonest = soonest_redraw(soonest, root.next_redraw());
     }
     for widgets in state.pane_viewport_widgets.values() {
         soonest = soonest_redraw(soonest, widgets.badge.next_redraw());
@@ -254,6 +251,3 @@ pub(crate) fn cancel_every_tree(state: &mut crate::app_state::AppState, ev: &Eve
     let _ = deliver_to_panes(state, ev);
     let _ = deliver_to_pane_viewports(state, ev);
 }
-
-
-

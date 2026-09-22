@@ -25,9 +25,22 @@ pub(crate) fn model(pane_id: u64) -> PaneShellModel {
     }
 }
 
+/// The same pane, at a rect a caller chooses — what a column's tests vary.
+pub(crate) fn model_at(pane_id: PaneId, x: f32, y: f32, w: f32, h: f32) -> PaneShellModel {
+    PaneShellModel {
+        pane_id,
+        x,
+        y,
+        w,
+        h,
+        ..model(pane_id.0)
+    }
+}
+
 /// Callbacks that record which panes were picked, instead of reaching the event loop — the app's
 /// edges and nothing else.
-pub(crate) fn recording_callbacks() -> (PaneCallbacks, std::rc::Rc<std::cell::RefCell<Vec<PaneId>>>) {
+pub(crate) fn recording_callbacks() -> (PaneCallbacks, std::rc::Rc<std::cell::RefCell<Vec<PaneId>>>)
+{
     let picked = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
     let sink = picked.clone();
     (

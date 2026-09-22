@@ -8,7 +8,7 @@
 //! routes a grip press to the column and a card press to the pane for free — no geometry here.
 
 use super::seams::{DockRegistries, DockSeams};
-use super::{column_key, column_row_items, pane_row::PaneRow, row_hint, ColumnEntry, MENU_COLUMN};
+use super::{ColumnEntry, MENU_COLUMN, column_key, column_row_items, pane_row::PaneRow, row_hint};
 use crate::chrome::{ChromeDragItem, RepaintWatch};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
 use heca_grid_ui::widgets::{HintPlacement, HintTone, MarkerGroup};
@@ -111,8 +111,8 @@ impl ColumnGroup<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::testing::{self, Fixture};
+    use super::*;
     use heca_core::layout::PaneId;
 
     /// **The sidebar's column is a pick target** (F003/P082/T474).

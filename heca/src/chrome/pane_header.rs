@@ -222,7 +222,15 @@ pub(crate) fn build_pane_info_bar(
     max_width: f32,
     font: f32,
 ) -> Option<Tag> {
-    let items = segment_items(programs, fallback_name, custom_name, runtime, segments, max_width, font);
+    let items = segment_items(
+        programs,
+        fallback_name,
+        custom_name,
+        runtime,
+        segments,
+        max_width,
+        font,
+    );
     if items.is_empty() {
         return None;
     }
@@ -241,7 +249,9 @@ pub(crate) fn build_pane_info_bar(
                 use heca_grid_ui::builders::ComponentExt as _;
                 Tag::new(text).leading(leading).key(key)
             }
-            Some(existing) => existing.segment_text_keyed(text, Some(Box::new(leading)), Some(&key)),
+            Some(existing) => {
+                existing.segment_text_keyed(text, Some(Box::new(leading)), Some(&key))
+            }
         });
     }
     tag
@@ -283,14 +293,16 @@ fn segment_text_key(seg: heca_config::appearance::PaneSegment) -> String {
 ///
 /// A segment that has *appeared or gone* is a different matter and does rebuild: that is a change
 /// of shape, and it stays in the key.
-pub(crate) fn refresh_pane_header_text(root: &dyn heca_grid_ui::Component, texts: &[(heca_config::appearance::PaneSegment, String)]) {
+pub(crate) fn refresh_pane_header_text(
+    root: &dyn heca_grid_ui::Component,
+    texts: &[(heca_config::appearance::PaneSegment, String)],
+) {
     for (seg, text) in texts {
         heca_grid_ui::set_text_by_key(root, &segment_text_key(*seg), text);
     }
 }
 
 // ── In-pane info-bar header: segments (left) + interactive action buttons (right) ──
-
 
 /// Font multiplier for a sidebar card's **secondary metadata** — the dimmed `(process)`
 /// suffix and the cwd row — smaller than the name so it reads as supporting detail.
@@ -398,7 +410,11 @@ impl ActionShortcuts {
                     .push(b.key.clone());
             }
         }
-        Self { by_action, by_layer, style }
+        Self {
+            by_action,
+            by_layer,
+            style,
+        }
     }
 
     /// **The keys `action_name` answers to in one surface's own layer** — empty when that surface
@@ -635,7 +651,10 @@ pub(crate) struct PaneHeaderButton {
 /// tiled-only buttons (per the shared action policy). This is the single place the
 /// button *set* is decided — config-driven today, plugin-extensible later (see
 /// [`PaneHeaderButton`]).
-pub(crate) fn pane_header_buttons(content: &PaneHeaderContent, ctx: &PaneHeaderCtx) -> Vec<PaneHeaderButton> {
+pub(crate) fn pane_header_buttons(
+    content: &PaneHeaderContent,
+    ctx: &PaneHeaderCtx,
+) -> Vec<PaneHeaderButton> {
     use heca_config::appearance::PaneAction;
     let mut out: Vec<PaneHeaderButton> = content
         .actions
@@ -643,8 +662,13 @@ pub(crate) fn pane_header_buttons(content: &PaneHeaderContent, ctx: &PaneHeaderC
         .copied()
         .filter(|&a| !content.floating || pane_action_visible_when_floating(content.catalog, a))
         .map(|action| {
-            let (glyph, wm_action, label, needs_focus) =
-                pane_action_spec(content.catalog, action, ctx.pane_id, ctx.ws_idx, ctx.col_idx);
+            let (glyph, wm_action, label, needs_focus) = pane_action_spec(
+                content.catalog,
+                action,
+                ctx.pane_id,
+                ctx.ws_idx,
+                ctx.col_idx,
+            );
             let is_active = match action {
                 PaneAction::Zoom => content.zoomed,
                 PaneAction::Float => content.floating,
@@ -701,7 +725,12 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
     let hints: Vec<String> = content
         .actions
         .iter()
-        .map(|&a| content.shortcuts.get(pane_action_name(a)).unwrap_or_default())
+        .map(|&a| {
+            content
+                .shortcuts
+                .get(pane_action_name(a))
+                .unwrap_or_default()
+        })
         .collect();
     // **The words are NOT part of this key** (F003/P097/T500). What a header *shows* — the
     // foreground program, the branch, the working directory — changes constantly and changes
@@ -836,16 +865,18 @@ pub(crate) fn build_pane_header(
             // (Antonio, driving, 2026-08-19). `docs/widgets.md` § Identity states the limit:
             // derived identity is fine for a remembered letter until the label changes.
             //
-            // The action name is exactly what a key should be — from the data, never a counter —
-            // and it is unique WITHOUT the pane id in it, because each pane's header is its own
-            // hint surface: `target_identity` prefixes it, giving `pane-header:7/zoom` and
-            // `pane-header:9/zoom`.
-            //
             // **Nothing is declared about picking.** These buttons used to repeat their own click
             // as a hint, purely to win back a letter the picker was withholding from anything
             // inside a pane. The picker counts things now, so a button gets its letter for being a
             // button (Antonio, 2026-09-04: *"Users/Developers MUST not think where a widget is"*).
-            let button = button.key(spec.action_name);
+            // **Named for which pane's control it is**, not for what it does. `zoom` is every
+            // pane's zoom; `pane:7-zoom` is this one's, so the picker can offer all of them at
+            // once. `target_identity` used to add the pane in front of it, which meant the name
+            // was only right while that prefixing lasted.
+            let button = button.key(crate::chrome::pane_control_key(
+                ctx.pane_id,
+                spec.action_name,
+            ));
             // Tooltip = label + the action's current keybind(s), resolved centrally
             // by name (never hand-picked here); the leader renders via PREFIX_SYMBOL. It is a
             // property now, so what comes back is still a `Button` and the group will take it.
@@ -897,10 +928,7 @@ pub(crate) fn build_pane_header(
         // below (Antonio, driving, 2026-09-02).
         .align("center");
     let row = match (bar, buttons) {
-        (Some(bar), Some(buttons)) => row
-            .justify("space-between")
-            .child(bar)
-            .child(buttons),
+        (Some(bar), Some(buttons)) => row.justify("space-between").child(bar).child(buttons),
         (Some(bar), None) => row.justify("start").child(bar),
         (None, Some(buttons)) => row.justify("end").child(buttons),
         (None, None) => return None,
@@ -961,9 +989,7 @@ fn build_pane_viewport_widgets(
     scrollbar = scrollbar.on_change(move |action| {
         if let heca_grid_ui::SignalData::Float(offset_top) = action.data {
             let max = (content_signal.get_untracked() - viewport_signal.get_untracked()).max(0.0);
-            let rows = ((max as f64) - offset_top)
-                .round()
-                .clamp(0.0, max as f64) as usize;
+            let rows = ((max as f64) - offset_top).round().clamp(0.0, max as f64) as usize;
             let _ = bar_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
                 source: InteractionSource::MouseContent,
                 intent: InteractionIntent::FocusPane { pane_id },
@@ -993,7 +1019,12 @@ pub(crate) fn sync_pane_viewport_widgets(
     // Measured before the loop takes a mutable borrow of the widgets it positions.
     let header_heights: std::collections::HashMap<PaneId, f32> = panes
         .iter()
-        .map(|p| (p.pane_id, crate::chrome::pane_header_height(state, p.pane_id)))
+        .map(|p| {
+            (
+                p.pane_id,
+                crate::chrome::pane_header_height(state, p.pane_id),
+            )
+        })
         .collect();
     let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
     for pane in panes {
@@ -1046,14 +1077,12 @@ pub(crate) fn sync_pane_viewport_widgets(
             continue;
         };
         if scrollbar_visible {
-            widgets.scrollbar.base_mut().style.layout.width =
-                heca_grid_ui::style::Length::Px(8.0);
+            widgets.scrollbar.base_mut().style.layout.width = heca_grid_ui::style::Length::Px(8.0);
             widgets.scrollbar.base_mut().style.layout.height =
                 heca_grid_ui::style::Length::Px(content_rect.size.h as f32);
-            LayoutEngine::new().base_font(font).compute(
-                &mut widgets.scrollbar,
-                Size::new(8.0, content_rect.size.h),
-            );
+            LayoutEngine::new()
+                .base_font(font)
+                .compute(&mut widgets.scrollbar, Size::new(8.0, content_rect.size.h));
             let bar_bounds = widgets.scrollbar.base().bounds;
             // X hugs the pane's outer right edge; Y/H follow the terminal content
             // rect so the thumb stays below the header and above the bottom inset.
@@ -1061,10 +1090,9 @@ pub(crate) fn sync_pane_viewport_widgets(
             heca_grid_ui::shift_subtree(&mut widgets.scrollbar, bar_x as f64, content_rect.loc.y);
         }
         if badge_visible {
-            LayoutEngine::new().base_font(font).compute(
-                &mut widgets.badge,
-                Size::new(pane.w as f64, pane.h as f64),
-            );
+            LayoutEngine::new()
+                .base_font(font)
+                .compute(&mut widgets.badge, Size::new(pane.w as f64, pane.h as f64));
             let badge_bounds = widgets.badge.base().bounds;
             // Align to the pane's outer right edge (flush, like the scrollbar).
             let badge_x = pane.x + pane.w - badge_bounds.size.w as f32;
@@ -1076,7 +1104,9 @@ pub(crate) fn sync_pane_viewport_widgets(
             heca_grid_ui::shift_subtree(&mut widgets.badge, badge_x as f64, badge_y as f64);
         }
     }
-    state.pane_viewport_widgets.retain(|id, _| seen.contains(id));
+    state
+        .pane_viewport_widgets
+        .retain(|id, _| seen.contains(id));
 }
 
 /// Build/position the retained per-pane info-bar headers for every visible pane.
@@ -1186,8 +1216,8 @@ pub(crate) fn build_pane_headers(state: &crate::app_state::AppState) -> BuiltPan
         if let Some(root) = build_pane_header(&content, &theme, band, font, input.avail_w, ctx) {
             // The identity rule's warning half (F003/P082/T444). This tree is where it was actually
             // broken: zooming changed what the bar rendered, and the buttons' hint letters moved
-            // under Antonio while he was driving (F011/P094/T451). They carry `.key(action_name)`
-            // now, and this is what says so if that ever goes.
+            // under Antonio while he was driving (F011/P094/T451). Each carries a key naming
+            // which pane's control it is, and this is what says so if that ever goes.
             super::identity::report_ambiguous_widgets("pane-header", &root);
             // **The words travel beside the tree, not inside its identity.** Whoever holds the
             // retained header writes these in each frame, so a command changing the program it
@@ -1209,7 +1239,6 @@ pub(crate) fn build_pane_headers(state: &crate::app_state::AppState) -> BuiltPan
     }
     built
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1280,14 +1309,10 @@ mod tests {
         ));
         let tip = action_tooltip(button, "close", "Close", &shortcuts);
 
-        let named = tip
-            .base()
-            .hint
-            .as_ref()
-            .unwrap()
-            .intent
-            .as_ref()
-            .unwrap();
-        assert_eq!(named.action, "close_pane_by_id", "the caller's own naming wins");
+        let named = tip.base().hint.as_ref().unwrap().intent.as_ref().unwrap();
+        assert_eq!(
+            named.action, "close_pane_by_id",
+            "the caller's own naming wins"
+        );
     }
 }

@@ -27,6 +27,13 @@ pub(crate) struct ColumnShellModel {
     /// on. It reuses `focus_pane` rather than adding a focus-column action: the column has no
     /// keyboard of its own, so a new verb would resolve to this one anyway.
     pub(crate) focus_pane: Option<PaneId>,
+    /// **The panes in this column**, in the order the layout engine placed them, each carrying the
+    /// absolute rect it was given.
+    ///
+    /// A column is where a pane lives, so the panes are its children — which is what lets one move
+    /// between containers the way a div does. Their rects stay **given**: the WM owns pane
+    /// geometry, and a column that stacked them would lose the space the WM left between them.
+    pub(crate) panes: Vec<crate::chrome::pane::PaneShellModel>,
 }
 
 impl ColumnShellModel {
@@ -37,5 +44,17 @@ impl ColumnShellModel {
     /// away the widget signals mid-gesture. Same split the pane shell already makes.
     pub(crate) fn key(&self) -> String {
         format!("{}|{:?}", self.col_id.0, self.focus_pane.map(|p| p.0))
+    }
+
+    /// **Who the column's children are**, in order — the identity each pane answers to.
+    ///
+    /// This is what the children are reconciled against, so a pane that is still here keeps the
+    /// widget it had: its letter, its gesture in flight, its animation. Deliberately not part of
+    /// [`key`](Self::key): adding a pane must not throw away the other panes' trees.
+    pub(crate) fn pane_keys(&self) -> Vec<String> {
+        self.panes
+            .iter()
+            .map(|p| crate::chrome::pane_key(p.pane_id))
+            .collect()
     }
 }

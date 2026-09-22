@@ -716,22 +716,14 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                     } else {
                         ws.scrolling.add_column(
                             None,
-                            Column::new(
-                                new_column_id,
-                                float.pane,
-                                chrome::default_column_width(),
-                            ),
+                            Column::new(new_column_id, float.pane, chrome::default_column_width()),
                             true,
                         );
                     }
                 } else {
                     ws.scrolling.add_column(
                         None,
-                        Column::new(
-                            new_column_id,
-                            float.pane,
-                            chrome::default_column_width(),
-                        ),
+                        Column::new(new_column_id, float.pane, chrome::default_column_width()),
                         true,
                     );
                 }
@@ -1016,27 +1008,48 @@ pub(crate) fn assign_letters(
     identities: &[Option<String>],
     remembered: &std::collections::HashMap<String, char>,
 ) -> Vec<Option<char>> {
-    let mut out: Vec<Option<char>> = vec![None; identities.len()];
-    let mut taken: std::collections::HashSet<char> = std::collections::HashSet::new();
+    use std::collections::{HashMap, HashSet};
+    let mut taken: HashSet<char> = HashSet::new();
+    // **One letter per NAME, not per target.** A pane in the scrolling area and its sidebar row are
+    // two views of one pane, so they answer to one name and must wear one letter — two would ask
+    // you to pick which picture of the same thing you meant, and would burn the alphabet twice as
+    // fast, which is what forces uppercase.
+    let mut chosen: HashMap<&str, char> = HashMap::new();
 
-    for (i, id) in identities.iter().enumerate() {
-        if let Some(id) = id
-            && let Some(&ch) = remembered.get(id)
+    // 1. Every name that had a letter and is still here keeps it.
+    for id in identities.iter().flatten() {
+        if chosen.contains_key(id.as_str()) {
+            continue;
+        }
+        if let Some(&ch) = remembered.get(id)
             && taken.insert(ch)
         {
-            out[i] = Some(ch);
+            chosen.insert(id, ch);
         }
     }
 
-    // **The gaps, in order.** A target new since last time takes the first letter nobody kept, so
-    // adding one costs one letter rather than renaming everything after it.
+    // 2. The gaps, in order. A name new since last time takes the first letter nobody kept, so
+    //    adding one costs one letter rather than renaming everything after it.
     let mut free = heca_grid_ui::widgets::DEFAULT_LETTERS
         .chars()
         .filter(|c| !taken.contains(c));
-    for slot in out.iter_mut() {
-        if slot.is_none() {
-            *slot = free.next();
-        }
+    let mut out: Vec<Option<char>> = vec![None; identities.len()];
+    for (i, id) in identities.iter().enumerate() {
+        out[i] = match id {
+            Some(id) => match chosen.get(id.as_str()) {
+                Some(&ch) => Some(ch),
+                None => {
+                    let ch = free.next();
+                    if let Some(ch) = ch {
+                        chosen.insert(id, ch);
+                    }
+                    ch
+                }
+            },
+            // A target with no name at all cannot be the same thing as any other, so it takes a
+            // letter of its own.
+            None => free.next(),
+        };
     }
     out
 }
@@ -1376,7 +1389,11 @@ fn enter_column_rename(state: &mut AppState, ws_idx: usize, col_idx: usize) {
                 .unwrap_or_else(|| format!("Column {}", col_idx + 1))
         })
         .unwrap_or_default();
-    open_rename_dialog(state, RenameTarget::Column { ws_idx, col_idx }, current_name);
+    open_rename_dialog(
+        state,
+        RenameTarget::Column { ws_idx, col_idx },
+        current_name,
+    );
 }
 
 pub fn handle_rename_column(state: &mut AppState, _action: &WmAction) {
@@ -1899,7 +1916,11 @@ pub fn handle_clear_search_history(state: &mut AppState, action: &WmAction) {
         WmAction::ClearSearchHistory { scope } => scope.clone(),
         _ => None,
     };
-    crate::search_state::forget(state, scope.as_deref(), crate::search_state::Forget::Queries);
+    crate::search_state::forget(
+        state,
+        scope.as_deref(),
+        crate::search_state::Forget::Queries,
+    );
 }
 
 /// Forget the usage counts that rank a search surface's list.
@@ -1908,7 +1929,11 @@ pub fn handle_clear_search_ranking(state: &mut AppState, action: &WmAction) {
         WmAction::ClearSearchRanking { scope } => scope.clone(),
         _ => None,
     };
-    crate::search_state::forget(state, scope.as_deref(), crate::search_state::Forget::Ranking);
+    crate::search_state::forget(
+        state,
+        scope.as_deref(),
+        crate::search_state::Forget::Ranking,
+    );
 }
 
 /// What a request aimed at the dock `mount` should do, given who holds the keyboard.
@@ -2050,11 +2075,7 @@ fn current_tiled_column_target(state: &AppState) -> Option<(usize, usize)> {
 /// body / buttons / dismissibility come from the spec. On resolve, [`run_outcome`] runs the chosen
 /// button's [`Outcome`](crate::actions::Outcome). `resume_sidebar` picks the mode to return to;
 /// `InputMode::ConfirmDelete` is set purely as a status-bar marker (the modal layer owns input).
-fn open_confirm(
-    state: &mut AppState,
-    spec: crate::actions::ConfirmSpec,
-    resolved: WmAction,
-) {
+fn open_confirm(state: &mut AppState, spec: crate::actions::ConfirmSpec, resolved: WmAction) {
     use crate::actions::ButtonRole;
     let title = confirm_title(state, &resolved);
     let danger_panel = spec.buttons.iter().any(|b| b.role == ButtonRole::Danger);
@@ -2291,7 +2312,11 @@ pub(crate) fn apply_ws_collapse(state: &mut AppState, ws_idx: usize, collapse: O
         .chrome_state
         .workspaces
         .with_collapsed_ws(|s| s.clone());
-    state.chrome_state.workspaces.tree_mut().apply_ws_collapsed(&set, Some(ws_idx));
+    state
+        .chrome_state
+        .workspaces
+        .tree_mut()
+        .apply_ws_collapsed(&set, Some(ws_idx));
 }
 
 pub fn handle_collapse_current_workspace(state: &mut AppState, _action: &WmAction) {
@@ -2322,7 +2347,11 @@ pub fn handle_collapse_current_column(state: &mut AppState, _action: &WmAction) 
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return;
     };
-    state.chrome_state.workspaces.tree_mut().collapse_column(ws_idx, col_idx);
+    state
+        .chrome_state
+        .workspaces
+        .tree_mut()
+        .collapse_column(ws_idx, col_idx);
     state.needs_redraw = true;
 }
 
@@ -2330,7 +2359,11 @@ pub fn handle_expand_current_column(state: &mut AppState, _action: &WmAction) {
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return;
     };
-    state.chrome_state.workspaces.tree_mut().expand_column(ws_idx, col_idx);
+    state
+        .chrome_state
+        .workspaces
+        .tree_mut()
+        .expand_column(ws_idx, col_idx);
     state.needs_redraw = true;
 }
 
@@ -2338,7 +2371,11 @@ pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &Wm
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return;
     };
-    state.chrome_state.workspaces.tree_mut().toggle_column_collapsed(ws_idx, col_idx);
+    state
+        .chrome_state
+        .workspaces
+        .tree_mut()
+        .toggle_column_collapsed(ws_idx, col_idx);
     state.needs_redraw = true;
 }
 
@@ -2390,7 +2427,9 @@ pub fn handle_layer_visibility(state: &mut AppState, action: &WmAction) {
     if show != Some(false) {
         crate::chrome::rebuild_named_layer(state, name);
     }
-    let Some(id) = state.layers.by_name(name) else { return };
+    let Some(id) = state.layers.by_name(name) else {
+        return;
+    };
     let show = show.unwrap_or(!state.layers.is_visible_named(&state.window_root, name));
     match show {
         true => state.layers.show(&mut state.window_root, id),
@@ -2660,11 +2699,15 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
     // or start a new selection without the Q5 snap-to-bottom triggering.
     if let Some(active) = state.selection.active()
         && let SelectionRegion::HostGrid {
-            focus_stable_row, focus_col, ..
+            focus_stable_row,
+            focus_col,
+            ..
         } = &active.region
     {
         let owner = active.owner;
-        state.selection.set_caret(owner, *focus_stable_row, *focus_col);
+        state
+            .selection
+            .set_caret(owner, *focus_stable_row, *focus_col);
     } else {
         state.selection.clear();
     }
@@ -2718,13 +2761,16 @@ pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
 /// Get the approximate viewport page size for the focused terminal pane, in rows.
 /// Falls back to a sensible default (24) when no snapshot is available.
 fn focused_terminal_page_rows(state: &AppState) -> usize {
-    state.focused_pane.and_then(|pane_id| {
-        state
-            .backends
-            .get(pane_id)
-            .and_then(|b| b.terminal_snapshot())
-            .map(|s| s.rows)
-    }).unwrap_or(24)
+    state
+        .focused_pane
+        .and_then(|pane_id| {
+            state
+                .backends
+                .get(pane_id)
+                .and_then(|b| b.terminal_snapshot())
+                .map(|s| s.rows)
+        })
+        .unwrap_or(24)
 }
 
 pub fn handle_scrollback_page_up(state: &mut AppState, _action: &WmAction) {
@@ -2813,12 +2859,15 @@ pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) {
             .get(pane_id)
             .and_then(|b| b.terminal_snapshot())
     {
-        let cursor_stable =
-            snapshot.viewport_top_stable_row + snapshot.cursor.row as isize;
+        let cursor_stable = snapshot.viewport_top_stable_row + snapshot.cursor.row as isize;
         if state.selection.is_caret() {
-            state.selection.move_caret(cursor_stable, snapshot.cursor.col);
+            state
+                .selection
+                .move_caret(cursor_stable, snapshot.cursor.col);
         } else {
-            state.selection.update_focus(cursor_stable, snapshot.cursor.col);
+            state
+                .selection
+                .update_focus(cursor_stable, snapshot.cursor.col);
         }
     }
     state.needs_redraw = true;
@@ -2992,7 +3041,9 @@ pub fn handle_notification_dismiss_one(state: &mut AppState, action: &WmAction) 
         return;
     };
     let id = crate::notification::NotificationId::from_raw(*notification_id);
-    state.notifications.dismiss_one(id, std::time::Instant::now());
+    state
+        .notifications
+        .dismiss_one(id, std::time::Instant::now());
     state.needs_redraw = true;
 }
 
@@ -3023,11 +3074,18 @@ pub fn handle_notification_pick(state: &mut AppState, _action: &WmAction) {
 /// chrome::notification_layer) into the notification's real `Intent` and fire it through the
 /// same layer_emitter the mount built, landing on the event loop's next turn.
 pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction) {
-    let WmAction::NotificationActionRelay { notification_id, key } = action else {
+    let WmAction::NotificationActionRelay {
+        notification_id,
+        key,
+    } = action
+    else {
         return;
     };
     let id = crate::notification::NotificationId::from_raw(*notification_id);
-    let Some((intent, dismiss_after)) = state.notifications.action_and_dismiss_after_for_visible(id, key) else {
+    let Some((intent, dismiss_after)) = state
+        .notifications
+        .action_and_dismiss_after_for_visible(id, key)
+    else {
         return;
     };
     // Fired **as the stack**, so the relayed intent is judged exactly as the click that asked for
@@ -3038,7 +3096,9 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
     );
     emit.fire(crate::app::interaction::InteractionIntent::View(intent));
     if dismiss_after {
-        state.notifications.dismiss_one(id, std::time::Instant::now());
+        state
+            .notifications
+            .dismiss_one(id, std::time::Instant::now());
         state.needs_redraw = true;
     }
 }
@@ -3087,7 +3147,10 @@ pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) {
 /// terminal output, so we refuse anything that isn't a plain web/file/mail
 /// resource (e.g. no `javascript:` / `data:`).
 fn link_scheme_allowed(url: &str) -> bool {
-    let scheme = url.trim().split_once(':').map(|(s, _)| s.to_ascii_lowercase());
+    let scheme = url
+        .trim()
+        .split_once(':')
+        .map(|(s, _)| s.to_ascii_lowercase());
     matches!(
         scheme.as_deref(),
         Some("http" | "https" | "mailto" | "file" | "ftp" | "ftps")
@@ -3329,10 +3392,17 @@ mod confirm_wording_tests {
             ),
             (
                 "delete_column",
-                WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 },
+                WmAction::DeleteColumn {
+                    ws_idx: 0,
+                    col_idx: 0,
+                },
                 "ws 1",
             ),
-            ("delete_workspace", WmAction::DeleteWorkspace { ws_idx: 0 }, "ws 1"),
+            (
+                "delete_workspace",
+                WmAction::DeleteWorkspace { ws_idx: 0 },
+                "ws 1",
+            ),
         ] {
             let verb = button_verb(&catalog, owner);
             let title = confirm_title_for(&action, target);
@@ -3356,7 +3426,13 @@ mod confirm_wording_tests {
             "Delete notes?",
         );
         assert_eq!(
-            confirm_title_for(&WmAction::DeleteColumn { ws_idx: 0, col_idx: 2 }, "notes"),
+            confirm_title_for(
+                &WmAction::DeleteColumn {
+                    ws_idx: 0,
+                    col_idx: 2
+                },
+                "notes"
+            ),
             "Delete Column?",
             "a column has no name, so it reads as the type word — the same shape as an unnamed pane",
         );
@@ -3397,7 +3473,7 @@ mod open_link_tests {
 
 #[cfg(test)]
 mod dock_focus_tests {
-    use super::{dock_focus_outcome, DockFocus};
+    use super::{DockFocus, dock_focus_outcome};
 
     /// **`FocusDock` only focuses.** Asking to focus the dock that already has the keyboard does
     /// nothing — it does not hand it back.
@@ -3408,23 +3484,41 @@ mod dock_focus_tests {
     /// it, which is a rule in a call site rather than in the model.
     #[test]
     fn focusing_a_dock_that_already_has_the_keyboard_does_nothing() {
-        assert_eq!(dock_focus_outcome(Some("workspaces"), "workspaces", false), DockFocus::Nothing);
+        assert_eq!(
+            dock_focus_outcome(Some("workspaces"), "workspaces", false),
+            DockFocus::Nothing
+        );
     }
 
     /// **`ToggleDock` hands it back** — `prefix+e` in, `prefix+e` out. The toggle belongs to the
     /// gesture: pressing a key again plainly means "undo that", while a click never does.
     #[test]
     fn toggling_a_dock_that_already_has_the_keyboard_gives_it_back() {
-        assert_eq!(dock_focus_outcome(Some("workspaces"), "workspaces", true), DockFocus::Release);
+        assert_eq!(
+            dock_focus_outcome(Some("workspaces"), "workspaces", true),
+            DockFocus::Release
+        );
     }
 
     /// Both take it when the dock does not have it — that half is the same gesture either way.
     #[test]
     fn either_way_a_dock_without_the_keyboard_takes_it() {
-        assert_eq!(dock_focus_outcome(None, "workspaces", false), DockFocus::Take);
-        assert_eq!(dock_focus_outcome(None, "workspaces", true), DockFocus::Take);
-        assert_eq!(dock_focus_outcome(Some("notes"), "workspaces", false), DockFocus::Take);
-        assert_eq!(dock_focus_outcome(Some("notes"), "workspaces", true), DockFocus::Take);
+        assert_eq!(
+            dock_focus_outcome(None, "workspaces", false),
+            DockFocus::Take
+        );
+        assert_eq!(
+            dock_focus_outcome(None, "workspaces", true),
+            DockFocus::Take
+        );
+        assert_eq!(
+            dock_focus_outcome(Some("notes"), "workspaces", false),
+            DockFocus::Take
+        );
+        assert_eq!(
+            dock_focus_outcome(Some("notes"), "workspaces", true),
+            DockFocus::Take
+        );
     }
 }
 
@@ -3475,7 +3569,10 @@ mod letter_memory_tests {
     fn reopening_an_unchanged_screen_gives_the_same_letters() {
         let first = assign_letters(&ids(&["one", "two", "three"]), &HashMap::new());
         let remembered = remember(&[("one", 'a'), ("two", 's'), ("three", 'd')]);
-        assert_eq!(assign_letters(&ids(&["one", "two", "three"]), &remembered), first);
+        assert_eq!(
+            assign_letters(&ids(&["one", "two", "three"]), &remembered),
+            first
+        );
     }
 
     /// A target that has gone releases its letter, and the next newcomer may take it — the memory
@@ -3491,13 +3588,28 @@ mod letter_memory_tests {
         );
     }
 
-    /// A remembered letter is never handed to two targets: whoever asks first keeps it, the other
-    /// takes a free one. Two identical identities are a bug elsewhere, not a reason to double-book.
+    /// **Two views of one thing share its letter.**
+    ///
+    /// A pane in the scrolling area and the sidebar row for that pane are the same pane, so they
+    /// answer to one name. Giving each its own letter asks which picture of the same thing you
+    /// meant, and burns the alphabet twice as fast — which is what pushed the letters into
+    /// uppercase. Offering already puts one letter on every place a name is shown.
     #[test]
-    fn one_letter_never_goes_to_two_targets() {
-        let remembered = remember(&[("dup", 'a')]);
-        let got = assign_letters(&ids(&["dup", "dup"]), &remembered);
-        assert_eq!(got, vec![Some('a'), Some('s')]);
+    fn two_views_of_one_thing_wear_the_same_letter() {
+        let remembered = remember(&[("pane:7", 'a')]);
+        let got = assign_letters(&ids(&["pane:7", "pane:7"]), &remembered);
+        assert_eq!(got, vec![Some('a'), Some('a')]);
+    }
+
+    /// …and a name with no remembered letter still gets one letter for both of its views, not two.
+    #[test]
+    fn two_views_of_a_new_thing_also_share_one_letter() {
+        let got = assign_letters(&ids(&["pane:7", "pane:7", "pane:8"]), &Default::default());
+        assert_eq!(
+            got,
+            vec![Some('a'), Some('a'), Some('s')],
+            "one letter for the pane seen twice, the next letter for the other pane",
+        );
     }
 
     /// **Open the picker, close it, open it again: the same letters.**
@@ -3529,7 +3641,10 @@ mod letter_memory_tests {
         // Esc, then press 2 — nothing about the targets has changed.
         let second = assign_letters(&identities, &remembered);
 
-        assert_eq!(second, first, "a second opening must repeat the first's letters");
+        assert_eq!(
+            second, first,
+            "a second opening must repeat the first's letters"
+        );
     }
 
     /// A target with no identity cannot be remembered, but still gets a letter — it just gets a

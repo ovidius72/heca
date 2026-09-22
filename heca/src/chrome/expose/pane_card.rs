@@ -135,6 +135,7 @@ impl PaneCard<'_> {
             // wrong, in opposite directions — so the theme carries the third scale, and this asks
             // for it by name rather than picking a number.
             .previous_tint(theme.colors.effective_card_previous_background())
+            // A view of that pane — the same letter it wears everywhere else.
             .key(pane_key(self.pane_id));
         // **The pane you are on wears the frame it wears in the app.**
         //

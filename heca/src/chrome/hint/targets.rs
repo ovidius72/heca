@@ -4,8 +4,8 @@
 //! Two questions, deliberately separate: *can you see it* is geometry, *would it do anything* is
 //! policy.
 
-use super::surfaces::{hint_surface_root, HintSurface, HintTarget};
-use super::visibility::{resolve_hint_layers, HintLayer};
+use super::surfaces::{HintSurface, HintTarget, hint_surface_root};
+use super::visibility::{HintLayer, resolve_hint_layers};
 use crate::chrome::ChromeConfig;
 use heca_core::layout::{Point, Rectangle, Size};
 use heca_grid_ui::Component;
@@ -208,11 +208,7 @@ fn window_slot_of(state: &crate::app_state::AppState, target: &HintTarget) -> Op
 /// bounds as an occluder blanked every letter in the app for as long as the stack was mounted —
 /// chrome, panes and all — leaving letters only on the toast itself.
 fn layer_occluders(lock: bool, bounds: Rectangle) -> Vec<Rectangle> {
-    if lock {
-        vec![bounds]
-    } else {
-        Vec::new()
-    }
+    if lock { vec![bounds] } else { Vec::new() }
 }
 
 /// The candidates the **one visibility rule** leaves — context activation, then geometric occlusion
@@ -223,9 +219,7 @@ fn layer_occluders(lock: bool, bounds: Rectangle) -> Vec<Rectangle> {
 /// [`visible_pane_targets`] wants the first alone — a pane-select mode letters a pane for reasons of
 /// its own, and answering it with the `prefix+/` picker's policy would be one surface's judgement
 /// applied to another's.
-fn visible_hint_targets(
-    state: &crate::app_state::AppState,
-) -> Vec<(HintTarget, Rectangle)> {
+fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, Rectangle)> {
     let chrome = ChromeConfig::of(state);
     let (vw, vh) = (chrome.window().w, chrome.window().h);
     let viewport = Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, vh));
@@ -320,10 +314,13 @@ fn visible_hint_targets(
         // The pane's shell and its info bar are ONE tree now — the bar is a child of the pane —
         // so one walk collects the pane's own letter and its bar buttons' together. They were
         // always hidden by the same occluder anyway, because they are one pane.
-        let targets = match state.panes.get(&pane_id) {
-            Some(shell) => hints_of(&HintSurface::Pane(pane_id), &shell.root),
-            None => Vec::new(),
-        };
+        // **Ask where the surface is, never where it used to be kept.** A floating pane is the
+        // host's own tree; a tiled one is a node inside its column. `hint_surface_root` is the one
+        // function that answers that, and collecting, offering and running the pick all ask it —
+        // so none of them can disagree about where a pane is.
+        let targets = super::surfaces::hint_surface_root(state, &HintSurface::Pane(pane_id))
+            .map(|root| hints_of(&HintSurface::Pane(pane_id), root))
+            .unwrap_or_default();
         if targets.is_empty() {
             continue;
         }

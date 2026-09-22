@@ -178,8 +178,8 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // Tick every pane's own tree, so its info bar's action buttons' press flash, hover animation
     // and tooltip reveal advance (and a redraw is requested while they animate) instead of getting
     // stuck. The bar is a child of its pane, so one tick reaches both.
-    for pane in state.panes.values_mut() {
-        chrome_animating |= pane.root.tick(dt);
+    for root in crate::chrome::pane_roots_mut(state) {
+        chrome_animating |= root.tick(dt);
     }
     for widgets in state.pane_viewport_widgets.values_mut() {
         chrome_animating |= widgets.badge.tick(dt);

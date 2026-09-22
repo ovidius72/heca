@@ -10,11 +10,11 @@
 //! opening its own group is not `HintPick`, so its letters were clobbered identically and the
 //! plugin author had no way to add themselves to that match. Ownership has no such list.
 
-use crate::app_state::InputMode;
-use heca_grid_ui::Component;
 use super::surfaces::{HintSurface, HintTarget};
-use super::targets::{visible_views, VisibleViews};
+use super::targets::{VisibleViews, visible_views};
+use crate::app_state::InputMode;
 use crate::providers::workspaces::{column_key, pane_key, workspace_key};
+use heca_grid_ui::Component;
 
 /// **A thing a picker asked to be lettered**, addressed the way that picker knows it.
 ///
@@ -155,10 +155,7 @@ pub(crate) fn sync_offered_letters(state: &crate::app_state::AppState) -> bool {
             .chrome_state
             .events()
             .emit(crate::chrome::ChromeEvent::HintLettersChanged {
-                letters: wanted
-                    .iter()
-                    .map(|(o, ch)| (*ch, o.name(state)))
-                    .collect(),
+                letters: wanted.iter().map(|(o, ch)| (*ch, o.name(state))).collect(),
             });
     }
     offered.offers = next;
@@ -231,6 +228,16 @@ fn offer_in_every_tree(
             for_view(HintSurface::Pane(*pane_id)),
         );
     }
+    // **A tiled pane is a node inside its column**, so its surface is asked for the same way any
+    // other is — `hint_surface_root` knows where a pane's tree is (F003/P082/T474).
+    for column in state.columns.values() {
+        for pane_id in &column.panes {
+            let surface = HintSurface::Pane(*pane_id);
+            if let Some(root) = super::surfaces::hint_surface_root(state, &surface) {
+                offered |= heca_grid_ui::offer_hint_by_key(root, key, for_view(surface));
+            }
+        }
+    }
     // **And the columns in the scrolling area.** A column is a third place a letter can land: it is
     // drawn in the content area, so it is not in the window root, and it is not a pane. Its sidebar
     // group is a second view of the same identity and is reached by the window-root walk above —
@@ -275,7 +282,11 @@ mod tests {
     #[test]
     fn an_unseen_view_is_withdrawn_from_rather_than_left_alone() {
         let letter = Some("a".to_string());
-        assert_eq!(label_for(&letter, true).as_deref(), Some("a"), "seen: it wears the letter");
+        assert_eq!(
+            label_for(&letter, true).as_deref(),
+            Some("a"),
+            "seen: it wears the letter"
+        );
         assert_eq!(
             label_for(&letter, false),
             None,
@@ -345,9 +356,9 @@ mod tests {
         let store = SharedChromeState::new(300.0, true, 300.0, false);
         let seen: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
         let log = seen.clone();
-        let _sub = store
-            .events()
-            .subscribe("hint.changed", move |e| log.borrow_mut().push(e.name().to_string()));
+        let _sub = store.events().subscribe("hint.changed", move |e| {
+            log.borrow_mut().push(e.name().to_string())
+        });
 
         store
             .events()
@@ -355,9 +366,12 @@ mod tests {
                 letters: vec![('a', pane_key(PaneId(1)))],
             });
 
-        assert_eq!(seen.borrow().len(), 1, "the name a plugin filters on is `hint.changed`");
+        assert_eq!(
+            seen.borrow().len(),
+            1,
+            "the name a plugin filters on is `hint.changed`"
+        );
     }
-
 }
 
 // ── Which targets exist, and which of them are reachable ─────────────────────

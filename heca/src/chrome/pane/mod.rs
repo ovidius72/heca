@@ -16,7 +16,7 @@
 //! key changes, re-lay-out and re-position every frame, prune panes that vanished.
 
 mod model;
-mod shell;
+pub(crate) mod shell;
 #[cfg(test)]
 pub(crate) mod testing;
 
@@ -83,12 +83,11 @@ pub(crate) fn clear_panes(state: &mut crate::app_state::AppState) {
     crate::chrome::clear_columns(state);
 }
 
-/// Build, lay out and position the retained shell for every visible pane.
-///
-/// Runs at the **top** of `render_frame`, before the `scene_view` borrow of `state.compositor`, so
-/// it can mutate `state.panes`; render then paints them read-only.
-pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
-    // ── Phase 1: gather, under immutable borrows only ──
+/// **Every visible pane, reduced to plain data** — the gather half of [`sync_panes`], on its own
+/// so the column surface can build the panes it holds from the same models rather than a second
+/// reading of the session (AGENTS.md § 0b-bis rule 4: `mod.rs` gathers, everything below takes
+/// plain data).
+pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellModel> {
     let frame_style = state.appearance.effective_pane_border_style();
     let border = state
         .appearance
@@ -144,6 +143,33 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
                 accent,
             }
         })
+        .collect();
+    models
+}
+
+/// Build, lay out and position the retained shell for every visible pane.
+///
+/// Runs at the **top** of `render_frame`, before the `scene_view` borrow of `state.compositor`, so
+/// it can mutate `state.panes`; render then paints them read-only.
+pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
+    // **Only the panes no column holds.** A tiled pane is a child of its column now
+    // (`chrome::column`), built, placed, focused and painted there — so building a second tree for
+    // it here would be two widgets answering to one name, and two of everything the pane carries.
+    // A floating pane belongs to no column, so it is still the host's to place.
+    let tiled: std::collections::HashSet<PaneId> = state
+        .session
+        .active_workspace()
+        .map(|ws| {
+            ws.scrolling
+                .panes_with_positions()
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect()
+        })
+        .unwrap_or_default();
+    let models: Vec<PaneShellModel> = pane_models(state)
+        .into_iter()
+        .filter(|m| !tiled.contains(&m.pane_id))
         .collect();
 
     // What each pane wants along its top. Built here and handed down as a child — the shell has no
@@ -217,7 +243,7 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
 
 /// The app's edges, gathered once. A test calls this to get exactly the seams and nothing else
 /// (AGENTS.md § 0b-bis rule 3).
-fn callbacks(state: &crate::app_state::AppState) -> PaneCallbacks {
+pub(crate) fn callbacks(state: &crate::app_state::AppState) -> PaneCallbacks {
     let proxy = state.event_proxy.clone();
     PaneCallbacks {
         pick: std::rc::Rc::new(move |pane_id: PaneId| {

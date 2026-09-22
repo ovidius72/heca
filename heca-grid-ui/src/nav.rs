@@ -154,6 +154,75 @@ pub fn identity_of(root: &dyn Component, path: &[usize]) -> Option<String> {
     Some(scope.join("/"))
 }
 
+/// **The node inside this tree that answers to `key`**, or `None`.
+///
+/// The lookup twin of [`identity_of`]: that one asks what a widget is called, this one goes and
+/// finds it. It exists because a tree can hold several named things that each own a surface of
+/// their own — a column holds its panes — and whoever collects from one of them needs to start at
+/// that node, not at the tree that contains it.
+pub fn node_with_key<'a>(root: &'a dyn Component, key: &str) -> Option<&'a dyn Component> {
+    if root.base().answers_to(key) {
+        return Some(root);
+    }
+    root.base()
+        .children
+        .iter()
+        .find_map(|c| node_with_key(c.as_ref(), key))
+}
+
+/// The path to the node that answers to `key`, for descending to it mutably.
+fn path_to_key(root: &dyn Component, key: &str, here: &mut Vec<usize>) -> Option<Vec<usize>> {
+    if root.base().answers_to(key) {
+        return Some(here.clone());
+    }
+    for (i, child) in root.base().children.iter().enumerate() {
+        here.push(i);
+        if let Some(found) = path_to_key(child.as_ref(), key, here) {
+            return Some(found);
+        }
+        here.pop();
+    }
+    None
+}
+
+/// [`node_with_key`], **mutably** — what running a pick needs, since a pick acts on the widget
+/// through its own handlers and handlers are `FnMut`.
+pub fn node_with_key_mut<'a>(
+    root: &'a mut dyn Component,
+    key: &str,
+) -> Option<&'a mut dyn Component> {
+    let path = path_to_key(root, key, &mut Vec::new())?;
+    let mut node = root;
+    for step in path {
+        node = node.base_mut().children.get_mut(step)?.as_mut();
+    }
+    Some(node)
+}
+
+/// **What one child answers to inside its parent** — its own name, without the scope its ancestors
+/// put in front of it.
+///
+/// [`identity_of`] gives the full path name (`col:3/pane:7`), which is what a letter is filed under
+/// because it has to be unique across the whole screen. A parent matching up its own children wants
+/// the last part of that (`pane:7`): the scope is the same for all of them, and the caller knows
+/// only the names it asked for.
+///
+/// Same rule either way — a declared `key` or `scope_key`, read through any wrapper, and otherwise
+/// derived from content with an index among identically-named siblings.
+pub fn child_name(parent: &dyn Component, index: usize) -> Option<String> {
+    let node = through_wrappers(parent.base().children.get(index)?.as_ref());
+    match node.base().identity() {
+        Some(k) => Some(k.to_string()),
+        None => {
+            let name = node.text_summary()?;
+            Some(match nth_named(parent, &[index], &name) {
+                0 => name,
+                n => format!("{name}[{n}]"),
+            })
+        }
+    }
+}
+
 /// How many widgets named `name` come before `path` within this scope, in document order — the
 /// index that disambiguates a repeated anonymous control. `0` for the first, which wears the bare
 /// name.

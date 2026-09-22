@@ -4,9 +4,8 @@
 //! nothing has to be un-registered when a tree is rebuilt or pruned. A path is meaningful only for
 //! the tree it was read from, which is exactly the lifetime a pick has.
 
-use heca_grid_ui::Component;
 use heca_core::layout::PaneId;
-
+use heca_grid_ui::Component;
 
 /// **Which retained tree a hint declaration was collected from** — and there are only two kinds
 /// left.
@@ -67,7 +66,11 @@ pub(crate) struct HintTarget {
 }
 
 impl HintTarget {
-    pub(super) fn new(surface: &HintSurface, root: &dyn heca_grid_ui::Component, path: Vec<usize>) -> Self {
+    pub(super) fn new(
+        surface: &HintSurface,
+        root: &dyn heca_grid_ui::Component,
+        path: Vec<usize>,
+    ) -> Self {
         Self {
             identity: heca_grid_ui::identity_of(root, &path),
             surface: surface.clone(),
@@ -101,16 +104,27 @@ pub(crate) fn resolve<'a>(
 }
 
 /// The retained tree a [`HintSurface`] names, or `None` when it is gone.
-pub(super) fn hint_surface_root<'a>(
+pub(crate) fn hint_surface_root<'a>(
     state: &'a crate::app_state::AppState,
     surface: &HintSurface,
 ) -> Option<&'a dyn heca_grid_ui::Component> {
     match surface {
         HintSurface::Window => Some(&state.window_root as &dyn heca_grid_ui::Component),
+        // **Wherever that pane's tree lives.** A floating pane is the host's own; a tiled one is a
+        // child of its column, so the surface resolves to the pane's own node inside it. One
+        // function, read by every side — offering a letter, running the pick and collecting the
+        // targets all ask here, so none of them can disagree about where a pane is.
         HintSurface::Pane(pane_id) => state
             .panes
             .get(pane_id)
-            .map(|p| &p.root as &dyn heca_grid_ui::Component),
+            .map(|p| &p.root as &dyn heca_grid_ui::Component)
+            .or_else(|| {
+                let key = crate::chrome::pane_key(*pane_id);
+                state
+                    .columns
+                    .values()
+                    .find_map(|c| heca_grid_ui::node_with_key(&c.root, &key))
+            }),
     }
 }
 
@@ -120,13 +134,22 @@ pub(super) fn hint_surface_root<'a>(
 fn hint_surface_root_mut<'a>(
     state: &'a mut crate::app_state::AppState,
     surface: &HintSurface,
-) -> Option<&'a mut (dyn heca_grid_ui::Component + 'static)> {
+) -> Option<&'a mut dyn heca_grid_ui::Component> {
     match surface {
         HintSurface::Window => Some(&mut state.window_root as &mut dyn heca_grid_ui::Component),
-        HintSurface::Pane(pane_id) => state
-            .panes
-            .get_mut(pane_id)
-            .map(|p| &mut p.root as &mut dyn heca_grid_ui::Component),
+        HintSurface::Pane(pane_id) => {
+            let key = crate::chrome::pane_key(*pane_id);
+            if state.panes.contains_key(pane_id) {
+                return state
+                    .panes
+                    .get_mut(pane_id)
+                    .map(|p| &mut p.root as &mut dyn heca_grid_ui::Component);
+            }
+            state
+                .columns
+                .values_mut()
+                .find_map(|c| heca_grid_ui::node_with_key_mut(&mut c.root, &key))
+        }
     }
 }
 
@@ -137,8 +160,17 @@ fn hint_surface_root_mut<'a>(
 /// widget it belonged to. The identity is the durable half: the widget's own `key` where it has one,
 /// derived from its name and scope where it has not (`heca_grid_ui::identity_of`).
 ///
-/// Prefixed by the tree, because a pane's shell and the window may each hold a `pane:7` and they
-/// are not the same pickable thing.
+/// **A thing that declared a key is named by that key alone, wherever it is shown.** A pane in the
+/// scrolling area and the sidebar row for that pane are two views of one pane — T447's rule — so
+/// they must get ONE letter, not one each. Prefixing by the tree gave them two, and two letters for
+/// one thing is also what exhausts the alphabet and forces uppercase.
+///
+/// Offering already handles this: [`resolve`] hands back *every* place a name is shown and all of
+/// them wear the letter. Only the naming split them.
+///
+/// Anything that declared no key keeps the prefix, because then the name is derived from content
+/// and is only unique within its own tree — two docks holding the same rows is exactly the case
+/// the scope exists for.
 ///
 /// ⚠️ **There is no per-layer prefix, and adding one back is a bug** (F003/P097/T499). While
 /// `Chrome` and `Layer` were separate arms, the same widget seen from the root and from its layer
@@ -150,11 +182,28 @@ pub(crate) fn target_identity(
     target: &HintTarget,
 ) -> Option<String> {
     let within = target.identity.clone()?;
+    // **A key names the thing, so it is the name.** A pane keyed `col:3-pane:7` is that pane
+    // wherever it is drawn, and its zoom button is `col:3-pane:7-zoom` — unique because it says
+    // which pane's zoom it is, not because of the tree it was found in.
+    if let Some(key) = declared_key(_state, target) {
+        return Some(key);
+    }
     let surface = match &target.surface {
         HintSurface::Window => "window".to_string(),
         HintSurface::Pane(id) => format!("pane:{}", id.0),
     };
     Some(format!("{surface}/{within}"))
+}
+
+/// The `key` the widget behind `target` declared about itself, or `None` when it declared none and
+/// its name is guessed from the text inside it.
+fn declared_key(state: &crate::app_state::AppState, target: &HintTarget) -> Option<String> {
+    let (root, paths) = resolve(state, target)?;
+    let mut node = root;
+    for step in paths.first()? {
+        node = node.base().children.get(*step)?.as_ref();
+    }
+    node.base().key.clone()
 }
 
 /// Run what a pick does to the widget behind `target`. `false` when its tree is gone or was rebuilt
@@ -208,8 +257,9 @@ pub(crate) fn fire_widget_action(state: &crate::app_state::AppState, name: &str)
 /// and reached only the surfaces the registry owned — never one placed without registering.
 pub(crate) fn clear_hint_letters(state: &crate::app_state::AppState) {
     heca_grid_ui::clear_hints(&state.window_root);
-    for shell in state.panes.values() {
-        heca_grid_ui::clear_hints(&shell.root);
+    // Every tree that holds panes — a floating pane's own, and each column's, which carries the
+    // tiled ones as children.
+    for root in crate::chrome::pane_roots(state) {
+        heca_grid_ui::clear_hints(root);
     }
-    crate::chrome::clear_column_hints(state);
 }

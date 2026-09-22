@@ -11,9 +11,7 @@ pub(crate) use theme::{
 pub(crate) mod signals;
 pub(crate) use signals::{ChromeSignals, sync_chrome_signals, sync_chrome_state};
 pub(crate) mod column;
-pub(crate) use column::{
-    RetainedColumn, clear_column_hints, clear_columns, offer_to_columns, sync_columns,
-};
+pub(crate) use column::{RetainedColumn, clear_columns, offer_to_columns, sync_columns};
 pub(crate) mod pane;
 pub(crate) use pane::{RetainedPane, clear_panes, header_height as pane_header_height, sync_panes};
 pub(crate) mod pane_header;
@@ -107,7 +105,9 @@ pub(crate) use context_menu::{
 // The command palette: every registered action, searchable, dispatched through the one door
 // (F003/P085/T358).
 pub use contribution::{ContextMenuContribution, Contribution, RegionSet};
-pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, Region, RegionId, SidebarSelection};
+pub use events::{
+    ChromeEvent, ChromeEventBus, ChromeSubscription, Region, RegionId, SidebarSelection,
+};
 pub(crate) use palette::open_command_palette;
 // Chrome keyboard focus: which dock the keyboard is aimed at (F003/P011/T020).
 pub(crate) use focus::{dock_candidates, navigable_dock, placement_for, region_on_screen};
@@ -656,6 +656,43 @@ pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: Box<dyn Compone
 /// lives here rather than in a provider so the pane and every view of it read the SAME string
 /// instead of keeping two copies in step (it was defined twice before F011/P094/T451).
 ///
+/// **Every retained tree that holds panes**, wherever they live.
+///
+/// A tiled pane is a child of its column (`chrome::column`); a floating one belongs to no column
+/// and is the host's own. Anything that walks "all the panes" — delivering an event, ticking an
+/// animation, collecting pick targets, asking for the next wake — has to reach both, and asking
+/// that question in five places is five chances to add the second map to four of them.
+pub(crate) fn pane_roots(
+    state: &crate::app_state::AppState,
+) -> impl Iterator<Item = &dyn heca_grid_ui::Component> {
+    state
+        .panes
+        .values()
+        .map(|p| &p.root as &dyn heca_grid_ui::Component)
+        .chain(
+            state
+                .columns
+                .values()
+                .map(|c| &c.root as &dyn heca_grid_ui::Component),
+        )
+}
+
+/// The same trees, to write to — see [`pane_roots`].
+pub(crate) fn pane_roots_mut(
+    state: &mut crate::app_state::AppState,
+) -> impl Iterator<Item = &mut dyn heca_grid_ui::Component> {
+    state
+        .panes
+        .values_mut()
+        .map(|p| &mut p.root as &mut dyn heca_grid_ui::Component)
+        .chain(
+            state
+                .columns
+                .values_mut()
+                .map(|c| &mut c.root as &mut dyn heca_grid_ui::Component),
+        )
+}
+
 /// It is never a position and never a counter: a `PaneId` survives every tree rebuild, which is
 /// what lets a hint letter stay with the same pane between openings of the picker.
 pub(crate) fn pane_key(pane: heca_core::layout::PaneId) -> String {
@@ -670,6 +707,55 @@ pub(crate) fn pane_key(pane: heca_core::layout::PaneId) -> String {
 /// two homes for one string is two spellings waiting to drift (F003/P082/T474).
 pub(crate) fn column_key(col_id: heca_core::layout::ColumnId) -> String {
     format!("col:{}", col_id.0)
+}
+
+/// **What one of a pane's own controls is called** — `pane:7-zoom`.
+///
+/// A control named for its ROLE is not named at all: every pane has a zoom button, so `zoom` says
+/// which button it is only if you already know which pane you are looking at. The name says which
+/// pane, so the picker can hold all of them at once and give each its own letter.
+///
+/// Composed here, once, so no call site spells the format — the same reason [`pane_key`] and
+/// [`column_key`] live together. An action contributed from `config.toml` or by a plugin gets a
+/// correct name without its author knowing any of this.
+pub(crate) fn pane_control_key(pane: heca_core::layout::PaneId, control: &str) -> String {
+    format!("{}-{control}", pane_key(pane))
+}
+
+#[cfg(test)]
+mod naming_tests {
+    use heca_core::layout::{ColumnId, PaneId};
+
+    /// **A name says which thing, so the same thing has one name wherever it is drawn.**
+    ///
+    /// The pane in the scrolling area, the sidebar row for it and the exposé card are three views
+    /// of one pane. They call it the same, so the picker gives it one letter instead of three.
+    #[test]
+    fn every_view_of_a_pane_calls_it_the_same() {
+        assert_eq!(super::pane_key(PaneId(7)), "pane:7");
+        assert_eq!(super::column_key(ColumnId(3)), "col:3");
+    }
+
+    /// **…and a control is named for the pane it belongs to, never for its role.**
+    ///
+    /// `zoom` is every pane's zoom button. Naming them that gave all of them one letter the moment
+    /// a name was taken at face value, so you could not say which pane you meant.
+    #[test]
+    fn two_panes_controls_are_not_the_same_control() {
+        let a = super::pane_control_key(PaneId(7), "zoom");
+        let b = super::pane_control_key(PaneId(9), "zoom");
+        assert_eq!(a, "pane:7-zoom");
+        assert_ne!(a, b, "one pane's zoom is not another's");
+    }
+
+    /// A control is not its pane either — they are two targets and wear two letters.
+    #[test]
+    fn a_pane_and_its_control_are_two_things() {
+        assert_ne!(
+            super::pane_key(PaneId(7)),
+            super::pane_control_key(PaneId(7), "zoom"),
+        );
+    }
 }
 
 /// **Fire a named gesture**: the closure that emits `intent` through this surface's chrome sink.
