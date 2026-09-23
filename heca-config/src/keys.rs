@@ -204,6 +204,20 @@ pub struct KeysConfig {
     /// Accepts both `prefix` and `prefix_key` for compatibility.
     #[serde(default = "default_prefix_key", alias = "prefix_key")]
     pub prefix: String,
+    /// **How long prefix mode waits for the next key**, in milliseconds.
+    ///
+    /// After this with nothing pressed, prefix mode cancels and the keyboard goes back to normal.
+    /// It governs chord mode too, which is the same question one key later.
+    ///
+    /// ```toml
+    /// [keys]
+    /// prefix_timeout_ms = 1500
+    /// ```
+    ///
+    /// It is a feel, not a fact — how long you take between two keys is yours, and the number that
+    /// used to be here was a guess compiled into the app.
+    #[serde(default = "default_prefix_timeout_ms")]
+    pub prefix_timeout_ms: u64,
     /// Flat action bindings (any key not named "prefix", "bind", "command", "mode", "unbind",
     /// "widgets", or "component").
     #[serde(flatten)]
@@ -270,6 +284,12 @@ impl KeysConfig {
 
 fn default_prefix_key() -> String {
     "ctrl+b".to_string()
+}
+
+/// Long enough to reach the second key without thinking about it, short enough that a prefix
+/// pressed by accident does not sit there waiting.
+fn default_prefix_timeout_ms() -> u64 {
+    1000
 }
 
 impl Default for KeysConfig {

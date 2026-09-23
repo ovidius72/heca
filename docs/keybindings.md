@@ -223,6 +223,20 @@ Change the prefix itself:
 prefix = "ctrl+a"
 ```
 
+### How long the prefix waits
+
+After the prefix key, heca waits for the next key and then gives up, so a prefix pressed by
+accident does not leave the keyboard in a mode you cannot see. The wait is yours to set:
+
+```toml
+[keys]
+prefix_timeout_ms = 1000   # default
+```
+
+It governs [modes](#3-a-mode--a-sub-keymap-behind-one-key) too, which is the same question one key
+later. Raise it if the second key keeps arriving too late; lower it if a stray prefix sits there
+waiting.
+
 ---
 
 ## Binding a plugin or provider action

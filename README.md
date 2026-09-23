@@ -598,6 +598,7 @@ shell_integration = true
 
 # Keybindings — prefix+ syntax for prefix bindings, direct for global
 [keys]
+prefix_timeout_ms = 1000      # how long the prefix waits for the next key
 focus_left = ["prefix+h", "prefix+ArrowLeft"]
 focus_right = ["prefix+l", "prefix+ArrowRight"]
 focus_up = ["prefix+k", "prefix+ArrowUp"]

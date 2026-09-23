@@ -393,7 +393,9 @@ pub(crate) async fn init_state(
     // from whatever the host has seated in it (`chrome::build_region_content`), so this
     // registration is *why* there is a workspace tree in the sidebar at all. Move the
     // container to the right region and its UI goes with it.
-    crate::chrome::Region::LeftSidebar.child(crate::providers::WorkspacesContainerProvider::new());
+    crate::chrome::Region::LeftSidebar.child(crate::providers::WorkspacesContainerProvider::new(
+        "workspaces",
+    ));
     // A **second placement** of the same container, in the right sidebar (F003/P085/T359, user
     // 2026-07-30). Not scaffolding: with one dock on screen none of this phase is observable — not
     // a letter per dock, not focus moving between them, not "the focused one answers and every
@@ -402,9 +404,9 @@ pub(crate) async fn init_state(
     //
     // It is also the only thing that exercises the kind/mount split for real: same content, same
     // bindings, separate cursor / scroll / focus, because those are keyed by mount id.
-    crate::chrome::Region::RightSidebar.child(
-        crate::providers::WorkspacesContainerProvider::named("workspaces.right"),
-    );
+    crate::chrome::Region::RightSidebar.child(crate::providers::WorkspacesContainerProvider::new(
+        "workspaces.right",
+    ));
     // A **third placement, beside the first**, so two docks share one region. One dock per sidebar
     // never shows whether two of them divide the height, hold their own space as one folds, or line
     // their title rows up with each other — which is the whole of what a region has to get right.
@@ -413,7 +415,7 @@ pub(crate) async fn init_state(
     crate::chrome::Region::LeftSidebar
         .template_row("1fr 1fr")
         .gap("sm")
-        .child(crate::providers::WorkspacesContainerProvider::named(
+        .child(crate::providers::WorkspacesContainerProvider::new(
             "workspaces.left2",
         ));
 
@@ -532,6 +534,7 @@ pub(crate) async fn init_state(
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
+        prefix_timeout_ms: app_config.config.keys.prefix_timeout_ms,
         widget_keymap: crate::app::registry::build_widget_keymap(&app_config.config),
         pending_menus: pending_menus.clone(),
         pending_drops: pending_drops.clone(),

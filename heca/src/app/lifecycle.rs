@@ -61,6 +61,12 @@ pub(crate) struct WakeRequests {
     pub(crate) widget_in: Option<f32>,
     /// When the next toast auto-dismisses, or `None` when the stack is holding its deadlines.
     pub(crate) toast_expiry: Option<Instant>,
+    /// **When prefix mode gives up waiting**, or `None` when nothing is waiting.
+    ///
+    /// It was checked but never booked, so the mode expired when something else happened to wake
+    /// the loop — terminal output, a pointer move — and on a quiet window it outlived its own
+    /// deadline. A deadline nobody sleeps until is a deadline that is only approximately kept.
+    pub(crate) prefix_expiry: Option<Instant>,
 }
 
 /// What the loop should do next: sleep until [`wake_at`](Wake::wake_at), or until an event when it
@@ -96,6 +102,7 @@ pub(crate) fn next_wake(now: Instant, req: WakeRequests) -> Wake {
         req.animating.then(|| now + crate::chrome::FRAME_INTERVAL),
         widget_frame_due,
         req.toast_expiry,
+        req.prefix_expiry,
     ]
     .into_iter()
     .flatten()
@@ -147,12 +154,13 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // received and a fresh ask is meaningful again. Anything marking itself further down this pass
     // is asking for the *next* frame and must be able to wake us.
     heca_grid_ui::frame_served();
+    let prefix_timeout = crate::chrome::prefix_timeout(state);
     let should_timeout = matches!(
         state.input_mode,
         InputMode::Prefix | InputMode::Chord { .. }
     ) && state
         .prefix_entered_at
-        .is_some_and(|entered| entered.elapsed() >= crate::chrome::PREFIX_TIMEOUT);
+        .is_some_and(|entered| entered.elapsed() >= prefix_timeout);
     if should_timeout {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
@@ -281,6 +289,14 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
             // spin, for as long as the pointer stayed. What ends the hold is a pointer event,
             // which wakes the loop on its own.
             toast_expiry,
+            // Prefix mode is waiting for a key that may never come, so the loop sleeps until the
+            // moment it stops waiting.
+            prefix_expiry: matches!(
+                state.input_mode,
+                InputMode::Prefix | InputMode::Chord { .. }
+            )
+            .then(|| state.prefix_entered_at.map(|at| at + prefix_timeout))
+            .flatten(),
         },
     );
     state.widget_frame_due = schedule.widget_frame_due;
@@ -304,7 +320,49 @@ mod tests {
             animating,
             widget_in,
             toast_expiry: toast_in.map(|s| now + Duration::from_secs_f32(s)),
+            prefix_expiry: None,
         }
+    }
+
+    /// **Prefix mode's deadline is one of the things the loop sleeps until.**
+    ///
+    /// It was checked every pass and booked by nobody, so it expired when something else happened
+    /// to wake the loop. With terminal output arriving that looks about right; on a quiet window
+    /// the mode sat open past its own deadline.
+    #[test]
+    fn the_loop_sleeps_until_prefix_mode_gives_up() {
+        let now = Instant::now();
+        let due = now + Duration::from_millis(1000);
+        let wake = next_wake(
+            now,
+            WakeRequests {
+                prefix_expiry: Some(due),
+                ..requests(false, None, None, now)
+            },
+        );
+        assert_eq!(
+            wake.wake_at,
+            Some(due),
+            "nothing else was waiting, so this is the wake"
+        );
+    }
+
+    /// …and it does not outrank a sooner one — the nearest deadline still wins.
+    #[test]
+    fn a_sooner_deadline_still_wins_over_the_prefix() {
+        let now = Instant::now();
+        let wake = next_wake(
+            now,
+            WakeRequests {
+                prefix_expiry: Some(now + Duration::from_millis(1000)),
+                ..requests(false, Some(0.1), None, now)
+            },
+        );
+        assert_eq!(
+            wake.wake_at,
+            Some(now + Duration::from_secs_f32(0.1)),
+            "the widget asked first and asked sooner",
+        );
     }
 
     /// **A widget's request survives an animation.** This is the bug the list replaced: the chain

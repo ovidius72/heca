@@ -85,6 +85,11 @@
 # Prefix key triggers prefix mode for all `prefix+...` bindings (tmux-style).
 prefix = "ctrl+b"
 
+# How long prefix mode waits for the next key before giving up, in milliseconds. Governs chord
+# mode too. Raise it if the second key keeps arriving too late; lower it if a prefix pressed by
+# accident sits there waiting.
+prefix_timeout_ms = 1000
+
 # ── Navigation (within workspace) ──
 focus_left  = ["prefix+h", "prefix+ArrowLeft"]
 focus_right = ["prefix+l", "prefix+ArrowRight"]
