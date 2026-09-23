@@ -2727,7 +2727,7 @@
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
   "updatedAt": "2026-09-23T08:50:09.772Z",
-  "handoff": "# The sidebar is mid-fix and NOT verified — a region takes children and a template, three layout defects are fixed, and the last one is unconfirmed on screen\n\nCreated at: 2026-08-27\nUpdated at: 2026-09-21T15:45:56.420Z\nReason: Work is stopping with uncommitted changes that Antonio has not signed off. The sidebar was photographed wrong three times in a row and each screenshot uncovered a different defect; the third fix is verified only headlessly. A cold agent must not commit, must re-drive the sidebar first, and must know which decisions are settled and which are still open — including two that Antonio raised and nobody has answered.\n\n## Current focus\nExact focus and resume point are preserved in the supporting document.\n\n## Current and partial state\nEarlier sessions: `.planner/docs/handoff-p082-2026-09-15-detail.md` — four library capabilities, the guards that proved nothing, and a \"Carried over — filed NOWHERE\" list. Its two `hit_test.rs` defects are now DONE; the rest stand.\n\n**Committed and verified on screen by Antonio:**\n- The layout API is CSS-shaped — tracks, keywords, child-side placement, one `child` door, `flex-basis`. Commit `47356a0`, plus `docs/layout.md` (`eed9fd7`).\n- The exposé's columns-of-two bug (`Flex::on_layout` walked into layouts, not just wrappers) and the mouse hit-test defects.\n- `Pane` and `DockFrame` find their parts BY NAME — `area(..)` reads one back, `area_slot(..)` hands over the slot so a part can be replaced. `DockFrame`'s five positional constants are gone. Commits `8c31419`, `d913683`. Antonio: \"it looks as before now.\"\n- `Region::LeftSidebar.child(..)` — a region takes children, one or many; no `Box`, no host object, no `::placed`; works before the host exists. `placed(id, region)` became `named(id)`. Commit `14452a9`.\n- A region takes a template — `Region::LeftSidebar.template_row(\"1fr 1fr\").gap(\"sm\")`. Commit `a3bc234`. **A third dock is registered in the left sidebar on purpose**, so two share a region and the arrangement is observable.\n\n**UNCOMMITTED, and the last one is UNVERIFIED on screen.** Three separate defects, found one at a time across three of Antonio's screenshots:\n1. Containers collap\n\n[Extended detail continues in the linked planner document.]\n\n## Preservation constraints\n- **The column parent move is unstarted.** Two traps remain (3 and 4 are gone — the pane's key is on its own node, and `.accent` removed the per-pane theme swap): (1) flex stacking the panes DROPS THE GAP, so place children at the slots `columns_with_positions` gives; (2) moving placement skips the per-frame `shell::focus_state_to` write, so the active pane loses its highlight. **Agree the steps with Antonio before writing any of it.**\n- **Ownership and painting move together** — \"ownership only\" was tried and was wrong; a host lookup `pane::shell(state, id)` was a registry by another name and was reverted too.\n- **`KeyHint` is only for a region that is not a widget you can put a builder on.** Three remain and are correct.\n\n## Supporting documents\n- .planner/docs/handoff-p082-2026-09-21T15-45-56-420Z.md — Full submitted handoff detail externalized automatically because the inline resume capsule exceeded 8000 characters. Read this document before resuming.\n\n## Blockers and risks\n- ⚠️ **TWO KNOWN DEFECTS, NEITHER DIAGNOSED.** **(a) Idle CPU reaches 100%** after a while — Antonio reported it returning during this session and it was never traced. Suspect a layout pass that never settles, since that re-requests a frame for ever; `LayoutEngine::compute` runs up to `SETTLE_PASSES` and then lays out once more regardless. **(b) `Region::child` after startup queues but is never seated** — `ChromeHost::mount_pending` is called once in `app/startup.rs`. A plugin adding a container later is silently dropped. Needs a drain point in the frame loop, or `child` seating directly when a host exists.\n- ⚠️ **The workspaces dock does not cap its own height.** It already nests its own `ScrollRegion` (`providers/workspaces/dock_view.rs`), so the scroll area exists — what is missing is the dock's body\n\n[Extended detail continues in the linked planner document.]\n\n## How to resume\n1. **Re-drive the left sidebar with Antonio.** Two docks, each capped to half, each scrolling its own rows, full width. If it is still wrong, STOP PATCHING — build a headless reproduction of the real region body first.\n2. Read `AGENTS.md`, then `docs/layout.md`, then T474's description and **notes**.\n3. **Gates:** `./scripts/lint-changed.sh test`, then `./scripts/lint-changed.sh`. Never `--workspace`. Grep for `warning:` as well as `error`. Formatting: compare newly-unformatted lines against HEAD, not hunk counts.\n4. **Sabotage every new guard.** Copy the file first; never `git checkout --` a modified file.\n5. **Never commit or push unasked. Propose planner entries, never create them.** Short, plain answers.",
+  "handoff": "",
   "handoffUpdatedAt": "2026-09-21T15:45:56.420Z",
   "handoffAudit": {
     "version": 1,
@@ -2972,6 +2972,11 @@
   "handoffReadAt": "2026-09-21T15:46:00.455Z",
   "handoffHistory": [
     {
+      "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-09-23T08-58-18-900Z.md",
+      "clearedAt": "2026-09-23T08:58:18.900Z",
+      "reason": "manual"
+    },
+    {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-25T08-59-39-784Z.md",
       "clearedAt": "2026-08-25T08:59:39.784Z",
       "reason": "superseded"
@@ -2989,11 +2994,6 @@
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-21T15-28-54-679Z.md",
       "clearedAt": "2026-08-21T15:28:54.679Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-21T11-18-49-039Z.md",
-      "clearedAt": "2026-08-21T11:18:49.039Z",
       "reason": "superseded"
     }
   ],
