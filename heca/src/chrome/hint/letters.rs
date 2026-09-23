@@ -81,11 +81,16 @@ fn wanted(mode: &InputMode) -> Vec<(Offer, char)> {
         );
     }
     if let Some(cands) = mode.col_candidates() {
-        out.extend(
-            cands
-                .iter()
-                .map(|(ch, _ws_idx, _col_idx, col_id)| (Offer::ByKey(column_key(*col_id)), *ch)),
-        );
+        out.extend(cands.iter().map(|(ch, target)| {
+            let key = match target {
+                crate::app_state::ColumnPickTarget::Existing { col_id, .. } => column_key(*col_id),
+                // The offer of a new column wears a letter like any other destination.
+                crate::app_state::ColumnPickTarget::New => {
+                    crate::chrome::NEW_COLUMN_KEY.to_string()
+                }
+            };
+            (Offer::ByKey(key), *ch)
+        }));
     }
     // A dock names itself with `scope_key` rather than `key` — a container's identity, not a
     // row's — and `offer_hint_by_key` matches either, so this is the same one line as the rest.

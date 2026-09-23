@@ -1197,7 +1197,12 @@ pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction)
     };
     // The column this pane is already in is not a destination — moving it there does nothing.
     let here = crate::app::selection::column_of_pane(&state.session, pane_id);
-    let candidates = crate::app::selection::collect_column_candidates(&state.session, here);
+    // **A new column is offered only when it would change something.** A pane alone in its column
+    // moved into a fresh one leaves the strip exactly as it was, so it is not offered rather than
+    // refused after the letter is pressed — the rule Part B already settled.
+    let offer_new = crate::app::selection::column_of_pane_has_siblings(&state.session, pane_id);
+    let candidates =
+        crate::app::selection::collect_column_candidates(&state.session, here, offer_new);
     begin_pick(
         state,
         InputMode::ColumnPick {

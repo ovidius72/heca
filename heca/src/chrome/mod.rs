@@ -141,8 +141,10 @@ pub const DEFAULT_SIDEBAR_WIDTH: f32 = 240.0;
 
 // ── Timing ──
 
-/// Prefix mode auto-exit timeout (ms). After this time with no key, prefix mode cancels.
-pub const PREFIX_TIMEOUT: Duration = Duration::from_millis(500);
+/// **How long prefix mode waits for the next key**, as configured.
+pub fn prefix_timeout(state: &crate::app_state::AppState) -> Duration {
+    Duration::from_millis(state.prefix_timeout_ms)
+}
 /// Target frame interval (~60 FPS).
 pub const FRAME_INTERVAL: Duration = Duration::from_millis(16);
 
@@ -709,6 +711,12 @@ pub(crate) fn column_key(col_id: heca_core::layout::ColumnId) -> String {
     format!("col:{}", col_id.0)
 }
 
+/// `col:new` — **the slot for a column that does not exist yet.**
+///
+/// A name, not an id, because there is nothing to have an id: it is the offer of a new column,
+/// shown only while a column pick is open and gone when it closes.
+pub(crate) const NEW_COLUMN_KEY: &str = "col:new";
+
 /// **What one of a pane's own controls is called** — `pane:7-zoom`.
 ///
 /// A control named for its ROLE is not named at all: every pane has a zoom button, so `zoom` says
@@ -1197,7 +1205,9 @@ mod tests {
 
         // The trait default, which is what a provider that says nothing gets.
         assert_eq!(
-            crate::providers::Provider::grow(&crate::providers::WorkspacesContainerProvider::new()),
+            crate::providers::Provider::grow(&crate::providers::WorkspacesContainerProvider::new(
+                "workspaces"
+            )),
             1.0,
             "saying nothing means one equal share",
         );
@@ -1560,7 +1570,7 @@ mod tests {
     ) -> Option<super::WidgetModel> {
         let mut host = super::ChromeHost::new(chrome.events());
         host.register(Box::new(
-            crate::providers::WorkspacesContainerProvider::new(),
+            crate::providers::WorkspacesContainerProvider::new("workspaces"),
         ));
         let emit: super::ChromeIntentEmitter = ChromeIntentEmitter::of(
             crate::app::interaction::InteractionSource::Keyboard,

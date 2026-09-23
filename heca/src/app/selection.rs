@@ -112,7 +112,9 @@ pub(crate) fn collect_workspace_candidates(
 pub(crate) fn collect_column_candidates(
     session: &Session,
     except: Option<heca_core::layout::ColumnId>,
-) -> Vec<(char, usize, usize, heca_core::layout::ColumnId)> {
+    offer_new: bool,
+) -> Vec<(char, crate::app_state::ColumnPickTarget)> {
+    use crate::app_state::ColumnPickTarget;
     session
         .workspaces
         .iter()
@@ -125,9 +127,31 @@ pub(crate) fn collect_column_candidates(
                 .map(move |(col_idx, col)| (ws_idx, col_idx, col.id))
         })
         .filter(|(_, _, col_id)| Some(*col_id) != except)
+        .map(|(ws_idx, col_idx, col_id)| ColumnPickTarget::Existing {
+            ws_idx,
+            col_idx,
+            col_id,
+        })
+        // **A new column is the last destination**, so the columns that exist keep the letters they
+        // had — adding this costs one letter rather than moving everyone's.
+        //
+        // Not offered when the pane is alone where it is: making a column to move it into leaves
+        // the strip exactly as it was. Excluded here rather than refused after the letter is
+        // pressed, the same rule that keeps the pane's own column out.
+        .chain(offer_new.then_some(ColumnPickTarget::New))
         .zip(heca_grid_ui::widgets::DEFAULT_LETTERS.chars())
-        .map(|((ws_idx, col_idx, col_id), ch)| (ch, ws_idx, col_idx, col_id))
+        .map(|(target, ch)| (ch, target))
         .collect()
+}
+
+/// **Does the pane share its column with another?** — whether moving it out would change the strip.
+pub(crate) fn column_of_pane_has_siblings(session: &Session, pane_id: PaneId) -> bool {
+    session.workspaces.iter().any(|ws| {
+        ws.scrolling
+            .columns
+            .iter()
+            .any(|col| col.panes.iter().any(|p| p.id == pane_id) && col.panes.len() > 1)
+    })
 }
 
 /// **The column a pane is in**, by its own id — what a column pick excludes.
@@ -166,7 +190,8 @@ pub(crate) fn find_pane_location(
 mod tests {
     use super::{
         PANE_CANDIDATE_LIMIT, candidate_letter, collect_all_pane_candidates,
-        collect_column_candidates, column_of_pane, has_pane_candidate_overflow,
+        collect_column_candidates, column_of_pane, column_of_pane_has_siblings,
+        has_pane_candidate_overflow,
     };
     use heca_core::layout::{
         Pane as LayoutPane, PaneId, Session,
@@ -193,15 +218,50 @@ mod tests {
     fn the_column_you_are_in_is_never_a_destination() {
         // Three panes, each opened as its own column.
         let session = make_session_with_panes(3);
-        let all = collect_column_candidates(&session, None);
+        let all = collect_column_candidates(&session, None, false);
         assert_eq!(all.len(), 3);
 
         let here = column_of_pane(&session, PaneId(2)).expect("pane 2 is in a column");
-        let others = collect_column_candidates(&session, Some(here));
+        let others = collect_column_candidates(&session, Some(here), false);
         assert_eq!(others.len(), 2, "the column you are in is gone");
         assert!(
-            !others.iter().any(|(_, _, _, col_id)| *col_id == here),
+            !others.iter().any(|(_, target)| matches!(
+                target,
+                crate::app_state::ColumnPickTarget::Existing { col_id, .. } if *col_id == here
+            )),
             "and it is not lettered under another letter either",
+        );
+    }
+
+    /// **A new column is offered last**, so the columns that exist keep the letters they had.
+    /// Adding the offer costs one letter rather than moving everyone's.
+    #[test]
+    fn the_offer_of_a_new_column_comes_after_the_ones_that_exist() {
+        use crate::app_state::ColumnPickTarget;
+        let session = make_session_with_panes(3);
+        let with_new = collect_column_candidates(&session, None, true);
+        assert_eq!(with_new.len(), 4, "three columns and the offer of a fourth");
+        assert!(
+            matches!(with_new.last(), Some((_, ColumnPickTarget::New))),
+            "the new-column offer is last: {with_new:?}",
+        );
+        let existing: Vec<char> = with_new[..3].iter().map(|(c, _)| *c).collect();
+        let without: Vec<char> = collect_column_candidates(&session, None, false)
+            .iter()
+            .map(|(c, _)| *c)
+            .collect();
+        assert_eq!(existing, without, "no column's letter moved to make room");
+    }
+
+    /// **A pane alone in its column is not offered a new one.** Moving it into a fresh column
+    /// leaves the strip exactly as it was, so the offer is withheld rather than refused after the
+    /// letter is pressed — the same rule that keeps the pane's own column out.
+    #[test]
+    fn a_pane_alone_in_its_column_is_not_offered_a_new_one() {
+        let session = make_session_with_panes(3);
+        assert!(
+            !column_of_pane_has_siblings(&session, PaneId(2)),
+            "each pane opened as its own column, so none has a sibling",
         );
     }
 
@@ -211,7 +271,7 @@ mod tests {
     fn a_single_column_offers_no_destination_at_all() {
         let session = make_session_with_panes(1);
         let here = column_of_pane(&session, PaneId(1)).expect("pane 1 is in a column");
-        assert!(collect_column_candidates(&session, Some(here)).is_empty());
+        assert!(collect_column_candidates(&session, Some(here), false).is_empty());
     }
 
     #[test]

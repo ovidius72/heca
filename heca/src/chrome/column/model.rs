@@ -34,6 +34,13 @@ pub(crate) struct ColumnShellModel {
     /// between containers the way a div does. Their rects stay **given**: the WM owns pane
     /// geometry, and a column that stacked them would lose the space the WM left between them.
     pub(crate) panes: Vec<crate::chrome::pane::PaneShellModel>,
+    /// **Show the offer of a new column, right of this one.**
+    ///
+    /// True only on the column the picked pane is in, and only while a column pick is open — "a new
+    /// column goes right of the current one, you keep your place in the strip", the rule
+    /// `move_pane_to_new_column` already follows. It rides on the column rather than on a surface of
+    /// its own because it is drawn beside this column and disappears with the pick.
+    pub(crate) new_column_slot: bool,
 }
 
 impl ColumnShellModel {
@@ -43,7 +50,12 @@ impl ColumnShellModel {
     /// which is far cheaper than rebuilding, and rebuilding on every pixel of a drag would throw
     /// away the widget signals mid-gesture. Same split the pane shell already makes.
     pub(crate) fn key(&self) -> String {
-        format!("{}|{:?}", self.col_id.0, self.focus_pane.map(|p| p.0))
+        format!(
+            "{}|{:?}|{}",
+            self.col_id.0,
+            self.focus_pane.map(|p| p.0),
+            self.new_column_slot,
+        )
     }
 
     /// **Who the column's children are**, in order — the identity each pane answers to.

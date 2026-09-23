@@ -763,27 +763,32 @@ fn handle_workspace_pick_mode(
 fn handle_column_pick_mode(
     registry: &ActionRegistry,
     state: &mut AppState,
-    candidates: &[(char, usize, usize, heca_core::layout::ColumnId)],
+    candidates: &[(char, crate::app_state::ColumnPickTarget)],
     pane_id: PaneId,
     ctx: KeyInputContext<'_>,
 ) {
+    use crate::app_state::ColumnPickTarget;
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
     let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
-        && let Some((_, ws_idx, col_idx, _)) = candidates.iter().find(|(c, ..)| *c == ch)
+        && let Some((_, target)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        dispatch_action(
-            state,
-            registry,
-            InteractionSource::Keyboard,
-            &WmAction::MovePaneToColumn {
+        // Each destination names the act that reaches it, so the letter runs the same action a
+        // keybinding or an RPC call would — the pick is only how a keyboard supplies an argument it
+        // cannot type.
+        let action = match *target {
+            ColumnPickTarget::Existing {
+                ws_idx, col_idx, ..
+            } => WmAction::MovePaneToColumn {
                 pane_id,
-                ws_idx: *ws_idx,
-                col_idx: *col_idx,
+                ws_idx,
+                col_idx,
             },
-        );
+            ColumnPickTarget::New => WmAction::MovePaneToNewColumn,
+        };
+        dispatch_action(state, registry, InteractionSource::Keyboard, &action);
     }
     state.needs_redraw = true;
 }

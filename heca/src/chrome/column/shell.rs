@@ -30,6 +30,8 @@ pub(crate) struct ColumnCallbacks {
     /// The keycap tint a column target wears — the theme token, so both views of a column agree
     /// and a theme reload moves them together.
     pub(crate) tint: heca_grid_ui::Color,
+    /// What picking the new-column offer does: make one and move the pane into it.
+    pub(crate) new_column: std::rc::Rc<dyn Fn()>,
 }
 
 /// The column shell component. Properties are struct fields and the constructor is a struct
@@ -42,6 +44,34 @@ pub(crate) struct ColumnShell<'a> {
     /// **What each pane wants along its top**, by pane. The column knows no more about a header
     /// than the pane does — it carries them down and the pane decides what to do with one.
     pub(crate) headers: HashMap<PaneId, Box<dyn Component>>,
+}
+
+/// How wide the new-column offer is, as a share of the column it sits beside. A slot, not a
+/// column: wide enough to aim at and to carry a letter, narrow enough to read as an opening.
+const NEW_COLUMN_SHARE: f32 = 0.18;
+
+/// **The offer of a new column**, drawn in the gap right of the column the picked pane is in.
+///
+/// It is a child of that column and placed outside its box, which `at_rect` allows — absolute
+/// placement is not clipped by a parent that does not clip. That is what keeps it out of every
+/// map and every walk: it arrives with the column and leaves with it.
+fn new_column_slot(cb: &ColumnCallbacks) -> Box<dyn Component> {
+    let slot = Flex::column()
+        .key(crate::chrome::NEW_COLUMN_KEY)
+        .at_rect(
+            heca_grid_ui::Length::Percent(1.0),
+            0.0,
+            heca_grid_ui::Length::Percent(NEW_COLUMN_SHARE),
+            heca_grid_ui::Length::Percent(1.0),
+        )
+        // What picking it means: make a column here and move the pane into it. The column asks;
+        // the core does.
+        .on_hint({
+            let make = cb.new_column.clone();
+            move || make()
+        })
+        .hint_color(cb.tint);
+    Box::new(slot)
 }
 
 /// **Build one pane, placed where the layout engine put it.**
@@ -106,6 +136,10 @@ impl ColumnShell<'_> {
         for pane in &self.model.panes {
             let header = self.headers.remove(&pane.pane_id);
             column = column.child(pane_child(pane, self.model, self.pane_cb, header));
+        }
+        // Declared last so it draws over the gap rather than under the panes.
+        if self.model.new_column_slot {
+            column = column.child(new_column_slot(self.cb));
         }
         column
     }

@@ -47,9 +47,9 @@ pub(crate) fn offer_to_columns(
 ) -> bool {
     let mut offered = false;
     for col in state.columns.values() {
-        if col.root.base().key.as_deref() == Some(key) {
-            offered |= heca_grid_ui::offer_hint(&col.root, &[], label.clone());
-        }
+        // **By key, into the tree** — the column names itself, and the offer of a new column beside
+        // it is a child. Matching only the root meant a target had to BE the tree it lived in.
+        offered |= heca_grid_ui::offer_hint_by_key(&col.root, key, label.clone());
     }
     offered
 }
@@ -81,6 +81,8 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
             w: col.rect.size.w as f32,
             h: col.rect.size.h as f32,
             focus_pane: focus_pane_of(state, col),
+            // Only the column the picked pane is in offers a new one beside it.
+            new_column_slot: picking_from_column(state, col),
             // The panes this column holds, in the order the layout engine placed them.
             panes: col
                 .panes
@@ -186,6 +188,30 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
     state.columns.retain(|id, _| seen.contains(id));
 }
 
+/// **Is the pick asking where to put a pane that lives in THIS column?**
+///
+/// The offer of a new column is drawn beside the column the pane is in, because that is where the
+/// new one goes — "you keep your place in the strip".
+fn picking_from_column(
+    state: &crate::app_state::AppState,
+    col: &heca_core::layout::LaidOutColumn,
+) -> bool {
+    let picking = match &state.input_mode {
+        crate::app_state::InputMode::ColumnPick { pane_id, .. } => Some(*pane_id),
+        _ => None,
+    };
+    offers_new_column(picking, col.panes.iter().map(|p| p.id))
+}
+
+/// The rule itself, without a window: the offer belongs to the column holding the pane the pick
+/// captured, and to nothing else when no pick is open.
+fn offers_new_column(picking: Option<PaneId>, panes: impl IntoIterator<Item = PaneId>) -> bool {
+    let Some(pane_id) = picking else {
+        return false;
+    };
+    panes.into_iter().any(|id| id == pane_id)
+}
+
 /// **Which pane a pick on this column goes to** — the active one when it is in this column, else
 /// the first. Where a column *is*, is the pane you would land on.
 fn focus_pane_of(
@@ -209,6 +235,17 @@ pub(crate) fn callbacks(state: &crate::app_state::AppState) -> ColumnCallbacks {
     let proxy = state.event_proxy.clone();
     ColumnCallbacks {
         tint: crate::chrome::chrome_gui_theme(state).colors.success,
+        new_column: {
+            let proxy = state.event_proxy.clone();
+            std::rc::Rc::new(move || {
+                let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+                    source: crate::app::interaction::InteractionSource::Keyboard,
+                    intent: crate::app::interaction::InteractionIntent::ActivateAction(
+                        crate::input::WmAction::MovePaneToNewColumn,
+                    ),
+                });
+            })
+        },
         pick: std::rc::Rc::new(move |pane_id: PaneId| {
             // The column asks; the core does. A pick is a **keyboard** gesture: it lands on
             // nothing, so where the keyboard is is its context — the same reasoning a pane's own
@@ -245,6 +282,7 @@ mod tests {
                     crate::chrome::pane::testing::model_at(PaneId(*id), 0.0, *top, 400.0, *h)
                 })
                 .collect(),
+            new_column_slot: false,
         }
     }
 
@@ -258,6 +296,7 @@ mod tests {
         let cb = ColumnCallbacks {
             tint: heca_grid_ui::Color::new(0, 255, 0, 255),
             pick: std::rc::Rc::new(|_| {}),
+            new_column: std::rc::Rc::new(|| {}),
         };
         ColumnShell {
             model: m,
@@ -354,6 +393,62 @@ mod tests {
         }
     }
 
+    /// **The offer of a new column is drawn beside the column the pane is in**, and only while a
+    /// pick is open. It sits outside that column's box, which is why it is placed absolutely
+    /// rather than stacked — a child that took space would squeeze the panes.
+    #[test]
+    fn the_new_column_offer_is_a_child_placed_beside_the_column() {
+        let mut m = with_panes(3, Some(7), &[(7, 0.0, 100.0)]);
+        m.new_column_slot = true;
+        let view = built(&m);
+        let slot = view
+            .base()
+            .children
+            .iter()
+            .find(|c| c.base().key.as_deref() == Some(crate::chrome::NEW_COLUMN_KEY))
+            .expect("the offer is a child of the column");
+        let placement = slot
+            .base()
+            .style
+            .layout
+            .placement
+            .expect("placed, so it takes no space from the panes");
+        assert_eq!(
+            placement.left,
+            heca_grid_ui::Length::Percent(1.0),
+            "it starts where the column ends",
+        );
+        assert!(slot.base().hint.is_some(), "and it is a pick target");
+    }
+
+    /// …and it is not there when nothing is picking.
+    #[test]
+    fn no_offer_is_drawn_when_no_pick_is_open() {
+        let view = built(&with_panes(3, Some(7), &[(7, 0.0, 100.0)]));
+        assert!(
+            !view
+                .base()
+                .children
+                .iter()
+                .any(|c| c.base().key.as_deref() == Some(crate::chrome::NEW_COLUMN_KEY)),
+            "the offer belongs to the pick, so it goes when the pick does",
+        );
+    }
+
+    /// **The offer belongs to the column holding the picked pane**, and to no column at all when
+    /// nothing is picking.
+    #[test]
+    fn only_the_column_the_picked_pane_is_in_offers_a_new_one() {
+        let here = [PaneId(7), PaneId(8)];
+        let elsewhere = [PaneId(9)];
+        assert!(super::offers_new_column(Some(PaneId(7)), here));
+        assert!(!super::offers_new_column(Some(PaneId(7)), elsewhere));
+        assert!(
+            !super::offers_new_column(None, here),
+            "no pick, no offer — it belongs to the pick and goes when it does",
+        );
+    }
+
     /// A column with no pane has nowhere to go, so it declares nothing and wears no letter.
     #[test]
     fn an_empty_column_is_not_a_pick_target() {
@@ -369,6 +464,7 @@ mod tests {
         let cb = ColumnCallbacks {
             tint: heca_grid_ui::Color::new(0, 255, 0, 255),
             pick: std::rc::Rc::new(move |id: PaneId| sink.borrow_mut().push(id)),
+            new_column: std::rc::Rc::new(|| {}),
         };
         let m = model(3, Some(7));
         let view = ColumnShell {

@@ -37,6 +37,25 @@ pub enum RenameTarget {
     Pane(PaneId),
 }
 
+/// **Where a picked pane goes** — a column that exists, or one that does not yet.
+///
+/// A new column is a destination like any other, so it is named here rather than signalled by a
+/// magic id: the pick offers it a letter beside the real columns, and pressing that letter runs the
+/// action that makes one. Without it "put this somewhere new" was a separate binding you had to
+/// know, while the pick was already on screen asking where.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColumnPickTarget {
+    /// A column already in the strip.
+    Existing {
+        ws_idx: usize,
+        col_idx: usize,
+        col_id: heca_core::layout::ColumnId,
+    },
+    /// **A new column, right of the one the pane is in now** — "you keep your place in the strip",
+    /// the same rule `move_pane_to_new_column` already follows.
+    New,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
     Normal,
@@ -101,8 +120,8 @@ pub enum InputMode {
     /// letter (shown as a `KeyHint` over its sidebar column); the next keypress moves
     /// the active pane into that `(ws_idx, col_idx)` column (stacking with its panes).
     ColumnPick {
-        /// `(letter, ws_idx, col_idx, col_id)` — see [`InputMode::WorkspacePick`].
-        candidates: Vec<(char, usize, usize, heca_core::layout::ColumnId)>,
+        /// `(letter, where it goes)` — see [`InputMode::WorkspacePick`].
+        candidates: Vec<(char, ColumnPickTarget)>,
         pane_id: PaneId,
     },
     /// Follow-link letter pick: each visible terminal hyperlink across **all
@@ -234,8 +253,8 @@ impl InputMode {
         }
     }
 
-    /// Column pick candidates (letter → `(ws_idx, col_idx)`) while a `ColumnPick` is active.
-    pub fn col_candidates(&self) -> Option<&[(char, usize, usize, heca_core::layout::ColumnId)]> {
+    /// Column pick candidates (letter → where the pane goes) while a `ColumnPick` is active.
+    pub fn col_candidates(&self) -> Option<&[(char, ColumnPickTarget)]> {
         match self {
             InputMode::ColumnPick { candidates, .. } => Some(candidates),
             _ => None,
@@ -987,6 +1006,8 @@ pub struct AppState {
     pub prefix_entered_at: Option<std::time::Instant>,
     /// The configured prefix key combo (e.g. Ctrl+b).
     pub prefix_combo: crate::keymap::KeyCombo,
+    /// **How long prefix mode waits for the next key** — `[keys] prefix_timeout_ms`.
+    pub prefix_timeout_ms: u64,
     /// Widget keymap (`widget-keys-config`): the single host-owned `[keys.widgets]`-derived map
     /// from a key chord to the semantic [`WidgetIntent`](heca_grid_ui::WidgetIntent)s it triggers.
     /// Every interactive widget/overlay (context menu, palette, `Select`, `Tabs`, `Dialog`,
