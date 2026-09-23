@@ -10,6 +10,33 @@ use crate::font::DEFAULT_MONO_FAMILY;
 
 pub use heca_theme::{FrameStyle, GlowLevel, Intensity};
 
+/// **The border styles, nameable from a description.**
+///
+/// Written by hand rather than derived because [`FrameStyle`] lives in `heca-theme`, which owns the
+/// vocabulary precisely so it can be read at paint time without depending on this crate — and a
+/// derive here would invert that. The orphan rule allows it: [`PropName`](crate::prop::PropName) is
+/// ours.
+///
+/// It was three enums for one thing until this: the theme's `FrameStyle`, the config's
+/// `BorderStyle`, and a `PaneFrame` that existed only so `Pane` could name the same three choices.
+/// The `Pane` copy is gone; the config one stays because it is the user-facing spelling and already
+/// converts into this.
+///
+/// ⚠️ A hand-written variant list can fall behind the enum it describes, so
+/// `every_border_style_can_be_named` walks it and fails when one is missing.
+impl crate::prop::PropName for FrameStyle {
+    const VARIANT_NAMES: &'static [&'static str] = &["none", "bordered", "bracketed"];
+
+    fn from_prop_name(name: &str) -> Option<Self> {
+        match name {
+            "none" => Some(FrameStyle::None),
+            "bordered" => Some(FrameStyle::Bordered),
+            "bracketed" => Some(FrameStyle::Bracketed),
+            _ => None,
+        }
+    }
+}
+
 /// Palette + effect tokens for a component tree.
 ///
 /// Composes `heca_theme::Theme` (the shared color/effect payload, accessed via
@@ -67,6 +94,59 @@ impl Theme {
     /// Derived from the config-driven `colors.shadow` token (color + alpha),
     /// exposed as a [`Color`] for the renderer boundary.
     pub fn shadow_color(&self) -> Color {
-        self.colors.shadow.color.with_alpha_f32(self.colors.shadow.alpha)
+        self.colors
+            .shadow
+            .color
+            .with_alpha_f32(self.colors.shadow.alpha)
+    }
+}
+#[cfg(test)]
+mod border_style_vocabulary {
+    use super::*;
+    use crate::prop::PropName;
+
+    /// **Every border style can be named, and the names round-trip.**
+    ///
+    /// [`FrameStyle`]'s `PropName` impl is hand-written — the enum lives in `heca-theme`, which
+    /// must not depend on this crate — so nothing makes the variant list follow the enum. Add a
+    /// fourth style and this fails, which is the only thing standing between a new style and a
+    /// description that silently cannot name it.
+    #[test]
+    fn every_border_style_can_be_named() {
+        // Exhaustive on purpose: a new variant makes this match fail to compile, which is the
+        // earliest possible warning, and the assertions below catch the rest.
+        let all = [
+            FrameStyle::None,
+            FrameStyle::Bordered,
+            FrameStyle::Bracketed,
+        ];
+        for style in all {
+            match style {
+                FrameStyle::None | FrameStyle::Bordered | FrameStyle::Bracketed => {}
+            }
+        }
+        assert_eq!(
+            FrameStyle::VARIANT_NAMES.len(),
+            all.len(),
+            "a style with no name cannot be set from a description",
+        );
+        for name in FrameStyle::VARIANT_NAMES {
+            let parsed = FrameStyle::from_prop_name(name)
+                .unwrap_or_else(|| panic!("`{name}` is offered but does not resolve"));
+            assert!(
+                all.contains(&parsed),
+                "`{name}` resolved to something not in the enum"
+            );
+        }
+    }
+
+    /// An unknown name is refused rather than guessed at.
+    #[test]
+    fn a_border_style_nobody_recognises_is_not_invented() {
+        assert!(FrameStyle::from_prop_name("dashed").is_none());
+        assert!(
+            FrameStyle::from_prop_name("Bordered").is_none(),
+            "names are snake_case"
+        );
     }
 }

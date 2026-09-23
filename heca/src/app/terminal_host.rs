@@ -8,9 +8,9 @@ use crate::actions::ActionRegistry;
 use crate::app::backend_store::BackendStore;
 use crate::app::interaction::{InteractionSource, dispatch_action};
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
+use crate::app_state::{AppState, InputMode, InteractiveMovePhase};
 use heca_grid_ui::Component as _;
 use heca_grid_ui::reactive::SignalUpdate as _;
-use crate::app_state::{AppState, InputMode, InteractiveMovePhase};
 
 /// Default cell height in logical pixels for PixelDelta → line conversion
 /// fallback when the terminal backend cannot be queried for real cell metrics.
@@ -177,7 +177,8 @@ pub(crate) fn forward_mouse_button(
         state.needs_redraw = true;
     }
 
-    if started_interactive_move(state, button, button_state) || crate::chrome::drag_in_flight(state) {
+    if started_interactive_move(state, button, button_state) || crate::chrome::drag_in_flight(state)
+    {
         return;
     }
 
@@ -497,8 +498,9 @@ pub(crate) fn move_focused_terminal_selection(
     // the current viewport offset:
     //   newest = viewport_top_stable_row + viewport_offset + rows - 1
     //   oldest = newest - scrollback_rows + 1
-    let content_base =
-        snapshot.viewport_top_stable_row + snapshot.viewport_offset as isize + snapshot.rows as isize;
+    let content_base = snapshot.viewport_top_stable_row
+        + snapshot.viewport_offset as isize
+        + snapshot.rows as isize;
     let min_stable = content_base - snapshot.scrollback_rows as isize; // oldest
     let max_stable = content_base - 1; // newest
 
@@ -764,7 +766,8 @@ pub(crate) fn hyperlink_uri_at_position(
 /// order. Each candidate carries its own `pane_id`. Panes fully off-screen and
 /// panes without a terminal backend are skipped. terminal-task-18.
 pub(crate) fn collect_link_hints(state: &AppState) -> Vec<crate::app_state::LinkHint> {
-    let (win_w, win_h) = window_logical_size(state);
+    let window = crate::chrome::ChromeConfig::of(state).window();
+    let (win_w, win_h) = (window.w as f32, window.h as f32);
     let mut hints = Vec::new();
     let mut idx = 0usize;
     for (pane_id, x, y, w, h) in pane_outer_frames(state) {
@@ -892,10 +895,17 @@ pub(crate) fn run_scrollback_search(state: &mut AppState) {
     let Some(pane_id) = state.search_target_pane() else {
         return;
     };
-    let Some(query) = state.search_for(pane_id).map(|s| s.input.borrow().value_str()) else {
+    let Some(query) = state
+        .search_for(pane_id)
+        .map(|s| s.input.borrow().value_str())
+    else {
         return;
     };
-    let cols = match state.backends.get(pane_id).and_then(|b| b.terminal_snapshot()) {
+    let cols = match state
+        .backends
+        .get(pane_id)
+        .and_then(|b| b.terminal_snapshot())
+    {
         Some(snap) => snap.cols,
         None => return,
     };
@@ -960,7 +970,11 @@ fn jump_to_current_match(state: &mut AppState) {
     state
         .selection
         .set_caret(SelectionOwner::Pane(pane_id), m.stable_row, m.start_col);
-    if let Some(snapshot) = state.backends.get(pane_id).and_then(|b| b.terminal_snapshot()) {
+    if let Some(snapshot) = state
+        .backends
+        .get(pane_id)
+        .and_then(|b| b.terminal_snapshot())
+    {
         ensure_caret_visible(state, pane_id, m.stable_row, &snapshot);
     }
     state.needs_redraw = true;
@@ -1087,10 +1101,47 @@ fn terminal_target_at_position(state: &AppState, pos: (f32, f32)) -> Option<Term
 /// loop derives per pane (`render.rs`); kept here so the pane-header sync step can
 /// position the in-pane info bar without a GPU borrow (render's `scene_view` holds
 /// `state.compositor`). Returns `(pane_id, x, y, w, h)` in logical px.
+/// **The columns of the active workspace, in screen coordinates**, with the panes inside each.
+///
+/// The same geometry [`pane_outer_frames`] reports, grouped the way the tree is shaped. Built on
+/// `ScrollingSpace::columns_with_positions`, so a caller asking about a column and a caller asking
+/// about a pane read one walk.
+///
+/// Floating panes are **not** here: they belong to no column.
+pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutColumn> {
+    let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
+    let ws_offset = state
+        .session
+        .workspace_geometries()
+        .first()
+        .map(|(_, rect)| (rect.loc.x, rect.loc.y))
+        .unwrap_or((0.0, 0.0));
+    let (dx, dy) = (pane_area.loc.x + ws_offset.0, pane_area.loc.y + ws_offset.1);
+    let Some(ws) = state.session.active_workspace() else {
+        return Vec::new();
+    };
+    let shift = |r: heca_core::layout::Rectangle| {
+        heca_core::layout::Rectangle::new(
+            heca_core::layout::types::Point::new(r.loc.x + dx, r.loc.y + dy),
+            r.size,
+        )
+    };
+    ws.scrolling
+        .columns_with_positions()
+        .into_iter()
+        .map(|mut col| {
+            col.rect = shift(col.rect);
+            for pane in &mut col.panes {
+                pane.rect = shift(pane.rect);
+                pane.slot = shift(pane.slot);
+            }
+            col
+        })
+        .collect()
+}
+
 pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32, f32)> {
-    let (win_w, win_h) = window_logical_size(state);
-    let chrome = chrome_config(state);
-    let pane_area = chrome.content_rect(win_w, win_h);
+    let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
     let ws_offset = state
         .session
         .workspace_geometries()
@@ -1121,9 +1172,7 @@ pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32,
 }
 
 fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle> {
-    let (win_w, win_h) = window_logical_size(state);
-    let chrome = chrome_config(state);
-    let pane_area = chrome.content_rect(win_w, win_h);
+    let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
     let ws_offset = state
         .session
         .workspace_geometries()
@@ -1193,24 +1242,6 @@ fn pane_content_inset(state: &AppState) -> f32 {
     padding.max(border + 1.0)
 }
 
-fn chrome_config(state: &AppState) -> crate::chrome::ChromeConfig {
-    crate::chrome::ChromeConfig {
-        tab_bar_height: state.tab_bar_height(),
-        status_bar_height: state.status_bar_height(),
-        left_sidebar_width: state.left_sidebar_width(),
-        right_sidebar_width: state.right_sidebar_width(),
-        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
-    }
-}
-
-fn window_logical_size(state: &AppState) -> (f32, f32) {
-    let phys = state.window.inner_size();
-    (
-        phys.width as f32 / state.scale_factor as f32,
-        phys.height as f32 / state.scale_factor as f32,
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::hyperlink_at_cell;
@@ -1229,15 +1260,9 @@ mod tests {
     fn hit_test_matches_inclusive_start_and_exclusive_end() {
         let links = [span(2, 4, 9, "https://example.com")];
         // Inclusive start.
-        assert_eq!(
-            hyperlink_at_cell(&links, 2, 4),
-            Some("https://example.com")
-        );
+        assert_eq!(hyperlink_at_cell(&links, 2, 4), Some("https://example.com"));
         // Interior cell.
-        assert_eq!(
-            hyperlink_at_cell(&links, 2, 8),
-            Some("https://example.com")
-        );
+        assert_eq!(hyperlink_at_cell(&links, 2, 8), Some("https://example.com"));
         // end_col is exclusive: the cell at end_col is not part of the link.
         assert_eq!(hyperlink_at_cell(&links, 2, 9), None);
         // Just before the start.

@@ -47,8 +47,7 @@
 use crate::component::{Base, Component};
 use crate::drag::DropSide;
 use crate::event::{
-    DragEvent, Event, EventKind, Handled, PointerButton, PointerEvent, RawPointer,
-    RawPointerKind,
+    DragEvent, Event, EventKind, Handled, PointerButton, PointerEvent, RawPointer, RawPointerKind,
 };
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_core::layout::{Point, Rectangle};
@@ -265,27 +264,29 @@ fn route_press(root: &mut dyn Component, raw: &RawPointer) -> Handled {
 
     // The click run belongs to the widget the press landed on, so two presses on two widgets are
     // never a double click however quickly they follow each other.
-    let count = {
-        let node = node_at(root, &path);
-        let base = node.base();
-        let now = Instant::now();
-        let continues = base.pointer.run.get().is_some_and(|(at, _)| {
-            now.duration_since(at).as_secs_f32() <= MULTI_CLICK_SECS
-        }) && base
-            .pointer
-            .press
-            .get()
-            .map(|(p, _)| near(p, raw.pos))
-            .unwrap_or(true);
-        let count = if continues {
-            base.pointer.run.get().map_or(1, |(_, c)| c + 1)
-        } else {
-            1
+    let count =
+        {
+            let node = node_at(root, &path);
+            let base = node.base();
+            let now = Instant::now();
+            let continues =
+                base.pointer.run.get().is_some_and(|(at, _)| {
+                    now.duration_since(at).as_secs_f32() <= MULTI_CLICK_SECS
+                }) && base
+                    .pointer
+                    .press
+                    .get()
+                    .map(|(p, _)| near(p, raw.pos))
+                    .unwrap_or(true);
+            let count = if continues {
+                base.pointer.run.get().map_or(1, |(_, c)| c + 1)
+            } else {
+                1
+            };
+            base.pointer.run.set(Some((now, count)));
+            base.pointer.press.set(Some((raw.pos, raw.button)));
+            count
         };
-        base.pointer.run.set(Some((now, count)));
-        base.pointer.press.set(Some((raw.pos, raw.button)));
-        count
-    };
 
     let handled = deliver_targeted(root, &path, Event::PointerDown(pointer_event(raw, count)));
     if handled == Handled::Yes {
@@ -336,12 +337,19 @@ fn route_release(root: &mut dyn Component, raw: &RawPointer) -> Handled {
                 EventKind::MiddleClick => Event::MiddleClick(e),
                 _ => Event::Click(e),
             };
-            handled = or(handled, deliver_targeted(root, &path, base));
-            // **A declared menu is what happens when nothing claims the right-click.** A widget
-            // that answers one itself still wins; this is the fallback, resolved by walking
-            // outwards from the widget that was clicked to the nearest one carrying a menu.
+            let (delivered, default_prevented) = delivering(|| deliver_targeted(root, &path, base));
+            handled = or(handled, delivered);
+            // **A declared menu opens because it was declared** — resolved by walking outwards
+            // from the widget that was clicked to the nearest one carrying one.
+            //
+            // A widget that wants to answer the right-click *and* show something else says
+            // `prevent_default`, the way a browser does. It used to be cancelled by
+            // `stop_propagation` instead, which is a different question — that one is about who
+            // *else* sees the event — so a widget that stopped the walk for an unrelated reason
+            // silently lost its own menu, with nothing failing and no warning
+            //.
             if kind == EventKind::RightClick
-                && handled == Handled::No
+                && !default_prevented
                 && crate::menu::open_declared_at(root, &path, raw.pos)
             {
                 handled = Handled::Yes;
@@ -518,7 +526,7 @@ fn deliver_self(node: &mut dyn Component, ev: &Event) {
     if node.on_event_capture(ev) == Handled::Yes {
         return;
     }
-    if node.base_mut().run_handlers(ev) == Handled::Yes {
+    if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return;
     }
     let _ = node.on_event(ev);
@@ -552,7 +560,7 @@ pub fn deliver_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Han
             return Handled::Yes;
         }
     }
-    if node.base_mut().run_handlers(ev) == Handled::Yes {
+    if node.base_mut().run_handlers(ev).handled == Handled::Yes {
         return Handled::Yes;
     }
     node.on_event(ev)
@@ -612,7 +620,11 @@ fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPointer) -> Ha
         if !far {
             return Handled::No;
         }
-        node_at(root, &source_path).base().pointer.dragging.set(true);
+        node_at(root, &source_path)
+            .base()
+            .pointer
+            .dragging
+            .set(true);
         let ev = Event::DragStart(drag_event(&item, raw, DropSide::Onto));
         let _ = deliver_path(root, &source_path, &ev);
     }
@@ -672,7 +684,11 @@ fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled {
         }
     }
     clear_drag_over(root);
-    node_at(root, &source_path).base().pointer.dragging.set(false);
+    node_at(root, &source_path)
+        .base()
+        .pointer
+        .dragging
+        .set(false);
     let side = hit.as_ref().map_or(DropSide::Onto, |h| h.side);
     let ev = Event::DragEnd(drag_event(&item, raw, side));
     or(handled, deliver_path(root, &source_path, &ev))
@@ -777,7 +793,6 @@ fn drag_identity(root: &dyn Component, path: &[usize]) -> Option<String> {
         .or_else(|| crate::nav::identity_of(root, path))
 }
 
-
 /// Depth-first search for the first node satisfying `f`, returning its path.
 fn find(node: &dyn Component, f: &dyn Fn(&dyn Component) -> bool) -> Option<Path> {
     if f(node) {
@@ -873,6 +888,27 @@ fn deliver_targeted(root: &mut dyn Component, path: &[usize], ev: Event) -> Hand
     deliver_path(root, path, &ev)
 }
 
+thread_local! {
+    /// **Whether any handler in the delivery just made asked the framework not to act.**
+    ///
+    /// Recorded as the event is delivered rather than found by asking again: a second walk would
+    /// run every handler twice and fire its side effects twice. Reset before each delivery, read
+    /// straight after — the walk is synchronous and single-threaded, so nothing can interleave.
+    static DEFAULT_PREVENTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Note that a handler asked the framework not to do its own thing.
+pub(crate) fn note_default_prevented() {
+    DEFAULT_PREVENTED.with(|c| c.set(true));
+}
+
+/// Run `f` as one delivery and report whether anything in it prevented the default.
+fn delivering<T>(f: impl FnOnce() -> T) -> (T, bool) {
+    DEFAULT_PREVENTED.with(|c| c.set(false));
+    let out = f();
+    (out, DEFAULT_PREVENTED.with(std::cell::Cell::get))
+}
+
 fn drag_event(item: &str, raw: &RawPointer, side: DropSide) -> DragEvent {
     DragEvent {
         item: item.to_string(),
@@ -917,10 +953,19 @@ pub(crate) fn fire_mounts(node: &mut dyn Component) {
 
 impl Base {
     /// Run this widget's registered handlers for `ev`, if it has any.
-    pub(crate) fn run_handlers(&mut self, ev: &Event) -> Handled {
+    pub(crate) fn run_handlers(&mut self, ev: &Event) -> crate::event::HandlerOutcome {
         match self.handlers.as_mut() {
-            Some(h) => h.run(ev),
-            None => Handled::No,
+            Some(h) => {
+                let out = h.run(ev);
+                if out.default_prevented {
+                    note_default_prevented();
+                }
+                out
+            }
+            None => crate::event::HandlerOutcome {
+                handled: Handled::No,
+                default_prevented: false,
+            },
         }
     }
 }

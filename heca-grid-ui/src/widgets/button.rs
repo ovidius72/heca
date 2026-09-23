@@ -31,6 +31,7 @@ use crate::builders::{LayoutExt, Parent};
 use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
+use crate::event::WidgetIntent;
 use crate::font::MONO_ADVANCE_RATIO;
 use crate::reactive::{Signal, SignalGet};
 use crate::scene::{Border, Glow};
@@ -163,7 +164,6 @@ pub struct Button {
     /// [`icon_only`](Self::icon_only).
     label: String,
     /// Overrides the hue this button reads in. See [`tone`](Self::tone).
-    tone: Option<Color>,
     /// **This button is about something destructive.** Set by the `Destructive` variant, which
     /// carries the whole look — hue and frame together — and a container never strips either.
     /// What it decides beyond the variant's own painting is the hue of the held-on frame, so an
@@ -178,7 +178,7 @@ pub struct Button {
 #[heca_grid_ui_macros::props]
 impl Button {
     /// An **empty** primary button — no content. Compose it with [`child`](Parent::child) /
-    /// [`icon`](Self::icon) / [`content_boxed`](Self::content_boxed).
+    /// [`icon`](Self::icon) / [`content`](Self::content).
     ///
     /// [`new`](Self::new) is the common case (a single label); this is the entry point when the
     /// content is a tree.
@@ -205,7 +205,6 @@ impl Button {
             icon_only: false,
             dangerous: false,
             label: String::new(),
-            tone: None,
             glyph: None,
         };
         button.remeasure();
@@ -259,13 +258,8 @@ impl Button {
 
     /// Append an already-boxed component — the seam for a subtree built by a mapper
     /// (`realize(&ViewNode)` returns `Box<dyn Component>`, which is not itself `Component` and so
-    /// cannot go through [`Parent::child`]). Mirrors `Dialog::body_boxed`.
+    /// goes through the same builder). Mirrors [`Dialog::body`](super::Dialog::body).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn content_boxed(mut self, content: Box<dyn Component>) -> Self {
-        self.base.children.push(content);
-        self
-    }
-
     /// Convenience constructors, one per variant.
     pub fn primary(label: impl Into<String>) -> Self {
         Self::new(label)
@@ -315,9 +309,8 @@ impl Button {
     /// control. In a row of quiet ghost buttons, a `Destructive` variant is the odd one out — it
     /// carries a border the others do not — where a ghost button in the danger hue reads as a cue.
     #[heca_grid_ui_macros::prop]
-    pub fn tone(mut self, c: Color) -> Self {
-        self.tone = Some(c);
-        self
+    pub fn accent(self, c: Color) -> Self {
+        crate::builders::ComponentExt::accent(self, c)
     }
 
     /// **Show only the icon, keeping the words.** The label is not drawn and takes no space, and
@@ -380,7 +373,6 @@ impl Button {
         self.base.pointer.hovered
     }
 
-
     /// Border that eases from semi-opaque (rest) to solid (hover) by `p`. The
     /// stroke `width` is the theme's `border_width` (so `border_width == 0` means
     /// no border, like every other surface).
@@ -426,7 +418,7 @@ impl Button {
     /// content whatever it is, instead of a width faked from a character count.
     fn content_box(&self) -> Rectangle {
         let b = self.base.bounds;
-        let pad = self.base.style.layout.padding_x.unwrap_or(self.base.style.layout.padding) as f64;
+        let pad = self.base.style.layout.pad_left(self.base.font) as f64;
         Rectangle::new(
             Point::new(b.loc.x + pad, b.loc.y),
             Size::new((b.size.w - 2.0 * pad).max(0.0), b.size.h),
@@ -455,10 +447,7 @@ impl Button {
         let content = self.content_box();
         let y = content.loc.y + content.size.h / 2.0 + (self.base.font as f64 * 0.5);
         cx.rect(
-            Rectangle::new(
-                Point::new(content.loc.x, y),
-                Size::new(content.size.w, 1.5),
-            ),
+            Rectangle::new(Point::new(content.loc.x, y), Size::new(content.size.w, 1.5)),
             color,
             None,
             0.0,
@@ -545,7 +534,7 @@ impl Component for Button {
     fn remeasure(&mut self) {
         let fs = self.base.font;
         let pad = BASE_PAD * self.base.size_scale();
-        self.base.style.layout.padding = pad;
+        self.base.style.layout.padding = (pad).into();
         // The extra horizontal room is there for **text**. With the words off it is padding around
         // nothing, which is what made a group of icon-only buttons read as too big.
         let side = if self.icon_only {
@@ -553,9 +542,9 @@ impl Component for Button {
         } else {
             pad + fs * MONO_ADVANCE_RATIO
         };
-        self.base.style.layout.padding_x = Some(side);
-        self.base.style.layout.padding_y = Some(pad);
-        self.base.style.layout.gap = fs * GAP_RATIO;
+        self.base.style.layout.padding_x = Some((side).into());
+        self.base.style.layout.padding_y = Some((pad).into());
+        self.base.style.layout.gap = (fs * GAP_RATIO).into();
         self.base.style.layout.width = Length::Auto;
         self.base.style.layout.height = Length::Auto;
         // **Showing only an icon, it says it cannot give way** — CSS `flex-shrink: 0`.
@@ -604,9 +593,9 @@ impl Component for Button {
             // severity-toned card follows the card, the way a `Label`'s ink already follows its
             // content colour. `None` unless a container asked, which is everywhere today, so a
             // button on its own is the theme accent exactly as before (F003/P096/T484).
-            let tone = cx.control_tone();
+            let accent = cx.accent();
+            let tone = cx.published_accent();
             let t = cx.theme();
-            let accent = tone.unwrap_or(t.colors.accent);
             (
                 t.colors.surface,
                 accent,
@@ -631,14 +620,23 @@ impl Component for Button {
         // vivid accent/danger chrome to `muted` so the whole affordance — border and fill, not
         // just the label — reads as inactive on every variant.
         let disabled = self.base.disabled.get_untracked();
-        let p = if disabled { 0.0 } else { self.progress.clamp(0.0, 1.0) };
-        let (accent, danger) = if disabled { (muted, muted) } else { (accent, danger) };
+        let p = if disabled {
+            0.0
+        } else {
+            self.progress.clamp(0.0, 1.0)
+        };
+        let (accent, danger) = if disabled {
+            (muted, muted)
+        } else {
+            (accent, danger)
+        };
         // An explicit tone replaces the variant's hue wherever the variant would have used the
         // accent — content, hover wash, held-on frame — without changing which variant this is.
+        // A tone the caller set is already in `accent` — `PaintCx::accent` resolved it, the same
+        // way it resolves one a container published. Only the variant's own meaning is left to
+        // decide here.
         let accent = if disabled {
             accent
-        } else if let Some(tone) = self.tone {
-            tone
         } else if self.dangerous {
             // The theme's danger, read at paint, so it follows a reload like every other colour.
             danger
@@ -665,7 +663,7 @@ impl Component for Button {
         // a held button stays legible with decorative borders switched off: this is a status cue,
         // not decoration.
         if self.active && !disabled {
-            let tone = cx.control_tone().unwrap_or(accent);
+            let tone = cx.accent();
             let line_w = cx.theme().focus_border_width;
             let frame = (line_w > 0.0).then_some(Border {
                 color: tone.with_alpha(ia.control_active_border),
@@ -740,7 +738,12 @@ impl Component for Button {
                 cx.rect(
                     b,
                     fill,
-                    self.animated_border(muted.lerp(accent, p), p, border_width, ia.control_rest_border as f32),
+                    self.animated_border(
+                        muted.lerp(accent, p),
+                        p,
+                        border_width,
+                        ia.control_rest_border as f32,
+                    ),
                     radius,
                     g,
                 );
@@ -850,6 +853,25 @@ impl Component for Button {
                 self.fire();
                 Handled::Yes
             }
+            // **A focused button answers the activate key** (F003/P097/T502).
+            //
+            // Keys reach the focus owner, so this only ever runs for the button the keyboard is
+            // actually on — which is why it needs no focus test of its own.
+            //
+            // `Dialog` already documented this as the way it works ("when a button itself is
+            // focused, Enter is delivered straight to it (it consumes it)") and fell back to
+            // firing its *primary* action for the case where it was not consumed. The button never
+            // consumed it, so every Enter went to the primary action instead of the focused
+            // button: Tab to Cancel, press Enter, and you got OK.
+            //
+            // Found by building an overlay the way a plugin has to — `Overlay` + `Surface` +
+            // `Button`s, with no `Dialog` to translate anything — where nothing answered Enter at
+            // all. That surface has no primary action to fall back to, so the gap that was hidden
+            // natively was total there.
+            Event::Widget(WidgetIntent::Activate) => {
+                self.fire();
+                Handled::Yes
+            }
             _ => Handled::No,
         }
     }
@@ -898,3 +920,52 @@ impl LayoutExt for Button {}
 /// Content is children: `.child(..)` appends any component (sugar like [`Button::new`] /
 /// [`Button::icon`] builds those same children).
 impl Parent for Button {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::component::dispatch;
+    use crate::event::WidgetIntent;
+    use crate::reactive::SignalUpdate;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    /// **A focused button answers the activate key** (F003/P097/T502).
+    ///
+    /// It answered `Event::Click` and nothing else. `Dialog` documented this as the way it works —
+    /// "when a button itself is focused, Enter is delivered straight to it (it consumes it)" — and
+    /// fell back to firing its **primary** action for the case where it was not consumed. It never
+    /// was consumed, so every Enter went to the primary action instead of the focused button: Tab
+    /// to Cancel, press Enter, and you got OK.
+    ///
+    /// Keys reach the focus owner, so this needs no focus test of its own.
+    #[test]
+    fn a_focused_button_answers_the_activate_key() {
+        let fired = Rc::new(Cell::new(0));
+        let count = fired.clone();
+        let mut b = Button::new("Cancel").on_click(move || count.set(count.get() + 1));
+        b.base_mut().focused.set(true);
+
+        assert_eq!(
+            dispatch(&mut b, &Event::Widget(WidgetIntent::Activate)),
+            Handled::Yes,
+        );
+        assert_eq!(fired.get(), 1, "the key ran the button's own click");
+    }
+
+    /// **A disabled button answers nothing**, by the key as by the mouse.
+    #[test]
+    fn a_disabled_button_ignores_the_activate_key() {
+        let fired = Rc::new(Cell::new(0));
+        let count = fired.clone();
+        let mut b = Button::new("Cancel").on_click(move || count.set(count.get() + 1));
+        b.base_mut().focused.set(true);
+        b.base_mut().disabled.set(true);
+
+        assert_eq!(
+            dispatch(&mut b, &Event::Widget(WidgetIntent::Activate)),
+            Handled::No,
+        );
+        assert_eq!(fired.get(), 0);
+    }
+}

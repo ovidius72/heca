@@ -97,13 +97,15 @@
 use crate::builders::{LayoutExt, Parent};
 use crate::color::Color;
 use crate::component::{
-    paint_child, shift_subtree, Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent,
+    Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent, paint_child, shift_subtree,
 };
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign, TextStyle};
-use crate::style::{Align, Direction, Length};
-use crate::widgets::key_hint::{keycap_size, paint_keycap, KeycapVariant};
-use crate::widgets::{paint_panel_chrome, place_at_point, Glyph, Icon, Label, PanelChrome, PanelElevation};
+use crate::style::{Direction, Length};
+use crate::widgets::key_hint::{KeycapVariant, keycap_size, paint_keycap};
+use crate::widgets::{
+    Glyph, Icon, Label, PanelChrome, PanelElevation, paint_panel_chrome, place_at_point,
+};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 use std::rc::Rc;
@@ -213,7 +215,9 @@ impl MenuItem {
     /// subtree is owned — see the [module docs](self#the-two-forms-of-a-row-and-why-child-takes-a-closure).
     /// The subtree becomes a real child of the panel, so the layout engine sizes it exactly as it
     /// would anywhere else.
-    #[heca_grid_ui_macros::host_only("a subtree builder — composed content crosses as ViewNode children")]
+    #[heca_grid_ui_macros::host_only(
+        "a subtree builder — composed content crosses as ViewNode children"
+    )]
     pub fn child<C: Component + 'static>(mut self, f: impl Fn() -> C + 'static) -> Self {
         self.content = Some(Rc::new(move || Box::new(f()) as Box<dyn Component>));
         self
@@ -269,6 +273,17 @@ impl Default for MenuItem {
 }
 
 impl MenuItem {
+    /// **Run what this row runs.** The row's own act, reachable without a pointer.
+    ///
+    /// The counterpart of [`label_text`](MenuItem::label_text): that reads a menu back, this drives
+    /// it. A test asserting that a row *does* something needs it, and so does anything choosing an
+    /// entry by keyboard, by quick-pick key or over RPC — otherwise "this row is wired up" is only
+    /// checkable by clicking it, and a row wired to nothing looks exactly like a row wired to
+    /// something — contributed rows once opened fine and did nothing at all.
+    pub fn activate(&self) {
+        (self.on_select)();
+    }
+
     /// The row's text, for a caller (or a test) reading a menu back. `None` for a composed row,
     /// whose text lives in its subtree.
     pub fn label_text(&self) -> Option<&str> {
@@ -284,7 +299,9 @@ impl MenuItem {
             w += SHORTCUT_GAP + s.chars().count() as f64 * adv;
         }
         if let Some(k) = self.key {
-            w += SHORTCUT_GAP + keycap_size(font * KEYCAP_FONT_SCALE, &k.to_string()).w + KEYCAP_INSET;
+            w += SHORTCUT_GAP
+                + keycap_size(font * KEYCAP_FONT_SCALE, &k.to_string()).w
+                + KEYCAP_INSET;
         }
         w
     }
@@ -299,8 +316,8 @@ impl MenuItem {
             Some(build) => build(),
             None => {
                 let mut row = crate::widgets::container()
-                    .direction(Direction::Row)
-                    .align(Align::Center)
+                    .direction("row")
+                    .align("center")
                     .gap(ICON_GAP);
                 if let Some(g) = self.icon {
                     row = row.child(Icon::new(g).size(font * 1.05));
@@ -313,11 +330,11 @@ impl MenuItem {
         };
         Box::new(
             crate::widgets::container()
-                .direction(Direction::Row)
-                .align(Align::Center)
+                .direction("row")
+                .align("center")
                 .padding_xy(ROW_PAD_X, ROW_PAD_Y)
                 .padding_right(ROW_PAD_X + self.trailing_width(font) as f32)
-                .child_boxed(inner),
+                .child(inner),
         )
     }
 }
@@ -401,6 +418,13 @@ impl Menu {
     /// The name other components may add rows to, if this menu has one.
     pub fn declared_name(&self) -> Option<&str> {
         self.name.as_deref()
+    }
+
+    /// **Take this menu's rows.** For a caller merging two menus into one: rows built by the same
+    /// conversion everything else goes through, moved onto another menu rather than rebuilt by hand
+    /// beside it — which is how a second, subtly different way of wiring a row gets written.
+    pub fn into_items(self) -> Vec<MenuItem> {
+        self.items
     }
 
     /// The rows' labels, in order — what a caller (or a test) reads back without reaching into the
@@ -534,10 +558,14 @@ impl ContextMenu {
     fn panel_base(open: Signal<bool>) -> Base {
         let mut base = Base::new();
         base.style.layout.direction = Direction::Column;
-        base.style.layout.padding = PAD;
+        base.style.layout.padding = (PAD).into();
         base.style.layout.min_width = Some(Length::Px(MIN_W));
         base.style.layout.max_width = Some(Length::Px(MAX_W));
         base.focused = open;
+        // **A menu locks because it is a menu.** It demands a choice, so nothing behind it is
+        // reachable while it is up — even though its panel is small. Without that, a prefix
+        // sequence deliberately falling through the menu's key path reached the app and ran.
+        base.lock = true;
         base
     }
 
@@ -582,13 +610,13 @@ impl ContextMenu {
     /// position — there is no sensible default for "somewhere".
     pub fn show(&self, ev: &Event) {
         if let Some(anchor) = MenuAnchor::from_event(ev) {
-            crate::menu::present(self.clone(), anchor);
+            crate::menu::present(self.clone(), anchor, None);
         }
     }
 
     /// Open or close the panel. Opening **realizes the rows** — the builders run here.
     #[heca_grid_ui_macros::prop]
-    pub fn open(mut self, open: bool) -> Self {
+    pub fn default_open(mut self, open: bool) -> Self {
         self.open.set(open);
         if open {
             self.realize();
@@ -689,7 +717,11 @@ impl ContextMenu {
             if self.menu.items[i].enabled {
                 return Some(i);
             }
-            i = if forward { (i + 1) % n } else { (i + n - 1) % n };
+            i = if forward {
+                (i + 1) % n
+            } else {
+                (i + n - 1) % n
+            };
         }
         None
     }
@@ -839,7 +871,7 @@ impl Component for ContextMenu {
         let (accent, glow_c, foreground, muted, danger, ctrl_radius) = {
             let t = cx.theme();
             (
-                t.colors.accent,
+                cx.accent(),
                 t.colors.glow,
                 t.colors.foreground,
                 t.colors.muted,
@@ -864,7 +896,11 @@ impl Component for ContextMenu {
                 panel,
                 PanelChrome {
                     border: panel_border,
-                    glow: Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
+                    glow: Some(Glow {
+                        color: glow_c,
+                        radius: 12.0,
+                        intensity: 0.3,
+                    }),
                     elevation: PanelElevation::Panel,
                 },
             );
@@ -873,8 +909,8 @@ impl Component for ContextMenu {
                 let row = self.row_rect(i);
                 let is_sel = i == self.selected && e.enabled;
                 if is_sel {
-                    let row_border =
-                        cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_row_border));
+                    let row_border = cx
+                        .border(accent.with_alpha(cx.theme().colors.interaction.panel_row_border));
                     cx.rect(
                         row,
                         accent.with_alpha(cx.theme().colors.interaction.panel_row_fill),
@@ -1003,7 +1039,10 @@ impl Component for ContextMenu {
             },
             // Raw keys are only quick-pick letters: a letter activates its entry
             // directly (case-insensitive).
-            Event::Key { key: GridKey::Char(c), pressed: true } => {
+            Event::Key {
+                key: GridKey::Char(c),
+                pressed: true,
+            } => {
                 if let Some(i) = self
                     .menu
                     .items
@@ -1062,7 +1101,6 @@ impl Component for ContextMenu {
             _ => Handled::No,
         }
     }
-
 }
 
 impl LayoutExt for ContextMenu {}
@@ -1098,11 +1136,11 @@ impl MenuAnchor {
     /// Apply this anchor to a panel and open it.
     pub fn open(self, panel: ContextMenu) -> ContextMenu {
         match self {
-            Self::At(p) => panel.anchor(p).centered(false).open(true),
+            Self::At(p) => panel.anchor(p).centered(false).default_open(true),
             Self::Under(b) => panel
                 .anchor(Point::new(b.loc.x, b.loc.y + b.size.h))
                 .centered(false)
-                .open(true),
+                .default_open(true),
         }
     }
 }

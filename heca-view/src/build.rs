@@ -43,11 +43,9 @@
 //! which is the defect this whole phase exists to remove.
 
 use crate::{
-    Intent, PropMap, PropValue, ViewAlign, ViewEllipsis, ViewGlyph, ViewJustify, ViewLabelSide, ViewMarker,
-    ViewAnimation, ViewNode, ViewOrientation, ViewRevealAlign, ViewScrollAxes, ViewSeverity,
-    ViewSize,
-    ViewTextAlign, ViewVariant,
-    WidgetKind,
+    Intent, PropMap, PropValue, ViewAlign, ViewAnimation, ViewEllipsis, ViewGlyph, ViewJustify,
+    ViewLabelSide, ViewMarker, ViewNode, ViewOrientation, ViewRevealAlign, ViewScrollAxes,
+    ViewSeverity, ViewSize, ViewTextAlign, ViewVariant, WidgetKind,
 };
 
 /// The properties every kind shares — arrangement (`Layout`) and appearance (`Visual`).
@@ -63,8 +61,9 @@ use crate::{
 ///   author.
 /// - **`grid_cell`** — grid placement is authored as `area` / `col` / `row` on the child, which is
 ///   what the `Grid` arm reads.
-/// - **`pad_spacing_x` / `pad_spacing_y` / `gap_spacing`** — theme `Spacing` tokens, which have no
-///   mirror in this crate yet. Use the px setters, or add the mirror when a caller needs it.
+/// - **`pad_spacing_x` / `pad_spacing_y` / `gap_spacing`** — the retired half of the old spacing
+///   pair. [`gap`](Style::gap) and [`padding`](Style::padding) take a step directly now; the old
+///   names are still read on the wire so no existing tree breaks.
 pub trait Style: Sized {
     /// The node being built. Public so the trait's defaults can reach it; not the way to author.
     #[doc(hidden)]
@@ -81,37 +80,54 @@ pub trait Style: Sized {
     }
 
     // ── Arrangement ──
-    /// Space between children, in px.
-    fn gap(self, px: f32) -> Self {
-        self.prop("gap", px)
+    /// **Space between children** — a number of pixels, a theme step, or either said as a string.
+    ///
+    /// ```ignore
+    /// VStack::new().gap(8)                 // eight pixels
+    /// VStack::new().gap(ViewSpacing::Sm)   // a step of the rhythm
+    /// VStack::new().gap("sm")              // the same step, said as JSON would
+    /// ```
+    ///
+    /// **Prefer the step.** It is resolved from the inherited font at layout, so a described tree
+    /// spaces itself the way the rest of the app does and follows a font, size-variant or theme
+    /// change with nothing rewritten; a pixel count is tuned for one font size and wrong at every
+    /// other. Use the steps to group: a tight `Xs` inside a label-and-control couple, a roomier
+    /// `Md` between couples — no arithmetic, and no new widget.
+    ///
+    /// It was two builders, `gap` and `gap_spacing`, writing two different properties. The docs
+    /// said prefer the step and the step was the one nobody reached for, because it had the longer
+    /// name. `"gap_spacing"` is still read on the wire, so no existing tree breaks.
+    fn gap(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("gap", v.into())
     }
-    /// Space inside the box on every side, in px.
-    fn padding(self, px: f32) -> Self {
-        self.prop("padding", px)
+
+    /// **Space inside the box on every side** — pixels or a step, exactly as [`gap`](Style::gap).
+    fn padding(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding", v.into())
     }
-    /// Horizontal padding (left + right), in px.
-    fn padding_x(self, px: f32) -> Self {
-        self.prop("padding_x", px)
+    /// Horizontal padding (left + right) — see [`padding`](Style::padding).
+    fn padding_x(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_x", v.into())
     }
-    /// Vertical padding (top + bottom), in px.
-    fn padding_y(self, px: f32) -> Self {
-        self.prop("padding_y", px)
+    /// Vertical padding (top + bottom) — see [`padding`](Style::padding).
+    fn padding_y(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_y", v.into())
     }
-    /// Left padding, in px.
-    fn padding_left(self, px: f32) -> Self {
-        self.prop("padding_left", px)
+    /// Left padding — see [`padding`](Style::padding).
+    fn padding_left(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_left", v.into())
     }
-    /// Right padding, in px.
-    fn padding_right(self, px: f32) -> Self {
-        self.prop("padding_right", px)
+    /// Right padding — see [`padding`](Style::padding).
+    fn padding_right(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_right", v.into())
     }
-    /// Top padding, in px.
-    fn padding_top(self, px: f32) -> Self {
-        self.prop("padding_top", px)
+    /// Top padding — see [`padding`](Style::padding).
+    fn padding_top(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_top", v.into())
     }
-    /// Bottom padding, in px.
-    fn padding_bottom(self, px: f32) -> Self {
-        self.prop("padding_bottom", px)
+    /// Bottom padding — see [`padding`](Style::padding).
+    fn padding_bottom(self, v: impl Into<crate::ViewSpace>) -> Self {
+        self.prop("padding_bottom", v.into())
     }
     /// Space outside the box on every side, in px.
     fn margin(self, px: f32) -> Self {
@@ -256,6 +272,144 @@ pub trait Style: Sized {
         self.prop("key", PropValue::Text(key.into()))
     }
 
+    /// **What this node says on hover.**
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::ViewGlyph;
+    ///
+    /// let close = Button::new().icon(ViewGlyph::Minus).tooltip("Close the pane");
+    /// ```
+    ///
+    /// Universal, like [`key`](Style::key), because `ComponentExt::tooltip` is on every widget
+    /// natively — so a described row says it the same way a native one does, and the framework owns
+    /// the rest: the reveal delay is timed off the hover clock the pointer router already keeps,
+    /// and the bubble is drawn in the one place every widget passes through.
+    ///
+    /// ⚠️ **There is no `Tooltip` widget kind, and there must not be one.** The wrapper it used to
+    /// be survives only for regions that are not widgets you can put a builder on. A plugin made to
+    /// wrap and anchor its own bubble is writing the second path by hand (⭐⭐ RULE ZERO).
+    fn tooltip(self, text: impl Into<String>) -> Self {
+        self.prop("tooltip", PropValue::Text(text.into()))
+    }
+
+    /// Which side the tooltip anchors to (default [`Top`](crate::ViewTooltipSide::Top)).
+    ///
+    /// A preference: the framework flips it when there is no room on that side. Says nothing on a
+    /// node that declared no [`tooltip`](Style::tooltip) — the side is part of the tip, not a style
+    /// of its own.
+    fn tooltip_side(self, side: crate::ViewTooltipSide) -> Self {
+        self.prop("tooltip_side", side)
+    }
+
+    /// Seconds the pointer must rest before the tooltip appears (default `0.5`).
+    ///
+    /// Says nothing on a node that declared no [`tooltip`](Style::tooltip).
+    fn tooltip_delay(self, seconds: f32) -> Self {
+        self.prop("tooltip_delay", seconds)
+    }
+
+    /// **Whether this node's ink is drawn**, keeping its box either way — CSS `visibility`.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    ///
+    /// // The row does not shift when this dot appears.
+    /// let quiet = StatusDot::new().visible(false);
+    /// ```
+    ///
+    /// **The other one is `hidden`** — CSS `display: none`, a [`Style`] property like any other,
+    /// which takes the node out of the layout so its neighbours close up. This keeps the box.
+    ///
+    /// Between them there is nothing left for a `Visibility` wrapper to do in a described tree, and
+    /// so there is no `WidgetKind` for one.
+    fn visible(self, visible: bool) -> Self {
+        self.prop("visible", visible)
+    }
+
+    /// **Where this node's hint letter sits over it** (default
+    /// [`TopCenter`](crate::ViewHintPlacement::TopCenter)).
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::ViewHintPlacement;
+    ///
+    /// // A wide list row: the cap on the right keeps the row's own label readable.
+    /// let row = Row::new().hint_placement(ViewHintPlacement::CenterRight);
+    /// ```
+    ///
+    /// Universal, like [`tooltip`](Style::tooltip), because the slot it writes is on every widget.
+    /// **Being pickable is not what this turns on** — anything actionable already wears a letter
+    /// with nothing declared; this only says where the letter goes.
+    fn hint_placement(self, placement: crate::ViewHintPlacement) -> Self {
+        self.prop("hint_placement", placement)
+    }
+
+    /// **Which pickers letter this target.** Unset — the default — means the ordinary one, which
+    /// letters everything actionable.
+    ///
+    /// One surface can mean more than one thing by a letter: a card that means *go there* and a ⊠
+    /// beside it that means *remove that*. A picker that letters both hands out twice the letters
+    /// and half of them do the wrong one, so a target names the sets it answers to and a picker
+    /// names the set it letters.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::Intent;
+    ///
+    /// // Lettered only by a picker that asked for "close" — never by the ordinary one.
+    /// let close = IconButton::new().on_press(Intent::new("card.remove")).hint_scope(["close"]);
+    /// ```
+    ///
+    /// **Naming a scope takes the target OUT of the ordinary picker** — that is the point, and the
+    /// direction matters: a ⊠ that deletes something must not wear a letter in the picker you use
+    /// to move around. Name several and it belongs to each of those pickers.
+    ///
+    /// Universal, like [`hint_placement`](Style::hint_placement), because the slot is on every
+    /// widget.
+    /// **What this node's keycap means** — the theme picks the colour, so it follows a reload and
+    /// a description never carries a hex.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::{Intent, ViewHintTone};
+    ///
+    /// // A fold control: a real act, but not somewhere to navigate to.
+    /// let fold = IconButton::new().on_press(Intent::new("panel.fold")).hint_tone(ViewHintTone::Muted);
+    /// ```
+    fn hint_tone(self, tone: crate::ViewHintTone) -> Self {
+        self.prop("hint_tone", tone)
+    }
+
+    fn hint_scope(self, scopes: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let list: Vec<PropValue> = scopes
+            .into_iter()
+            .map(|s| PropValue::Text(s.into()))
+            .collect();
+        self.prop("hint_scope", PropValue::List(list))
+    }
+
+    /// The keycap's font size in logical px. Unset = derived from the node's resolved font, which
+    /// is what keeps a letter proportional to the thing it captions.
+    fn hint_size(self, px: f32) -> Self {
+        self.prop("hint_size", px)
+    }
+
+    /// The keycap's colour **by theme token name** (`"accent"`, `"danger"`), glow included. Unset =
+    /// the theme's `accent`.
+    ///
+    /// A token, not a hex literal, for the same reason every other colour here is one: a letter
+    /// should follow a theme change with nothing rewritten.
+    fn hint_color(self, colour: &str) -> Self {
+        self.prop("hint_color", PropValue::Color(colour.to_string()))
+    }
+
+    /// A vertical nudge applied **after** placement — positive moves the cap down. What drops a
+    /// [`TopRight`](crate::ViewHintPlacement::TopRight) cap onto a dock's header line.
+    fn hint_offset_y(self, px: f64) -> Self {
+        self.prop("hint_offset_y", px)
+    }
+
     /// Keep this node **out of the picker**, however actionable it is. Default `true`.
     ///
     /// The declarative spelling of `ComponentExt::hintable`. Being pickable is not opt-in — a node
@@ -294,6 +448,27 @@ pub trait Style: Sized {
     }
 
     // ── Appearance ──
+    /// **Override the accent — for this node and everything inside it.**
+    ///
+    /// Focus rings, hover and press fills, selected washes, scrollbar thumbs, a caret: everything
+    /// that would otherwise be the theme's accent. A panel with a hue of its own says it once and
+    /// every control inside follows, with nothing told twice.
+    ///
+    /// ```ignore
+    /// Surface::new().accent("danger").child(Button::new().text("Delete"))
+    /// ```
+    ///
+    /// **The theme is always first.** Set nothing and everything reads the theme's accent. The
+    /// order is: this node's own → the nearest ancestor that set one → the theme.
+    ///
+    /// A theme token name (`"danger"`) or a literal (`"#ff8800"`) — prefer a token, which follows a
+    /// theme reload where a literal does not.
+    ///
+    /// ⚠️ It does **not** redefine a declared meaning: a badge's `accent` variant, an alert's
+    /// `info`, a destructive button. Those keep the colour their variant names.
+    fn accent(self, colour: &str) -> Self {
+        self.prop("accent", PropValue::Color(colour.to_string()))
+    }
     /// Background colour: a theme token name (`"accent"`) or a literal (`"#ff8800"`).
     ///
     /// Prefer a token — it follows a theme reload, a literal does not.
@@ -340,16 +515,10 @@ pub trait Style: Sized {
 /// A `Toast` draws its own card and takes none, so it has no `child`. That is the same rule as the
 /// properties: if the widget cannot do it, the builder cannot say it.
 pub trait Parent: Style {
-    /// Append a child.
-    fn child(mut self, child: impl Into<ViewNode>) -> Self {
-        self.node_mut().children.push(child.into());
-        self
-    }
-
-    /// Append several children.
-    fn children<C: Into<ViewNode>>(mut self, children: impl IntoIterator<Item = C>) -> Self {
-        let node = self.node_mut();
-        node.children.extend(children.into_iter().map(Into::into));
+    /// **Append a child, or several** — one node, or a `Vec`/array of them. One door, the same as
+    /// `ViewNode::child` and the native `Parent::child`.
+    fn child(mut self, children: impl crate::IntoNodes) -> Self {
+        self.node_mut().children.extend(children.into_nodes());
         self
     }
 }
@@ -478,6 +647,11 @@ builder!(
     /// child (`area`, or `col`/`row`).
     Grid => Grid
 );
+builder!(
+    /// A grid of cards with a cursor: arrow keys move it, hovering moves it, Enter activates and
+    /// Escape dismisses. Each child is a card, and its own `key` is what activation hands back.
+    CardGrid => CardGrid
+);
 builder_text!(
     /// A titled card.
     Card => Card
@@ -551,6 +725,7 @@ impl Parent for MarkerGroup {}
 impl Parent for Tabs {}
 impl Parent for Choice {}
 impl Parent for KeyHintGroup {}
+impl Parent for ButtonGroup {}
 
 // ── Leaves ────────────────────────────────────────────────────────────────────────────────
 builder_text!(
@@ -604,6 +779,37 @@ builder!(
 builder!(
     /// A value meter.
     Gauge => Gauge
+);
+builder!(
+    /// An indeterminate loading ring — *something is happening, and nobody knows for how long*.
+    ///
+    /// It takes no properties of its own: it animates itself off the frame clock, and its diameter
+    /// is `width`/`height` like any other node's. Reach for [`Progress`] the moment you can say how
+    /// far along you are.
+    Spinner => Spinner
+);
+builder!(
+    /// A determinate progress bar, `0.0..=1.0`.
+    ///
+    /// The fill **eases** toward whatever value it is given, so a tree re-sent with a new one
+    /// animates rather than jumping — with nothing declared.
+    Progress => Progress
+);
+builder!(
+    /// **A row of actions that gets out of its own way.** Its children are [`Button`]s.
+    ///
+    /// As the room runs out it shows icons instead of words, and whatever still does not fit
+    /// collapses into a ⋮ menu running the same actions — none of which you write. Give each button
+    /// **both** `text` and `icon`: the text is its menu row and its words on hover, the icon is what
+    /// it shows once there is no room for words.
+    ButtonGroup => ButtonGroup
+);
+builder!(
+    /// A **keyboard glyph** from the embedded Nerd Font — ⇧ ⌃ ⌥ ⌘, Enter, Escape, the arrows.
+    ///
+    /// Its own vocabulary ([`ViewNfGlyph`](crate::ViewNfGlyph)), because it is its own font. Draw a
+    /// shortcut with it rather than typing a character your user's font may not carry.
+    NfIcon => NfIcon
 );
 builder!(
     /// A message banner.
@@ -678,11 +884,12 @@ with_event!(
     VStack { on_hint => "hint" }
     HStack { on_hint => "hint" }
     Grid { on_hint => "hint" }
+    CardGrid { on_hint => "hint" }
     Card { on_hint => "hint" }
     Scroll { on_hint => "hint" }
     Panel { on_hint => "hint" }
     Surface { on_hint => "hint" }
-    Overlay { on_hint => "hint" }
+    Overlay { on_dismiss => "dismiss", on_hint => "hint" }
     KeyHintGroup { on_hint => "hint" }
     MarkerGroup { on_hint => "hint" }
     Label { on_hint => "hint" }
@@ -691,6 +898,10 @@ with_event!(
     Icon { on_hint => "hint" }
     StatusDot { on_hint => "hint" }
     Gauge { on_hint => "hint" }
+    Spinner { on_hint => "hint" }
+    NfIcon { on_hint => "hint" }
+    ButtonGroup { on_hint => "hint" }
+    Progress { on_hint => "hint" }
     Alert { on_hint => "hint" }
     Separator { on_hint => "hint" }
 );
@@ -774,22 +985,12 @@ impl Button {
     pub fn icon_only(self, on: bool) -> Self {
         self.prop("icon_only", on)
     }
-    /// **The hue this button reads in**, overriding what its variant would use — a theme token name
-    /// or a literal. A button can be *about* something dangerous without being drawn as a boxed
-    /// destructive control, which in a row of quiet buttons is the odd one out.
-    pub fn tone(self, colour: &str) -> Self {
-        self.prop("tone", colour)
-    }
 }
 
 impl IconButton {
     /// The cell's square size in px.
     pub fn cell(self, px: f32) -> Self {
         self.prop("cell", px)
-    }
-    /// Icon colour: a theme token name or a literal.
-    pub fn tone(self, colour: &str) -> Self {
-        self.prop("tone", PropValue::Color(colour.to_string()))
     }
     /// A glow halo.
     pub fn glowing(self, on: bool) -> Self {
@@ -914,6 +1115,42 @@ impl Gauge {
     }
 }
 
+impl ButtonGroup {
+    /// How wide each action is before the row starts collapsing (default
+    /// [`IconOnly`](crate::ViewDisplay::IconOnly)).
+    pub fn display(self, display: crate::ViewDisplay) -> Self {
+        self.prop("display", display)
+    }
+    /// The look every action in the group takes, so it is said once rather than per button.
+    pub fn variant(self, variant: ViewVariant) -> Self {
+        self.prop("variant", variant)
+    }
+}
+
+impl NfIcon {
+    /// Which key this glyph is.
+    pub fn glyph(self, glyph: crate::ViewNfGlyph) -> Self {
+        self.prop("glyph", glyph)
+    }
+    /// Explicit glyph size in logical px. Unset = the inherited font size, which is what keeps a
+    /// key glyph the size of the text beside it.
+    pub fn size(self, px: f32) -> Self {
+        self.prop("size", px)
+    }
+    /// Glyph colour **by theme token name**. Unset = the enclosing control's content colour.
+    pub fn color(self, colour: &str) -> Self {
+        self.prop("color", PropValue::Color(colour.to_string()))
+    }
+}
+
+impl Progress {
+    /// How far along, `0.0..=1.0`. Out-of-range values are clamped rather than refused, because a
+    /// description is untrusted input and a bar that renders nothing is worse than a full one.
+    pub fn value(self, value: f32) -> Self {
+        self.prop("value", value)
+    }
+}
+
 impl Alert {
     /// How serious the message is.
     pub fn severity(self, s: ViewSeverity) -> Self {
@@ -943,8 +1180,8 @@ impl Toast {
     }
     /// Whether it starts on screen. A described card that is closed takes no space until something
     /// opens it.
-    pub fn opened(self, open: bool) -> Self {
-        self.prop("opened", open)
+    pub fn default_open(self, open: bool) -> Self {
+        self.prop("default_open", open)
     }
     /// Where the card sits in the box that holds it: `"top-right"` (the default), `"top-left"`,
     /// `"top-center"`, `"bottom-right"`, `"bottom-left"`, `"bottom-center"`.
@@ -1034,6 +1271,14 @@ impl DockFrame {
     pub fn previous(self, on: bool) -> Self {
         self.prop("previous", on)
     }
+    /// **What the fold control's letter means**, for the theme to colour.
+    ///
+    /// Folding is a real act, so the toggle earns a letter — but which class of target it reads as
+    /// belongs to whoever assembles the surface. Unset, it takes the picker's own colour.
+    pub fn fold_hint_tone(self, tone: crate::ViewHintTone) -> Self {
+        self.prop("fold_hint_tone", tone)
+    }
+
     /// Whether the frame is open.
     pub fn expanded(self, on: bool) -> Self {
         self.prop("expanded", on)
@@ -1099,6 +1344,27 @@ impl KeyHintGroup {
     pub fn opens_on(self, action: impl Into<String>) -> Self {
         self.prop("opens_on", PropValue::Text(action.into()))
     }
+
+    /// **Which set of targets this picker letters.** Unset — the default — means the ordinary
+    /// set: everything beneath it that named no scope.
+    ///
+    /// A surface with two verbs over one tree gives each its own picker and its own letters:
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::Intent;
+    ///
+    /// // Two pickers over the same cards. The first letters the cards, the second only the ⊠s.
+    /// let jump  = KeyHintGroup::new().opens_on("map.jump");
+    /// let close = KeyHintGroup::new().opens_on("map.close").scope("close");
+    /// ```
+    ///
+    /// A picker whose scope matches nothing shows **no letters** rather than falling back to
+    /// lettering everything — the fallback is the dangerous direction, since a "close" picker that
+    /// quietly lettered every card would remove what you meant to go to.
+    pub fn scope(self, scope: impl Into<String>) -> Self {
+        self.prop("scope", PropValue::Text(scope.into()))
+    }
 }
 
 impl Panel {
@@ -1109,6 +1375,23 @@ impl Panel {
 }
 
 impl Overlay {
+    /// **Which control the keyboard starts on**, named by its `key`.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    ///
+    /// let confirm = Overlay::new()
+    ///     .default_focus("cancel")
+    ///     .child(Button::new().key("cancel").text("Cancel"));
+    /// ```
+    ///
+    /// Yours to decide, because only you know which control is safe: a confirm starts on the
+    /// button that changes nothing, a form on its first field, a menu on neither. Unset, nothing
+    /// is focused.
+    pub fn default_focus(self, key: &str) -> Self {
+        self.prop("default_focus", PropValue::Text(key.to_string()))
+    }
+
     /// **How it arrives and leaves.** Unset, it cuts.
     ///
     /// These are the built-ins. An animation nobody named is a Rust type handed to
@@ -1122,10 +1405,11 @@ impl Overlay {
     pub fn blocking(self, on: bool) -> Self {
         self.prop("blocking", PropValue::Bool(on))
     }
-    /// Whether it starts up. A surface **born** open is already there and plays no arrival; one
+    /// Whether it starts up. The starting value only — to follow state you hold, the host binds a
+    /// signal with `open_when`. A surface **born** open is already there and plays no arrival; one
     /// that *becomes* open arrives.
-    pub fn opened(self, on: bool) -> Self {
-        self.prop("opened", PropValue::Bool(on))
+    pub fn default_open(self, on: bool) -> Self {
+        self.prop("default_open", PropValue::Bool(on))
     }
     /// **Blur what is behind it.** The scrim's counterpart: a scrim tints what is underneath, a
     /// frost takes its detail away, and a surface may want either, both or neither.
@@ -1231,7 +1515,10 @@ mod tests {
             .radius(6.0)
             .into_node();
 
-        assert_eq!(node.props.get("fill"), Some(&PropValue::Color("accent".into())));
+        assert_eq!(
+            node.props.get("fill"),
+            Some(&PropValue::Color("accent".into()))
+        );
         assert!(matches!(node.props.get("border"), Some(PropValue::Map(_))));
         assert!(matches!(node.props.get("glow"), Some(PropValue::Map(_))));
     }
@@ -1240,13 +1527,61 @@ mod tests {
     #[test]
     fn a_percentage_width_is_written_the_way_length_reads_it() {
         let node = Surface::new().width_pct(0.5).into_node();
-        assert_eq!(node.props.get("width"), Some(&PropValue::Text("50%".into())));
+        assert_eq!(
+            node.props.get("width"),
+            Some(&PropValue::Text("50%".into()))
+        );
     }
 
     /// An event lands under the name `realize` looks for.
     #[test]
     fn an_event_is_bound_under_its_canonical_name() {
-        let node = Row::new().on_press(Intent::new("docker.select")).into_node();
-        assert_eq!(node.events.get("press").map(|i| i.action.as_str()), Some("docker.select"));
+        let node = Row::new()
+            .on_press(Intent::new("docker.select"))
+            .into_node();
+        assert_eq!(
+            node.events.get("press").map(|i| i.action.as_str()),
+            Some("docker.select")
+        );
+    }
+
+    /// **One builder writes ONE property, whichever kind of space it was given.**
+    ///
+    /// The retired names are still read on the far side, so a tree emitting `"gap_spacing"` keeps
+    /// working — which means nothing downstream can tell you the builder picked the wrong name.
+    /// This is the only place that can, so it pins the name rather than the effect.
+    #[test]
+    fn spacing_is_written_under_one_property_name() {
+        let px = VStack::new().gap(8).into_node();
+        assert_eq!(px.props.get("gap"), Some(&PropValue::Float(8.0)));
+        assert!(
+            !px.props.contains_key("gap_spacing"),
+            "the retired name must not be emitted — it is read, not written",
+        );
+
+        let step = VStack::new().gap(crate::ViewSpacing::Sm).into_node();
+        assert_eq!(
+            step.props.get("gap"),
+            Some(&PropValue::Text("sm".into())),
+            "a step travels as its name, under the same property",
+        );
+        assert!(!step.props.contains_key("gap_spacing"));
+    }
+
+    /// Padding does the same, and a string is read as either kind.
+    #[test]
+    fn padding_is_written_under_one_property_name() {
+        let node = Surface::new().padding("md").padding_x(4).into_node();
+        assert_eq!(
+            node.props.get("padding"),
+            Some(&PropValue::Text("md".into()))
+        );
+        assert_eq!(node.props.get("padding_x"), Some(&PropValue::Float(4.0)));
+        for retired in ["pad_spacing_x", "pad_spacing_y"] {
+            assert!(
+                !node.props.contains_key(retired),
+                "{retired} must not be emitted"
+            );
+        }
     }
 }

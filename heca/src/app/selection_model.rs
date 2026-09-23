@@ -36,7 +36,10 @@ pub enum SelectionSource {
     /// RPC or other programmatic request.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "RPC-originated selection is reserved for upcoming wiring")
+        expect(
+            dead_code,
+            reason = "RPC-originated selection is reserved for upcoming wiring"
+        )
     )]
     Rpc,
 }
@@ -85,7 +88,10 @@ pub enum SelectionRegion {
     /// Opaque backend-native region. The host does not interpret it.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "backend-native region is reserved for future backend-owned selection")
+        expect(
+            dead_code,
+            reason = "backend-native region is reserved for future backend-owned selection"
+        )
     )]
     BackendNative,
 }
@@ -189,7 +195,10 @@ impl SelectionState {
     /// Current lifecycle phase.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "used by tests and reserved for future selection lifecycle routing")
+        expect(
+            dead_code,
+            reason = "used by tests and reserved for future selection lifecycle routing"
+        )
     )]
     pub fn phase(&self) -> SelectionPhase {
         match self {
@@ -216,7 +225,10 @@ impl SelectionState {
     /// Who renders the selection visual, if a selection is active.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "used by tests and reserved for backend-native selection wiring")
+        expect(
+            dead_code,
+            reason = "used by tests and reserved for backend-native selection wiring"
+        )
     )]
     pub fn render_mode(&self) -> Option<SelectionRenderMode> {
         self.active().map(|a| a.render_mode())
@@ -225,7 +237,10 @@ impl SelectionState {
     /// Selection region, if active.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "used by tests and reserved for backend-native selection wiring")
+        expect(
+            dead_code,
+            reason = "used by tests and reserved for backend-native selection wiring"
+        )
     )]
     pub fn region(&self) -> Option<&SelectionRegion> {
         self.active().map(|a| &a.region)
@@ -247,7 +262,10 @@ impl SelectionState {
     /// True if a selection has been confirmed.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "used by tests and reserved for upcoming confirmed-selection flows")
+        expect(
+            dead_code,
+            reason = "used by tests and reserved for upcoming confirmed-selection flows"
+        )
     )]
     pub fn has_selection(&self) -> bool {
         matches!(self, SelectionState::Selected(_))
@@ -261,7 +279,9 @@ impl SelectionState {
     /// Return the caret position, if in caret-only state.
     pub fn caret_pos(&self) -> Option<(isize, usize)> {
         match self {
-            SelectionState::Caret { stable_row, col, .. } => Some((*stable_row, *col)),
+            SelectionState::Caret {
+                stable_row, col, ..
+            } => Some((*stable_row, *col)),
             _ => None,
         }
     }
@@ -293,12 +313,21 @@ impl SelectionState {
 
     /// Place a caret at the given position (caret-only state, no selection).
     pub fn set_caret(&mut self, owner: SelectionOwner, stable_row: isize, col: usize) {
-        *self = SelectionState::Caret { owner, stable_row, col };
+        *self = SelectionState::Caret {
+            owner,
+            stable_row,
+            col,
+        };
     }
 
     /// Move the caret position. No-op if not in caret-only state.
     pub fn move_caret(&mut self, stable_row: isize, col: usize) {
-        if let SelectionState::Caret { stable_row: r, col: c, .. } = self {
+        if let SelectionState::Caret {
+            stable_row: r,
+            col: c,
+            ..
+        } = self
+        {
             *r = stable_row;
             *c = col;
         }
@@ -309,7 +338,12 @@ impl SelectionState {
     /// The caret becomes the anchor AND focus of the new selection.
     /// After this, movement will grow the selection from the anchor.
     pub fn begin_selection_from_caret(&mut self, source: SelectionSource) {
-        if let SelectionState::Caret { owner, stable_row, col } = *self {
+        if let SelectionState::Caret {
+            owner,
+            stable_row,
+            col,
+        } = *self
+        {
             *self = SelectionState::Selecting(ActiveSelection {
                 owner,
                 source,
@@ -335,7 +369,9 @@ impl SelectionState {
                         anchor_stable_row,
                         anchor_col,
                         focus_stable_row,
-                        focus_col, .. },
+                        focus_col,
+                        ..
+                    },
                 ..
             })
             | SelectionState::Selected(ActiveSelection {
@@ -344,7 +380,9 @@ impl SelectionState {
                         anchor_stable_row,
                         anchor_col,
                         focus_stable_row,
-                        focus_col, .. },
+                        focus_col,
+                        ..
+                    },
                 ..
             }) => {
                 std::mem::swap(anchor_stable_row, focus_stable_row);
@@ -424,7 +462,10 @@ mod tests {
 
         // Caret-only state → the caret cell.
         s.set_caret(SelectionOwner::Pane(PaneId(7)), 3, 5);
-        assert_eq!(s.cursor_cell(), Some((SelectionOwner::Pane(PaneId(7)), 3, 5)));
+        assert_eq!(
+            s.cursor_cell(),
+            Some((SelectionOwner::Pane(PaneId(7)), 3, 5))
+        );
 
         // Active selection → the moving FOCUS endpoint, not the anchor.
         s.begin(
@@ -437,7 +478,10 @@ mod tests {
                 focus_col: 4,
             },
         );
-        assert_eq!(s.cursor_cell(), Some((SelectionOwner::Pane(PaneId(9)), 8, 4)));
+        assert_eq!(
+            s.cursor_cell(),
+            Some((SelectionOwner::Pane(PaneId(9)), 8, 4))
+        );
     }
 
     #[test]
@@ -451,8 +495,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 0,
-            
-        },
+            },
         );
         assert!(s.is_selecting());
         assert_eq!(s.owner(), Some(SelectionOwner::Pane(PaneId(1))));
@@ -465,8 +508,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 0,
-            
-        })
+            })
         );
     }
 
@@ -501,8 +543,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 0,
-            
-        },
+            },
         );
         s.update_focus(0, 10);
         s.end();
@@ -514,8 +555,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 10,
-            
-        })
+            })
         );
         assert!(s.has_selection());
     }
@@ -531,8 +571,7 @@ mod tests {
                 anchor_col: 3,
                 focus_stable_row: 2,
                 focus_col: 3,
-            
-        },
+            },
         );
         s.update_focus(4, 5);
         assert_eq!(
@@ -542,8 +581,7 @@ mod tests {
                 anchor_col: 3,
                 focus_stable_row: 4,
                 focus_col: 5,
-            
-        })
+            })
         );
     }
 
@@ -570,8 +608,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 0,
-            
-        },
+            },
         );
         s.update_focus(0, 5);
         s.end();
@@ -584,8 +621,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 5,
-            
-        })
+            })
         );
     }
 
@@ -608,8 +644,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 5,
-            
-        },
+            },
         );
         s.end();
         assert!(s.has_selection());
@@ -622,8 +657,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 5,
-            
-        })
+            })
         );
     }
 
@@ -691,9 +725,16 @@ mod tests {
                 anchor_stable_row,
                 anchor_col,
                 focus_stable_row,
-                focus_col, .. } => {
+                focus_col,
+                ..
+            } => {
                 assert_eq!(
-                    (*anchor_stable_row, *anchor_col, *focus_stable_row, *focus_col),
+                    (
+                        *anchor_stable_row,
+                        *anchor_col,
+                        *focus_stable_row,
+                        *focus_col
+                    ),
                     (3, 5, 3, 5)
                 );
             }
@@ -720,8 +761,7 @@ mod tests {
                 anchor_col: 2,
                 focus_stable_row: 3,
                 focus_col: 5,
-            
-        },
+            },
         );
         s.toggle_selection_endpoint();
         match s.active().unwrap().region {
@@ -729,9 +769,14 @@ mod tests {
                 anchor_stable_row,
                 anchor_col,
                 focus_stable_row,
-                focus_col, .. } => {
+                focus_col,
+                ..
+            } => {
                 // After toggle, anchor and focus are swapped.
-                assert_eq!((anchor_stable_row, anchor_col, focus_stable_row, focus_col), (3, 5, 0, 2));
+                assert_eq!(
+                    (anchor_stable_row, anchor_col, focus_stable_row, focus_col),
+                    (3, 5, 0, 2)
+                );
             }
             _ => panic!("expected HostGrid region"),
         }
@@ -770,8 +815,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 5,
                 focus_col: 3,
-            
-        },
+            },
         );
         s.end(); // Confirm → Selected state
         assert!(s.has_selection());
@@ -781,8 +825,13 @@ mod tests {
                 anchor_stable_row,
                 anchor_col,
                 focus_stable_row,
-                focus_col, .. } => {
-                assert_eq!((anchor_stable_row, anchor_col, focus_stable_row, focus_col), (5, 3, 1, 0));
+                focus_col,
+                ..
+            } => {
+                assert_eq!(
+                    (anchor_stable_row, anchor_col, focus_stable_row, focus_col),
+                    (5, 3, 1, 0)
+                );
             }
             _ => panic!("expected HostGrid region"),
         }
@@ -806,8 +855,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 1,
                 focus_col: 2,
-            
-        }
+            }
             .render_mode(),
             SelectionRenderMode::HostGrid
         );
@@ -838,8 +886,7 @@ mod tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 0,
-            
-        },
+            },
         );
         s.update_focus(0, 10);
         s.end();
@@ -898,18 +945,20 @@ pub fn extract_selection_text(
             focus_col,
             ..
         } => {
-            let (start_stable, start_col, end_stable, end_col) =
-                normalize_selection_rect(
-                    *anchor_stable_row,
-                    *anchor_col,
-                    *focus_stable_row,
-                    *focus_col,
-                );
+            let (start_stable, start_col, end_stable, end_col) = normalize_selection_rect(
+                *anchor_stable_row,
+                *anchor_col,
+                *focus_stable_row,
+                *focus_col,
+            );
             // Point selection (anchor == focus): nothing is selected yet.
             if start_stable == end_stable && start_col == end_col {
                 return None;
             }
-            debug_assert_eq!(base_stable, start_stable, "caller must fetch the normalized stable range and pass base_stable == start_stable");
+            debug_assert_eq!(
+                base_stable, start_stable,
+                "caller must fetch the normalized stable range and pass base_stable == start_stable"
+            );
             let start_off = (start_stable - base_stable).max(0) as usize;
             let end_off = (end_stable - base_stable).max(0) as usize;
             Some(extract_text_from_grid(
@@ -1171,8 +1220,7 @@ mod extraction_tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 4,
-            
-        },
+            },
         );
         sel.end();
         let text = extract_selection_text(&sel, &lines, 0, 7, TEST_BG).unwrap();
@@ -1195,8 +1243,7 @@ mod extraction_tests {
                 anchor_col: 1,
                 focus_stable_row: 2,
                 focus_col: 1,
-            
-        },
+            },
         );
         sel.end();
         // Row 0: start_col=1, end=3 → "bc" (trailing blank trimmed)
@@ -1222,8 +1269,7 @@ mod extraction_tests {
                 anchor_col: 2,
                 focus_stable_row: 0,
                 focus_col: 0,
-            
-        },
+            },
         );
         sel.end();
         let text = extract_selection_text(&sel, &lines, 0, 3, TEST_BG).unwrap();
@@ -1251,8 +1297,7 @@ mod extraction_tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 2,
-            
-        },
+            },
         );
         sel.end();
         // Should copy "中b" (filler cell at col 1 is skipped)
@@ -1296,8 +1341,7 @@ mod extraction_tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 3,
-            
-        },
+            },
         );
         sel.end();
         // Selecting entire row including trailing blanks — should get "ab"
@@ -1323,8 +1367,7 @@ mod extraction_tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 2,
-            
-        },
+            },
         );
         sel.end();
         // "a" + space + highlighted_space — both spaces must be preserved.
@@ -1350,8 +1393,7 @@ mod extraction_tests {
                 anchor_col: 0,
                 focus_stable_row: 0,
                 focus_col: 3,
-            
-        },
+            },
         );
         sel.end();
         // Trailing blank_cell() has default_bg, so it's trimmed.
@@ -1379,8 +1421,7 @@ mod extraction_tests {
                 anchor_col: 1,
                 focus_stable_row: 0,
                 focus_col: 2,
-            
-        },
+            },
         );
         sel.end();
         // Normalized: start=(0,1), end=(0,2)

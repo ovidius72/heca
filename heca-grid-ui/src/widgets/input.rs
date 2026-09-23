@@ -163,7 +163,6 @@ impl Input {
         self.text.get_untracked().chars().count()
     }
 
-
     fn caret_visible(&self) -> bool {
         let phase = self
             .blink_origin
@@ -449,7 +448,7 @@ impl Component for Input {
             let t = cx.theme();
             (
                 t.colors.surface,
-                t.colors.accent,
+                cx.accent(),
                 t.colors.muted,
                 t.colors.foreground,
                 t.colors.control_radius(),
@@ -471,7 +470,11 @@ impl Component for Input {
             color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
             width: bw,
         };
-        let glow = if disabled { None } else { cx.rest_glow(GLOW_RADIUS) };
+        let glow = if disabled {
+            None
+        } else {
+            cx.rest_glow(GLOW_RADIUS)
+        };
         cx.rect(b, surface, Some(border), radius, glow);
 
         // Text (left-aligned within the padded inner rect); placeholder when
@@ -508,7 +511,14 @@ impl Component for Input {
                 TextStyle::REGULAR,
             );
         } else if !s.is_empty() {
-            cx.text(text_rect, &s, foreground, fs, TextAlign::Start, TextStyle::REGULAR);
+            cx.text(
+                text_rect,
+                &s,
+                foreground,
+                fs,
+                TextAlign::Start,
+                TextStyle::REGULAR,
+            );
         }
 
         // Caret: a thin accent bar at the cursor (hidden while text is selected).

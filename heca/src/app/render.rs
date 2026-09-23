@@ -232,14 +232,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .unwrap_or(state.theme.accent)
         .to_f32x4();
 
-    let chrome = ChromeConfig {
-        tab_bar_height: state.tab_bar_height(),
-        status_bar_height: state.status_bar_height(),
-        left_sidebar_width: state.left_sidebar_width(),
-        right_sidebar_width: state.right_sidebar_width(),
-        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
-    };
-    let pane_area = chrome.content_rect(w, h);
+    let chrome = ChromeConfig::of(state);
+    let pane_area = chrome.content_rect();
     state.text_renderer.begin_frame();
     state.text_renderer.set_damage(None);
     state.text_renderer.set_clip(None);
@@ -248,27 +242,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // note in `render_chrome`).
     state.grid_renderer.begin_frame();
 
-    let active_pane_id = state
-        .session
-        .active_workspace()
-        .and_then(|ws| ws.active_pane())
-        .map(|pane| pane.id)
-        .or_else(|| state.chrome_state.workspaces.active_pane())
-        .or(state.focused_pane);
-
     // ── Pane chrome from pane-specific config ──
-    let pane_border_color = state
-        .appearance
-        .effective_pane_border_color(&state.theme)
-        .to_f32x4();
-    let pane_active_border_color = state
-        .appearance
-        .effective_pane_active_border_color(&state.theme)
-        .to_f32x4();
-    let pane_floating_border_color = state
-        .appearance
-        .effective_pane_floating_border_color(&state.theme)
-        .to_f32x4();
+    // The three frame colours are **not** read here. A pane's frame colour is its own — written
+    // onto its retained shell by `chrome::sync_panes`, which is also where it becomes the hue the
+    // pane publishes to its contents. Reading them here meant the host decided how a widget looked.
     let pane_border_radius = state.appearance.effective_pane_border_radius(&state.theme);
     let pane_content_inset = state.appearance.effective_pane_padding(&state.theme);
     let pane_positions = state
@@ -328,7 +305,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
             y: py,
             w: pw,
             h: ph,
-            is_active: active_pane_id == Some(*pane_id),
             content_rect,
             mount,
         });
@@ -378,16 +354,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 y: fy,
                 w: fw,
                 h: fh,
-                is_active: active_pane_id == Some(float.pane.id),
                 content_rect,
                 mount,
             });
         }
     }
 
-    let mut viewport_widget_panes: Vec<&PaneRenderState> = Vec::with_capacity(
-        tiled_panes.len() + floating_panes.len(),
-    );
+    let mut viewport_widget_panes: Vec<&PaneRenderState> =
+        Vec::with_capacity(tiled_panes.len() + floating_panes.len());
     viewport_widget_panes.extend(tiled_panes.iter());
     viewport_widget_panes.extend(floating_panes.iter());
     crate::chrome::sync_pane_viewport_widgets(state, &viewport_widget_panes);
@@ -619,8 +593,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 ),
                 mount,
                 Some(stencil_view),
-            )
-            {
+            ) {
                 queue_terminal_dynamic_overlays(
                     &mut state.text_renderer,
                     &mut state.primitive_renderer,
@@ -684,11 +657,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
         ));
 
         for pane in &tiled_panes {
-            let bcolor = if pane.is_active {
-                pane_active_border_color
-            } else {
-                pane_border_color
-            };
+            // Which colour this pane's frame is, and what it re-tints inside itself, is the
+            // retained shell's own business — written on it by `chrome::sync_panes`.
             paint_terminal_pane_shell(
                 state,
                 &mut pane_scene,
@@ -698,9 +668,19 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     y: pane.y,
                     w: pane.w,
                     h: pane.h,
-                    border_color: bcolor,
                 },
             );
+        }
+
+        // **The columns' own letters.** A column draws no chrome of its own — it is the box and
+        // the name — so this stamps only what it carries. **Through `paint_child`, never `paint`**:
+        // `paint_child` is what draws a widget's hint letter after painting it.
+        {
+            let column_theme = crate::chrome::chrome_gui_theme(state);
+            let mut cx = heca_grid_ui::PaintCx::new(&mut pane_scene, &column_theme);
+            for column in state.columns.values() {
+                heca_grid_ui::paint_child(&column.root, &mut cx);
+            }
         }
 
         pane_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
@@ -771,9 +751,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     }
 
     for pane in &floating_panes {
-        // Floating panes use their own border color (distinct layer), independent
-        // of the tiled active/inactive border colors.
-        let fborder = pane_floating_border_color;
         if pane.content_rect.is_some() {
             // ── Floating pane backdrop (solid or frosted), rounded-clipped ──
             //
@@ -845,8 +822,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     ),
                     mount,
                     Some(stencil_view),
-                )
-                {
+                ) {
                     queue_terminal_dynamic_overlays(
                         &mut state.text_renderer,
                         &mut state.primitive_renderer,
@@ -905,7 +881,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     y: pane.y,
                     w: pane.w,
                     h: pane.h,
-                    border_color: fborder,
                 },
             );
             float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
@@ -972,15 +947,19 @@ pub(crate) fn render_frame(state: &mut AppState) {
     }
     // Push value-state (selection + status) into the retained tree's bound signals so
     // focus/mode changes update in place without a rebuild (the signature excludes them).
-    let chrome_signals_changed = crate::chrome::sync_chrome_signals(state);
-    if chrome_signals_changed {
-        // Runtime/git signal writes happen during render, but wrappers like
-        // `Visibility` apply their `style.hidden` flip in `tick()`. Advance the
-        // retained chrome tree immediately so new branch/count rows participate in
-        // this frame's layout + damage pass instead of waiting for a later focus/input
-        // event to flush the signal-backed structure.
-        state.window_root.tick(0.0);
-    }
+    crate::chrome::sync_chrome_signals(state);
+    // **Flush signal-driven structure before this frame is laid out.**
+    //
+    // Wrappers like `Visibility` apply their `hidden` flip in `tick`, so a row revealed by a
+    // signal has no box until one runs. The frame pass already ticked, but that was before the
+    // store was brought up to date — and a pane's runtime now reaches its row through the row's
+    // own subscription, which fires during that update. Without this the reveal would land a
+    // frame late, and it used to be skipped entirely whenever the sync pass reported no change.
+    //
+    // Unconditional, because "did anything change" is no longer a question one return value can
+    // answer once rows subscribe for themselves. A tick with no time and nothing pending is a
+    // walk that finds nothing.
+    state.window_root.tick(0.0);
     let chrome_theme = crate::chrome::chrome_gui_theme(state);
     let mut chrome_scene =
         crate::chrome::paint_chrome_root(&mut state.window_root, w, h, &chrome_theme);
@@ -1119,17 +1098,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
 /// Update session viewport to match current chrome/content area size.
 pub(crate) fn update_session_viewport(state: &mut AppState) {
-    let phys = state.window.inner_size();
-    let win_w = phys.width as f32 / state.scale_factor as f32;
-    let win_h = phys.height as f32 / state.scale_factor as f32;
-    let chrome = ChromeConfig {
-        tab_bar_height: state.tab_bar_height(),
-        status_bar_height: state.status_bar_height(),
-        left_sidebar_width: state.left_sidebar_width(),
-        right_sidebar_width: state.right_sidebar_width(),
-        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
-    };
-    let pane_area = chrome.content_rect(win_w, win_h);
+    let pane_area = ChromeConfig::of(state).content_rect();
     let new_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     state.session.update_viewport(new_size);
 }

@@ -100,12 +100,14 @@ pub(crate) fn chord_caps(binding: &str) -> Vec<KeyCap> {
     if prefixed {
         caps.push(KeyCap::Text(PREFIX_SYMBOL.to_string()));
     }
-    caps.extend(keys.split('+').filter(|t| !t.is_empty()).map(|token| {
-        match key_glyph(token) {
-            Some(glyph) => KeyCap::Nf(glyph),
-            None => KeyCap::Text(token.to_string()),
-        }
-    }));
+    caps.extend(
+        keys.split('+')
+            .filter(|t| !t.is_empty())
+            .map(|token| match key_glyph(token) {
+                Some(glyph) => KeyCap::Nf(glyph),
+                None => KeyCap::Text(token.to_string()),
+            }),
+    );
     caps
 }
 

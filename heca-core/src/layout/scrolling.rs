@@ -313,6 +313,43 @@ impl ScrollingSpace {
     }
 
     /// Add a pane to a column.
+    /// **Take a pane out of its column and give it one of its own, immediately to the right.**
+    ///
+    /// Distinct from [`add_pane_to_column`](Self::add_pane_to_column), which puts a pane *into* a
+    /// column that exists. The nearest existing move only creates a column when the target is past
+    /// the end of the strip, so asked for a position between two columns it stacks into the
+    /// existing one instead — this always creates, which is the whole act.
+    ///
+    /// **A pane already alone in its column is left where it is** and this answers `false`: it
+    /// would leave a column of one and land in a column of one, so nothing on screen would change.
+    ///
+    /// `new_id` is passed in rather than derived: an id taken from the pane could name a column
+    /// that already exists, and two columns with one id are two rows the cursor, the hint letters
+    /// and a right-click cannot tell apart (F003/P082/T458).
+    pub fn extract_pane_to_new_column(
+        &mut self,
+        pane_id: PaneId,
+        new_id: ColumnId,
+        width: ColumnWidth,
+    ) -> bool {
+        let Some((src_col, pane_idx)) = self.columns.iter().enumerate().find_map(|(c, col)| {
+            col.panes
+                .iter()
+                .position(|p| p.id == pane_id)
+                .map(|p| (c, p))
+        }) else {
+            return false;
+        };
+        if self.columns[src_col].panes.len() <= 1 {
+            return false;
+        }
+        let Some(pane) = self.remove_pane(src_col, pane_idx) else {
+            return false;
+        };
+        self.add_column(Some(src_col + 1), Column::new(new_id, pane, width), true);
+        true
+    }
+
     pub fn add_pane_to_column(
         &mut self,
         col_idx: usize,
@@ -1179,43 +1216,239 @@ impl ScrollingSpace {
 
     /// Get all panes with their render positions.
     pub fn panes_with_positions(&self) -> Vec<(PaneId, Rectangle)> {
-        let mut result = Vec::new();
-        let view_pos = self.view_pos();
-        let view_off = Point::new(-view_pos, 0.0);
+        self.laid_out_columns()
+            .into_iter()
+            .flat_map(|col| col.panes)
+            .map(|p| (p.id, p.rect))
+            .collect()
+    }
+
+    /// **Where each column is on screen**, with the panes inside it — one walk, so a caller asking
+    /// about a column and a caller asking about a pane cannot disagree about where either sits.
+    ///
+    /// The column geometry was always computed here and then thrown away: only the pane rects came
+    /// out, and anything wanting a column's box had to rebuild the same arithmetic from
+    /// [`column_x`](Self::column_x), the render offset, the view offset and the gaps.
+    pub fn columns_with_positions(&self) -> Vec<LaidOutColumn> {
+        self.laid_out_columns()
+    }
+
+    /// The one walk both public views are built on.
+    fn laid_out_columns(&self) -> Vec<LaidOutColumn> {
+        let view_off = Point::new(-self.view_pos(), 0.0);
         let gaps = self.options.gaps;
 
-        for (col_idx, col) in self.columns.iter().enumerate() {
-            let col_x = self.column_x(col_idx);
-            let col_render_off = col.render_offset();
-            let col_pos = Point::new(col_x + col_render_off, 0.0);
+        self.columns
+            .iter()
+            .enumerate()
+            .map(|(col_idx, col)| {
+                let col_pos = Point::new(self.column_x(col_idx) + col.render_offset(), 0.0);
+                let mut pane_y = self.working_area.loc.y + gaps;
+                let mut panes = Vec::with_capacity(col.panes.len());
 
-            let mut pane_y = self.working_area.loc.y + gaps;
+                for (pane_idx, pane) in col.panes.iter().enumerate() {
+                    let size = col.pane_sizes.get(pane_idx).copied().unwrap_or(Size::new(
+                        col.computed_width,
+                        self.working_area.size.h / col.panes.len().max(1) as f64,
+                    ));
 
-            for (pane_idx, pane) in col.panes.iter().enumerate() {
-                let size = col.pane_sizes.get(pane_idx).copied().unwrap_or(Size::new(
-                    col.computed_width,
-                    self.working_area.size.h / col.panes.len().max(1) as f64,
-                ));
+                    // **Flow, then transform.** The slot is where the column stacks this pane; the
+                    // displacement is the pane's own, from a move animation or a drag in flight.
+                    // They are returned apart because a container places its children by the first
+                    // and the child carries the second — the same split CSS makes between layout
+                    // and `transform`.
+                    let pane_offset = pane.move_offset.current();
+                    let rubber = pane.interactive_move_offset;
+                    let slot = view_off + col_pos + Point::new(0.0, pane_y);
+                    let displacement =
+                        Point::new(pane_offset.x + rubber.x, pane_offset.y + rubber.y);
+                    panes.push(LaidOutPane {
+                        id: pane.id,
+                        rect: Rectangle::new(slot + displacement, size),
+                        slot: Rectangle::new(slot, size),
+                        displacement,
+                    });
 
-                let pane_offset = pane.move_offset.current();
-                let rubber = pane.interactive_move_offset;
-                let pane_pos = view_off
-                    + col_pos
-                    + Point::new(pane_offset.x + rubber.x, pane_y + pane_offset.y + rubber.y);
-                let rect = Rectangle::new(pane_pos, size);
-                result.push((pane.id, rect));
+                    pane_y += size.h + gaps;
+                }
 
-                pane_y += size.h + gaps;
-            }
-        }
-
-        result
+                LaidOutColumn {
+                    id: col.id,
+                    idx: col_idx,
+                    rect: enclosing(&panes).unwrap_or_else(|| {
+                        // An empty column has no panes to span, so it is its own width at the top
+                        // of the working area — the box it would occupy the moment one arrives.
+                        Rectangle::new(
+                            view_off + col_pos + Point::new(0.0, self.working_area.loc.y + gaps),
+                            Size::new(col.computed_width, 0.0),
+                        )
+                    }),
+                    panes,
+                }
+            })
+            .collect()
     }
+}
+
+/// **One column as it is laid out on screen**, and the panes stacked inside it.
+///
+/// `rect` spans the **slots** it holds — a column is the box its contents occupy in the layout, so
+/// a pane being dragged away does not stretch the column it is leaving.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LaidOutColumn {
+    /// The column's own identity — stable across a split, unlike its index.
+    pub id: ColumnId,
+    /// Its position in the strip, for the actions that still address a column positionally.
+    pub idx: usize,
+    /// The box it occupies, in the same space [`ScrollingSpace::panes_with_positions`] reports.
+    pub rect: Rectangle,
+    /// Its panes, top to bottom.
+    pub panes: Vec<LaidOutPane>,
+}
+
+/// **One pane as it is laid out**, with its flow position and its own displacement kept apart.
+///
+/// `slot` is where its column stacks it; `displacement` is what a move animation or a drag in
+/// flight has shifted it by; `rect` is the two together, which is where it is drawn.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LaidOutPane {
+    pub id: PaneId,
+    /// Where it is drawn — `slot` plus `displacement`.
+    pub rect: Rectangle,
+    /// Where its column stacks it, before any displacement of its own.
+    pub slot: Rectangle,
+    /// Its own offset, from a move animation or a drag in flight.
+    pub displacement: Point,
+}
+
+/// The smallest box containing every pane's **slot** — `None` when there are none.
+fn enclosing(panes: &[LaidOutPane]) -> Option<Rectangle> {
+    let mut it = panes.iter().map(|p| p.slot);
+    let first = it.next()?;
+    Some(it.fold(first, |acc, r| {
+        let x = acc.loc.x.min(r.loc.x);
+        let y = acc.loc.y.min(r.loc.y);
+        let right = (acc.loc.x + acc.size.w).max(r.loc.x + r.size.w);
+        let bottom = (acc.loc.y + acc.size.h).max(r.loc.y + r.size.h);
+        Rectangle::new(Point::new(x, y), Size::new(right - x, bottom - y))
+    }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **A column's box is exactly the panes it holds**, and the two views agree because they are
+    /// one walk (F003/P082/T474).
+    #[test]
+    fn a_column_spans_the_panes_inside_it_and_agrees_with_them() {
+        let mut space = space_with_columns(2);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(99), "second"), false);
+
+        let cols = space.columns_with_positions();
+        assert_eq!(cols.len(), 2, "two columns, the first holding two panes");
+        assert_eq!(cols[0].panes.len(), 2);
+
+        for col in &cols {
+            for pane in &col.panes {
+                let slot = pane.slot;
+                assert!(
+                    slot.loc.x >= col.rect.loc.x - 0.5
+                        && slot.loc.x + slot.size.w <= col.rect.loc.x + col.rect.size.w + 0.5,
+                    "pane {:?} at {slot:?} must sit inside its column {:?}",
+                    pane.id,
+                    col.rect,
+                );
+                assert!(
+                    slot.loc.y >= col.rect.loc.y - 0.5
+                        && slot.loc.y + slot.size.h <= col.rect.loc.y + col.rect.size.h + 0.5,
+                );
+            }
+        }
+
+        let flat: Vec<_> = cols
+            .iter()
+            .flat_map(|c| c.panes.iter().map(|p| (p.id, p.rect)))
+            .collect();
+        assert_eq!(
+            flat,
+            space.panes_with_positions(),
+            "a pane must not be in two places depending on who asked",
+        );
+    }
+
+    /// **A pane dragged out of its column does not stretch the column it is leaving.**
+    ///
+    /// Flow and transform are separate answers: the column's box is the slots its panes occupy, and
+    /// a pane's own displacement moves where it is *drawn* without moving where it belongs.
+    #[test]
+    fn a_displaced_pane_moves_where_it_is_drawn_and_not_where_it_belongs() {
+        let mut space = space_with_columns(1);
+        let before = space.columns_with_positions()[0].rect;
+
+        space.columns[0].panes[0].interactive_move_offset = Point::new(400.0, 90.0);
+        let after = &space.columns_with_positions()[0];
+        let pane = after.panes[0];
+
+        assert_eq!(
+            after.rect, before,
+            "the column keeps the box its slots occupy"
+        );
+        assert_eq!(pane.displacement, Point::new(400.0, 90.0));
+        assert_eq!(
+            pane.rect.loc,
+            pane.slot.loc + pane.displacement,
+            "what is drawn is the slot plus the pane's own transform",
+        );
+        assert_eq!(
+            pane.slot.loc, before.loc,
+            "and the slot itself has not moved"
+        );
+    }
+
+    /// **A pane leaves its column and gets one of its own, immediately to the right**
+    /// (F003/P082/T474 part B; Antonio, 2026-09-10 — right of the current one, not the end of the
+    /// strip, so you keep your place).
+    #[test]
+    fn a_pane_is_extracted_into_a_new_column_beside_its_own() {
+        let mut space = space_with_columns(2);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(99), "second"), false);
+        assert_eq!(space.columns[0].panes.len(), 2);
+
+        assert!(space.extract_pane_to_new_column(
+            PaneId(99),
+            ColumnId(500),
+            ColumnWidth::Proportion(0.5)
+        ));
+
+        assert_eq!(space.columns.len(), 3, "a column was created");
+        assert_eq!(space.columns[0].panes.len(), 1, "it left the one it was in");
+        assert_eq!(
+            space.columns[1]
+                .panes
+                .iter()
+                .map(|p| p.id)
+                .collect::<Vec<_>>(),
+            vec![PaneId(99)],
+            "and landed immediately to the right, alone",
+        );
+        assert_eq!(space.columns[1].id, ColumnId(500));
+    }
+
+    /// A pane already alone in its column stays put and says so: it would leave a column of one and
+    /// land in a column of one, so nothing on screen would change.
+    #[test]
+    fn a_pane_alone_in_its_column_is_left_where_it_is() {
+        let mut space = space_with_columns(2);
+        let before = space.columns.len();
+
+        assert!(!space.extract_pane_to_new_column(
+            PaneId(1),
+            ColumnId(500),
+            ColumnWidth::Proportion(0.5)
+        ));
+        assert_eq!(space.columns.len(), before);
+    }
 
     fn test_scrolling_space() -> ScrollingSpace {
         ScrollingSpace::new(
@@ -1380,8 +1613,14 @@ mod tests {
         space.resize_pane_height(0, 0, 60.0);
         let after: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
 
-        assert!((after[0] - (before[0] + 60.0)).abs() < 0.5, "the pane above grew by the drag");
-        assert!((after[1] - (before[1] - 60.0)).abs() < 0.5, "…and its neighbour gave exactly that");
+        assert!(
+            (after[0] - (before[0] + 60.0)).abs() < 0.5,
+            "the pane above grew by the drag"
+        );
+        assert!(
+            (after[1] - (before[1] - 60.0)).abs() < 0.5,
+            "…and its neighbour gave exactly that"
+        );
         assert!(
             (after[2] - third).abs() < 0.5,
             "the third pane is not on this boundary and must not move: {third} -> {}",
@@ -1390,7 +1629,10 @@ mod tests {
         // The column stays exactly full, so nothing is pushed past its bottom edge.
         let sum_before: f64 = before.iter().sum();
         let sum_after: f64 = after.iter().sum();
-        assert!((sum_after - sum_before).abs() < 0.5, "the column is still exactly full");
+        assert!(
+            (sum_after - sum_before).abs() < 0.5,
+            "the column is still exactly full"
+        );
     }
 
     /// The far side stops at its floor rather than the drag reaching past it for more space — which
@@ -1437,10 +1679,7 @@ mod tests {
             space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
 
             let before: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
-            let (h, gaps) = (
-                space.working_area.size.h,
-                space.options.gaps,
-            );
+            let (h, gaps) = (space.working_area.size.h, space.options.gaps);
             let col = &mut space.columns[0];
             col.active_pane_idx = active;
             col.move_active_pane_boundary(40.0, h, gaps);
@@ -1682,7 +1921,11 @@ mod tests {
         space.activate_column(0);
         let pinned = widths(&space);
         space.move_active_column_left_boundary(0.1);
-        assert_eq!(widths(&space), pinned, "no edge to the left of the first column");
+        assert_eq!(
+            widths(&space),
+            pinned,
+            "no edge to the left of the first column"
+        );
     }
 
     /// **Both of a pane's edges can be moved.** The counterpart of the column test above: plain
@@ -1699,7 +1942,10 @@ mod tests {
         space.add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
         space.add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
         let heights = |s: &ScrollingSpace| -> Vec<f64> {
-            s.panes_with_positions().iter().map(|(_, r)| r.size.h).collect()
+            s.panes_with_positions()
+                .iter()
+                .map(|(_, r)| r.size.h)
+                .collect()
         };
 
         // The middle pane: moving its BOTTOM edge down trades with the pane below.

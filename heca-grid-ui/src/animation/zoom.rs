@@ -1,6 +1,6 @@
 //! [`Zoom`] — a surface arriving by growing to life size, and leaving by shrinking away.
 
-use super::{smoothstep, Animate, AnimationFrame};
+use super::{Animate, AnimationFrame, smoothstep};
 
 /// How long a zoom takes when nobody says otherwise. niri's own overview animation is in this
 /// range: long enough to read as one picture pulling back, short enough that it never feels like
@@ -157,17 +157,30 @@ mod tests {
         assert!(!z.is_running());
 
         z.enter();
-        assert!((z.amount() - 0.5).abs() < 0.01, "arriving starts at the far end");
+        assert!(
+            (z.amount() - 0.5).abs() < 0.01,
+            "arriving starts at the far end"
+        );
         assert!(z.tick(0.5));
         let mid = z.amount();
-        assert!(mid > 0.5 && mid < 1.0, "…and is somewhere between, got {mid}");
+        assert!(
+            mid > 0.5 && mid < 1.0,
+            "…and is somewhere between, got {mid}"
+        );
         assert!(!z.tick(0.6), "the frame it stops running");
         assert_eq!(z.amount(), 1.0, "…it is life size again");
 
         z.leave();
-        assert!((z.amount() - 1.0).abs() < 0.01, "leaving starts at life size");
+        assert!(
+            (z.amount() - 1.0).abs() < 0.01,
+            "leaving starts at life size"
+        );
         assert!(z.tick(0.9));
-        assert!(z.amount() < 0.6, "…and shrinks toward the far end, got {}", z.amount());
+        assert!(
+            z.amount() < 0.6,
+            "…and shrinks toward the far end, got {}",
+            z.amount()
+        );
 
         // Re-shown mid-flight: present again, not finishing a departure nobody wants.
         z.cancel();

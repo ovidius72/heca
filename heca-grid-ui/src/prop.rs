@@ -125,7 +125,10 @@ mod tests {
     /// marked — and they are recorded, so the drift guard can tell intent from oversight.
     #[test]
     fn unmarked_builders_are_recorded_as_host_only() {
-        assert!(Input::HOST_ONLY_BUILDERS.contains(&"on_change"), "a closure builder");
+        assert!(
+            Input::HOST_ONLY_BUILDERS.contains(&"on_change"),
+            "a closure builder"
+        );
         assert!(ScrollRegion::HOST_ONLY_BUILDERS.contains(&"both"));
     }
 

@@ -469,6 +469,15 @@ pub struct AppearanceConfig {
     /// pane's own, in the same picker.
     #[serde(default = "default_hint_font_size")]
     pub hint_font_size: f32,
+    /// Picker letter **colour** override. `None` → inherits the theme's `hint_color`, which itself
+    /// falls back to the accent. Set in `config.toml` to pin one colour whatever theme is loaded.
+    ///
+    /// The pair with [`hint_font_size`](Self::hint_font_size): size is a setting because it depends
+    /// on your display and font, colour is a theme token because it belongs with a palette — and
+    /// this override exists for the same reason `glow_size` has one, so a user can differ from every
+    /// theme they load without editing each.
+    #[serde(default)]
+    pub hint_color: Option<Color>,
 
     // ── z=0 background layer (compositor-blur refactor) ──
     /// z=0 background gradient *top* color override. `None` → inherits
@@ -654,6 +663,14 @@ impl AppearanceConfig {
     // Config.toml `[appearance]` overrides take precedence; `None` inherits
     // from the theme automatically.
 
+    /// Effective picker letter colour: config override → `theme.hint_color` → the accent. One
+    /// colour for every keycap in the app; a host may still tint one *kind* of target apart with
+    /// the per-widget `hint_color` builder.
+    pub fn effective_hint_color(&self, theme: &Theme) -> Color {
+        self.hint_color
+            .unwrap_or_else(|| theme.effective_hint_color())
+    }
+
     /// Effective glow halo level: config override → `theme.glow_size`. Owns
     /// glow presence + radius + strength.
     pub fn effective_glow_size(&self, theme: &Theme) -> GlowLevel {
@@ -691,7 +708,9 @@ impl AppearanceConfig {
     /// sidebar and as the fallback for panes. The app-wide equivalent of the
     /// showcase BORDER control.
     pub fn effective_border_width(&self, theme: &Theme) -> f32 {
-        self.border_width.unwrap_or(theme.border_width).clamp(0.0, 10.0)
+        self.border_width
+            .unwrap_or(theme.border_width)
+            .clamp(0.0, 10.0)
     }
 
     /// Effective **global** decorative border color: config `border_color`
@@ -744,7 +763,9 @@ impl AppearanceConfig {
     /// active or inactive, so they read as a distinct layer). Config override →
     /// `theme.float_accent`.
     pub fn effective_pane_floating_border_color(&self, theme: &Theme) -> Color {
-        self.pane.floating_border_color.unwrap_or(theme.float_accent)
+        self.pane
+            .floating_border_color
+            .unwrap_or(theme.float_accent)
     }
 
     /// Effective gap between tiled panes (logical px). Config override → 8.0.
@@ -773,7 +794,10 @@ impl AppearanceConfig {
     /// `[0, 20]`. Snug by default now that the rounded content-clip (stencil)
     /// handles corners — a small straight-edge gap no longer overflows.
     pub fn effective_pane_padding(&self, theme: &Theme) -> f32 {
-        self.pane.padding.unwrap_or(theme.pane_padding).clamp(0.0, 20.0)
+        self.pane
+            .padding
+            .unwrap_or(theme.pane_padding)
+            .clamp(0.0, 20.0)
     }
 
     /// Effective sidebar gap. Config override → 12.0.
@@ -858,6 +882,7 @@ impl Default for AppearanceConfig {
             background_gradient_bottom: None,
             background_blur: default_background_blur(),
             background_transparency: default_background_transparency(),
+            hint_color: None,
             glow_size: None,
             intensity: None,
             show_focus_border: None,
@@ -1066,6 +1091,37 @@ mod tests {
         assert_eq!(cfg.effective_intensity(&grid_tron), grid_tron.intensity);
     }
 
+    /// **The picker's letters: theme first, config on top** — the same two-step every effect token
+    /// takes, so a user who wants one colour across every theme sets it once.
+    #[test]
+    fn the_picker_colour_falls_back_to_the_theme_then_to_the_accent() {
+        let grid_tron = crate::theme::load("grid_tron");
+        let cfg = AppearanceConfig::default();
+        assert_eq!(
+            cfg.effective_hint_color(&grid_tron),
+            grid_tron.accent,
+            "no setting and no theme token: the letters wear the accent",
+        );
+
+        let mut themed = grid_tron.clone();
+        themed.hint_color = Some(Color::rgb(0xff, 0xb8, 0x6c));
+        assert_eq!(
+            cfg.effective_hint_color(&themed),
+            Color::rgb(0xff, 0xb8, 0x6c),
+            "a theme that names one wins over the accent",
+        );
+
+        let over = AppearanceConfig {
+            hint_color: Some(Color::rgb(0x00, 0xff, 0x00)),
+            ..Default::default()
+        };
+        assert_eq!(
+            over.effective_hint_color(&themed),
+            Color::rgb(0x00, 0xff, 0x00),
+            "and the setting wins over the theme",
+        );
+    }
+
     #[test]
     fn effect_token_config_override_wins_over_theme() {
         let mocha = crate::theme::load("mocha");
@@ -1126,29 +1182,23 @@ intensity = "off""#,
 
     #[test]
     fn terminal_scrollbar_visibility_parses_snake_case() {
-        let cfg: AppearanceConfig = toml::from_str(
-            "[terminal]\nshow_scrollbar = \"always\"\n",
-        )
-        .expect("terminal show_scrollbar should parse");
+        let cfg: AppearanceConfig = toml::from_str("[terminal]\nshow_scrollbar = \"always\"\n")
+            .expect("terminal show_scrollbar should parse");
         assert_eq!(cfg.terminal.show_scrollbar, ScrollbarVisibility::Always);
 
-        let cfg: AppearanceConfig = toml::from_str(
-            "[terminal]\nshow_scrollbar = \"never\"\n",
-        )
-        .expect("terminal show_scrollbar should parse never");
+        let cfg: AppearanceConfig = toml::from_str("[terminal]\nshow_scrollbar = \"never\"\n")
+            .expect("terminal show_scrollbar should parse never");
         assert_eq!(cfg.terminal.show_scrollbar, ScrollbarVisibility::Never);
     }
 
     #[test]
     fn terminal_scrolled_up_badge_setting_parses() {
-        let cfg: AppearanceConfig =
-            toml::from_str("[terminal]\nshow_scrolled_up_badge = false\n")
-                .expect("terminal show_scrolled_up_badge should parse");
+        let cfg: AppearanceConfig = toml::from_str("[terminal]\nshow_scrolled_up_badge = false\n")
+            .expect("terminal show_scrolled_up_badge should parse");
         assert!(!cfg.terminal.show_scrolled_up_badge);
 
-        let cfg: AppearanceConfig =
-            toml::from_str("[terminal]\nshow_scrolled_up_badge = true\n")
-                .expect("terminal show_scrolled_up_badge should parse true");
+        let cfg: AppearanceConfig = toml::from_str("[terminal]\nshow_scrolled_up_badge = true\n")
+            .expect("terminal show_scrolled_up_badge should parse true");
         assert!(cfg.terminal.show_scrolled_up_badge);
     }
 
@@ -1253,7 +1303,10 @@ theme = "mocha"
 
         // The theme, not the config, moves it when the user hasn't overridden.
         theme.overlay_frame = FrameStyle::None;
-        assert_eq!(dflt.effective_overlay_border_style(&theme), FrameStyle::None);
+        assert_eq!(
+            dflt.effective_overlay_border_style(&theme),
+            FrameStyle::None
+        );
 
         // A config override wins over the theme, and parses snake_case.
         let cfg: AppearanceConfig = toml::from_str("overlay_border_style = \"bordered\"")
@@ -1280,7 +1333,10 @@ theme = "mocha"
         // Defaults match the current app look: panes bordered, sidebar bracketed.
         let dflt = AppearanceConfig::default();
         assert_eq!(dflt.effective_pane_border_style(), BorderStyle::Bordered);
-        assert_eq!(dflt.effective_sidebar_border_style(), BorderStyle::Bracketed);
+        assert_eq!(
+            dflt.effective_sidebar_border_style(),
+            BorderStyle::Bracketed
+        );
     }
 
     #[test]
@@ -1354,7 +1410,10 @@ theme = "mocha"
         assert_eq!(dflt.effective_pane_border_width(&theme), theme.border_width);
 
         // Global override drives both chrome and the pane fallback.
-        let g = AppearanceConfig { border_width: Some(3.0), ..Default::default() };
+        let g = AppearanceConfig {
+            border_width: Some(3.0),
+            ..Default::default()
+        };
         assert_eq!(g.effective_border_width(&theme), 3.0);
         assert_eq!(g.effective_pane_border_width(&theme), 3.0);
 

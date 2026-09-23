@@ -47,15 +47,15 @@
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
 use crate::component::{
-    shift_subtree, Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent,
+    Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent, shift_subtree,
 };
 use crate::font::MONO_LINE_RATIO;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Length};
-use crate::widgets::choice::{self, choice_at, Choice};
+use crate::widgets::choice::{self, Choice, choice_at};
 use crate::widgets::overlay::{
-    paint_panel_chrome, place_anchored_on, AnchorSide, PanelChrome, PanelElevation,
+    AnchorSide, PanelChrome, PanelElevation, paint_panel_chrome, place_anchored_on,
 };
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
@@ -590,7 +590,7 @@ impl Component for Select {
             let t = cx.theme();
             (
                 t.colors.surface,
-                t.colors.accent,
+                cx.accent(),
                 t.colors.glow,
                 t.colors.muted,
                 t.colors.foreground,
@@ -612,7 +612,11 @@ impl Component for Select {
             color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
             width: bw,
         };
-        let glow = if disabled { None } else { cx.rest_glow(GLOW_RADIUS) };
+        let glow = if disabled {
+            None
+        } else {
+            cx.rest_glow(GLOW_RADIUS)
+        };
         cx.rect(b, surface, Some(border), radius, glow);
 
         // **One control, one highlight.** The whole trigger lights under the pointer — the chosen
@@ -621,7 +625,13 @@ impl Component for Select {
         // echoed option that hovered, and its pill stops at the chevron gutter, which is why the
         // caret stayed dark while the text lit up (F003/P096/T483).
         if !disabled && !self.open && self.base.hovered() {
-            cx.rect(b, foreground.with_alpha(ia.row_hover_fill), None, radius, None);
+            cx.rect(
+                b,
+                foreground.with_alpha(ia.row_hover_fill),
+                None,
+                radius,
+                None,
+            );
         }
 
         // What the trigger shows: the **chosen option**, content and all — its icon, its badge,
@@ -757,7 +767,10 @@ impl Component for Select {
         let y0 = trigger.loc.y.min(panel.loc.y);
         let x1 = (trigger.loc.x + trigger.size.w).max(panel.loc.x + panel.size.w);
         let y1 = (trigger.loc.y + trigger.size.h).max(panel.loc.y + panel.size.h);
-        Some(Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0)))
+        Some(Rectangle::new(
+            Point::new(x0, y0),
+            Size::new(x1 - x0, y1 - y0),
+        ))
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
@@ -919,7 +932,11 @@ mod tests {
         // A different viewport (resize, or the value paint caches vs. what layout
         // saw) must not move the panel out from under its rows.
         s.viewport.set(Size::new(400.0, 200.0));
-        assert_eq!(s.panel_rect(), before, "panel rect must not track the viewport");
+        assert_eq!(
+            s.panel_rect(),
+            before,
+            "panel rect must not track the viewport"
+        );
         s.viewport.set(Size::new(f64::INFINITY, f64::INFINITY));
         assert_eq!(s.panel_rect(), before, "…nor an unset one");
     }
@@ -935,7 +952,11 @@ mod tests {
         s.open_up = true;
         s.open = true;
         let p = s.panel_rect();
-        assert_eq!(p.loc.y, 60.0 - PANEL_GAP - p.size.h, "exact flip-above formula");
+        assert_eq!(
+            p.loc.y,
+            60.0 - PANEL_GAP - p.size.h,
+            "exact flip-above formula"
+        );
     }
 
     /// Closed, the panel is not consulted: the widget reports no overlay and the

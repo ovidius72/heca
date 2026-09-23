@@ -13,11 +13,11 @@
 
 use crate::app::interaction::InteractionSource;
 use crate::app_state::AppState;
-use crate::chrome::{open_dropdown, DropdownItem, DropdownSpec, Intent, PropValue};
+use crate::chrome::{DropdownItem, DropdownSpec, Intent, PropValue, open_dropdown};
 use crate::host::App;
 use crate::providers::ChromeCtx;
 use heca_core::layout::{PaneId, Point};
-use heca_grid_ui::widgets::{Menu, MenuItem};
+use heca_grid_ui::widgets::Menu;
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Context model
@@ -112,7 +112,11 @@ impl ContextMenuRegistry {
     pub fn with_builtins() -> Self {
         let mut r = Self::default();
         // Weight 0, so a component's or plugin's entries (weight 1 upwards) merge after it.
-        r.register(ContextPath::PANE, vec![0], std::rc::Rc::new(build_pane_menu));
+        r.register(
+            ContextPath::PANE,
+            vec![0],
+            std::rc::Rc::new(build_pane_menu),
+        );
         r
     }
 
@@ -145,14 +149,24 @@ impl ContextMenuRegistry {
     ) -> Vec<DropdownItem> {
         let mut providers = self.ordered_providers(path);
         providers.extend(plugin);
-        // Re-sort: the plugin entries must interleave with the built-ins by weight.
-        providers.sort_by(|a, b| a.weight.cmp(&b.weight));
 
-        let mut items = Vec::new();
+        // **One sorted list, not blocks-then-items.** Every entry has a weight: the one it declared
+        // for itself, or its block's when it declared none. So a plugin can place its entries as a
+        // block — which is what it usually wants — and still lift a single one to the top, without
+        // anyone having to understand two orderings to predict where anything lands
+        //.
+        //
+        // Stable, so entries that end up with equal weights keep the order their source produced
+        // them in — which is what makes a block with no weights at all come out exactly as written.
+        let mut weighted: Vec<(Vec<i64>, DropdownItem)> = Vec::new();
         for p in providers {
-            items.extend((p.build)(ctx, target));
+            for item in (p.build)(ctx, target) {
+                let weight = item.weight.clone().unwrap_or_else(|| p.weight.clone());
+                weighted.push((weight, item));
+            }
         }
-        items
+        weighted.sort_by(|a, b| a.0.cmp(&b.0));
+        weighted.into_iter().map(|(_, item)| item).collect()
     }
 
     /// Providers for a path, cloned + sorted by weight (stable sort keeps insertion order on
@@ -251,7 +265,6 @@ pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, C
     ))
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 //  Built-in providers
 // ──────────────────────────────────────────────────────────────────────────────
@@ -306,26 +319,25 @@ pub(crate) fn menu_from_items(
     catalog: &crate::actions::ActionCatalog,
     emit: &crate::chrome::ChromeIntentEmitter,
 ) -> Menu {
-    let mut menu = Menu::new(title, description);
-    if !name.is_empty() {
-        menu = menu.name(name);
-    }
-    for it in items {
-        let intent = it.intent.clone();
-        let emit_e = emit.clone();
-        let mut row = MenuItem::new()
-            .label(it.label.clone())
-            .danger(it.danger)
-            .enabled(it.enabled)
-            .on_click(move || {
-                emit_e.fire(crate::app::interaction::InteractionIntent::View(intent.clone()))
-            });
-        if let Some(glyph) = catalog.icon(&it.id) {
-            row = row.icon(glyph);
-        }
-        menu = menu.child(row);
-    }
-    menu
+    // **One conversion, two authoring paths** (F003/P097/T501). The body moved to
+    // `heca_view_realize::menu_from_items` so a *described* node can declare a menu and get the
+    // identical one — this is the app's half, supplying the two things only it knows: an entry's
+    // icon, from the action catalog, and how a choice is dispatched.
+    heca_view_realize::menu_from_items(
+        title,
+        description,
+        name,
+        items,
+        &|id| catalog.icon(id),
+        &|intent| {
+            let emit = emit.clone();
+            Box::new(move || {
+                emit.fire(crate::app::interaction::InteractionIntent::View(
+                    intent.clone(),
+                ))
+            })
+        },
+    )
 }
 
 /// A `usize` argument as the `PropValue` an [`Intent`] carries — the form every `ws_idx` /
@@ -354,6 +366,40 @@ fn pane_action_items(has_custom_name: bool) -> Vec<DropdownItem> {
     items.push(item("rename_workspace", "Rename workspace"));
     items.push(item_running("close", "Close pane", "close", &[]).danger(true));
     items
+}
+
+/// **Turn the identity a menu's declarer published into the target its providers read.**
+///
+/// A pane declares `pane:<id>` about itself already — the same declaration the keyboard cursor, the
+/// right-click target and a drag all read — so a menu declared on a pane arrives here saying what
+/// it is about, and nothing has to hit-test to find out.
+///
+/// The hyperlink is resolved here rather than by the pane, and that is the one thing this path
+/// still owes to the terminal: whether the clicked cell holds a link is a question about the
+/// terminal's own contents, and until the terminal is a component the only thing that can answer is
+/// the host. A keyboard-opened menu passes no point and so never gets a link entry, which is right
+/// — there is no cell under a keystroke.
+pub(crate) fn target_from_subject(
+    state: &AppState,
+    subject: Option<&str>,
+    at: Option<heca_core::layout::Point>,
+) -> ContextTarget {
+    let Some(pane_id) = subject.and_then(pane_id_from_key) else {
+        return ContextTarget::Contribution;
+    };
+    let hyperlink = at.and_then(|p| {
+        crate::app::terminal_host::hyperlink_uri_at_position(
+            state,
+            pane_id,
+            (p.x as f32, p.y as f32),
+        )
+    });
+    ContextTarget::Pane { pane_id, hyperlink }
+}
+
+/// `pane:<id>` → the pane. The identity a pane publishes about itself; anything else is not a pane.
+fn pane_id_from_key(key: &str) -> Option<PaneId> {
+    key.strip_prefix("pane:")?.parse().ok().map(PaneId)
 }
 
 /// Provider for [`ContextPath::PANE`] — a content pane. "Open link" first only when the mouse
@@ -390,10 +436,9 @@ mod tests {
     /// An observe-only facade over an empty chrome store — what a provider's `build` receives.
     fn test_ctx() -> ChromeCtx<'static> {
         // Leaked deliberately: a test-only store that must outlive the borrow in `App`.
-        let store: &'static crate::chrome::SharedChromeState =
-            Box::leak(Box::new(crate::chrome::SharedChromeState::new(
-                300.0, true, 300.0, false,
-            )));
+        let store: &'static crate::chrome::SharedChromeState = Box::leak(Box::new(
+            crate::chrome::SharedChromeState::new(300.0, true, 300.0, false),
+        ));
         ChromeCtx::new(App::new(store))
     }
 
@@ -487,11 +532,15 @@ mod tests {
     fn reset_name_entries_are_conditional_on_a_custom_name() {
         // "Use process name" only when the pane has a custom name.
         assert!(
-            pane_action_items(true).iter().any(|i| i.id == "reset_pane_name"),
+            pane_action_items(true)
+                .iter()
+                .any(|i| i.id == "reset_pane_name"),
             "reset shows with a custom name"
         );
         assert!(
-            !pane_action_items(false).iter().any(|i| i.id == "reset_pane_name"),
+            !pane_action_items(false)
+                .iter()
+                .any(|i| i.id == "reset_pane_name"),
             "reset hidden without a custom name"
         );
         // "Use default name" only when the workspace has a custom name.
@@ -525,6 +574,130 @@ mod tests {
         assert_eq!(ordered[1].weight, vec![2], "plugin (weight 2) second");
     }
 
+    /// **An entry can sit somewhere other than where its block sits.** ⚠️ Ran red first.
+    ///
+    /// Block weight is the right granularity most of the time — a plugin thinks in "my entries" —
+    /// but a block can only move whole, so a plugin with one entry belonging at the very top and
+    /// the rest at the bottom was stuck. An entry that declares its own weight is placed by it;
+    /// one that declares nothing takes its block's, so this changes nothing for anybody who says
+    /// nothing.
+    #[test]
+    fn an_entry_can_outrank_its_own_block() {
+        let mut r = ContextMenuRegistry::with_builtins();
+        r.register(
+            ContextPath::PANE,
+            // A block that sorts LAST — and yet one of its entries belongs first.
+            vec![9],
+            std::rc::Rc::new(|_ctx: &ChromeCtx, _target: &ContextTarget| {
+                vec![
+                    DropdownItem::new("myplugin.pin", "Pin this").weight(vec![-1]),
+                    DropdownItem::new("myplugin.rest", "Something else"),
+                ]
+            }),
+        );
+
+        let ctx = test_ctx();
+        let items = r.items_for(
+            &ctx,
+            ContextPath::PANE,
+            &ContextTarget::Pane {
+                pane_id: PaneId(1),
+                hyperlink: None,
+            },
+            vec![],
+        );
+        let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+
+        assert_eq!(
+            ids.first(),
+            Some(&"myplugin.pin"),
+            "the entry that named a weight is placed by it, above every built-in: {ids:?}",
+        );
+        assert_eq!(
+            ids.last(),
+            Some(&"myplugin.rest"),
+            "and its silent sibling stays where its block sits, at the end: {ids:?}",
+        );
+    }
+
+    /// **Saying nothing changes nothing.** The whole ordering is one sorted list now, so this pins
+    /// that a block with no per-entry weights comes out exactly as its provider wrote it — the
+    /// sort must be stable, and every built-in menu depends on it.
+    #[test]
+    fn entries_that_name_no_weight_keep_the_order_their_block_wrote_them_in() {
+        let mut r = ContextMenuRegistry::with_builtins();
+        r.register(
+            ContextPath::PANE,
+            vec![9],
+            std::rc::Rc::new(|_ctx: &ChromeCtx, _target: &ContextTarget| {
+                vec![
+                    DropdownItem::new("one", "One"),
+                    DropdownItem::new("two", "Two"),
+                    DropdownItem::new("three", "Three"),
+                ]
+            }),
+        );
+
+        let ctx = test_ctx();
+        let items = r.items_for(
+            &ctx,
+            ContextPath::PANE,
+            &ContextTarget::Pane {
+                pane_id: PaneId(1),
+                hyperlink: None,
+            },
+            vec![],
+        );
+        let mine: Vec<&str> = items
+            .iter()
+            .map(|i| i.id.as_str())
+            .filter(|id| matches!(*id, "one" | "two" | "three"))
+            .collect();
+        assert_eq!(mine, vec!["one", "two", "three"], "written order, kept");
+    }
+
+    /// **A menu says what it is about, and the host never hit-tests to find out.** ⚠️ Ran red first.
+    ///
+    /// A pane publishes `pane:<id>` about itself already — the same declaration the keyboard
+    /// cursor, the right-click target and a drag all read — so a menu declared on a pane arrives
+    /// carrying it, and this is the whole of turning that back into the thing it names. It is what
+    /// let the pane's menu stop being hand-built by the mouse handler, and with it went the
+    /// ordering that made right-clicking a pane never focus it.
+    ///
+    /// Only the reading is asked here: resolving the hyperlink needs a live terminal, and there is
+    /// no headless `AppState` to give it one (see `heca/tests/by_id_actions.rs`, written as a
+    /// source lint for exactly that reason).
+    #[test]
+    fn a_menu_declared_on_a_pane_says_which_pane_it_is_about() {
+        assert_eq!(
+            pane_id_from_key("pane:7"),
+            Some(PaneId(7)),
+            "read from the identity the pane already publishes, not searched for by position",
+        );
+    }
+
+    /// **A declarer that publishes no identity, or one that is not a pane's, is a contribution** —
+    /// entries that act on app state rather than on a particular thing.
+    ///
+    /// Guarded because the tempting fix for the test above is to require an identity, and `key` is
+    /// optional everywhere in this codebase; and because a loose parse would read a sidebar row as
+    /// a pane and build it the wrong menu.
+    #[test]
+    fn an_identity_that_is_not_a_panes_is_never_mistaken_for_one() {
+        assert_eq!(pane_id_from_key("sidebar.row"), None);
+        assert_eq!(
+            pane_id_from_key("pane:"),
+            None,
+            "a prefix alone names nothing"
+        );
+        assert_eq!(pane_id_from_key("pane:abc"), None);
+        assert_eq!(
+            pane_id_from_key("workspace:7"),
+            None,
+            "a different kind of thing"
+        );
+    }
+
     // ── context-menu-5: a plugin's entries ──
 
     /// A menu entry's **identity** (`id` → icon/label) and its **behaviour** (`intent` → what runs)
@@ -545,7 +718,10 @@ mod tests {
         let new_pane = items.iter().find(|i| i.id == "add_pane_to_column").unwrap();
         assert_eq!(new_pane.intent.action, "add_pane_to_column");
         assert_eq!(new_pane.intent.args.get("ws_idx"), Some(&PropValue::Int(2)));
-        assert_eq!(new_pane.intent.args.get("col_idx"), Some(&PropValue::Int(3)));
+        assert_eq!(
+            new_pane.intent.args.get("col_idx"),
+            Some(&PropValue::Int(3))
+        );
     }
 
     /// Every built-in entry's intent must actually RESOLVE — a name + args that `build_action` (or
@@ -657,7 +833,6 @@ mod tests {
     // The three row menus moved into the component that owns those rows (F003/P086/T365); these
     // tests assert on their content, so they reach for them there.
     use crate::providers::workspaces::{column_row_items, pane_row_items, workspace_row_items};
-
 
     #[test]
     fn context_menus_differ_by_where_opened() {

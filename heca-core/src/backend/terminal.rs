@@ -293,18 +293,16 @@ impl TerminalBackend {
         let (pty, auto_close_on_exit) = match launch {
             LaunchTarget::Shell(shell) => {
                 let pty = match shell.override_path {
-                    Some(shell_path) => {
-                        PtyHandle::new_with_shell(
-                            cols,
-                            rows,
-                            cell_size,
-                            wake_on_output,
-                            shell.integration,
-                            Some(shell_path),
-                            shell.env_clear,
-                            &shell.env,
-                        )?
-                    }
+                    Some(shell_path) => PtyHandle::new_with_shell(
+                        cols,
+                        rows,
+                        cell_size,
+                        wake_on_output,
+                        shell.integration,
+                        Some(shell_path),
+                        shell.env_clear,
+                        &shell.env,
+                    )?,
                     None => {
                         PtyHandle::new(cols, rows, cell_size, wake_on_output, shell.integration)?
                     }
@@ -516,7 +514,11 @@ impl TerminalBackend {
         }
         self.pending_pty_size = None;
         self.last_pty_resize = Instant::now();
-        if self.pty.resize(cols, rows, self.physical_cell_px()).is_err() {
+        if self
+            .pty
+            .resize(cols, rows, self.physical_cell_px())
+            .is_err()
+        {
             #[cfg(debug_assertions)]
             eprintln!(
                 "[heca] warning: failed to resize PTY to {}x{}; terminal model resized anyway",
@@ -851,12 +853,7 @@ impl PaneBackend for TerminalBackend {
         self.engine.reload_config(palette_defaults, scrollback_size);
         self.force_full_damage = true;
     }
-    fn lines_in_stable_range(
-        &self,
-        start: isize,
-        end: isize,
-        cols: usize,
-    ) -> Vec<TerminalLine> {
+    fn lines_in_stable_range(&self, start: isize, end: isize, cols: usize) -> Vec<TerminalLine> {
         self.engine.lines_in_stable_range(start, end, cols)
     }
 
@@ -1222,7 +1219,10 @@ mod tests {
             Err(io::Error::other("wait failed")),
         );
 
-        assert!(exited, "nothing to read and nothing to reap — the child is gone");
+        assert!(
+            exited,
+            "nothing to read and nothing to reap — the child is gone"
+        );
         assert!(reaped, "…so stop polling for it");
     }
 
@@ -1269,12 +1269,18 @@ mod tests {
         // PROMPT_COMMAND) clobbers our OSC 133 hooks so `D;0` for `true` never
         // arrives. Spawn with a clean HOME (no ~/.bashrc to source) + the
         // inherited PATH so the test is deterministic across machines.
-        let clean_home = std::env::temp_dir()
-            .join(format!("heca-bash-test-home-{}", std::process::id()));
+        let clean_home =
+            std::env::temp_dir().join(format!("heca-bash-test-home-{}", std::process::id()));
         std::fs::create_dir_all(&clean_home).expect("create clean HOME for bash test");
         let env = vec![
-            ("HOME".to_string(), clean_home.to_string_lossy().into_owned()),
-            ("PATH".to_string(), std::env::var("PATH").unwrap_or_default()),
+            (
+                "HOME".to_string(),
+                clean_home.to_string_lossy().into_owned(),
+            ),
+            (
+                "PATH".to_string(),
+                std::env::var("PATH").unwrap_or_default(),
+            ),
         ];
         let mut backend = TerminalBackend::with_test_shell(
             80,
@@ -1478,7 +1484,11 @@ mod tests {
 
     /// [`pump_backend_until`] with an explicit, shorter budget — for polling that is
     /// expected to be retried rather than to succeed on the first attempt.
-    fn pump_backend_for<F>(backend: &mut TerminalBackend, budget: Duration, mut predicate: F) -> bool
+    fn pump_backend_for<F>(
+        backend: &mut TerminalBackend,
+        budget: Duration,
+        mut predicate: F,
+    ) -> bool
     where
         F: FnMut(&TerminalBackend) -> bool,
     {

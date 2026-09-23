@@ -4,8 +4,6 @@
 //! preserving the existing key handling behavior.
 
 use crate::actions::ActionRegistry;
-use heca_grid_ui::Component as _;
-use heca_grid_ui::reactive::SignalUpdate as _;
 use crate::app::interaction::InteractionSource;
 use crate::app::interaction::{dispatch_action, dispatch_action_ref};
 use crate::app::keyboard::{
@@ -17,6 +15,8 @@ use crate::app_state::{AppState, InputMode, WorkspacePickTarget};
 use crate::input::WmAction;
 use crate::keymap::{KeyCombo, KeymapRegistry, Keymaps};
 use heca_core::layout::PaneId;
+use heca_grid_ui::Component as _;
+use heca_grid_ui::reactive::SignalUpdate as _;
 use std::collections::HashMap;
 use winit::keyboard::{Key, NamedKey, PhysicalKey};
 
@@ -91,6 +91,13 @@ pub(crate) fn handle_keyboard_input(
         &keymaps.components,
         &keymaps.triggers,
     );
+    // **The last key's reply is answered by the next key.** Cleared here, before this press is
+    // dispatched, so a note set by *this* handler survives to be read — and is gone the moment you
+    // do anything else. No timer, and nothing to schedule: a stale line in a status bar costs
+    // nothing, which is the whole reason it is not a toast.
+    if state.status_note.take().is_some() {
+        state.needs_redraw = true;
+    }
     let input_mode = state.input_mode.clone();
     // **A picker is waiting for one letter, and a modifier is not it.** Every pick mode ends on the
     // next key — picked, wrong key, or Esc — so reaching for Shift to type a capital would cancel
@@ -164,8 +171,8 @@ pub(crate) fn handle_keyboard_input(
                 // Skip modifier-only keys (Shift, Ctrl, Alt alone) so that
                 // e.g. Shift+click mouse selection works after scrolling
                 // with direct bindings.
-                let is_modifier_only =
-                    ctx.key_text.is_empty() && crate::app::keyboard::is_modifier_key(ctx.logical_key);
+                let is_modifier_only = ctx.key_text.is_empty()
+                    && crate::app::keyboard::is_modifier_key(ctx.logical_key);
                 if !is_modifier_only {
                     backend.scroll_to_bottom();
                 }
@@ -292,22 +299,19 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
     }
     let key = combo_key;
     let keymap = state.widget_keymap.clone();
-    keymap.dispatch(key, mods, |ev| {
-        match state.active_search_mut() {
-            Some(search) => {
-                let handled = heca_grid_ui::dispatch(&mut *search.input.borrow_mut(), ev);
-                edited |= handled == heca_grid_ui::Handled::Yes;
-                handled
-            }
-            None => heca_grid_ui::Handled::No,
+    keymap.dispatch(key, mods, |ev| match state.active_search_mut() {
+        Some(search) => {
+            let handled = heca_grid_ui::dispatch(&mut *search.input.borrow_mut(), ev);
+            edited |= handled == heca_grid_ui::Handled::Yes;
+            handled
         }
+        None => heca_grid_ui::Handled::No,
     });
     if edited {
         crate::app::terminal_host::run_scrollback_search(state);
     }
     state.needs_redraw = true;
 }
-
 
 /// The action a key resolves to in **one named surface's** binding layer — a dock's `kind()`, a
 /// placement id, or a layer's own name (F003/P082/T416).
@@ -759,27 +763,32 @@ fn handle_workspace_pick_mode(
 fn handle_column_pick_mode(
     registry: &ActionRegistry,
     state: &mut AppState,
-    candidates: &[(char, usize, usize, heca_core::layout::ColumnId)],
+    candidates: &[(char, crate::app_state::ColumnPickTarget)],
     pane_id: PaneId,
     ctx: KeyInputContext<'_>,
 ) {
+    use crate::app_state::ColumnPickTarget;
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
     let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
-        && let Some((_, ws_idx, col_idx, _)) = candidates.iter().find(|(c, ..)| *c == ch)
+        && let Some((_, target)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        dispatch_action(
-            state,
-            registry,
-            InteractionSource::Keyboard,
-            &WmAction::MovePaneToColumn {
+        // Each destination names the act that reaches it, so the letter runs the same action a
+        // keybinding or an RPC call would — the pick is only how a keyboard supplies an argument it
+        // cannot type.
+        let action = match *target {
+            ColumnPickTarget::Existing {
+                ws_idx, col_idx, ..
+            } => WmAction::MovePaneToColumn {
                 pane_id,
-                ws_idx: *ws_idx,
-                col_idx: *col_idx,
+                ws_idx,
+                col_idx,
             },
-        );
+            ColumnPickTarget::New => WmAction::MovePaneToNewColumn,
+        };
+        dispatch_action(state, registry, InteractionSource::Keyboard, &action);
     }
     state.needs_redraw = true;
 }
@@ -891,7 +900,6 @@ fn mode_combo(ctx: KeyInputContext<'_>) -> KeyCombo {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1000,12 +1008,19 @@ mod tests {
         for key in ["q", "Ctrl+q"] {
             assert_eq!(
                 surface_action(&layer, &modes, &components, &KeyCombo::parse(key)),
-                Some(crate::keymap::ActionRef::Builtin(WmAction::CloseOverlay { overlay: None })),
+                Some(crate::keymap::ActionRef::Builtin(WmAction::CloseOverlay {
+                    overlay: None
+                })),
                 "{key} closes the overlay in front of you",
             );
             // …and in the scrolling area nobody claims it, which is what sends it to the program.
             assert_eq!(
-                surface_action(&FocusedSurface::Panes, &modes, &components, &KeyCombo::parse(key)),
+                surface_action(
+                    &FocusedSurface::Panes,
+                    &modes,
+                    &components,
+                    &KeyCombo::parse(key)
+                ),
                 None,
                 "{key} belongs to the pane when no overlay is up",
             );
@@ -1018,7 +1033,12 @@ mod tests {
     fn a_dock_is_consulted_at_its_placement_then_its_kind() {
         let (modes, components) = defaults();
         let combo = KeyCombo::parse("x");
-        let by_kind = surface_action(&dock("nowhere-in-particular", "workspaces"), &modes, &components, &combo);
+        let by_kind = surface_action(
+            &dock("nowhere-in-particular", "workspaces"),
+            &modes,
+            &components,
+            &combo,
+        );
         assert!(
             by_kind.is_some(),
             "an unknown mount still resolves through the provider's kind",

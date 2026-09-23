@@ -16,7 +16,7 @@ use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::{Attention, Flash};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction};
 use crate::widgets::ActiveMarker;
@@ -243,6 +243,15 @@ impl Row {
 }
 
 impl Component for Row {
+    /// **A row is the thing a cursor lands on**, so it answers this: the nav signal it already
+    /// holds is what its look is bound to. A grid moving a cursor over rows lights the one it is on
+    /// through this, and the caller connects nothing.
+    fn set_selected(&self, on: bool) -> bool {
+        use crate::reactive::SignalUpdate as _;
+        self.nav.set(on);
+        true
+    }
+
     /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
     /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
     ///
@@ -267,7 +276,16 @@ impl Component for Row {
         let active = self.active.get_untracked();
         let (accent, glow_c, foreground, ctrl_radius, sel_border_w, ia, selected_bg, previous_bg) = {
             let t = cx.theme();
-            (t.colors.accent, t.colors.glow, t.colors.foreground, t.colors.control_radius(), t.focus_border_width, t.colors.interaction, t.colors.effective_selected_background(), t.colors.effective_previous_background())
+            (
+                cx.accent(),
+                t.colors.glow,
+                t.colors.foreground,
+                t.colors.control_radius(),
+                t.focus_border_width,
+                t.colors.interaction,
+                t.colors.effective_selected_background(),
+                t.colors.effective_previous_background(),
+            )
         };
         let b = self.base.bounds;
 
@@ -277,7 +295,13 @@ impl Component for Row {
         // `glow_size` setting at rest; an unfilled row stays surface-less and flat.
         let s = &self.base.style;
         if let (Some(fill), None) = (s.visual.fill, s.visual.glow) {
-            cx.rect(b, fill, s.visual.border, s.visual.radius, cx.rest_glow(REST_GLOW_RADIUS));
+            cx.rect(
+                b,
+                fill,
+                s.visual.border,
+                s.visual.radius,
+                cx.rest_glow(REST_GLOW_RADIUS),
+            );
         } else {
             cx.paint_base(&self.base);
         }
@@ -294,7 +318,13 @@ impl Component for Row {
         // **"You were just here"** — painted first, so selection and cursor land on top of it and
         // it only shows on a row that has neither.
         if self.previous.get_untracked() {
-            cx.rect(sel, self.previous_tint.unwrap_or(previous_bg), None, sel_radius, None);
+            cx.rect(
+                sel,
+                self.previous_tint.unwrap_or(previous_bg),
+                None,
+                sel_radius,
+                None,
+            );
         }
         if active {
             // **Selected is a FILLED PANEL, and it carries no border.**
@@ -345,7 +375,11 @@ impl Component for Row {
                     width: (sel_border_w * 1.5).max(2.0),
                 }),
                 sel_radius,
-                Some(Glow { color: glow_c, radius: 8.0, intensity: 0.28 }),
+                Some(Glow {
+                    color: glow_c,
+                    radius: 8.0,
+                    intensity: 0.28,
+                }),
             );
         }
 
@@ -363,7 +397,11 @@ impl Component for Row {
                         bar_c,
                         None,
                         (BAR_W / 2.0) as f32,
-                        Some(Glow { color: bar_glow, radius: 8.0, intensity: 0.16 }),
+                        Some(Glow {
+                            color: bar_glow,
+                            radius: 8.0,
+                            intensity: 0.16,
+                        }),
                     );
                 }
                 ActiveMarker::Check => {
@@ -417,14 +455,23 @@ impl Component for Row {
         // the content/selection.
         let attn = self.attention.amount();
         if attn > 0.0 {
-            let c = self.attention_color.unwrap_or_else(|| cx.theme().colors.warning);
+            let c = self
+                .attention_color
+                .unwrap_or_else(|| cx.theme().colors.warning);
             let radius = ctrl_radius.min((b.size.h / 2.0) as f32);
             cx.rect(
                 b,
                 c.with_alpha((40.0 * attn) as u8),
-                Some(Border { color: c.with_alpha((235.0 * attn) as u8), width: sel_border_w }),
+                Some(Border {
+                    color: c.with_alpha((235.0 * attn) as u8),
+                    width: sel_border_w,
+                }),
                 radius,
-                Some(Glow { color: c, radius: ATTENTION_GLOW_RADIUS, intensity: attn }),
+                Some(Glow {
+                    color: c,
+                    radius: ATTENTION_GLOW_RADIUS,
+                    intensity: attn,
+                }),
             );
         }
     }
@@ -440,7 +487,10 @@ impl Component for Row {
             // hand: `dispatch` only offers a raw key to the widget that owns the keyboard. The rule
             // is the framework's, made once, so a widget cannot take a key meant for something else
             // — which is what made a row eat the Enter that belonged to the list it sits in.
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } => {
                 self.activate();
                 Handled::Yes
             }

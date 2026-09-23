@@ -86,8 +86,8 @@ pub(super) fn resolve_hint_layers(
 /// *under* the exposé while the targets they named answered normally.
 #[cfg(test)]
 mod hint_visibility {
-    use super::*;
     use super::super::surfaces::HintSurface;
+    use super::*;
     use heca_core::layout::{Point, Size};
 
     /// **A target whose centre has left the screen is judged where you can still see it**
@@ -105,18 +105,33 @@ mod hint_visibility {
         // A pane 386 wide, scrolled until its centre sits 5px off the left edge: it spans
         // -198..188, so the part you can see is 0..188 — entirely under the sidebar.
         let pane = (
-            HintTarget { surface: HintSurface::Pane(heca_core::layout::PaneId(2)), path: vec![], identity: None },
+            HintTarget {
+                surface: HintSurface::Pane(heca_core::layout::PaneId(2)),
+                path: vec![],
+                identity: None,
+            },
             Rectangle::new(Point::new(-198.0, 40.0), Size::new(386.0, 728.0)),
         );
 
         let kept = resolve_hint_layers(
             vec![
-                HintLayer { targets: vec![], occluders: vec![sidebar], modal: false },
-                HintLayer { targets: vec![pane], occluders: vec![], modal: false },
+                HintLayer {
+                    targets: vec![],
+                    occluders: vec![sidebar],
+                    modal: false,
+                },
+                HintLayer {
+                    targets: vec![pane],
+                    occluders: vec![],
+                    modal: false,
+                },
             ],
             viewport,
         );
-        assert!(kept.is_empty(), "the only part of it on screen is behind the sidebar");
+        assert!(
+            kept.is_empty(),
+            "the only part of it on screen is behind the sidebar"
+        );
     }
 
     /// The same target, scrolled far enough right that its visible middle clears the sidebar, is a
@@ -129,18 +144,34 @@ mod hint_visibility {
         // Spans -50..336: the visible part is 0..336, whose centre (168) is still under the
         // sidebar — but move it right and the visible centre clears it.
         let clear = (
-            HintTarget { surface: HintSurface::Pane(heca_core::layout::PaneId(3)), path: vec![], identity: None },
+            HintTarget {
+                surface: HintSurface::Pane(heca_core::layout::PaneId(3)),
+                path: vec![],
+                identity: None,
+            },
             Rectangle::new(Point::new(200.0, 40.0), Size::new(386.0, 728.0)),
         );
 
         let kept = resolve_hint_layers(
             vec![
-                HintLayer { targets: vec![], occluders: vec![sidebar], modal: false },
-                HintLayer { targets: vec![clear], occluders: vec![], modal: false },
+                HintLayer {
+                    targets: vec![],
+                    occluders: vec![sidebar],
+                    modal: false,
+                },
+                HintLayer {
+                    targets: vec![clear],
+                    occluders: vec![],
+                    modal: false,
+                },
             ],
             viewport,
         );
-        assert_eq!(kept.len(), 1, "its visible middle (393) is past the sidebar's edge");
+        assert_eq!(
+            kept.len(),
+            1,
+            "its visible middle (393) is past the sidebar's edge"
+        );
     }
 
     /// **A tree that has not been laid out yet is not "hidden"** (F003/P082/T438).
@@ -152,21 +183,37 @@ mod hint_visibility {
     fn a_target_with_no_geometry_yet_is_kept_rather_than_called_hidden() {
         let viewport = Rectangle::new(Point::new(0.0, 0.0), Size::new(1412.0, 800.0));
         let fresh = (
-            HintTarget { surface: HintSurface::Chrome, path: vec![0], identity: None },
+            HintTarget {
+                surface: HintSurface::Window,
+                path: vec![0],
+                identity: None,
+            },
             Rectangle::new(Point::new(0.0, 0.0), Size::new(0.0, 0.0)),
         );
 
         let kept = resolve_hint_layers(
-            vec![HintLayer { targets: vec![fresh], occluders: vec![], modal: false }],
+            vec![HintLayer {
+                targets: vec![fresh],
+                occluders: vec![],
+                modal: false,
+            }],
             viewport,
         );
-        assert_eq!(kept.len(), 1, "no bounds is 'no answer yet', never 'not visible'");
+        assert_eq!(
+            kept.len(),
+            1,
+            "no bounds is 'no answer yet', never 'not visible'"
+        );
     }
 
     /// A target somewhere harmless, named by a path so two of them are never equal.
     fn target(path: usize, x: f64) -> (HintTarget, Rectangle) {
         (
-            HintTarget { surface: HintSurface::Chrome, path: vec![path], identity: None },
+            HintTarget {
+                surface: HintSurface::Window,
+                path: vec![path],
+                identity: None,
+            },
             Rectangle::new(Point::new(x, 10.0), Size::new(20.0, 20.0)),
         )
     }
@@ -182,11 +229,23 @@ mod hint_visibility {
     #[test]
     fn a_modal_layer_is_the_active_context_and_nothing_beneath_it_is_pickable() {
         let stack = vec![
-            HintLayer { targets: vec![target(0, 0.0)], occluders: vec![], modal: true },
-            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: false },
+            HintLayer {
+                targets: vec![target(0, 0.0)],
+                occluders: vec![],
+                modal: true,
+            },
+            HintLayer {
+                targets: vec![target(1, 100.0)],
+                occluders: vec![],
+                modal: false,
+            },
         ];
         let kept = resolve_hint_layers(stack, viewport());
-        assert_eq!(kept.len(), 1, "only the active context's own targets survive");
+        assert_eq!(
+            kept.len(),
+            1,
+            "only the active context's own targets survive"
+        );
         assert_eq!(kept[0].0.path, vec![0]);
     }
 
@@ -196,8 +255,16 @@ mod hint_visibility {
     #[test]
     fn a_non_modal_layer_leaves_what_is_beneath_it_pickable() {
         let stack = vec![
-            HintLayer { targets: vec![target(0, 0.0)], occluders: vec![], modal: false },
-            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: false },
+            HintLayer {
+                targets: vec![target(0, 0.0)],
+                occluders: vec![],
+                modal: false,
+            },
+            HintLayer {
+                targets: vec![target(1, 100.0)],
+                occluders: vec![],
+                modal: false,
+            },
         ];
         assert_eq!(resolve_hint_layers(stack, viewport()).len(), 2);
     }
@@ -209,13 +276,24 @@ mod hint_visibility {
         let stack = vec![
             HintLayer {
                 targets: vec![target(0, 0.0)],
-                occluders: vec![Rectangle::new(Point::new(90.0, 0.0), Size::new(200.0, 100.0))],
+                occluders: vec![Rectangle::new(
+                    Point::new(90.0, 0.0),
+                    Size::new(200.0, 100.0),
+                )],
                 modal: false,
             },
-            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: true },
+            HintLayer {
+                targets: vec![target(1, 100.0)],
+                occluders: vec![],
+                modal: true,
+            },
         ];
         let kept = resolve_hint_layers(stack, viewport());
-        assert_eq!(kept.len(), 1, "the covered target is dropped, the covering one kept");
+        assert_eq!(
+            kept.len(),
+            1,
+            "the covered target is dropped, the covering one kept"
+        );
         assert_eq!(kept[0].0.path, vec![0]);
     }
 

@@ -117,7 +117,11 @@ pub fn place_anchored_on(
                 // Neither side fits fully: take the side with more room, then clamp.
                 let room_below = (viewport.h - below_y).max(0.0);
                 let room_above = (anchor.loc.y - gap).max(0.0);
-                y = if room_above > room_below { above_y } else { below_y };
+                y = if room_above > room_below {
+                    above_y
+                } else {
+                    below_y
+                };
             }
         }
         y = y.clamp(0.0, (viewport.h - panel.h).max(0.0));
@@ -344,7 +348,11 @@ mod tests {
         let anchor = Rectangle::new(Point::new(40.0, 560.0), Size::new(120.0, 30.0));
         let panel = Size::new(120.0, 80.0);
         let r = place_anchored(anchor, panel, Size::new(800.0, 600.0), 4.0);
-        assert_eq!(r.loc.y, 560.0 - 4.0 - 80.0, "flipped to sit above the anchor");
+        assert_eq!(
+            r.loc.y,
+            560.0 - 4.0 - 80.0,
+            "flipped to sit above the anchor"
+        );
     }
 
     /// Neither side fully fits → take the side with more room, then clamp on-screen.
@@ -355,7 +363,10 @@ mod tests {
         let panel = Size::new(100.0, 500.0);
         let r = place_anchored(anchor, panel, Size::new(800.0, 600.0), 4.0);
         // Room above (450-4=446) > room below (600-484=116) → flip up, then clamp ≥ 0.
-        assert_eq!(r.loc.y, 0.0, "clamped to the top after choosing the roomier side");
+        assert_eq!(
+            r.loc.y, 0.0,
+            "clamped to the top after choosing the roomier side"
+        );
     }
 
     /// The panel is clamped so it never spills past the right/bottom viewport edge.
@@ -364,7 +375,11 @@ mod tests {
         let anchor = Rectangle::new(Point::new(760.0, 20.0), Size::new(120.0, 30.0));
         let panel = Size::new(120.0, 80.0);
         let r = place_anchored(anchor, panel, Size::new(800.0, 600.0), 4.0);
-        assert_eq!(r.loc.x, 800.0 - 120.0, "right edge clamped into the viewport");
+        assert_eq!(
+            r.loc.x,
+            800.0 - 120.0,
+            "right edge clamped into the viewport"
+        );
         assert!(r.loc.x >= 0.0);
     }
 
@@ -403,7 +418,11 @@ mod tests {
         let forced = place_anchored_on(anchor, panel, vp, 4.0, AnchorSide::Below);
         // Below would start at 594 and overflow, so it clamps to the bottom edge —
         // but it never flips to the other side.
-        assert_eq!(forced.loc.y, 600.0 - 80.0, "forced Below clamps, does not flip");
+        assert_eq!(
+            forced.loc.y,
+            600.0 - 80.0,
+            "forced Below clamps, does not flip"
+        );
 
         // And a forced Above near the TOP clamps instead of flipping down.
         let top_anchor = Rectangle::new(Point::new(40.0, 10.0), Size::new(120.0, 30.0));
@@ -541,7 +560,11 @@ mod tests {
         let anchor = Rectangle::new(Point::new(5.0, 300.0), Size::new(40.0, 20.0));
         let r = place_beside(anchor, panel, vp, 6.0, BesideSide::Top);
         assert_eq!(r.loc.x, 0.0, "cross axis clamped into the viewport");
-        assert_eq!(r.loc.y, 300.0 - panel.h - 6.0, "main axis untouched by the clamp");
+        assert_eq!(
+            r.loc.y,
+            300.0 - panel.h - 6.0,
+            "main axis untouched by the clamp"
+        );
     }
 
     /// **Documents the deliberate rule.** When neither side fits, the preferred side

@@ -278,7 +278,11 @@ impl Label {
                 .collect();
         }
         let whole = |chars: &[char]| -> Vec<(char, Option<usize>)> {
-            chars.iter().enumerate().map(|(i, &c)| (c, Some(i))).collect()
+            chars
+                .iter()
+                .enumerate()
+                .map(|(i, &c)| (c, Some(i)))
+                .collect()
         };
         let chars: Vec<char> = text.chars().collect();
         let mode = self.truncate;
@@ -403,7 +407,11 @@ impl Label {
         let font = self.base.font as f64;
         // A wrapped label's box is N lines tall, so a run is one line; a plain label's run is its
         // whole box, which is what keeps a stretched single-line label centring as it always did.
-        let line_h = if self.wrap.get_untracked() { self.line_h() } else { bounds.size.h };
+        let line_h = if self.wrap.get_untracked() {
+            self.line_h()
+        } else {
+            bounds.size.h
+        };
         self.drawn_lines()
             .iter()
             .enumerate()
@@ -449,6 +457,15 @@ impl Label {
 }
 
 impl Component for Label {
+    /// **A label is what shows words**, so it answers this: the text is a signal, and writing it
+    /// updates in place. This is what lets a host change what a retained tree says — a pane's
+    /// foreground program, its git branch — without throwing the tree away and rebuilding it.
+    fn set_text(&self, text: String) -> bool {
+        use crate::reactive::SignalUpdate as _;
+        self.text_signal().set(text);
+        true
+    }
+
     fn base(&self) -> &Base {
         &self.base
     }
@@ -521,7 +538,7 @@ impl Component for Label {
         let lines = self.drawn_indexed();
         let bounds = self.base.bounds;
         let runs = self.run_rects();
-        let mark_color = self.mark_color.unwrap_or_else(|| cx.theme().colors.accent);
+        let mark_color = self.mark_color.unwrap_or_else(|| cx.accent());
         let marks = self.marks.get_untracked();
         let wrapping = self.wrap.get_untracked();
         // A plain label draws into its whole box, exactly as before — the alignment and vertical

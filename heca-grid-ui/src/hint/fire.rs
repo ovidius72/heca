@@ -1,7 +1,7 @@
 //! **The pick itself** — delivered as an event on the walk every other event uses.
 
-use crate::component::Component;
 use super::collect::is_target;
+use crate::component::Component;
 
 /// **Pick the widget at `path`.** `false` when the path no longer leads to a target — a tree rebuilt
 /// under the letters, which is not an error.

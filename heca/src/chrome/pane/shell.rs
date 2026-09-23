@@ -10,13 +10,14 @@
 //! plugin's own tree — each is a child, and none of them has anything to do with the letter.
 
 use heca_core::layout::PaneId;
-use heca_grid_ui::widgets::{HintPlacement, KeyHint, Pane as UiPane};
-use heca_grid_ui::{ComponentExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::widgets::{HintPlacement, Pane as UiPane};
+use heca_grid_ui::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
 
 use super::model::PaneShellModel;
 
 /// The app seams the shell binds, travelling as **one group** rather than one argument at a time
 /// (AGENTS.md § 0b-bis rule 3) — so a test can hand it the app's edges and nothing else.
+#[derive(Clone)]
 pub(crate) struct PaneCallbacks {
     /// What picking this pane does: focus it. Emitted as an `InteractionIntent`, never performed
     /// here — the pane asks, the core does.
@@ -50,18 +51,26 @@ pub(crate) struct PaneShell<'a> {
     pub(crate) content: Option<Box<dyn heca_grid_ui::Component>>,
 }
 
+/// **The pane's two rows, named.** The parts say which one they are and the host asks by name —
+/// see [`crate::chrome::pane::header_height`], which used to count children instead.
+pub(crate) const PANE_HEADER_AREA: &str = "header";
+/// The row that takes whatever the header does not.
+pub(crate) const PANE_CONTENT_AREA: &str = "content";
+
 impl PaneShell<'_> {
     /// Build the retained tree for one pane.
     ///
-    /// Returns the `KeyHint` wrapper rather than the `Pane` inside it: the wrapper is what carries
-    /// the pick declaration, and it is transparent to layout, focus and events, so the pane below
-    /// stays an ordinary widget. (`ComponentExt::on_hint` — which would let the `Pane` declare it
-    /// directly and drop the wrapper — is F003/P082/T432 and is not built yet.)
+    /// Returns the `Pane` itself: it says what picking it does, where its letter goes and what
+    /// colour that letter is, the same way it says what a click does. There is no wrapper to see
+    /// past — which matters twice over. A wrapper round an actionable widget is a SECOND pick
+    /// target, so a surface picker offered two letters where the author wrote one; and the pane's
+    /// `key` sat inside it, so anything looking for the pane by name found an anonymous wrapper
+    /// instead, treated every pane as unbuilt, and rebuilt all of them every frame.
     ///
     /// **The letter is drawn by the framework**, inside `heca_grid_ui::paint_child`, from
     /// `Base::hint_label`. Anything that paints this tree with a direct `.paint(cx)` will show no
     /// letter at all — which is exactly the defect this task exists to end.
-    pub(crate) fn build(self) -> KeyHint {
+    pub(crate) fn build(self) -> UiPane {
         let PaneShellModel {
             pane_id,
             active,
@@ -79,9 +88,10 @@ impl PaneShell<'_> {
         // onto this tree's root every frame. Baking `Px(w)` in here instead meant the tree kept
         // the width it was first built at, so zooming or resizing left the frame at the old size
         // while the content moved (found by tracing: asked 648 wide, got 380, forever).
-        let mut pane = crate::chrome::apply_pane_frame(UiPane::new(), frame)
-            .width(heca_grid_ui::Length::Pct(1.0))
-            .height(heca_grid_ui::Length::Pct(1.0))
+        let mut pane = UiPane::new()
+            .border_style(frame.into())
+            .width(heca_grid_ui::Length::Percent(1.0))
+            .height(heca_grid_ui::Length::Percent(1.0))
             .padding(content_inset)
             .border(to_gui_color(border_color), border_width)
             .radius(border_radius);
@@ -96,20 +106,77 @@ impl PaneShell<'_> {
         // The pane's own identity, from the data — never a counter, never a position. A pane id is
         // stable across every rebuild, which is what lets a letter stay with the same pane between
         // openings of the picker (F003/P082/T445).
-        let mut pane = pane.key(crate::chrome::pane_key(pane_id));
+        // **One pane, seen in several places.** The sidebar row and the exposé card show this
+        // same pane and declare the same key, so the three of them wear one letter between them.
+        let pane = pane.key(crate::chrome::pane_key(pane_id));
 
-        // **Two rows: the header at its own height, the content taking the rest.** The header is
-        // whatever the thing running in this pane wants along its top; the shell neither builds it
-        // nor knows what it is.
-        if let Some(header) = self.header {
-            pane = pane.child_boxed(header);
-        }
-        // The content row. It grows, which is what holds the header to a strip at the top rather
-        // than letting it centre itself down the middle of the pane.
-        pane = match self.content {
-            Some(content) => pane.child_boxed(content),
-            None => pane.child(heca_grid_ui::widgets::Flex::column().grow(1.0)),
+        // **What a click on a pane means, said in one place, in the order it happens.**
+        //
+        // It was two separate declarations twenty lines apart: a press handler that asked for
+        // focus, and a menu handed to the framework to open on right-click. Nothing ordered them —
+        // it worked only because a press arrives before a release — and reading either one told
+        // you nothing about the gesture. A sidebar row, a dock or a plugin's panel says exactly
+        // this about itself, and nothing outside knows any of them exist.
+        // **What a click on a pane means, and nothing host-private in sight.**
+        //
+        // Clicking focuses it: the action named, not a function handed in. Right-clicking focuses
+        // it too and ends the gesture there, so nothing behind also acts on it — the menu is a
+        // *declaration* below, opened and closed by the framework, because a pane has no business
+        // knowing what a menu is.
+        //
+        // This carried a struct of host callbacks until now, cloned twice at the call site. A
+        // plugin could build none of that, so a plugin's widget could not act at all.
+        // **Clicking a pane focuses it, whichever button.** The action named, not a function
+        // handed in — a plugin's widget writes the identical line.
+        //
+        // It does not claim the click: a declared menu opens only for a right-click nobody took
+        // (guarded by `a_widget_that_claims_its_own_right_click_beats_the_declaration`), so
+        // claiming it here would silently switch this pane's own menu off.
+        let mut pane = pane
+            .on_click(move |ev| ev.dispatch(focus_pane(pane_id)))
+            .on_right_click(move |ev| ev.dispatch(focus_pane(pane_id)))
+            // **It has a menu; it does not own one.** The framework opens it on a right-click at
+            // the pointer and takes it down when a press lands outside. Everything in it comes
+            // from whatever is registered for this name — heca's entries and any plugin's alike.
+            .context_menu(|_at| {
+                heca_grid_ui::widgets::ContextMenu::new("pane").child(
+                    heca_grid_ui::widgets::Menu::new("Pane", "What you can do with this pane")
+                        .name(crate::chrome::ContextPath::PANE),
+                )
+            });
+
+        // **The pane is a FRAME; the arrangement is a template.** The header takes its own
+        // height, the content takes the rest, and each part says which row it is by name.
+        //
+        // A `header` slot would answer exactly this one shape — and then Header | Content | Footer
+        // would need a second slot, and the next part a third. A track template answers all of
+        // them in one line, and it is the same line a dock, a palette or a plugin's panel writes
+        // (docs/layout.md). It also ends the question the host used to ask: "does this pane have
+        // two children, so is the first one a header?" — put a second thing in the body and the
+        // first was mistaken for one. A part is in the area it named, and a missing part is a
+        // missing row.
+        let content: Box<dyn heca_grid_ui::Component> = match self.content {
+            Some(content) => content,
+            None => Box::new(heca_grid_ui::widgets::Flex::column().grow(1.0)),
         };
+        let body = match self.header {
+            Some(header) => heca_grid_ui::widgets::Grid::new()
+                .template_row("auto 1fr")
+                .template_area([PANE_HEADER_AREA, PANE_CONTENT_AREA])
+                .child([
+                    header.area(PANE_HEADER_AREA),
+                    content.area(PANE_CONTENT_AREA),
+                ]),
+            // **A missing part is a missing row**, not a flag and not a zero-height placeholder.
+            None => heca_grid_ui::widgets::Grid::new()
+                .template_row("1fr")
+                .template_area([PANE_CONTENT_AREA])
+                .child(content.area(PANE_CONTENT_AREA)),
+        };
+        pane = pane.child(
+            body.width(heca_grid_ui::Length::Percent(1.0))
+                .height(heca_grid_ui::Length::Percent(1.0)),
+        );
 
         let pick = self.cb.pick.clone();
         // **Say what the pick IS, not only what it runs** (F003/P082/T432). The closure emits
@@ -121,18 +188,58 @@ impl PaneShell<'_> {
         //
         // It names the built-in `focus_pane` with the argument that action declares, so the letter,
         // a keybinding, a menu entry and RPC all resolve through one `build_action`.
-        let picked = heca_view::Intent::new("focus_pane").arg(
-            "pane_id",
-            heca_view::PropValue::Int(pane_id.0 as i64),
-        );
-        KeyHint::new(pane)
+        let picked = focus_pane(pane_id);
+        pane
             // Centred over the pane, which is where the letter is today and what the maintainer
             // expects. `TopCenter` is for compact square targets; a pane is the large-target case.
-            .placement(HintPlacement::Center)
+            .hint_placement(HintPlacement::Center)
             // The theme accent, not the ambient one: see `PaneShellModel::accent`.
-            .color(to_gui_color(accent))
+            .hint_color(to_gui_color(accent))
             .on_hint(heca_grid_ui::Hint::of(picked, move || pick(pane_id)))
     }
+}
+
+/// **Focus this pane** — the catalogued action, named rather than performed here.
+fn focus_pane(pane_id: PaneId) -> heca_view::Intent {
+    heca_view::Intent::new("focus_pane").arg("pane_id", heca_view::PropValue::Int(pane_id.0 as i64))
+}
+
+/// **Give the shell what focus changed about it.** A per-frame input, exactly like the rect above
+/// and the header's words — never part of the built tree.
+///
+/// Whether a pane is active used to be part of its **identity**, so focusing one threw its tree
+/// away and built a new one. That lost any gesture in flight: a right-click is made from a press
+/// and a release on the *same* widget, and the press had been recorded on the tree that focusing
+/// discarded. So the first right-click on an unfocused pane focused it and opened nothing, and only
+/// a second one — with nothing left to rebuild — showed the menu.
+///
+/// This is the third thing in this file to move out of the rebuild key for the same reason; the
+/// other two are the rect and the header's words, each with the same story.
+pub(crate) fn focus_state_to(
+    root: &mut dyn heca_grid_ui::Component,
+    active: bool,
+    border_color: [f32; 4],
+    accent: [f32; 4],
+) {
+    let color = to_gui_color(border_color);
+    let base = root.base_mut();
+    if let Some(border) = base.style.visual.border.as_mut() {
+        border.color = color;
+    }
+    base.style.visual.glow = active.then_some(heca_grid_ui::scene::Glow {
+        color,
+        radius: super::ACTIVE_GLOW_RADIUS,
+        intensity: super::ACTIVE_GLOW_STRENGTH,
+    });
+    base.hint_style.color = Some(to_gui_color(accent));
+    // **A pane re-tints what it holds by publishing its hue, not by swapping the theme.**
+    //
+    // An active pane really does mean to re-accent its contents — that is its identity. It used to
+    // be done by painting the pane under a theme whose accent had been replaced, which meant the
+    // host had to make a separate paint call per pane, and therefore that nothing else could ever
+    // paint one. Published as a tone, the hue reaches the same widgets through the ordinary walk,
+    // so who paints the pane stops mattering.
+    base.style.visual.accent = Some(color);
 }
 
 /// **Give the shell the rect the WM assigned it.** Size is a per-frame input, never part of the
@@ -142,13 +249,11 @@ impl PaneShell<'_> {
 /// Baking `Px(w)` into `build` instead is the regression this exists to stop — the tree kept the
 /// width it was first built at, so the border stayed put while the content moved (traced: asked
 /// 648 wide, got 380, every frame).
-pub(crate) fn size_to(root: &mut KeyHint, w: f32, h: f32) {
-    use heca_grid_ui::Component;
+pub(crate) fn size_to(root: &mut dyn heca_grid_ui::Component, w: f32, h: f32) {
     let style = &mut root.base_mut().style.layout;
     style.width = heca_grid_ui::Length::Px(w);
     style.height = heca_grid_ui::Length::Px(h);
 }
-
 
 fn to_gui_color(color: [f32; 4]) -> heca_grid_ui::Color {
     heca_grid_ui::Color::new(
@@ -166,6 +271,62 @@ mod tests {
     use heca_grid_ui::Component;
     use heca_grid_ui::{LayoutEngine, Size};
 
+    /// **A second thing in the body is not mistaken for a header.**
+    ///
+    /// The pane's parts say which row of its template they are, so the host asks by name. It used
+    /// to count children — `len() == 2` meant "there is a header" — which is the answer that
+    /// changes the moment anything else is put in the body.
+    ///
+    /// ⚠️ Ran red first: with the parts unnamed, a two-child body reports the first child's height
+    /// as a header that is not there.
+    #[test]
+    fn a_second_thing_in_the_body_is_not_mistaken_for_a_header() {
+        use heca_grid_ui::widgets::Flex;
+        use heca_grid_ui::{LayoutEngine, Size};
+
+        let named = |n: &dyn Component, name: &str| -> bool {
+            fn walk(n: &dyn Component, name: &str) -> bool {
+                n.base().grid_area.as_deref() == Some(name)
+                    || n.base().children.iter().any(|c| walk(c.as_ref(), name))
+            }
+            walk(n, name)
+        };
+
+        // A body holding two things and NO header.
+        let (cb, _) = recording_callbacks();
+        let m = model(9);
+        let mut tree = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: None,
+            content: Some(Box::new(
+                Flex::column().child([Flex::column().height(20.0), Flex::column().height(20.0)]),
+            )),
+        }
+        .build();
+        LayoutEngine::new().compute(&mut tree, Size::new(200.0, 200.0));
+
+        assert!(
+            !named(&tree, PANE_HEADER_AREA),
+            "no part claims the header row, however many things the body holds",
+        );
+        assert!(
+            named(&tree, PANE_CONTENT_AREA),
+            "the body is in the content row"
+        );
+
+        // And with a header, it is the one that says so.
+        let mut with_header = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: Some(Box::new(Flex::row().height(18.0))),
+            content: Some(Box::new(Flex::column())),
+        }
+        .build();
+        LayoutEngine::new().compute(&mut with_header, Size::new(200.0, 200.0));
+        assert!(named(&with_header, PANE_HEADER_AREA));
+    }
+
     /// It renders what it was given: the pane's own identity, from its id.
     #[test]
     fn the_pane_declares_its_own_identity() {
@@ -178,9 +339,42 @@ mod tests {
             content: None,
         }
         .build();
-        // The wrapper is transparent; the identity belongs to the pane inside it.
-        let pane = &tree.base().children[0];
-        assert_eq!(pane.base().key.as_deref(), Some("pane:7"));
+        // **The identity is on the outermost node**, because the pane IS the outermost node.
+        // It sat one level in while a `KeyHint` wrapped it, so anything looking a pane up by name
+        // found an anonymous wrapper, judged the pane unbuilt, and rebuilt every one of them every
+        // frame.
+        assert_eq!(tree.base().key.as_deref(), Some("pane:7"));
+    }
+
+    /// **An active pane re-tints what it holds by publishing its hue, not by swapping the theme.**
+    ///
+    /// The frame colour used to be written into a *copy of the theme* the host painted this pane
+    /// under — which is why each pane needed its own paint call, and therefore why no container
+    /// could ever paint one of its children. Published on the shell, the hue reaches the same
+    /// widgets through the ordinary paint walk and who paints the pane stops mattering.
+    ///
+    /// Without this a pane's contents fall back to the global accent: header buttons in the active
+    /// pane stop reading as active, and nothing else notices.
+    #[test]
+    fn a_pane_publishes_its_frame_colour_to_everything_it_holds() {
+        let (cb, _) = recording_callbacks();
+        let m = model(7);
+        let mut tree = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
+
+        let frame = [1.0, 0.0, 0.0, 1.0];
+        focus_state_to(&mut tree, true, frame, m.accent);
+
+        assert_eq!(
+            tree.base().style.visual.accent,
+            Some(to_gui_color(frame)),
+            "the pane's contents follow its frame colour, whoever paints them",
+        );
     }
 
     /// **A pick says what it IS, not only what it runs** (F003/P082/T432).
@@ -209,7 +403,10 @@ mod tests {
             .intent
             .as_ref()
             .expect("…and says what that pick is");
-        assert_eq!(intent.action, "focus_pane", "the built-in, by the name every surface uses");
+        assert_eq!(
+            intent.action, "focus_pane",
+            "the built-in, by the name every surface uses"
+        );
         assert_eq!(
             intent.args.get("pane_id"),
             Some(&heca_view::PropValue::Int(7)),
@@ -311,5 +508,157 @@ mod tests {
                 b.size.h
             );
         }
+    }
+
+    /// **What a click on a pane means, asserted through the real path.** ⚠️ Ran red first.
+    ///
+    /// The pane names an action; the framework routes it. So this installs the sink a host installs
+    /// and reads back what the pane asked for — no callbacks, because the pane has none any more.
+    /// It carried a struct of host functions until now, cloned at the call site, which a plugin
+    /// could not have built.
+    fn dispatched(build: impl FnOnce(&mut UiPane)) -> Vec<String> {
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let sink = seen.clone();
+        heca_grid_ui::intent::install_intent_sink(move |i| {
+            sink.borrow_mut().push(format!(
+                "{}({:?})",
+                i.action,
+                i.args.get("pane_id").cloned()
+            ))
+        });
+
+        let cb = crate::chrome::pane::testing::recording_callbacks().0;
+        let mut pane = PaneShell {
+            model: &model(3),
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
+        size_to(&mut pane, 400.0, 300.0);
+        LayoutEngine::new().compute(&mut pane, Size::new(400.0, 300.0));
+        build(&mut pane);
+        seen.borrow().clone()
+    }
+
+    /// **Clicking a pane focuses it**, by naming the action rather than calling a function.
+    #[test]
+    fn a_click_on_a_pane_asks_for_that_pane() {
+        use heca_grid_ui::event::{Event, PointerEvent};
+        let at = heca_core::layout::Point::new(50.0, 50.0);
+        let fired = dispatched(|pane| {
+            heca_grid_ui::dispatch(pane, &Event::Click(PointerEvent::at(at)));
+        });
+        assert_eq!(
+            fired,
+            vec!["focus_pane(Some(Int(3)))".to_string()],
+            "the pane named the action and the framework carried it",
+        );
+    }
+
+    /// **A right-click focuses it too, and deliberately does NOT claim the click.**
+    ///
+    /// A declared menu opens only for a right-click nobody took, so claiming it here would switch
+    /// this pane's own menu off — two declarations on one widget cancelling each other, with
+    /// nothing failing anywhere. Guarded because `stop_propagation` reads like the tidy thing to
+    /// add and would break the menu silently.
+    #[test]
+    fn a_right_click_focuses_the_pane_without_claiming_the_click() {
+        use heca_grid_ui::event::{Event, PointerEvent};
+        let at = heca_core::layout::Point::new(50.0, 50.0);
+        let mut handled = heca_grid_ui::Handled::Yes;
+        let fired = dispatched(|pane| {
+            handled = heca_grid_ui::dispatch(pane, &Event::RightClick(PointerEvent::at(at)));
+        });
+        assert_eq!(fired, vec!["focus_pane(Some(Int(3)))".to_string()]);
+        assert_eq!(
+            handled,
+            heca_grid_ui::Handled::No,
+            "left unclaimed, so the framework goes on to open the menu the pane declared",
+        );
+    }
+
+    /// **And it has a menu it does not own.** Declared, so the framework opens it at the pointer
+    /// and takes it down when a press lands outside — a pane has no business knowing what a menu
+    /// is.
+    #[test]
+    fn a_pane_declares_a_menu_rather_than_opening_one() {
+        use heca_grid_ui::Component;
+        let (cb, _) = crate::chrome::pane::testing::recording_callbacks();
+        let pane = PaneShell {
+            model: &model(3),
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
+        // The declaration sits on the pane itself, inside the picker wrapper the shell returns.
+        fn declares_a_menu(n: &dyn Component) -> bool {
+            n.base().context_menu.is_some()
+                || n.base()
+                    .children
+                    .iter()
+                    .any(|c| declares_a_menu(c.as_ref()))
+        }
+        assert!(
+            declares_a_menu(&pane),
+            "the pane says it has one; opening and closing it is nobody else's business here",
+        );
+    }
+
+    /// **Focusing a pane must not rebuild it.** ⚠️ Ran red against its own bug.
+    ///
+    /// A right-click is made from a press and a release on the *same* widget. Whether a pane is
+    /// active used to be part of its identity, so focusing it — which is what the press itself
+    /// asks for — threw the tree away and built a new one. The release then landed on a different
+    /// widget, no click was ever completed, and the first right-click on an unfocused pane focused
+    /// it and opened nothing. Only a second one, with nothing left to rebuild, showed the menu
+    ///.
+    ///
+    /// The same trap caught the pane's rect and its header's words before this. Anything that
+    /// changes while a gesture is in flight belongs on the tree, not in the key.
+    #[test]
+    fn focusing_a_pane_does_not_change_its_identity() {
+        let mut inactive = model(3);
+        inactive.active = false;
+        let mut active = model(3);
+        active.active = true;
+        active.border_color = [1.0, 0.0, 0.0, 1.0];
+        active.accent = [1.0, 0.0, 0.0, 1.0];
+
+        assert_eq!(
+            inactive.key(),
+            active.key(),
+            "the same pane, focused or not, is the same pane — so focusing it keeps its tree and \
+             the press already recorded on it",
+        );
+    }
+
+    /// **And focus still shows**, because it is written on instead. Guarded because the tempting
+    /// way to pass the test above is to stop the glow appearing at all.
+    #[test]
+    fn a_focused_pane_still_glows() {
+        use heca_grid_ui::Component;
+
+        let (cb, _) = crate::chrome::pane::testing::recording_callbacks();
+        let mut pane = PaneShell {
+            model: &model(3),
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
+
+        focus_state_to(&mut pane, false, [0.1, 0.9, 0.8, 1.0], [0.1, 0.9, 0.8, 1.0]);
+        assert!(
+            pane.base().style.visual.glow.is_none(),
+            "an unfocused pane has no halo"
+        );
+
+        focus_state_to(&mut pane, true, [0.1, 0.9, 0.8, 1.0], [0.1, 0.9, 0.8, 1.0]);
+        assert!(
+            pane.base().style.visual.glow.is_some(),
+            "and a focused one does, without the tree being rebuilt to get it",
+        );
     }
 }

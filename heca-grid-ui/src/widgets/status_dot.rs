@@ -51,12 +51,17 @@ impl StatusDot {
         // sliver instead of a dot. It is already the smallest thing on any row it appears in, so
         // there is nothing to win by taking space from it (F003/P096/T483).
         base.style.layout.flex_shrink = Some(0.0);
-        Self { base, status: signal(status) }
+        Self {
+            base,
+            status: signal(status),
+        }
     }
 
     /// **Show a different status.** The pip changes in place — nothing is rebuilt, and a caller
     /// that holds the dot does not have to hold its signal to say so.
-    #[heca_grid_ui_macros::host_only("an imperative state change, not a property a description sets")]
+    #[heca_grid_ui_macros::host_only(
+        "an imperative state change, not a property a description sets"
+    )]
     pub fn set(&self, status: DotStatus) {
         if self.status.get_untracked() != status {
             self.status.set(status);

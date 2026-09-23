@@ -21,7 +21,7 @@
 //! handler on the group: the same one, so the visible button and the menu row cannot drift.
 
 use crate::builders::{ComponentExt, LayoutExt, StyleExt};
-use crate::component::{paint_child, Base, Component, PaintCx};
+use crate::component::{Base, Component, PaintCx, paint_child};
 use crate::reactive::SignalGet;
 use crate::style::{Align, Direction, Justify};
 use crate::widgets::button::ButtonVariant;
@@ -198,7 +198,7 @@ impl ButtonGroup {
         }
         // Before the ⋮, which is always the last child.
         let at = self.entries.len().saturating_sub(1);
-        self.row_mut()
+        self.strip_mut()
             .base_mut()
             .children
             .insert(at, Box::new(button));
@@ -210,7 +210,7 @@ impl ButtonGroup {
         // **The button just added — not the last child**, which is the ⋮ and always will be. Aimed
         // at the wrong one, every button kept its words whatever the mode said, and the first
         // decision was then made from widths that were never going to be drawn.
-        if let Some(added) = self.row_mut().base_mut().children.get_mut(at) {
+        if let Some(added) = self.strip_mut().base_mut().children.get_mut(at) {
             added.set_icon_only(icons);
         }
         self
@@ -309,7 +309,7 @@ impl Component for ButtonGroup {
         // whole of the decision: no widths are added up and no budget is worked out.
         let outside = |group: &Self| -> usize {
             group
-                .row()
+                .strip()
                 .base()
                 .children
                 .iter()
@@ -321,7 +321,7 @@ impl Component for ButtonGroup {
         // layout placed, so it is the layout's answer and not a sum of parts.
         if self.words.get() {
             let shown_kids: Vec<&Box<dyn Component>> = self
-                .row()
+                .strip()
                 .base()
                 .children
                 .iter()
@@ -358,6 +358,10 @@ impl Component for ButtonGroup {
             self.words.set(words);
             self.set_words(words);
             self.base.mark_needs_paint();
+            // **Ask for the pass this decision needs, and get it before anything is painted.** The
+            // engine settles a layout that prompted a change rather than leaving it to the next
+            // frame, so what appears is the arrangement decided here — never the one it replaced.
+            self.base.mark_needs_layout();
             // The widths have changed, so what fits must be read from the layout that follows —
             // deciding it now would be deciding it from the arrangement being replaced.
             return;
@@ -385,7 +389,7 @@ impl Component for ButtonGroup {
         // cannot strobe.
         if over == 0 && shown_now < count {
             let first = self
-                .row()
+                .strip()
                 .base()
                 .children
                 .iter()
@@ -394,7 +398,7 @@ impl Component for ButtonGroup {
                 .unwrap_or(left);
             let slack = first - left;
             let widest = self
-                .row()
+                .strip()
                 .base()
                 .children
                 .iter()
@@ -411,6 +415,11 @@ impl Component for ButtonGroup {
             self.shown.set(fits);
             self.apply();
             self.base.mark_needs_paint();
+            // The row now holds different buttons, so it must be placed again before it is drawn —
+            // the engine settles it in this same pass. Without it the row was painted once with the
+            // arrangement this line just replaced, which is the flash a caller kept seeing on every
+            // rebuild and could do nothing about.
+            self.base.mark_needs_layout();
         }
     }
 }
@@ -420,11 +429,14 @@ impl Component for ButtonGroup {
 const EPS: f64 = 0.5;
 
 impl ButtonGroup {
-    /// The group **is** the row that arranges the buttons — they are its own children.
-    fn row(&self) -> &dyn Component {
+    /// The group **is** the strip that arranges the buttons — they are its own children.
+    ///
+    /// Named `strip` rather than `row`: `row` is CSS's `grid-row` on every widget
+    /// ([`LayoutExt::row`]), and a private accessor should not take a word the whole library uses.
+    fn strip(&self) -> &dyn Component {
         self
     }
-    fn row_mut(&mut self) -> &mut dyn Component {
+    fn strip_mut(&mut self) -> &mut dyn Component {
         self
     }
 
@@ -444,7 +456,7 @@ impl ButtonGroup {
             Display::Auto => shown == count && self.entries.iter().all(|e| e.glyph.is_some()),
         };
         for i in 0..count {
-            let Some(child) = self.row_mut().base_mut().children.get_mut(i) else {
+            let Some(child) = self.strip_mut().base_mut().children.get_mut(i) else {
                 continue;
             };
             // A collapsed button is `hidden`, not merely invisible: the layout must give it no
@@ -461,7 +473,7 @@ impl ButtonGroup {
     fn set_words(&mut self, words: bool) {
         let count = self.entries.len();
         for i in 0..count {
-            let Some(child) = self.row_mut().base_mut().children.get_mut(i) else {
+            let Some(child) = self.strip_mut().base_mut().children.get_mut(i) else {
                 continue;
             };
             child.set_icon_only(!words);
@@ -501,7 +513,7 @@ impl ButtonGroup {
         // where it happened, and the menu reads it from there.
         let trigger = ComponentExt::on_click(trigger, {
             let menu = menu.clone();
-            move |ev| menu.borrow().show(ev.event())
+            move |ev: &mut crate::event::EventCx<'_>| menu.borrow().show(ev.event())
         });
         // Nothing is declared about picking it. It is a button: a letter reaches it for that
         // reason alone, and picking it runs this same click.
@@ -513,7 +525,7 @@ impl ButtonGroup {
         // **Whatever went into the menu, the menu says so** — refreshed here rather than rebuilt
         // with the ⋮, so the widget itself is only ever made once.
         *self.menu.borrow_mut() = self.overflow_menu();
-        if let Some(t) = self.row_mut().base_mut().children.get_mut(count) {
+        if let Some(t) = self.strip_mut().base_mut().children.get_mut(count) {
             t.base_mut().set_hidden(!needed);
         }
     }

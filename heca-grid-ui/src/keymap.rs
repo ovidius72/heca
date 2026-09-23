@@ -182,8 +182,14 @@ impl Keymap {
     pub fn with_defaults() -> Self {
         use GridKey::*;
         use WidgetIntent::*;
-        let ctrl = Modifiers { ctrl: true, ..Default::default() };
-        let meta = Modifiers { meta: true, ..Default::default() };
+        let ctrl = Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
+        let meta = Modifiers {
+            meta: true,
+            ..Default::default()
+        };
         let none = Modifiers::default();
 
         let mut km = Keymap::new();
@@ -219,21 +225,42 @@ mod tests {
     #[test]
     fn default_bindings_resolve_by_axis() {
         let km = Keymap::with_defaults();
-        let ctrl = Modifiers { ctrl: true, ..Default::default() };
+        let ctrl = Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
         let none = Modifiers::default();
         // Horizontal = item_*, vertical = menu_*.
-        assert_eq!(km.resolve(GridKey::ArrowRight, none), &[WidgetIntent::ItemNext]);
-        assert_eq!(km.resolve(GridKey::Char('l'), ctrl), &[WidgetIntent::ItemNext]);
-        assert_eq!(km.resolve(GridKey::ArrowDown, none), &[WidgetIntent::MenuDown]);
-        assert_eq!(km.resolve(GridKey::Char('j'), ctrl), &[WidgetIntent::MenuDown]);
-        assert_eq!(km.resolve(GridKey::Char('k'), ctrl), &[WidgetIntent::MenuUp]);
+        assert_eq!(
+            km.resolve(GridKey::ArrowRight, none),
+            &[WidgetIntent::ItemNext]
+        );
+        assert_eq!(
+            km.resolve(GridKey::Char('l'), ctrl),
+            &[WidgetIntent::ItemNext]
+        );
+        assert_eq!(
+            km.resolve(GridKey::ArrowDown, none),
+            &[WidgetIntent::MenuDown]
+        );
+        assert_eq!(
+            km.resolve(GridKey::Char('j'), ctrl),
+            &[WidgetIntent::MenuDown]
+        );
+        assert_eq!(
+            km.resolve(GridKey::Char('k'), ctrl),
+            &[WidgetIntent::MenuUp]
+        );
     }
 
     #[test]
     fn ctrl_h_offers_edit_before_nav() {
         // The overload: Ctrl+h is delete-back first (a focused Input wins), then ItemPrevious.
         let km = Keymap::with_defaults();
-        let ctrl = Modifiers { ctrl: true, ..Default::default() };
+        let ctrl = Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
         assert_eq!(
             km.resolve(GridKey::Char('h'), ctrl),
             &[WidgetIntent::EditDeleteBack, WidgetIntent::ItemPrevious],
@@ -243,16 +270,25 @@ mod tests {
     #[test]
     fn letter_case_is_normalised() {
         let mut km = Keymap::new();
-        let ctrl = Modifiers { ctrl: true, ..Default::default() };
+        let ctrl = Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
         km.bind(GridKey::Char('H'), ctrl, WidgetIntent::ItemPrevious);
-        assert_eq!(km.resolve(GridKey::Char('h'), ctrl), &[WidgetIntent::ItemPrevious]);
+        assert_eq!(
+            km.resolve(GridKey::Char('h'), ctrl),
+            &[WidgetIntent::ItemPrevious]
+        );
     }
 
     #[test]
     fn dispatch_modified_key_offers_intents_before_raw() {
         use std::cell::RefCell;
         let km = Keymap::with_defaults();
-        let ctrl = Modifiers { ctrl: true, ..Default::default() };
+        let ctrl = Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
         // Ctrl+h is a COMMAND: intents are offered first (so a menu never eats it as the
         // quick-pick letter `h`). A widget consuming ItemPrevious (like Tabs) sees the edit intent
         // (ignored) then the nav intent (consumed); the raw key is never reached.
@@ -280,7 +316,10 @@ mod tests {
     fn dispatch_modified_key_falls_back_to_raw() {
         use std::cell::RefCell;
         let km = Keymap::with_defaults();
-        let ctrl = Modifiers { ctrl: true, ..Default::default() };
+        let ctrl = Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
         // Ctrl+ArrowLeft has no bound intent, so after the (empty) intent pass it falls back to
         // the raw key — this is how an Input keeps Ctrl+Arrow word/line caret motion.
         let seen = RefCell::new(Vec::new());
@@ -290,7 +329,10 @@ mod tests {
         });
         assert_eq!(
             *seen.borrow(),
-            vec![Event::Key { key: GridKey::ArrowLeft, pressed: true }],
+            vec![Event::Key {
+                key: GridKey::ArrowLeft,
+                pressed: true
+            }],
             "no intent bound → raw key delivered as the fallback",
         );
     }
@@ -311,6 +353,9 @@ mod tests {
             _ => Handled::No,
         });
         assert_eq!(handled, Handled::Yes);
-        assert!(!offered_intent, "the raw key was consumed, so no intent was offered");
+        assert!(
+            !offered_intent,
+            "the raw key was consumed, so no intent was offered"
+        );
     }
 }

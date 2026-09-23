@@ -23,8 +23,13 @@ pub enum WorkspaceRow {
         col_idx: usize,
         col_id: heca_core::layout::ColumnId,
     },
-    Pane { pane_id: PaneId },
-    FloatingPane { pane_id: PaneId, ws_idx: usize },
+    Pane {
+        pane_id: PaneId,
+    },
+    FloatingPane {
+        pane_id: PaneId,
+        ws_idx: usize,
+    },
 }
 
 impl WorkspaceRow {
@@ -64,7 +69,6 @@ impl WorkspaceRow {
             WorkspaceRow::FloatingPane { .. } => WorkspaceRowKind::FloatingPane,
         }
     }
-
 }
 
 /// A pane entry in the sidebar tree.
@@ -381,7 +385,10 @@ impl WorkspaceTree {
         // panes. Workspace headers stay selectable so a collapsed workspace can be
         // re-expanded with `l`.
         self.flat_items.get(idx).is_some_and(|item| {
-            matches!(item, WorkspaceRow::Pane { .. } | WorkspaceRow::Workspace { .. })
+            matches!(
+                item,
+                WorkspaceRow::Pane { .. } | WorkspaceRow::Workspace { .. }
+            )
         })
     }
 
@@ -456,7 +463,9 @@ impl WorkspaceTree {
 
     fn current_item_in_workspace(&self, ws_idx: usize) -> bool {
         match self.current_item() {
-            Some(WorkspaceRow::Workspace { ws_idx: item_ws, .. }) => *item_ws == ws_idx,
+            Some(WorkspaceRow::Workspace {
+                ws_idx: item_ws, ..
+            }) => *item_ws == ws_idx,
             Some(WorkspaceRow::Column {
                 ws_idx: item_ws, ..
             }) => *item_ws == ws_idx,
@@ -472,7 +481,11 @@ impl WorkspaceTree {
 
     fn current_item_in_column(&self, ws_idx: usize, col_idx: usize) -> bool {
         match self.current_item() {
-            Some(WorkspaceRow::Column { ws_idx: item_ws, col_idx: item_col, .. }) => *item_ws == ws_idx && *item_col == col_idx,
+            Some(WorkspaceRow::Column {
+                ws_idx: item_ws,
+                col_idx: item_col,
+                ..
+            }) => *item_ws == ws_idx && *item_col == col_idx,
             Some(WorkspaceRow::Pane { pane_id }) => self
                 .pane_location(*pane_id)
                 .is_some_and(|(item_ws, item_col)| item_ws == ws_idx && item_col == Some(col_idx)),
@@ -569,7 +582,10 @@ impl WorkspaceTree {
                     }
                 }
                 WorkspaceRowKind::Column => {
-                    if let WorkspaceRow::Column { ws_idx, col_idx, .. } = item {
+                    if let WorkspaceRow::Column {
+                        ws_idx, col_idx, ..
+                    } = item
+                    {
                         self.toggle_column_collapsed(ws_idx, col_idx);
                     }
                 }
@@ -590,7 +606,10 @@ impl WorkspaceTree {
                     }
                 }
                 WorkspaceRowKind::Column => {
-                    if let WorkspaceRow::Column { ws_idx, col_idx, .. } = item {
+                    if let WorkspaceRow::Column {
+                        ws_idx, col_idx, ..
+                    } = item
+                    {
                         self.expand_column(ws_idx, col_idx);
                     }
                 }
@@ -611,7 +630,10 @@ impl WorkspaceTree {
                     }
                 }
                 WorkspaceRowKind::Column => {
-                    if let WorkspaceRow::Column { ws_idx, col_idx, .. } = item {
+                    if let WorkspaceRow::Column {
+                        ws_idx, col_idx, ..
+                    } = item
+                    {
                         self.collapse_column(ws_idx, col_idx);
                     }
                 }

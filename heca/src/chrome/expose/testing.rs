@@ -5,8 +5,8 @@
 //! reads as the thing it is asserting rather than as its setup.
 
 use heca_core::layout::{LayoutOptions, Pane, PaneId, Rectangle, Session, SessionId, Size};
-use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::Component;
+use heca_grid_ui::theme::Theme as GuiTheme;
 
 use super::pane_card::{ExposeCallbacks, ExposeDeleteKeys};
 
@@ -34,14 +34,18 @@ pub(super) fn shipped_keys() -> ExposeDeleteKeys {
 
 /// What a component saw fit to send, in the order it sent it — one line per intent, which is
 /// enough to assert against and far easier to read than the enum.
-pub(super) type Sink = std::rc::Rc<std::cell::RefCell<Vec<crate::app::interaction::InteractionIntent>>>;
+pub(super) type Sink =
+    std::rc::Rc<std::cell::RefCell<Vec<crate::app::interaction::InteractionIntent>>>;
 
 /// The seams, wired to a sink instead of to the app.
 pub(super) fn callbacks() -> (ExposeCallbacks, Sink) {
     let sink: Sink = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
     let emit: crate::chrome::ChromeIntentEmitter = {
         let sink = sink.clone();
-        crate::chrome::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, move |_, i| sink.borrow_mut().push(i))
+        crate::chrome::ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            move |_, i| sink.borrow_mut().push(i),
+        )
     };
     (super::callbacks(emit, shipped_keys()), sink)
 }
@@ -81,7 +85,10 @@ pub(super) fn card_of(n: &dyn Component, key: &str) -> Option<heca_grid_ui::Rect
     if n.base().key.as_deref() == Some(key) {
         return Some(n.base().bounds);
     }
-    n.base().children.iter().find_map(|c| card_of(c.as_ref(), key))
+    n.base()
+        .children
+        .iter()
+        .find_map(|c| card_of(c.as_ref(), key))
 }
 
 /// The rectangle **every** card in a tree falls inside — what has to stay within the box the map

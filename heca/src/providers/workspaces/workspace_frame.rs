@@ -11,12 +11,11 @@
 
 use super::seams::{DockRegistries, DockSeams};
 use super::{
-    column_group::ColumnGroup, pane_row::PaneRow, row_hint, workspace_key, workspace_row_items,
-    ChromeDragItem, WorkspaceEntry, MENU_WORKSPACE,
+    ChromeDragItem, MENU_WORKSPACE, WorkspaceEntry, column_group::ColumnGroup, pane_row::PaneRow,
+    row_hint, workspace_key, workspace_row_items,
 };
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
-use heca_grid_ui::style::{Align, Length};
-use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, KeyHint};
+use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, HintTone};
 
 /// A `.frameless(true)` [`DockFrame`] whose header carries the workspace's total pane count, and
 /// whose body is the workspace's columns followed by its floating panes.
@@ -57,17 +56,25 @@ impl WorkspaceFrame<'_> {
         // rebuilds (F4.3). Collapse is read back from that same shared state.
         let emit = seams.emit.clone();
         let mut dock = DockFrame::new(ws.name.clone())
+            // **What the fold control's letter means** — this is the file that assigns the
+            // vocabulary: a workspace's own letter is `warning` a few lines down, a pane's is the
+            // accent, a column's is `success`. Folding is a structural control rather than
+            // somewhere to navigate, so it reads `muted`. The widget places the letter (only it
+            // knows where its chevron is) and says nothing about what it means.
+            .fold_hint_tone(HintTone::Muted)
             .frameless(true)
             .gap(4.0) // tighten the workspace header → body spacing
             .expanded(!seams.ws_state.is_ws_collapsed(ws_idx))
             .on_toggle(move |_| {
-                emit.fire(crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx });
+                emit.fire(
+                    crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx },
+                );
             })
             .header(
                 Flex::row()
-                    .align(Align::Center)
+                    .align("center")
                     .child(badge)
-                    .child(Flex::row().width(Length::Px(6.0))),
+                    .child(Flex::row().width(6.0)),
             );
         // Light accent wash over the whole active workspace area (+ the accent count badge).
         // Signal-driven like every other state here, so it flips in place via
@@ -102,8 +109,12 @@ impl WorkspaceFrame<'_> {
             .chain(&ws.floating_panes)
             .map(|p| p.pane_id)
             .collect::<Vec<_>>();
-        reg.signals.ws_active.push((ws_pane_ids, dock.active_state()));
-        reg.signals.ws_previous.push((ws_idx, dock.previous_state()));
+        reg.signals
+            .ws_active
+            .push((ws_pane_ids, dock.active_state()));
+        reg.signals
+            .ws_previous
+            .push((ws_idx, dock.previous_state()));
         reg.signals.row_nav.push((
             seams.mount.to_string(),
             workspace_key(ws_id),
@@ -134,32 +145,27 @@ impl WorkspaceFrame<'_> {
                 .build(seams, reg),
             );
         }
-        dock = dock.child(cols);
-        // Wrap the whole workspace dock in the universal `KeyHint` so a
-        // "move column/pane → workspace" pick can stamp this workspace's letter over
-        // it. The keycap is tinted `warning` (not accent) so a workspace target reads
-        // distinctly from a pane target. The hint signal is driven each frame in
-        // `sync_chrome_signals` from the active pick candidates.
-        KeyHint::new(dock)
-            // **What `prefix+/` does to this row** — the cursor lands on the workspace header
-            // and the dock keeps the keyboard, exactly as it does on a pane row.
-            .on_hint(crate::chrome::picks(
-                seams.mount,
-                row_hint(workspace_key(ws_id)),
-                seams.emit,
-            ))
-            .color(theme.colors.warning)
-            // Top-right (like the pane cards' right-aligned keycap), nudged down
-            // onto the workspace title row so it lines up with the name.
-            .placement(HintPlacement::TopRight)
-            .offset_y((theme.font_size * 0.45) as f64)
+        // **The dock says all of this about itself** — no wrapper.
+        //
+        // `KeyHint` is for a region that is not a widget you can put a builder on; a `DockFrame`
+        // is one. Its `paint` only paints its child, because the letter is drawn by `paint_child`
+        // for any widget carrying one — so wrapping bought a node in the tree and nothing else.
+        //
+        // The tone says what the target IS and the theme colours it: a workspace reads distinctly
+        // from a pane, without this file naming a colour. Top-right like the pane cards, nudged
+        // down onto the title row so it lines up with the name.
+        dock.child(cols)
+            .on_hint(seams.picks(row_hint(workspace_key(ws_id))))
+            .hint_tone(HintTone::Warning)
+            .hint_placement(HintPlacement::TopRight)
+            .hint_offset_y((theme.font_size * 0.45) as f64)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::testing::{self, Fixture};
+    use super::*;
     use heca_core::layout::PaneId;
 
     /// A floating pane is a row in the frame's body beside the columns — **not** a second row
@@ -207,10 +213,7 @@ mod tests {
             .build(&seams, &mut reg);
         }
 
-        assert!(
-            !fx.signals.ws_active.is_empty(),
-            "the workspace you are in",
-        );
+        assert!(!fx.signals.ws_active.is_empty(), "the workspace you are in",);
         assert!(
             fx.signals.ws_previous.iter().any(|(idx, _)| *idx == 0),
             "and the one prefix+Shift+i would return to",

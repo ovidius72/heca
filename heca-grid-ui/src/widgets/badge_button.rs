@@ -9,7 +9,7 @@ use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
-use crate::reactive::{signal, Signal, SignalGet};
+use crate::reactive::{Signal, SignalGet, signal};
 use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::style::Length;
 use crate::widgets::badge::BadgeVariant;
@@ -104,7 +104,6 @@ impl BadgeButton {
     pub fn hovered(&self) -> Signal<bool> {
         self.base.pointer.hovered
     }
-
 }
 
 impl Component for BadgeButton {
@@ -127,7 +126,8 @@ impl Component for BadgeButton {
         let chars = label.chars().count() as f32;
         let fs = self.base.font;
         let s = self.base.size_scale();
-        self.base.style.layout.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
+        self.base.style.layout.width =
+            Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
         self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V * s);
     }
 
@@ -146,17 +146,19 @@ impl Component for BadgeButton {
 
         let (fill, border_c, text_c, glow) = if self.variant == BadgeVariant::Outline {
             let border_c = if hovered {
-                cx.theme().colors.accent.with_alpha(cx.theme().colors.interaction.outline_hover)
+                cx.accent()
+                    .with_alpha(cx.theme().colors.interaction.outline_hover)
             } else {
                 muted.with_alpha(cx.theme().colors.interaction.outline_rest)
             };
             let fill = if hovered {
-                cx.theme().colors.accent.with_alpha(cx.theme().colors.interaction.badge_fill / 2)
+                cx.accent()
+                    .with_alpha(cx.theme().colors.interaction.badge_fill / 2)
             } else {
                 Color::TRANSPARENT
             };
             let glow = hovered.then_some(Glow {
-                color: cx.theme().colors.accent,
+                color: cx.accent(),
                 radius: GLOW_RADIUS,
                 intensity: GLOW_INTENSITY,
             });
@@ -170,7 +172,12 @@ impl Component for BadgeButton {
                 BadgeVariant::Danger => danger,
                 BadgeVariant::Outline => unreachable!(),
             };
-            let fill_alpha = cx.theme().colors.interaction.badge_fill.saturating_add(if hovered { HOVER_FILL_EXTRA } else { 0 });
+            let fill_alpha = cx
+                .theme()
+                .colors
+                .interaction
+                .badge_fill
+                .saturating_add(if hovered { HOVER_FILL_EXTRA } else { 0 });
             let glow = Some(Glow {
                 color: c,
                 radius: GLOW_RADIUS,
@@ -190,13 +197,7 @@ impl Component for BadgeButton {
 
         let white = Color::rgb(255, 255, 255);
         let border = cx.border(border_c.lerp(white, pulse * 0.15));
-        cx.rect(
-            pill,
-            fill.lerp(white, pulse * 0.08),
-            border,
-            radius,
-            glow,
-        );
+        cx.rect(pill, fill.lerp(white, pulse * 0.08), border, radius, glow);
         cx.text(
             pill,
             &self.label.get_untracked(),
@@ -272,9 +273,9 @@ impl LayoutExt for BadgeButton {}
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::event::PointerButton;
     use crate::reactive::SignalUpdate;
-    use super::*;
     use std::cell::Cell;
     use std::rc::Rc;
 

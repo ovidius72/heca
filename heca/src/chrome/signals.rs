@@ -49,37 +49,8 @@ pub(crate) struct ChromeSignals {
     /// row now declares one identity (`Base::key`) and this is the highlight half of it; the
     /// cursor highlight stays distinct from `active_pane`, as it always was.
     pub(crate) row_nav: Vec<(String, String, Signal<bool>)>,
-    /// Per-pane runtime display signals for the fixed pane-info rows.
-    pub(crate) pane_info: Vec<(PaneId, PaneInfoSignals)>,
     /// The status-bar label's text signal.
     pub(crate) status: Option<Signal<String>>,
-}
-
-
-
-/// Find a pane's sidebar entry across all workspaces (tiled + floating).
-fn find_pane_entry(tree: &WorkspaceTree, pane_id: PaneId) -> Option<&PaneEntry> {
-    tree.workspaces
-        .iter()
-        .flat_map(|ws| {
-            ws.columns
-                .iter()
-                .flat_map(|col| col.panes.iter())
-                .chain(ws.floating_panes.iter())
-        })
-        .find(|pane| pane.pane_id == pane_id)
-}
-
-fn pane_fallback_name(tree: &WorkspaceTree, pane_id: PaneId) -> &str {
-    find_pane_entry(tree, pane_id)
-        .map(|pane| pane.name.as_str())
-        .unwrap_or_else(|| unreachable!("pane {pane_id:?} must exist in sidebar tree"))
-}
-
-/// The pane's user-set override name (from rename), if any — wins over the process
-/// title. `None` while the pane tracks its process.
-fn pane_custom_name(tree: &WorkspaceTree, pane_id: PaneId) -> Option<&str> {
-    find_pane_entry(tree, pane_id).and_then(|pane| pane.custom_name.as_deref())
 }
 
 pub(crate) fn sync_pane_runtime_state(
@@ -156,7 +127,11 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     // change-guarded chokepoint, so calling it every frame is cheap.
     if state.container_cursor_visible() {
         let selection = state.chrome_state.workspaces.nav_selection();
-        state.chrome_state.workspaces.tree_mut().apply_nav_selection(selection);
+        state
+            .chrome_state
+            .workspaces
+            .tree_mut()
+            .apply_nav_selection(selection);
     } else {
         state.chrome_state.workspaces.set_nav_selection(None);
     }
@@ -181,17 +156,15 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
 /// bound signals. Guarded — writes only on change, so unchanged frames cause no
 /// signal churn. Called each frame before paint; this is what lets focus changes
 /// update the highlight + status **without** rebuilding the tree.
-pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
+pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
     let Some(retained) = state.chrome_tree.as_ref() else {
-        return false;
+        return;
     };
-    let mut changed = false;
     let active = state.chrome_state.workspaces.active_pane();
     for (pid, sig) in &retained.signals.pane_active {
         let v = active == Some(*pid);
         if sig.get_untracked() != v {
             sig.set(v);
-            changed = true;
         }
     }
     // The same sync for the back-and-forth mark, from the field `prefix+i` itself reads.
@@ -199,7 +172,6 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
         let v = state.chrome_state.workspaces.is_previous_pane(*pid) && active != Some(*pid);
         if sig.get_untracked() != v {
             sig.set(v);
-            changed = true;
         }
     }
     // The workspace back-and-forth would take you to — the frame says *which* workspace, the pane
@@ -209,21 +181,18 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
         let v = Some(*idx) == previous_ws;
         if sig.get_untracked() != v {
             sig.set(v);
-            changed = true;
         }
     }
     for (pids, sig) in &retained.signals.col_active {
         let v = active.is_some_and(|a| pids.contains(&a));
         if sig.get_untracked() != v {
             sig.set(v);
-            changed = true;
         }
     }
     for (pids, sig) in &retained.signals.ws_active {
         let v = active.is_some_and(|a| pids.contains(&a));
         if sig.get_untracked() != v {
             sig.set(v);
-            changed = true;
         }
     }
     // Project each mount's cursor onto its rows' cursor signals — distinct from `active` above, so
@@ -238,7 +207,6 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             == Some(key.as_str());
         if sig.get_untracked() != v {
             sig.set(v);
-            changed = true;
         }
     }
     // **The letters are not projected from here any more** (F003/P082/T427).
@@ -248,111 +216,11 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
     // working perfectly over a layer, which is not synced from here. `chrome::hint` owns them now,
     // by the one rule that does not need a list of modes: **whoever offers a letter owns it until
     // they withdraw it.** A plugin's own picker is safe for the same reason heca's is.
-    changed |= crate::chrome::hint::sync_offered_letters(state);
-    for (pid, sigs) in &retained.signals.pane_info {
-        let runtime = runtime_snapshot(&state.chrome_state.workspaces, *pid);
-        let next = pane_info_view(
-            &state.programs,
-            pane_fallback_name(&state.chrome_state.workspaces.tree(), *pid),
-            pane_custom_name(&state.chrome_state.workspaces.tree(), *pid),
-            runtime.as_ref(),
-            // Drive the sidebar card's `(process)` suffix live: compute the hint with the
-            // real flag so a rename toggles it without a tree rebuild. Only `process_hint`
-            // depends on this; icon/title/status/git are unaffected.
-            state
-                .chrome_state
-                .workspaces
-                .pane_renamed_add_process_name(),
-        );
-        if sigs.icon.get_untracked() != next.icon {
-            sigs.icon.set(next.icon);
-            changed = true;
-        }
-        if sigs.title.get_untracked() != next.title {
-            sigs.title.set(next.title.clone());
-            changed = true;
-        }
-        let hint_text = next
-            .process_hint
-            .as_deref()
-            .map(|program| format!("({program})"))
-            .unwrap_or_default();
-        if sigs.process_hint.get_untracked() != hint_text {
-            sigs.process_hint.set(hint_text);
-            changed = true;
-        }
-        let hint_visible = next.process_hint.is_some();
-        if sigs.process_hint_visible.get_untracked() != hint_visible {
-            sigs.process_hint_visible.set(hint_visible);
-            changed = true;
-        }
-        // Cwd row: text follows the live cwd, visibility follows the setting + presence.
-        let cwd_path = runtime.as_ref().and_then(|rt| rt.cwd.clone());
-        let cwd_text = cwd_path
-            .as_deref()
-            .map(home_relative_path)
-            .unwrap_or_default();
-        if sigs.cwd.get_untracked() != cwd_text {
-            sigs.cwd.set(cwd_text);
-            changed = true;
-        }
-        let cwd_visible =
-            state.chrome_state.workspaces.pane_show_cwd() && cwd_path.is_some();
-        if sigs.cwd_visible.get_untracked() != cwd_visible {
-            sigs.cwd_visible.set(cwd_visible);
-            changed = true;
-        }
-        let status = crate::providers::workspaces::dot_status(next.status);
-        {
-            let signal = sigs.status;
-            if signal.get_untracked() != status {
-                signal.set(status);
-                changed = true;
-            }
-        }
-        let git_visible = next.git_branch.is_some();
-        if sigs.git_visible.get_untracked() != git_visible {
-            sigs.git_visible.set(git_visible);
-            changed = true;
-        }
-        let branch = next.git_branch.unwrap_or_default();
-        if sigs.git_branch.get_untracked() != branch {
-            sigs.git_branch.set(branch.clone());
-            changed = true;
-        }
-        let branch_display = truncate_sidebar_git_branch(&branch);
-        if sigs.git_branch_display.get_untracked() != branch_display {
-            sigs.git_branch_display.set(branch_display);
-            changed = true;
-        }
-        for (visible_signal, label_signal, value) in [
-            (sigs.git_added_visible, sigs.git_added, next.git_added),
-            (
-                sigs.git_modified_visible,
-                sigs.git_modified,
-                next.git_modified,
-            ),
-            (sigs.git_deleted_visible, sigs.git_deleted, next.git_deleted),
-        ] {
-            let visible = value.is_some();
-            if visible_signal.get_untracked() != visible {
-                visible_signal.set(visible);
-                changed = true;
-            }
-            let label = value.unwrap_or_default();
-            if label_signal.get_untracked() != label {
-                label_signal.set(label);
-                changed = true;
-            }
-        }
-    }
+    crate::chrome::hint::sync_offered_letters(state);
     if let Some(status) = &retained.signals.status {
         let next = chrome_status(state);
         if status.get_untracked() != next {
             status.set(next);
-            changed = true;
         }
     }
-    changed
 }
-

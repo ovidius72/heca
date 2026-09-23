@@ -16,7 +16,7 @@
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify, Length};
 use crate::widgets::Icon;
@@ -140,7 +140,13 @@ impl Component for RailCell {
         let active = self.active.get_untracked();
         let (accent, glow_c, foreground, ctrl_radius, sel_border_w) = {
             let t = cx.theme();
-            (t.colors.accent, t.colors.glow, t.colors.foreground, t.colors.control_radius(), t.focus_border_width)
+            (
+                cx.accent(),
+                t.colors.glow,
+                t.colors.foreground,
+                t.colors.control_radius(),
+                t.focus_border_width,
+            )
         };
         let b = self.base.bounds;
 
@@ -155,12 +161,25 @@ impl Component for RailCell {
             cx.rect(
                 b,
                 accent.with_alpha(cx.theme().colors.interaction.row_active_fill),
-                Some(Border { color: accent.with_alpha(cx.theme().colors.interaction.row_active_border), width: sel_border_w }),
+                Some(Border {
+                    color: accent.with_alpha(cx.theme().colors.interaction.row_active_border),
+                    width: sel_border_w,
+                }),
                 cell_radius,
-                Some(Glow { color: glow_c, radius: ACTIVE_GLOW_RADIUS, intensity: ACTIVE_GLOW_INTENSITY }),
+                Some(Glow {
+                    color: glow_c,
+                    radius: ACTIVE_GLOW_RADIUS,
+                    intensity: ACTIVE_GLOW_INTENSITY,
+                }),
             );
         } else if self.base.hovered() {
-            cx.rect(b, foreground.with_alpha(cx.theme().colors.interaction.row_hover_fill), None, cell_radius, None);
+            cx.rect(
+                b,
+                foreground.with_alpha(cx.theme().colors.interaction.row_hover_fill),
+                None,
+                cell_radius,
+                None,
+            );
         }
 
         // The icon (carries its own status color). At rest the cell draws no surface
@@ -202,7 +221,10 @@ impl Component for RailCell {
             return Handled::No;
         }
         match ev {
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } => {
                 self.activate();
                 Handled::Yes
             }

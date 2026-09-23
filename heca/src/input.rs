@@ -336,6 +336,10 @@ pub enum WmAction {
     /// active workspace's columns; the picked letter dispatches
     /// [`MovePaneToColumn`](WmAction::MovePaneToColumn), stacking into that column).
     MovePaneToColumnPick,
+    /// Take the focused pane out of its column and give it one of its own, immediately to the
+    /// right. The intersection of `SplitHorizontal` ("make a column here") and `MovePaneToColumn`
+    /// ("put this pane in that column"), and it reads like both.
+    MovePaneToNewColumn,
     RenamePane,
     RenameColumn,
 
@@ -801,6 +805,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "move_column_to_workspace_pick" => Some(WmAction::MoveColumnToWorkspacePick),
         "move_pane_to_workspace_pick" => Some(WmAction::MovePaneToWorkspacePick),
         "move_pane_to_column_pick" => Some(WmAction::MovePaneToColumnPick),
+        // The bare name says everything: it acts on the focused pane and needs no target.
+        "move_pane_to_new_column" => Some(WmAction::MovePaneToNewColumn),
         "pane_take" => Some(WmAction::PaneTake),
         "pane_take_and_focus" => Some(WmAction::PaneTakeAndFocus),
         "swap_and_focus_pane" => Some(WmAction::SwapAndFocusPane),
@@ -855,11 +861,23 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "rename_column" => Some(WmAction::RenameColumn),
         "reset_pane_name" => Some(WmAction::ResetPaneName),
         "reset_workspace_name" => Some(WmAction::ResetWorkspaceName),
-        "command_palette" => Some(WmAction::CommandPalette { mode: None, query: None }),
+        "command_palette" => Some(WmAction::CommandPalette {
+            mode: None,
+            query: None,
+        }),
         "close_overlay" => Some(WmAction::CloseOverlay { overlay: None }),
-        "show_layer" => Some(WmAction::ShowLayer { name: None, dock: None }),
-        "hide_layer" => Some(WmAction::HideLayer { name: None, dock: None }),
-        "toggle_layer" => Some(WmAction::ToggleLayer { name: None, dock: None }),
+        "show_layer" => Some(WmAction::ShowLayer {
+            name: None,
+            dock: None,
+        }),
+        "hide_layer" => Some(WmAction::HideLayer {
+            name: None,
+            dock: None,
+        }),
+        "toggle_layer" => Some(WmAction::ToggleLayer {
+            name: None,
+            dock: None,
+        }),
         "reload_config" => Some(WmAction::ReloadConfig),
         "notification_dismiss_all" => Some(WmAction::NotificationDismissAll),
         "notification_dismiss_last" => Some(WmAction::NotificationDismissLast),
@@ -1270,6 +1288,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::MoveColumnToWorkspacePick
         | WmAction::MovePaneToWorkspacePick
         | WmAction::MovePaneToColumnPick
+        | WmAction::MovePaneToNewColumn
         | WmAction::FocusToggleLocal
         | WmAction::FocusToggleGlobal
         | WmAction::CreateWorkspace
@@ -1460,7 +1479,10 @@ mod tests {
         assert_eq!(action_from_name("close"), Some(WmAction::ClosePane));
         assert_eq!(
             action_from_name("command_palette"),
-            Some(WmAction::CommandPalette { mode: None, query: None })
+            Some(WmAction::CommandPalette {
+                mode: None,
+                query: None
+            })
         );
         // Font zoom — six names map to two variants with the right step + None pane.
         assert_eq!(
@@ -1583,7 +1605,10 @@ mod tests {
         assert!(action_priority(&WmAction::ResizeIncrease) > action_priority(&WmAction::ClosePane));
         // CommandPalette should have lowest priority
         assert!(
-            action_priority(&WmAction::CommandPalette { mode: None, query: None }) > action_priority(&WmAction::SidebarLeft)
+            action_priority(&WmAction::CommandPalette {
+                mode: None,
+                query: None
+            }) > action_priority(&WmAction::SidebarLeft)
         );
     }
 
@@ -1629,6 +1654,7 @@ mod tests {
             WmAction::MoveColumnToWorkspacePick,
             WmAction::MovePaneToWorkspacePick,
             WmAction::MovePaneToColumnPick,
+            WmAction::MovePaneToNewColumn,
             WmAction::FocusToggleLocal,
             WmAction::FocusToggleGlobal,
             WmAction::CreateWorkspace,
@@ -1649,7 +1675,10 @@ mod tests {
             WmAction::SidebarLeft,
             WmAction::SidebarRight,
             // System
-            WmAction::CommandPalette { mode: None, query: None },
+            WmAction::CommandPalette {
+                mode: None,
+                query: None,
+            },
             // Scrollback
             WmAction::ScrollbackPageUp,
             WmAction::ScrollbackPageDown,
@@ -1784,7 +1813,10 @@ mod tests {
             WmAction::NotificationDismissAll,
             WmAction::NotificationDismissLast,
             WmAction::NotificationPick,
-            WmAction::NotificationActionRelay { notification_id: 0, key: String::new() },
+            WmAction::NotificationActionRelay {
+                notification_id: 0,
+                key: String::new(),
+            },
         ]
     }
 
@@ -1830,7 +1862,11 @@ mod tests {
         let mut reachable: std::collections::HashSet<std::mem::Discriminant<WmAction>> =
             std::collections::HashSet::new();
         for descriptor in ActionRegistry::ALL {
-            let args: Vec<ArgSpec> = descriptor.args.iter().map(ArgSpec::from_descriptor).collect();
+            let args: Vec<ArgSpec> = descriptor
+                .args
+                .iter()
+                .map(ArgSpec::from_descriptor)
+                .collect();
             let built = action_from_name(descriptor.name)
                 .or_else(|| build_action(descriptor.name, &sample_args(&args)));
             let built = built.unwrap_or_else(|| {
@@ -1844,7 +1880,9 @@ mod tests {
 
         // `EnterMode` is the one variant with no descriptor: it is not an action a user names, it
         // is how a mode trigger is represented internally once `[keys.mode]` has been read.
-        let internal = [action_discriminant(&WmAction::EnterMode { name: String::new() })];
+        let internal = [action_discriminant(&WmAction::EnterMode {
+            name: String::new(),
+        })];
 
         let missing: Vec<String> = each_variant()
             .iter()
@@ -2079,10 +2117,7 @@ mod tests {
 
     #[test]
     fn test_build_scroll_to_offset() {
-        let args = std::collections::HashMap::from([(
-            "rows".to_string(),
-            "42".to_string(),
-        )]);
+        let args = std::collections::HashMap::from([("rows".to_string(), "42".to_string())]);
         assert_eq!(
             build_action("scroll_to_offset", &args),
             Some(WmAction::ScrollToOffset { rows: 42 })
@@ -2111,8 +2146,7 @@ mod tests {
 
     #[test]
     fn test_build_reset_name_by_target() {
-        let pane_args =
-            std::collections::HashMap::from([("pane_id".to_string(), "7".to_string())]);
+        let pane_args = std::collections::HashMap::from([("pane_id".to_string(), "7".to_string())]);
         assert_eq!(
             build_action("reset_pane_name_by_id", &pane_args),
             Some(WmAction::ResetPaneNameById { pane_id: PaneId(7) })

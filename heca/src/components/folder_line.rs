@@ -2,7 +2,7 @@
 
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::reactive::Signal;
-use heca_grid_ui::style::{Align, Length};
+use heca_grid_ui::style::{Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, Visibility};
 
@@ -29,6 +29,15 @@ pub(crate) struct FolderLine<'a> {
     /// Size relative to the surrounding text: metadata sits under the name, never beside it in
     /// weight.
     pub(crate) font_scale: f32,
+    /// **How far the line sits in from the name above it** — a token, resolved from the font, and
+    /// applied *inside* this line's own visibility so the inset disappears with the line.
+    ///
+    /// It is a property because it is the surrounding card's taste, not the line's: the dock's
+    /// card steps its metadata in under the name, the exposé's centres it and steps nothing.
+    /// It lives here rather than in a wrapper the caller adds because a wrapper does not vanish
+    /// when the line hides — a row holding a hidden line is still a row, and the column above it
+    /// still spends a gap on it.
+    pub(crate) indent: Spacing,
     pub(crate) theme: &'a GuiTheme,
 }
 
@@ -56,11 +65,13 @@ impl FolderLine<'_> {
         let text = label.text_signal();
         let widget = Visibility::new(
             Flex::row()
-                .align(Align::Center)
+                .align("center")
                 .gap(GAP)
+                // Inside the `Visibility`, never around it — see `indent`.
+                .padding_x(self.indent)
                 // Never wider than what holds it — see `PaneName`. The line is commonly centred,
                 // and a centred child is sized by its content unless it says otherwise.
-                .max_width(Length::Pct(1.0))
+                .max_width(Length::FULL)
                 // **This line absorbs the squeeze**, which is how a widget asks for it here
                 // (`Style::flex_shrink`: nothing shrinks unless it says so). A path is the longest
                 // thing on a card and the first that should give way — without this the line keeps
@@ -86,14 +97,15 @@ impl FolderLine<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use heca_grid_ui::reactive::SignalGet;
     use heca_grid_ui::Component;
+    use heca_grid_ui::reactive::SignalGet;
 
     fn built(path: Option<&str>, show: bool) -> BuiltFolderLine {
         FolderLine {
             path,
             show,
             font_scale: 0.85,
+            indent: Spacing::None,
             theme: &GuiTheme::default(),
         }
         .build()
@@ -116,7 +128,13 @@ mod tests {
     /// are the same absence rather than an empty row with a folder icon in it.
     #[test]
     fn it_is_hidden_when_there_is_no_path_or_the_setting_is_off() {
-        assert!(!built(None, true).visible.get_untracked(), "no cwd reported");
-        assert!(!built(Some("~/x"), false).visible.get_untracked(), "setting off");
+        assert!(
+            !built(None, true).visible.get_untracked(),
+            "no cwd reported"
+        );
+        assert!(
+            !built(Some("~/x"), false).visible.get_untracked(),
+            "setting off"
+        );
     }
 }

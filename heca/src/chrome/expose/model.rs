@@ -228,13 +228,19 @@ mod tests {
         assert!(!rows[1].active);
 
         let strip: f64 = rows[0].columns.iter().map(|c| c.width).sum();
-        assert_eq!(rows[0].strip_width, strip, "the strip is the sum of its columns");
+        assert_eq!(
+            rows[0].strip_width, strip,
+            "the strip is the sum of its columns"
+        );
         assert!(
             rows[0].columns.iter().all(|c| c.width > 0.0),
             "every column has a real width: {:?}",
             rows[0].columns,
         );
-        assert_eq!(rows[0].viewport.1, 800.0, "the viewport is the working area's width");
+        assert_eq!(
+            rows[0].viewport.1, 800.0,
+            "the viewport is the working area's width"
+        );
 
         // An empty workspace is still a row, as wide as its viewport — it must stay selectable.
         assert!(rows[1].columns.is_empty());
@@ -249,7 +255,8 @@ mod tests {
     fn the_model_carries_the_resolved_pane_heights_not_an_even_split() {
         let mut s = session();
         let ws = &mut s.workspaces[0];
-        ws.scrolling.add_pane_to_column(0, None, Pane::new(PaneId(3), "c"), false);
+        ws.scrolling
+            .add_pane_to_column(0, None, Pane::new(PaneId(3), "c"), false);
         let (h, gaps) = (ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
         ws.scrolling.columns[0].move_pane_boundary(0, 120.0, h, gaps);
 
@@ -267,8 +274,8 @@ mod tests {
     /// in the wrong place the moment the workspace is scrolled.
     #[test]
     fn a_floating_pane_is_offset_by_the_scroll_so_it_lands_where_it_looks() {
-        use heca_core::layout::workspace::FloatingPane;
         use heca_core::layout::Point;
+        use heca_core::layout::workspace::FloatingPane;
         let mut s = session();
         s.workspaces[0].floating_panes.push(FloatingPane {
             pane: Pane::new(PaneId(9), "float"),
@@ -286,7 +293,10 @@ mod tests {
         // coincide and the bug hides — which is exactly how it survived until it was on screen.
         s.workspaces[0].scrolling.active_column_idx = 1;
         let anchor = s.workspaces[0].scrolling.column_x(1);
-        assert!(anchor > 0.0, "the second column starts somewhere other than 0: {anchor}");
+        assert!(
+            anchor > 0.0,
+            "the second column starts somewhere other than 0: {anchor}"
+        );
 
         let rows = model(&s, |p| p.title.clone(), false);
         let f = &rows[0].floating[0];

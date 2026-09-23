@@ -144,7 +144,8 @@ impl Checkbox {
                 let fs = self.label_fs();
                 let text_w = label.chars().count() as f32 * fs * MONO_ADVANCE_RATIO;
                 let line = fs * MONO_LINE_RATIO;
-                self.base.style.layout.width = Length::Px(box_size + self.label_gap() as f32 + text_w);
+                self.base.style.layout.width =
+                    Length::Px(box_size + self.label_gap() as f32 + text_w);
                 self.base.style.layout.height = Length::Px(box_size.max(line));
             }
             None => {
@@ -178,7 +179,6 @@ impl Checkbox {
         Rectangle::new(Point::new(x, b.loc.y), Size::new(w, b.size.h))
     }
 
-
     /// Flip the state: animate the indicator, flash, and emit `checkbox-change`.
     fn flip(&mut self) {
         let new = !self.checked.get_untracked();
@@ -207,7 +207,7 @@ impl Component for Checkbox {
             let t = cx.theme();
             (
                 t.colors.surface,
-                t.colors.accent,
+                cx.accent(),
                 t.colors.glow,
                 t.colors.muted,
                 t.colors.foreground,
@@ -229,7 +229,11 @@ impl Component for Checkbox {
             color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
             width: bw,
         };
-        let box_glow = if disabled { None } else { cx.rest_glow(GLOW_RADIUS) };
+        let box_glow = if disabled {
+            None
+        } else {
+            cx.rest_glow(GLOW_RADIUS)
+        };
         cx.rect(bx, surface, Some(border), radius, box_glow);
 
         // Checked indicator: an accent square that pops in from the box center.

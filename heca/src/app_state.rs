@@ -37,6 +37,25 @@ pub enum RenameTarget {
     Pane(PaneId),
 }
 
+/// **Where a picked pane goes** — a column that exists, or one that does not yet.
+///
+/// A new column is a destination like any other, so it is named here rather than signalled by a
+/// magic id: the pick offers it a letter beside the real columns, and pressing that letter runs the
+/// action that makes one. Without it "put this somewhere new" was a separate binding you had to
+/// know, while the pick was already on screen asking where.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColumnPickTarget {
+    /// A column already in the strip.
+    Existing {
+        ws_idx: usize,
+        col_idx: usize,
+        col_id: heca_core::layout::ColumnId,
+    },
+    /// **A new column, right of the one the pane is in now** — "you keep your place in the strip",
+    /// the same rule `move_pane_to_new_column` already follows.
+    New,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
     Normal,
@@ -101,8 +120,8 @@ pub enum InputMode {
     /// letter (shown as a `KeyHint` over its sidebar column); the next keypress moves
     /// the active pane into that `(ws_idx, col_idx)` column (stacking with its panes).
     ColumnPick {
-        /// `(letter, ws_idx, col_idx, col_id)` — see [`InputMode::WorkspacePick`].
-        candidates: Vec<(char, usize, usize, heca_core::layout::ColumnId)>,
+        /// `(letter, where it goes)` — see [`InputMode::WorkspacePick`].
+        candidates: Vec<(char, ColumnPickTarget)>,
         pane_id: PaneId,
     },
     /// Follow-link letter pick: each visible terminal hyperlink across **all
@@ -234,13 +253,37 @@ impl InputMode {
         }
     }
 
-    /// Column pick candidates (letter → `(ws_idx, col_idx)`) while a `ColumnPick` is active.
-    pub fn col_candidates(
-        &self,
-    ) -> Option<&[(char, usize, usize, heca_core::layout::ColumnId)]> {
+    /// Column pick candidates (letter → where the pane goes) while a `ColumnPick` is active.
+    pub fn col_candidates(&self) -> Option<&[(char, ColumnPickTarget)]> {
         match self {
             InputMode::ColumnPick { candidates, .. } => Some(candidates),
             _ => None,
+        }
+    }
+
+    /// **How many things this pick has to offer** — `None` for a mode that is not a pick.
+    ///
+    /// **Exhaustive on purpose — no wildcard**, for the reason
+    /// [`awaits_pick_letter`](Self::awaits_pick_letter) is: a new pick variant that nobody
+    /// classified would answer "not a pick" silently, and its refusal would go back to being
+    /// invisible.
+    pub fn pick_candidate_count(&self) -> Option<usize> {
+        match self {
+            InputMode::PaneSelect { candidates }
+            | InputMode::PaneSwap { candidates, .. }
+            | InputMode::PaneTake { candidates, .. } => Some(candidates.len()),
+            InputMode::WorkspacePick { candidates, .. } => Some(candidates.len()),
+            InputMode::ColumnPick { candidates, .. } => Some(candidates.len()),
+            InputMode::DockPick { candidates } => Some(candidates.len()),
+            InputMode::FollowLink { candidates } => Some(candidates.len()),
+            InputMode::HintPick { candidates } => Some(candidates.len()),
+            InputMode::Normal
+            | InputMode::Prefix
+            | InputMode::Chord { .. }
+            | InputMode::Mode { .. }
+            | InputMode::Selection
+            | InputMode::ConfirmDelete
+            | InputMode::Search => None,
         }
     }
 
@@ -331,6 +374,21 @@ pub enum PickKind {
     MovePaneToColumn,
     /// Pick a chrome container to give keyboard focus to.
     FocusDock,
+}
+
+impl PickKind {
+    /// **What this pick offers, as a word** — so a refusal can say what there was none of without
+    /// each pick carrying its own sentence. The label and prompt still come from the
+    /// [`ActionCatalog`](crate::actions::ActionCatalog); this is the one thing the catalog does not
+    /// know, because it describes what an action *does* rather than what it picks among.
+    pub fn subject(self) -> &'static str {
+        match self {
+            PickKind::SelectPane | PickKind::SwapPane | PickKind::TakePane => "pane",
+            PickKind::MovePaneToWorkspace | PickKind::MoveColumnToWorkspace => "workspace",
+            PickKind::MovePaneToColumn => "column",
+            PickKind::FocusDock => "dock",
+        }
+    }
 }
 
 /// State for the interactive content-area drag (pane moved by mouse).
@@ -592,6 +650,18 @@ fn make_terminal_texture(
     (texture, view)
 }
 
+/// **A menu a widget asked to open, waiting for the host to mount it.**
+///
+/// The menu itself, where it goes, and **who it is about** — the declaring widget's own identity,
+/// carried through so the host's providers can build its entries without a hit test of their own.
+/// `None` when the declarer publishes no identity, which is a contribution: entries that act on app
+/// state rather than on a particular thing.
+pub type PendingMenu = (
+    heca_grid_ui::widgets::ContextMenu,
+    heca_grid_ui::widgets::MenuAnchor,
+    Option<String>,
+);
+
 /// Central application runtime state.
 ///
 /// Holds the winit window, GPU resources, session layout, backends,
@@ -699,6 +769,17 @@ pub struct AppState {
     pub pane_cell_override: HashMap<PaneId, (f32, f32)>,
     pub scale_factor: f64,
     pub needs_redraw: bool,
+    /// **One line of feedback in the bottom bar**, shown until the next keypress.
+    ///
+    /// What a key did when it could not do the thing you asked — a pick with nothing to offer is
+    /// the case it exists for. It goes here rather than into a toast because it is a reply to the
+    /// key you just pressed, not an event: the bar is already where the pick's own prompt appears,
+    /// so the answer and the question share a surface, and nothing covers the work to say it.
+    ///
+    /// Cleared by the next key rather than by a timer. A stale line in a status bar costs nothing —
+    /// unlike a toast, which is why this is not one — and the next thing you do is what makes it
+    /// irrelevant.
+    pub status_note: Option<String>,
     pub focused_pane: Option<PaneId>,
     pub input_mode: InputMode,
     /// **The window root — the one retained tree** (`docs/surface-compositor.md` § 0.8).
@@ -731,6 +812,12 @@ pub struct AppState {
     /// carry one — which is why the pane letters used to be stamped by a host paint pass
     /// (F011/P094/T451).
     pub panes: HashMap<PaneId, crate::chrome::RetainedPane>,
+    /// **Retained per-column trees**, keyed by the column's own id — the box a column occupies in
+    /// the scrolling area, and the identity a pick addresses it by.
+    ///
+    /// The column is what OWNS `col:<id>`; the workspaces dock shows a view of it. Built and placed
+    /// each frame by `chrome::sync_columns` (F003/P082/T474).
+    pub columns: HashMap<heca_core::layout::ColumnId, crate::chrome::RetainedColumn>,
     /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
     /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
     /// trees; this holds runtime-added layers that join the same surface stack. See
@@ -919,6 +1006,8 @@ pub struct AppState {
     pub prefix_entered_at: Option<std::time::Instant>,
     /// The configured prefix key combo (e.g. Ctrl+b).
     pub prefix_combo: crate::keymap::KeyCombo,
+    /// **How long prefix mode waits for the next key** — `[keys] prefix_timeout_ms`.
+    pub prefix_timeout_ms: u64,
     /// Widget keymap (`widget-keys-config`): the single host-owned `[keys.widgets]`-derived map
     /// from a key chord to the semantic [`WidgetIntent`](heca_grid_ui::WidgetIntent)s it triggers.
     /// Every interactive widget/overlay (context menu, palette, `Select`, `Tabs`, `Dialog`,
@@ -933,9 +1022,7 @@ pub struct AppState {
     /// A queue rather than a direct call because the sink is a plain `Fn` installed once at
     /// startup, and inserting a layer needs `&mut AppState`; and rather than an `AppEvent` because
     /// a menu carries closures and a winit user event must be `Send`.
-    pub pending_menus: std::rc::Rc<
-        std::cell::RefCell<Vec<(heca_grid_ui::widgets::ContextMenu, heca_grid_ui::widgets::MenuAnchor)>>,
-    >,
+    pub pending_menus: std::rc::Rc<std::cell::RefCell<Vec<PendingMenu>>>,
     /// **Drops no widget took**, waiting to become moves (F003/P097/T496).
     ///
     /// The twin of [`pending_menus`](Self::pending_menus), for the same reason: a row owns the
@@ -971,9 +1058,7 @@ pub struct AppState {
     pub notification_pick_open: heca_grid_ui::reactive::Signal<bool>,
 }
 
-
 impl AppState {
-
     /// The scrollback search for `pane`, if it has one.
     pub fn search_for(&self, pane: PaneId) -> Option<&SearchState> {
         self.searches.get(&pane)
@@ -1175,6 +1260,52 @@ mod tests {
             .candidates(),
             Some(cands.as_slice())
         );
+    }
+
+    /// **An empty pick is a pick, and must be recognised as one.** This is what decides whether a
+    /// refusal is reported or the key looks unbound: a pick answering `None` here would be treated
+    /// as "not a pick" and go back to failing silently.
+    #[test]
+    fn a_pick_with_nothing_to_offer_still_counts_as_a_pick() {
+        assert_eq!(
+            InputMode::PaneSelect {
+                candidates: Vec::new()
+            }
+            .pick_candidate_count(),
+            Some(0),
+        );
+        assert_eq!(
+            InputMode::WorkspacePick {
+                candidates: Vec::new(),
+                target: WorkspacePickTarget::Pane(PaneId(1)),
+            }
+            .pick_candidate_count(),
+            Some(0),
+        );
+        assert_eq!(
+            InputMode::PaneSelect {
+                candidates: vec![('a', PaneId(1))]
+            }
+            .pick_candidate_count(),
+            Some(1),
+        );
+    }
+
+    /// A mode that is not a pick has no count, so nothing tries to refuse it.
+    #[test]
+    fn a_mode_that_is_not_a_pick_has_no_count() {
+        assert_eq!(InputMode::Normal.pick_candidate_count(), None);
+        assert_eq!(InputMode::Search.pick_candidate_count(), None);
+    }
+
+    /// **Every pick names what it picks among**, so a refusal reads as a sentence rather than a
+    /// generic "nothing found". The words are the user's, not the code's.
+    #[test]
+    fn every_pick_says_what_it_offers() {
+        assert_eq!(PickKind::MovePaneToWorkspace.subject(), "workspace");
+        assert_eq!(PickKind::MovePaneToColumn.subject(), "column");
+        assert_eq!(PickKind::SelectPane.subject(), "pane");
+        assert_eq!(PickKind::FocusDock.subject(), "dock");
     }
 
     #[test]

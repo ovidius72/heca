@@ -140,33 +140,6 @@ pub fn handle_focus_workspace(state: &mut AppState, action: &WmAction) {
 
 // ── Layout ──
 
-/// Announce a freshly created pane — F009/T493, the first real producer on the public
-/// [`Notification`](crate::notification::Notification) builder.
-///
-/// Every user-initiated creation path (horizontal / vertical split, add-to-column, new
-/// workspace, spawn-command) calls this once, so the message and the decision to raise it live
-/// in one place rather than five. A just-spawned pane has no name until the user renames it
-/// (`pane_name` is empty by design), so it is identified by its id — the same monotonic id the
-/// pane selector and RPC use.
-///
-/// Carries a **Focus** action: its [`Intent`](heca_view::Intent) is `focus_pane` keyed to this
-/// id, so a `prefix+/` pick (or a click, once the toast layer is wired for the pointer — F009/
-/// T207) moves focus to the new pane and dismisses the toast.
-fn announce_pane_created(pane_id: u64) {
-    use crate::notification::{Notification, NotificationAction};
-    use heca_view::{Intent, PropValue};
-
-    Notification::info(format!("Pane {pane_id} created"))
-        .action(
-            NotificationAction::new(
-                "Focus",
-                Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane_id as i64)),
-            )
-            .dismiss_after(true),
-        )
-        .send();
-}
-
 pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
     let active_ws = state.session.active_workspace_idx;
     let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
@@ -179,7 +152,6 @@ pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
-    announce_pane_created(next_id);
 }
 
 pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
@@ -201,7 +173,6 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
-    announce_pane_created(next_id);
 }
 
 pub fn handle_resize_increase(state: &mut AppState, _action: &WmAction) {
@@ -745,22 +716,14 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                     } else {
                         ws.scrolling.add_column(
                             None,
-                            Column::new(
-                                new_column_id,
-                                float.pane,
-                                chrome::default_column_width(),
-                            ),
+                            Column::new(new_column_id, float.pane, chrome::default_column_width()),
                             true,
                         );
                     }
                 } else {
                     ws.scrolling.add_column(
                         None,
-                        Column::new(
-                            new_column_id,
-                            float.pane,
-                            chrome::default_column_width(),
-                        ),
+                        Column::new(new_column_id, float.pane, chrome::default_column_width()),
                         true,
                     );
                 }
@@ -841,7 +804,7 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
 /// own identity — the same function and the same remembered map `prefix+/` uses. One assignment
 /// rule for both pickers, which is the whole point of F011/P094/T451.
 fn pane_candidates_with_stable_letters(state: &mut AppState) -> Vec<(char, PaneId)> {
-    let panes: Vec<PaneId> = collect_all_pane_candidates(&state.session)
+    let panes: Vec<PaneId> = collect_all_pane_candidates(&state.session, state.focused_pane)
         .into_iter()
         .map(|(_, id)| id)
         .collect();
@@ -864,29 +827,166 @@ fn pane_candidates_with_stable_letters(state: &mut AppState) -> Vec<(char, PaneI
         .collect()
 }
 
+/// **Start a pick, or say why it cannot start.**
+///
+/// The one door every letter pick goes through. Each handler used to write `if
+/// !candidates.is_empty() { state.input_mode = ..; state.needs_redraw = true; }` for itself — ten
+/// copies of one rule — and the empty case simply fell off the end. `prefix+g` with a single
+/// workspace open did nothing at all: no prompt, no message, no flash, which is indistinguishable
+/// from an unbound key and is exactly how a working feature gets reported as broken.
+///
+/// There is no branch here for a caller to leave out. A handler hands over the mode it wants and
+/// this decides; a pick that has nothing to offer says so, and a plugin's pick gets the same
+/// sentence heca's does with nothing written.
+///
+/// The words come from the [`ActionCatalog`](crate::actions::ActionCatalog), which is the single
+/// source of truth for what an action is called, plus the pick's own
+/// [`subject`](crate::app_state::PickKind::subject) — the one thing the catalog cannot know,
+/// because it describes what an action does rather than what it picks among.
+pub(crate) fn begin_pick(state: &mut AppState, mode: InputMode) {
+    let empty = mode.pick_candidate_count() == Some(0);
+    if !empty {
+        state.input_mode = mode;
+        state.needs_redraw = true;
+        return;
+    }
+    let Some(pending) = mode.pending_pick(&state.action_catalog) else {
+        return;
+    };
+    state.status_note = Some(pick_refusal(&pending));
+    state.needs_redraw = true;
+}
+
+/// **What a pick with nothing to offer says.**
+///
+/// Split out because the app needs a window, so `begin_pick` cannot be called in a test and this is
+/// the half worth asserting. It names the act in the action's own words — the ones the command
+/// palette and the tooltip already use — and then what there was none of.
+///
+/// It goes in the bottom bar, which is where that pick's *prompt* would have appeared, so the
+/// answer lands where the question would have. A toast was tried first and is too much for it: a
+/// key that cannot do its thing is not an event worth covering the work.
+/// **What a key that could not act says** — the act in the action's own words, then why.
+///
+/// The sibling of [`pick_refusal`], for an action that is not a pick. Both exist for one reason: a
+/// key that cannot do its thing is a reply to what you pressed, and saying nothing is
+/// indistinguishable from a keypress that never registered (Antonio, 2026-09-10, on
+/// `move_pane_to_new_column` doing nothing for a pane already alone in its column).
+///
+/// The label comes from the catalog, so the bar names the act exactly as the command palette and
+/// its tooltip do — one vocabulary, never a sentence written at the call site.
+pub(crate) fn act_refusal(
+    catalog: &crate::actions::ActionCatalog,
+    action_name: &str,
+    because: &str,
+) -> String {
+    match catalog.describe(action_name) {
+        Some(d) => format!("{} — {because}", d.label),
+        None => format!("{action_name} — {because}"),
+    }
+}
+
+pub(crate) fn pick_refusal(pending: &crate::app_state::PendingPick) -> String {
+    format!(
+        "{} — there is no other {} to pick",
+        pending.label,
+        pending.kind.subject()
+    )
+}
+
+#[cfg(test)]
+mod act_refusal_tests {
+    use crate::actions::ActionCatalog;
+
+    /// **A key that could not act names the act and why** (Antonio, 2026-09-10: with the pane alone
+    /// in its column "it's not clear" that anything happened).
+    ///
+    /// The words come from the action's own catalog entry, so the bar names it exactly as the
+    /// command palette and its tooltip do — one vocabulary, not a sentence written at the call site.
+    #[test]
+    fn a_refused_act_names_itself_in_the_catalogs_words() {
+        let catalog = ActionCatalog::with_builtins();
+        let note = super::act_refusal(
+            &catalog,
+            "move_pane_to_new_column",
+            "it is already the only pane in its column",
+        );
+        assert_eq!(
+            note,
+            "Move Pane to New Column — it is already the only pane in its column",
+        );
+    }
+
+    /// An action the catalog does not know still says something, rather than an empty bar.
+    #[test]
+    fn an_unknown_action_still_answers() {
+        let catalog = ActionCatalog::with_builtins();
+        let note = super::act_refusal(&catalog, "plugin.something", "there is nowhere to put it");
+        assert_eq!(note, "plugin.something — there is nowhere to put it");
+    }
+}
+
+#[cfg(test)]
+mod pick_refusal_tests {
+    use crate::actions::ActionCatalog;
+    use crate::app_state::InputMode;
+
+    /// **A refused pick says which act it was and what there was none of.**
+    ///
+    /// The words come from the action's own catalog entry, so the bar names the act exactly as the
+    /// command palette and its tooltip do — one vocabulary, not a sentence written here.
+    #[test]
+    fn a_refused_pick_names_the_act_and_what_was_missing() {
+        let catalog = ActionCatalog::with_builtins();
+        let mode = InputMode::WorkspacePick {
+            candidates: Vec::new(),
+            target: crate::app_state::WorkspacePickTarget::Pane(heca_core::layout::PaneId(1)),
+        };
+        let pending = mode
+            .pending_pick(&catalog)
+            .expect("a workspace pick is a pick");
+        let note = super::pick_refusal(&pending);
+
+        assert!(
+            note.contains("workspace"),
+            "it must say what there was none of, not just that something failed: {note}",
+        );
+        assert!(
+            note.contains(&pending.label),
+            "and name the act in the catalog's words: {note}",
+        );
+    }
+
+    /// The pane picks say "pane", so the sentence is about what you were choosing among rather than
+    /// a generic "nothing found".
+    #[test]
+    fn a_pane_pick_says_pane() {
+        let catalog = ActionCatalog::with_builtins();
+        let mode = InputMode::PaneSelect {
+            candidates: Vec::new(),
+        };
+        let pending = mode.pending_pick(&catalog).expect("a pane pick is a pick");
+        assert!(super::pick_refusal(&pending).contains("pane"));
+    }
+}
+
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         focus_navigable_dock(state);
         return;
     }
     let candidates = pane_candidates_with_stable_letters(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneSelect { candidates };
-        state.needs_redraw = true;
-    }
+    begin_pick(state, InputMode::PaneSelect { candidates });
 }
 
 pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) {
     let candidates = crate::app::terminal_host::collect_link_hints(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::FollowLink { candidates };
-        state.needs_redraw = true;
-    }
+    begin_pick(state, InputMode::FollowLink { candidates });
 }
 
 /// Enter the universal picker (`prefix+/`): assign a letter to every region on screen that said
 /// what a pick does to it (document order) and show a keycap over each; the next keypress runs that
-/// region's declaration. No-ops if nothing on screen declares one.
+/// region's declaration. Says so when nothing on screen declares one.
 /// **Hand out the letters, giving each target back the one it had last time** (F003/P082/T445).
 ///
 /// `identities` is one entry per target, in document order — `None` for a target with no identity to
@@ -908,27 +1008,48 @@ pub(crate) fn assign_letters(
     identities: &[Option<String>],
     remembered: &std::collections::HashMap<String, char>,
 ) -> Vec<Option<char>> {
-    let mut out: Vec<Option<char>> = vec![None; identities.len()];
-    let mut taken: std::collections::HashSet<char> = std::collections::HashSet::new();
+    use std::collections::{HashMap, HashSet};
+    let mut taken: HashSet<char> = HashSet::new();
+    // **One letter per NAME, not per target.** A pane in the scrolling area and its sidebar row are
+    // two views of one pane, so they answer to one name and must wear one letter — two would ask
+    // you to pick which picture of the same thing you meant, and would burn the alphabet twice as
+    // fast, which is what forces uppercase.
+    let mut chosen: HashMap<&str, char> = HashMap::new();
 
-    for (i, id) in identities.iter().enumerate() {
-        if let Some(id) = id
-            && let Some(&ch) = remembered.get(id)
+    // 1. Every name that had a letter and is still here keeps it.
+    for id in identities.iter().flatten() {
+        if chosen.contains_key(id.as_str()) {
+            continue;
+        }
+        if let Some(&ch) = remembered.get(id)
             && taken.insert(ch)
         {
-            out[i] = Some(ch);
+            chosen.insert(id, ch);
         }
     }
 
-    // **The gaps, in order.** A target new since last time takes the first letter nobody kept, so
-    // adding one costs one letter rather than renaming everything after it.
+    // 2. The gaps, in order. A name new since last time takes the first letter nobody kept, so
+    //    adding one costs one letter rather than renaming everything after it.
     let mut free = heca_grid_ui::widgets::DEFAULT_LETTERS
         .chars()
         .filter(|c| !taken.contains(c));
-    for slot in out.iter_mut() {
-        if slot.is_none() {
-            *slot = free.next();
-        }
+    let mut out: Vec<Option<char>> = vec![None; identities.len()];
+    for (i, id) in identities.iter().enumerate() {
+        out[i] = match id {
+            Some(id) => match chosen.get(id.as_str()) {
+                Some(&ch) => Some(ch),
+                None => {
+                    let ch = free.next();
+                    if let Some(ch) = ch {
+                        chosen.insert(id, ch);
+                    }
+                    ch
+                }
+            },
+            // A target with no name at all cannot be the same thing as any other, so it takes a
+            // letter of its own.
+            None => free.next(),
+        };
     }
     out
 }
@@ -969,15 +1090,12 @@ pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
             .filter_map(|(id, ch)| Some((id.clone()?, (*ch)?))),
     );
 
-    if !candidates.is_empty() {
-        // **Entering the mode is the whole of it.** The letters are handed out by
-        // `sync_offered_letters`, every frame, exactly as every other pick mode's are — so the
-        // rules that live there apply here too: a view that becomes covered loses its letter, and a
-        // withdrawal reaches every view. Handing them out once from here is what left `prefix+/`
-        // outside all of it (F003/P082/T438).
-        state.input_mode = InputMode::HintPick { candidates };
-        state.needs_redraw = true;
-    }
+    // **Entering the mode is the whole of it.** The letters are handed out by
+    // `sync_offered_letters`, every frame, exactly as every other pick mode's are — so the rules
+    // that live there apply here too: a view that becomes covered loses its letter, and a
+    // withdrawal reaches every view. Handing them out once from here is what left `prefix+/`
+    // outside all of it.
+    begin_pick(state, InputMode::HintPick { candidates });
 }
 
 pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
@@ -986,13 +1104,13 @@ pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
         return;
     }
     let candidates = pane_candidates_with_stable_letters(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneSwap {
+    begin_pick(
+        state,
+        InputMode::PaneSwap {
             candidates,
             focus_after: false,
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
@@ -1001,18 +1119,18 @@ pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
         return;
     }
     let candidates = pane_candidates_with_stable_letters(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneSwap {
+    begin_pick(
+        state,
+        InputMode::PaneSwap {
             candidates,
             focus_after: true,
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 /// Enter the "move active column → workspace" letter pick: assign a letter to each
 /// workspace (shown as a `KeyHint` over its dock); the next keypress moves the active
-/// column into that workspace. No-ops if there are no workspaces.
+/// column into that workspace. Says so when there is no other workspace.
 pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAction) {
     let ws_idx = state.session.active_workspace_idx;
     let col_idx = state
@@ -1021,47 +1139,77 @@ pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAc
         .map(|ws| ws.scrolling.active_column_idx)
         .unwrap_or(0);
     let candidates = crate::app::selection::collect_workspace_candidates(&state.session);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::WorkspacePick {
+    begin_pick(
+        state,
+        InputMode::WorkspacePick {
             candidates,
             target: WorkspacePickTarget::Column { ws_idx, col_idx },
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 /// Enter the "move active pane → workspace" letter pick (see
-/// [`handle_move_column_to_workspace_pick`]). No-ops without a focused pane.
+/// [`handle_move_column_to_workspace_pick`]). Does nothing without a focused pane.
 pub fn handle_move_pane_to_workspace_pick(state: &mut AppState, _action: &WmAction) {
     let Some(pane_id) = state.focused_pane else {
         return;
     };
     let candidates = crate::app::selection::collect_workspace_candidates(&state.session);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::WorkspacePick {
+    begin_pick(
+        state,
+        InputMode::WorkspacePick {
             candidates,
             target: WorkspacePickTarget::Pane(pane_id),
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 /// Enter the "move active pane → column" letter pick: assign a letter to each column
 /// in the active workspace (shown as a `KeyHint` over its sidebar column); the next
 /// keypress moves the active pane into that column (stacking with its panes). No-ops
 /// without a focused pane or columns.
+/// **Take the focused pane out of its column into a new one, right of it.**
+///
+/// The layout change itself lives in `heca-core`'s scrolling space, reached through
+/// [`move_pane_to_new_column`](crate::app::mutations::move_pane_to_new_column) — this handler
+/// computes no geometry, the same way every other structural action works.
+pub fn handle_move_pane_to_new_column(state: &mut AppState, _action: &WmAction) {
+    let Some(pane_id) = state.focused_pane else {
+        return;
+    };
+    if crate::app::mutations::move_pane_to_new_column(state, pane_id) {
+        after_layout_change(state);
+        return;
+    }
+    // It is already the only pane in its column: it would leave a column of one and land in a
+    // column of one. Say so rather than looking like a key that did not register.
+    state.status_note = Some(act_refusal(
+        &state.action_catalog,
+        "move_pane_to_new_column",
+        "it is already the only pane in its column",
+    ));
+    state.needs_redraw = true;
+}
+
 pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction) {
     let Some(pane_id) = state.focused_pane else {
         return;
     };
-    let candidates = crate::app::selection::collect_column_candidates(&state.session);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::ColumnPick {
+    // The column this pane is already in is not a destination — moving it there does nothing.
+    let here = crate::app::selection::column_of_pane(&state.session, pane_id);
+    // **A new column is offered only when it would change something.** A pane alone in its column
+    // moved into a fresh one leaves the strip exactly as it was, so it is not offered rather than
+    // refused after the letter is pressed — the rule Part B already settled.
+    let offer_new = crate::app::selection::column_of_pane_has_siblings(&state.session, pane_id);
+    let candidates =
+        crate::app::selection::collect_column_candidates(&state.session, here, offer_new);
+    begin_pick(
+        state,
+        InputMode::ColumnPick {
             candidates,
             pane_id,
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 /// **Move a mounted container's cursor to the row named by `key`** — the generic form of a click
@@ -1246,7 +1394,11 @@ fn enter_column_rename(state: &mut AppState, ws_idx: usize, col_idx: usize) {
                 .unwrap_or_else(|| format!("Column {}", col_idx + 1))
         })
         .unwrap_or_default();
-    open_rename_dialog(state, RenameTarget::Column { ws_idx, col_idx }, current_name);
+    open_rename_dialog(
+        state,
+        RenameTarget::Column { ws_idx, col_idx },
+        current_name,
+    );
 }
 
 pub fn handle_rename_column(state: &mut AppState, _action: &WmAction) {
@@ -1375,7 +1527,6 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
-    announce_pane_created(next_id);
 }
 
 /// Add a new column to a specific workspace (sidebar right-click context menu).
@@ -1492,13 +1643,13 @@ pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) {
         return;
     }
     let candidates = pane_candidates_with_stable_letters(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneTake {
+    begin_pick(
+        state,
+        InputMode::PaneTake {
             candidates,
             focus_after: false,
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) {
@@ -1507,13 +1658,13 @@ pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) {
         return;
     }
     let candidates = pane_candidates_with_stable_letters(state);
-    if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneTake {
+    begin_pick(
+        state,
+        InputMode::PaneTake {
             candidates,
             focus_after: true,
-        };
-        state.needs_redraw = true;
-    }
+        },
+    );
 }
 
 /// Move a pane from wherever it is to the bottom of the active column.
@@ -1652,7 +1803,6 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
         state.expose_cursor_per_ws.push(None);
     }
     after_layout_change(state);
-    announce_pane_created(next_id);
 }
 
 /// Open the rename dialog for workspace `ws_idx`, pre-filled with its current name. Shared by
@@ -1771,7 +1921,11 @@ pub fn handle_clear_search_history(state: &mut AppState, action: &WmAction) {
         WmAction::ClearSearchHistory { scope } => scope.clone(),
         _ => None,
     };
-    crate::search_state::forget(state, scope.as_deref(), crate::search_state::Forget::Queries);
+    crate::search_state::forget(
+        state,
+        scope.as_deref(),
+        crate::search_state::Forget::Queries,
+    );
 }
 
 /// Forget the usage counts that rank a search surface's list.
@@ -1780,7 +1934,11 @@ pub fn handle_clear_search_ranking(state: &mut AppState, action: &WmAction) {
         WmAction::ClearSearchRanking { scope } => scope.clone(),
         _ => None,
     };
-    crate::search_state::forget(state, scope.as_deref(), crate::search_state::Forget::Ranking);
+    crate::search_state::forget(
+        state,
+        scope.as_deref(),
+        crate::search_state::Forget::Ranking,
+    );
 }
 
 /// What a request aimed at the dock `mount` should do, given who holds the keyboard.
@@ -1853,11 +2011,7 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
     let candidates = crate::chrome::dock_candidates(&state.chrome_host, |region| {
         crate::chrome::region_on_screen(state, region)
     });
-    if candidates.is_empty() {
-        return;
-    }
-    state.input_mode = InputMode::DockPick { candidates };
-    state.needs_redraw = true;
+    begin_pick(state, InputMode::DockPick { candidates });
 }
 
 /// **Focus a dock, or give the keyboard back if it already has it** — one key in and out.
@@ -1926,11 +2080,7 @@ fn current_tiled_column_target(state: &AppState) -> Option<(usize, usize)> {
 /// body / buttons / dismissibility come from the spec. On resolve, [`run_outcome`] runs the chosen
 /// button's [`Outcome`](crate::actions::Outcome). `resume_sidebar` picks the mode to return to;
 /// `InputMode::ConfirmDelete` is set purely as a status-bar marker (the modal layer owns input).
-fn open_confirm(
-    state: &mut AppState,
-    spec: crate::actions::ConfirmSpec,
-    resolved: WmAction,
-) {
+fn open_confirm(state: &mut AppState, spec: crate::actions::ConfirmSpec, resolved: WmAction) {
     use crate::actions::ButtonRole;
     let title = confirm_title(state, &resolved);
     let danger_panel = spec.buttons.iter().any(|b| b.role == ButtonRole::Danger);
@@ -2167,7 +2317,11 @@ pub(crate) fn apply_ws_collapse(state: &mut AppState, ws_idx: usize, collapse: O
         .chrome_state
         .workspaces
         .with_collapsed_ws(|s| s.clone());
-    state.chrome_state.workspaces.tree_mut().apply_ws_collapsed(&set, Some(ws_idx));
+    state
+        .chrome_state
+        .workspaces
+        .tree_mut()
+        .apply_ws_collapsed(&set, Some(ws_idx));
 }
 
 pub fn handle_collapse_current_workspace(state: &mut AppState, _action: &WmAction) {
@@ -2198,7 +2352,11 @@ pub fn handle_collapse_current_column(state: &mut AppState, _action: &WmAction) 
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return;
     };
-    state.chrome_state.workspaces.tree_mut().collapse_column(ws_idx, col_idx);
+    state
+        .chrome_state
+        .workspaces
+        .tree_mut()
+        .collapse_column(ws_idx, col_idx);
     state.needs_redraw = true;
 }
 
@@ -2206,7 +2364,11 @@ pub fn handle_expand_current_column(state: &mut AppState, _action: &WmAction) {
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return;
     };
-    state.chrome_state.workspaces.tree_mut().expand_column(ws_idx, col_idx);
+    state
+        .chrome_state
+        .workspaces
+        .tree_mut()
+        .expand_column(ws_idx, col_idx);
     state.needs_redraw = true;
 }
 
@@ -2214,7 +2376,11 @@ pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &Wm
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return;
     };
-    state.chrome_state.workspaces.tree_mut().toggle_column_collapsed(ws_idx, col_idx);
+    state
+        .chrome_state
+        .workspaces
+        .tree_mut()
+        .toggle_column_collapsed(ws_idx, col_idx);
     state.needs_redraw = true;
 }
 
@@ -2266,7 +2432,9 @@ pub fn handle_layer_visibility(state: &mut AppState, action: &WmAction) {
     if show != Some(false) {
         crate::chrome::rebuild_named_layer(state, name);
     }
-    let Some(id) = state.layers.by_name(name) else { return };
+    let Some(id) = state.layers.by_name(name) else {
+        return;
+    };
     let show = show.unwrap_or(!state.layers.is_visible_named(&state.window_root, name));
     match show {
         true => state.layers.show(&mut state.window_root, id),
@@ -2348,7 +2516,6 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     }
     state.backends.insert_for_pane(PaneId(next_id), backend);
     after_layout_change(state);
-    announce_pane_created(next_id);
 }
 
 // ── Mode ──
@@ -2537,11 +2704,15 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
     // or start a new selection without the Q5 snap-to-bottom triggering.
     if let Some(active) = state.selection.active()
         && let SelectionRegion::HostGrid {
-            focus_stable_row, focus_col, ..
+            focus_stable_row,
+            focus_col,
+            ..
         } = &active.region
     {
         let owner = active.owner;
-        state.selection.set_caret(owner, *focus_stable_row, *focus_col);
+        state
+            .selection
+            .set_caret(owner, *focus_stable_row, *focus_col);
     } else {
         state.selection.clear();
     }
@@ -2595,13 +2766,16 @@ pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
 /// Get the approximate viewport page size for the focused terminal pane, in rows.
 /// Falls back to a sensible default (24) when no snapshot is available.
 fn focused_terminal_page_rows(state: &AppState) -> usize {
-    state.focused_pane.and_then(|pane_id| {
-        state
-            .backends
-            .get(pane_id)
-            .and_then(|b| b.terminal_snapshot())
-            .map(|s| s.rows)
-    }).unwrap_or(24)
+    state
+        .focused_pane
+        .and_then(|pane_id| {
+            state
+                .backends
+                .get(pane_id)
+                .and_then(|b| b.terminal_snapshot())
+                .map(|s| s.rows)
+        })
+        .unwrap_or(24)
 }
 
 pub fn handle_scrollback_page_up(state: &mut AppState, _action: &WmAction) {
@@ -2690,12 +2864,15 @@ pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) {
             .get(pane_id)
             .and_then(|b| b.terminal_snapshot())
     {
-        let cursor_stable =
-            snapshot.viewport_top_stable_row + snapshot.cursor.row as isize;
+        let cursor_stable = snapshot.viewport_top_stable_row + snapshot.cursor.row as isize;
         if state.selection.is_caret() {
-            state.selection.move_caret(cursor_stable, snapshot.cursor.col);
+            state
+                .selection
+                .move_caret(cursor_stable, snapshot.cursor.col);
         } else {
-            state.selection.update_focus(cursor_stable, snapshot.cursor.col);
+            state
+                .selection
+                .update_focus(cursor_stable, snapshot.cursor.col);
         }
     }
     state.needs_redraw = true;
@@ -2869,7 +3046,9 @@ pub fn handle_notification_dismiss_one(state: &mut AppState, action: &WmAction) 
         return;
     };
     let id = crate::notification::NotificationId::from_raw(*notification_id);
-    state.notifications.dismiss_one(id, std::time::Instant::now());
+    state
+        .notifications
+        .dismiss_one(id, std::time::Instant::now());
     state.needs_redraw = true;
 }
 
@@ -2900,11 +3079,18 @@ pub fn handle_notification_pick(state: &mut AppState, _action: &WmAction) {
 /// chrome::notification_layer) into the notification's real `Intent` and fire it through the
 /// same layer_emitter the mount built, landing on the event loop's next turn.
 pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction) {
-    let WmAction::NotificationActionRelay { notification_id, key } = action else {
+    let WmAction::NotificationActionRelay {
+        notification_id,
+        key,
+    } = action
+    else {
         return;
     };
     let id = crate::notification::NotificationId::from_raw(*notification_id);
-    let Some((intent, dismiss_after)) = state.notifications.action_and_dismiss_after_for_visible(id, key) else {
+    let Some((intent, dismiss_after)) = state
+        .notifications
+        .action_and_dismiss_after_for_visible(id, key)
+    else {
         return;
     };
     // Fired **as the stack**, so the relayed intent is judged exactly as the click that asked for
@@ -2915,7 +3101,9 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
     );
     emit.fire(crate::app::interaction::InteractionIntent::View(intent));
     if dismiss_after {
-        state.notifications.dismiss_one(id, std::time::Instant::now());
+        state
+            .notifications
+            .dismiss_one(id, std::time::Instant::now());
         state.needs_redraw = true;
     }
 }
@@ -2964,7 +3152,10 @@ pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) {
 /// terminal output, so we refuse anything that isn't a plain web/file/mail
 /// resource (e.g. no `javascript:` / `data:`).
 fn link_scheme_allowed(url: &str) -> bool {
-    let scheme = url.trim().split_once(':').map(|(s, _)| s.to_ascii_lowercase());
+    let scheme = url
+        .trim()
+        .split_once(':')
+        .map(|(s, _)| s.to_ascii_lowercase());
     matches!(
         scheme.as_deref(),
         Some("http" | "https" | "mailto" | "file" | "ftp" | "ftps")
@@ -3206,10 +3397,17 @@ mod confirm_wording_tests {
             ),
             (
                 "delete_column",
-                WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 },
+                WmAction::DeleteColumn {
+                    ws_idx: 0,
+                    col_idx: 0,
+                },
                 "ws 1",
             ),
-            ("delete_workspace", WmAction::DeleteWorkspace { ws_idx: 0 }, "ws 1"),
+            (
+                "delete_workspace",
+                WmAction::DeleteWorkspace { ws_idx: 0 },
+                "ws 1",
+            ),
         ] {
             let verb = button_verb(&catalog, owner);
             let title = confirm_title_for(&action, target);
@@ -3233,7 +3431,13 @@ mod confirm_wording_tests {
             "Delete notes?",
         );
         assert_eq!(
-            confirm_title_for(&WmAction::DeleteColumn { ws_idx: 0, col_idx: 2 }, "notes"),
+            confirm_title_for(
+                &WmAction::DeleteColumn {
+                    ws_idx: 0,
+                    col_idx: 2
+                },
+                "notes"
+            ),
             "Delete Column?",
             "a column has no name, so it reads as the type word — the same shape as an unnamed pane",
         );
@@ -3274,7 +3478,7 @@ mod open_link_tests {
 
 #[cfg(test)]
 mod dock_focus_tests {
-    use super::{dock_focus_outcome, DockFocus};
+    use super::{DockFocus, dock_focus_outcome};
 
     /// **`FocusDock` only focuses.** Asking to focus the dock that already has the keyboard does
     /// nothing — it does not hand it back.
@@ -3285,23 +3489,41 @@ mod dock_focus_tests {
     /// it, which is a rule in a call site rather than in the model.
     #[test]
     fn focusing_a_dock_that_already_has_the_keyboard_does_nothing() {
-        assert_eq!(dock_focus_outcome(Some("workspaces"), "workspaces", false), DockFocus::Nothing);
+        assert_eq!(
+            dock_focus_outcome(Some("workspaces"), "workspaces", false),
+            DockFocus::Nothing
+        );
     }
 
     /// **`ToggleDock` hands it back** — `prefix+e` in, `prefix+e` out. The toggle belongs to the
     /// gesture: pressing a key again plainly means "undo that", while a click never does.
     #[test]
     fn toggling_a_dock_that_already_has_the_keyboard_gives_it_back() {
-        assert_eq!(dock_focus_outcome(Some("workspaces"), "workspaces", true), DockFocus::Release);
+        assert_eq!(
+            dock_focus_outcome(Some("workspaces"), "workspaces", true),
+            DockFocus::Release
+        );
     }
 
     /// Both take it when the dock does not have it — that half is the same gesture either way.
     #[test]
     fn either_way_a_dock_without_the_keyboard_takes_it() {
-        assert_eq!(dock_focus_outcome(None, "workspaces", false), DockFocus::Take);
-        assert_eq!(dock_focus_outcome(None, "workspaces", true), DockFocus::Take);
-        assert_eq!(dock_focus_outcome(Some("notes"), "workspaces", false), DockFocus::Take);
-        assert_eq!(dock_focus_outcome(Some("notes"), "workspaces", true), DockFocus::Take);
+        assert_eq!(
+            dock_focus_outcome(None, "workspaces", false),
+            DockFocus::Take
+        );
+        assert_eq!(
+            dock_focus_outcome(None, "workspaces", true),
+            DockFocus::Take
+        );
+        assert_eq!(
+            dock_focus_outcome(Some("notes"), "workspaces", false),
+            DockFocus::Take
+        );
+        assert_eq!(
+            dock_focus_outcome(Some("notes"), "workspaces", true),
+            DockFocus::Take
+        );
     }
 }
 
@@ -3352,7 +3574,10 @@ mod letter_memory_tests {
     fn reopening_an_unchanged_screen_gives_the_same_letters() {
         let first = assign_letters(&ids(&["one", "two", "three"]), &HashMap::new());
         let remembered = remember(&[("one", 'a'), ("two", 's'), ("three", 'd')]);
-        assert_eq!(assign_letters(&ids(&["one", "two", "three"]), &remembered), first);
+        assert_eq!(
+            assign_letters(&ids(&["one", "two", "three"]), &remembered),
+            first
+        );
     }
 
     /// A target that has gone releases its letter, and the next newcomer may take it — the memory
@@ -3368,13 +3593,28 @@ mod letter_memory_tests {
         );
     }
 
-    /// A remembered letter is never handed to two targets: whoever asks first keeps it, the other
-    /// takes a free one. Two identical identities are a bug elsewhere, not a reason to double-book.
+    /// **Two views of one thing share its letter.**
+    ///
+    /// A pane in the scrolling area and the sidebar row for that pane are the same pane, so they
+    /// answer to one name. Giving each its own letter asks which picture of the same thing you
+    /// meant, and burns the alphabet twice as fast — which is what pushed the letters into
+    /// uppercase. Offering already puts one letter on every place a name is shown.
     #[test]
-    fn one_letter_never_goes_to_two_targets() {
-        let remembered = remember(&[("dup", 'a')]);
-        let got = assign_letters(&ids(&["dup", "dup"]), &remembered);
-        assert_eq!(got, vec![Some('a'), Some('s')]);
+    fn two_views_of_one_thing_wear_the_same_letter() {
+        let remembered = remember(&[("pane:7", 'a')]);
+        let got = assign_letters(&ids(&["pane:7", "pane:7"]), &remembered);
+        assert_eq!(got, vec![Some('a'), Some('a')]);
+    }
+
+    /// …and a name with no remembered letter still gets one letter for both of its views, not two.
+    #[test]
+    fn two_views_of_a_new_thing_also_share_one_letter() {
+        let got = assign_letters(&ids(&["pane:7", "pane:7", "pane:8"]), &Default::default());
+        assert_eq!(
+            got,
+            vec![Some('a'), Some('a'), Some('s')],
+            "one letter for the pane seen twice, the next letter for the other pane",
+        );
     }
 
     /// **Open the picker, close it, open it again: the same letters.**
@@ -3406,7 +3646,10 @@ mod letter_memory_tests {
         // Esc, then press 2 — nothing about the targets has changed.
         let second = assign_letters(&identities, &remembered);
 
-        assert_eq!(second, first, "a second opening must repeat the first's letters");
+        assert_eq!(
+            second, first,
+            "a second opening must repeat the first's letters"
+        );
     }
 
     /// A target with no identity cannot be remembered, but still gets a letter — it just gets a

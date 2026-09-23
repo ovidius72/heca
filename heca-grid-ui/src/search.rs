@@ -60,7 +60,10 @@ pub struct Caps {
 
 impl Default for Caps {
     fn default() -> Self {
-        Self { history: DEFAULT_HISTORY_CAP, usage: DEFAULT_USAGE_CAP }
+        Self {
+            history: DEFAULT_HISTORY_CAP,
+            usage: DEFAULT_USAGE_CAP,
+        }
     }
 }
 
@@ -124,7 +127,10 @@ pub fn smart_case(query: &str) -> bool {
 pub fn fuzzy(query: &str, text: &str, case_sensitive: bool) -> Option<Match> {
     let q: Vec<char> = query.chars().collect();
     if q.is_empty() {
-        return Some(Match { score: 0, hits: Vec::new() });
+        return Some(Match {
+            score: 0,
+            hits: Vec::new(),
+        });
     }
     let t: Vec<char> = text.chars().collect();
     let norm = |c: char| {
@@ -143,12 +149,7 @@ pub fn fuzzy(query: &str, text: &str, case_sensitive: bool) -> Option<Match> {
 }
 
 /// One greedy walk, pinned to begin at `start`.
-fn match_from(
-    q: &[char],
-    t: &[char],
-    start: usize,
-    norm: &impl Fn(char) -> char,
-) -> Option<Match> {
+fn match_from(q: &[char], t: &[char], start: usize, norm: &impl Fn(char) -> char) -> Option<Match> {
     let mut qi = 0;
     let mut hits = Vec::with_capacity(q.len());
     let mut score = 0i32;
@@ -197,7 +198,11 @@ pub struct Frecency {
 
 impl Default for Frecency {
     fn default() -> Self {
-        Self { uses: HashMap::new(), seq: 0, cap: DEFAULT_USAGE_CAP }
+        Self {
+            uses: HashMap::new(),
+            seq: 0,
+            cap: DEFAULT_USAGE_CAP,
+        }
     }
 }
 
@@ -210,7 +215,10 @@ impl Frecency {
 
     /// An empty table keeping at most `cap` entries.
     pub fn with_cap(cap: usize) -> Self {
-        Self { cap, ..Self::default() }
+        Self {
+            cap,
+            ..Self::default()
+        }
     }
 
     /// How many entries this table keeps.
@@ -222,7 +230,10 @@ impl Frecency {
     pub fn record(&mut self, id: &str) {
         self.seq += 1;
         let seq = self.seq;
-        let entry = self.uses.entry(id.to_string()).or_insert(Use { count: 0, last_seq: seq });
+        let entry = self.uses.entry(id.to_string()).or_insert(Use {
+            count: 0,
+            last_seq: seq,
+        });
         entry.count = entry.count.saturating_add(1);
         entry.last_seq = seq;
         self.prune();
@@ -242,7 +253,9 @@ impl Frecency {
 
     /// Every entry, for the host that persists this.
     pub fn entries(&self) -> impl Iterator<Item = (&str, u32, u64)> {
-        self.uses.iter().map(|(id, u)| (id.as_str(), u.count, u.last_seq))
+        self.uses
+            .iter()
+            .map(|(id, u)| (id.as_str(), u.count, u.last_seq))
     }
 
     /// The current use-sequence — persisted with the entries, or recency resets on restart.
@@ -274,8 +287,11 @@ impl Frecency {
         if self.uses.len() <= self.cap {
             return;
         }
-        let mut ranked: Vec<(String, i32)> =
-            self.uses.keys().map(|id| (id.clone(), self.boost(id))).collect();
+        let mut ranked: Vec<(String, i32)> = self
+            .uses
+            .keys()
+            .map(|id| (id.clone(), self.boost(id)))
+            .collect();
         ranked.sort_by_key(|(_, boost)| *boost);
         for (id, _) in ranked.into_iter().take(self.uses.len() - self.cap) {
             self.uses.remove(&id);
@@ -296,7 +312,12 @@ pub struct History {
 
 impl Default for History {
     fn default() -> Self {
-        Self { cap: DEFAULT_HISTORY_CAP, entries: Vec::new(), cursor: None, draft: None }
+        Self {
+            cap: DEFAULT_HISTORY_CAP,
+            entries: Vec::new(),
+            cursor: None,
+            draft: None,
+        }
     }
 }
 
@@ -308,7 +329,10 @@ impl History {
 
     /// An empty history keeping at most `cap` queries.
     pub fn with_cap(cap: usize) -> Self {
-        Self { cap, ..Self::default() }
+        Self {
+            cap,
+            ..Self::default()
+        }
     }
 
     /// How many queries this history keeps.
@@ -378,7 +402,12 @@ impl History {
         let mut entries: Vec<String> = entries.into_iter().collect();
         let overflow = entries.len().saturating_sub(cap);
         entries.drain(..overflow);
-        Self { cap, entries, cursor: None, draft: None }
+        Self {
+            cap,
+            entries,
+            cursor: None,
+            draft: None,
+        }
     }
 }
 
@@ -411,7 +440,10 @@ impl SearchStore {
 
     /// An empty store remembering `caps` much per scope.
     pub fn with_caps(caps: Caps) -> Self {
-        Self { caps, ..Self::default() }
+        Self {
+            caps,
+            ..Self::default()
+        }
     }
 
     /// How much this store remembers per scope.
@@ -422,10 +454,12 @@ impl SearchStore {
     /// One scope's memory, created empty on first use — with this store's caps.
     pub fn scope_mut(&mut self, scope: &str) -> &mut Scope {
         let caps = self.caps;
-        self.scopes.entry(scope.to_string()).or_insert_with(|| Scope {
-            history: History::with_cap(caps.history),
-            frecency: Frecency::with_cap(caps.usage),
-        })
+        self.scopes
+            .entry(scope.to_string())
+            .or_insert_with(|| Scope {
+                history: History::with_cap(caps.history),
+                frecency: Frecency::with_cap(caps.usage),
+            })
     }
 
     /// Bumped every time something is recorded.
@@ -539,7 +573,11 @@ impl SearchModel {
     /// The store is shared and outlives the widget deliberately: a palette is rebuilt every time it
     /// opens, and a memory that died with the widget would remember nothing.
     pub fn new(scope: impl Into<String>, store: Rc<RefCell<SearchStore>>) -> Self {
-        Self { scope: scope.into(), store, case: MatchCase::default() }
+        Self {
+            scope: scope.into(),
+            store,
+            case: MatchCase::default(),
+        }
     }
 
     /// How the query's case is treated — the user's preference, not the widget's.
@@ -553,7 +591,11 @@ impl SearchModel {
     /// What a surface with several modes uses: one palette listing actions, panes and workspaces
     /// keeps three separate memories, and switching mode is switching which one it consults.
     pub fn with_scope(&self, scope: impl Into<String>) -> Self {
-        Self { scope: scope.into(), store: self.store.clone(), case: self.case }
+        Self {
+            scope: scope.into(),
+            store: self.store.clone(),
+            case: self.case,
+        }
     }
 
     /// Which scope this model reads and writes.
@@ -596,7 +638,11 @@ impl SearchModel {
                     (Some(id), Some(f)) => f.boost(id),
                     _ => 0,
                 };
-                Some(Ranked { index, score: m.score + boost, hits: m.hits })
+                Some(Ranked {
+                    index,
+                    score: m.score + boost,
+                    hits: m.hits,
+                })
             })
             .collect();
         // Stable: within equal scores the caller's own order survives.
@@ -623,7 +669,11 @@ impl SearchModel {
 
     /// An ordinary keystroke: the walk is over, and the field is the user's again.
     pub fn query_changed(&mut self) {
-        self.store.borrow_mut().scope_mut(&self.scope).history.reset();
+        self.store
+            .borrow_mut()
+            .scope_mut(&self.scope)
+            .history
+            .reset();
     }
 
     /// Something ran: remember the query as typed, and the chosen id if it has one.
@@ -672,7 +722,11 @@ mod tests {
     #[test]
     fn the_best_alignment_wins_not_the_first_one() {
         let m = fuzzy("left", "Toggle Left Sidebar", false).expect("it matches");
-        assert_eq!(m.hits, vec![7, 8, 9, 10], "the word Left, not letters out of Toggle");
+        assert_eq!(
+            m.hits,
+            vec![7, 8, 9, 10],
+            "the word Left, not letters out of Toggle"
+        );
         // And that reading scores strictly better than the scattered one a greedy pass would take.
         let scattered = super::match_from(
             &"left".chars().collect::<Vec<_>>(),
@@ -681,7 +735,12 @@ mod tests {
             &|c: char| c.to_ascii_lowercase(),
         )
         .expect("the scattered reading exists");
-        assert!(m.score > scattered.score, "{} vs {}", m.score, scattered.score);
+        assert!(
+            m.score > scattered.score,
+            "{} vs {}",
+            m.score,
+            scattered.score
+        );
     }
 
     #[test]
@@ -697,7 +756,10 @@ mod tests {
     fn the_case_mode_is_the_users_choice() {
         let items = [((), "Git Push")];
         let hit = |case: MatchCase, q: &str| {
-            !SearchModel::detached("s").case(case).rank(&items, q, |i| (None, i.1)).is_empty()
+            !SearchModel::detached("s")
+                .case(case)
+                .rank(&items, q, |i| (None, i.1))
+                .is_empty()
         };
         // Smart: lowercase finds anything; reaching for Shift is how you say you meant it.
         assert!(hit(MatchCase::Smart, "git"));
@@ -733,7 +795,10 @@ mod tests {
             g.record(&format!("filler{i}"));
         }
         g.record("new");
-        assert!(g.boost("new") > g.boost("old"), "recency separates equal counts");
+        assert!(
+            g.boost("new") > g.boost("old"),
+            "recency separates equal counts"
+        );
     }
 
     /// **A second use outranks a single more-recent one.** The boundary a user actually notices, and
@@ -770,7 +835,10 @@ mod tests {
         for _ in 0..50 {
             model.record_run("", Some("much_used"));
         }
-        let items = [("much_used", "Zoom Out Everything"), ("close", "Close Pane")];
+        let items = [
+            ("much_used", "Zoom Out Everything"),
+            ("close", "Close Pane"),
+        ];
         let ranked = model.rank(&items, "close", |i| (Some(i.0), i.1));
         assert_eq!(
             items[ranked[0].index].0, "close",
@@ -799,11 +867,19 @@ mod tests {
         h.push("close");
         h.push("close");
         h.push("split");
-        assert_eq!(h.entries(), ["close", "split"], "empty and repeats are not remembered");
+        assert_eq!(
+            h.entries(),
+            ["close", "split"],
+            "empty and repeats are not remembered"
+        );
 
         assert_eq!(h.older(""), Some("split"));
         assert_eq!(h.older(""), Some("close"));
-        assert_eq!(h.older(""), Some("close"), "the oldest is a wall, not a loop");
+        assert_eq!(
+            h.older(""),
+            Some("close"),
+            "the oldest is a wall, not a loop"
+        );
     }
 
     /// Walking back down past the newest restores **what the user was typing**, not the last entry.
@@ -868,7 +944,11 @@ mod tests {
         );
 
         assert!(store.borrow_mut().clear_ranking(Some("command")));
-        assert_eq!(m.rank(&items, "", |i| (Some(i.0), i.1))[0].score, 0, "and now it does not");
+        assert_eq!(
+            m.rank(&items, "", |i| (Some(i.0), i.1))[0].score,
+            0,
+            "and now it does not"
+        );
 
         // Nothing left to forget is not an error, and reports honestly.
         assert!(!store.borrow_mut().clear_history(Some("command")));
@@ -906,5 +986,3 @@ mod tests {
         );
     }
 }
-
-

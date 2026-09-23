@@ -17,19 +17,18 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
-use heca_grid_ui::widgets::{Menu, MenuAnchor, MenuItem, ContextMenu};
+use heca_grid_ui::reactive::{SignalGet, SignalUpdate, create_effect};
+use heca_grid_ui::widgets::{ContextMenu, Menu, MenuAnchor};
 use heca_grid_ui::{Button, ButtonVariant, Component, ComponentExt as _, Dialog, Point};
 
-use heca_view::{PropMap, ViewNode, WidgetKind};
-use super::{ChromeIntentEmitter, ContextTarget, FormBindings, LayerId, LayerKind};
-use crate::host::App;
-use crate::providers::ChromeCtx;
+use super::{ChromeIntentEmitter, FormBindings, LayerId, LayerKind};
 use crate::actions::ActionRegistry;
 use crate::app::interaction::{InteractionIntent, InteractionSource};
-use heca_view::Intent;
 use crate::app_state::AppState;
+use crate::host::App;
 use crate::input::WmAction;
+use crate::providers::ChromeCtx;
+use heca_view::{PropMap, ViewNode, WidgetKind};
 
 /// Opaque, stable id for an open overlay — the same value as its backing
 /// [`LayerId`](super::LayerId). Public because [`WmAction`] carries it (an action targets a
@@ -167,7 +166,7 @@ pub(crate) fn top_modal(state: &AppState) -> Option<OverlayId> {
 }
 
 /// Is the tiled area covered by an overlay? The one input `Domain::Overlay` needs
-/// (F003/P086/T371) — see [`DynamicLayer::covers_content`](crate::chrome::layers::DynamicLayer).
+/// (F003/P086/T371) — see [`DynamicLayer::lock`](crate::chrome::layers::DynamicLayer).
 pub(crate) fn content_covered(state: &AppState) -> bool {
     state.layers.content_covered(&state.window_root)
 }
@@ -201,16 +200,14 @@ pub(crate) fn open_modal(
         &state.action_shortcuts,
         &mut forms,
     );
-    // A modal **covers the tiled area** by definition: it scrims the app and demands a decision,
-    // so nothing may act on the panes behind it (F003/P086/T371). That is the same protection the
-    // router's old blanket "a modal blocks everything" gave, said as a property of the overlay.
+    // **Nothing about the surface is said here.** A `Dialog` locks what is behind it because it is
+    // a dialog, and an open layer holds focus, which IS how it takes the keyboard. Both travel with
+    // the widget, so this path cannot disagree with a dialog raised any other way.
     let parent = state.layers.current();
     state.layers.insert(
         id.0,
         parent,
         LayerKind::OnDemand,
-        true,
-        true,
         root,
         &mut state.window_root,
     );
@@ -228,18 +225,21 @@ pub(crate) fn open_modal(
 /// keeps the node beside the realized tree so a theme reload or a plugin update can re-realize from
 /// the description rather than from whatever the tree has become.
 ///
-/// `parent`, `modal` and `covers_content` are the caller's. `parent` is **what opened this** —
-/// pass `state.layers.current()` for a panel raised from wherever the user is, so it sits above
-/// that surface and goes with it; pass `None` for a surface that belongs to the base context. A
-/// plugin panel over the scrolling area is `covers_content: true` and not modal; a rich dialog is
-/// both. **No occluder is passed** — `active_hint_targets` reads it from the realized tree's
-/// laid-out bounds, which is the invariant this path must not break.
+/// `parent` and `lock` are the caller's. `parent` is **what opened this** — pass
+/// `state.layers.current()` for a panel raised from wherever the user is, so it sits above that
+/// surface and goes with it; pass `None` for a surface that belongs to the base context. A plugin
+/// panel over the scrolling area is `lock: true`.
+///
+/// **Whether it takes the keyboard is not passed**, because it is not a decision anyone makes here:
+/// a surface that wants keys holds focus, so a described overlay that opens takes them by opening,
+/// exactly as a native one does. **No occluder is passed either** — the hint walk reads it from the
+/// realized tree's laid-out bounds, which is the invariant this path must not break.
 pub(crate) fn open_view_layer(
     state: &mut AppState,
+    name: Option<String>,
     parent: Option<LayerId>,
     kind: LayerKind,
-    modal: bool,
-    covers_content: bool,
+    lock: bool,
     node: ViewNode,
 ) -> LayerId {
     // Reserved before the tree is built, because the tree's intent sink names the layer it lives in
@@ -257,10 +257,21 @@ pub(crate) fn open_view_layer(
     // The identity rule's declarative half, said once per description rather than per realize —
     // this node is realized again on every theme reload (F003/P082/T444).
     super::identity::report_unkeyed_description("view layer", &node);
-    let realized = super::realize(&node, &theme, &view_emit, &mut forms);
-    let id = state
-        .layers
-        .add_view(id, parent, kind, modal, covers_content, node, realized, &mut state.window_root);
+    let mut realized = super::realize(&node, &theme, &view_emit, &mut forms);
+    // **The surface declares what it obscures, on itself.** A described overlay says it the same
+    // way a native one does, so the two authoring paths produce the same tree (F003/P097/T499).
+    // A described overlay declares coverage the same way a native one does. Whether it takes
+    // the keyboard is read from the tree, exactly as for a native one.
+    realized.base_mut().lock = lock;
+    let id = state.layers.add_view(
+        id,
+        name,
+        parent,
+        kind,
+        node,
+        realized,
+        &mut state.window_root,
+    );
     state.needs_redraw = true;
     id
 }
@@ -277,60 +288,10 @@ pub(crate) fn collect_form(state: &AppState, overlay: OverlayId) -> PropMap {
         .unwrap_or_default()
 }
 
-/// One entry of a dropdown / context menu. The author supplies id/label/action; the host resolves
-/// the icon from the action registry (`ActionCatalog::icon`) and wires the intent + quick-pick —
-/// the same centralized path as [`ModalAction`], with **no hand-picked glyph and no `prefix+X`
-/// label** (the leader doesn't work while the menu is open; a host-assigned single-letter quick-pick
-/// that *does* work replaces it).
-#[derive(Clone)]
-pub struct DropdownItem {
-    /// Stable id returned in [`ModalResult::Action`]; also the **catalog name** the icon and label
-    /// resolve from — the entry's visual identity (e.g. `"close"`).
-    ///
-    /// It is deliberately **not** the same thing as what the entry runs: a sidebar "Close pane"
-    /// entry has id `close` (so it shows the close icon) but dispatches `close_pane_by_id` with the
-    /// row's pane. Identity and behaviour are separate fields.
-    pub id: String,
-    pub label: String,
-    /// What the entry dispatches when chosen: an [`Intent`] — an action **name + args** — routed
-    /// through the one dispatch door, so the interaction policy and the confirm gate apply exactly
-    /// as they would for a keypress.
-    ///
-    /// An `Intent` rather than a `WmAction` because `WmAction` is a **closed enum**: a plugin cannot
-    /// add a variant, so a menu entry carrying one could only ever run actions heca already has —
-    /// which is precisely what blocked plugin-contributed menus (context-menu-5). A name resolves to
-    /// a built-in *or* to a plugin's own registered action, indifferently.
-    pub intent: Intent,
-    pub danger: bool,
-    pub enabled: bool,
-}
-
-impl DropdownItem {
-    /// An enabled, non-destructive entry whose id is also the action it runs (the common case: the
-    /// entry's catalog identity and its behaviour coincide, e.g. `zoom_column`).
-    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
-        let id = id.into();
-        let intent = Intent::new(id.clone());
-        Self { id, label: label.into(), intent, danger: false, enabled: true }
-    }
-
-    /// An entry whose behaviour differs from its visual identity — the id keeps the icon/label
-    /// (`close`), while the intent carries the action actually run, with its args
-    /// (`close_pane_by_id` + `pane_id`).
-    pub fn with_intent(id: impl Into<String>, label: impl Into<String>, intent: Intent) -> Self {
-        Self { id: id.into(), label: label.into(), intent, danger: false, enabled: true }
-    }
-    /// Tint destructive (red) — the confirm gate still applies on dispatch.
-    pub fn danger(mut self, on: bool) -> Self {
-        self.danger = on;
-        self
-    }
-    /// Enable/disable (a disabled entry is dimmed + unselectable).
-    pub fn enabled(mut self, on: bool) -> Self {
-        self.enabled = on;
-        self
-    }
-}
+// `DropdownItem` lives in `heca-view` now (F003/P097/T501): a menu entry is pure data carrying an
+// `Intent`, and a **described** tree must be able to declare one. Re-exported here so the app-side
+// name a hundred call sites already use keeps working — one type, not a second one beside it.
+pub use heca_view::DropdownItem;
 
 /// A cursor-anchored dropdown / context menu spec — the pointer / `OpenContextMenu` counterpart to
 /// [`ModalSpec`]. A data description a native handler **or** a plugin submits to [`open_dropdown`].
@@ -371,8 +332,6 @@ fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
         id.0,
         parent,
         LayerKind::OnDemand,
-        true,
-        true,
         Box::new(panel),
         &mut state.window_root,
     );
@@ -387,14 +346,25 @@ fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
 /// Plugin entries still merge: a menu that gave itself a [`name`](Menu::name) is offered to the
 /// mounted providers for that name, so "Open in Docker" can still appear on a row a different
 /// component declared. A menu that named itself nothing is simply itself.
-pub(crate) fn present_menu(state: &mut AppState, ctx: ContextMenu, anchor: MenuAnchor) -> OverlayId {
+pub(crate) fn present_menu(
+    state: &mut AppState,
+    ctx: ContextMenu,
+    anchor: MenuAnchor,
+    subject: Option<String>,
+) -> OverlayId {
     let id = OverlayId(state.layers.reserve_id());
     let source = InteractionSource::MouseContent;
     let emit = ChromeIntentEmitter::new(&state.event_proxy, source);
 
     // Rows other components added to this menu — only if it named itself.
     let mut ctx = ctx;
-    ctx.set_menu(merge_contributions(state, ctx.menu().clone(), id, &emit));
+    ctx.set_menu(merge_contributions(
+        state,
+        ctx.menu().clone(),
+        &emit,
+        subject.as_deref(),
+        anchor_point(&anchor),
+    ));
 
     // Choosing an entry runs its own closure; taking the layer down afterwards is the host's, so an
     // item stays a plain closure that knows nothing about overlays. The anchor was chosen by
@@ -416,41 +386,56 @@ pub(crate) fn present_menu(state: &mut AppState, ctx: ContextMenu, anchor: MenuA
 /// Append every mounted provider's rows for the menu's [`name`](Menu::name).
 ///
 /// A menu without a name is closed: it built its own rows and nothing else may add to it.
+/// Where the menu was opened, when a pointer opened it. `None` for a keyboard-opened menu, which
+/// has no cell under it — which is exactly why "Open link" never appears on one.
+fn anchor_point(anchor: &MenuAnchor) -> Option<Point> {
+    match anchor {
+        MenuAnchor::At(p) => Some(*p),
+        _ => None,
+    }
+}
+
 fn merge_contributions(
     state: &mut AppState,
     menu: Menu,
-    id: OverlayId,
     emit: &ChromeIntentEmitter,
+    subject: Option<&str>,
+    at: Option<Point>,
 ) -> Menu {
     let Some(path) = menu.declared_name().map(str::to_string) else {
         return menu;
     };
-    // A contributed row has no per-row payload (that was `about`, dropped 2026-08-07): it acts on
-    // app state, not on the row this menu was opened for.
-    // A contribution carries no row payload — see `ContextTarget::Contribution`. The menu's name
-    // is `path`, passed to `items_for` beside this.
-    let target = ContextTarget::Contribution;
+    // **A menu is opened about something, and the thing says what it is.** The declaring widget's
+    // own identity travels with the menu, so a provider building entries for this menu is told what
+    // it is building them for — rather than the host hit-testing to work it out, which is how a
+    // pane's whole menu ended up hand-written in the mouse handler.
+    //
+    // A menu whose declarer publishes no identity is a contribution like any other: entries that
+    // act on app state rather than on a particular thing.
+    let target = super::context_menu::target_from_subject(state, subject, at);
     let ctx = ChromeCtx::new(App::new(&state.chrome_state));
     let plugin = super::context_menu::plugin_providers_for(&state.chrome_host, &ctx, &path);
     let items = state
         .context_menu_registry
         .items_for(&ctx, &path, &target, plugin);
+    // **The same conversion the declarer's own entries went through** — one door, not a second
+    // one for contributed rows — one conversion, every authoring path.
+    //
+    // What stood here built its rows by hand and wired each to `SubmitOverlay`, which resolves the
+    // overlay and hands the chosen id to a *completion* — and a menu presented from a widget's own
+    // declaration has no completion, because nobody registers one. So contributed rows opened
+    // fine and then did **nothing at all** when chosen, with nothing failing anywhere. It went
+    // unnoticed while contributions were the rare case; the moment a pane's whole menu arrived
+    // this way, every entry in it was dead.
+    //
+    // Going through the one conversion means a contributed row runs **its own intent**, dispatched
+    // by name through the central gate — the same policy and destructive-confirm a keypress gets —
+    // exactly as a row the declarer wrote does.
+    let contributed =
+        super::context_menu::menu_from_items("", "", "", items, &state.action_catalog, emit);
     let mut menu = menu;
-    for item in items {
-        let carrier = InteractionIntent::ActivateAction(WmAction::SubmitOverlay {
-            overlay: id,
-            action: item.id.clone(),
-        });
-        let emit_e = emit.clone();
-        let mut entry = MenuItem::new()
-            .label(item.label.clone())
-            .on_click(move || emit_e.fire(carrier.clone()))
-            .danger(item.danger)
-            .enabled(item.enabled);
-        if let Some(glyph) = state.action_catalog.icon(&item.id) {
-            entry = entry.icon(glyph);
-        }
-        menu = menu.child(entry);
+    for row in contributed.into_items() {
+        menu = menu.child(row);
     }
     menu
 }
@@ -469,14 +454,8 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     // builds the rows and anchors it — but *how a menu is built* must not depend on that, or the
     // two drift: they already had, one with quick-pick keycaps and one without, which is how the
     // same menu came to have two shapes on screen (Antonio, 2026-08-07).
-    let items = super::context_menu::menu_from_items(
-        "",
-        "",
-        "",
-        spec.items,
-        &state.action_catalog,
-        &emit,
-    );
+    let items =
+        super::context_menu::menu_from_items("", "", "", spec.items, &state.action_catalog, &emit);
     let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
     let emit_dismiss = emit.clone();
     let dismiss_close = close.clone();
@@ -493,7 +472,7 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
         // keyboard, so every keybinding was dead until `Escape` (Antonio, 2026-08-07 —
         // "`prefix+>` then float/unfloat makes it unstable, keybindings don't work").
         .after_select(move || emit_after.fire(close.clone()))
-        .open(true);
+        .default_open(true);
 
     // A menu **captures input and demands a choice**, so it covers for policy purposes even though
     // its panel is small: *a modal is an overlay with coverage* (F003/P086/T371). Its own entries
@@ -533,7 +512,7 @@ fn build_modal_root(
         super::identity::report_unkeyed_description("modal body", &spec.body);
         super::realize(&spec.body, theme, &view_emit, forms)
     };
-    let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);
+    let mut dialog = Dialog::new(spec.title.clone()).body(body);
     for action in &spec.actions {
         let variant = if action.danger {
             ButtonVariant::Destructive
@@ -559,9 +538,10 @@ fn build_modal_root(
             create_effect(move |_| disabled.set(sig.get().trim().is_empty()));
         }
         // Tooltip + live shortcut from the action id — the one centralized path. The pick
-        // declaration goes on the wrapper around the button, where the letter is drawn.
+        // declaration goes on the button itself, which is what `on_hint` is for (AGENTS §
+        // 5a): a `KeyHint` wrapper used to carry it, costing the button a second pick target.
         dialog = dialog.action(super::action_tooltip(
-            heca_grid_ui::widgets::KeyHint::new(button).on_hint(hint),
+            button.on_hint(hint),
             &action.id,
             &action.label,
             shortcuts,
@@ -575,7 +555,7 @@ fn build_modal_root(
         dialog
             .dismissible(spec.dismissible)
             .on_dismiss(move || emit_dismiss.fire(close.clone()))
-            .open(true),
+            .default_open(true),
     )
 }
 
@@ -605,10 +585,57 @@ pub(crate) fn resolve(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use heca_view::Intent;
     use heca_view::PropValue;
 
     fn noop_emit() -> ChromeIntentEmitter {
         ChromeIntentEmitter::of(InteractionSource::MouseContent, |_, _| {})
+    }
+
+    /// **A contributed row runs its own action, exactly as a row the declarer wrote does.**
+    /// ⚠️ Ran red against its own bug.
+    ///
+    /// Rows contributed to somebody else's menu used to be built by hand here and wired to
+    /// `SubmitOverlay`, which resolves the overlay and hands the chosen id to a *completion*. A
+    /// menu presented from a widget's own declaration has no completion — nobody registers one —
+    /// so a contributed row opened fine and then did **nothing at all** when chosen, and nothing
+    /// failed anywhere.
+    ///
+    /// It went unnoticed while contributions were the rare case. The moment a pane's whole menu
+    /// arrived this way, every entry in it was dead. This pins that
+    /// the merge goes through the one conversion, so the two kinds of row are wired the same way.
+    #[test]
+    fn a_contributed_row_carries_the_action_it_runs() {
+        let fired = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let sink = fired.clone();
+        let emit = ChromeIntentEmitter::of(InteractionSource::MouseContent, move |_, intent| {
+            if let InteractionIntent::View(i) = intent {
+                sink.borrow_mut().push(i.action.clone());
+            }
+        });
+
+        let menu = crate::chrome::context_menu::menu_from_items(
+            "",
+            "",
+            "",
+            vec![heca_view::DropdownItem::with_intent(
+                "close",
+                "Close pane",
+                Intent::new("close_pane_by_id").arg("pane_id", PropValue::Int(4)),
+            )],
+            &crate::actions::ActionCatalog::default(),
+            &emit,
+        );
+
+        let rows = menu.into_items();
+        assert_eq!(rows.len(), 1, "one entry in, one row out");
+        rows[0].activate();
+        assert_eq!(
+            fired.borrow().as_slice(),
+            &["close_pane_by_id".to_string()],
+            "choosing the row runs the action the entry declared — not an overlay-resolve that \
+             lands on a completion nobody registered",
+        );
     }
 
     #[test]
@@ -618,7 +645,10 @@ mod tests {
         assert_eq!(close.id, "close");
         assert_eq!(close.label, "Close pane");
         assert_eq!(close.intent.action, "close", "id doubles as the action");
-        assert!(close.danger && close.enabled, "danger set, enabled by default");
+        assert!(
+            close.danger && close.enabled,
+            "danger set, enabled by default"
+        );
 
         let disabled = DropdownItem::new("dup", "Duplicate").enabled(false);
         assert!(!disabled.enabled && !disabled.danger);
@@ -668,7 +698,14 @@ mod tests {
                 fired.borrow_mut().push(intent)
             })
         };
-        let mut root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &emit, &shortcuts, &mut FormBindings::default());
+        let mut root = build_modal_root(
+            &spec,
+            id,
+            &heca_grid_ui::Theme::default(),
+            &emit,
+            &shortcuts,
+            &mut FormBindings::default(),
+        );
 
         let targets = heca_grid_ui::collect_hints(root.as_ref());
         assert_eq!(targets.len(), 2, "two actions → two pick targets");
@@ -690,6 +727,59 @@ mod tests {
         let overlay = &root.base().children[0];
         let panel = &overlay.base().children[0];
         assert_eq!(panel.base().children.len(), 3, "title + body + action row");
-        assert_eq!(panel.base().children[2].base().children.len(), 2, "two buttons");
+        assert_eq!(
+            panel.base().children[2].base().children.len(),
+            2,
+            "two buttons"
+        );
+    }
+
+    /// **A modal's action button is one pick target, not two** (docs/hint-architecture.md § 5a).
+    ///
+    /// `on_hint` is on `ComponentExt`, so the `Button` already answers for itself — wrapping it in
+    /// a `KeyHint` used to add a second pick target on top of the button's own actionability, the
+    /// same bug the exposé's pane card had until 2026-09-15. This pins `build_modal_root` to the
+    /// fix: one action button, one target — and that the target IS the button, not a wrapper
+    /// standing in front of it.
+    ///
+    /// The count alone can't catch a reintroduced wrapper: `collect_hints`'s own "one letter per
+    /// thing, not per layer" rule already collapses a transparent `KeyHint` and the single
+    /// actionable child it holds into one target (`heca-grid-ui/src/hint/collect.rs`), so a
+    /// wrapped button and a bare one both report exactly one. What differs is *which node* survives
+    /// — the wrapper's declaration outranks the button's mere actionability, so a reintroduced
+    /// `KeyHint` would make the surviving target the transparent wrapper, not the button.
+    #[test]
+    fn a_modal_button_is_one_pick_target_not_two() {
+        let spec = ModalSpec::message("Delete pane?", "Gone forever.")
+            .action(ModalAction::new("confirm", "Delete").danger(true))
+            .dismissible(false);
+        let id = OverlayId(super::super::LayerRegistry::default().reserve_id());
+        let shortcuts = super::super::ActionShortcuts::default();
+        let emit = noop_emit();
+        let root = build_modal_root(
+            &spec,
+            id,
+            &heca_grid_ui::Theme::default(),
+            &emit,
+            &shortcuts,
+            &mut FormBindings::default(),
+        );
+
+        let targets = heca_grid_ui::collect_hints(root.as_ref());
+        assert_eq!(
+            targets.len(),
+            1,
+            "one action button must be exactly one pick target, not the button plus its wrapper",
+        );
+
+        let mut node: &dyn Component = root.as_ref();
+        for &step in &targets[0].0 {
+            node = node.base().children[step].as_ref();
+        }
+        assert!(
+            !node.base().transparent,
+            "the pick target must be the button itself, not a transparent KeyHint wrapped \
+             around it",
+        );
     }
 }

@@ -28,7 +28,10 @@ pub enum ActionCategory {
     /// Session-level: overview, save, load.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "no session-level actions exist yet; used when overview/save/load land")
+        expect(
+            dead_code,
+            reason = "no session-level actions exist yet; used when overview/save/load land"
+        )
     )]
     Session,
     /// UI chrome: sidebar toggle, tab management.
@@ -50,7 +53,6 @@ impl ActionCategory {
             ActionCategory::System => "System",
         }
     }
-
 }
 
 /// The glyph an action shows when it declares none of its own — **one neutral mark, for every
@@ -110,12 +112,24 @@ pub struct ArgDescriptor {
 impl ArgDescriptor {
     /// An argument the action cannot run without.
     pub const fn required(name: &'static str, kind: ArgKind, description: &'static str) -> Self {
-        Self { name, kind, required: true, description, values: &[] }
+        Self {
+            name,
+            kind,
+            required: true,
+            description,
+            values: &[],
+        }
     }
 
     /// An argument with a default — omitting it is legal, misspelling it is not.
     pub const fn optional(name: &'static str, kind: ArgKind, description: &'static str) -> Self {
-        Self { name, kind, required: false, description, values: &[] }
+        Self {
+            name,
+            kind,
+            required: false,
+            description,
+            values: &[],
+        }
     }
 
     /// A required argument limited to a fixed vocabulary. `values` must list every spelling the
@@ -126,7 +140,13 @@ impl ArgDescriptor {
         values: &'static [&'static str],
         description: &'static str,
     ) -> Self {
-        Self { name, kind: ArgKind::Enum, required: true, description, values }
+        Self {
+            name,
+            kind: ArgKind::Enum,
+            required: true,
+            description,
+            values,
+        }
     }
 
     /// A vocabulary-limited argument with a default.
@@ -135,7 +155,13 @@ impl ArgDescriptor {
         values: &'static [&'static str],
         description: &'static str,
     ) -> Self {
-        Self { name, kind: ArgKind::Enum, required: false, description, values }
+        Self {
+            name,
+            kind: ArgKind::Enum,
+            required: false,
+            description,
+            values,
+        }
     }
 }
 
@@ -199,24 +225,41 @@ impl ArgSpec {
 pub enum ArgProblem {
     /// A name the action does not take. Usually a misspelling of one it does, so the nearest
     /// declared name is offered when there is an obvious one.
-    Unknown { name: String, did_you_mean: Option<String> },
+    Unknown {
+        name: String,
+        did_you_mean: Option<String>,
+    },
     /// A required argument was not supplied. The action cannot be built.
     Missing { name: String },
     /// The value does not read as the declared kind.
-    BadValue { name: String, value: String, expected: String },
+    BadValue {
+        name: String,
+        value: String,
+        expected: String,
+    },
 }
 
 impl std::fmt::Display for ArgProblem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ArgProblem::Unknown { name, did_you_mean: Some(near) } => {
+            ArgProblem::Unknown {
+                name,
+                did_you_mean: Some(near),
+            } => {
                 write!(f, "unknown argument '{name}' — did you mean '{near}'?")
             }
-            ArgProblem::Unknown { name, did_you_mean: None } => {
+            ArgProblem::Unknown {
+                name,
+                did_you_mean: None,
+            } => {
                 write!(f, "unknown argument '{name}'")
             }
             ArgProblem::Missing { name } => write!(f, "missing required argument '{name}'"),
-            ArgProblem::BadValue { name, value, expected } => {
+            ArgProblem::BadValue {
+                name,
+                value,
+                expected,
+            } => {
                 write!(f, "argument '{name}' expected {expected}, got '{value}'")
             }
         }
@@ -245,7 +288,9 @@ pub fn check_args(
                 value: value.clone(),
                 expected: describe_expected(spec),
             }),
-            None if spec.required => problems.push(ArgProblem::Missing { name: spec.name.clone() }),
+            None if spec.required => problems.push(ArgProblem::Missing {
+                name: spec.name.clone(),
+            }),
             _ => {}
         }
     }
@@ -552,7 +597,10 @@ impl ActionRegistry {
     // Used in tests and debugging; kept for future RPC introspection.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "used by tests and reserved for future RPC introspection")
+        expect(
+            dead_code,
+            reason = "used by tests and reserved for future RPC introspection"
+        )
     )]
     pub fn has_handler(&self, action: &crate::input::WmAction) -> bool {
         let disc = crate::input::action_discriminant(action);
@@ -762,8 +810,16 @@ impl ActionRegistry {
             category: ActionCategory::Layout,
             icon: Some(Glyph::FolderSimplePlus),
             args: &[
-                ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace holding the column."),
-                ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to add the pane to."),
+                ArgDescriptor::required(
+                    "ws_idx",
+                    ArgKind::Int,
+                    "Index of the workspace holding the column.",
+                ),
+                ArgDescriptor::required(
+                    "col_idx",
+                    ArgKind::Int,
+                    "Index of the column to add the pane to.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -917,7 +973,11 @@ impl ActionRegistry {
             description: "Move the active pane into the column on the left.",
             category: ActionCategory::Layout,
             icon: Some(Glyph::ArrowLineLeft),
-            args: &[ArgDescriptor::optional("pane_id", ArgKind::Int, "The pane to move; omit for the focused one.")],
+            args: &[ArgDescriptor::optional(
+                "pane_id",
+                ArgKind::Int,
+                "The pane to move; omit for the focused one.",
+            )],
         },
         ActionDescriptor {
             name: "move_pane_right",
@@ -925,7 +985,11 @@ impl ActionRegistry {
             description: "Move the active pane into the column on the right.",
             category: ActionCategory::Layout,
             icon: Some(Glyph::ArrowLineRight),
-            args: &[ArgDescriptor::optional("pane_id", ArgKind::Int, "The pane to move; omit for the focused one.")],
+            args: &[ArgDescriptor::optional(
+                "pane_id",
+                ArgKind::Int,
+                "The pane to move; omit for the focused one.",
+            )],
         },
         ActionDescriptor {
             name: "zoom_column_at_index",
@@ -935,7 +999,11 @@ impl ActionRegistry {
             // Same glyph as `zoom_column`: one act, two ways of naming its target.
             icon: Some(Glyph::FrameCorners),
             args: &[
-                ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace holding the column."),
+                ArgDescriptor::required(
+                    "ws_idx",
+                    ArgKind::Int,
+                    "Index of the workspace holding the column.",
+                ),
                 ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to zoom."),
             ],
         },
@@ -946,7 +1014,11 @@ impl ActionRegistry {
             category: ActionCategory::Layout,
             icon: Some(Glyph::Trash),
             args: &[
-                ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace holding the column."),
+                ArgDescriptor::required(
+                    "ws_idx",
+                    ArgKind::Int,
+                    "Index of the workspace holding the column.",
+                ),
                 ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to delete."),
             ],
         },
@@ -984,7 +1056,11 @@ impl ActionRegistry {
             category: ActionCategory::Pane,
             // Constructed with a URL (mouse/HintKey/selection/menu); no global key.
             icon: Some(Glyph::ArrowRight),
-            args: &[ArgDescriptor::required("url", ArgKind::Text, "The link to open.")],
+            args: &[ArgDescriptor::required(
+                "url",
+                ArgKind::Text,
+                "The link to open.",
+            )],
         },
         ActionDescriptor {
             name: "follow_link",
@@ -1054,6 +1130,14 @@ impl ActionRegistry {
             args: &[],
         },
         ActionDescriptor {
+            name: "move_pane_to_new_column",
+            label: "Move Pane to New Column",
+            description: "Take the active pane out of its column into a new one beside it.",
+            category: ActionCategory::Layout,
+            icon: None,
+            args: &[],
+        },
+        ActionDescriptor {
             name: "rename_pane",
             label: "Rename Pane",
             description: "Rename the active pane/tab.",
@@ -1108,7 +1192,11 @@ impl ActionRegistry {
             description: "Delete a workspace and all its panes (not the last workspace).",
             category: ActionCategory::Workspace,
             icon: Some(Glyph::StackMinus),
-            args: &[ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace to delete.")],
+            args: &[ArgDescriptor::required(
+                "ws_idx",
+                ArgKind::Int,
+                "Index of the workspace to delete.",
+            )],
         },
         // ── Chrome ──
         ActionDescriptor {
@@ -1239,8 +1327,16 @@ impl ActionRegistry {
             category: ActionCategory::Chrome,
             icon: Some(Glyph::ArrowLineRight),
             args: &[
-                ArgDescriptor::required("container_id", ArgKind::Text, "Id of the container to move."),
-                ArgDescriptor::required_enum("region", <crate::chrome::RegionId as crate::input::EnumArg>::VALUES, "The region to move it into."),
+                ArgDescriptor::required(
+                    "container_id",
+                    ArgKind::Text,
+                    "Id of the container to move.",
+                ),
+                ArgDescriptor::required_enum(
+                    "region",
+                    <crate::chrome::RegionId as crate::input::EnumArg>::VALUES,
+                    "The region to move it into.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -1249,7 +1345,11 @@ impl ActionRegistry {
             description: "Move a chrome container into the left sidebar.",
             category: ActionCategory::Chrome,
             icon: Some(Glyph::ArrowLineLeft),
-            args: &[ArgDescriptor::required("container_id", ArgKind::Text, "Id of the container to move.")],
+            args: &[ArgDescriptor::required(
+                "container_id",
+                ArgKind::Text,
+                "Id of the container to move.",
+            )],
         },
         ActionDescriptor {
             name: "chrome.container.move_right_sidebar",
@@ -1257,7 +1357,11 @@ impl ActionRegistry {
             description: "Move a chrome container into the right sidebar.",
             category: ActionCategory::Chrome,
             icon: Some(Glyph::ArrowLineRight),
-            args: &[ArgDescriptor::required("container_id", ArgKind::Text, "Id of the container to move.")],
+            args: &[ArgDescriptor::required(
+                "container_id",
+                ArgKind::Text,
+                "Id of the container to move.",
+            )],
         },
         ActionDescriptor {
             name: "chrome.container.reorder_before",
@@ -1266,8 +1370,16 @@ impl ActionRegistry {
             category: ActionCategory::Chrome,
             icon: None,
             args: &[
-                ArgDescriptor::required("container_id", ArgKind::Text, "Id of the container to move."),
-                ArgDescriptor::optional("before_id", ArgKind::Text, "Id of the container to sit before; omit to move it to the end."),
+                ArgDescriptor::required(
+                    "container_id",
+                    ArgKind::Text,
+                    "Id of the container to move.",
+                ),
+                ArgDescriptor::optional(
+                    "before_id",
+                    ArgKind::Text,
+                    "Id of the container to sit before; omit to move it to the end.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -1277,8 +1389,16 @@ impl ActionRegistry {
             category: ActionCategory::Chrome,
             icon: None,
             args: &[
-                ArgDescriptor::required("container_id", ArgKind::Text, "Id of the container to move."),
-                ArgDescriptor::required("after_id", ArgKind::Text, "Id of the container to sit after."),
+                ArgDescriptor::required(
+                    "container_id",
+                    ArgKind::Text,
+                    "Id of the container to move.",
+                ),
+                ArgDescriptor::required(
+                    "after_id",
+                    ArgKind::Text,
+                    "Id of the container to sit after.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -1440,7 +1560,11 @@ impl ActionRegistry {
             description: "Dismiss a visible notification by id, when its lifecycle permits it.",
             category: ActionCategory::Chrome,
             icon: Some(Glyph::XSquare),
-            args: &[ArgDescriptor::required("id", ArgKind::Int, "The notification's runtime id.")],
+            args: &[ArgDescriptor::required(
+                "id",
+                ArgKind::Int,
+                "The notification's runtime id.",
+            )],
         },
         ActionDescriptor {
             name: "notification_dismiss_all",
@@ -1474,7 +1598,11 @@ impl ActionRegistry {
             icon: None,
             args: &[
                 ArgDescriptor::required("id", ArgKind::Int, "The notification's runtime id."),
-                ArgDescriptor::required("key", ArgKind::Text, "The action's key (its own intent name)."),
+                ArgDescriptor::required(
+                    "key",
+                    ArgKind::Text,
+                    "The action's key (its own intent name).",
+                ),
             ],
         },
         // ── Scrollback (host terminal viewport) ──
@@ -1500,7 +1628,11 @@ impl ActionRegistry {
             description: "Scroll the terminal viewport up by a configurable number of lines (selection mode).",
             category: ActionCategory::Pane,
             icon: None,
-            args: &[ArgDescriptor::optional("amount", ArgKind::Int, "Notches to scroll; each is multiplied by `terminal_wheel_scroll_lines`. Default 1.")],
+            args: &[ArgDescriptor::optional(
+                "amount",
+                ArgKind::Int,
+                "Notches to scroll; each is multiplied by `terminal_wheel_scroll_lines`. Default 1.",
+            )],
         },
         ActionDescriptor {
             name: "scrollback_line_down",
@@ -1508,7 +1640,11 @@ impl ActionRegistry {
             description: "Scroll the terminal viewport down by a configurable number of lines (selection mode).",
             category: ActionCategory::Pane,
             icon: None,
-            args: &[ArgDescriptor::optional("amount", ArgKind::Int, "Notches to scroll; each is multiplied by `terminal_wheel_scroll_lines`. Default 1.")],
+            args: &[ArgDescriptor::optional(
+                "amount",
+                ArgKind::Int,
+                "Notches to scroll; each is multiplied by `terminal_wheel_scroll_lines`. Default 1.",
+            )],
         },
         ActionDescriptor {
             name: "scrollback_to_top",
@@ -1622,7 +1758,11 @@ impl ActionRegistry {
             description: "Jump the terminal viewport to an explicit offset in rows above the live bottom. Used by the GUI scrollbar and RPC; no default keybinding.",
             category: ActionCategory::Pane,
             icon: None,
-            args: &[ArgDescriptor::required("rows", ArgKind::Int, "Rows above the live bottom to jump to.")],
+            args: &[ArgDescriptor::required(
+                "rows",
+                ArgKind::Int,
+                "Rows above the live bottom to jump to.",
+            )],
         },
         // ── Selection (host capability) ──
         ActionDescriptor {
@@ -1737,7 +1877,6 @@ impl ActionRegistry {
             icon: Some(Glyph::CaretDown),
             args: &[],
         },
-
         // Column movement — bound by default, but they had no descriptor at all until
         // action-task-E went looking for actions the catalog could not see.
         ActionDescriptor {
@@ -1756,7 +1895,6 @@ impl ActionRegistry {
             icon: None,
             args: &[],
         },
-
         // ── Actions that name their target (action-task-E) ──
         //
         // These are built by name + arguments through `build_action` — from a `config.toml`
@@ -1773,7 +1911,11 @@ impl ActionRegistry {
             description: "Move focus to a specific pane by id.",
             category: ActionCategory::Navigation,
             icon: None,
-            args: &[ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to focus.")],
+            args: &[ArgDescriptor::required(
+                "pane_id",
+                ArgKind::Int,
+                "The pane to focus.",
+            )],
         },
         ActionDescriptor {
             name: "focus_workspace",
@@ -1781,7 +1923,11 @@ impl ActionRegistry {
             description: "Switch to a specific workspace by index.",
             category: ActionCategory::Navigation,
             icon: None,
-            args: &[ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace to switch to.")],
+            args: &[ArgDescriptor::required(
+                "ws_idx",
+                ArgKind::Int,
+                "Index of the workspace to switch to.",
+            )],
         },
         ActionDescriptor {
             name: "swap",
@@ -1791,7 +1937,11 @@ impl ActionRegistry {
             icon: None,
             args: &[
                 ArgDescriptor::required("a_id", ArgKind::Int, "The first pane."),
-                ArgDescriptor::required("b_id", ArgKind::Int, "The second pane, which takes the first one's place."),
+                ArgDescriptor::required(
+                    "b_id",
+                    ArgKind::Int,
+                    "The second pane, which takes the first one's place.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -1802,7 +1952,11 @@ impl ActionRegistry {
             icon: None,
             args: &[
                 ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to move."),
-                ArgDescriptor::required("target_col", ArgKind::Int, "Index of the column to move it into."),
+                ArgDescriptor::required(
+                    "target_col",
+                    ArgKind::Int,
+                    "Index of the column to move it into.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -1813,7 +1967,11 @@ impl ActionRegistry {
             icon: None,
             args: &[
                 ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to move."),
-                ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the destination workspace."),
+                ArgDescriptor::required(
+                    "ws_idx",
+                    ArgKind::Int,
+                    "Index of the destination workspace.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -1824,8 +1982,16 @@ impl ActionRegistry {
             icon: None,
             args: &[
                 ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to move."),
-                ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the destination workspace."),
-                ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the destination column."),
+                ArgDescriptor::required(
+                    "ws_idx",
+                    ArgKind::Int,
+                    "Index of the destination workspace.",
+                ),
+                ArgDescriptor::required(
+                    "col_idx",
+                    ArgKind::Int,
+                    "Index of the destination column.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -1835,11 +2001,23 @@ impl ActionRegistry {
             category: ActionCategory::Layout,
             icon: None,
             args: &[
-                ArgDescriptor::required("src_ws", ArgKind::Int, "Index of the workspace the column is in."),
+                ArgDescriptor::required(
+                    "src_ws",
+                    ArgKind::Int,
+                    "Index of the workspace the column is in.",
+                ),
                 ArgDescriptor::required("src_col", ArgKind::Int, "Index of the column to move."),
-                ArgDescriptor::required("dst_ws", ArgKind::Int, "Index of the destination workspace."),
+                ArgDescriptor::required(
+                    "dst_ws",
+                    ArgKind::Int,
+                    "Index of the destination workspace.",
+                ),
                 ArgDescriptor::required("dst_idx", ArgKind::Int, "Position to insert it at."),
-                ArgDescriptor::optional("focus", ArgKind::Bool, "Follow the column with focus. Default true."),
+                ArgDescriptor::optional(
+                    "focus",
+                    ArgKind::Bool,
+                    "Follow the column with focus. Default true.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -1862,9 +2040,21 @@ impl ActionRegistry {
             category: ActionCategory::Layout,
             icon: None,
             args: &[
-                ArgDescriptor::required_enum("target", <crate::input::ResizeTarget as crate::input::EnumArg>::VALUES, "What to resize."),
-                ArgDescriptor::required("amount", ArgKind::Float, "How far to move the boundary, and which way: positive is right for a column, down for a pane. A pane's boundary is the one below it, or the one above when it is last — so the divider moves the same way whichever pane is active. Thousandths of the working width for a column; logical pixels for a pane."),
-                ArgDescriptor::optional_enum("edge", <crate::input::ResizeEdge as crate::input::EnumArg>::VALUES, "Which of the target's edges moves. Omit it for the edge the target already owned. 'top' takes a pane's upper edge instead, so a positive amount shrinks it from the top and a negative one grows it upwards; it does nothing on the first pane, which has no edge above."),
+                ArgDescriptor::required_enum(
+                    "target",
+                    <crate::input::ResizeTarget as crate::input::EnumArg>::VALUES,
+                    "What to resize.",
+                ),
+                ArgDescriptor::required(
+                    "amount",
+                    ArgKind::Float,
+                    "How far to move the boundary, and which way: positive is right for a column, down for a pane. A pane's boundary is the one below it, or the one above when it is last — so the divider moves the same way whichever pane is active. Thousandths of the working width for a column; logical pixels for a pane.",
+                ),
+                ArgDescriptor::optional_enum(
+                    "edge",
+                    <crate::input::ResizeEdge as crate::input::EnumArg>::VALUES,
+                    "Which of the target's edges moves. Omit it for the edge the target already owned. 'top' takes a pane's upper edge instead, so a positive amount shrinks it from the top and a negative one grows it upwards; it does nothing on the first pane, which has no edge above.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -1874,7 +2064,11 @@ impl ActionRegistry {
             category: ActionCategory::Layout,
             icon: None,
             args: &[
-                ArgDescriptor::required_enum("target", <crate::input::ResizeTarget as crate::input::EnumArg>::VALUES, "What to resize."),
+                ArgDescriptor::required_enum(
+                    "target",
+                    <crate::input::ResizeTarget as crate::input::EnumArg>::VALUES,
+                    "What to resize.",
+                ),
                 ArgDescriptor::required("width", ArgKind::Float, "The new width."),
                 ArgDescriptor::required("height", ArgKind::Float, "The new height."),
             ],
@@ -1899,7 +2093,11 @@ impl ActionRegistry {
             description: "Close a specific pane by id, whether or not it is focused.",
             category: ActionCategory::Pane,
             icon: Some(Glyph::XSquare),
-            args: &[ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to close.")],
+            args: &[ArgDescriptor::required(
+                "pane_id",
+                ArgKind::Int,
+                "The pane to close.",
+            )],
         },
         ActionDescriptor {
             name: "rename_target",
@@ -1918,7 +2116,11 @@ impl ActionRegistry {
             description: "Open the rename prompt for a specific pane.",
             category: ActionCategory::Pane,
             icon: Some(Glyph::NotePencil),
-            args: &[ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to rename.")],
+            args: &[ArgDescriptor::required(
+                "pane_id",
+                ArgKind::Int,
+                "The pane to rename.",
+            )],
         },
         ActionDescriptor {
             name: "rename_workspace_by_idx",
@@ -1926,7 +2128,11 @@ impl ActionRegistry {
             description: "Open the rename prompt for a specific workspace.",
             category: ActionCategory::Workspace,
             icon: Some(Glyph::NotePencil),
-            args: &[ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace to rename.")],
+            args: &[ArgDescriptor::required(
+                "ws_idx",
+                ArgKind::Int,
+                "Index of the workspace to rename.",
+            )],
         },
         ActionDescriptor {
             name: "rename_column_by_idx",
@@ -1935,7 +2141,11 @@ impl ActionRegistry {
             category: ActionCategory::Layout,
             icon: Some(Glyph::NotePencil),
             args: &[
-                ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace holding the column."),
+                ArgDescriptor::required(
+                    "ws_idx",
+                    ArgKind::Int,
+                    "Index of the workspace holding the column.",
+                ),
                 ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to rename."),
             ],
         },
@@ -1945,7 +2155,11 @@ impl ActionRegistry {
             description: "Drop a pane's custom name so it follows its process again.",
             category: ActionCategory::Pane,
             icon: None,
-            args: &[ArgDescriptor::required("pane_id", ArgKind::Int, "The pane whose name to reset.")],
+            args: &[ArgDescriptor::required(
+                "pane_id",
+                ArgKind::Int,
+                "The pane whose name to reset.",
+            )],
         },
         ActionDescriptor {
             name: "reset_workspace_name_by_idx",
@@ -1953,7 +2167,11 @@ impl ActionRegistry {
             description: "Drop a workspace's custom name so it follows its default again.",
             category: ActionCategory::Workspace,
             icon: None,
-            args: &[ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace whose name to reset.")],
+            args: &[ArgDescriptor::required(
+                "ws_idx",
+                ArgKind::Int,
+                "Index of the workspace whose name to reset.",
+            )],
         },
         ActionDescriptor {
             name: "take_pane",
@@ -1963,7 +2181,11 @@ impl ActionRegistry {
             icon: None,
             args: &[
                 ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to take."),
-                ArgDescriptor::optional("focus_after", ArgKind::Bool, "Focus the pane once it arrives. Default false."),
+                ArgDescriptor::optional(
+                    "focus_after",
+                    ArgKind::Bool,
+                    "Focus the pane once it arrives. Default false.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -1972,7 +2194,11 @@ impl ActionRegistry {
             description: "Add a column to a specific workspace.",
             category: ActionCategory::Layout,
             icon: Some(Glyph::FolderSimplePlus),
-            args: &[ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace to add the column to.")],
+            args: &[ArgDescriptor::required(
+                "ws_idx",
+                ArgKind::Int,
+                "Index of the workspace to add the column to.",
+            )],
         },
         ActionDescriptor {
             name: "app_font_zoom",
@@ -1980,7 +2206,11 @@ impl ActionRegistry {
             description: "Step the whole app's font size up, down, or back to the configured size.",
             category: ActionCategory::System,
             icon: None,
-            args: &[ArgDescriptor::required_enum("step", <crate::input::FontZoomStep as crate::input::EnumArg>::VALUES, "Which way to step.")],
+            args: &[ArgDescriptor::required_enum(
+                "step",
+                <crate::input::FontZoomStep as crate::input::EnumArg>::VALUES,
+                "Which way to step.",
+            )],
         },
         ActionDescriptor {
             name: "pane_terminal_font_zoom",
@@ -1989,8 +2219,16 @@ impl ActionRegistry {
             category: ActionCategory::Pane,
             icon: None,
             args: &[
-                ArgDescriptor::optional("pane_id", ArgKind::Int, "The pane to zoom; omit for the focused one."),
-                ArgDescriptor::required_enum("step", <crate::input::FontZoomStep as crate::input::EnumArg>::VALUES, "Which way to step."),
+                ArgDescriptor::optional(
+                    "pane_id",
+                    ArgKind::Int,
+                    "The pane to zoom; omit for the focused one.",
+                ),
+                ArgDescriptor::required_enum(
+                    "step",
+                    <crate::input::FontZoomStep as crate::input::EnumArg>::VALUES,
+                    "Which way to step.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -2001,11 +2239,31 @@ impl ActionRegistry {
             icon: None,
             args: &[
                 ArgDescriptor::required("command", ArgKind::Text, "The command line to run."),
-                ArgDescriptor::optional_enum("kind", <crate::input::SpawnKind as crate::input::EnumArg>::VALUES, "What kind of pane to open. Default terminal."),
-                ArgDescriptor::optional("float", ArgKind::Bool, "Open it as a floating pane. Default false."),
-                ArgDescriptor::optional("close_pane", ArgKind::Bool, "Close the pane when the command exits. Default false."),
-                ArgDescriptor::optional("keep_on_error", ArgKind::Bool, "Keep the pane open when the command fails. Default false."),
-                ArgDescriptor::optional("keep_on_success", ArgKind::Bool, "Keep the pane open when the command succeeds. Default false."),
+                ArgDescriptor::optional_enum(
+                    "kind",
+                    <crate::input::SpawnKind as crate::input::EnumArg>::VALUES,
+                    "What kind of pane to open. Default terminal.",
+                ),
+                ArgDescriptor::optional(
+                    "float",
+                    ArgKind::Bool,
+                    "Open it as a floating pane. Default false.",
+                ),
+                ArgDescriptor::optional(
+                    "close_pane",
+                    ArgKind::Bool,
+                    "Close the pane when the command exits. Default false.",
+                ),
+                ArgDescriptor::optional(
+                    "keep_on_error",
+                    ArgKind::Bool,
+                    "Keep the pane open when the command fails. Default false.",
+                ),
+                ArgDescriptor::optional(
+                    "keep_on_success",
+                    ArgKind::Bool,
+                    "Keep the pane open when the command succeeds. Default false.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -2016,8 +2274,16 @@ impl ActionRegistry {
             icon: None,
             args: &[
                 ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to move."),
-                ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the destination workspace."),
-                ArgDescriptor::optional("focus", ArgKind::Bool, "Follow the column with focus. Default true."),
+                ArgDescriptor::required(
+                    "ws_idx",
+                    ArgKind::Int,
+                    "Index of the destination workspace.",
+                ),
+                ArgDescriptor::optional(
+                    "focus",
+                    ArgKind::Bool,
+                    "Follow the column with focus. Default true.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -2028,7 +2294,11 @@ impl ActionRegistry {
             icon: None,
             args: &[
                 ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to resize."),
-                ArgDescriptor::required("delta", ArgKind::Float, "Fraction of the working width to add; negative shrinks."),
+                ArgDescriptor::required(
+                    "delta",
+                    ArgKind::Float,
+                    "Fraction of the working width to add; negative shrinks.",
+                ),
             ],
         },
         ActionDescriptor {
@@ -2038,13 +2308,24 @@ impl ActionRegistry {
             category: ActionCategory::Layout,
             icon: None,
             args: &[
-                ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column holding the pane."),
-                ArgDescriptor::required("pane_idx", ArgKind::Int, "Index of the pane within the column."),
-                ArgDescriptor::required("delta", ArgKind::Float, "Logical pixels to add; negative shrinks."),
+                ArgDescriptor::required(
+                    "col_idx",
+                    ArgKind::Int,
+                    "Index of the column holding the pane.",
+                ),
+                ArgDescriptor::required(
+                    "pane_idx",
+                    ArgKind::Int,
+                    "Index of the pane within the column.",
+                ),
+                ArgDescriptor::required(
+                    "delta",
+                    ArgKind::Float,
+                    "Logical pixels to add; negative shrinks.",
+                ),
             ],
         },
     ];
-
 }
 
 /// Runtime metadata for **one action** — a built-in or a name-keyed one contributed by a provider
@@ -2180,7 +2461,10 @@ impl ActionCatalog {
             if let Some(meta) = catalog.by_name.get_mut(owner_action) {
                 meta.confirm = Some(spec);
             } else {
-                debug_assert!(false, "confirm spec owner {owner_action:?} has no built-in action");
+                debug_assert!(
+                    false,
+                    "confirm spec owner {owner_action:?} has no built-in action"
+                );
             }
         }
         catalog
@@ -2256,7 +2540,8 @@ impl ActionCatalog {
     /// **Every action has one**: its own if it declared one, else [`GENERIC_ACTION_ICON`] — so no
     /// surface has to decide what to do with a blank. `None` only for a name nothing knows.
     pub fn icon(&self, name: &str) -> Option<Glyph> {
-        self.find(name).map(|m| m.icon.unwrap_or(GENERIC_ACTION_ICON))
+        self.find(name)
+            .map(|m| m.icon.unwrap_or(GENERIC_ACTION_ICON))
     }
 
     /// The human-readable label for an action, by name — so a caller names the action
@@ -2290,7 +2575,10 @@ impl ActionCatalog {
     /// All actions in a given category, in stable order.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "preserved for the command palette + RPC introspection")
+        expect(
+            dead_code,
+            reason = "preserved for the command palette + RPC introspection"
+        )
     )]
     pub fn by_category(&self, category: ActionCategory) -> impl Iterator<Item = &ActionMeta> + '_ {
         self.order
@@ -2302,7 +2590,10 @@ impl ActionCatalog {
     /// Total number of catalogued actions.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "preserved for the command palette + RPC introspection")
+        expect(
+            dead_code,
+            reason = "preserved for the command palette + RPC introspection"
+        )
     )]
     pub fn count(&self) -> usize {
         self.order.len()
@@ -2510,7 +2801,11 @@ impl ResponseButton {
         Self {
             id: id.into(),
             label: label.into(),
-            role: if danger { ButtonRole::Danger } else { ButtonRole::Default },
+            role: if danger {
+                ButtonRole::Danger
+            } else {
+                ButtonRole::Default
+            },
             outcome: Outcome::Proceed,
         }
     }
@@ -2692,14 +2987,19 @@ mod tests {
     fn check_args_names_what_is_wrong() {
         let specs = builtin_args("move_column").unwrap();
 
-        assert!(check_args(&specs, &sample_args(&specs)).is_empty(), "a well-formed call is quiet");
+        assert!(
+            check_args(&specs, &sample_args(&specs)).is_empty(),
+            "a well-formed call is quiet"
+        );
 
         // A misspelling is named, and the intended argument is offered.
         let mut typo = sample_args(&specs);
         typo.remove("src_col");
         typo.insert("src_colum".to_string(), "0".to_string());
         let problems = check_args(&specs, &typo);
-        assert!(problems.contains(&ArgProblem::Missing { name: "src_col".to_string() }));
+        assert!(problems.contains(&ArgProblem::Missing {
+            name: "src_col".to_string()
+        }));
         assert!(problems.contains(&ArgProblem::Unknown {
             name: "src_colum".to_string(),
             did_you_mean: Some("src_col".to_string()),
@@ -2751,11 +3051,18 @@ mod tests {
             "unknown argument 'ws_idxx' — did you mean 'ws_idx'?",
         );
         assert_eq!(
-            ArgProblem::Unknown { name: "colour".to_string(), did_you_mean: None }.to_string(),
+            ArgProblem::Unknown {
+                name: "colour".to_string(),
+                did_you_mean: None
+            }
+            .to_string(),
             "unknown argument 'colour'",
         );
         assert_eq!(
-            ArgProblem::Missing { name: "ws_idx".to_string() }.to_string(),
+            ArgProblem::Missing {
+                name: "ws_idx".to_string()
+            }
+            .to_string(),
             "missing required argument 'ws_idx'",
         );
         assert_eq!(
@@ -2914,7 +3221,7 @@ mod tests {
     /// proves `builtin_policy` resolves all 115 names (it would `unreachable!` otherwise).
     #[test]
     fn builtin_policy_is_derived_from_the_exhaustive_match() {
-        use crate::app::interaction::{action_policy, ActionPolicy};
+        use crate::app::interaction::{ActionPolicy, action_policy};
         let catalog = ActionCatalog::with_builtins();
         for d in ActionRegistry::ALL {
             let meta = catalog.find(d.name).unwrap();
@@ -2969,7 +3276,10 @@ mod tests {
             Some(std::rc::Rc::new(|_state, _intent| {})),
         );
 
-        assert_eq!(handle, Ok(ActionHandle("plugin.docker.restart".to_string())));
+        assert_eq!(
+            handle,
+            Ok(ActionHandle("plugin.docker.restart".to_string()))
+        );
         assert_eq!(catalog.count(), builtins + 1);
         assert_eq!(
             catalog.label("plugin.docker.restart"),
@@ -3016,7 +3326,11 @@ mod tests {
             catalog.all().all(|m| catalog.icon(&m.name).is_some()),
             "no catalogued action may render blank",
         );
-        assert_eq!(catalog.icon("nope.not.a.thing"), None, "only an unknown name has none");
+        assert_eq!(
+            catalog.icon("nope.not.a.thing"),
+            None,
+            "only an unknown name has none"
+        );
     }
 
     /// **Introspection says whose verb it is** (F003/P085/T358). Without an owner, `list-actions`
@@ -3066,7 +3380,10 @@ mod tests {
             "plugin.docker.restart"
         ));
         assert!(catalog.find("plugin.docker.restart").is_none());
-        assert_eq!(registry.dispatch_of(&catalog, "plugin.docker.restart"), None);
+        assert_eq!(
+            registry.dispatch_of(&catalog, "plugin.docker.restart"),
+            None
+        );
         // Idempotent: retiring it twice is not an error.
         assert!(!unregister_dynamic(
             &mut registry,
@@ -3202,7 +3519,10 @@ mod tests {
                 meta,
             },
         );
-        assert!(registry.has_handler(&WmAction::ReloadConfig), "handler wired");
+        assert!(
+            registry.has_handler(&WmAction::ReloadConfig),
+            "handler wired"
+        );
         assert!(catalog.find("reload_config").is_some(), "meta wired");
         assert_eq!(
             registry.dispatch_of(&catalog, "reload_config"),

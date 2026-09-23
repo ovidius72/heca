@@ -355,7 +355,6 @@ impl<'a> ProviderCx<'a> {
     }
 }
 
-
 /// The read-only host inputs a container body is projected from. Present only on a
 /// context built for a render pass ([`ChromeCtx::for_build`]); a context built to
 /// merely observe ([`ChromeCtx::new`], e.g. at [`Provider::on_activate`]) has none,
@@ -418,7 +417,11 @@ impl<'a> ChromeCtx<'a> {
     ) -> Self {
         Self {
             app,
-            render: Some(RenderInputs { theme, emit, catalog }),
+            render: Some(RenderInputs {
+                theme,
+                emit,
+                catalog,
+            }),
         }
     }
 
@@ -573,12 +576,16 @@ mod tests {
                 movable: self.movable(),
                 collapsible: self.collapsible(),
                 grow: self.grow(),
-                build: Box::new(|ctx: &ChromeCtx<'_>, _bx: &mut crate::chrome::BuildCx<'_>| {
-                    // The theme is there for anyone; nothing else is needed to render a number.
-                    let _theme = ctx.theme().expect("a render pass carries the frame's theme");
-                    Box::new(heca_grid_ui::widgets::Label::new("42"))
-                        as crate::chrome::WidgetModel
-                }),
+                build: Box::new(
+                    |ctx: &ChromeCtx<'_>, _bx: &mut crate::chrome::BuildCx<'_>| {
+                        // The theme is there for anyone; nothing else is needed to render a number.
+                        let _theme = ctx
+                            .theme()
+                            .expect("a render pass carries the frame's theme");
+                        Box::new(heca_grid_ui::widgets::Label::new("42"))
+                            as crate::chrome::WidgetModel
+                    },
+                ),
             })
         }
     }
@@ -614,7 +621,10 @@ mod tests {
     fn the_shared_context_carries_nothing_of_one_components_domain() {
         let store = store();
         let theme = heca_grid_ui::theme::Theme::default();
-        let emit: crate::chrome::ChromeIntentEmitter = crate::chrome::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
+        let emit: crate::chrome::ChromeIntentEmitter = crate::chrome::ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            |_, _| {},
+        );
         let catalog = crate::actions::ActionCatalog::with_builtins();
         let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
 
@@ -627,8 +637,14 @@ mod tests {
         let body = (c.build)(&ctx, &mut bx);
 
         assert!(body.base().children.is_empty(), "one label, no rows");
-        assert!(drag.items().is_empty(), "…and it registered nothing host-side");
-        assert!(heca_grid_ui::collect_hints(body.as_ref()).is_empty(), "…and declared no hint");
+        assert!(
+            drag.items().is_empty(),
+            "…and it registered nothing host-side"
+        );
+        assert!(
+            heca_grid_ui::collect_hints(body.as_ref()).is_empty(),
+            "…and declared no hint"
+        );
     }
 
     #[test]

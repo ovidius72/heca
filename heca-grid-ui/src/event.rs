@@ -860,6 +860,19 @@ pub enum WidgetIntent {
     ScrollToRightEdge,
 }
 
+/// **What a widget's handlers said about an event**: whether one of them took it, and whether one
+/// of them asked the framework not to do its own thing afterwards.
+///
+/// Two answers rather than one because they are two questions. A widget that stops the walk is
+/// saying nobody *else* should see this; a widget that prevents the default is saying the framework
+/// should not act on it. Conflating them meant stopping the walk also cancelled a widget's own
+/// declared context menu, silently.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HandlerOutcome {
+    pub handled: Handled,
+    pub default_prevented: bool,
+}
+
 /// What a [`Base`] handler is given: the event, and the one lever it has over the walk.
 ///
 /// A handler is not asked to return anything. Most of them do their work and let the event carry
@@ -868,17 +881,42 @@ pub enum WidgetIntent {
 pub struct EventCx<'a> {
     event: &'a Event,
     stop: bool,
+    prevented: bool,
 }
 
 impl<'a> EventCx<'a> {
     /// Wrap `event` for delivery to a handler.
     pub fn new(event: &'a Event) -> Self {
-        Self { event, stop: false }
+        Self {
+            event,
+            stop: false,
+            prevented: false,
+        }
     }
 
     /// The event being delivered.
     pub fn event(&self) -> &'a Event {
         self.event
+    }
+
+    /// **Do something, by name.** The way a handler acts without a callback handed to it.
+    ///
+    /// ```ignore
+    /// .on_click(|ev| {
+    ///     if ev.modifiers().shift { return; }
+    ///     ev.dispatch(Intent::new("focus_pane").arg("pane_id", id));
+    /// })
+    /// ```
+    ///
+    /// A widget used to be able to act only through a function its host passed in, so every
+    /// composition that did anything carried a struct of callbacks — plumbing in the middle of what
+    /// should read as a declaration. Naming the action instead means a plugin writes the identical
+    /// line, and the act goes through the same gate a keypress does: the same permission rules, and
+    /// the same confirmation on anything destructive.
+    ///
+    /// A no-op until a host installs a sink, so widget code and headless tests can always call it.
+    pub fn dispatch(&self, intent: heca_view::Intent) {
+        crate::intent::dispatch(intent);
     }
 
     /// The pointer payload, if this event has one.
@@ -922,6 +960,26 @@ impl<'a> EventCx<'a> {
     pub fn stopped(&self) -> bool {
         self.stop
     }
+
+    /// **Do not do the thing the framework would have done.** The browser's `preventDefault`.
+    ///
+    /// The only default that exists today is opening the [`context_menu`] a widget declared, on a
+    /// right-click. So a widget that wants to answer a right-click *and* show its own menu instead
+    /// of the declared one says this, and one that just wants to react says nothing.
+    ///
+    /// **It is separate from [`stop_propagation`](Self::stop_propagation) because they are
+    /// different questions**, and one word doing both was a trap: stopping the walk — to keep
+    /// something behind from also reacting — silently switched a widget's own declared menu off,
+    /// with nothing failing and no warning. Stopping the walk is about who
+    /// *else* sees the event; this is about what happens afterwards.
+    pub fn prevent_default(&mut self) {
+        self.prevented = true;
+    }
+
+    /// Whether a handler called [`prevent_default`](Self::prevent_default).
+    pub fn default_prevented(&self) -> bool {
+        self.prevented
+    }
 }
 
 /// **The text a keystroke committed, if it committed any** — the one rule that decides whether a
@@ -951,7 +1009,9 @@ pub fn typed_text(key_text: Option<&str>, mods: Modifiers) -> Option<String> {
     if mods.ctrl || mods.meta || text.is_empty() {
         return None;
     }
-    text.chars().all(|c| !c.is_control()).then(|| text.to_string())
+    text.chars()
+        .all(|c| !c.is_control())
+        .then(|| text.to_string())
 }
 
 /// A widget's registered event handlers, keyed by [`EventKind`].
@@ -982,7 +1042,7 @@ impl Handlers {
 
     /// Run every handler registered for this event's kind. Returns [`Handled::Yes`] if one of them
     /// stopped propagation.
-    pub fn run(&mut self, ev: &Event) -> Handled {
+    pub fn run(&mut self, ev: &Event) -> HandlerOutcome {
         let kind = ev.kind();
         let mut cx = EventCx::new(ev);
         for (k, f) in self.entries.iter_mut() {
@@ -990,7 +1050,14 @@ impl Handlers {
                 f(&mut cx);
             }
         }
-        if cx.stopped() { Handled::Yes } else { Handled::No }
+        HandlerOutcome {
+            handled: if cx.stopped() {
+                Handled::Yes
+            } else {
+                Handled::No
+            },
+            default_prevented: cx.default_prevented(),
+        }
     }
 }
 

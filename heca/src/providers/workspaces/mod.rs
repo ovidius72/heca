@@ -13,7 +13,6 @@ mod column_group;
 mod dock_view;
 mod model;
 mod pane_row;
-pub(crate) use pane_row::dot_status;
 mod seams;
 mod workspace_frame;
 
@@ -24,21 +23,21 @@ mod model_tests;
 #[cfg(test)]
 mod testing;
 
+use crate::actions::{ActionCategory, ActionMeta, ArgKind, ArgSpec};
+use crate::app::interaction::ActionPolicy;
 use crate::chrome::{
     BuildCx, ChromeDragItem, ContainerContribution, Contribution, RegionId, RegionSet, WidgetModel,
 };
-use crate::actions::{ActionCategory, ActionMeta, ArgKind, ArgSpec};
-use crate::app::interaction::ActionPolicy;
 use crate::chrome::{Intent, PropMap, PropValue};
 // The menu-entry vocabulary, shared with the host's own pane menu (F003/P086/T365).
-use crate::chrome::context_menu::{item, item_running, usize_arg};
 use crate::chrome::DropdownItem;
+use crate::chrome::context_menu::{item, item_running, usize_arg};
 use crate::providers::{ChromeCtx, Provider, ProviderCx};
 use dock_view::DockView;
-use seams::{DockRegistries, DockSeams};
-use heca_grid_ui::Handled;
 use heca_core::layout::PaneId;
+use heca_grid_ui::Handled;
 use heca_grid_ui::widgets::{Flex, Glyph};
+use seams::{DockRegistries, DockSeams};
 
 /// The built-in workspace-tree sidebar container.
 ///
@@ -55,32 +54,30 @@ pub struct WorkspacesContainerProvider {
 }
 
 impl WorkspacesContainerProvider {
-    /// The default placement: id `workspaces`, seated in the left sidebar.
-    pub fn new() -> Self {
-        Self::placed("workspaces", RegionId::LeftSidebar)
-    }
-
-    /// **Place this container**, with its own mount id, in `region`.
+    /// This container, under its own name.
+    /// **Name this placement.** Everything that belongs to one seating keys off it — the cursor,
+    /// the scroll offset, whether it holds chrome focus — so two of these are two placements of one
+    /// container, not two containers.
     ///
-    /// A widget is a component and placing one is placing it — so a second placement is this call,
-    /// not a second implementation of the provider. The build hook is one plain `fn` that reads
-    /// everything off the contexts, so it already serves every placement; what a placement needs of
-    /// its own is an id (state that is per mount, like its scroll position, is keyed by it) and
-    /// somewhere to sit.
+    /// It is required, because a name is how everything else refers to this seating: a keybinding,
+    /// the action registry, `focus_dock`, RPC. A placement the host had to name for you is one
+    /// nothing you write can reach.
     ///
-    /// The **content is the same either way**: the workspaces come from the shared store, exactly as
-    /// two renders of one component show the same data.
-    pub fn placed(id: impl Into<String>, region: RegionId) -> Self {
+    /// ```ignore
+    /// Region::LeftSidebar.child(Workspaces::new("workspaces"));
+    /// Region::RightSidebar.child(Workspaces::new("workspaces.right"));
+    /// ```
+    pub fn new(name: impl Into<String>) -> Self {
         Self {
-            id: id.into(),
-            region,
+            id: name.into(),
+            region: RegionId::LeftSidebar,
         }
     }
 }
 
 impl Default for WorkspacesContainerProvider {
     fn default() -> Self {
-        Self::new()
+        Self::new("workspaces")
     }
 }
 
@@ -239,7 +236,8 @@ impl Provider for WorkspacesContainerProvider {
                     name: "key".to_string(),
                     kind: ArgKind::Text,
                     required: false,
-                    description: "The row to peek, by its nav key (default: the cursor).".to_string(),
+                    description: "The row to peek, by its nav key (default: the cursor)."
+                        .to_string(),
                     values: Vec::new(),
                 }],
                 ..act(
@@ -301,7 +299,6 @@ impl Provider for WorkspacesContainerProvider {
             ),
         ]
     }
-
 
     /// The host moved this placement's cursor — reconcile the tree's positional index with it.
     ///
@@ -534,7 +531,9 @@ impl WorkspacesContainerProvider {
         let state = cx.state();
         let tree = state.workspaces().tree();
         match tree.current_item()? {
-            WorkspaceRow::Column { ws_idx, col_idx, .. } => Some((*ws_idx, *col_idx)),
+            WorkspaceRow::Column {
+                ws_idx, col_idx, ..
+            } => Some((*ws_idx, *col_idx)),
             WorkspaceRow::Pane { pane_id } => tree.locate_pane(*pane_id),
             WorkspaceRow::Workspace { .. } | WorkspaceRow::FloatingPane { .. } => None,
         }
@@ -714,11 +713,10 @@ pub(crate) fn workspace_key(ws_id: heca_core::layout::WorkspaceId) -> String {
     format!("ws:{}", ws_id.0)
 }
 
-/// `col:<id>` — a column group. No workspace prefix: a [`ColumnId`](heca_core::layout::ColumnId) is
-/// allocated from the session's counter, so it is unique across the whole session on its own.
-pub(crate) fn column_key(col_id: heca_core::layout::ColumnId) -> String {
-    format!("col:{}", col_id.0)
-}
+// `column_key` lives beside `pane_key` in `crate::chrome` since F003/P082/T474: the column in the
+// scrolling area OWNS that identity and this provider shows a VIEW of it, so both sides must read
+// the same string rather than keeping two copies in step.
+pub(crate) use crate::chrome::column_key;
 
 // ── What each row kind does when you press it (F003/P086/T365) ──
 //
@@ -754,7 +752,7 @@ fn pane_row_press(pane_id: PaneId) -> Intent {
 /// Pointing one intent at both gestures is precisely the bug this replaces: commit `e712d70`
 /// (2026-07-30) made the row's hint target fire the row's *click*, and `prefix+/` on a sidebar row
 /// started activating the pane and leaving the sidebar.
-fn row_hint(key: String) -> Intent {
+pub(super) fn row_hint(key: String) -> Intent {
     Intent::new(PEEK_SELECTED).arg("key", PropValue::Text(key))
 }
 
@@ -820,7 +818,10 @@ pub(crate) fn pane_row_items(
             "add_pane_to_column",
             "New pane",
             "add_pane_to_column",
-            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
+            &[
+                ("ws_idx", usize_arg(ws_idx)),
+                ("col_idx", usize_arg(col_idx)),
+            ],
         ));
     }
     items.push(item_running(
@@ -838,7 +839,13 @@ pub(crate) fn pane_row_items(
         ));
     }
     items.push(
-        item_running("close", "Close pane", "close_pane_by_id", &[("pane_id", pane)]).danger(true),
+        item_running(
+            "close",
+            "Close pane",
+            "close_pane_by_id",
+            &[("pane_id", pane)],
+        )
+        .danger(true),
     );
     items
 }
@@ -850,7 +857,10 @@ pub(crate) fn column_row_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownIte
             "add_pane_to_column",
             "New pane",
             "add_pane_to_column",
-            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
+            &[
+                ("ws_idx", usize_arg(ws_idx)),
+                ("col_idx", usize_arg(col_idx)),
+            ],
         ),
         item_running(
             "split_horizontal",
@@ -865,7 +875,10 @@ pub(crate) fn column_row_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownIte
             "delete_column",
             "Delete column",
             "delete_column",
-            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
+            &[
+                ("ws_idx", usize_arg(ws_idx)),
+                ("col_idx", usize_arg(col_idx)),
+            ],
         )
         .danger(true),
     ]
@@ -917,7 +930,7 @@ mod tests {
         ChromeEventBus, ChromeHost, ChromeIntentEmitter, ChromeSignals, DragItemRegistry,
         SharedChromeState,
     };
-    use crate::providers::workspaces::{ColumnEntry, PaneEntry, WorkspaceTree, WorkspaceEntry};
+    use crate::providers::workspaces::{ColumnEntry, PaneEntry, WorkspaceEntry, WorkspaceTree};
     use heca_core::layout::PaneId;
     use heca_grid_ui::theme::Theme as GuiTheme;
     use std::rc::Rc;
@@ -1030,7 +1043,7 @@ mod tests {
 
     #[test]
     fn it_declares_only_what_acts_on_its_own_cursor() {
-        let declared: Vec<String> = WorkspacesContainerProvider::new()
+        let declared: Vec<String> = WorkspacesContainerProvider::new("workspaces")
             .actions()
             .into_iter()
             .map(|m| m.name)
@@ -1064,7 +1077,7 @@ mod tests {
     #[test]
     fn the_cursor_moves_over_the_components_own_rows() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
         let first = store.workspaces.tree().cursor;
@@ -1083,7 +1096,7 @@ mod tests {
     #[test]
     fn moving_the_cursor_publishes_it_for_this_mount() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
         p.perform(CURSOR_DOWN, &Intent::new(CURSOR_DOWN), &mut cx);
@@ -1105,12 +1118,15 @@ mod tests {
     #[test]
     fn activating_a_row_asks_the_host_rather_than_acting() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
 
         let mut cx = ProviderCx::new("workspaces", store.clone());
         p.perform(ACTIVATE_SELECTED, &Intent::new(ACTIVATE_SELECTED), &mut cx);
         let asked: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
-        assert!(asked.contains(&"focus_pane".to_string()) || asked.contains(&"focus_workspace".to_string()));
+        assert!(
+            asked.contains(&"focus_pane".to_string())
+                || asked.contains(&"focus_workspace".to_string())
+        );
 
         let mut cx = ProviderCx::new("workspaces", store);
         p.perform(PEEK_SELECTED, &Intent::new(PEEK_SELECTED), &mut cx);
@@ -1130,7 +1146,7 @@ mod tests {
     #[test]
     fn a_click_moves_the_cursor_so_stepping_continues_from_it() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
         // The fixture's rows are the workspace and its one pane; aim at the pane.
@@ -1164,7 +1180,7 @@ mod tests {
     #[test]
     fn a_key_this_component_did_not_write_leaves_the_cursor_alone() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
         let before = store.workspaces.tree().cursor;
 
@@ -1185,7 +1201,7 @@ mod tests {
     #[test]
     fn hint_and_activate_differ_only_by_the_release_they_ask_for() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
 
         // Park the cursor on the pane: the workspace row takes the `focus_workspace` arm, which
         // never releases either way, so it cannot tell the two verbs apart.
@@ -1234,19 +1250,23 @@ mod tests {
     #[test]
     fn a_hint_can_be_aimed_at_a_row_by_key_and_moves_the_cursor_there() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
         // The cursor starts on the workspace row; aim at the pane row instead.
-        let pane_id = match store.workspaces.tree().flat_items.iter().find_map(|row| match row {
-            WorkspaceRow::Pane { pane_id } => Some(*pane_id),
-            _ => None,
-        }) {
+        let pane_id = match store
+            .workspaces
+            .tree()
+            .flat_items
+            .iter()
+            .find_map(|row| match row {
+                WorkspaceRow::Pane { pane_id } => Some(*pane_id),
+                _ => None,
+            }) {
             Some(id) => id,
             None => panic!("the fixture has a pane row"),
         };
-        let aimed = Intent::new(PEEK_SELECTED)
-            .arg("key", PropValue::Text(pane_key(pane_id)));
+        let aimed = Intent::new(PEEK_SELECTED).arg("key", PropValue::Text(pane_key(pane_id)));
         p.perform(PEEK_SELECTED, &aimed, &mut cx);
 
         assert!(
@@ -1271,7 +1291,7 @@ mod tests {
     /// activates the pane but the keyboard goes to the terminal"*.
     #[test]
     fn a_hint_from_outside_the_dock_asks_for_the_keyboard_and_from_inside_does_not() {
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
 
         // Nothing holds chrome focus (the keyboard is in a pane).
         let away = store();
@@ -1303,12 +1323,11 @@ mod tests {
     #[test]
     fn an_aimed_hint_with_a_stale_key_leaves_the_cursor_where_it_was() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
         let before = store.workspaces.tree().cursor;
 
-        let stale = Intent::new(PEEK_SELECTED)
-            .arg("key", PropValue::Text("pane:9999".to_string()));
+        let stale = Intent::new(PEEK_SELECTED).arg("key", PropValue::Text("pane:9999".to_string()));
         p.perform(PEEK_SELECTED, &stale, &mut cx);
 
         assert_eq!(store.workspaces.tree().cursor, before, "no guess, no move");
@@ -1337,7 +1356,10 @@ mod tests {
             .find(|i| i.id == "add_pane_to_column")
             .expect("a tiled pane is in a column");
         assert_eq!(new_pane.intent.args.get("ws_idx"), Some(&PropValue::Int(0)));
-        assert_eq!(new_pane.intent.args.get("col_idx"), Some(&PropValue::Int(0)));
+        assert_eq!(
+            new_pane.intent.args.get("col_idx"),
+            Some(&PropValue::Int(0))
+        );
 
         // A floating pane is in no column, so `pane_card` passes `None`.
         let floating = pane_row_items(PaneId(9), None, false);
@@ -1347,9 +1369,16 @@ mod tests {
              aimed at a guess: {:?}",
             floating.iter().map(|i| &i.id).collect::<Vec<_>>(),
         );
-        assert!(floating.iter().any(|i| i.id == "close"), "it is still closable");
+        assert!(
+            floating.iter().any(|i| i.id == "close"),
+            "it is still closable"
+        );
 
-        let renamed = tree.workspaces.iter().find(|w| w.ws_idx == 0).expect("workspace 0");
+        let renamed = tree
+            .workspaces
+            .iter()
+            .find(|w| w.ws_idx == 0)
+            .expect("workspace 0");
         let ws = workspace_row_items(0, renamed.custom_name.is_some());
         assert!(
             ws.iter().any(|i| i.id == "reset_workspace_name"),
@@ -1363,7 +1392,7 @@ mod tests {
     #[test]
     fn rename_selected_targets_the_cursor_row_by_id() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
         let intent = Intent::new(RENAME_SELECTED);
 
@@ -1387,7 +1416,7 @@ mod tests {
         let store = store_with_tree("workspaces");
         let mut cx = ProviderCx::new("workspaces", store);
         assert_eq!(
-            WorkspacesContainerProvider::new().perform(
+            WorkspacesContainerProvider::new("workspaces").perform(
                 "docker.restart_selected",
                 &Intent::new("docker.restart_selected"),
                 &mut cx,
@@ -1398,7 +1427,7 @@ mod tests {
 
     #[test]
     fn provider_metadata_is_self_consistent() {
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         assert_eq!(p.id(), "workspaces");
         assert_eq!(p.title(), "Workspaces");
         assert_eq!(p.default_region(), RegionId::LeftSidebar);
@@ -1412,7 +1441,7 @@ mod tests {
     #[test]
     fn register_seats_in_left_sidebar_at_order_zero() {
         let mut host = ChromeHost::new(ChromeEventBus::default());
-        host.register(Box::new(WorkspacesContainerProvider::new()));
+        host.register(Box::new(WorkspacesContainerProvider::new("workspaces")));
         // Seated in the left sidebar (its default_region), not the right.
         let left = host.contributions(RegionId::LeftSidebar);
         assert_eq!(left.len(), 1);
@@ -1424,7 +1453,7 @@ mod tests {
 
     #[test]
     fn contribution_carries_the_provider_metadata() {
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let ctx = ChromeCtx::new(crate::host::App::new(&store()));
         let c = container(&p, &ctx);
         assert_eq!(c.id, "workspaces");
@@ -1443,9 +1472,12 @@ mod tests {
         // child per workspace, and — the part a placeholder could never fake — the
         // drag and hint ids the interactive rows need, allocated in the host's
         // registries.
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let theme = GuiTheme::default();
-        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            |_, _| {},
+        );
         let store = store();
         // The model is the component's own, read off its state — not handed in by the host.
         *store.workspaces.tree_mut() = tree();
@@ -1485,7 +1517,7 @@ mod tests {
     /// rebuilt constantly.
     #[test]
     fn every_pick_target_in_the_sidebar_can_be_found_again_by_its_identity() {
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let theme = GuiTheme::default();
         let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
             crate::app::interaction::InteractionSource::Keyboard,
@@ -1526,7 +1558,7 @@ mod tests {
     /// remembered, so it takes a fresh letter every time.
     #[test]
     fn no_two_pick_targets_in_the_sidebar_share_an_identity() {
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let theme = GuiTheme::default();
         let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
             crate::app::interaction::InteractionSource::Keyboard,
@@ -1591,9 +1623,12 @@ mod tests {
         use super::testing::pane;
         use heca_core::layout::PaneId;
 
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let theme = GuiTheme::default();
-        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            |_, _| {},
+        );
         let store = store();
 
         // Two workspaces, each with a column of two identically-named panes — nothing here can be
@@ -1647,14 +1682,15 @@ mod tests {
     #[test]
     fn a_rows_gesture_is_a_named_intent_and_a_pick_is_its_own_gesture() {
         use crate::app::interaction::InteractionIntent;
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let theme = GuiTheme::default();
         let fired: Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
         let emit: ChromeIntentEmitter = {
             let fired = fired.clone();
-            ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, move |_, intent| {
-                fired.borrow_mut().push(intent)
-            })
+            ChromeIntentEmitter::of(
+                crate::app::interaction::InteractionSource::Keyboard,
+                move |_, intent| fired.borrow_mut().push(intent),
+            )
         };
         let store = store();
         *store.workspaces.tree_mut() = tree();
@@ -1725,14 +1761,15 @@ mod tests {
         use crate::providers::SEAT_ARG;
 
         let seats = |mount: &str| {
-            let p = WorkspacesContainerProvider::new();
+            let p = WorkspacesContainerProvider::new("workspaces");
             let theme = GuiTheme::default();
             let fired: Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
             let emit: ChromeIntentEmitter = {
                 let fired = fired.clone();
-                ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, move |_, intent| {
-                fired.borrow_mut().push(intent)
-            })
+                ChromeIntentEmitter::of(
+                    crate::app::interaction::InteractionSource::Keyboard,
+                    move |_, intent| fired.borrow_mut().push(intent),
+                )
             };
             let store = store();
             *store.workspaces.tree_mut() = tree();
@@ -1752,11 +1789,11 @@ mod tests {
                 .borrow()
                 .iter()
                 .filter_map(|intent| match intent {
-                    InteractionIntent::View(vi) => Some(
-                        vi.args.get(SEAT_ARG).cloned().unwrap_or_else(|| {
+                    InteractionIntent::View(vi) => {
+                        Some(vi.args.get(SEAT_ARG).cloned().unwrap_or_else(|| {
                             panic!("a gesture must name its seating, got {:?}", vi.args)
-                        }),
-                    ),
+                        }))
+                    }
                     _ => None,
                 })
                 .collect();
@@ -1775,7 +1812,7 @@ mod tests {
     fn build_outside_a_render_pass_yields_an_empty_body() {
         // An observe-only context has no tree/theme/emitter to project. Building is
         // still legal (a host may want the metadata) and must not panic.
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let store = store();
         let ctx = ChromeCtx::new(crate::host::App::new(&store));
         let c = container(&p, &ctx);

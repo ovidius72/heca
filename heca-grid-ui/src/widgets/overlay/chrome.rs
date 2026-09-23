@@ -76,7 +76,9 @@ const HOVER_SHADOW_SCALE: f32 = 0.25;
 #[heca_grid_ui_macros::props]
 impl PanelElevation {
     /// Multiplier applied to both the shadow's blur and its drop offset.
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
+    #[heca_grid_ui_macros::host_only(
+        "carries no value — a property needs one; the equivalent is an explicit setting"
+    )]
     fn shadow_scale(self) -> f32 {
         match self {
             Self::Panel => 1.0,
@@ -172,8 +174,8 @@ mod tests {
     /// than asserting exact widths) keeps the test about the edge *policy* and
     /// robust to how the reticle happens to be drawn.
     fn chrome_edge_count(frame: FrameStyle, chrome: PanelChrome) -> usize {
-        use crate::scene::DrawCommand;
         use crate::Scene;
+        use crate::scene::DrawCommand;
         let mut theme = crate::theme::Theme::default();
         theme.colors.overlay_frame = frame;
         let mut scene = Scene::new();
@@ -240,8 +242,8 @@ mod tests {
 
     /// Paint the shared chrome at `elevation` and report the drop shadow it emitted.
     fn chrome_shadow(elevation: PanelElevation) -> Shadow {
-        use crate::scene::DrawCommand;
         use crate::Scene;
+        use crate::scene::DrawCommand;
         let theme = crate::theme::Theme::default();
         let mut scene = Scene::new();
         {

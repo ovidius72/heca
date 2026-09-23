@@ -325,7 +325,13 @@ mod tests {
             LayoutOptions::default(),
         );
         let pane = Pane::new(PaneId(pane_id), format!("pane{}", pane_id));
-        ws.add_pane(pane, None, true, ColumnWidth::Proportion(0.5), ColumnId(pane_id));
+        ws.add_pane(
+            pane,
+            None,
+            true,
+            ColumnWidth::Proportion(0.5),
+            ColumnId(pane_id),
+        );
         ws
     }
 

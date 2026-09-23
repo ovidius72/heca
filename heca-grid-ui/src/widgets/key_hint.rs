@@ -64,8 +64,61 @@ pub struct HintStyle {
     pub size: Option<f32>,
     /// Cap colour override; defaults to the theme `accent`, glow included.
     pub color: Option<Color>,
+    /// **What the cap MEANS, left for the theme to colour.** Overridden by
+    /// [`color`](Self::color) when both are set.
+    ///
+    /// A literal colour cannot be written by a widget that has no theme at build time — which is
+    /// every widget, since the theme arrives at paint. So a widget names a tone and the theme
+    /// decides the pixels, which is the same rule every other colour in the library follows.
+    pub tone: Option<HintTone>,
     /// Extra vertical nudge applied after placement — positive moves it down.
     pub offset_y: f64,
+}
+
+/// **What a keycap means**, so the theme can colour it.
+///
+/// heca reads them: a pane is `Accent`, a workspace `Warning`, a column `Success`, and a
+/// structural control — fold this, close that — is `Muted`, because it is not somewhere to go.
+/// A caller names the meaning; which pixels that is stays the theme's business and follows a
+/// reload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, heca_grid_ui_macros::PropName)]
+pub enum HintTone {
+    /// The default weight — a target you would navigate to.
+    Accent,
+    /// A structural control rather than a destination: a fold, a close, a handle.
+    Muted,
+    /// Reserved for a distinct class of target, so two kinds never read alike.
+    Warning,
+    /// As `Warning`, a third class.
+    Success,
+    /// Something destructive.
+    Danger,
+}
+
+impl HintTone {
+    /// The colour, from the theme this frame.
+    pub fn resolve(self, theme: &crate::theme::Theme) -> Color {
+        match self {
+            HintTone::Accent => theme.colors.accent,
+            HintTone::Muted => theme.colors.muted,
+            HintTone::Warning => theme.colors.warning,
+            HintTone::Success => theme.colors.success,
+            HintTone::Danger => theme.colors.danger,
+        }
+    }
+}
+
+/// **What colour a keycap is: an explicit choice, then a declared meaning, then the picker's own.**
+///
+/// A widget composing itself has no theme at build time, so a literal is not something it can
+/// write — a tone is. It has to be resolved *before* the picker's fallback: with the fallback
+/// first, `color` is always `Some` by the time the tone is consulted and the tone is silently
+/// dead, which looks from the outside like a placement that moved and a colour that did not.
+pub(crate) fn cap_tint(style: &HintStyle, theme: &crate::theme::Theme) -> Color {
+    style
+        .color
+        .or_else(|| style.tone.map(|t| t.resolve(theme)))
+        .unwrap_or(theme.hint_color)
 }
 
 /// Keycap font size as a fraction of the wrapped component's resolved font.
@@ -95,6 +148,10 @@ const LEFT_INSET: f64 = 2.0;
 const GLYPH_ADVANCE_FRAC: f32 = 0.62;
 /// Keycap glow intensity (scaled by the theme `glow_size`) — soft, not blazing.
 const KEYCAP_GLOW: f32 = 0.45;
+/// How far a keycap's chip must sit from the theme `background` in luminance for a
+/// background-coloured letter to still read on it. Below this the letter takes the contrasting tone
+/// instead — see [`keycap_glyph_color`].
+const KEYCAP_MIN_GLYPH_CONTRAST: f32 = 0.15;
 
 /// Size of the keycap chip for `text` at `font` (logical px) — the exact sizing
 /// [`KeyHint`] uses. Exposed so hosts can stamp a standalone keycap over targets
@@ -197,7 +254,6 @@ impl KeycapContent<'_> {
             }
         }
     }
-
 }
 
 /// One cap of a keyboard chord: a **Nerd Font key glyph** where the key has a picture (shift,
@@ -239,6 +295,35 @@ impl KeyCap {
 }
 
 /// The shared chip: the surface (per [`KeycapVariant`]) plus whatever sits in it.
+/// **The letter's colour on a filled keycap** — the theme `background`, unless the chip is too close
+/// to it to read, in which case the contrasting tone.
+///
+/// The chip is not `tint`: it is an opaque `background` base with `tint` laid over it at `alpha`, so
+/// the fill the eye sees is the blend. Asking about `tint` alone would answer for a colour that is
+/// never painted.
+///
+/// **Why not simply [`Theme::on`] every time.** That is the more contrasty answer and it would
+/// change how heca looks: measured on `grid_tron`, the chip lands at luminance 0.24 against a 0.003
+/// background and a 0.82 foreground, so `on` returns the *foreground* and the letters would flip
+/// from dark-on-accent to light-on-accent. The dark glyph is the design; this only steps in when
+/// keeping it would make the letter vanish.
+///
+/// **Why it steps in at all.** The glyph used to be `background` unconditionally, which is right for
+/// an accent far from the background and wrong the moment it is not — a light-background theme had a
+/// light glyph on a light chip. `hint_color` then made that reachable on any theme: set the letters
+/// near your own background and you get an empty keycap. A colour a user is free to choose cannot
+/// carry a legibility rule that only holds for one of its values.
+fn keycap_glyph_color(theme: &heca_theme::Theme, tint: Color, alpha: u8) -> Color {
+    let chip = theme.background.lerp(tint, alpha as f32 / 255.0);
+    let reads_on_background =
+        (chip.luminance() - theme.background.luminance()).abs() >= KEYCAP_MIN_GLYPH_CONTRAST;
+    if reads_on_background {
+        theme.background
+    } else {
+        theme.on(chip)
+    }
+}
+
 fn paint_keycap_content(
     cx: &mut PaintCx,
     cap: Rectangle,
@@ -250,7 +335,7 @@ fn paint_keycap_content(
     let (accent, glow_c, background, ctrl_radius, keycap_alpha) = {
         let t = cx.theme();
         (
-            t.colors.accent,
+            cx.accent(),
             t.colors.glow,
             t.colors.background,
             t.colors.control_radius(),
@@ -277,9 +362,14 @@ fn paint_keycap_content(
                     intensity: KEYCAP_GLOW,
                 }),
             );
-            // Accent tint on top of the opaque base, then the dark bold glyph for contrast.
+            // Tint on top of the opaque base, then the glyph in whichever of the theme's
+            // background/foreground contrasts with the chip — see [`keycap_glyph_color`].
             cx.rect(cap, keycap_c.with_alpha(keycap_alpha), None, radius, None);
-            content.paint(cx, cap, background, font);
+            let glyph = {
+                let t = cx.theme();
+                keycap_glyph_color(&t.colors, keycap_c, keycap_alpha)
+            };
+            content.paint(cx, cap, glyph, font);
         }
         KeycapVariant::Bordered => {
             // Outline-only chip: **no fill** (empty interior) + a full-strength **accent** border
@@ -305,7 +395,6 @@ pub struct KeyHint {
 
 #[heca_grid_ui_macros::props]
 impl KeyHint {
-
     // `on_hint` is **not here any more** (F003/P082/T432). It is
     // [`ComponentExt::on_hint`](crate::builders::ComponentExt::on_hint), on every widget — so a
     // `KeyHint::new(row).on_hint(…)` call still reads exactly the same, and a widget that can carry
@@ -318,15 +407,8 @@ impl KeyHint {
     // only is why sidebar letters kept failing with no error.
 
     /// Wrap `child`. Bind the hint text with [`hint`](KeyHint::hint).
-    pub fn new(child: impl Component + 'static) -> Self {
-        Self::wrap(Box::new(child))
-    }
-
-    /// Wrap an **already-boxed** subtree — what a dynamically built tree is (a chrome provider's
-    /// render seam, `realize` output), where the concrete widget type is not known at the call
-    /// site. Mirrors [`Parent::child_boxed`](crate::builders::Parent::child_boxed).
-    pub fn new_boxed(child: Box<dyn Component>) -> Self {
-        Self::wrap(child)
+    pub fn new(child: impl crate::builders::IntoComponent) -> Self {
+        Self::wrap(child.into_component())
     }
 
     fn wrap(child: Box<dyn Component>) -> Self {
@@ -363,36 +445,42 @@ impl KeyHint {
         self.base.hint_label
     }
 
+    // ── The four cap knobs ────────────────────────────────────────────────────────────────
+    //
+    // These are the **wrapper's spelling** of capabilities that live on every widget
+    // (`ComponentExt::hint_placement` and friends): the slot they write, `Base::hint_style`, has
+    // always been universal, and since F003/P097/T501 so has the way to set it. They delegate
+    // rather than repeat the assignment, so there is one writer per field and the two spellings
+    // cannot drift — the same arrangement `Tooltip` has with `ComponentExt::tooltip`.
+    //
+    // Kept because the wrapper itself is kept: for a region that is not a widget you can put a
+    // builder on.
+
     /// Where the keycap sits over the target (default [`HintPlacement::TopCenter`]).
     #[heca_grid_ui_macros::prop]
-    pub fn placement(mut self, placement: HintPlacement) -> Self {
-        self.base.hint_style.placement = placement;
-        self
+    pub fn placement(self, placement: HintPlacement) -> Self {
+        crate::builders::ComponentExt::hint_placement(self, placement)
     }
 
     /// Explicit keycap font size in logical px (overrides the font-derived size).
     #[heca_grid_ui_macros::prop]
-    pub fn size(mut self, px: f32) -> Self {
-        self.base.hint_style.size = Some(px);
-        self
+    pub fn size(self, px: f32) -> Self {
+        crate::builders::ComponentExt::hint_size(self, px)
     }
 
     /// Override the keycap color (default: theme `accent`). The glow follows it too.
     #[heca_grid_ui_macros::prop]
-    pub fn color(mut self, c: Color) -> Self {
-        self.base.hint_style.color = Some(c);
-        self
+    pub fn color(self, c: Color) -> Self {
+        crate::builders::ComponentExt::hint_color(self, c)
     }
 
     /// Nudge the keycap down by `px` logical pixels after placement (positive = down).
     /// Use it to drop a `TopCenter` cap from a tall target's top edge onto its header
     /// row (e.g. align with a workspace dock's title).
     #[heca_grid_ui_macros::prop]
-    pub fn offset_y(mut self, px: f64) -> Self {
-        self.base.hint_style.offset_y = px;
-        self
+    pub fn offset_y(self, px: f64) -> Self {
+        crate::builders::ComponentExt::hint_offset_y(self, px)
     }
-
 }
 
 /// The cap font for a target of `bounds` at inherited `font`, under `style`.
@@ -573,7 +661,11 @@ pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
     // instead, an emphasized header button wore a letter a quarter larger than the pane's own, and
     // in a different colour, in the same picker (Antonio, driving, 2026-09-03).
     let picker_font = cx.theme().hint_font_size;
-    style.color = Some(style.color.unwrap_or(cx.theme().hint_color));
+    // **Explicit colour, then the declared MEANING, then the picker's own token.** A widget
+    // composing itself has no theme at build time, so a tone is the only thing it can say — and it
+    // has to be resolved here, before the fallback, or the fallback always wins and the tone is
+    // silently dead.
+    style.color = Some(cap_tint(&style, cx.theme()));
     let (cap, permitted) = keycap_rect(base.bounds, picker_font, &style, &text, cx.viewport());
     let Some(cap) = fit_into_view(cap, permitted, cx.clip()) else {
         return;
@@ -624,10 +716,17 @@ mod tests {
     #[test]
     fn an_unclipped_cap_is_left_where_it_was_placed() {
         let cap = rect(180.0, 10.0, 20.0, 20.0);
-        assert_eq!(fit_into_view(cap, rect(0.0, 0.0, 200.0, 40.0), None), Some(cap));
+        assert_eq!(
+            fit_into_view(cap, rect(0.0, 0.0, 200.0, 40.0), None),
+            Some(cap)
+        );
         // …and so is one whose row is fully inside the clip.
         assert_eq!(
-            fit_into_view(cap, rect(0.0, 0.0, 200.0, 40.0), Some(rect(0.0, 0.0, 200.0, 400.0))),
+            fit_into_view(
+                cap,
+                rect(0.0, 0.0, 200.0, 40.0),
+                Some(rect(0.0, 0.0, 200.0, 400.0))
+            ),
             Some(cap),
         );
     }
@@ -649,7 +748,10 @@ mod tests {
             fitted.loc.y + fitted.size.h <= clip.loc.y + clip.size.h,
             "and inside the dock: {fitted:?}",
         );
-        assert!(fitted.loc.y >= row.loc.y, "still within its own row, not the one above");
+        assert!(
+            fitted.loc.y >= row.loc.y,
+            "still within its own row, not the one above"
+        );
     }
 
     /// **Too little of the row left to hold a letter, so none is drawn.** Nudging it any further
@@ -686,7 +788,10 @@ mod tests {
         );
 
         let fitted = fit_into_view(cap, permitted, Some(clip)).expect("the caption band holds it");
-        assert_eq!(fitted, cap, "and the clamp leaves it beside the icon, not on it");
+        assert_eq!(
+            fitted, cap,
+            "and the clamp leaves it beside the icon, not on it"
+        );
     }
 
     /// **…and flips above only when below would fall off the viewport.**
@@ -710,6 +815,65 @@ mod tests {
         assert_eq!(fitted, cap, "and the clamp leaves it there");
     }
 
+    /// **A letter stays readable whatever colour it is given** (Antonio, 2026-09-10: *"what if a
+    /// user set the same color of the text?"*).
+    ///
+    /// `hint_color` is a colour the user picks, so the glyph cannot assume the chip is bright. The
+    /// glyph was a constant — always the theme background — which is legible under a bright accent
+    /// and invisible the moment the chip is near the background instead.
+    #[test]
+    fn a_keycap_letter_contrasts_with_the_chip_whatever_colour_it_is_given() {
+        use super::keycap_glyph_color;
+        let theme = heca_theme::Theme::grid_tron();
+        let alpha = theme.interaction.keycap;
+
+        // The dangerous setting: the letters painted the same colour as the background behind them.
+        let glyph = keycap_glyph_color(&theme, theme.background, alpha);
+        assert_ne!(
+            glyph, theme.background,
+            "a chip the colour of the background must not carry a background-coloured letter",
+        );
+        assert_eq!(
+            glyph, theme.foreground,
+            "it takes the contrasting tone instead"
+        );
+
+        // …and the default is unchanged: a bright accent chip still carries the dark glyph.
+        assert_eq!(
+            keycap_glyph_color(&theme, theme.accent, alpha),
+            theme.background,
+            "the accent letters must look exactly as they always did",
+        );
+    }
+
+    /// **The rule is about the chip, not about the theme being dark.** A light theme whose accent is
+    /// also light gives a chip that a background-coloured letter disappears into — the same failure
+    /// a badly chosen `hint_color` produces, reached without touching the setting.
+    #[test]
+    fn a_pale_chip_on_a_pale_theme_switches_the_letter_too() {
+        use super::keycap_glyph_color;
+        let mut light = heca_theme::Theme::grid_tron();
+        // A light palette is the dark one's two tones swapped — enough to state the rule without
+        // depending on which bundled theme happens to be light.
+        std::mem::swap(&mut light.background, &mut light.foreground);
+        let alpha = light.interaction.keycap;
+
+        // A mid-toned accent is far enough from the pale background: the letter is unchanged.
+        assert_eq!(
+            keycap_glyph_color(&light, light.accent, alpha),
+            light.background,
+            "a chip that already stands off the background keeps the design's own letter",
+        );
+
+        // A pale accent is not, so the letter takes the contrasting tone rather than vanishing.
+        let pale = light.background.lerp(light.accent, 0.1);
+        assert_eq!(
+            keycap_glyph_color(&light, pale, alpha),
+            light.foreground,
+            "a chip the eye cannot separate from the background gets the other tone",
+        );
+    }
+
     #[test]
     fn keycap_size_is_positive_and_grows_with_text() {
         let one = keycap_size(13.0, "a");
@@ -726,5 +890,53 @@ mod tests {
         let large = keycap_size(20.0, "a");
         assert!(large.w > small.w);
         assert!(large.h > small.h);
+    }
+}
+
+#[cfg(test)]
+mod keycap_tint {
+    use super::*;
+    use crate::builders::ComponentExt as _;
+    use crate::widgets::{HintTone, Surface};
+
+    fn style_of(w: impl Component) -> HintStyle {
+        w.base().hint_style
+    }
+
+    /// **A declared MEANING colours the cap** — the one thing a widget composing itself can say,
+    /// since it has no theme at build time to take a literal from.
+    ///
+    /// It was dead on arrival once: the picker's own fallback ran first, so `color` was always
+    /// `Some` by the time the tone was consulted. From the outside that looked like a placement
+    /// that moved and a colour that did not.
+    #[test]
+    fn a_tone_decides_the_cap_when_no_colour_was_named() {
+        let theme = crate::theme::Theme::default();
+        let muted = style_of(Surface::new().hint_tone(HintTone::Muted));
+        assert_eq!(cap_tint(&muted, &theme), theme.colors.muted);
+        assert_ne!(
+            cap_tint(&muted, &theme),
+            cap_tint(&style_of(Surface::new()), &theme),
+            "a tone has to change something",
+        );
+    }
+
+    /// **An explicit colour still wins**, so the app's per-kind tints are untouched.
+    #[test]
+    fn a_named_colour_outranks_a_tone() {
+        let theme = crate::theme::Theme::default();
+        let red = crate::Color::new(255, 0, 0, 255);
+        let both = style_of(Surface::new().hint_tone(HintTone::Muted).hint_color(red));
+        assert_eq!(cap_tint(&both, &theme), red);
+    }
+
+    /// …and with neither, the picker's own token, exactly as before any of this.
+    #[test]
+    fn nothing_named_is_the_pickers_own_colour() {
+        let theme = crate::theme::Theme::default();
+        assert_eq!(
+            cap_tint(&style_of(Surface::new()), &theme),
+            theme.hint_color
+        );
     }
 }

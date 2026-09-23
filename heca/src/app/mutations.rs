@@ -195,6 +195,39 @@ pub(crate) fn move_pane_to_workspace_column(
 
 /// Move a pane from one column to another within the same workspace.
 /// Handles column removal when a column becomes empty after the move.
+/// **Take the focused pane out of its column into a new one, right of it.**
+///
+/// The layout change is `heca-core`'s
+/// ([`ScrollingSpace::extract_pane_to_new_column`](heca_core::layout::ScrollingSpace::extract_pane_to_new_column))
+/// — this computes no geometry, the same way every other structural action works. It answers
+/// `false` when the pane is already alone in its column, because the move would change nothing.
+pub(crate) fn move_pane_to_new_column(state: &mut AppState, pane_id: PaneId) -> bool {
+    let Some((ws_idx, _, _)) = crate::app::selection::find_pane_location(&state.session, pane_id)
+    else {
+        return false;
+    };
+    if state.session.active_workspace_idx != ws_idx {
+        crate::app::focus::switch_workspace_tracked(state, ws_idx);
+    }
+    // Allocated before the mutable borrow, and spent only if the move happens.
+    let new_col_id = ColumnId(state.session.next_id());
+    let width = chrome::default_column_width();
+    let moved = state
+        .session
+        .workspaces
+        .get_mut(ws_idx)
+        .map(|ws| {
+            ws.scrolling
+                .extract_pane_to_new_column(pane_id, new_col_id, width)
+        })
+        .unwrap_or(false);
+    if moved {
+        state.focused_pane = Some(pane_id);
+        sync_focus(state);
+    }
+    moved
+}
+
 pub(crate) fn move_pane_to_column(
     state: &mut AppState,
     pane_id: PaneId,

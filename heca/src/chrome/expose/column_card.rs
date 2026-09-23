@@ -41,7 +41,7 @@ impl ColumnCard<'_> {
         // failure this whole task exists to remove. Padding sits **inside** the border box, so the
         // share stays exact and the air appears between the cards all the same. Vertically a gap is
         // safe (`grow` divides what is left *after* gaps), so the panes below use one.
-        let mut stack = Flex::column().pad_x(Spacing::Xs).gap_spacing(Spacing::Xs);
+        let mut stack = Flex::column().padding_x(Spacing::Xs).gap(Spacing::Xs);
         let mut cells = Vec::new();
         for pane in &self.column.panes {
             let (card, cell) = PaneCard {
@@ -72,8 +72,8 @@ impl ColumnCard<'_> {
 mod tests {
     use super::*;
     use crate::chrome::expose::model::ExposePane;
-    use crate::chrome::expose::testing::{callbacks, card_of, lay_out, theme};
     use crate::chrome::expose::pane_card::pane_key;
+    use crate::chrome::expose::testing::{callbacks, card_of, lay_out, theme};
     use heca_grid_ui::style::Length;
 
     fn column(heights: &[f64]) -> Box<dyn heca_grid_ui::Component> {
@@ -104,7 +104,7 @@ mod tests {
         }
         .build();
         // The width a row would give it; the height is the box it must divide.
-        lay_out(stack.width(Length::Pct(1.0)).height(Length::Pct(1.0)), 400.0, 600.0)
+        lay_out(stack.width(Length::FULL).height(Length::FULL), 400.0, 600.0)
     }
 
     /// **A pane takes the share of its column its real height is worth.** A stack the user dragged

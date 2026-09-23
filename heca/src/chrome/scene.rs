@@ -27,11 +27,7 @@ use super::*;
 /// `share(n)` setter in the library; this exists so a *transparent* wrapper stays transparent until
 /// then, rather than each caller rediscovering the combination.
 pub(super) fn pass_box_down(node: &mut dyn Component) {
-    let layout = &mut node.base_mut().style.layout;
-    layout.flex_grow = 1.0;
-    layout.height = heca_grid_ui::Length::Px(0.0);
-    layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
-    layout.flex_shrink = Some(1.0);
+    node.base_mut().style.layout.share = Some(1.0);
 }
 
 /// Give a container body its declared share of the region's **main axis**, as a flex grow factor
@@ -44,26 +40,7 @@ pub(super) fn pass_box_down(node: &mut dyn Component) {
 /// Set by the region rather than by the container, because a share only means anything relative to
 /// its siblings — which a container cannot see and should not have to.
 pub(super) fn with_share(mut body: WidgetModel, grow: f32) -> WidgetModel {
-    let layout = &mut body.base_mut().style.layout;
-    layout.flex_grow = grow;
-    if grow > 0.0 {
-        // A share has to be **of the region**, not of what is left over after the content.
-        //
-        // `flex_grow` alone distributes only *positive* free space, and a container's content is
-        // routinely taller than the sidebar — so two containers measured 1214px each inside a 600px
-        // body, overflowed the frame, and got no share at all. In CSS this is `flex: 1 1 0`; there
-        // is no `flex_basis` in this vocabulary, so the equivalent is a **zero base size** plus
-        // permission to shrink. Then the free space is the whole region and the shares divide it:
-        // 296px each, measured.
-        //
-        // Safe because a shared container is expected to scroll its own content — it nests its own
-        // scroll area, so being handed less height than its content is the normal case, not a
-        // squeeze. A container that asked for `0.0` is saying "size me to my content" and keeps its
-        // natural height.
-        layout.height = heca_grid_ui::Length::Px(0.0);
-        layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
-        layout.flex_shrink = Some(1.0);
-    }
+    body.base_mut().style.layout.share = Some(grow);
     body
 }
 
@@ -93,7 +70,7 @@ fn focus_and_pick(
     if share > 0.0 {
         pass_box_down(body.as_mut());
     }
-    let mut picked = KeyHint::new_boxed(body)
+    let mut picked = KeyHint::new(body)
         // Top-centre over a tall dock. Outside a render pass there is no theme to tint it with, and
         // there is no keycap to draw either (no pick is open while a host reads metadata), so the
         // default accent stands.
@@ -135,6 +112,11 @@ fn focus_and_pick(
     };
     Box::new(
         focus_scope
+            // **The dock's own letter belongs to the dock pick, not the ordinary one.** Clicking
+            // this wrapper focuses the container, which is what makes it actionable and therefore
+            // lettered — but that is a keyboard destination `prefix+Shift+e` already offers, so in
+            // `prefix+/` it was a letter per placement pointing at something with its own key.
+            .hint_scope([crate::chrome::DOCK_PICK_SCOPE])
             .focus(ctx.state().container_keyboard_target(container))
             // Still declared: `offer_hint_by_key` matches it so the DOCK PICK can letter this
             // container (`chrome/hint/letters.rs`). It is no longer read by any hit-test.
@@ -174,10 +156,10 @@ pub(super) fn build_region_content(
                 // The share goes on the OUTERMOST node, so it has to be applied after the wrappers:
                 // a share set on the body would leave the wrapper content-sized and divide nothing
                 // (F003/P011/T021's lesson, one level up).
-                Some(with_share(
-                    focus_and_pick(body, &c.id, c.grow, ctx),
-                    c.grow,
-                ))
+                // **The container asks for its share and the engine decides what that means** —
+                // a flex region divides itself by it, a templated one has already sized the track
+                // and ignores it. Neither this code nor a plugin has to know which it is in.
+                Some(with_share(focus_and_pick(body, &c.id, c.grow, ctx), c.grow))
             }
             _ => None,
         })
@@ -191,6 +173,35 @@ pub(super) fn build_region_content(
         // `reorder`/`move_container` maintain), each keeping its own body and its own share. The
         // stack itself must be allowed to shrink to the region, or it takes its content's height
         // and overflows before the shares are ever divided.
+        // **The region said how to arrange them**, so it is a grid and the template is the answer.
+        // Each container still carries its own share, which the tracks may override — `"auto 1fr"`
+        // pins the first to its content and gives the rest to the second, whatever either asked for.
+        _ if host.layout(region).is_set() => {
+            let arrangement = host.layout(region);
+            // **The body fills the region on both axes.** The share covers the main one; across it
+            // a grid is auto-sized, so without this it drew at its content's width and left the
+            // rest of the sidebar empty.
+            let mut grid = heca_grid_ui::widgets::Grid::new()
+                .share(1.0)
+                .width(heca_grid_ui::Length::Percent(1.0));
+            if let Some(rows) = &arrangement.rows {
+                grid = grid.template_row(rows.as_str());
+            }
+            if let Some(columns) = &arrangement.columns {
+                grid = grid.template_column(columns.as_str());
+            }
+            if let Some(gap) = arrangement.gap {
+                grid = grid.gap(gap);
+            }
+            {
+                let layout = &mut grid.base_mut().style.layout;
+                layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
+                layout.flex_shrink = Some(1.0);
+            }
+            // No rule between them: a caller that chose the arrangement chose what separates the
+            // parts, and a `Separator` injected here would be a row the template did not ask for.
+            Some(Box::new(grid.child(bodies)))
+        }
         _ => {
             let mut stack = Flex::column().gap(8.0).grow(1.0);
             {
@@ -211,7 +222,7 @@ pub(super) fn build_region_content(
                     } else {
                         col
                     };
-                    col.child_boxed(body)
+                    col.child(body)
                 },
             )))
         }
@@ -246,11 +257,12 @@ pub(super) fn build_sidebar_shell(
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
     // The collapse toggle lives in the always-visible top bar (sidebar-fu-14), so the
     // shell has no header row — the mounted content (if any) fills the body.
-    let mut body = apply_pane_frame(Pane::new(), border_style)
+    let mut body = Pane::new()
+        .border_style(border_style.into())
         .border_width(border_width)
         .radius(border_radius)
-        .width(Length::Px(inner_w))
-        .height(Length::Px(inner_h))
+        .width(inner_w)
+        .height(inner_h)
         .padding(10.0)
         .gap(8.0)
         .background(shell_bg);
@@ -266,19 +278,16 @@ pub(super) fn build_sidebar_shell(
         //
         // The shell's job is to give containers bounds. It hands them the region's height, they
         // take their shares of it, and each scrolls inside what it got.
-        body = body.child_boxed(content);
+        body = body.child(content);
     }
-    Flex::column()
-        .width(Length::Px(region_w))
-        .height(Length::Px(sidebar_h))
-        .child(
-            Surface::column()
-                .width(Length::Px(region_w))
-                .height(Length::Px(sidebar_h))
-                .background(shell_bg)
-                .padding(sidebar_gap)
-                .child(body),
-        )
+    Flex::column().width(region_w).height(sidebar_h).child(
+        Surface::column()
+            .width(region_w)
+            .height(sidebar_h)
+            .background(shell_bg)
+            .padding(sidebar_gap)
+            .child(body),
+    )
 }
 
 /// The chrome frame's geometry, colors, and status text — grouped so the assembly
@@ -309,7 +318,7 @@ pub(super) fn sidebar_toggle_button(
     catalog: &crate::actions::ActionCatalog,
     emit: ChromeIntentEmitter,
     color: Color,
-) -> KeyHint {
+) -> IconButton {
     use crate::app::interaction::InteractionIntent;
     // Label from the action descriptor (catalog-owned), never re-spelled here.
     let label = catalog.label(action_name).unwrap_or(action_name);
@@ -333,8 +342,12 @@ pub(super) fn sidebar_toggle_button(
     let button = IconButton::new(Icon::new(glyph).color(color))
         .key(action_name)
         .size(WidgetSize::Small)
-        .on_click(fire);
-    action_tooltip(KeyHint::new(button).on_hint(hint), action_name, label, shortcuts)
+        .on_click(fire)
+        // Declares its own pick — `on_hint` is on `ComponentExt`, so every widget has it. A
+        // `KeyHint` wrapper here used to be a second pick target on top of the button's own
+        // actionability (AGENTS § 5a).
+        .on_hint(hint);
+    action_tooltip(button, action_name, label, shortcuts)
 }
 
 /// Assemble the chrome root widget tree (no layout/paint): a transparent tab band
@@ -346,8 +359,8 @@ fn chrome_root(
     frame: &ChromeFrame,
     left_sidebar: Option<Flex>,
     right_sidebar: Option<Flex>,
-    left_toggle: Option<KeyHint>,
-    right_toggle: Option<KeyHint>,
+    left_toggle: Option<IconButton>,
+    right_toggle: Option<IconButton>,
     signals: &mut ChromeSignals,
 ) -> Flex {
     let ChromeFrame {
@@ -364,9 +377,7 @@ fn chrome_root(
     // Middle row: the full-height sidebar shell (when expanded) + a transparent
     // spacer over the content area (panes are drawn by the hand-drawn path under
     // this scene). The shell sizes its own width/height.
-    let mut middle = Flex::row()
-        .width(Length::Px(w))
-        .height(Length::Px(middle_h));
+    let mut middle = Flex::row().width(w).height(middle_h);
     if let Some(shell) = left_sidebar {
         middle = middle.child(shell);
     }
@@ -375,7 +386,7 @@ fn chrome_root(
         middle = middle.child(shell);
     }
 
-    let mut root = Flex::column().width(Length::Px(w)).height(Length::Px(h));
+    let mut root = Flex::column().width(w).height(h);
     // Transparent tab band — the hand-drawn tab bar paints underneath. Omitted
     // entirely when the top bar is hidden (`show_top_bar = false`).
     if tab_bar_height > 0.0 {
@@ -384,10 +395,10 @@ fn chrome_root(
         // Edge inset from a theme spacing token (resolved from the font at layout — no
         // hand-computed px). Vertical breathing room comes from centering a `Small` toggle.
         let mut band = Flex::row()
-            .width(Length::Px(w))
-            .height(Length::Px(tab_bar_height))
-            .align(Align::Center)
-            .pad_x(Spacing::Sm);
+            .width(w)
+            .height(tab_bar_height)
+            .align("center")
+            .padding_x(Spacing::Sm);
         if let Some(t) = left_toggle {
             band = band.child(t);
         }
@@ -410,11 +421,11 @@ fn chrome_root(
         signals.status = Some(status_signal);
         root = root.child(
             Surface::row()
-                .width(Length::Px(w))
-                .height(Length::Px(status_bar_height))
+                .width(w)
+                .height(status_bar_height)
                 .background(side_bg)
                 .radius(0.0)
-                .align(Align::Center)
+                .align("center")
                 .padding_xy(8.0, 0.0)
                 .child(status_watch),
         );
@@ -439,7 +450,6 @@ pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiThem
 /// Keycap glyph size (logical px) for follow-link hints — compact so a label sits
 /// legibly over a single terminal cell.
 const LINK_HINT_FONT: f32 = 13.0;
-
 
 /// Peak alpha of the visual-bell flash overlay (faded out over the flash window).
 const BELL_FLASH_MAX_ALPHA: u8 = 56;
@@ -469,7 +479,13 @@ pub(crate) fn paint_bell_flash(
         return;
     }
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    cx.rect(content_rect, theme.colors.accent.with_alpha(alpha), None, 0.0, None);
+    cx.rect(
+        content_rect,
+        theme.colors.accent.with_alpha(alpha),
+        None,
+        0.0,
+        None,
+    );
 }
 
 /// Paint follow-link keycaps over the focused terminal's hyperlinks while
@@ -512,7 +528,6 @@ pub(crate) fn paint_link_hints(
     }
 }
 
-
 /// Peak alpha for a non-current search-match highlight; the current match is bolder.
 const SEARCH_HL_ALPHA: u8 = 64;
 const SEARCH_HL_CURRENT_ALPHA: u8 = 150;
@@ -535,7 +550,14 @@ pub(crate) fn paint_search(
     // Every pane that has a search draws its own highlights and bar. They are
     // independent, so a search in one pane never disturbs another's.
     for (&pane_id, search) in &state.searches {
-        paint_pane_search(state, &mut cx, pane_id, search, theme, Size::new(w as f64, h as f64));
+        paint_pane_search(
+            state,
+            &mut cx,
+            pane_id,
+            search,
+            theme,
+            Size::new(w as f64, h as f64),
+        );
     }
 }
 
@@ -618,13 +640,9 @@ pub(super) fn search_bar_tree(
     // The query slot, then the match position as a separate chip so it reads as
     // distinct information rather than as part of what was typed.
     let mut row = Flex::row()
-        .align(Align::Center)
-        .gap_spacing(Spacing::Sm)
-        .child(
-            Flex::row()
-                .width(Length::Px(field.w as f32))
-                .height(Length::Px(field.h as f32)),
-        );
+        .align("center")
+        .gap(Spacing::Sm)
+        .child(Flex::row().width(field.w as f32).height(field.h as f32));
     if let Some(count) = count {
         row = row.child(Tag::new(count).color(theme.colors.accent));
     }
@@ -633,10 +651,10 @@ pub(super) fn search_bar_tree(
     // into its bottom-right corner. The engine does the positioning; nothing here
     // measures text or computes a coordinate.
     Flex::row()
-        .justify(Justify::End)
-        .align(Align::End)
-        .width(Length::Px(pane.size.w as f32))
-        .height(Length::Px(pane.size.h as f32))
+        .justify("end")
+        .align("end")
+        .width(pane.size.w as f32)
+        .height(pane.size.h as f32)
         .margin_left(pane.loc.x as f32)
         .margin_top(pane.loc.y as f32)
         .padding(Spacing::Sm.scale() * theme.font_size)
@@ -732,7 +750,12 @@ pub(super) fn chrome_scene(
 pub(crate) fn build_chrome_root(
     state: &crate::app_state::AppState,
     chrome: ChromeConfig,
-) -> (Flex, ChromeSignals, DragItemRegistry, crate::app::interaction::InteractionSource) {
+) -> (
+    Flex,
+    ChromeSignals,
+    DragItemRegistry,
+    crate::app::interaction::InteractionSource,
+) {
     let phys = state.window.inner_size();
     let scale = state.scale_factor as f32;
     let w = phys.width as f32 / scale;
@@ -754,8 +777,12 @@ pub(crate) fn build_chrome_root(
     // `WorkspacesContainer`, the right is an empty placeholder until it gains a Provider.
     let sidebar_gap = state.appearance.effective_sidebar_gap(&state.theme);
     let border_style = state.appearance.effective_sidebar_border_style();
-    let border_width = state.appearance.effective_sidebar_border_width(&state.theme);
-    let border_radius = state.appearance.effective_sidebar_border_radius(&state.theme);
+    let border_width = state
+        .appearance
+        .effective_sidebar_border_width(&state.theme);
+    let border_radius = state
+        .appearance
+        .effective_sidebar_border_radius(&state.theme);
     let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
 
     // The region body is whatever the `ChromeHost` has seated in that region — the app

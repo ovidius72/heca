@@ -70,7 +70,13 @@ impl Component for Gauge {
         }
         let (success, warning, danger, muted, glow_c) = {
             let t = cx.theme();
-            (t.colors.success, t.colors.warning, t.colors.danger, t.colors.muted, t.colors.glow)
+            (
+                t.colors.success,
+                t.colors.warning,
+                t.colors.danger,
+                t.colors.muted,
+                t.colors.glow,
+            )
         };
         let b = self.base.bounds;
         let value = self.value.get_untracked().clamp(0.0, 1.0);
@@ -98,7 +104,13 @@ impl Component for Gauge {
                 });
                 cx.rect(rect, color, None, 1.0, glow);
             } else {
-                cx.rect(rect, muted.with_alpha(cx.theme().colors.interaction.unlit), None, 1.0, None);
+                cx.rect(
+                    rect,
+                    muted.with_alpha(cx.theme().colors.interaction.unlit),
+                    None,
+                    1.0,
+                    None,
+                );
             }
         }
     }

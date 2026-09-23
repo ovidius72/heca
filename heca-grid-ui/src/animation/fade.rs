@@ -149,7 +149,10 @@ mod tests {
         f.leave();
         f.tick(0.05);
         assert!((f.amount() - 0.5).abs() < 0.01, "halfway: {}", f.amount());
-        assert!(!f.tick(0.05), "the frame it finishes is the frame the surface can go");
+        assert!(
+            !f.tick(0.05),
+            "the frame it finishes is the frame the surface can go"
+        );
         assert_eq!(f.amount(), 0.0, "and a finished exit rests invisible");
         assert!(!f.is_leaving(), "…so nothing holds the surface any more");
     }

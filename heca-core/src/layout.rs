@@ -42,7 +42,7 @@ pub mod view_offset;
 pub mod workspace;
 
 pub use column::{Column, Pane};
-pub use scrolling::ScrollingSpace;
+pub use scrolling::{LaidOutColumn, LaidOutPane, ScrollingSpace};
 pub use session::{Session, WorkspaceSwitch};
 pub use types::*;
 pub use view_offset::ViewOffset;

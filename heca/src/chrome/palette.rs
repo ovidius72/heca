@@ -20,12 +20,11 @@
 //! resolved by the overlay host, so the entry's intent is policy-routed and confirm-gated like any
 //! other dispatch.
 
-
-use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
+use heca_grid_ui::reactive::{SignalGet, SignalUpdate, create_effect};
 use heca_grid_ui::widgets::{Command, CommandPalette, Glyph};
 
 use super::{ChromeIntentEmitter, LayerKind, ModalResult, OverlayId};
-use crate::app::interaction::{dispatch_intent, InteractionIntent, InteractionSource};
+use crate::app::interaction::{InteractionIntent, InteractionSource, dispatch_intent};
 use crate::app_state::AppState;
 use crate::chrome::Intent;
 use crate::input::WmAction;
@@ -169,7 +168,10 @@ pub(crate) fn pane_entries(
 ) -> Vec<PaletteEntry> {
     // The pane you are standing in: the active workspace's active pane. Only one row in the whole
     // list can be it, which is what makes the accent mean something.
-    let focused = session.active_workspace().and_then(|ws| ws.active_pane()).map(|p| p.id);
+    let focused = session
+        .active_workspace()
+        .and_then(|ws| ws.active_pane())
+        .map(|p| p.id);
     let mut rows = Vec::new();
     for (ws_idx, ws) in session.workspaces.iter().enumerate() {
         let ws_name = workspace_name(ws, ws_idx);
@@ -346,7 +348,9 @@ pub(crate) fn open_command_palette(
     let id = OverlayId(state.layers.reserve_id());
     let prefill = format!(
         "{}{}",
-        mode.and_then(sigil_for).map(String::from).unwrap_or_default(),
+        mode.and_then(sigil_for)
+            .map(String::from)
+            .unwrap_or_default(),
         query.unwrap_or_default(),
     );
     let source = InteractionSource::Keyboard;
@@ -355,7 +359,11 @@ pub(crate) fn open_command_palette(
 
     let owners = owners(state);
     let mut rows = entries(&state.action_catalog, &owners, &state.action_shortcuts);
-    rows.extend(pane_entries(&state.session, &state.programs, state.last_focused));
+    rows.extend(pane_entries(
+        &state.session,
+        &state.programs,
+        state.last_focused,
+    ));
     rows.extend(workspace_entries(&state.session, state.last_visited_ws_idx));
     let mut palette = CommandPalette::new()
         .placeholder("Type a command…")
@@ -420,7 +428,7 @@ pub(crate) fn open_command_palette(
         }
         palette = palette.command(command);
     }
-    let palette = palette.query(prefill).open(true);
+    let palette = palette.query(prefill).default_open(true);
 
     // **A pane row follows its pane.** The chrome store already mirrors each pane's `program` and
     // `custom_name` as signals, and the row's title is a signal too, so this is one effect per pane
@@ -472,29 +480,29 @@ pub(crate) fn open_command_palette(
 
     // Modal + covering: an open palette captures the keyboard for the whole viewport (that is how
     // typing reaches its query line through the widget-keymap path) and nothing behind it should be
-    // acted on — `Domain::Overlay` says so for policy, `covers_content` is the fact it reads.
+    // acted on — `Domain::Overlay` says so for policy, `lock` is the fact it reads.
     let parent = state.layers.current();
     state.layers.insert(
         id.0,
         parent,
         LayerKind::OnDemand,
-        true,
-        true,
         Box::new(palette),
         &mut state.window_root,
     );
 
-    state.overlays.on_resolve(id, move |state, registry, result| {
-        if let ModalResult::Action { id: chosen, .. } = result
-            && let Some(entry) = rows.iter().find(|e| e.id == chosen)
-        {
-            dispatch_intent(state, registry, source, entry.intent.clone());
-            // Not the palette's business *what* was recorded or whether anything was: the shared
-            // helper saves when the store says it changed, so any future search surface is
-            // persisted by the same call without knowing this one exists.
-            crate::search_state::persist_if_changed(state);
-        }
-    });
+    state
+        .overlays
+        .on_resolve(id, move |state, registry, result| {
+            if let ModalResult::Action { id: chosen, .. } = result
+                && let Some(entry) = rows.iter().find(|e| e.id == chosen)
+            {
+                dispatch_intent(state, registry, source, entry.intent.clone());
+                // Not the palette's business *what* was recorded or whether anything was: the shared
+                // helper saves when the store says it changed, so any future search surface is
+                // persisted by the same call without knowing this one exists.
+                crate::search_state::persist_if_changed(state);
+            }
+        });
     state.needs_redraw = true;
     id
 }
@@ -538,7 +546,12 @@ mod tests {
     #[test]
     fn a_components_action_is_scoped_and_focuses_first() {
         let mut catalog = ActionCatalog::with_builtins();
-        component_action(&mut catalog, "docker.restart", "Restart Container", "docker");
+        component_action(
+            &mut catalog,
+            "docker.restart",
+            "Restart Container",
+            "docker",
+        );
         let owners = std::collections::HashMap::from([(
             "docker.restart".to_string(),
             owner("docker.right", "Containers", false),
@@ -550,7 +563,10 @@ mod tests {
         assert_eq!(entry.description, "Restart Container — what it does.");
         match &entry.intent {
             InteractionIntent::FocusContainerThenAction { container, action } => {
-                assert_eq!(container, "docker.right", "the placement, not the component");
+                assert_eq!(
+                    container, "docker.right",
+                    "the placement, not the component"
+                );
                 assert_eq!(action.action, "docker.restart");
             }
             other => panic!("expected the focus-then-act composite, got {other:?}"),
@@ -561,12 +577,8 @@ mod tests {
     fn session_with_panes() -> heca_core::layout::Session {
         use heca_core::layout::{LayoutOptions, Pane, PaneId, Rectangle, SessionId, Size};
         let viewport = Size::new(800.0, 600.0);
-        let mut session = heca_core::layout::Session::new(
-            SessionId(0),
-            viewport,
-            1.0,
-            LayoutOptions::default(),
-        );
+        let mut session =
+            heca_core::layout::Session::new(SessionId(0), viewport, 1.0, LayoutOptions::default());
         session.workspaces[0].name = Some("Editing".to_string());
         // **The shape a running app actually has**: `title` empty, the name carried by the live
         // runtime. Reading `title` here produced a list of blank rows in the app while the sidebar
@@ -590,7 +602,11 @@ mod tests {
     #[test]
     fn a_pane_row_is_ranked_by_its_display_name_not_its_id() {
         let session = session_with_panes();
-        let rows = pane_entries(&session, &heca_config::programs::ProgramsConfig::default(), None);
+        let rows = pane_entries(
+            &session,
+            &heca_config::programs::ProgramsConfig::default(),
+            None,
+        );
 
         let running = find(&rows, "pane:1");
         assert_eq!(
@@ -598,7 +614,11 @@ mod tests {
             "the name comes from the live runtime through pane_info_view — `title` is empty in a \
              running app, and reading it left every row blank",
         );
-        assert_eq!(running.rank_id.as_deref(), Some("zsh"), "ranked by that name");
+        assert_eq!(
+            running.rank_id.as_deref(),
+            Some("zsh"),
+            "ranked by that name"
+        );
         assert_eq!(running.mode.as_deref(), Some(MODE_PANE));
         assert_eq!(
             running.description, "/tmp/project · Editing",
@@ -613,7 +633,11 @@ mod tests {
 
         match renamed.intent {
             InteractionIntent::FocusPane { pane_id } => {
-                assert_eq!(pane_id, heca_core::layout::PaneId(2), "runs FocusPane on that pane");
+                assert_eq!(
+                    pane_id,
+                    heca_core::layout::PaneId(2),
+                    "runs FocusPane on that pane"
+                );
             }
             ref other => panic!("expected FocusPane, got {other:?}"),
         }
@@ -625,7 +649,11 @@ mod tests {
     fn the_focused_pane_and_the_active_workspace_are_marked_current() {
         let session = session_with_panes();
 
-        let panes = pane_entries(&session, &heca_config::programs::ProgramsConfig::default(), None);
+        let panes = pane_entries(
+            &session,
+            &heca_config::programs::ProgramsConfig::default(),
+            None,
+        );
         let current: Vec<&str> = panes
             .iter()
             .filter(|r| r.current)
@@ -671,17 +699,28 @@ mod tests {
         let prefill = |mode: Option<&str>, query: Option<&str>| {
             format!(
                 "{}{}",
-                mode.and_then(sigil_for).map(String::from).unwrap_or_default(),
+                mode.and_then(sigil_for)
+                    .map(String::from)
+                    .unwrap_or_default(),
                 query.unwrap_or_default(),
             )
         };
         assert_eq!(prefill(None, None), "", "bare is what it always was");
-        assert_eq!(prefill(Some("pane"), None), "@", "a mode alone lists it whole");
+        assert_eq!(
+            prefill(Some("pane"), None),
+            "@",
+            "a mode alone lists it whole"
+        );
         assert_eq!(prefill(Some("pane"), Some("nvim")), "@nvim");
         assert_eq!(prefill(Some("workspace"), Some("ed")), "$ed");
-        assert_eq!(prefill(None, Some("close")), "close", "a query with no mode is a search");
         assert_eq!(
-            prefill(Some("nonsense"), Some("x")), "x",
+            prefill(None, Some("close")),
+            "close",
+            "a query with no mode is a search"
+        );
+        assert_eq!(
+            prefill(Some("nonsense"), Some("x")),
+            "x",
             "an unknown mode has no sigil and lands in the default list, rather than refusing to \
              open over a typo in a config line",
         );
@@ -691,10 +730,13 @@ mod tests {
     /// new arguments are optional — a required one would take it out of the palette entirely.
     #[test]
     fn command_palette_stays_bindable_and_offerable_with_no_arguments() {
-        use crate::input::{action_from_name, WmAction};
+        use crate::input::{WmAction, action_from_name};
         assert_eq!(
             action_from_name("command_palette"),
-            Some(WmAction::CommandPalette { mode: None, query: None }),
+            Some(WmAction::CommandPalette {
+                mode: None,
+                query: None
+            }),
             "the bare name still parses, and to the same behaviour",
         );
         let catalog = ActionCatalog::with_builtins();
@@ -730,8 +772,14 @@ mod tests {
         component_action(&mut catalog, "docker.restart", "Restart", "docker");
         component_action(&mut catalog, "ws.delete", "Delete Row", "workspaces");
         let owners = std::collections::HashMap::from([
-            ("docker.restart".to_string(), owner("docker", "Containers", false)),
-            ("ws.delete".to_string(), owner("workspaces", "Workspaces", true)),
+            (
+                "docker.restart".to_string(),
+                owner("docker", "Containers", false),
+            ),
+            (
+                "ws.delete".to_string(),
+                owner("workspaces", "Workspaces", true),
+            ),
         ]);
 
         let rows = entries(&catalog, &owners, &super::super::ActionShortcuts::default());
@@ -741,12 +789,7 @@ mod tests {
             "an unfocused component's actions are listed, not filtered out",
         );
         // Everything else keeps the catalog's own order behind them.
-        let builtins: Vec<&str> = rows
-            .iter()
-            .skip(1)
-            .take(2)
-            .map(|e| e.id.as_str())
-            .collect();
+        let builtins: Vec<&str> = rows.iter().skip(1).take(2).map(|e| e.id.as_str()).collect();
         assert_eq!(
             builtins,
             catalog

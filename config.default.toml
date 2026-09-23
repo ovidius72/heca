@@ -210,7 +210,7 @@ delete_workspace = true # deleting a workspace (and its contents)
 #  APPEARANCE
 # ═════════════════════════════════════════════════════════════════════════════
 # Layout:
-#   [appearance]          → app-wide knobs + GLOBAL border defaults
+#   [appearance]          → app-wide settings + GLOBAL border defaults
 #   [appearance.terminal] → terminal CONTENT translucency/blur
 #   [appearance.pane]     → pane FRAME (border/radius/gap/padding) + info bar
 #   [appearance.sidebar]  → sidebar shell frame + background
@@ -220,7 +220,7 @@ delete_workspace = true # deleting a workspace (and its contents)
 # border_width; if that is unset too, the active theme decides. So you set a value
 # once at [appearance] and every surface follows, or override per surface.
 #
-# Numeric "amount" knobs (transparency/blur) are 0..=100; 0 = off (default).
+# Numeric "amount" settings (transparency/blur) are 0..=100; 0 = off (default).
 # Lengths (border_width, *_radius, gap, padding, width) are in logical pixels.
 
 [appearance]
@@ -247,11 +247,22 @@ background_transparency = 0
 #         popover | menu | full_screen_ui | window_background
 # vibrancy = "under_window_background"
 
-# The `prefix+/` picker's letter size, in logical px. ONE size for every letter in
-# the app: a letter is drawn *over* whatever it points at, so it is not scaled by
-# the size of that thing — an emphasized header button and a whole pane wear the
-# same letter. Raise it if the letters read small at your font size.
+# ── The `prefix+/` picker's letters ──
+# ONE size and ONE colour for every letter in the app. A letter is drawn *over*
+# whatever it points at rather than being part of it, so it does not take that
+# thing's size or colour: an emphasized header button and a whole pane wear the
+# same letter.
+#
+# hint_font_size : size in logical px, clamped 6..=48. Raise it if the letters read
+#                  small at your font size. Lower it to fit letters into narrower
+#                  targets — a letter is dropped when its target is too small to
+#                  hold it, so a smaller letter reaches more places.
+# hint_color     : the letters' colour. Unset here → the theme's own `hint_color`
+#                  → the theme accent. Set it here to keep one colour whatever
+#                  theme you load; set it in a theme instead to have it travel
+#                  with that palette.
 hint_font_size = 12.0
+# hint_color = "#ffb86c"
 
 # Effect tokens — override the theme; unset → inherit the theme value.
 # glow_size         : owns glow presence + halo radius + strength — including the

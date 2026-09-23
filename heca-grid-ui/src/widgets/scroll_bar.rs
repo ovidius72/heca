@@ -9,7 +9,7 @@
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, Handled, PaintCx};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::Glow;
 use crate::style::{Direction, Length};
 use heca_core::layout::{Point, Rectangle, Size};
@@ -150,7 +150,6 @@ impl ScrollBar {
         };
         self.set_offset(frac * self.max_offset());
     }
-
 }
 
 impl Component for ScrollBar {
@@ -169,7 +168,7 @@ impl Component for ScrollBar {
             return;
         };
         let active = self.base.hovered() || self.drag_grab.is_some();
-        let accent = cx.theme().colors.accent;
+        let accent = cx.accent();
         let glow = Some(Glow {
             color: accent,
             radius: 10.0,
@@ -234,8 +233,8 @@ impl LayoutExt for ScrollBar {}
 
 #[cfg(test)]
 mod tests {
-    use crate::event::PointerButton;
     use super::*;
+    use crate::event::PointerButton;
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -277,7 +276,10 @@ mod tests {
         s.viewport_extent_signal().set(50.0);
         s.base.bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(16.0, 100.0));
         assert_eq!(
-            crate::component::dispatch(&mut s, &Event::pointer_pressed(Point::new(8.0, 60.0), PointerButton::Left)),
+            crate::component::dispatch(
+                &mut s,
+                &Event::pointer_pressed(Point::new(8.0, 60.0), PointerButton::Left)
+            ),
             Handled::Yes
         );
         assert!(!seen.borrow().is_empty(), "track click emits a new offset");

@@ -2,8 +2,7 @@ use super::super::{
     BackendAlert, BackendKeyCode, BackendKeyEvent, BackendModifiers, BackendMouseButton,
     BackendMouseEvent, BackendMouseEventKind, GraphicsPlacement, HyperlinkSpan, SearchMatch,
     TerminalCell, TerminalImage, TerminalImageFrame, TerminalLine, TerminalPaletteDefaults,
-    TerminalSnapshot,
-    TerminalUnderlineStyle,
+    TerminalSnapshot, TerminalUnderlineStyle,
 };
 use crate::backend::{TerminalCursor, TerminalCursorShape};
 use crate::layout::animation::{Animation, AnimationConfig};
@@ -204,9 +203,11 @@ impl TerminalEngine {
             pending_bell: Arc::clone(&pending_bell),
         }));
         let clipboard_writes = Arc::new(Mutex::new(Vec::new()));
-        terminal.set_clipboard(&(Arc::new(OscClipboard {
-            pending: Arc::clone(&clipboard_writes),
-        }) as Arc<dyn Clipboard>));
+        terminal.set_clipboard(
+            &(Arc::new(OscClipboard {
+                pending: Arc::clone(&clipboard_writes),
+            }) as Arc<dyn Clipboard>),
+        );
 
         Ok(Self {
             terminal,
@@ -243,7 +244,8 @@ impl TerminalEngine {
             return;
         }
         self.cell_px = cell_px;
-        self.terminal.resize(terminal_size(self.cols, self.rows, cell_px));
+        self.terminal
+            .resize(terminal_size(self.cols, self.rows, cell_px));
     }
 
     /// Enable or disable plain-text URL auto-detection (linkify).
@@ -258,7 +260,8 @@ impl TerminalEngine {
     pub(super) fn resize(&mut self, cols: usize, rows: usize) {
         self.cols = cols;
         self.rows = rows;
-        self.terminal.resize(terminal_size(cols, rows, self.cell_px));
+        self.terminal
+            .resize(terminal_size(cols, rows, self.cell_px));
         // A resize reflows scrollback (visible rows change, history moves), which
         // changes the max valid offset. Re-clamp AFTER the wezterm resize so the
         // boundary reflects the reflowed scrollback, never pointing past the new top.
@@ -506,11 +509,7 @@ impl TerminalEngine {
             .as_ref()
             .map_or(self.viewport_offset as f64, |a| a.value());
         if (current.round() as usize) != 0 {
-            self.viewport_anim = Some(Animation::new(
-                current,
-                0.0,
-                self.viewport_anim_config,
-            ));
+            self.viewport_anim = Some(Animation::new(current, 0.0, self.viewport_anim_config));
         }
     }
 
@@ -754,8 +753,7 @@ impl TerminalEngine {
         // `viewport_top_stable_row` track the scrolled content instead of staying
         // pinned to the live screen — which selection overlays and caret
         // auto-scroll depend on (terminal-task-01g).
-        self.terminal.screen().visible_row_to_stable_row(0)
-            - self.viewport_offset as isize
+        self.terminal.screen().visible_row_to_stable_row(0) - self.viewport_offset as isize
     }
 
     pub(super) fn changed_visible_rows_since(&self, seqno: usize) -> Vec<usize> {
@@ -880,7 +878,9 @@ impl TerminalEngine {
             return cached.clone();
         }
         let decoded = decode_terminal_image(hash, &data.data()).map(Arc::new);
-        self.decoded_images.borrow_mut().insert(hash, decoded.clone());
+        self.decoded_images
+            .borrow_mut()
+            .insert(hash, decoded.clone());
         decoded
     }
 }
@@ -1167,7 +1167,9 @@ impl GraphicsCollector {
         decoded: &Arc<TerminalImage>,
     ) {
         let image_id = decoded.id;
-        self.images.entry(image_id).or_insert_with(|| decoded.clone());
+        self.images
+            .entry(image_id)
+            .or_insert_with(|| decoded.clone());
 
         match self.index.get(&(hash, placement_id, z_index)) {
             Some(&idx) => {
@@ -1256,7 +1258,10 @@ fn is_url_body_byte(b: u8) -> bool {
 /// Trailing characters trimmed off a detected URL (sentence punctuation that is
 /// almost never part of the link).
 fn is_url_trailing_byte(b: u8) -> bool {
-    matches!(b, b'.' | b',' | b';' | b':' | b'!' | b'?' | b')' | b']' | b'}' | b'\'' | b'"' | b'>')
+    matches!(
+        b,
+        b'.' | b',' | b';' | b':' | b'!' | b'?' | b')' | b']' | b'}' | b'\'' | b'"' | b'>'
+    )
 }
 
 /// Scan `text` for URL byte ranges `[start, end)` beginning with a known scheme.
@@ -1332,9 +1337,9 @@ fn detect_plain_links(lines: &[TerminalLine], hyperlinks: &mut Vec<HyperlinkSpan
         detect_row_links(line, row, &mut detected);
     }
     detected.retain(|d| {
-        !hyperlinks[..explicit].iter().any(|e| {
-            e.row == d.row && d.start_col < e.end_col && e.start_col < d.end_col
-        })
+        !hyperlinks[..explicit]
+            .iter()
+            .any(|e| e.row == d.row && d.start_col < e.end_col && e.start_col < d.end_col)
     });
     hyperlinks.extend(detected);
 }
@@ -1624,7 +1629,10 @@ mod tests {
         .expect("engine should initialize");
 
         // The configured background is in effect.
-        assert_eq!(engine.terminal.palette().background, rgba_u8([10, 20, 30, 255]));
+        assert_eq!(
+            engine.terminal.palette().background,
+            rgba_u8([10, 20, 30, 255])
+        );
 
         // A program forks the palette via OSC 11 (set the default background). After this,
         // `palette()` returns the fork, not the config.
@@ -1650,9 +1658,15 @@ mod tests {
     #[test]
     fn snapshot_preserves_background_colored_blank_cells_after_clear() {
         let writer = SharedWriter::new(Box::new(SinkWriter));
-        let mut engine =
-            TerminalEngine::new(6, 2, (8.0, 16.0), writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
-                .expect("engine should initialize");
+        let mut engine = TerminalEngine::new(
+            6,
+            2,
+            (8.0, 16.0),
+            writer,
+            None,
+            crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+        )
+        .expect("engine should initialize");
 
         engine.advance_bytes(b"\x1b[48;2;30;30;46m\x1b[2J");
 
@@ -1675,8 +1689,15 @@ mod tests {
     #[test]
     fn bell_alert_is_captured_once() {
         let writer = SharedWriter::new(Box::new(SinkWriter));
-        let mut engine = TerminalEngine::new(80, 24, (8.0, 16.0), writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
-            .expect("terminal engine should initialize");
+        let mut engine = TerminalEngine::new(
+            80,
+            24,
+            (8.0, 16.0),
+            writer,
+            None,
+            crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+        )
+        .expect("terminal engine should initialize");
 
         engine.advance_bytes(b"\x07");
         assert_eq!(engine.take_alerts(), vec![BackendAlert::Bell]);
@@ -1686,8 +1707,15 @@ mod tests {
     #[test]
     fn captures_osc52_clipboard_write_once() {
         let writer = SharedWriter::new(Box::new(SinkWriter));
-        let mut engine = TerminalEngine::new(80, 24, (8.0, 16.0), writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
-            .expect("terminal engine should initialize");
+        let mut engine = TerminalEngine::new(
+            80,
+            24,
+            (8.0, 16.0),
+            writer,
+            None,
+            crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+        )
+        .expect("terminal engine should initialize");
 
         // OSC 52: set clipboard `c` to base64("hello"). wezterm decodes it for us.
         engine.advance_bytes(b"\x1b]52;c;aGVsbG8=\x07");
@@ -1699,8 +1727,15 @@ mod tests {
     #[test]
     fn bracketed_paste_mode_tracks_decset_2004() {
         let writer = SharedWriter::new(Box::new(SinkWriter));
-        let mut engine = TerminalEngine::new(80, 24, (8.0, 16.0), writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
-            .expect("terminal engine should initialize");
+        let mut engine = TerminalEngine::new(
+            80,
+            24,
+            (8.0, 16.0),
+            writer,
+            None,
+            crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+        )
+        .expect("terminal engine should initialize");
 
         assert!(!engine.bracketed_paste_enabled(), "off by default");
         engine.advance_bytes(b"\x1b[?2004h");
@@ -1839,8 +1874,14 @@ mod tests {
         // The placement resolves to a decoded image in the registry.
         assert_eq!(snapshot.images.len(), 1, "one decoded image registered");
         let image = &snapshot.images[0];
-        assert_eq!(image.id, placement.image_id, "placement references the image");
-        assert!(image.width >= 16 && image.height >= 6, "decoded at source size");
+        assert_eq!(
+            image.id, placement.image_id,
+            "placement references the image"
+        );
+        assert!(
+            image.width >= 16 && image.height >= 6,
+            "decoded at source size"
+        );
         assert_eq!(image.frames.len(), 1, "static image has one frame");
         assert_eq!(
             image.frames[0].rgba.len(),
@@ -1878,10 +1919,20 @@ mod tests {
         let mut bytes = Vec::new();
         {
             let mut enc = image::codecs::gif::GifEncoder::new(&mut bytes);
-            enc.encode_frame(Frame::from_parts(red, 0, 0, Delay::from_numer_denom_ms(120, 1)))
-                .expect("encode frame 0");
-            enc.encode_frame(Frame::from_parts(blue, 0, 0, Delay::from_numer_denom_ms(120, 1)))
-                .expect("encode frame 1");
+            enc.encode_frame(Frame::from_parts(
+                red,
+                0,
+                0,
+                Delay::from_numer_denom_ms(120, 1),
+            ))
+            .expect("encode frame 0");
+            enc.encode_frame(Frame::from_parts(
+                blue,
+                0,
+                0,
+                Delay::from_numer_denom_ms(120, 1),
+            ))
+            .expect("encode frame 1");
         }
 
         let decoded = decode_terminal_image([3u8; 32], &ImageDataType::EncodedFile(bytes))
@@ -1896,8 +1947,16 @@ mod tests {
             decoded.frames[0].rgba, decoded.frames[1].rgba,
             "animation frames must differ; frame 0 red, frame 1 blue"
         );
-        assert_eq!(&decoded.frames[0].rgba[..4], &[255, 0, 0, 255], "frame 0 red");
-        assert_eq!(&decoded.frames[1].rgba[..4], &[0, 0, 255, 255], "frame 1 blue");
+        assert_eq!(
+            &decoded.frames[0].rgba[..4],
+            &[255, 0, 0, 255],
+            "frame 0 red"
+        );
+        assert_eq!(
+            &decoded.frames[1].rgba[..4],
+            &[0, 0, 255, 255],
+            "frame 1 blue"
+        );
     }
 
     #[test]
@@ -1929,7 +1988,11 @@ mod tests {
         assert_eq!((p.row, p.col, p.cols, p.rows), (0, 0, 2, 2));
         assert_eq!(p.image_id, 42);
         assert_eq!(p.src_top_left, [0.0, 0.0], "top-left from the first cell");
-        assert_eq!(p.src_bottom_right, [1.0, 1.0], "bottom-right from the last cell");
+        assert_eq!(
+            p.src_bottom_right,
+            [1.0, 1.0],
+            "bottom-right from the last cell"
+        );
         assert_eq!(images.len(), 1, "the shared image is registered once");
     }
 
@@ -1998,9 +2061,16 @@ mod tests {
         let mut engine = viewport_engine(20, 4, 3500);
         fill_scrollback(&mut engine, 20, 10);
 
-        assert_eq!(engine.viewport_offset(), 0, "fresh engine pins to live bottom");
+        assert_eq!(
+            engine.viewport_offset(),
+            0,
+            "fresh engine pins to live bottom"
+        );
         assert!(engine.at_bottom(), "at_bottom is true at offset 0");
-        assert!(!engine.take_viewport_changed(), "no motion yet ⇒ no viewport damage");
+        assert!(
+            !engine.take_viewport_changed(),
+            "no motion yet ⇒ no viewport damage"
+        );
 
         let snapshot = engine.snapshot((8.0, 14.0));
         assert_eq!(snapshot.viewport_offset, 0);
@@ -2021,12 +2091,18 @@ mod tests {
         let mut engine = viewport_engine(20, 4, 3500);
         fill_scrollback(&mut engine, 20, 10);
         let max_offset = max_offset(&engine);
-        assert!(max_offset > 0, "fixture should produce some scrollback history");
+        assert!(
+            max_offset > 0,
+            "fixture should produce some scrollback history"
+        );
 
         engine.scroll_viewport(3);
         assert_eq!(engine.viewport_offset(), 3);
         assert!(!engine.at_bottom());
-        assert!(engine.take_viewport_changed(), "motion sets the viewport-changed flag");
+        assert!(
+            engine.take_viewport_changed(),
+            "motion sets the viewport-changed flag"
+        );
         assert!(!engine.take_viewport_changed(), "flag drains once");
 
         // Overscroll clamps to max_offset.
@@ -2043,7 +2119,10 @@ mod tests {
         // No-op scrolls (already at boundary) do not arm damage.
         engine.scroll_viewport(-1);
         assert_eq!(engine.viewport_offset(), 0);
-        assert!(!engine.take_viewport_changed(), "clamped no-op must not arm damage");
+        assert!(
+            !engine.take_viewport_changed(),
+            "clamped no-op must not arm damage"
+        );
     }
 
     #[test]
@@ -2058,7 +2137,10 @@ mod tests {
         assert!(engine.take_viewport_changed());
 
         engine.scroll_to_top();
-        assert!(!engine.take_viewport_changed(), "already-at-top no-op must not arm damage");
+        assert!(
+            !engine.take_viewport_changed(),
+            "already-at-top no-op must not arm damage"
+        );
 
         engine.scroll_to_bottom();
         assert_eq!(engine.viewport_offset(), 0);
@@ -2066,7 +2148,10 @@ mod tests {
         assert!(engine.take_viewport_changed());
 
         engine.scroll_to_bottom();
-        assert!(!engine.take_viewport_changed(), "already-at-bottom no-op must not arm damage");
+        assert!(
+            !engine.take_viewport_changed(),
+            "already-at-bottom no-op must not arm damage"
+        );
     }
 
     #[test]
@@ -2085,9 +2170,15 @@ mod tests {
 
         engine.scroll_viewport_animated(target as i32);
         // Single advance settles: the animation reports done and snaps to target.
-        assert!(!engine.advance_animation(), "0ms animation completes on first advance");
+        assert!(
+            !engine.advance_animation(),
+            "0ms animation completes on first advance"
+        );
         assert_eq!(engine.viewport_offset(), target, "offset settles at target");
-        assert!(!engine.advance_animation(), "no animation left after settle");
+        assert!(
+            !engine.advance_animation(),
+            "no animation left after settle"
+        );
     }
 
     #[test]
@@ -2106,8 +2197,15 @@ mod tests {
         // not 5). The second call bases its delta on the first animation's target.
         engine.scroll_viewport_animated(5);
         engine.scroll_viewport_animated(5);
-        assert!(!engine.advance_animation(), "0ms animation completes on first advance");
-        assert_eq!(engine.viewport_offset(), expected, "re-targeted jump lands at 10, not 5");
+        assert!(
+            !engine.advance_animation(),
+            "0ms animation completes on first advance"
+        );
+        assert_eq!(
+            engine.viewport_offset(),
+            expected,
+            "re-targeted jump lands at 10, not 5"
+        );
     }
 
     #[test]
@@ -2120,8 +2218,15 @@ mod tests {
         engine.set_scroll_animations_enabled(false);
 
         engine.scroll_viewport_animated(target as i32);
-        assert_eq!(engine.viewport_offset(), target, "disabled animation jumps immediately");
-        assert!(!engine.advance_animation(), "no animation left when disabled");
+        assert_eq!(
+            engine.viewport_offset(),
+            target,
+            "disabled animation jumps immediately"
+        );
+        assert!(
+            !engine.advance_animation(),
+            "no animation left when disabled"
+        );
     }
 
     #[test]
@@ -2139,7 +2244,10 @@ mod tests {
 
         // Start an animated jump; it is still running (long duration).
         engine.scroll_viewport_animated(10);
-        assert!(engine.advance_animation(), "long animation is still running");
+        assert!(
+            engine.advance_animation(),
+            "long animation is still running"
+        );
         // Wheel scroll (immediate path) clears the animation and applies at once.
         engine.scroll_viewport(3);
         assert_eq!(engine.viewport_offset(), 3, "wheel applied immediately");
@@ -2155,7 +2263,11 @@ mod tests {
         let snapshot = engine.snapshot((8.0, 14.0));
         assert_eq!(snapshot.viewport_offset, 4);
         assert!(!snapshot.at_bottom);
-        assert_eq!(snapshot.lines.len(), 4, "snapshot still reports exactly `rows` lines");
+        assert_eq!(
+            snapshot.lines.len(),
+            4,
+            "snapshot still reports exactly `rows` lines"
+        );
         snapshot.debug_assert_valid();
     }
 
@@ -2175,7 +2287,10 @@ mod tests {
             total.saturating_sub(8),
             "resize must re-clamp offset to new max (total - visible 8)"
         );
-        assert!(engine.take_viewport_changed(), "re-clamp on resize arms damage");
+        assert!(
+            engine.take_viewport_changed(),
+            "re-clamp on resize arms damage"
+        );
     }
 
     #[test]
@@ -2226,7 +2341,10 @@ mod tests {
             changed,
             "reconcile must report a correction when the stored offset was stale"
         );
-        assert!(engine.take_viewport_changed(), "correction arms viewport damage");
+        assert!(
+            engine.take_viewport_changed(),
+            "correction arms viewport damage"
+        );
 
         // A second reconcile on already-consistent state is a no-op.
         assert!(!engine.reconcile_viewport_offset());
@@ -2239,8 +2357,15 @@ mod tests {
         engine.advance_bytes(b"\x1b[?1049h");
         let collapsed = max_offset(&engine);
         if collapsed == 0 {
-            assert!(engine.reconcile_viewport_offset(), "alt-screen shrink must correct");
-            assert_eq!(engine.viewport_offset(), 0, "reconcile snaps to bottom on alt screen");
+            assert!(
+                engine.reconcile_viewport_offset(),
+                "alt-screen shrink must correct"
+            );
+            assert_eq!(
+                engine.viewport_offset(),
+                0,
+                "reconcile snaps to bottom on alt screen"
+            );
             assert!(engine.take_viewport_changed());
         }
         // Leave the alt screen so the shared default-config cache / other tests are unaffected.

@@ -23,9 +23,18 @@ const FUNNEL: &str = "dispatch_surface_pointer";
 
 /// The winit branches that carry pointer input. Each must reach the funnel.
 const POINTER_BRANCHES: &[(&str, &str)] = &[
-    ("WindowEvent::CursorMoved", "a move is the hover gate — a region ignores a wheel without it"),
-    ("WindowEvent::MouseInput", "press AND release; a lost release leaves a thumb stuck to the cursor"),
-    ("WindowEvent::MouseWheel", "the wheel itself — without it a scroll region simply does not scroll"),
+    (
+        "WindowEvent::CursorMoved",
+        "a move is the hover gate — a region ignores a wheel without it",
+    ),
+    (
+        "WindowEvent::MouseInput",
+        "press AND release; a lost release leaves a thumb stuck to the cursor",
+    ),
+    (
+        "WindowEvent::MouseWheel",
+        "the wheel itself — without it a scroll region simply does not scroll",
+    ),
 ];
 
 fn events_rs() -> PathBuf {
@@ -173,6 +182,44 @@ fn the_mouse_layer_sends_a_release_for_every_press_it_sends() {
     }
 }
 
+/// **A right-click must reach the panes, not only the chrome.** ⚠️ Ran red against its own bug.
+///
+/// A pane's widgets live in a tree of their own until the pane joins the one tree
+/// tree, and only *left* presses were ever handed to them. So a right-click never
+/// reached a pane at all — and the moment a pane started declaring its own menu, right-clicking one
+/// showed nothing whatsoever, while `prefix+>` still worked because the keyboard path resolves the
+/// pane a different way.
+///
+/// A lint rather than a behaviour test, like its neighbours: what it guards is *absence*, and the
+/// suite was fully green with right-click menus completely dead.
+#[test]
+fn a_right_click_is_handed_to_the_panes_as_well_as_the_chrome() {
+    let src = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"))
+        .expect("read the mouse layer");
+
+    for arm in [
+        "(Btn::Right, Kind::Pressed) =>",
+        "(Btn::Right, Kind::Released) =>",
+    ] {
+        let at = src.find(arm).unwrap_or_else(|| {
+            panic!("the mouse layer no longer has a `{arm}` arm — move this guard with it")
+        });
+        let body = &src[at..];
+        let end = body[arm.len()..]
+            .find("\n        (")
+            .map(|i| i + arm.len())
+            .unwrap_or(body.len());
+        assert!(
+            body[..end].contains("deliver_to_panes("),
+            "the mouse layer's `{arm}` arm hands the event to the chrome tree but not to the \
+             panes.\n\
+             A pane is dispatched separately until it joins the one tree, so a right-click that \
+             goes only to the chrome never reaches a pane — and the menu a pane declares about \
+             itself is then unreachable, with nothing failing anywhere.",
+        );
+    }
+}
+
 /// **A divider resize must end at the same level its press started it.**
 ///
 /// The press starts the drag in the event loop (`mouse::resize::on_press`, before the general mouse
@@ -193,12 +240,10 @@ fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
     let body = branch_body(&src, "WindowEvent::MouseInput")
         .expect("the button branch is still a `WindowEvent::MouseInput` arm");
 
-    let ends = body
-        .find("resize::on_release")
-        .expect(
-            "the button branch no longer ends the divider resize. It must: the press starts the \
+    let ends = body.find("resize::on_release").expect(
+        "the button branch no longer ends the divider resize. It must: the press starts the \
              drag here, so the release has to end it here too, or the drag outlives the button.",
-        );
+    );
     // Searched FORWARD from where the resize ends, not from the top of the branch: the viewport
     // widgets are given the press too, further up, and that call cannot swallow a release. What
     // has to hold is that the swallowing call comes after the resize has been told.
@@ -403,13 +448,16 @@ fn the_loop_wakes_for_what_the_widgets_are_waiting_for() {
     // because it is due *now* — so the loop wakes and goes straight back to sleep. The first attempt
     // at this fix scheduled the wake correctly and changed nothing on screen for exactly that
     // reason.
-    let needs_frame = src
-        .split_once("let needs_frame")
-        .and_then(|(_, rest)| rest.split_once(';'))
+    //
+    // The reasons are named fields now (`app/frame_reasons.rs`) rather than a `||` chain, so this
+    // reads the set the loop builds and checks the wake is in it.
+    let reasons = src
+        .split_once("FrameReasons {")
+        .and_then(|(_, rest)| rest.split_once("};"))
         .map(|(decl, _)| decl)
-        .expect("the frame loop decides with a `needs_frame`");
+        .expect("the frame loop decides with a `FrameReasons` set");
     assert!(
-        needs_frame.contains("widget_due"),
+        reasons.contains("widget_due"),
         "reaching a widget's wake is not itself a reason to draw, so the loop wakes for it and \
          then does nothing"
     );

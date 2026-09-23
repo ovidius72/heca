@@ -106,7 +106,6 @@ pub struct HostRequest {
     pub alpha: f32,
 }
 
-
 /// Walk `scene` and enqueue its commands into the renderers.
 ///
 /// `glow_alpha_scale` selects the glow compositing strategy for this scene:
@@ -264,11 +263,7 @@ pub fn enqueue_scene(
 }
 
 /// Eight thin arms framing the rect's corners (Tron reticle).
-fn draw_brackets(
-    grid: &mut GridRenderer,
-    b: &BracketCmd,
-    glow_alpha_scale: f32,
-) {
+fn draw_brackets(grid: &mut GridRenderer, b: &BracketCmd, glow_alpha_scale: f32) {
     let (x, y, w, h) = xywh(&b.rect);
     let color = b.color.to_f32x4();
     let (gc, mut gr, gi) = match b.glow {
@@ -337,16 +332,20 @@ mod tests {
     use super::{
         LIGHT_BG_GLOW_ALPHA_SCALE, glow_alpha_scale_for_background, host_requests, intersect_clip,
     };
-    use heca_grid_ui::scene::{DrawCommand, HostCmd, HostDraw, Scene};
-    use heca_grid_ui::Rectangle;
     use heca_core::layout::{Point, Size};
+    use heca_grid_ui::Rectangle;
+    use heca_grid_ui::scene::{DrawCommand, HostCmd, HostDraw, Scene};
 
     fn rect(x: f64, y: f64, w: f64, h: f64) -> Rectangle {
         Rectangle::new(Point::new(x, y), Size::new(w, h))
     }
 
     fn host(rect: Rectangle) -> DrawCommand {
-        DrawCommand::Host(HostCmd { draw: HostDraw::Surface { id: 1 }, rect, alpha: 1.0 })
+        DrawCommand::Host(HostCmd {
+            draw: HostDraw::Surface { id: 1 },
+            rect,
+            alpha: 1.0,
+        })
     }
 
     /// **A surface inside a scroll region clips like anything else.**
@@ -372,7 +371,11 @@ mod tests {
             Some([10.0, 10.0, 30.0, 100.0]),
             "nested clips intersect, never exceed the outer one",
         );
-        assert_eq!(got[2].clip, Some([10.0, 10.0, 100.0, 100.0]), "the inner clip was popped");
+        assert_eq!(
+            got[2].clip,
+            Some([10.0, 10.0, 100.0, 100.0]),
+            "the inner clip was popped"
+        );
     }
 
     /// **Order is the meaning for a backdrop** — it blurs what came before it and nothing after.

@@ -38,7 +38,7 @@ behind. Hover did the same, which is why hovering a toast highlighted the pane u
 **`prefix+/` lettered only the toast.** The hint walk treated every visible layer's box as something
 that hides what is beneath it. A toast stack fills the viewport — not because it covers the screen,
 but because that is how it *positions* its cards in a corner — so it hid every letter in the app. The
-layer had declared `covers_content: false`. The action router honoured that declaration; the hint
+layer had declared `lock: false`. The action router honoured that declaration; the hint
 walk did not.
 
 The shape is the same both times: **rebuild, layout, paint, hints and input are five separate walks
@@ -81,7 +81,7 @@ There are two things called "overlay" here: the **`Overlay` widget** in `heca-gr
 
 | what a surface needs | `Overlay` already has |
 |---|---|
-| fill the viewport, place a panel in it | `Pct(1.0)` fill with real layout, so every descendant gets true bounds |
+| fill the viewport, place a panel in it | `Percent(1.0)` fill with real layout, so every descendant gets true bounds |
 | swallow input (modal) | `blocking(true)` — scrim plus swallow |
 | let input fall through | `blocking(false)` — a press beside it reaches the page behind |
 | show and hide | `open` / `hide` / `toggle`, or bind `open_signal` |
@@ -123,7 +123,26 @@ a crate boundary a plugin composing a tree must never see.
 | who owns a surface's tree | the registry | its parent, as a keyed child |
 | how input reaches it | 16 per-surface functions; registry surfaces got none | one walk from the root |
 | layout and paint | a second set of passes (`layout_layers` / `paint_layers`) | the root's own walk |
-| what the registry holds | a parallel tree, ~900 lines | name, nesting, modality, `covers_content` |
+| what the registry holds | a parallel tree, ~900 lines | name and nesting — **only** |
+
+**Coverage is the surface's own, declared on the widget** (`P097/T499`). A surface says whether it
+stands in front of the page with one builder — `.lock(true)` — and every reader takes it
+off the node in the one tree. It was a field on the registry entry, so a plugin could declare it
+only by passing it to a host call it had to reach; now the line a plugin author writes is the line
+the host writes. **A surface that registers nothing still answers for itself** — the toast stack
+does.
+
+**Taking the keyboard is not declared at all — it is read.** A surface that wants keys *holds
+focus*, and `Overlay`, `ContextMenu` and `CommandPalette` all bind their open signal to
+`Base::focused`; that is the whole of how an open layer takes the keyboard (§ 0c). So an open
+overlay is the active context **by being open**, an ambient one like the toast stack is not **by
+holding no focus**, and neither author writes anything. `Base::captures_keyboard` is an optional
+override for a surface whose keyboard story the framework cannot see; making it a plain flag with a
+`true` default would make every ambient surface the active context, and a toast would suppress every
+letter behind it.
+
+The registry is left holding **liveness** alone — whether a seated surface is still up — because
+hiding a surface leaves its node in the tree, and that is the one thing the tree does not record.
 
 **How to put a surface on screen:** `chrome::place_surface(&mut state.window_root, key, boxed)`. It
 positions the surface out of the flow at the full viewport, so it takes no space from the chrome
@@ -491,7 +510,7 @@ these reads the same structure instead of re-deriving order per feature.
 
 > ⚠️ **This section describes the layer registry as it was when it owned surface trees. It no
 > longer does** — `P097(F003)/T494` moved every tree into the window root (§ 0.6) and the registry
-> now keeps only name, nesting, modality and `covers_content`. Read § 0 first; what follows is
+> now keeps only name, nesting, modality and `lock`. Read § 0 first; what follows is
 > history plus the parts of the registry that survive. It was built and it
 > works, but it turned out to be a **parallel tree implementation** — it stores parent links and
 > re-derives nesting every frame, duplicating what child position gives for free, and every walk over

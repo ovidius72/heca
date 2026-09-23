@@ -4,10 +4,10 @@
 //! existing winit-driven behavior.
 
 use crate::actions::ActionRegistry;
-use crate::app::input::{handle_keyboard_input, KeyInputContext};
-use crate::app::interaction::{dispatch_action, InteractionIntent, InteractionSource};
+use crate::app::input::{KeyInputContext, handle_keyboard_input};
+use crate::app::interaction::{InteractionIntent, InteractionSource, dispatch_action};
 use crate::app::keyboard::{build_event_combo, is_prefix_match};
-use crate::app::mutations::{after_mutation_change, MutationKind};
+use crate::app::mutations::{MutationKind, after_mutation_change};
 use crate::app::render::{render_frame, update_session_viewport};
 use crate::app::terminal_host::{
     forward_mouse_button, forward_mouse_move, forward_mouse_wheel, notify_window_focus_changed,

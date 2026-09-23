@@ -13,8 +13,7 @@
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::widgets::{Dialog, DockFrame, FocusScope, Overlay, ScrollRegion, Select};
 use heca_grid_ui::{
-    Base, Component, Event, EventKind, Handled, LayoutEngine, Point, PointerButton, Rectangle,
-    Size,
+    Base, Component, Event, EventKind, Handled, LayoutEngine, Point, PointerButton, Rectangle, Size,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -219,7 +218,10 @@ fn hover_moves_from_one_widget_to_the_other() {
     let (mut root, a, b) = two_probes();
     mv(root.as_mut(), LEFT);
     assert_eq!(meaningful(&a), vec!["PointerEnter"]);
-    assert!(meaningful(&b).is_empty(), "nothing happened to the other one");
+    assert!(
+        meaningful(&b).is_empty(),
+        "nothing happened to the other one"
+    );
 
     mv(root.as_mut(), RIGHT);
     assert_eq!(meaningful(&a), vec!["PointerEnter", "PointerLeave"]);
@@ -335,12 +337,20 @@ fn an_unscrollable_inner_region_lets_the_wheel_reach_the_outer_one() {
     let inner = ScrollRegion::new()
         .width(Length::Px(100.0))
         .height(Length::Px(50.0))
-        .child(Flex::column().width(Length::Px(80.0)).height(Length::Px(20.0)));
+        .child(
+            Flex::column()
+                .width(Length::Px(80.0))
+                .height(Length::Px(20.0)),
+        );
     let mut outer = ScrollRegion::new()
         .width(Length::Px(200.0))
         .height(Length::Px(100.0))
         .child(inner)
-        .child(Flex::column().width(Length::Px(180.0)).height(Length::Px(600.0)));
+        .child(
+            Flex::column()
+                .width(Length::Px(180.0))
+                .height(Length::Px(600.0)),
+        );
     let offset = outer.scroll_offset();
     LayoutEngine::new().compute(&mut outer, Size::new(200.0, 100.0));
 
@@ -368,7 +378,10 @@ fn every_routing_container_passes_the_whole_vocabulary_through() {
             if (b.size.w - w as f64).abs() < 0.5 && (b.size.h - h as f64).abs() < 0.5 {
                 return Some(b);
             }
-            c.base().children.iter().find_map(|c| find(c.as_ref(), w, h))
+            c.base()
+                .children
+                .iter()
+                .find_map(|c| find(c.as_ref(), w, h))
         }
         let b = find(root.as_ref(), 100.0, 50.0).expect("the probe was laid out");
         let at = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
@@ -386,15 +399,27 @@ fn every_routing_container_passes_the_whole_vocabulary_through() {
         ),
         (
             "Overlay",
-            probe_in(|p| Box::new(Overlay::new().panel(Flex::column().child(p)).opened(true))),
+            probe_in(|p| {
+                Box::new(
+                    Overlay::new()
+                        .panel(Flex::column().child(p))
+                        .default_open(true),
+                )
+            }),
         ),
         (
             "Dialog",
-            probe_in(|p| Box::new(Dialog::new("T").body(p).open(true))),
+            probe_in(|p| Box::new(Dialog::new("T").body(p).default_open(true))),
         ),
     ];
     for (name, seen) in cases {
-        for want in ["PointerEnter", "PointerDown", "PointerUp", "Click", "Scroll"] {
+        for want in [
+            "PointerEnter",
+            "PointerDown",
+            "PointerUp",
+            "Click",
+            "Scroll",
+        ] {
             assert!(
                 seen.contains(&want.to_string()),
                 "{name} never let {want} through to its child: {seen:?}",
@@ -452,7 +477,10 @@ fn a_handler_on_any_widget_hears_its_own_clicks() {
 
     click(&mut root, LEFT);
     assert_eq!(hits.get(), 1, "a Label with a handler is a click target");
-    let _ = heca_grid_ui::dispatch(&mut root, &Event::pointer_pressed(LEFT, PointerButton::Right));
+    let _ = heca_grid_ui::dispatch(
+        &mut root,
+        &Event::pointer_pressed(LEFT, PointerButton::Right),
+    );
     let _ = heca_grid_ui::dispatch(
         &mut root,
         &Event::pointer_released(LEFT, PointerButton::Right),
@@ -543,13 +571,22 @@ fn a_control_takes_the_left_press_and_lets_every_other_button_past() {
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 50.0));
 
     assert_eq!(
-        heca_grid_ui::dispatch(&mut root, &Event::pointer_pressed(LEFT, PointerButton::Left)),
+        heca_grid_ui::dispatch(
+            &mut root,
+            &Event::pointer_pressed(LEFT, PointerButton::Left)
+        ),
         Handled::Yes,
         "the button owns the press that would activate it",
     );
-    let _ = heca_grid_ui::dispatch(&mut root, &Event::pointer_released(LEFT, PointerButton::Left));
+    let _ = heca_grid_ui::dispatch(
+        &mut root,
+        &Event::pointer_released(LEFT, PointerButton::Left),
+    );
     assert_eq!(
-        heca_grid_ui::dispatch(&mut root, &Event::pointer_pressed(LEFT, PointerButton::Right)),
+        heca_grid_ui::dispatch(
+            &mut root,
+            &Event::pointer_pressed(LEFT, PointerButton::Right)
+        ),
         Handled::No,
         "a right press carries on to whoever answers right-clicks",
     );
@@ -582,14 +619,14 @@ fn a_press_outside_an_open_menu_dismisses_it() {
         .child(Menu::new("Test", "a menu").child(MenuItem::new().label("Close").on_click(|| {})))
         .anchor(Point::new(40.0, 40.0))
         .on_dismiss(move || d.set(true))
-        .open(true);
+        .default_open(true);
     LayoutEngine::new().compute(&mut menu, Size::new(400.0, 300.0));
     // Paint once so the menu caches a viewport and places its panel, as a host frame would.
     let theme = Theme::default();
     let mut scene = heca_grid_ui::Scene::new();
     {
-        let mut cx = heca_grid_ui::PaintCx::new(&mut scene, &theme)
-            .with_viewport(Size::new(400.0, 300.0));
+        let mut cx =
+            heca_grid_ui::PaintCx::new(&mut scene, &theme).with_viewport(Size::new(400.0, 300.0));
         menu.paint(&mut cx);
     }
 

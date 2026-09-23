@@ -10,7 +10,8 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Debito tecnico del crate: docs, allocazioni, test coverage, helper condivisi.",
-  "description": "",
+  "description": "Debt found by reviewing the crate rather than by a user hitting it: values the vocabulary could not express, and rules a caller had to remember.\n\n⭐ READ docs/layout.md BEFORE TOUCHING ANY TASK IN THIS PHASE. The authoring API changed under these tasks on 2026-09-16 and several of them are written against the older one.\n\n═══════════ WHAT THE LAYOUT API IS NOW (2026-09-16) ═══════════\nUncommitted on feat/hint-collapses-to-the-tree. Every spelling below goes through ONE parser shared with the wire, so the line written in Rust is the line a plugin writes in JSON.\n\n1. EVERY VALUE READS ITS CSS SPELLING. `Track` (\"auto\", \"1fr\", \"200px\", \"22\", \"min-content\", \"repeat(3, 1fr)\"), and the layout keywords `Justify` / `Align` / `Direction` (\"space-between\", \"center\", \"column\") through their own serde names, hyphen and underscore alike. Eight builders take `impl Into<..>`; ~100 hand-written enum variants were swept out of real code, and six imports went dead as a result. The track parser used to live in heca-view-realize, which meant a plugin could say \"1fr\" and native Rust could not.\n\n2. THE GRID IS CSS-SHAPED. `.template_row(..)` / `.template_column(..)` / `.template_area(..)` on the container; `.child(one_or_many)` auto-places, exactly as in HTML. PLACEMENT IS THE CHILD'S OWN PROPERTY — `.column(\"1 / -1\")`, `.row(2)`, `.column_span(Span::All)`, `.area(\"title\")` — and `.cell(child, col, row, col_span, row_span)` and `.row(child)` are GONE from the grid: a parent writing a position into its child was the inversion this replaced. Names and `1 / -1` are resolved during LAYOUT, against whichever grid holds the child, so a child can be built before its parent and a template change re-places children without rebuilding them. The described path matches: `realize` sets `area` / `col` / `row` on the child.\n\n3. ONE DOOR FOR CHILDREN. `.child(x)` and `.child([a, b, c])` are the same builder, on every widget and on the SDK's `ViewNode`. The `child` / `children` pair is deleted.\n\n4. `flex-basis` EXISTS — `.basis(..)`. A share is `.grow(w).basis(0.0).shrink(1.0)`, real CSS `flex: 1 1 0`. This is P052(F004)/T350 item 1, landed; see that task for what remains of it.\n\n5. `Icon` and `NfIcon` implement `LayoutExt`, because a widget that cannot place itself cannot be a grid item. `CardGrid`, `Visibility` and `KeyHintGroup` still implement no builder trait — untouched, and worth a look.\n\n═══════════ TWO DEFECTS FIXED THE SAME DAY ═══════════\n- A row baseline-aligned children that were whole LAYOUTS, not text runs. `Flex::on_layout` hunts for the text inside each child so a name and a dimmed suffix share a line; hunting through any container made the exposé's strip treat each column of pane cards as a word, and a column of two panes was pushed down by half a card and drawn past the bottom of the map. It now looks only through TRANSPARENT wrappers — `Base::transparent`, the same answer the picker uses to the same question. The map's own overflow guard could not catch it because every fixture gave each column exactly one pane; the fixture takes pane counts per column now.\n- Mouse hit-testing hand-rolled the pane area four times, with a dead 40px strip on the left (a deleted rail's width) and the right edge guarded by an x compared against half the window's HEIGHT. It asks `content_rect` and `Rectangle::contains` now.\n\n═══════════ HOW THE WORK IS EXPECTED TO GO ═══════════\nEvery capability above landed with a guard that was run RED against its own bug by sabotage. Two of them passed first and proved nothing — one because the retired wire name still worked, one because `grow` alone divides free space correctly in a simple box — and were rewritten until a sabotage turned them red. A green test here is not evidence; a watched-red one is.",
+  "descriptionUpdatedAt": "2026-09-16T14:29:32.986Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -31,7 +32,8 @@
     "ef50268d-2dcf-412b-904f-e995c6d314dc",
     "ff38079b-e9d7-4ed1-a6fc-1cb05cbaddaa",
     "bd6b5935-a55b-4ad0-b26d-fcfd3985c611",
-    "d9527a20-4e5e-4da2-ba02-c795d966d04e"
+    "d9527a20-4e5e-4da2-ba02-c795d966d04e",
+    "19730fa4-c7f9-45cb-adb1-fac858449cdf"
   ],
   "tasks": [
     {
@@ -44,6 +46,7 @@
       "title": "Replace allow with expect",
       "status": "planned",
       "description": "Rimpiazzare suppressions con `expect` motivati dove appropriato.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:56.078Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -51,10 +54,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:56.078Z",
-      "updatedAt": "2026-07-01T18:13:56.078Z"
+      "updatedAt": "2026-07-01T18:13:56.078Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "48def7e3-3c88-4aea-a459-5cfc9d4fc422",
@@ -66,6 +73,7 @@
       "title": "Increase widget test coverage",
       "status": "planned",
       "description": "Espandere la copertura test dei widget.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:56.078Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -73,10 +81,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:56.078Z",
-      "updatedAt": "2026-07-01T18:13:56.078Z"
+      "updatedAt": "2026-07-01T18:13:56.078Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "5c2c4288-1f53-42f3-9440-2427038494f9",
@@ -88,6 +100,7 @@
       "title": "Extract shared animation helpers",
       "status": "planned",
       "description": "Estrarre helper comuni per hover/flash/animazioni.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:56.078Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -95,10 +108,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:56.078Z",
-      "updatedAt": "2026-07-01T18:13:56.078Z"
+      "updatedAt": "2026-07-01T18:13:56.078Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "8f27d989-8448-4556-9e3e-a652155dea31",
@@ -110,6 +127,7 @@
       "title": "Add non_exhaustive to public enums",
       "status": "planned",
       "description": "Applicare `non_exhaustive` dove opportuno sugli enum pubblici.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:56.078Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -117,10 +135,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:56.078Z",
-      "updatedAt": "2026-07-01T18:13:56.078Z"
+      "updatedAt": "2026-07-01T18:13:56.078Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "cc10bb1a-e295-467f-8017-8261065bb21b",
@@ -132,6 +154,7 @@
       "title": "Fix badge.rs unreachable in reachable",
       "status": "planned",
       "description": "Eliminare unreachable impropri in `badge.rs`.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:56.078Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -139,10 +162,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:56.078Z",
-      "updatedAt": "2026-07-01T18:13:56.078Z"
+      "updatedAt": "2026-07-01T18:13:56.078Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "dcdd3d61-3f20-49d7-a02d-b60edea5caa2",
@@ -154,6 +181,7 @@
       "title": "Eliminate hot-path allocations",
       "status": "planned",
       "description": "Ridurre allocazioni nei path caldi della UI.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:56.078Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -161,10 +189,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:56.078Z",
-      "updatedAt": "2026-07-01T18:13:56.078Z"
+      "updatedAt": "2026-07-01T18:13:56.078Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "ef50268d-2dcf-412b-904f-e995c6d314dc",
@@ -176,6 +208,7 @@
       "title": "Add missing docs to lib.rs",
       "status": "planned",
       "description": "Documentazione pubblica mancante del crate.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:56.078Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -183,10 +216,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:56.078Z",
-      "updatedAt": "2026-07-01T18:13:56.078Z"
+      "updatedAt": "2026-07-01T18:13:56.078Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "ff38079b-e9d7-4ed1-a6fc-1cb05cbaddaa",
@@ -198,6 +235,7 @@
       "title": "Workspace lints in Cargo.toml",
       "status": "planned",
       "description": "Allineare i lints del crate al workspace.",
+      "descriptionUpdatedAt": "2026-07-01T18:13:56.078Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -205,10 +243,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:56.078Z",
-      "updatedAt": "2026-07-01T18:13:56.078Z"
+      "updatedAt": "2026-07-01T18:13:56.078Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "bd6b5935-a55b-4ad0-b26d-fcfd3985c611",
@@ -220,6 +262,7 @@
       "title": "gridui-debt Dialog font-derived min-width needs Style min_width",
       "status": "planned",
       "description": "**Rescued from the old root `HANDOFF.md` §3c (deleted 2026-07-13); do not lose this.**\n\nA short confirm dialog (\"Delete Pane?\") renders **cramped** — the panel hugs its content, so a two-word title + two buttons produces a tiny box, and dialogs of different content have visibly different widths with no shared baseline.\n\n## The gap\n`Style` (`heca-grid-ui/src/style.rs`) has **no `min_width`** — only `width`/`height` (`Length::{Auto, Px}`). So `Dialog` cannot express \"hug the content, but never below a sensible floor\".\n\n## Work\n1. Add `min_width: Length` (and probably `min_height` for symmetry — decide) to `Style`, defaulting to `Length::Auto`, and wire it into `Style::to_taffy()` (taffy has `min_size`). Add the builder to `LayoutExt`.\n2. Give `Dialog`'s panel a **font-derived** minimum — the note said **~22em** (i.e. `22 × base font`), so it scales with the theme font instead of being a magic pixel count. Verify against the real dialogs (delete-pane confirm, the rename form).\n3. Tests: a `min_width` smaller than the content is a no-op; larger than the content floors the box; it scales with the base font.\n4. `docs/widgets.md`: the `Style`/`LayoutExt` tables + the `Dialog` entry.\n\n## Why it's here\n`gridui-07` (crate-review debt) is the right home: it is a missing primitive in the layout style, not a feature.\n\n## Gates\nclippy 0; `cargo test -p heca-grid-ui -p heca`; showcase green; no `cargo fmt`.",
+      "descriptionUpdatedAt": "2026-07-13T21:19:50.592Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -227,10 +270,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-13T21:19:50.592Z",
-      "updatedAt": "2026-07-13T21:19:50.592Z"
+      "updatedAt": "2026-07-13T21:19:50.592Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "d9527a20-4e5e-4da2-ba02-c795d966d04e",
@@ -242,6 +289,34 @@
       "title": "A proportional share must not be written as a fixed measure",
       "status": "planned",
       "description": "# The problem\n\nTo make two containers take half a region each, `with_share` (`heca/src/chrome/mod.rs`) writes:\n\n```rust\nlayout.flex_grow = grow;\nlayout.height = heca_grid_ui::Length::Px(0.0);      // ← a FIXED measure\nlayout.min_height = Some(heca_grid_ui::Length::Px(0.0));\nlayout.flex_shrink = Some(1.0);\n```\n\n**A proportional share is being expressed by writing a fixed number**, which is what the user does not\nwant anyone doing (2026-07-28: *\"I don't want other developers to write fixed measure\"*). Worse, it is\nthree coupled fields whose combination is folklore: get one wrong and the split silently reverts to\ncontent-sizing, which is exactly the bug it was written to fix.\n\n# Why it is there\n\n`flex_grow` distributes only **positive free space**. Container content is routinely taller than a\nsidebar, so there is no positive free space to distribute — measured 2026-07-28: two containers took\n**1214px each inside a 600px body** and divided nothing. In CSS the answer is `flex: 1 1 0`; the base\nsize of 0 is what makes the whole region free space. With it: **296px each**, measured.\n\n**`Layout` has no `flex_basis`** (confirmed — `grep flex_basis heca-grid-ui/src/style.rs` is empty),\nso `height = Px(0)` is standing in for it. taffy *does* have `flex_basis` in its `Style`, so the\nconcept is available one layer down and simply was never surfaced.\n\n# What to build\n\n1. **Add `flex_basis: Option<Length>` to `Layout`** and map it in `to_taffy`\n   (`heca-grid-ui/src/style.rs`). That is the missing word in the vocabulary; everything below already\n   understands it.\n2. **Give the library one way to say \"take a share\"** so no caller assembles the trio by hand — a\n   builder on `LayoutExt` (`heca-grid-ui/src/builders.rs`), e.g. `share(n)`, meaning *n shares of the\n   parent's main axis*, setting grow + basis 0 + min 0 + shrink internally. Then:\n   - `with_share` becomes one call and stops naming a measure;\n   - the SDK's `Style` trait (`heca-view/src/build.rs`) exposes the same thing, so a **described** tree\n     can say it too — today it can only set `flex_grow`, which has the same trap;\n   - `grow()` stays as the raw flex knob for callers who genuinely want content-based basis.\n   Decide whether `grow()` should be *renamed* or documented as the low-level one, so the obvious name\n   is the one that behaves as expected.\n3. **Main-axis, not height.** `flex_basis` is main-axis relative like `flex_grow`, so one setter covers\n   a column and a row (the same reason `ContainerContribution::grow` is not called `height_grow`). Do\n   not add a per-axis variant.\n4. **Sweep for the same folklore elsewhere.** `ScrollRegion::new()` already sets `min_height: 0` and\n   `flex_shrink: 1` by hand with a long comment explaining why (`heca-grid-ui/src/widgets/scroll_region.rs:274`).\n   Check whether that is the same idea written a second way, and whether it should go through the new\n   setter.\n5. **Tests must measure, not inspect flags.** A test asserting `flex_grow == 1.0` passed while the\n   layout was visibly broken (2026-07-28) — the measured-height test is what caught it. Assert\n   pixels: two shares of a 600px region are ~296 each, with content far taller than either.\n\n# Acceptance\n\n- No caller writes a fixed measure to express a proportion — not in `heca`, not in the SDK, not in a\n  described tree.\n- One setter, documented, with the trio behind it.\n- `docs/widgets.md` says how to take a share, next to R8 (the stretch contract) in\n  `docs/chrome-and-ui.md` — the two rules are read together.\n- Whole workspace green, clippy 0 warnings.",
+      "descriptionUpdatedAt": "2026-07-28T06:21:53.247Z",
+      "notes": "PARTLY LANDED 2026-09-16, uncommitted on feat/hint-collapses-to-the-tree.\n\nTHIS TASK PREDICTED A REAL DEFECT AND IT HAPPENED. The \"three coupled fields whose combination is folklore\" (flex_grow + height: Px(0) + min_height + flex_shrink) were still being written by hand in the exposé's share_v, and the zero HEIGHT half of it was the wrong spelling: a definite zero height says \"this box is zero\", which is a different answer to anything measuring the container's content than \"start from nothing, then take your weight\".\n\nWHAT LANDED\n- heca-grid-ui gained the property that was missing: LayoutExt::basis(..) → Style::Layout::flex_basis → taffy flex_basis. CSS flex-basis, taking pixels, a percentage or \"auto\". It is a Layout field, so it travels on the wire with no name table to extend.\n- A share is now written .grow(w).basis(0.0).shrink(1.0) — literally CSS `flex: 1 1 0`. heca/src/chrome/expose/mod.rs::share_v uses it, and the comment that apologised for spelling it with a zero height is gone.\n- Guard: a_share_divides_the_whole_box_by_weight_not_just_the_leftover (heca-grid-ui/src/builders.rs). It took two attempts — the first passed with the mapping deleted and therefore proved nothing, because grow alone divides free space correctly in a simple box. The rewritten one gives the two items DIFFERENT CONTENT, which is where the basis bites: asked for 2:1 in a 900px box, a zero basis gives 600/300 and an auto basis gives 606/294, skewed by what each item started from. Sabotaged, it fails on exactly that.\n\nWHAT IS LEFT, and it is the original scope\n- `with_share` in heca/src/chrome/mod.rs still writes the four fields by hand. It is the function this task was opened about; share_v was its twin in the exposé. It should call .basis(0.0) too, or better, be deleted in favour of one shared builder.\n- The larger question this task asks — \"a proportional share must not be written as a fixed measure\" — is answerable now that basis exists. A share is three builders; consider whether it should be ONE (`.share(w)`), so the combination stops being folklore a caller has to remember at all.\n\nRELATED, same day: docs/layout.md now documents the share idiom, each of the three parts, and what each alone does instead.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-28T06:21:53.247Z",
+      "updatedAt": "2026-09-16T14:24:52.511Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "19730fa4-c7f9-45cb-adb1-fac858449cdf",
+      "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
+      "number": 517,
+      "shortId": "6UY62",
+      "priority": 11,
+      "shortName": "a-part-is-found-by-its-positio",
+      "title": "A widget invents a slot instead of taking a template — and then finds the part by its position",
+      "status": "planned",
+      "description": "Filed 2026-09-16, scope decided with Antonio 2026-09-17.\n\nTHE DECISION\n**A widget does not invent slots. It holds one child, and that child is a `Grid` saying the arrangement.**\n\n`DockFrame::header(..)` and the pane's header slot answer exactly one shape. Header | Content | Footer needs a second slot; a fourth part needs a third. `.template_row(\"auto 1fr auto\")` answers all of them in one line a reader can check against the picture — and it is the same line for a dock, a pane, a palette or a plugin's panel.\n\nSo `Pane` and `DockFrame` stay **frames**: border, glow, fold, title chrome. The arrangement is a `Grid` child.\n\nTHE DEFECT THIS REMOVES\nA widget with several PARTS finds each part by its index in `base.children`. `children[0]` is the header, `children[1]` the body, `children.len() == 2` means \"there is a header\". Put a second thing in the body and the first is mistaken for a header; insert a part and every index after it is wrong; and no test fails, because the indices are still valid indices. `dock_frame.rs` documents it as the design: \"Index of the header (a `Flex` row) / body within `base.children`.\"\n\nThe slot is the cause and the index is the symptom: a part placed by a named area or a template row is found by name, and the question never arises.\n\nTHE SURVEY — non-test code finding a part by child position (measured 2026-09-16):\n- heca-grid-ui/src/widgets/dialog.rs — 17 (`self.base.children[0]` at :240, :277, :296-297)\n- heca/src/chrome/mod.rs — 11\n- heca-grid-ui/src/widgets/scroll_region.rs — 10\n- heca/src/chrome/overlay.rs — 3; heca/src/chrome/expose/pane_card.rs — 3\n- heca/src/chrome/scene.rs — 2; heca-grid-ui/src/widgets/flex.rs — 2\n- one each: heca/src/chrome/pane/mod.rs, heca/src/providers/workspaces/pane_row.rs, heca/src/components/folder_line.rs, heca-grid-ui/src/widgets/tag.rs, heca-grid-ui/src/widgets/visibility.rs\n- heca-grid-ui/src/widgets/dock_frame.rs — header/body/rail indices, named in its own module doc\n\nWHAT EXISTS NOW (landed 2026-09-16, commit 47356a0)\n`.template_row(..)` / `.template_column(..)` / `.template_area(..)` on the container; `.child(one_or_many)` auto-places as in HTML; placement is the CHILD's property — `.area(\"header\")`, `.column(\"1 / -1\")`, `.row(2)`, `.column_span(Span::All)` — resolved during layout against whichever grid holds the child. Full reference: docs/layout.md.\n\nTHE WORK\n1. **`Pane`** — delete its header slot; the caller passes a `Grid`. `heca/src/chrome/pane/shell.rs` builds `Grid::new().template_row(\"auto 1fr\").child([header, content])` (or `\"auto 1fr auto\"` when something wants a footer), and `heca/src/chrome/pane/mod.rs::header_height` asks for the named area instead of `match children.len()`.\n2. **`DockFrame`** — same: delete `header(..)`, keep the frame's own chrome (fold toggle, rail, brackets). Its header/body/rail indices go with it.\n3. **`Dialog`** — 17 positional lookups; title / body / actions as a template.\n4. Then the app-side ones, and `scroll_region` LAST — it is 2565 lines with its own split task (P082(F003)/T471, deferred); change only how it finds its parts, or agree the order first.\n\nEDGE CASES\n- `flex.rs`'s two are inside `on_layout`'s baseline pass — a walk over all children, not a part lookup. Check before changing.\n- `visibility.rs` and `tag.rs` may genuinely mean \"the one child\". A wrapper with exactly one child is not this defect; leave a comment saying why when it stays.\n- Deleting a slot builder is an API change for that widget's callers, including the described path — `realize` reads `slot` props (`header`, `leading`, `trailing`). Decide per widget whether `slot` maps to a grid area or is dropped, and keep the described and native paths saying the same thing.\n- `Item`'s leading/trailing are a genuinely different case: they are a row of three parts with fixed meaning, not an arrangement a caller chooses. Judge it separately rather than sweeping it.\n\nVERIFICATION\nPer widget: a guard that puts a SECOND thing in the body and asserts the first is still not mistaken for the header — the failure an index cannot see. Sabotage each one. Then Antonio drives what changed: a dock's header and fold, a pane's info bar, a confirm dialog, a scrolled list.\n\nNOT IN SCOPE: the general \"the app uses Flex everywhere and Grid nowhere\" backlog (`Grid::new()` appears zero times in heca/src). Bigger conversation, its own proposal.\n\n⚠️ Antonio, 2026-09-17: most phases in this feature are likely obsolete or superseded and want reviewing. This task is filed here for now, not because F004's phase structure is right.",
+      "descriptionUpdatedAt": "2026-09-17T07:57:30.055Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -249,16 +324,21 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-28T06:21:53.247Z",
-      "updatedAt": "2026-07-28T06:21:53.247Z"
+      "createdAt": "2026-09-16T14:25:42.305Z",
+      "updatedAt": "2026-09-17T07:57:30.052Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-08-10T19:20:30.596Z",
+  "updatedAt": "2026-09-17T07:57:30.052Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
   "statusLog": [
@@ -270,5 +350,6 @@
       "title": "draft → planned",
       "description": ""
     }
-  ]
+  ],
+  "sessionInfo": []
 }

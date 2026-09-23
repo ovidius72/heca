@@ -92,7 +92,10 @@ impl std::fmt::Display for RpcError {
                 write!(f, "action '{name}' is not allowed right now")
             }
             RpcError::NotRunnable(name) => {
-                write!(f, "action '{name}' has no runnable owner (component not mounted?)")
+                write!(
+                    f,
+                    "action '{name}' has no runnable owner (component not mounted?)"
+                )
             }
             RpcError::MissingArgs(name) => write!(
                 f,
@@ -245,9 +248,7 @@ pub fn parse_rpc(input: &str) -> Result<RpcCommand, RpcError> {
         // A bare word is a caller mistake worth naming: silently ignoring it is how a typo becomes
         // "the action ran but did nothing".
         let (key, value) = part.split_once('=').ok_or_else(|| {
-            RpcError::UnknownCommand(format!(
-                "action {name}: expected key=value, got '{part}'"
-            ))
+            RpcError::UnknownCommand(format!("action {name}: expected key=value, got '{part}'"))
         })?;
         intent = intent.arg(key, crate::chrome::PropValue::Text(value.to_string()));
     }
@@ -747,7 +748,9 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "scrollback-page-up" | "scroll-page-up" => Ok(WmAction::ScrollbackPageUp),
         "scrollback-page-down" | "scroll-page-down" => Ok(WmAction::ScrollbackPageDown),
         "scrollback-line-up" | "scroll-line-up" => Ok(WmAction::ScrollbackLineUp { amount: 1 }),
-        "scrollback-line-down" | "scroll-line-down" => Ok(WmAction::ScrollbackLineDown { amount: 1 }),
+        "scrollback-line-down" | "scroll-line-down" => {
+            Ok(WmAction::ScrollbackLineDown { amount: 1 })
+        }
         "scrollback-to-top" | "scroll-to-top" => Ok(WmAction::ScrollbackToTop),
         "scrollback-to-bottom" | "scroll-to-bottom" => Ok(WmAction::ScrollbackToBottom),
         "exit-scrollback" => Ok(WmAction::ExitScrollback),
@@ -832,17 +835,25 @@ mod tests {
         assert!(list.iter().any(|a| a.name == "close"));
 
         // describe-action <name> → one action, with its confirm toggle key surfaced.
-        let json = introspect(&catalog, "describe-action close").unwrap().unwrap();
+        let json = introspect(&catalog, "describe-action close")
+            .unwrap()
+            .unwrap();
         let info: crate::actions::ActionInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(info.name, "close");
         assert_eq!(info.confirm.as_deref(), Some("close"));
-        let json = introspect(&catalog, "describe-action focus_left").unwrap().unwrap();
+        let json = introspect(&catalog, "describe-action focus_left")
+            .unwrap()
+            .unwrap();
         let info: crate::actions::ActionInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(info.policy, "tiled_only");
         assert!(info.confirm.is_none());
 
         // Errors: unknown action, missing argument.
-        assert!(introspect(&catalog, "describe-action nope").unwrap().is_err());
+        assert!(
+            introspect(&catalog, "describe-action nope")
+                .unwrap()
+                .is_err()
+        );
         assert!(introspect(&catalog, "describe-action").unwrap().is_err());
     }
 
@@ -962,7 +973,10 @@ mod tests {
 
     #[test]
     fn test_reset_name_commands() {
-        assert_eq!(parse_rpc_command("reset-pane-name"), Ok(WmAction::ResetPaneName));
+        assert_eq!(
+            parse_rpc_command("reset-pane-name"),
+            Ok(WmAction::ResetPaneName)
+        );
         assert_eq!(
             parse_rpc_command("reset-pane-name-id 7"),
             Ok(WmAction::ResetPaneNameById { pane_id: PaneId(7) })
@@ -1183,7 +1197,8 @@ mod tests {
     /// `Intent`, which is what the click / key / menu path already dispatches.
     #[test]
     fn the_action_verb_reaches_what_no_wmaction_can() {
-        let RpcCommand::Intent { intent, dock } = parse_rpc("action workspaces.cursor_down").unwrap()
+        let RpcCommand::Intent { intent, dock } =
+            parse_rpc("action workspaces.cursor_down").unwrap()
         else {
             panic!("a component's action is an Intent, not a WmAction");
         };
@@ -1197,7 +1212,8 @@ mod tests {
         );
 
         // Arguments are key=value, in any order.
-        let RpcCommand::Intent { intent, .. } = parse_rpc("action close_pane_by_id pane_id=7").unwrap()
+        let RpcCommand::Intent { intent, .. } =
+            parse_rpc("action close_pane_by_id pane_id=7").unwrap()
         else {
             panic!("the verb always yields an Intent");
         };
@@ -1288,7 +1304,10 @@ mod tests {
     fn test_layer_visibility_verbs() {
         assert_eq!(
             parse_rpc_command("show-layer heca.expose"),
-            Ok(WmAction::ShowLayer { name: Some("heca.expose".into()), dock: None }),
+            Ok(WmAction::ShowLayer {
+                name: Some("heca.expose".into()),
+                dock: None
+            }),
         );
         assert_eq!(
             parse_rpc_command("hide-layer docker.expose docker.right"),
@@ -1299,7 +1318,10 @@ mod tests {
         );
         assert_eq!(
             parse_rpc_command("toggle-layer"),
-            Ok(WmAction::ToggleLayer { name: None, dock: None }),
+            Ok(WmAction::ToggleLayer {
+                name: None,
+                dock: None
+            }),
             "bare is valid: both arguments are optional",
         );
     }
@@ -1308,7 +1330,10 @@ mod tests {
     fn test_command_palette() {
         assert_eq!(
             parse_rpc_command("command-palette"),
-            Ok(WmAction::CommandPalette { mode: None, query: None })
+            Ok(WmAction::CommandPalette {
+                mode: None,
+                query: None
+            })
         );
     }
 

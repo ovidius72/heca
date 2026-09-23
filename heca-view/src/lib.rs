@@ -49,6 +49,18 @@ pub enum WidgetKind {
     /// that cannot do it.
     Row,
     Grid,
+    /// **A grid of cards with a cursor** — the shape a picker surface is: an exposé, a palette of
+    /// tiles, a plugin's chooser (F003/P097/T501).
+    ///
+    /// Each child is one card, in reading order, and its own `key` is what activation hands back.
+    /// The cursor is the widget's — arrow keys move it, hovering moves it, Enter activates, Escape
+    /// dismisses — and a described grid gets all of that with nothing declared but the cards.
+    ///
+    /// **The lit card is not something a description wires.** Natively a caller hands the grid each
+    /// card's own state signal; a description cannot name another node's signal, so the realizer
+    /// makes that connection itself — it is the one building both the card and the cell. That is
+    /// why this can be described at all while a `ScrollBar` cannot.
+    CardGrid,
     Card,
     Scroll,
     Panel,
@@ -101,6 +113,35 @@ pub enum WidgetKind {
     Item,
     /// A thin themed divider line.
     Separator,
+    /// **Something is happening and nobody knows for how long** — an indeterminate ring
+    /// (F003/P097/T501).
+    ///
+    /// It takes no properties of its own: it animates itself off the frame clock, and its diameter
+    /// is `width`/`height` like any other node's. Reach for [`Progress`](WidgetKind::Progress)
+    /// instead the moment you can say *how far along* — a spinner is what you show when you cannot.
+    Spinner,
+    /// **How far along something is**, `0.0..=1.0` in the `value` prop (F003/P097/T501).
+    ///
+    /// The fill eases toward whatever it is given, so a described tree re-sent with a new `value`
+    /// animates rather than jumping, with nothing declared.
+    Progress,
+    /// **A keyboard glyph** from the embedded Nerd Font — ⇧ ⌃ ⌥ ⌘, Enter, Escape, the arrows
+    /// (F003/P097/T501).
+    ///
+    /// Its own `glyph` vocabulary ([`ViewNfGlyph`]), because it is its own font. It is what lets a
+    /// plugin draw a shortcut the way heca's own key hints do, rather than typing a character its
+    /// user's font may not carry.
+    NfIcon,
+    /// **A row of actions that gets out of its own way** (F003/P097/T501).
+    ///
+    /// Its children are [`Button`](WidgetKind::Button) nodes. As the room runs out it shows icons
+    /// instead of words, and whatever still does not fit collapses into a ⋮ menu that runs the same
+    /// actions — none of which an author writes. A button's own text becomes its menu row and its
+    /// words on hover, so it is written once.
+    ///
+    /// The group is why a tooltip and a hint placement had to stop being wrappers: it holds
+    /// **typed** buttons, and wrapping one changes what it is.
+    ButtonGroup,
 }
 
 impl WidgetKind {
@@ -145,6 +186,11 @@ impl WidgetKind {
         WidgetKind::RailCell,
         WidgetKind::Item,
         WidgetKind::Separator,
+        WidgetKind::CardGrid,
+        WidgetKind::Spinner,
+        WidgetKind::Progress,
+        WidgetKind::NfIcon,
+        WidgetKind::ButtonGroup,
     ];
 
     /// This kind's position in [`ALL`](Self::ALL).
@@ -195,6 +241,11 @@ impl WidgetKind {
             WidgetKind::RailCell => 31,
             WidgetKind::Item => 32,
             WidgetKind::Separator => 33,
+            WidgetKind::CardGrid => 34,
+            WidgetKind::Spinner => 35,
+            WidgetKind::Progress => 36,
+            WidgetKind::NfIcon => 37,
+            WidgetKind::ButtonGroup => 38,
         }
     }
 }
@@ -306,6 +357,169 @@ pub enum ViewLabelSide {
     Left,
 }
 
+/// A spacing step from the theme — mirrors grid-ui `Spacing`.
+///
+/// **Resolved from the inherited font at layout, never a pixel count**, so a described tree spaces
+/// itself the way the rest of the app does and follows a font or theme change with nothing
+/// rewritten. It is what an author reaches for instead of `padding(16.0)`: raw pixels are still
+/// there for the rare case that genuinely needs one, and are the wrong default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewSpacing {
+    None,
+    Xs,
+    Sm,
+    Md,
+    Lg,
+}
+
+/// **A space: a number of pixels, or a step of the theme's rhythm** — mirrors grid-ui `Space`.
+///
+/// One authoring type, because spacing is one property. It was two builders on each axis — a px
+/// `gap` beside a `gap_spacing` step, `padding` beside `pad_all` — and the docs told everyone to
+/// prefer the step while the px name stayed the shorter, more obvious one.
+///
+/// ```ignore
+/// VStack::new().gap(8)                 // eight pixels
+/// VStack::new().gap(ViewSpacing::Sm)   // a step of the rhythm
+/// VStack::new().gap("sm")              // the same step, said as JSON would
+/// ```
+///
+/// **Prefer the step.** It is resolved from the inherited font at layout, so it follows a font,
+/// size-variant or zoom change with nothing rewritten; a pixel count is tuned for one font size
+/// and wrong at every other.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ViewSpace {
+    /// Logical pixels, fixed whatever the font does.
+    Px(f32),
+    /// A step of the theme's rhythm.
+    Step(ViewSpacing),
+}
+
+impl From<ViewSpacing> for ViewSpace {
+    fn from(s: ViewSpacing) -> Self {
+        ViewSpace::Step(s)
+    }
+}
+
+impl From<f32> for ViewSpace {
+    fn from(v: f32) -> Self {
+        ViewSpace::Px(v)
+    }
+}
+
+impl From<f64> for ViewSpace {
+    /// Rust reads a bare decimal as `f64`, so without this `.gap(8.0)` does not compile.
+    fn from(v: f64) -> Self {
+        ViewSpace::Px(v as f32)
+    }
+}
+
+impl From<i32> for ViewSpace {
+    /// …and a bare integer as `i32`.
+    fn from(v: i32) -> Self {
+        ViewSpace::Px(v as f32)
+    }
+}
+
+impl From<&str> for ViewSpace {
+    /// `"sm"` for a step, `"8"` / `"8px"` for pixels — the spellings the described side reads.
+    ///
+    /// An unrecognised step name is passed through as text rather than guessed at: the realizing
+    /// side owns the vocabulary and degrades a value it cannot read, which is the rule every
+    /// untrusted value here follows.
+    fn from(t: &str) -> Self {
+        match t.trim().to_ascii_lowercase().as_str() {
+            "none" => ViewSpace::Step(ViewSpacing::None),
+            "xs" => ViewSpace::Step(ViewSpacing::Xs),
+            "sm" => ViewSpace::Step(ViewSpacing::Sm),
+            "md" => ViewSpace::Step(ViewSpacing::Md),
+            "lg" => ViewSpace::Step(ViewSpacing::Lg),
+            other => ViewSpace::Px(
+                other
+                    .strip_suffix("px")
+                    .map_or(other, str::trim_end)
+                    .parse()
+                    .unwrap_or(0.0),
+            ),
+        }
+    }
+}
+
+impl From<ViewSpace> for PropValue {
+    /// A step travels as its **name** and a length as a number — the two spellings the layout
+    /// setting reads back, so one property name carries either.
+    fn from(s: ViewSpace) -> Self {
+        match s {
+            ViewSpace::Px(v) => PropValue::Float(v as f64),
+            ViewSpace::Step(step) => step.into(),
+        }
+    }
+}
+
+/// How a [`ButtonGroup`](WidgetKind::ButtonGroup) shows its actions — mirrors grid-ui `Display`.
+///
+/// Whatever does not fit collapses into a ⋮ menu whichever of these is chosen; this only decides
+/// how wide each action is before that happens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewDisplay {
+    /// Words while there is room, icons once there is not.
+    ///
+    /// ⚠️ **Not settled** — at some widths the group alternates between the two on successive
+    /// layouts, because taking the words off is what makes the row fit. Prefer the other two.
+    Auto,
+    /// Always icons, however much room there is. The labels still say what the hover bubble and the
+    /// collapsed menu read. **The default**, because it is the one that is settled.
+    IconOnly,
+    /// Always words. The group collapses into the menu sooner, because each action is wider.
+    Full,
+}
+
+/// Which side of a widget its tooltip anchors to — mirrors grid-ui `TooltipSide`.
+///
+/// A **preference, not a placement**: the framework flips it to the opposite side when there is no
+/// room, so an author says where they would like the bubble and never where it must go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewTooltipSide {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+/// Where a node's hint letter sits over it — mirrors grid-ui `HintPlacement`.
+///
+/// The picker draws the cap itself; this only says where. `TopLeft` is what the picker drew for
+/// every large target before letters became the widget's own to place, and it is kept as a variant
+/// because that rule was right for a card or a content pane: out of the way of what the target
+/// shows, and never on its border.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewHintPlacement {
+    TopCenter,
+    Center,
+    CenterRight,
+    TopRight,
+    TopLeft,
+}
+
+/// **What a keycap means** — mirrors grid-ui `HintTone`. The theme picks the colour, so a letter
+/// follows a theme reload and a plugin never writes a hex.
+///
+/// `Accent` is a place to go; `Muted` a structural control — fold this, close that — which is not
+/// somewhere to navigate; the rest are further classes so two kinds of target never read alike.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewHintTone {
+    Accent,
+    Muted,
+    Warning,
+    Success,
+    Danger,
+}
+
 /// How a selected row shows it — mirrors grid-ui `ActiveMarker` (`Row`, `Item`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -395,6 +609,33 @@ value_set! {
     ViewAnimation { None => "none", Fade => "fade", Zoom => "zoom", ZoomFade => "zoom_fade" }
     ViewSeverity { Info => "info", Success => "success", Warning => "warning", Danger => "danger" }
     ViewLabelSide { Right => "right", Left => "left" }
+    ViewTooltipSide { Top => "top", Bottom => "bottom", Left => "left", Right => "right" }
+    ViewDisplay { Auto => "auto", IconOnly => "icon_only", Full => "full" }
+    ViewSpacing { None => "none", Xs => "xs", Sm => "sm", Md => "md", Lg => "lg" }
+    ViewHintTone { Accent => "accent", Muted => "muted", Warning => "warning", Success => "success", Danger => "danger" }
+    ViewNfGlyph {
+        Shift => "shift",
+        Control => "control",
+        Option => "option",
+        Command => "command",
+        CapsLock => "caps_lock",
+        Enter => "enter",
+        Escape => "escape",
+        Tab => "tab",
+        Space => "space",
+        Backspace => "backspace",
+        ArrowUp => "arrow_up",
+        ArrowDown => "arrow_down",
+        ArrowLeft => "arrow_left",
+        ArrowRight => "arrow_right",
+    }
+    ViewHintPlacement {
+        TopCenter => "top_center",
+        Center => "center",
+        CenterRight => "center_right",
+        TopRight => "top_right",
+        TopLeft => "top_left",
+    }
     ViewMarker { None => "none", Bar => "bar", Check => "check" }
     ViewTextAlign { Start => "start", Center => "center", End => "end" }
     ViewEllipsis { End => "end", Start => "start" }
@@ -553,6 +794,35 @@ pub enum ViewGlyph {
     SquareHalfBottom,
 }
 
+/// The **keyboard** glyphs, from the embedded Nerd Font — a separate vocabulary from
+/// [`ViewGlyph`] because it is a separate font (F003/P097/T501).
+///
+/// These are the keys a shortcut is written with: ⇧ ⌃ ⌥ ⌘, Enter, Escape, Tab, Space, Backspace and
+/// the four arrows. A description names one and the host resolves it against the font, exactly as
+/// it does an icon name — so a plugin can render a keybinding the way heca's own key hints do
+/// instead of typing a character that its user's font may not have.
+///
+/// Held honest by `every_glyph_name_has_a_mirror`, which compares both vocabularies against the
+/// library's own in both directions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewNfGlyph {
+    Shift,
+    Control,
+    Option,
+    Command,
+    CapsLock,
+    Enter,
+    Escape,
+    Tab,
+    Space,
+    Backspace,
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight,
+}
+
 /// Names and the conversion into a property value, from the same list as the enum.
 ///
 /// A glyph becomes [`PropValue::Glyph`], not `Text`: that variant already exists and says what the
@@ -698,6 +968,20 @@ impl PropValue {
             _ => None,
         }
     }
+
+    /// The number if this is [`Float`](PropValue::Float) **or** [`Int`](PropValue::Int).
+    ///
+    /// Both, because a description is written by hand and over the wire: `0.5` and `1` are the same
+    /// number of seconds to whoever wrote them, and JSON does not keep the two apart the way Rust
+    /// does. Refusing the integer would fail a correct description for a reason its author cannot
+    /// see — the scalar channel already merges them the same way (`prop_to_input`).
+    pub fn as_float(&self) -> Option<f64> {
+        match self {
+            PropValue::Float(f) => Some(*f),
+            PropValue::Int(i) => Some(*i as f64),
+            _ => None,
+        }
+    }
 }
 
 /// A named, ordered property bag (ordered for deterministic (de)serialisation).
@@ -794,7 +1078,7 @@ pub type Events = BTreeMap<String, Intent>;
 ///   by putting props on *that child*.
 ///
 /// The builder just chains for ergonomics; the children are a vector underneath — `.child(n)` appends
-/// one, `.children([a, b])` appends many, so `Column().child(a).child(b)` ≡ `Column().children([a,b])`.
+/// one and `.child([a, b])` appends many, so `Column().child(a).child(b)` ≡ `Column().child([a, b])`.
 ///
 /// ```ignore
 /// ViewNode::new(WidgetKind::VStack)
@@ -940,6 +1224,25 @@ pub struct ViewNode {
     /// changed). The *only* way a node carries behaviour — an action id, not a closure.
     #[serde(default, skip_serializing_if = "Events::is_empty")]
     pub events: Events,
+    /// **The menu this node opens on a right-click** — a declaration, exactly as `press` is
+    /// (F003/P097/T501).
+    ///
+    /// ⚠️ **A menu is not a widget kind, and must not become one.** Natively it is one builder on
+    /// *any* widget (`ComponentExt::context_menu`) — no row identity, no path string, no registered
+    /// builder, no anchor: the framework takes the anchor from whatever triggered it, and owns the
+    /// dismissal and the keyboard half. A described node says the same thing the same way, so the
+    /// two authoring paths converge instead of drifting. A plugin made to assemble a menu out of
+    /// parts is writing the second path by hand, and will get the anchor, the dismissal and the
+    /// keys only approximately right (⭐⭐ RULE ZERO — one door, never two).
+    ///
+    /// Each entry carries an [`Intent`], so a plugin's menu dispatches **its own** registered
+    /// actions and not only heca's — and every entry goes through the one dispatch door, so the
+    /// interaction policy and the confirm gate apply exactly as they would for a keypress.
+    ///
+    /// Empty means no menu, which is also what "nothing declared" means natively: a right-click
+    /// with nothing declared opens nothing, and bubbling stops at the nearest declaration.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub menu: Vec<DropdownItem>,
     /// This node's **own** named verbs (`name` → [`Intent`]) — the declarative spelling of
     /// `ComponentExt::on_action`, and how a described surface owns a verb of its own instead of
     /// borrowing one the app already compiled in (F003/P082/T436).
@@ -960,7 +1263,51 @@ pub struct ViewNode {
     pub children: Vec<ViewNode>,
 }
 
+/// **One node or many** — what every `child` builder takes, so a caller hands over whichever shape
+/// they happen to hold and never goes looking for a plural spelling.
+pub trait IntoNodes {
+    /// The nodes.
+    fn into_nodes(self) -> Vec<ViewNode>;
+}
+
+impl<N: Into<ViewNode>> IntoNodes for N {
+    fn into_nodes(self) -> Vec<ViewNode> {
+        vec![self.into()]
+    }
+}
+
+impl<N: Into<ViewNode>> IntoNodes for Vec<N> {
+    fn into_nodes(self) -> Vec<ViewNode> {
+        self.into_iter().map(Into::into).collect()
+    }
+}
+
+impl<N: Into<ViewNode>, const K: usize> IntoNodes for [N; K] {
+    fn into_nodes(self) -> Vec<ViewNode> {
+        self.into_iter().map(Into::into).collect()
+    }
+}
+
 impl ViewNode {
+    /// **Open this menu when the node is right-clicked** — the described spelling of
+    /// `ComponentExt::context_menu`, and available on every kind for the same reason it is on every
+    /// widget (F003/P097/T501).
+    ///
+    /// ```ignore
+    /// ViewNode::new(WidgetKind::Row)
+    ///     .menu([
+    ///         DropdownItem::with_intent("close", "Close", Intent::new("docker.stop").arg("id", id)),
+    ///         DropdownItem::new("rename", "Rename").danger(false),
+    ///     ])
+    /// ```
+    ///
+    /// The framework anchors it where the click landed, dismisses it, and gives it the keyboard —
+    /// an author writes none of that, exactly as a native caller does not.
+    pub fn menu(mut self, items: impl IntoIterator<Item = DropdownItem>) -> Self {
+        self.menu = items.into_iter().collect();
+        self
+    }
+
     /// A new node of `kind` with no props/events/children. (The ergonomic SwiftUI-style
     /// builder is a separate task, plugin-task-ui-2; these are the minimal constructors.)
     pub fn new(kind: WidgetKind) -> Self {
@@ -968,6 +1315,7 @@ impl ViewNode {
             kind,
             props: PropMap::new(),
             events: Events::new(),
+            menu: Vec::new(),
             actions: Events::new(),
             children: Vec::new(),
         }
@@ -1053,16 +1401,15 @@ impl ViewNode {
         self.on("hint", intent)
     }
 
-    /// Append a child node to the [`children`](Self::children) vec. The child is a full `ViewNode`
-    /// with its own props/events — style it by putting props on *it*, not on the parent.
-    pub fn child(mut self, child: ViewNode) -> Self {
-        self.children.push(child);
-        self
-    }
-
-    /// Append several children at once — `Column().children([a, b])` ≡ `.child(a).child(b)`.
-    pub fn children(mut self, children: impl IntoIterator<Item = ViewNode>) -> Self {
-        self.children.extend(children);
+    /// **Append a child, or several** — one `ViewNode`, or a `Vec`/array of them.
+    ///
+    /// The child is a full `ViewNode` with its own props/events — style it by putting props on
+    /// *it*, not on the parent.
+    ///
+    /// One door, as on the native side: a `child` / `children` pair is two names for one idea, and
+    /// a caller reaches for whichever they saw first.
+    pub fn child(mut self, children: impl IntoNodes) -> Self {
+        self.children.extend(children.into_nodes());
         self
     }
 
@@ -1171,6 +1518,100 @@ fn walk_unkeyed(node: &ViewNode, path: &mut Vec<usize>, out: &mut Vec<UnkeyedIte
     }
 }
 
+/// One entry of a dropdown / context menu. The author supplies id/label/action; the host resolves
+/// the icon from the action registry (`ActionCatalog::icon`) and wires the intent + quick-pick —
+/// the same centralized path as [`ModalAction`], with **no hand-picked glyph and no `prefix+X`
+/// label** (the leader doesn't work while the menu is open; a host-assigned single-letter quick-pick
+/// that *does* work replaces it).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DropdownItem {
+    /// Stable id returned in [`ModalResult::Action`]; also the **catalog name** the icon and label
+    /// resolve from — the entry's visual identity (e.g. `"close"`).
+    ///
+    /// It is deliberately **not** the same thing as what the entry runs: a sidebar "Close pane"
+    /// entry has id `close` (so it shows the close icon) but dispatches `close_pane_by_id` with the
+    /// row's pane. Identity and behaviour are separate fields.
+    pub id: String,
+    pub label: String,
+    /// What the entry dispatches when chosen: an [`Intent`] — an action **name + args** — routed
+    /// through the one dispatch door, so the interaction policy and the confirm gate apply exactly
+    /// as they would for a keypress.
+    ///
+    /// An `Intent` rather than a `WmAction` because `WmAction` is a **closed enum**: a plugin cannot
+    /// add a variant, so a menu entry carrying one could only ever run actions heca already has —
+    /// which is precisely what blocked plugin-contributed menus (context-menu-5). A name resolves to
+    /// a built-in *or* to a plugin's own registered action, indifferently.
+    pub intent: Intent,
+    pub danger: bool,
+    pub enabled: bool,
+    /// **Where this entry sits among all the others**, or `None` to sit where its block sits.
+    ///
+    /// A menu is filled by several sources at once — heca's own entries and any plugin's — and each
+    /// source declares a weight for its whole block. That is the right granularity most of the
+    /// time: a plugin thinks in "my entries". It is not enough when one entry belongs at the very
+    /// top and the rest belong at the bottom, because a block can only move whole.
+    ///
+    /// So an entry may say where it goes, and **one that says nothing takes its block's weight**.
+    /// There is a single ordering rule rather than "sort the blocks, then sort inside them": every
+    /// entry has a weight, most simply do not spell it, and the whole menu is one sorted list.
+    ///
+    /// A list of numbers rather than one, sorted ascending, so an entry can be slotted *between*
+    /// two neighbours without renumbering either — `[1, 1, 1]` lands between `[1, 1]` and `[1, 2]`.
+    /// Ties keep the order the entries were produced in.
+    pub weight: Option<Vec<i64>>,
+}
+
+impl DropdownItem {
+    /// An enabled, non-destructive entry whose id is also the action it runs (the common case: the
+    /// entry's catalog identity and its behaviour coincide, e.g. `zoom_column`).
+    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+        let id = id.into();
+        let intent = Intent::new(id.clone());
+        Self {
+            id,
+            label: label.into(),
+            intent,
+            danger: false,
+            enabled: true,
+            weight: None,
+        }
+    }
+
+    /// An entry whose behaviour differs from its visual identity — the id keeps the icon/label
+    /// (`close`), while the intent carries the action actually run, with its args
+    /// (`close_pane_by_id` + `pane_id`).
+    pub fn with_intent(id: impl Into<String>, label: impl Into<String>, intent: Intent) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            intent,
+            danger: false,
+            enabled: true,
+            weight: None,
+        }
+    }
+    /// Tint destructive (red) — the confirm gate still applies on dispatch.
+    pub fn danger(mut self, on: bool) -> Self {
+        self.danger = on;
+        self
+    }
+    /// Enable/disable (a disabled entry is dimmed + unselectable).
+    pub fn enabled(mut self, on: bool) -> Self {
+        self.enabled = on;
+        self
+    }
+
+    /// **Put this entry somewhere other than where its block sits** — see
+    /// [`weight`](DropdownItem::weight).
+    ///
+    /// ```ignore
+    /// DropdownItem::new("myplugin.pin", "Pin this").weight(vec![0])   // above everything
+    /// ```
+    pub fn weight(mut self, weight: Vec<i64>) -> Self {
+        self.weight = Some(weight);
+        self
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -1197,7 +1638,10 @@ mod tests {
         assert_eq!(found[2].path, vec![2]);
         assert_eq!(found[0].kind, WidgetKind::Row);
         assert_eq!(found[0].action, "focus_pane");
-        assert_eq!(found[0].siblings, 3, "what the author has to look at to see the collection");
+        assert_eq!(
+            found[0].siblings, 3,
+            "what the author has to look at to see the collection"
+        );
     }
 
     /// Keying the items is the fix, and it is the only thing the report ever asks for.
@@ -1240,7 +1684,11 @@ mod tests {
     fn a_lone_pressable_child_is_not_a_collection() {
         let tree = ViewNode::new(WidgetKind::HStack)
             .child(ViewNode::new(WidgetKind::Label).text("Delete pane?"))
-            .child(ViewNode::new(WidgetKind::Button).text("OK").on_press(Intent::new("confirm_ok")));
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("OK")
+                    .on_press(Intent::new("confirm_ok")),
+            );
 
         assert_eq!(unkeyed_collection_items(&tree), vec![]);
     }
@@ -1251,8 +1699,16 @@ mod tests {
     #[test]
     fn a_pair_of_buttons_is_a_collection_of_two() {
         let tree = ViewNode::new(WidgetKind::HStack)
-            .child(ViewNode::new(WidgetKind::Button).text("Cancel").on_press(Intent::new("cancel")))
-            .child(ViewNode::new(WidgetKind::Button).text("OK").on_press(Intent::new("confirm_ok")));
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("Cancel")
+                    .on_press(Intent::new("cancel")),
+            )
+            .child(
+                ViewNode::new(WidgetKind::Button)
+                    .text("OK")
+                    .on_press(Intent::new("confirm_ok")),
+            );
 
         let found = unkeyed_collection_items(&tree);
         assert_eq!(found.len(), 2);
@@ -1293,7 +1749,10 @@ mod tests {
     fn a_key_is_an_ordinary_prop_read_back_by_name() {
         let node = ViewNode::new(WidgetKind::Row).key("pane:7");
         assert_eq!(node.declared_key(), Some("pane:7"));
-        assert_eq!(node.props.get("key"), Some(&PropValue::Text("pane:7".into())));
+        assert_eq!(
+            node.props.get("key"),
+            Some(&PropValue::Text("pane:7".into()))
+        );
         assert_eq!(ViewNode::new(WidgetKind::Row).declared_key(), None);
     }
 
@@ -1360,7 +1819,10 @@ mod tests {
         let tree = confirm_tree();
         let json = serde_json::to_string(&tree).expect("serialize");
         let back: ViewNode = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(tree, back, "ViewNode must round-trip through JSON (WASM boundary)");
+        assert_eq!(
+            tree, back,
+            "ViewNode must round-trip through JSON (WASM boundary)"
+        );
         // Spot-check the shape survived.
         assert_eq!(back.kind, WidgetKind::VStack);
         assert_eq!(back.children.len(), 2);
@@ -1416,10 +1878,17 @@ mod tests {
     /// exist to remove. `ALL` comes from the same list as `name`, so this cannot miss a variant.
     #[test]
     fn a_value_sets_name_matches_how_it_serializes() {
-        fn check<T: Copy + Serialize + std::fmt::Debug>(all: &[T], name: impl Fn(T) -> &'static str) {
+        fn check<T: Copy + Serialize + std::fmt::Debug>(
+            all: &[T],
+            name: impl Fn(T) -> &'static str,
+        ) {
             for &v in all {
                 let json = serde_json::to_value(v).unwrap();
-                assert_eq!(json.as_str(), Some(name(v)), "{v:?}: name() and serde disagree");
+                assert_eq!(
+                    json.as_str(),
+                    Some(name(v)),
+                    "{v:?}: name() and serde disagree"
+                );
             }
         }
         check(ViewOrientation::ALL, ViewOrientation::name);
@@ -1428,6 +1897,11 @@ mod tests {
         check(ViewAnimation::ALL, ViewAnimation::name);
         check(ViewSeverity::ALL, ViewSeverity::name);
         check(ViewLabelSide::ALL, ViewLabelSide::name);
+        check(ViewTooltipSide::ALL, ViewTooltipSide::name);
+        check(ViewHintPlacement::ALL, ViewHintPlacement::name);
+        check(ViewNfGlyph::ALL, ViewNfGlyph::name);
+        check(ViewDisplay::ALL, ViewDisplay::name);
+        check(ViewSpacing::ALL, ViewSpacing::name);
         check(ViewMarker::ALL, ViewMarker::name);
         check(ViewTextAlign::ALL, ViewTextAlign::name);
         check(ViewGlyph::ALL, ViewGlyph::name);
@@ -1446,7 +1920,10 @@ mod tests {
             PropValue::from(ViewOrientation::Vertical),
             PropValue::Text("vertical".into()),
         );
-        assert_eq!(PropValue::from(ViewSeverity::Danger), PropValue::Text("danger".into()));
+        assert_eq!(
+            PropValue::from(ViewSeverity::Danger),
+            PropValue::Text("danger".into())
+        );
         assert_eq!(
             PropValue::from(ViewGlyph::GitBranch),
             PropValue::Glyph("git_branch".into()),

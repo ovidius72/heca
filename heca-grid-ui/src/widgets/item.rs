@@ -104,8 +104,8 @@ impl Item {
         base.style.layout.direction = Direction::Row;
         base.style.layout.justify = Justify::Start; // the growing label pushes the trailing slot right
         base.style.layout.align = Align::Center; // center slots vertically (kbd hint, dot)
-        base.style.layout.padding = PAD_H as f32;
-        base.style.layout.gap = GAP as f32;
+        base.style.layout.padding = (PAD_H as f32).into();
+        base.style.layout.gap = (GAP as f32).into();
         base.style.layout.height = Length::Px(ROW_H);
         // One control = one Tab stop: focus never descends into the composed content.
         base.focus_barrier = true;
@@ -153,33 +153,15 @@ impl Item {
 
     /// Set the leading (left) slot — any component (icon, dot, badge…).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn leading(mut self, c: impl Component + 'static) -> Self {
-        self.base.children[LEADING] = Box::new(c);
+    pub fn leading(mut self, c: impl crate::builders::IntoComponent) -> Self {
+        self.base.children[LEADING] = c.into_component();
         self
     }
 
     /// Set the trailing (right) slot — any component (kbd hint, `>`, badge…).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn trailing(mut self, c: impl Component + 'static) -> Self {
-        self.base.children[TRAILING] = Box::new(c);
-        self
-    }
-
-    /// [`leading`](Item::leading) for an **already-boxed** component — what a host mapper has after
-    /// realizing a declarative subtree. `Box<dyn Component>` is not itself `Component`, so it cannot
-    /// go through the `impl Component` setters; same seam as
-    /// [`Dialog::body_boxed`](super::Dialog::body_boxed).
-    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn leading_boxed(mut self, c: Box<dyn Component>) -> Self {
-        self.base.children[LEADING] = c;
-        self
-    }
-
-    /// [`trailing`](Item::trailing) for an already-boxed component — see
-    /// [`leading_boxed`](Item::leading_boxed).
-    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn trailing_boxed(mut self, c: Box<dyn Component>) -> Self {
-        self.base.children[TRAILING] = c;
+    pub fn trailing(mut self, c: impl crate::builders::IntoComponent) -> Self {
+        self.base.children[TRAILING] = c.into_component();
         self
     }
 
@@ -245,7 +227,6 @@ impl Item {
         self.on_activate.is_some()
     }
 
-
     fn activate(&mut self) {
         self.flash.trigger();
         if let Some(f) = &self.on_activate {
@@ -276,7 +257,7 @@ impl Component for Item {
         let (accent, glow_c, foreground, muted_c, border_c, ctrl_radius, bw) = {
             let t = cx.theme();
             (
-                t.colors.accent,
+                cx.accent(),
                 t.colors.glow,
                 t.colors.foreground,
                 t.colors.muted,

@@ -11,8 +11,8 @@
   "contextReadyReason": "",
   "startDate": "",
   "endDate": "",
-  "workDone": "F003's priority-0 phase P097 has delivered its core: pointer input reaches every surface through one tree walk instead of 16 hand-written per-surface functions, and the picker now letters anything actionable wherever it sits. T494, T495, T496 and T497 are closed; T498 canceled as a duplicate.",
-  "workRemaining": "P097 still owes T499 (the picker's app half — deleting the HintSurface enum that enumerates surfaces), T500 (Antonio driving every surface as a regression pass) and T501/T502 (the plugin-capability half: a described plugin overlay gets input for free, but still cannot build what the expose builds). Elsewhere in F003: P082's five open bugs and its file-split tasks, P096's T504/T505, and P035's StateView and host-API namespace work.",
+  "workDone": "",
+  "workRemaining": "",
   "acceptedDecisions": [],
   "phaseIds": [
     "09bcb3cf-f8ea-454a-913e-ea377c53d37e",
@@ -44,8 +44,8 @@
   "dependsOn": [],
   "statusLog": [
     {
-      "id": "48b1361e-0938-45f0-9f67-9055a132106f",
-      "date": "2026-09-04T13:52:47.937Z",
+      "id": "259a0ae2-7cf5-42b1-b70f-98abdbe617f0",
+      "date": "2026-09-21T17:46:37.267Z",
       "fromStatus": "planned",
       "toStatus": "in-progress",
       "title": "planned → in-progress",
@@ -53,6 +53,6 @@
     }
   ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-09-04T14:27:10.452Z",
+  "updatedAt": "2026-07-13T15:29:44.427Z",
   "sessionInfo": []
 }

@@ -36,22 +36,31 @@
 //! viewport and centers the panel by taffy), so every descendant gets true bounds (which the
 //! hint picker and pointer hit-testing need).
 
-use crate::builders::{LayoutExt, Parent};
-use crate::component::{
-    Base, Component, Event, GridKey, Handled, WidgetIntent,
-};
-use crate::focus::FocusManager;
+use crate::builders::{ComponentExt as _, LayoutExt, Parent};
+use crate::component::{Base, Component, Event, GridKey, Handled, WidgetIntent};
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
-use crate::style::{Justify, Length, Spacing};
+use crate::style::{Length, Spacing};
 use crate::widgets::{Flex, Label, Overlay};
 use heca_core::layout::{Point, Rectangle, Size};
 
-/// Panel inner padding.
-const PAD: f32 = 18.0;
-/// Gap between the title, body, and the action row.
-const GAP: f32 = 14.0;
-/// Gap between adjacent action buttons.
-const BTN_GAP: f32 = 10.0;
+// ── The dialog panel recipe ───────────────────────────────────────────────────────────────
+//
+// **Theme steps, and public, because a dialog is not the only thing shaped like one.** These were
+// three private `f32` pixel constants living in this file, which had two consequences: they did not
+// follow the font or the theme, and **nothing outside could match them** — so a surface composed
+// from `Overlay` + `Surface` + `Button`s, which is what a plugin writes, produced a dialog that
+// looked nothing like heca's own. Buttons flush together, no air between the body and the actions
+// (Antonio, driving, 2026-09-07, with the two side by side).
+//
+// One vocabulary, read by both, so the two cannot drift: change a step here and every dialog-shaped
+// surface follows, whoever built it.
+
+/// Inner padding of a dialog panel.
+pub const DIALOG_PAD: Spacing = Spacing::Lg;
+/// Space between a dialog's title, its body, and its action row.
+pub const DIALOG_GAP: Spacing = Spacing::Md;
+/// Space between adjacent action buttons.
+pub const DIALOG_BTN_GAP: Spacing = Spacing::Sm;
 
 /// A centered overlay panel over a scrim, holding real child components.
 ///
@@ -61,14 +70,10 @@ const BTN_GAP: f32 = 10.0;
 /// right-aligned [`Flex`] row of the caller's [`Button`](super::Button)s.
 pub struct Dialog {
     base: Base,
-    /// Shared with the composed [`Overlay`] (it is the overlay's own signal).
-    open: Signal<bool>,
     /// When `false`, Esc / scrim clicks are swallowed but don't dismiss — a forced-decision
     /// dialog (the user must pick a button). Default `true`.
     dismissible: bool,
-    /// Keyboard focus across the panel's focusable descendants (the action buttons, plus any
-    /// focusables inside a rich `body`).
-    focus: FocusManager,
+
     /// Fired when Esc or a scrim click requests dismissal (only if `dismissible`). The host
     /// points this at its overlay-close path (e.g. emit `CloseOverlay`).
     on_dismiss: Option<Box<dyn Fn()>>,
@@ -83,27 +88,36 @@ impl Dialog {
     pub fn new(title: impl Into<String>) -> Self {
         // Panel: a padded column holding the title, then body + actions as they're added.
         let panel = Flex::column()
-            .padding(PAD)
-            .gap(GAP)
+            .padding(DIALOG_PAD)
+            .gap(DIALOG_GAP)
             .child(Label::new(title));
 
         // The base Overlay owns the layer presentation: blocking (scrim + swallow),
         // viewport centering, drop shadow, panel fill, bracket reticle. Its open
         // signal IS the dialog's open signal.
-        let overlay = Overlay::new().blocking(true).panel(panel);
-        let open = overlay.open_signal();
-
+        // **A dialog locks because it is a dialog.** It is asking a question, so nothing behind it
+        // is reachable until you answer — the caller never says so, and cannot get it wrong. A
+        // modeless one (find/replace, a properties panel) turns it off with `.lock(false)`.
         // Root: a full-size passthrough so the overlay child fills the viewport.
         let mut base = Base::new();
-        base.style.layout.width = Length::Pct(1.0);
-        base.style.layout.height = Length::Pct(1.0);
+        base.style.layout.width = Length::Percent(1.0);
+        base.style.layout.height = Length::Percent(1.0);
+
+        // **One flag, handed down.** The dialog is up when `Base::open` says so — the flag every
+        // component carries — and the overlay it composes *follows* that same signal rather than
+        // owning one of its own. This single line is what used to be five forwarded methods: show,
+        // close and the gesture all work on the dialog because they work on every component, and
+        // the surface underneath simply agrees.
+        let overlay = Overlay::new()
+            .blocking(true)
+            .lock(true)
+            .panel(panel)
+            .open_when(base.open);
         base.children.push(Box::new(overlay));
 
         Self {
             base,
-            open,
             dismissible: true,
-            focus: FocusManager::new(),
             on_dismiss: None,
             has_actions: false,
         }
@@ -119,14 +133,16 @@ impl Dialog {
     ///
     /// ```ignore
     /// Dialog::new("Pick a container")
-    ///     .panel_size(Length::Pct(0.5), Length::Pct(0.6))   // 50% × 60% of the VIEWPORT
+    ///     .panel_size(Length::Percent(0.5), Length::Percent(0.6))   // 50% × 60% of the VIEWPORT
     ///     .body(ScrollRegion::new().child(long_list))       // only the body scrolls
     ///     .action(Button::new("Cancel"))
     /// ```
     ///
-    /// `Length::Auto` on an axis keeps the hug-content behaviour. A [`Pct`](Length::Pct)
+    /// `Length::Auto` on an axis keeps the hug-content behaviour. A [`Percent`](Length::Percent)
     /// resolves against the **viewport** (the composed [`Overlay`](super::Overlay) fills it).
-    #[heca_grid_ui_macros::host_only("takes more than one value, which a single property cannot carry")]
+    #[heca_grid_ui_macros::host_only(
+        "takes more than one value, which a single property cannot carry"
+    )]
     pub fn panel_size(mut self, width: Length, height: Length) -> Self {
         let style = &mut self.panel_mut().style.layout;
         style.width = width;
@@ -137,8 +153,8 @@ impl Dialog {
     /// Set the dialog **body** — an arbitrary component (a message label, a form, a table…),
     /// inserted between the title and the action row. Call before [`action`](Dialog::action).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn body(mut self, body: impl Component + 'static) -> Self {
-        self.panel_mut().children.push(Box::new(body));
+    pub fn body(mut self, body: impl crate::builders::IntoComponent) -> Self {
+        self.panel_mut().children.push(body.into_component());
         self.fit_body();
         self
     }
@@ -147,12 +163,6 @@ impl Dialog {
     /// by a mapper that returns `Box<dyn Component>` (e.g. `heca`'s `realize(ViewNode)`), which
     /// can't be passed to `body` because `Box<dyn Component>` is not itself `Component`.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn body_boxed(mut self, body: Box<dyn Component>) -> Self {
-        self.panel_mut().children.push(body);
-        self.fit_body();
-        self
-    }
-
     /// Make the body behave the way a dialog body always should, so no caller has
     /// to remember it: **fill the panel's width** (instead of hugging its content
     /// and sitting to the left) and **take the space left between the title and the
@@ -178,13 +188,13 @@ impl Dialog {
         let idx = self.panel_mut().children.len() - 1;
         let style = &mut self.panel_mut().children[idx].base_mut().style.layout;
         if style.width == Length::Auto {
-            style.width = Length::Pct(1.0);
+            style.width = Length::Percent(1.0);
         }
         if style.flex_grow == 0.0 {
             style.flex_grow = 1.0;
         }
-        if style.gap == 0.0 && style.gap_spacing.is_none() {
-            style.gap_spacing = Some(Spacing::Md);
+        if style.gap == crate::style::Space::Px(0.0) {
+            style.gap = Spacing::Md.into();
         }
     }
 
@@ -195,7 +205,7 @@ impl Dialog {
     pub fn action(mut self, button: impl Component + 'static) -> Self {
         if !self.has_actions {
             // Lazily create the right-aligned action row on first use.
-            let row = Flex::row().gap(BTN_GAP).justify(Justify::End);
+            let row = Flex::row().gap(DIALOG_BTN_GAP).justify("end");
             self.panel_mut().children.push(Box::new(row));
             self.has_actions = true;
         }
@@ -205,6 +215,29 @@ impl Dialog {
             .base_mut()
             .children
             .push(Box::new(button));
+        self
+    }
+
+    /// **Which action the keyboard starts on**, named by that button's `key`.
+    ///
+    /// ```ignore
+    /// Dialog::new("Close pane?")
+    ///     .action(Button::new("Cancel").key("cancel"))
+    ///     .action(Button::destructive("Close").key("close"))
+    ///     .default_action("cancel")          // Enter is the safe one
+    /// ```
+    ///
+    /// The author's call, and only the author's: which button is safe is a fact about *this*
+    /// question, not something a framework can infer. Unset, nothing is focused — a deliberate
+    /// choice a dialog can keep making.
+    ///
+    /// It delegates to [`Overlay::default_focus`], so a dialog and a surface **composed** from an
+    /// overlay place the keyboard by the same rule rather than two that drift.
+    #[heca_grid_ui_macros::prop]
+    pub fn default_action(mut self, key: impl Into<String>) -> Self {
+        let key = key.into();
+        // The composed `Overlay` is this dialog's only child, and it is what holds the keyboard.
+        self.base.children[0].set_default_focus(&key);
         self
     }
 
@@ -227,20 +260,59 @@ impl Dialog {
     /// Set the initial open state (focusing the first focusable — the safe default when the
     /// caller orders `[Cancel, …, Confirm]`).
     #[heca_grid_ui_macros::prop]
-    pub fn open(mut self, open: bool) -> Self {
-        self.open.set(open);
+    pub fn default_open(mut self, open: bool) -> Self {
+        self.base.open.set(open);
+        // **Its own gesture adopts the state too**, not just the flag. Setting only the flag left
+        // the two disagreeing for a frame — the flag said up, the component's own record said
+        // closed — so anything asking whether it was up (a host driving the layer stack, an exit
+        // still playing) got the wrong answer until the first tick caught it up.
+        //
+        // Its own, and not the composed overlay's: arriving and leaving belong to every component
+        // now, so a caller holding a `Dialog` asks the `Dialog`, and the surface underneath
+        // follows the one flag it was handed.
+        self.base.presence.assume_open(open);
         if open {
             // Focus the safe-default (first) button so Enter works — but WITHOUT the ring; it
             // appears only once the user navigates by keyboard (focus-visible).
-            let panel = self.base.children[0].base_mut().children[0].as_mut();
-            self.focus.focus_first_quiet(panel);
+            self.base.children[0].focus_first_quiet();
         }
         self
     }
 
     /// The open-state signal — the host binds this to show/hide the dialog.
+    /// **Follow a signal of your own** — the dialog is up exactly when it is true.
+    ///
+    /// ```ignore
+    /// let confirming = signal(false);
+    /// let d = Dialog::new("Close pane?").body(..).action(..).open_when(confirming);
+    /// confirming.set(true);   // it appears
+    /// ```
+    ///
+    /// Delegates to the composed [`Overlay`](super::Overlay), which holds the state.
+    #[heca_grid_ui_macros::host_only(
+        "a live signal; a description carries a starting value, `open`"
+    )]
+    pub fn open_when(mut self, open: Signal<bool>) -> Self {
+        let overlay = std::mem::replace(&mut self.base.children[0], Box::new(Flex::column()));
+        self.base.children[0] = overlay;
+        self.base.open = open;
+        self.base.children[0].follow_open(open);
+        self
+    }
+
+    /// **A handle to show and close this dialog from anywhere** — copyable, so it goes into any
+    /// closure. See [`SurfaceHandle`](super::SurfaceHandle).
+    ///
+    /// ```ignore
+    /// let confirm = Dialog::new("Close pane?").body(..).action(..).handle();
+    /// Button::new("Delete").on_click(move || confirm.show())
+    /// ```
+    pub fn handle(&self) -> super::SurfaceHandle {
+        super::SurfaceHandle::new(self.base.open)
+    }
+
     pub fn open_signal(&self) -> Signal<bool> {
-        self.open
+        self.base.open
     }
 
     // ── Self-contained keyboard: the widget owns focus traversal + activation + dismissal.
@@ -252,15 +324,20 @@ impl Dialog {
     //    arrows → focus motion). ──
 
     /// Move keyboard focus to the next focusable descendant (wraps).
+    ///
+    /// **Delegated to the composed [`Overlay`](super::Overlay), which owns the keyboard.** This
+    /// used to drive a `FocusManager` of the dialog's own — a second position over the same panel,
+    /// so Tab (the overlay's) and the arrow keys (this one) each thought the keyboard was
+    /// somewhere else and one of them was always wrong. One manager, one position
+    /// (F003/P097/T502).
     fn focus_next(&mut self) {
-        let panel = self.base.children[0].base_mut().children[0].as_mut();
-        self.focus.advance(panel, true);
+        self.base.children[0].advance_focus(true);
     }
 
-    /// Move keyboard focus to the previous focusable descendant (wraps).
+    /// Move keyboard focus to the previous focusable descendant (wraps). See
+    /// [`focus_next`](Dialog::focus_next).
     fn focus_prev(&mut self) {
-        let panel = self.base.children[0].base_mut().children[0].as_mut();
-        self.focus.advance(panel, false);
+        self.base.children[0].advance_focus(false);
     }
 
     /// Fire the **primary** (first) action button — used when Enter is pressed from a field
@@ -295,7 +372,7 @@ impl Dialog {
     }
 
     fn is_open(&self) -> bool {
-        self.open.get_untracked()
+        self.base.open.get_untracked()
     }
 
     /// The panel container (the composed [`Overlay`]'s single child), mutably.
@@ -339,6 +416,20 @@ impl Component for Dialog {
         self.is_open()
     }
 
+    // ── Nothing is forwarded any more ────────────────────────────────────────────────────────
+    //
+    // This block held five hand-written methods passing `presence` / `show` / `close` /
+    // `follow_open` down to the composed `Overlay`. They are gone: arriving and leaving now live
+    // on `Base`, so **every** component answers — a `Select`, a `Button`, a pane, a dock — and a
+    // composed one is not a special case. `ContextMenu` and `CommandPalette` could never have
+    // forwarded anyway, because they are their own panels with no overlay inside to forward to,
+    // which is how it became clear that forwarding was the wrong shape rather than the missing
+    // piece (AGENTS.md § 0 rule 2: the fix is always centralized).
+    //
+    // The dialog and the overlay it composes share **one** open flag, handed down once in
+    // `Dialog::new`, so the surface still places the keyboard where the dialog said when the flag
+    // is raised by any of the three doors.
+
     // No `paint` override: the default recursion reaches the composed [`Overlay`],
     // which owns the whole layer presentation (scrim, shadow, panel fill, bracket
     // reticle, and the panel's children) inside `with_overlay`.
@@ -369,7 +460,7 @@ impl Component for Dialog {
                 if panel_bounds.contains(p.pos)
                     || crate::component::overlay_occluded_at(panel, p.pos)
                 {
-                    self.focus.focus_at_trapped(panel, p.pos);
+                    self.base.children[0].focus_at_trapped(p.pos);
                     Handled::No
                 } else if self.dismissible {
                     // Scrim / outside click dismisses only when dismissible.
@@ -422,7 +513,10 @@ impl Component for Dialog {
             },
             // Classic, always-on focus traversal: Tab / Shift+Tab move focus within the modal.
             // Universal widget behaviour, not a rebindable `[keys.widgets]` binding.
-            Event::Key { key: GridKey::Tab, pressed: true } => {
+            Event::Key {
+                key: GridKey::Tab,
+                pressed: true,
+            } => {
                 if crate::event::modifiers().shift {
                     self.focus_prev();
                 } else {
@@ -441,8 +535,8 @@ impl LayoutExt for Dialog {}
 
 #[cfg(test)]
 mod tests {
-    use crate::event::PointerButton;
     use super::*;
+    use crate::event::PointerButton;
     use crate::widgets::{Button, Label};
     use std::cell::Cell;
     use std::rc::Rc;
@@ -452,7 +546,7 @@ mod tests {
             .body(Label::new("This action cannot be undone."))
             .action(Button::new("Cancel"))
             .action(Button::new("Delete"))
-            .open(true)
+            .default_open(true)
     }
 
     /// An open dialog wired with a dismiss flag, for the Esc / scrim tests.
@@ -484,7 +578,13 @@ mod tests {
         assert!(!d.overlay_active());
         assert!(!d.focusable());
         assert_eq!(
-            crate::component::dispatch(&mut d, &Event::Key { key: GridKey::Escape, pressed: true }),
+            crate::component::dispatch(
+                &mut d,
+                &Event::Key {
+                    key: GridKey::Escape,
+                    pressed: true
+                }
+            ),
             Handled::No,
             "a closed dialog handles nothing",
         );
@@ -521,8 +621,8 @@ mod tests {
     /// grows to fit the content and the region never has anything to scroll.
     #[test]
     fn a_sized_panel_bounds_a_scrollable_body() {
-        use crate::widgets::ScrollRegion;
         use crate::Length;
+        use crate::widgets::ScrollRegion;
 
         // 12 rows, far taller than the 200px panel we ask for.
         let long_body = || {
@@ -538,7 +638,7 @@ mod tests {
         let mut sized = Dialog::new("Long list")
             .panel_size(Length::Px(300.0), Length::Px(200.0))
             .body(long_body())
-            .open(true);
+            .default_open(true);
         crate::LayoutEngine::new().compute(&mut sized, viewport);
         let panel = sized.panel_bounds();
         assert!(
@@ -552,14 +652,15 @@ mod tests {
         );
 
         // Unsized, the same body makes the panel grow instead (nothing to scroll).
-        let mut unsized_dialog = Dialog::new("Long list").body(long_body()).open(true);
+        let mut unsized_dialog = Dialog::new("Long list")
+            .body(long_body())
+            .default_open(true);
         crate::LayoutEngine::new().compute(&mut unsized_dialog, viewport);
         assert!(
             unsized_dialog.panel_bounds().size.h > panel.size.h,
             "without panel_size the panel hugs the tall content"
         );
     }
-
 
     #[test]
     fn clicking_panel_body_keeps_button_focus() {
@@ -577,7 +678,8 @@ mod tests {
         let panel = d.panel_bounds();
         let body = Point::new(panel.loc.x + panel.size.w * 0.5, panel.loc.y + 2.0);
         assert!(panel.contains(body), "test point is inside the panel body");
-        let _ = crate::component::dispatch(&mut d, &Event::pointer_pressed(body, PointerButton::Left));
+        let _ =
+            crate::component::dispatch(&mut d, &Event::pointer_pressed(body, PointerButton::Left));
 
         assert_eq!(
             focused_buttons(&d),
@@ -593,7 +695,9 @@ mod tests {
         // `dismissible`.
         let flag = Rc::new(Cell::new(false));
         let f = flag.clone();
-        let mut d = open_dialog().dismissible(false).on_dismiss(move || f.set(true));
+        let mut d = open_dialog()
+            .dismissible(false)
+            .on_dismiss(move || f.set(true));
         assert_eq!(
             crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::Dismiss)),
             Handled::Yes,
@@ -602,7 +706,10 @@ mod tests {
 
         // A scrim click (press outside the panel) on a forced dialog must NOT dismiss.
         flag.set(false);
-        let _ = crate::component::dispatch(&mut d, &Event::pointer_pressed(Point::new(-100.0, -100.0), PointerButton::Left));
+        let _ = crate::component::dispatch(
+            &mut d,
+            &Event::pointer_pressed(Point::new(-100.0, -100.0), PointerButton::Left),
+        );
         assert!(!flag.get(), "forced dialog ignores the scrim/outside click");
     }
 
@@ -612,8 +719,14 @@ mod tests {
         // configurable `item_next`/`item_previous` bindings). Each is consumed and lands focus.
         for intent in [WidgetIntent::ItemNext, WidgetIntent::ItemPrevious] {
             let mut d = open_dialog();
-            assert_eq!(crate::component::dispatch(&mut d, &Event::Widget(intent)), Handled::Yes);
-            assert!(!focused_buttons(&d).is_empty(), "{intent:?} focuses a button");
+            assert_eq!(
+                crate::component::dispatch(&mut d, &Event::Widget(intent)),
+                Handled::Yes
+            );
+            assert!(
+                !focused_buttons(&d).is_empty(),
+                "{intent:?} focuses a button"
+            );
         }
     }
 
@@ -627,7 +740,7 @@ mod tests {
             .body(Input::new().value("term"))
             .action(Button::new("OK").on_click(move || f.set(true)))
             .action(Button::new("Cancel"))
-            .open(true);
+            .default_open(true);
         // Typed text is delivered field-first to (and consumed by) the focused input. Text, not a
         // key: `Event::TextInput` is what the user actually committed.
         assert_eq!(
@@ -650,16 +763,168 @@ mod tests {
             .body(Input::new().value("ab"))
             .action(Button::new("OK"))
             .action(Button::new("Cancel"))
-            .open(true);
+            .default_open(true);
         // Editing shortcut → forwarded to the input; it is consumed and focus stays on the field.
         assert_eq!(
             crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::EditDeleteBack)),
             Handled::Yes,
             "EditDeleteBack reaches the focused input",
         );
-        assert!(focused_buttons(&d).is_empty(), "editing keeps focus in the input");
+        assert!(
+            focused_buttons(&d).is_empty(),
+            "editing keeps focus in the input"
+        );
         // Nav moves focus off the input onto a button.
         let _ = crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::ItemNext));
-        assert!(!focused_buttons(&d).is_empty(), "ItemNext navigates to a button");
+        assert!(
+            !focused_buttons(&d).is_empty(),
+            "ItemNext navigates to a button"
+        );
+    }
+
+    // ── A dialog answers as a surface ──────────────────────────────────────
+
+    /// **A host can raise a dialog, and until now it could not.** ⚠️ Ran red against its own bug.
+    ///
+    /// A `Dialog` is composed on an `Overlay` but forwarded only its keyboard, so asking the
+    /// dialog itself to open reached the `Component` trait's empty default and did nothing at all.
+    /// The single thing that had ever raised one was `default_open(true)` at construction — which
+    /// is why a dialog could not be shown by name, and why a handle pointing at one moved a flag
+    /// no surface was reading.
+    #[test]
+    fn asking_a_dialog_to_show_actually_opens_it() {
+        let mut d = Dialog::new("Delete pane?")
+            .body(Label::new("This action cannot be undone."))
+            .action(Button::new("Cancel"));
+        assert!(!d.is_open(), "built closed, as every surface is");
+
+        Component::show(&mut d);
+        assert!(
+            d.is_open(),
+            "the dialog forwards opening to the overlay it is built on, so a host that holds a \
+             surface can raise it without knowing what kind it is",
+        );
+
+        Component::close(&mut d);
+        assert!(!d.is_open(), "and the same for dismissing it");
+    }
+
+    /// **A dialog reports its own arrival and exit**, so a host can tell a surface that is going
+    /// away from one that has gone.
+    ///
+    /// It answered `None` before, which reads as "not a surface at all": a dismissed dialog
+    /// counted as finished the instant it was asked to leave, rather than when its gesture had
+    /// played out.
+    #[test]
+    fn a_dialog_reports_whether_it_is_up() {
+        use crate::animation::Presence;
+
+        let mut d = open_dialog();
+        assert!(
+            d.presence().is_some_and(Presence::is_open),
+            "an open dialog says it is up",
+        );
+
+        Component::close(&mut d);
+        assert!(
+            d.presence().is_some_and(|p| !p.is_open()),
+            "and a dismissed one says it is not",
+        );
+    }
+
+    /// **A dialog raised by its handle starts on the control it named.**
+    ///
+    /// The same rule the overlay guards prove, asserted through the composed widget, because that
+    /// is the shape a caller actually holds — and because forwarding a subset of a surface's
+    /// behaviour is what broke the keyboard the last time it was done by halves.
+    #[test]
+    fn a_dialog_raised_by_its_handle_starts_where_it_said() {
+        use crate::reactive::SignalGet;
+
+        let mut d = Dialog::new("Delete pane?")
+            .body(Label::new("This action cannot be undone."))
+            .action(Button::new("Cancel"))
+            .action(Button::new("Delete"))
+            .default_action("Delete");
+
+        let handle = d.handle();
+        let opener = move || handle.show();
+        opener();
+        d.tick(0.016);
+
+        fn focused(n: &dyn Component, out: &mut Vec<String>) {
+            if n.base().focused.get_untracked()
+                && let Some(name) = n.text_summary()
+            {
+                out.push(name);
+            }
+            for c in &n.base().children {
+                focused(c.as_ref(), out);
+            }
+        }
+        let mut names = Vec::new();
+        focused(&d, &mut names);
+        assert!(
+            names.iter().any(|n| n == "Delete"),
+            "opened from a closure holding nothing but the handle, and the keyboard landed on the \
+             control the dialog named: {names:?}",
+        );
+    }
+}
+
+#[cfg(test)]
+mod tab_repro {
+    use super::*;
+    use crate::component::GridKey;
+    use crate::widgets::Button;
+
+    /// **The first Tab moves the keyboard** (F003/P097/T502).
+    ///
+    /// It did not. Opening a dialog quietly focused its first button through a `FocusManager` the
+    /// **dialog** owned, while Tab was answered by the one the composed **overlay** owns — two
+    /// positions over one panel. The first press moved the overlay's manager to *its* first
+    /// control, which was the button the keyboard was already on, so nothing appeared to happen
+    /// and only the second press moved (Antonio, driving `prefix+x`, 2026-09-07).
+    ///
+    /// One manager now, on the overlay, which is what holds the keyboard. The dialog keeps none
+    /// and delegates all four operations — opening, Tab, arrow motion, and a click inside the
+    /// panel. Collapsing only *one* of them is what broke the arrow-key traversal on the first
+    /// attempt: the halves have to move together or they disagree in a new place instead.
+    #[test]
+    fn the_first_tab_in_a_dialog_moves_off_the_default_button() {
+        let mut d = Dialog::new("Close pane?")
+            .body(Label::new("This action cannot be undone."))
+            .action(Button::new("Cancel"))
+            .action(Button::new("Close"))
+            .default_open(true);
+        crate::component::dispatch(
+            &mut d,
+            &Event::Key {
+                key: GridKey::Tab,
+                pressed: true,
+            },
+        );
+
+        fn focused(n: &dyn Component, out: &mut Vec<String>) {
+            if crate::reactive::SignalGet::get_untracked(&n.base().focused)
+                && let Some(name) = n.text_summary()
+            {
+                out.push(name);
+            }
+            for c in &n.base().children {
+                focused(c.as_ref(), out);
+            }
+        }
+        let mut names = Vec::new();
+        focused(&d, &mut names);
+
+        assert!(
+            names.iter().any(|n| n == "Close"),
+            "one Tab moved off the button the dialog opened on, got {names:?}",
+        );
+        assert!(
+            !names.iter().any(|n| n == "Cancel"),
+            "and left it, rather than lighting both: {names:?}",
+        );
     }
 }

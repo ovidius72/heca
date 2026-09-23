@@ -85,7 +85,10 @@ impl Sequence {
             }
             return;
         }
-        self.pending = Some(Pending { left: wait, leaving });
+        self.pending = Some(Pending {
+            left: wait,
+            leaving,
+        });
     }
 }
 
@@ -142,7 +145,9 @@ impl Animate for Sequence {
 
     /// The lead, plus whatever of the follower runs past the end of it.
     fn duration(&self) -> f32 {
-        self.lead.duration().max(self.wait() + self.follow.duration())
+        self.lead
+            .duration()
+            .max(self.wait() + self.follow.duration())
     }
 }
 
@@ -155,23 +160,38 @@ mod tests {
     /// and the surface is held until **both** have played out.
     #[test]
     fn the_follower_rides_the_lead_and_the_whole_gesture_holds_the_surface() {
-        let mut exit = Sequence::new(Zoom::new().from(0.8).seconds(0.2), Fade::out().seconds(0.2))
-            .lag(0.5); // half of the shrink plays first
+        let mut exit =
+            Sequence::new(Zoom::new().from(0.8).seconds(0.2), Fade::out().seconds(0.2)).lag(0.5); // half of the shrink plays first
 
         exit.leave();
-        assert!(exit.is_leaving(), "the gesture holds the surface from the first frame");
+        assert!(
+            exit.is_leaving(),
+            "the gesture holds the surface from the first frame"
+        );
         assert_eq!(exit.frame().scale, 1.0, "an exit leaves from life size");
 
         // While the lead-in runs, the surface is **moving and still solid** — the dissolve has not
         // started. Fading at the same time hides the movement before it has played.
         assert!(exit.tick(0.05));
-        assert!(exit.frame().scale < 1.0, "already shrinking, got {}", exit.frame().scale);
-        assert_eq!(exit.frame().opacity, 1.0, "…and fully present while the wait runs");
+        assert!(
+            exit.frame().scale < 1.0,
+            "already shrinking, got {}",
+            exit.frame().scale
+        );
+        assert_eq!(
+            exit.frame().opacity,
+            1.0,
+            "…and fully present while the wait runs"
+        );
 
         assert!(exit.tick(0.05), "the wait is over; the dissolve begins");
         assert!(exit.tick(0.05));
         let mid = exit.frame();
-        assert!(mid.opacity < 1.0 && mid.opacity > 0.0, "now dissolving, got {}", mid.opacity);
+        assert!(
+            mid.opacity < 1.0 && mid.opacity > 0.0,
+            "now dissolving, got {}",
+            mid.opacity
+        );
 
         // The shrink finishes first — and the surface is still held, because the dissolve is not
         // done. Tying the lifetime to one half is the bug this composition exists to prevent.
@@ -179,7 +199,10 @@ mod tests {
         assert!(exit.is_leaving(), "the shrink is over, the gesture is not");
 
         while exit.tick(0.05) {}
-        assert!(!exit.is_leaving(), "…and it releases the surface only at the end");
+        assert!(
+            !exit.is_leaving(),
+            "…and it releases the surface only at the end"
+        );
         assert_eq!(exit.frame().scale, 0.8, "resting where it left off");
         assert_eq!(exit.frame().opacity, 0.0);
     }

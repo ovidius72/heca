@@ -194,17 +194,27 @@ mod tests {
         assert!(!s.is_running());
 
         s.enter();
-        assert!((s.travelled() - 100.0).abs() < 0.01, "arriving starts at the far edge");
+        assert!(
+            (s.travelled() - 100.0).abs() < 0.01,
+            "arriving starts at the far edge"
+        );
         assert!(s.tick(0.5));
         let mid = s.travelled();
-        assert!(mid > 0.0 && mid < 100.0, "…and is somewhere between, got {mid}");
+        assert!(
+            mid > 0.0 && mid < 100.0,
+            "…and is somewhere between, got {mid}"
+        );
         assert!(!s.tick(0.6), "the frame it stops running");
         assert_eq!(s.travelled(), 0.0, "…it is home");
 
         s.leave();
         assert!(s.travelled() < 0.01, "leaving starts at home");
         assert!(s.tick(0.9));
-        assert!(s.travelled() > 40.0, "…and travels out, got {}", s.travelled());
+        assert!(
+            s.travelled() > 40.0,
+            "…and travels out, got {}",
+            s.travelled()
+        );
 
         // Re-shown mid-flight: present again, not finishing a departure nobody wants.
         s.cancel();

@@ -79,25 +79,11 @@ pub(crate) struct DynamicLayer {
     /// concerned and only the picture is still playing out. [`LayerRegistry::tick`] drops it.
     pub(crate) doomed: bool,
     pub(crate) kind: LayerKind,
-    /// Captures the context while active — suppresses everything beneath it.
-    pub(crate) modal: bool,
-    /// **Does it cover the tiled area?** (F003/P086/T371.)
-    ///
-    /// The one thing an overlay declares about the app underneath it, and the only input
-    /// `Domain::Overlay` needs: while something covers the panes, acting on them is refused. A
-    /// modal covers by definition; a **non-modal** overlay — a plugin panel over the scrolling
-    /// area — declares it, and gets the same protection the blunt "a modal blocks everything" rule
-    /// could never give it. A dropdown or a tooltip covers a corner, not the panes, and says
-    /// `false`.
-    ///
-    /// It is deliberately **not** a policy: a plugin declares what its own overlay obscures, never
-    /// what may run while it is up. Otherwise every plugin would end up naming `split_horizontal`.
-    ///
-    /// **Every `modal` layer sets this**, because a modal captures input and demands a decision —
-    /// that is what "a modal is an overlay with coverage" means, and it is what preserves the
-    /// blanket block the router used to apply while one was open. The flag earns its keep on the
-    /// **non-modal** overlays that had no protection at all.
-    pub(crate) covers_content: bool,
+    // `modal` and `lock` used to sit here. They are now declared by the surface
+    // itself — `Base::captures_keyboard` and `Base::lock`, set with one builder on the
+    // widget — and read off the node in the one tree (F003/P097/T499). A plugin therefore says what
+    // its own overlay obscures without reaching this registry at all, and a host reads it from the
+    // tree it already walks rather than from a parallel record it has to keep in step.
     /// Whether it participates this frame. `Persistent` layers start visible; `OnDemand`
     /// layers start hidden and are shown via [`LayerRegistry::show`].
     pub(crate) visible: bool,
@@ -126,7 +112,6 @@ pub(crate) struct DynamicLayer {
     pub(crate) node: Option<ViewNode>,
 }
 
-
 impl DynamicLayer {
     /// Is this layer **still in charge** — capturing input, covering the panes, answering as the
     /// front-most modal?
@@ -142,8 +127,6 @@ impl DynamicLayer {
     pub(crate) fn is_active(&self, leaving: bool) -> bool {
         self.visible && !leaving
     }
-
-
 }
 
 #[cfg(test)]
@@ -155,10 +138,24 @@ mod tests {
     /// a dot.
     #[test]
     fn a_layer_name_is_stamped_from_its_owner_and_cannot_be_forged() {
-        assert_eq!(layer_name("docker", "expose").as_deref(), Some("docker.expose"));
-        assert_eq!(layer_name(HOST_OWNER, "expose").as_deref(), Some("heca.expose"));
-        assert_eq!(layer_name("docker", "expose.thing"), None, "no smuggled second segment");
-        assert_eq!(layer_name("docker", "heca.expose"), None, "cannot claim another namespace");
+        assert_eq!(
+            layer_name("docker", "expose").as_deref(),
+            Some("docker.expose")
+        );
+        assert_eq!(
+            layer_name(HOST_OWNER, "expose").as_deref(),
+            Some("heca.expose")
+        );
+        assert_eq!(
+            layer_name("docker", "expose.thing"),
+            None,
+            "no smuggled second segment"
+        );
+        assert_eq!(
+            layer_name("docker", "heca.expose"),
+            None,
+            "cannot claim another namespace"
+        );
         assert_eq!(layer_name("docker", ""), None);
     }
 }

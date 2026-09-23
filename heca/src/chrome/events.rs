@@ -19,7 +19,68 @@ pub enum RegionId {
     BottomBar,
 }
 
+/// **A region, as a caller says it**: `Region::LeftSidebar.child(Workspaces::new())`.
+///
+/// The same type as [`RegionId`] — one region vocabulary, not two — under the name that reads at a
+/// call site, where `Id` said nothing.
+pub use RegionId as Region;
+
 impl RegionId {
+    /// **Put a container in this region** — one, or several.
+    ///
+    /// ```ignore
+    /// Region::LeftSidebar.child(Workspaces::new());
+    /// Region::LeftSidebar.child([workspaces, docker]);
+    /// ```
+    ///
+    /// It ADDS to the region that is already on screen; it never builds one. The region is the
+    /// receiver rather than an argument, so a container stops declaring which parent it belongs to
+    /// — the same inversion the grid's placement lost.
+    ///
+    /// A plugin writes this identical line, which is the point: no `Box`, no host object to reach,
+    /// no `::placed` constructor, and no mount id unless the caller wants to name that placement.
+    ///
+    /// **It works before the host exists.** The containers queue here and [`ChromeHost`] takes them
+    /// when it is built, so load order stops mattering — a plugin adding one at startup and one an
+    /// hour later write the same call.
+    ///
+    /// [`ChromeHost`]: crate::chrome::ChromeHost
+    pub fn child(self, containers: impl IntoProviders) -> Self {
+        PENDING.with(|q| {
+            q.borrow_mut()
+                .extend(containers.into_providers().into_iter().map(|p| (self, p)))
+        });
+        self
+    }
+
+    /// **How this region arranges what is in it** — a track template, as a stylesheet writes one.
+    ///
+    /// ```ignore
+    /// Region::LeftSidebar.template_row("1fr 1fr").gap("sm").child([workspaces, docker]);
+    /// ```
+    ///
+    /// Without one the containers stack and divide the region by the share each asked for, which is
+    /// what they did before this existed. With one, the region says the arrangement in a line a
+    /// reader can check against the picture — `"auto 1fr"` for a fixed dock above one that takes
+    /// the rest — and a part that is not there is a missing row rather than a number to revisit.
+    pub fn template_row(self, tracks: &str) -> Self {
+        LAYOUT.with(|l| l.borrow_mut().entry(self).or_default().rows = Some(tracks.to_string()));
+        self
+    }
+
+    /// The column tracks, for a region arranged across rather than down.
+    pub fn template_column(self, tracks: &str) -> Self {
+        LAYOUT.with(|l| l.borrow_mut().entry(self).or_default().columns = Some(tracks.to_string()));
+        self
+    }
+
+    /// **Air between the containers in this region** — a number of pixels, a step of the theme's
+    /// rhythm (`"sm"`), or a string, exactly as everywhere else.
+    pub fn gap(self, gap: impl Into<heca_grid_ui::style::Space>) -> Self {
+        LAYOUT.with(|l| l.borrow_mut().entry(self).or_default().gap = Some(gap.into()));
+        self
+    }
+
     /// All four regions in canonical order.
     pub const ALL: [RegionId; 4] = [
         RegionId::LeftSidebar,
@@ -98,8 +159,13 @@ pub enum SidebarSelection {
         col_idx: usize,
         col_id: heca_core::layout::ColumnId,
     },
-    Pane { pane_id: PaneId },
-    FloatingPane { pane_id: PaneId, ws_idx: usize },
+    Pane {
+        pane_id: PaneId,
+    },
+    FloatingPane {
+        pane_id: PaneId,
+        ws_idx: usize,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -327,4 +393,85 @@ mod tests {
         assert_eq!(typed.borrow().as_slice(), ["pane.active.changed"]);
         assert_eq!(all.borrow().as_slice(), ["pane.active.changed"]);
     }
+}
+
+/// **One container or several** — what [`RegionId::child`] takes, so a caller hands over whichever
+/// shape they hold and never goes looking for a plural spelling.
+pub trait IntoProviders {
+    /// The containers, boxed once.
+    fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>>;
+}
+
+impl<P: crate::providers::Provider + 'static> IntoProviders for P {
+    fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>> {
+        vec![Box::new(self)]
+    }
+}
+
+impl IntoProviders for Box<dyn crate::providers::Provider> {
+    fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>> {
+        vec![self]
+    }
+}
+
+impl<P: IntoProviders> IntoProviders for Vec<P> {
+    fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>> {
+        self.into_iter()
+            .flat_map(IntoProviders::into_providers)
+            .collect()
+    }
+}
+
+impl<P: IntoProviders, const N: usize> IntoProviders for [P; N] {
+    fn into_providers(self) -> Vec<Box<dyn crate::providers::Provider>> {
+        self.into_iter()
+            .flat_map(IntoProviders::into_providers)
+            .collect()
+    }
+}
+
+thread_local! {
+    /// Containers named by [`RegionId::child`] before a [`ChromeHost`](crate::chrome::ChromeHost)
+    /// existed to hold them.
+    ///
+    /// Thread-local rather than a global with a lock: the chrome is built and mutated on the UI
+    /// thread only, and a lock here would be a promise the rest of the chrome does not keep.
+    static PENDING: std::cell::RefCell<Vec<(RegionId, Box<dyn crate::providers::Provider>)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Take everything [`RegionId::child`] has queued. The host calls this; nothing else should.
+pub(crate) fn take_pending() -> Vec<(RegionId, Box<dyn crate::providers::Provider>)> {
+    PENDING.with(|q| std::mem::take(&mut *q.borrow_mut()))
+}
+
+/// **What a region says about arranging its own contents.** Empty unless a caller said something,
+/// in which case the region's body is built as a grid rather than a stack.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RegionLayout {
+    /// The row tracks (`"auto 1fr"`, `"repeat(2, 1fr)"`).
+    pub rows: Option<String>,
+    /// The column tracks.
+    pub columns: Option<String>,
+    /// Air between the containers.
+    pub gap: Option<heca_grid_ui::style::Space>,
+}
+
+impl RegionLayout {
+    /// Did anyone say anything about this region?
+    pub fn is_set(&self) -> bool {
+        self.rows.is_some() || self.columns.is_some() || self.gap.is_some()
+    }
+}
+
+thread_local! {
+    /// What each region was told about arranging itself, before a host existed to hold it —
+    /// alongside [`PENDING`], and taken by the same call.
+    static LAYOUT: std::cell::RefCell<std::collections::HashMap<RegionId, RegionLayout>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Take the arrangements [`RegionId::template_row`] and friends have queued.
+pub(crate) fn take_pending_layout() -> std::collections::HashMap<RegionId, RegionLayout> {
+    LAYOUT.with(|l| std::mem::take(&mut *l.borrow_mut()))
 }

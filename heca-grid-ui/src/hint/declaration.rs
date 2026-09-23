@@ -59,7 +59,9 @@ impl Hint {
 
 impl std::fmt::Debug for Hint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Hint").field("intent", &self.intent).finish()
+        f.debug_struct("Hint")
+            .field("intent", &self.intent)
+            .finish()
     }
 }
 

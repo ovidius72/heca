@@ -19,7 +19,7 @@
 //! These all run **before the window**: no GPU, no event loop, so a script can ask heca a question
 //! without a display.
 
-use crate::actions::{check_args, ActionCatalog, ArgDescriptor, ArgKind, ArgSpec};
+use crate::actions::{ActionCatalog, ArgDescriptor, ArgKind, ArgSpec, check_args};
 use std::collections::HashMap;
 
 /// One thing heca can be asked from the command line.

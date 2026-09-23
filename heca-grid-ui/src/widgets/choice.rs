@@ -169,8 +169,8 @@ impl Component for Choice {
     /// both derive from the resolved font + size variant, so the whole affordance scales together.
     fn remeasure(&mut self) {
         let pad = BASE_PAD * self.base.size_scale();
-        self.base.style.layout.padding = pad;
-        self.base.style.layout.gap = self.base.font * GAP_RATIO;
+        self.base.style.layout.padding = (pad).into();
+        self.base.style.layout.gap = (self.base.font * GAP_RATIO).into();
         self.base.style.layout.width = Length::Auto;
         self.base.style.layout.height = Length::Auto;
     }
@@ -184,7 +184,7 @@ impl Component for Choice {
         let (accent, foreground, radius, ia) = {
             let t = cx.theme();
             (
-                t.colors.accent,
+                cx.accent(),
                 t.colors.foreground,
                 t.colors.control_radius(),
                 t.colors.interaction,
@@ -197,7 +197,13 @@ impl Component for Choice {
         if selected {
             cx.rect(b, accent.with_alpha(ia.row_active_fill), None, radius, None);
         } else if self.base.hovered() {
-            cx.rect(b, foreground.with_alpha(ia.row_hover_fill), None, radius, None);
+            cx.rect(
+                b,
+                foreground.with_alpha(ia.row_hover_fill),
+                None,
+                radius,
+                None,
+            );
         }
 
         // The composed content paints itself, under the option's state color: chosen → accent,

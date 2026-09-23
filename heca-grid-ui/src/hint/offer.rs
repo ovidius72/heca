@@ -2,15 +2,17 @@
 //! nothing more: assign the letters and hand each one to the widget that declared the pick, which
 //! draws it in its own paint.
 
+use super::collect::{is_addressable, narrowed, skip, unseen};
 use crate::component::Component;
-use super::collect::{is_target, narrowed, out_of_view, skip};
 use crate::reactive::SignalUpdate;
 use heca_core::layout::Rectangle;
 
 /// **Hand `label` to `node`, unless nothing can see it there.**
 ///
-/// The one place a letter is written, so the rule that a clipped-away view does not get one is
-/// stated once per walk rather than at each of the four places a letter is handed out.
+/// The one place a letter is written, so the rule that a view you cannot see does not get one is
+/// stated once per walk rather than at each of the four places a letter is handed out. **Cannot
+/// see** covers both halves — clipped away by an ancestor, or squeezed to nothing of its own
+/// ([`unseen`]).
 ///
 /// **Withdrawal is never refused.** `None` takes a letter back and must reach a widget wherever it
 /// has scrolled to since it got one, or the keycap outlives the picker that put it up — the exact
@@ -21,7 +23,7 @@ use heca_core::layout::Rectangle;
 /// and the letter belongs to the pane. A row past the sidebar's fold simply is not one of the
 /// places that can show it; the pane keeps its letter and its other views still wear it.
 fn give(node: &dyn Component, label: &Option<String>, clip: Option<Rectangle>) -> bool {
-    if label.is_some() && out_of_view(node, clip) {
+    if label.is_some() && unseen(node, clip) {
         return false;
     }
     node.base().hint_label.set(label.clone());
@@ -55,7 +57,7 @@ pub fn offer_hint(root: &dyn Component, path: &[usize], label: Option<String>) -
             None => return false,
         }
     }
-    if !is_target(node) {
+    if !is_addressable(node) {
         return false;
     }
     give(node, &label, clip)
@@ -101,7 +103,7 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
         }
         // The nearest hint *above* the target, remembered on the way down so it is there if the
         // named node turns out to be inside a wrapper that declared one.
-        let enclosing = if is_target(node) {
+        let enclosing = if is_addressable(node) {
             Some(node)
         } else {
             enclosing
@@ -123,16 +125,20 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
             // hand its letter up to the workspace header, which is a wrong letter rather than no
             // letter. The named thing is not visible in this tree, so this tree is not one of the
             // places that can show it (F003/P082/T438).
-            if label.is_some() && out_of_view(node, clip) {
+            if label.is_some() && unseen(node, clip) {
                 return false;
             }
             // A declaration inside wins first (a dock names itself on the outside and declares the
             // pick within), then a declaration *enclosing* it, and only then anything merely
             // actionable inside. Same precedence in both directions: whoever DECLARED what a pick
             // does owns the letter — and the placement it drew with.
-            if label_nearest_matching(node, label, clip, &|c: &dyn Component| {
-                c.base().hint.is_some()
-            }) {
+            if label_nearest_matching(
+                node,
+                label,
+                clip,
+                &|c: &dyn Component| c.base().hint.is_some(),
+                Some(key),
+            ) {
                 return true;
             }
             if let Some(outer) = declaring
@@ -140,7 +146,7 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
             {
                 return true;
             }
-            if label_nearest_matching(node, label, clip, &|_: &dyn Component| true) {
+            if label_nearest_matching(node, label, clip, &|_: &dyn Component| true, Some(key)) {
                 return true;
             }
             if let Some(outer) = enclosing
@@ -170,7 +176,32 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
     walk(root, key, &label, None, None, None)
 }
 
-/// The nearest target in this subtree that `pick` accepts, labelled.
+/// Whether this subtree **is somebody else** — it holds an identity that is not `owner`'s.
+///
+/// Asked of a subtree rather than of a node, because the declaration and the name are on different
+/// widgets and usually the wrong way round: a row names itself on the inside and the `KeyHint`
+/// carrying its declaration wraps it. Asking only whether *this* node names something else would
+/// therefore never fire — the wrapper names nothing, and the letter lands on it.
+///
+/// A subtree that names nothing is part of whatever encloses it, which is what keeps a `KeyHint`, a
+/// `Flex` or a `Surface` transparent here.
+fn governs_foreign_identity(node: &dyn Component, owner: Option<&str>) -> bool {
+    if skip(node) {
+        return false;
+    }
+    let base = node.base();
+    if let Some(declared) = base.key.as_deref().or(base.scope_key.as_deref())
+        && Some(declared) != owner
+    {
+        return true;
+    }
+    base.children
+        .iter()
+        .any(|c| governs_foreign_identity(c.as_ref(), owner))
+}
+
+/// The nearest target in this subtree that `pick` accepts, labelled — **without crossing into
+/// something that is somebody else.**
 ///
 /// Split in two passes so a **declaration wins over mere actionability**, which is the precedence
 /// T441 settled: a declared hint shadows something merely actionable beneath it, but never another
@@ -181,23 +212,40 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
 /// goes with it (`CenterRight`, so the letter clears the row's label). A single inner-first pass
 /// labelled the row, so the same pane wore a right-aligned keycap under one picker and a
 /// top-centred one under the other — same letter, two widgets, two looks.
+///
+/// # A nested identity owns its own letter
+///
+/// `key` is what stops the descent. Searching inside the named thing is right — a container names
+/// itself on the outside and may declare its pick within — but a child that **names something
+/// else** is a different thing, and its declaration says what a pick does to *it*. Handing it a
+/// letter that belongs to its parent draws the parent's keycap on the child, in the child's place
+/// and the child's colour.
+///
+/// That is what happened: a workspace dock declares its pick on the wrapper *outside* itself, so
+/// the search went in and found the first pane row's — and the workspace's letter appeared over a
+/// pane, blue and right-aligned, instead of orange on the workspace's own header. Everything the
+/// caller sees is the same; the letter simply lands on the wrong widget.
 fn label_nearest_matching(
     node: &dyn Component,
     label: &Option<String>,
     clip: Option<Rectangle>,
     pick: &dyn Fn(&dyn Component) -> bool,
+    owner: Option<&str>,
 ) -> bool {
     if skip(node) {
         return false;
     }
-    if is_target(node) && pick(node) && give(node, label, clip) {
+    if is_addressable(node) && pick(node) && give(node, label, clip) {
         return true;
     }
     let clip = narrowed(clip, node);
-    node.base()
-        .children
-        .iter()
-        .any(|c| label_nearest_matching(c.as_ref(), label, clip, pick))
+    // **Do not go into somebody else.** Checked per child, never of the node the search started
+    // from: that one *is* `owner`. A child subtree holding a different identity is a different
+    // thing, and its declaration says what a pick does to it.
+    node.base().children.iter().any(|c| {
+        !governs_foreign_identity(c.as_ref(), owner)
+            && label_nearest_matching(c.as_ref(), label, clip, pick, owner)
+    })
 }
 
 /// Withdraw every letter in this tree — what a host calls when the picker closes.
@@ -206,10 +254,86 @@ fn label_nearest_matching(
 /// the picker and closing it still has its letter taken away. A stale keycap left over a card is
 /// the failure this prevents.
 pub fn clear_hints(root: &dyn Component) {
-    if is_target(root) {
+    if is_addressable(root) {
         root.base().hint_label.set(None);
     }
     for child in &root.base().children {
         clear_hints(child.as_ref());
     }
+}
+
+/// **Change what a named node says, without rebuilding anything** (F003/P097/T500).
+///
+/// The text is a signal, so this is a write to reactive state: the tree keeps its identity, its
+/// layout and every widget inside it. That matters because a rebuild is not free and not invisible
+/// — a freshly built widget has no layout node until the walk reaches it, and **nothing is painted
+/// before it has a box**, so the frame after a rebuild draws nothing where the old tree was.
+///
+/// The case it was written for: a pane's header shows the foreground program and whether the last
+/// command succeeded. Both change twice per command, and while they were part of the header's
+/// *identity* every command threw the whole header away and built a new one — the buttons blinked
+/// out and back twice, which is what a user sees as a flash (Antonio, driving, 2026-09-05).
+///
+/// Addressed by the node's own declared key, exactly as [`offer_hint_by_key`] is, so there is
+/// nothing to register and nothing to release when the tree does change for a real reason.
+/// Answers `true` if anything took it. Every matching node is written, because one thing may be
+/// shown in more than one place.
+pub fn set_text_by_key(root: &dyn Component, key: &str, text: &str) -> bool {
+    fn walk(node: &dyn Component, key: &str, text: &str) -> bool {
+        if skip(node) {
+            return false;
+        }
+        let mut wrote = false;
+        if node.base().key.as_deref() == Some(key) {
+            wrote |= node.set_text(text.to_string());
+            // A named wrapper is allowed to hold the words rather than be them — the same shape
+            // `offer_hint_by_key` handles, where the named node's own answer may live just beneath
+            // it. Only the nearest one, so a panel with a name does not rewrite every label in it.
+            if !wrote {
+                for child in node.base().children.iter() {
+                    if child.set_text(text.to_string()) {
+                        return true;
+                    }
+                }
+            }
+        }
+        for child in node.base().children.iter() {
+            wrote |= walk(child.as_ref(), key, text);
+        }
+        wrote
+    }
+    walk(root, key, text)
+}
+
+/// **Light the named node, and darken every other one it knows about** (F003/P097/T501).
+///
+/// A container that moves a cursor over its children says which one it is on by that child's own
+/// key — the same addressing [`offer_hint_by_key`] and [`set_text_by_key`] use, and for the same
+/// reason: nothing is registered, so nothing has to be released when the tree is rebuilt.
+///
+/// It replaces the caller wiring the two together. A grid used to be handed each card's own state
+/// signal (`GridCell::new(key, card.nav_state())`), which works but means every caller has to know
+/// the connection exists and make it — and a *described* card cannot make it at all, because a
+/// description has no way to name another node's signal. Addressing by key is something both
+/// authoring paths can do.
+///
+/// `keys` is every key the container owns, so exactly one ends lit and the rest are cleared in the
+/// same walk — a cursor is single-valued, and clearing separately is how two claims survive at once.
+pub fn set_selected_by_key(root: &dyn Component, keys: &[String], lit: Option<&str>) -> bool {
+    fn walk(node: &dyn Component, keys: &[String], lit: Option<&str>, any: &mut bool) {
+        if skip(node) {
+            return;
+        }
+        if let Some(k) = node.base().key.as_deref()
+            && keys.iter().any(|owned| owned == k)
+        {
+            *any |= node.set_selected(Some(k) == lit);
+        }
+        for child in node.base().children.iter() {
+            walk(child.as_ref(), keys, lit, any);
+        }
+    }
+    let mut any = false;
+    walk(root, keys, lit, &mut any);
+    any
 }

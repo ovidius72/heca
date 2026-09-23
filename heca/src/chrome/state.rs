@@ -91,15 +91,19 @@ impl PaneRuntimeSignals {
         }
     }
 
-    #[cfg(test)]
+    /// Read every field of this pane's runtime at once.
+    ///
+    /// **Tracked reads, one per field.** Outside a reactive scope this is the same as an untracked
+    /// read; inside one it is the whole point — a subscription depends on this pane's six fields
+    /// and on nothing else, so a neighbour's directory changing does not wake this row.
     pub(crate) fn snapshot(&self) -> PaneRuntime {
         PaneRuntime {
-            program: self.program.get_untracked(),
-            status: self.status.get_untracked(),
-            cwd: self.cwd.get_untracked(),
-            exit_code: self.exit_code.get_untracked(),
-            git: self.git.get_untracked(),
-            kind: self.kind.get_untracked(),
+            program: self.program.get(),
+            status: self.status.get(),
+            cwd: self.cwd.get(),
+            exit_code: self.exit_code.get(),
+            git: self.git.get(),
+            kind: self.kind.get(),
         }
     }
 }
@@ -274,6 +278,19 @@ impl WorkspacesContainerState {
     pub fn pane_renamed_add_process_name(&self) -> bool {
         self.pane_renamed_add_process_name.get_untracked()
     }
+    /// **The two display settings as signals**, for a row that follows them rather than reading
+    /// them once while its tree is built. The untracked accessors above stay for the build-time
+    /// initial value; these are what a subscription depends on, so a setting reload reaches every
+    /// row without a rebuild.
+    pub(crate) fn pane_show_cwd_signal(&self) -> Signal<bool> {
+        self.pane_show_cwd
+    }
+
+    /// See [`pane_show_cwd_signal`](Self::pane_show_cwd_signal).
+    pub(crate) fn pane_renamed_add_process_name_signal(&self) -> Signal<bool> {
+        self.pane_renamed_add_process_name
+    }
+
     /// The program catalog this component resolves process icons and names through. Read untracked —
     /// consumed while building the retained tree, not inside a reactive paint closure.
     pub fn programs(&self) -> std::rc::Rc<heca_config::programs::ProgramsConfig> {
@@ -302,6 +319,30 @@ impl WorkspacesContainerState {
         f: impl FnOnce(Option<&PaneRuntimeSignals>) -> R,
     ) -> R {
         self.panes.with(|panes| f(panes.get(&pane)))
+    }
+
+    /// **This pane's signal handles, created if the store has not met it yet.**
+    ///
+    /// The handles are `Copy`, so a component takes them once while it builds and reads them from
+    /// inside its own subscription — depending on that pane's fields rather than on the map that
+    /// holds them. Subscribing to the map instead would wake every row on every frame, because the
+    /// per-frame mirror touches it whether anything changed or not.
+    ///
+    /// It **creates** the entry rather than answering `None`, and that is the point: a handle a
+    /// caller does not get is a subscription that can never form, so a row built in the same frame
+    /// its pane appeared would be deaf for the life of the tree — the same "read once at build time
+    /// and frozen" failure as a line that was never attached. The mirror fills the entry in on its
+    /// next pass, and `retain_panes` prunes it when the pane goes.
+    pub(crate) fn pane_runtime_signals(&self, pane: PaneId) -> PaneRuntimeSignals {
+        let mut sigs = None;
+        self.panes.update(|panes| {
+            sigs = Some(
+                *panes
+                    .entry(pane)
+                    .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default())),
+            );
+        });
+        sigs.expect("the entry was just inserted")
     }
 
     /// Snapshot a pane's reactive runtime into a plain [`PaneRuntime`] (the public
@@ -861,9 +902,6 @@ impl SharedChromeState {
         sig.set(key);
     }
 
-
-
-
     /// Construct the store with initial region modes + widths (mirroring the
     /// `SidebarState` defaults during migration). Signals are created here — requires
     /// the reactive runtime, available on the UI thread at `AppState` construction.
@@ -1008,7 +1046,6 @@ mod tests {
         s.workspaces.set_ws_collapsed(1, false);
         assert!(!s.workspaces.is_ws_collapsed(1));
     }
-
 
     #[test]
     fn selection_defaults_none_then_set() {
@@ -1168,7 +1205,10 @@ mod tests {
         let s = state();
         let a = s.container_keyboard_target("dock.a");
         let b = s.container_keyboard_target("dock.b");
-        assert!(!a.get_untracked() && !b.get_untracked(), "no focus, no target");
+        assert!(
+            !a.get_untracked() && !b.get_untracked(),
+            "no focus, no target"
+        );
 
         s.set_focused_container(Some("dock.a".into()));
         assert!(a.get_untracked());
@@ -1186,7 +1226,10 @@ mod tests {
 
         s.set_focused_container(None);
         for (id, sig) in [("dock.a", a), ("dock.b", b), ("dock.c", c)] {
-            assert!(!sig.get_untracked(), "{id} keeps no target once focus is cleared");
+            assert!(
+                !sig.get_untracked(),
+                "{id} keeps no target once focus is cleared"
+            );
         }
     }
 
@@ -1199,9 +1242,11 @@ mod tests {
         let again = s.container_keyboard_target("workspaces");
         assert!(first.get_untracked() && again.get_untracked());
         s.set_focused_container(None);
-        assert!(!again.get_untracked(), "and it is the same signal, not a copy");
+        assert!(
+            !again.get_untracked(),
+            "and it is the same signal, not a copy"
+        );
     }
-
 
     /// Focus emits once per real change, and never for a repeat.
     ///
@@ -1361,8 +1406,7 @@ mod tests {
         assert_eq!(s.workspaces.terminal_viewport(pane), None);
 
         // After a viewport write, it returns the expected values.
-        s.workspaces
-            .set_pane_viewport(pane, 42, false, 200);
+        s.workspaces.set_pane_viewport(pane, 42, false, 200);
         let vp = s.workspaces.terminal_viewport(pane).unwrap();
         assert_eq!(
             vp,
@@ -1385,20 +1429,15 @@ mod tests {
         let pane = PaneId(11);
 
         // First write -> terminal.viewport.changed emitted.
-        s.workspaces
-            .set_pane_viewport(pane, 10, false, 50);
+        s.workspaces.set_pane_viewport(pane, 10, false, 50);
         // Identical write -> no event.
-        s.workspaces
-            .set_pane_viewport(pane, 10, false, 50);
+        s.workspaces.set_pane_viewport(pane, 10, false, 50);
         // Single field change -> event fired.
-        s.workspaces
-            .set_pane_viewport(pane, 11, false, 50);
+        s.workspaces.set_pane_viewport(pane, 11, false, 50);
         // All fields changed -> single event.
-        s.workspaces
-            .set_pane_viewport(pane, 0, true, 100);
+        s.workspaces.set_pane_viewport(pane, 0, true, 100);
         // Back to the last values -> event fired (still a change from current).
-        s.workspaces
-            .set_pane_viewport(pane, 11, false, 50);
+        s.workspaces.set_pane_viewport(pane, 11, false, 50);
 
         assert_eq!(
             seen.borrow().as_slice(),
@@ -1417,8 +1456,7 @@ mod tests {
         let s = state();
         let pane = PaneId(12);
         // set_pane_viewport on a fresh pane without set_pane_runtime should work.
-        s.workspaces
-            .set_pane_viewport(pane, 5, true, 30);
+        s.workspaces.set_pane_viewport(pane, 5, true, 30);
         let vp = s.workspaces.terminal_viewport(pane).unwrap();
         assert_eq!(vp.viewport_offset, 5);
         assert!(vp.at_bottom);

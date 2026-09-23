@@ -14,14 +14,17 @@ use std::time::{Duration, Instant};
 
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{DrawCommand, ScanlineCmd};
-use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, RawPointer, RawPointerKind, Rectangle, Scene, Size};
 use heca_grid_ui::widgets::{ContextMenu, KeyCap, Menu, NfGlyph, NfIcon, Overlay};
-use heca_view::build::{self, Parent as _, Style as _};
-use heca_view::{Intent, PropValue, ViewNode};
-use heca_view_realize::{realize, FormBindings, IntentEmitter};
+use heca_grid_ui::{
+    Component, Event, LayoutEngine, PaintCx, Panel, Point, RawPointer, RawPointerKind, Rectangle,
+    Scene, Size,
+};
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
+use heca_view::build::{self, Parent as _, Style as _};
+use heca_view::{Intent, PropValue, ViewGlyph, ViewNode};
+use heca_view_realize::{FormBindings, IntentEmitter, realize};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
 
@@ -96,8 +99,11 @@ const INTENSITY_OPTS: [Intensity; 4] = [
 /// showcase cannot read (it builds its own `Theme` and never loads `config.toml`),
 /// so the control writes the same `theme.colors.overlay_frame` token the config
 /// path writes in the real app.
-const OVERLAY_FRAME_OPTS: [FrameStyle; 3] =
-    [FrameStyle::Bracketed, FrameStyle::Bordered, FrameStyle::None];
+const OVERLAY_FRAME_OPTS: [FrameStyle; 3] = [
+    FrameStyle::Bracketed,
+    FrameStyle::Bordered,
+    FrameStyle::None,
+];
 
 /// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`, `HEADER`).
 const SIZE_OPTS: [WidgetSize; 4] = [
@@ -225,27 +231,109 @@ fn described_tree() -> ViewNode {
                 // crossing the hover pill's edge, and it reads as the badge overflowing.
                 .padding(6.0)
                 .on_press(Intent::new("showcase.select").arg("id", PropValue::Text("nginx".into())))
+                // **A tooltip is a declaration, not a box around the row** (F003/P097/T501). It is
+                // universal like `.key(..)`, so a described node says it exactly as its native twin
+                // below does — hover either and the same bubble appears, on the same side, after
+                // the same rest. There is no `WidgetKind::Tooltip` to construct and anchor.
+                .tooltip("Running · 3 days")
+                .tooltip_side(heca_view::ViewTooltipSide::Bottom)
+                // **Where the letter goes is a declaration too** (F003/P097/T501). A wide list row
+                // wants its cap on the right, where it does not sit on the row's own label — and
+                // until now saying so meant wrapping the row in a `KeyHint`, which a description
+                // cannot do. Press `prefix+/` and compare it with the native twin.
+                .hint_placement(heca_view::ViewHintPlacement::CenterRight)
                 .child(build::Label::new("nginx"))
                 .child(build::Badge::new("UP")),
         )
         .child(build::Separator::new())
         .child(build::Label::new("colour by token name").color("danger"))
+        // **The two ways of not showing something** (F003/P097/T501). Neither needs a wrapper on
+        // either authoring path any more. The first keeps its box — the gap below the rule is it —
+        // and the second is gone from the layout, so nothing marks where it was.
+        .child(build::Label::new("ink hidden, box kept").visible(false))
+        .child(build::Label::new("gone from the layout").hidden(true))
+        // **Three kinds a described tree could not name before.** The spinner takes no properties
+        // at all; the bar's fill eases toward whatever value it is given, so re-describing the tree
+        // animates it; and the key glyph comes from the keyboard font, its own vocabulary, because
+        // the pictogram set has no keys whatsoever.
+        .child(
+            build::HStack::new()
+                .gap(8.0)
+                .child(build::Spinner::new().width(16.0).height(16.0))
+                .child(build::Progress::new().value(0.4).width(120.0))
+                .child(
+                    build::NfIcon::new()
+                        .glyph(heca_view::ViewNfGlyph::Command)
+                        .size(14.0),
+                )
+                .child(build::Label::new("K")),
+        )
+        // **The pane header's own action row, described** (F003/P097/T501). It shows icons, says
+        // its words on hover, and collapses whatever does not fit into a ⋮ that runs the same
+        // actions — none of which is written here. A plugin could only hand-build this before, and
+        // would have got the collapse and the overflow menu approximately right.
+        .child(
+            build::ButtonGroup::new()
+                .display(heca_view::ViewDisplay::IconOnly)
+                .child(
+                    build::Button::new()
+                        .text("Close")
+                        .icon(ViewGlyph::Close)
+                        .on_press(Intent::new("showcase.close")),
+                )
+                .child(
+                    build::Button::new()
+                        .text("Split")
+                        .icon(ViewGlyph::SquareSplitHorizontal)
+                        .on_press(Intent::new("showcase.split")),
+                ),
+        )
         .into_node()
 }
 
 /// The same four widgets built by hand, to compare against [`described_tree`] with the eye.
 fn native_twin(theme: &Theme) -> Panel {
     Panel::titled("NATIVE")
-        .width(Length::Px(240.0))
+        .width(240.0)
         .child(
             Row::new()
                 .padding(6.0)
                 .on_activate(|| println!("[showcase] native row activated"))
+                // The native half of the pair above: one builder, on the widget.
+                .tooltip("Running · 3 days")
+                .tooltip_side(TooltipSide::Bottom)
+                // One builder on the widget — no `KeyHint` wrapper, which is the point.
+                .hint_placement(HintPlacement::CenterRight)
                 .child(Label::new("nginx"))
                 .child(Badge::new("UP")),
         )
         .child(Separator::horizontal())
         .child(Label::new("colour by token name").color(theme.colors.danger))
+        // The native half of the pair above — one builder each, on the widget.
+        .child(Label::new("ink hidden, box kept").visible(false))
+        .child(Label::new("gone from the layout").hidden(true))
+        .child(
+            Flex::row()
+                .gap(8.0)
+                .child(Spinner::new().width(16.0).height(16.0))
+                .child(ProgressBar::new().value(0.4).width(120.0))
+                .child(NfIcon::new(NfGlyph::Command).size(14.0))
+                .child(Label::new("K")),
+        )
+        .child(
+            ButtonGroup::new()
+                .display(heca_grid_ui::widgets::Display::IconOnly)
+                .child(
+                    Button::new("Close")
+                        .icon(Glyph::Close)
+                        .on_click(|| println!("[showcase] native close")),
+                )
+                .child(
+                    Button::new("Split")
+                        .icon(Glyph::SquareSplitHorizontal)
+                        .on_click(|| println!("[showcase] native split")),
+                ),
+        )
 }
 
 /// A described tree beside its hand-built twin. They should be indistinguishable.
@@ -267,7 +355,7 @@ fn described_vs_native(theme: &Theme) -> Flex {
 
     // `Box<dyn Component>` is not `Component`, so it cannot go through `child()` — push it the way
     // the mapper itself does.
-    let mut row = Flex::row().gap(28.0).align(Align::Start);
+    let mut row = Flex::row().gap(28.0).align("start");
     row.base_mut().children.push(described);
     row.base_mut().children.push(Box::new(native_twin(theme)));
     row
@@ -325,7 +413,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             Command::new("Split pane right", || println!("[showcase] split right"))
                 .description("New column to the right of the active pane.")
                 .icon(Glyph::Sidebar)
-                .keys([KeyCap::Text(PREFIX_SYMBOL.into()), KeyCap::Nf(NfGlyph::Enter)]),
+                .keys([
+                    KeyCap::Text(PREFIX_SYMBOL.into()),
+                    KeyCap::Nf(NfGlyph::Enter),
+                ]),
         )
         .command(
             Command::new("Close pane", || println!("[showcase] close pane"))
@@ -337,7 +428,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             Command::new("Toggle sidebar", || println!("[showcase] toggle sidebar"))
                 .description("Show or hide the sidebar region.")
                 .icon(Glyph::Sidebar)
-                .keys([KeyCap::Text(PREFIX_SYMBOL.into()), KeyCap::Nf(NfGlyph::Shift), KeyCap::Text("b".into())])
+                .keys([
+                    KeyCap::Text(PREFIX_SYMBOL.into()),
+                    KeyCap::Nf(NfGlyph::Shift),
+                    KeyCap::Text("b".into()),
+                ])
                 .keys([KeyCap::Text(PREFIX_SYMBOL.into()), KeyCap::Text("b".into())]),
         )
         .command(
@@ -410,7 +505,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .child(|| {
                             Flex::row()
                                 .gap(10.0)
-                                .align(Align::Center)
+                                .align("center")
                                 .child(Icon::new(Glyph::FolderSimpleMinus))
                                 .child(Label::new("Close"))
                                 .child(Badge::new("⌫"))
@@ -459,8 +554,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
 
     let card = |title: &str, value: &str| {
         Card::new(title)
-            .width(Length::Px(220.0))
-            .height(Length::Px(140.0))
+            .width(220.0)
+            .height(140.0)
             .background(theme.colors.surface)
             .border(theme.colors.border, theme.colors.border_width)
             .glow(theme.colors.glow)
@@ -478,7 +573,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     let toggle_row = |toggle: Toggle, label: &str, color: Color| {
         Flex::row()
             .gap(16.0)
-            .align(Align::Center)
+            .align("center")
             .child(toggle)
             .child(Label::new(label).color(color))
     };
@@ -526,7 +621,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .gap(10.0)
                 .padding(20.0)
                 .child(Label::new("ANIMATED SURFACE"))
-                .child(Label::new("Zoom in; on the way out the dissolve rides the shrink."))
+                .child(Label::new(
+                    "Zoom in; on the way out the dissolve rides the shrink.",
+                ))
                 .child(Button::secondary("CLOSE").on_click(move || dismiss_it.set(false))),
         )
         .on_outside_click(move || dismiss_it.set(false));
@@ -552,7 +649,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // body is inside the region. The nested Select above still has to composite
         // ABOVE the buttons even while the body is scrolled.
         // SIZED panel: `panel_size` bounds the panel so the scrollable list below has
-        // something to overflow. A `Pct` tracks the window; `Px` would pin it.
+        // something to overflow. A `Percent` tracks the window; `Px` would pin it.
         // A bounded panel (fixed px — a dialog is not viewport-proportional) so the
         // scrollable body has something to overflow. Note what the caller does NOT
         // have to say: the body fills the panel width and takes the leftover height
@@ -569,7 +666,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .selected(2)
                         .on_change(report),
                 )
-                .child(Checkbox::new().label("Also close its column").on_change(report))
+                .child(
+                    Checkbox::new()
+                        .label("Also close its column")
+                        .on_change(report),
+                )
                 .child(caption("Affected panes"))
                 .child(Label::new("· pane-1  (zsh)"))
                 .child(Label::new("· pane-2  (nvim)"))
@@ -595,7 +696,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     let page = Flex::column()
         .padding(40.0)
         .gap(28.0)
-        .align(Align::Center)
+        .align("center")
         .child(caption("Card"))
         .child(
             Flex::row()
@@ -609,7 +710,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(16.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Label::new("MODE").color(theme.colors.muted).font_scale(0.85))
                 .child(Select::new(["NORMAL", "PREFIX", "PASSTHROUGH"]).on_change(report))
                 .child(Label::new("WORKSPACE").color(theme.colors.muted).font_scale(0.85))
@@ -631,7 +732,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(14.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Button::primary("DEFAULT").on_click(click("DEFAULT")))
                 .child(Button::secondary("SECONDARY"))
                 .child(Button::outline("OUTLINE"))
@@ -655,7 +756,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(14.0)
-                .align(Align::Center)
+                .align("center")
                 // Sugar: `.icon(..)` prepends an Icon child → [Icon, Label].
                 .child(Button::primary("SAVE").icon(Glyph::Check).on_click(click("SAVE")))
                 .child(Button::destructive("DELETE").icon(Glyph::Trash).on_click(click("DELETE")))
@@ -668,11 +769,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .child(
                             Flex::column()
                                 .gap(2.0)
-                                .align(Align::Center)
+                                .align("center")
                                 .child(
                                     Flex::row()
                                         .gap(6.0)
-                                        .align(Align::Center)
+                                        .align("center")
                                         .child(Icon::new(Glyph::Lightning))
                                         .child(Label::new("COMPOSED").bold(true)),
                                 )
@@ -694,14 +795,14 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(8.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Choice::labeled("low", "LOW").on_activate(click("LOW")))
                 .child(
                     Choice::new("medium")
                         .child(
                             Flex::row()
                                 .gap(6.0)
-                                .align(Align::Center)
+                                .align("center")
                                 .child(Icon::new(Glyph::Warning))
                                 .child(Label::new("MEDIUM")),
                         )
@@ -717,7 +818,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 .child(
                                     Flex::row()
                                         .gap(6.0)
-                                        .align(Align::Center)
+                                        .align("center")
                                         .child(Icon::new(Glyph::Lightning))
                                         .child(Label::new("HIGH")),
                                 )
@@ -759,7 +860,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(24.0)
-                .align(Align::Center)
+                .align("center")
                 .child(
                     Checkbox::new()
                         .checked(true)
@@ -788,7 +889,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(20.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Label::new("REGULAR"))
                 .child(Label::new("BOLD").bold(true))
                 .child(Label::new("ITALIC").italic(true))
@@ -807,7 +908,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(20.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Input::new().placeholder("CALLSIGN").on_change(report))
                 .child(Input::new().value("GRID-7").on_change(report))
                 .child(Input::new().value("LOCKED").disabled(true)),
@@ -837,53 +938,44 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(caption("Grid"))
         .child(
             Grid::new()
-                .columns([Track::Auto, Track::Fr(1.0), Track::Auto])
-                .rows([Track::Auto, Track::Auto])
-                .areas(["icon title   status", "icon subtext ."])
+                .template_column("auto 1fr auto")
+                .template_row("auto auto")
+                .template_area(["icon title   status", "icon subtext ."])
                 // Items sit at the TOP-LEFT of their cell by default (an explicit size has nothing
                 // to stretch), so an Icon (h = font) and a Label (h = font × 1.4) would not share a
                 // centre line. `align` is the vertical knob — the icon then centres across the two
                 // rows it spans, and the status dot centres against the title.
-                .align(Align::Center)
+                .align("center")
                 // A leading icon spans both text rows, so it is sized to them (a body-size glyph
                 // centred over two lines just floats in the gutter between them).
-                .area(Icon::new(Glyph::Terminal).size(26.0), "icon")
-                .area(Label::new("zsh").bold(true), "title")
+                .child(Icon::new(Glyph::Terminal).size(26.0).area("icon"))
+                .child(Label::new("zsh").bold(true).area("title"))
                 // …and `justify_self` is the horizontal one, per item: pin the dot to the right edge
                 // of its cell instead of letting it stretch across the column.
-                .area(
-                    StatusDot::online().justify_self(Align::End),
-                    "status",
-                )
-                .area(
-                    Label::new("~/projects/heca").color(theme.colors.muted),
-                    "subtext",
-                )
+                .child(StatusDot::online().justify_self("end").area("status"))
+                .child(Label::new("~/projects/heca").color(theme.colors.muted).area("subtext"))
                 .gap(8.0)
-                .width(Length::Px(320.0)),
+                .width(320.0),
         )
         .child(
             Grid::new()
-                .columns([Track::Auto, Track::Fr(1.0), Track::Auto])
-                .rows([Track::Auto])
-                .areas(["icon title status"])
+                .template_column("auto 1fr auto")
+                .template_row("auto")
+                .template_area(["icon title status"])
                 // Items sit at the TOP-LEFT of their cell by default (an explicit size has nothing
                 // to stretch), so an Icon (h = font) and a Label (h = font × 1.4) would not share a
                 // centre line. `align` is the vertical knob — the icon then centres across the two
                 // rows it spans, and the status dot centres against the title.
-                .align(Align::Center)
+                .align("center")
                 // A leading icon spans both text rows, so it is sized to them (a body-size glyph
                 // centred over two lines just floats in the gutter between them).
-                .area(Icon::new(Glyph::Terminal).size(26.0), "icon")
-                .area(Label::new("zsh").italic(true).bold(true), "title")
+                .child(Icon::new(Glyph::Terminal).size(26.0).area("icon"))
+                .child(Label::new("zsh").italic(true).bold(true).area("title"))
                 // …and `justify_self` is the horizontal one, per item: pin the dot to the right edge
                 // of its cell instead of letting it stretch across the column.
-                .area(
-                    StatusDot::online().justify_self(Align::End),
-                    "status",
-                )
+                .child(StatusDot::online().justify_self("end").area("status"))
                 .gap(3.0)
-                .width(Length::Px(320.0)),
+                .width(320.0),
         )
         // Panel: a titled section container. Quiet by default (no frame of its own), which is what
         // distinguishes it from a Card — a Card stands apart, a Panel is a slice of a region. The
@@ -893,10 +985,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(16.0)
-                .align(Align::Start)
+                .align("start")
                 .child(
                     Panel::titled("Containers")
-                        .width(Length::Px(220.0))
+                        .width(220.0)
                         .background(theme.colors.foreground.with_alpha(6))
                         .radius(theme.colors.control_radius())
                         .child(Label::new("nginx").color(theme.colors.muted))
@@ -904,7 +996,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 )
                 .child(
                     Panel::new()
-                        .width(Length::Px(220.0))
+                        .width(220.0)
                         .background(theme.colors.foreground.with_alpha(6))
                         .radius(theme.colors.control_radius())
                         .child(Label::new("untitled — no header row").color(theme.colors.muted)),
@@ -919,8 +1011,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(12.0)
-                .align(Align::Center)
-                .height(Length::Px(40.0))
+                .align("center")
+                .height(40.0)
                 .child(Label::new("full height").color(theme.colors.muted))
                 .child(Separator::vertical())
                 .child(Label::new("length(24)").color(theme.colors.muted))
@@ -932,7 +1024,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(12.0)
-                .align(Align::Center)
+                .align("center")
                 .child(StatusDot::online())
                 .child(Badge::success("ONLINE"))
                 .child(Badge::warning("DEGRADED"))
@@ -946,21 +1038,21 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(12.0)
-                .align(Align::Center)
+                .align("center")
                 // Segmented status-bar chip: path · branch · diff-stat (colored).
                 .child(
                     Tag::new("~/repos/do-things")
                         .leading(Icon::new(Glyph::Folder).size(13.0).color(theme.colors.muted))
                         .segment(
                             Flex::row()
-                                .align(Align::Center)
+                                .align("center")
                                 .gap(6.0)
                                 .child(Icon::new(Glyph::GitBranch).size(13.0).color(theme.colors.muted))
                                 .child(Label::new("main").color(theme.colors.foreground).font_scale(0.8)),
                         )
                         .segment(
                             Flex::row()
-                                .align(Align::Center)
+                                .align("center")
                                 .gap(6.0)
                                 .child(Icon::new(Glyph::File).size(13.0).color(theme.colors.muted))
                                 .child(Label::new("5").color(theme.colors.foreground).font_scale(0.8))
@@ -980,7 +1072,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(20.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Spinner::new())
                 .child(Alert::warning("LINK UNSTABLE").body("retrying handshake...")),
         )
@@ -1026,7 +1118,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(24.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Label::new("POWER").color(theme.colors.muted).font_scale(0.85))
                 .child(ProgressBar::new().value(0.72))
                 .child(Gauge::new().value(0.85)),
@@ -1036,7 +1128,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(16.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Label::new("INTENSITY").color(theme.colors.muted).font_scale(0.85))
                 .child(
                     Select::new(["OFF", "LOW", "MEDIUM", "HEAVY"])
@@ -1068,7 +1160,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(16.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Label::new("GLOW").color(theme.colors.muted).font_scale(0.85))
                 .child(
                     Select::new(GlowLevel::ALL.map(|g| g.label()))
@@ -1107,7 +1199,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(16.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Label::new("FONT").color(theme.colors.muted).font_scale(0.85))
                 .child(
                     Select::new(["8", "10", "12", "15", "20", "28"])
@@ -1128,7 +1220,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(16.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Label::new("SIZE").color(theme.colors.muted).font_scale(0.85))
                 .child(
                     Select::new(["NORMAL", "SMALL", "LARGE", "HEADER"])
@@ -1168,7 +1260,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 })
             };
             Pane::new()
-                .width(Length::Px(320.0))
+                .width(320.0)
                 .gap(2.0)
                 .background(theme.colors.surface)
                 .child(select(
@@ -1209,8 +1301,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             let cell = |glyph: Glyph| {
                 Flex::column()
                     .gap(6.0)
-                    .align(Align::Center)
-                    .width(Length::Px(124.0))
+                    .align("center")
+                    .width(124.0)
                     .child(Icon::new(glyph).color(theme.colors.foreground).size(26.0))
                     .child(
                         Label::new(format!("{glyph:?}"))
@@ -1219,11 +1311,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     )
             };
             let mut grid = Flex::column().gap(18.0);
-            let mut row = Flex::row().gap(8.0).align(Align::Start);
+            let mut row = Flex::row().gap(8.0).align("start");
             for (i, &glyph) in Glyph::ALL.iter().enumerate() {
                 if i > 0 && i % PER_ROW == 0 {
                     grid = grid.child(row);
-                    row = Flex::row().gap(8.0).align(Align::Start);
+                    row = Flex::row().gap(8.0).align("start");
                 }
                 row = row.child(cell(glyph));
             }
@@ -1244,8 +1336,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             let cell = |glyph: NfGlyph| {
                 Flex::column()
                     .gap(6.0)
-                    .align(Align::Center)
-                    .width(Length::Px(124.0))
+                    .align("center")
+                    .width(124.0)
                     .child(NfIcon::new(glyph).color(theme.colors.foreground).size(26.0))
                     .child(
                         Label::new(format!("{}  U+{:05X}", glyph.name(), glyph.codepoint()))
@@ -1254,11 +1346,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     )
             };
             let mut grid = Flex::column().gap(18.0);
-            let mut row = Flex::row().gap(8.0).align(Align::Start);
+            let mut row = Flex::row().gap(8.0).align("start");
             for (i, &glyph) in NfGlyph::ALL.iter().enumerate() {
                 if i > 0 && i % PER_ROW == 0 {
                     grid = grid.child(row);
-                    row = Flex::row().gap(8.0).align(Align::Start);
+                    row = Flex::row().gap(8.0).align("start");
                 }
                 row = row.child(cell(glyph));
             }
@@ -1273,18 +1365,18 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(28.0)
-                .align(Align::Center)
+                .align("center")
                 .child(
                     Flex::column()
                         .gap(6.0)
-                        .align(Align::Center)
+                        .align("center")
                         .child(Icon::new(Glyph::Lightning).color(theme.colors.accent).size(34.0))
                         .child(Label::new("FLAT").font_scale(0.62).color(theme.colors.muted)),
                 )
                 .child(
                     Flex::column()
                         .gap(6.0)
-                        .align(Align::Center)
+                        .align("center")
                         .child(
                             Icon::new(Glyph::Lightning)
                                 .color(theme.colors.accent)
@@ -1296,7 +1388,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(
                     Flex::column()
                         .gap(6.0)
-                        .align(Align::Center)
+                        .align("center")
                         .child(
                             Icon::new(Glyph::Terminal)
                                 .color(theme.colors.foreground)
@@ -1315,12 +1407,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Surface::new()
                 .background(theme.colors.surface)
-                .pad_all(Spacing::Xs)
-                .width(Length::Pct(0.5))
+                .padding(Spacing::Xs)
+                .width(Length::HALF)
                 .child(
                     ButtonGroup::new()
                         .size(WidgetSize::Small)
-                        .gap_spacing(Spacing::Xs)
+                        .gap(Spacing::Xs)
                         .child(
                             Button::new("Split")
                                 .icon(Glyph::Plus)
@@ -1349,12 +1441,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Surface::new()
                 .background(theme.colors.surface)
-                .pad_all(Spacing::Xs)
+                .padding(Spacing::Xs)
                 .child(
                     ButtonGroup::new()
                         .size(WidgetSize::Small)
                         .display(heca_grid_ui::widgets::Display::IconOnly)
-                        .gap_spacing(Spacing::Xs)
+                        .gap(Spacing::Xs)
                         .child(
                             Button::new("Split")
                                 .icon(Glyph::Plus)
@@ -1374,12 +1466,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         )
         // IconButton + Tooltip: a toolbar of compact, clickable icon affordances —
         // ghost at rest, tinted hover frame + press flash + focus ring — each
-        // wrapped in a hover-revealed Tooltip label. The danger one uses `.tone()`.
+        // wrapped in a hover-revealed Tooltip label. The danger one uses `.accent()`.
         .child(caption("IconButton · Tooltip"))
         .child(
             Flex::row()
                 .gap(8.0)
-                .align(Align::Center)
+                .align("center")
                 // **The tooltip is a property of the button**, not a box around it — one builder,
                 // on every widget. This row used to wrap each button in a `Tooltip`, which is the
                 // noise the property removed.
@@ -1423,7 +1515,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(
                     Tooltip::new(
                         IconButton::new(Icon::new(Glyph::Close).color(theme.colors.danger).size(20.0))
-                            .tone(theme.colors.danger)
+                            .accent(theme.colors.danger)
                             .on_click(|| println!("[showcase] close")),
                         "Close",
                     )
@@ -1439,7 +1531,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(8.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Tooltip::new(
                     Button::secondary("TOP").on_click(|| {}),
                     "Above the target",
@@ -1469,7 +1561,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(12.0)
-                .align(Align::Center)
+                .align("center")
                 .child(
                     Button::destructive("DELETE PANE (DIALOG)…")
                         .on_click(move || dialog_open.set(true)),
@@ -1489,20 +1581,20 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child({
             Flex::row()
                 .gap(8.0)
-                .align(Align::Center)
+                .align("center")
                 .child(
                     Pane::new()
                         .frameless()
-                        .width(Length::Px(100.0))
-                        .height(Length::Px(80.0))
+                        .width(100.0)
+                        .height(80.0)
                         .background(theme.colors.surface)
                         .child(Label::new("None").font_size(12.0).color(theme.colors.muted)),
                 )
                 .child(
                     Pane::new()
                         .bordered()
-                        .width(Length::Px(100.0))
-                        .height(Length::Px(80.0))
+                        .width(100.0)
+                        .height(80.0)
                         .background(theme.colors.surface)
                         .border(theme.colors.border, theme.colors.border_width)
                         .child(Label::new("Bordered").font_size(12.0).color(theme.colors.accent)),
@@ -1512,8 +1604,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     // `theme.colors.border_width`); no `.border()` — that would compete.
                     Pane::new()
                         .bracketed()
-                        .width(Length::Px(100.0))
-                        .height(Length::Px(80.0))
+                        .width(100.0)
+                        .height(80.0)
                         .background(theme.colors.surface)
                         .child(Label::new("Bracketed").font_size(12.0).color(theme.colors.accent)),
                 )
@@ -1525,8 +1617,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .bordered()
                         .border_width(3.0)
                         .radius(10.0)
-                        .width(Length::Px(100.0))
-                        .height(Length::Px(80.0))
+                        .width(100.0)
+                        .height(80.0)
                         .background(theme.colors.surface)
                         .border(theme.colors.accent, 0.0)
                         .child(Label::new("Border 3px").font_size(12.0).color(theme.colors.accent)),
@@ -1541,13 +1633,13 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::row()
                 .gap(12.0)
-                .align(Align::Start)
+                .align("start")
                 // Idle terminal pane: location · shell name.
                 .child(
                     Pane::new()
                         .bordered()
-                        .width(Length::Px(220.0))
-                        .height(Length::Px(90.0))
+                        .width(220.0)
+                        .height(90.0)
                         .padding(8.0)
                         .gap(8.0)
                         .background(theme.colors.surface)
@@ -1557,7 +1649,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 .leading(Icon::new(Glyph::Folder).size(13.0).color(theme.colors.muted))
                                 .segment(
                                     Flex::row()
-                                        .align(Align::Center)
+                                        .align("center")
                                         .gap(6.0)
                                         .child(
                                             Icon::new(Glyph::Terminal)
@@ -1581,17 +1673,17 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(
                     Pane::new()
                         .bordered()
-                        .width(Length::Px(360.0))
-                        .height(Length::Px(90.0))
+                        .width(360.0)
+                        .height(90.0)
                         .padding(8.0)
                         .gap(8.0)
                         .background(theme.colors.surface)
                         .border(theme.colors.border, theme.colors.border_width)
                         .child(
                             Flex::row()
-                                .width(Length::Px(344.0))
-                                .align(Align::Center)
-                                .justify(Justify::SpaceBetween)
+                                .width(344.0)
+                                .align("center")
+                                .justify("space-between")
                                 .child(
                                     Tag::new("Neovim")
                                         .leading(
@@ -1601,7 +1693,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                         )
                                         .segment(
                                             Flex::row()
-                                                .align(Align::Center)
+                                                .align("center")
                                                 .gap(6.0)
                                                 .child(
                                                     Icon::new(Glyph::GitBranch)
@@ -1618,7 +1710,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 )
                                 .child(
                                     Flex::row()
-                                        .align(Align::Center)
+                                        .align("center")
                                         .gap(2.0)
                                         .child(
                                             Tooltip::new(
@@ -1640,7 +1732,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                                         .size(15.0),
                                                 )
                                                 .cell(24.0)
-                                                .tone(theme.colors.danger),
+                                                .accent(theme.colors.danger),
                                                 "Close  ⌃B X",
                                             )
                                             .side(TooltipSide::Bottom),
@@ -1662,8 +1754,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .gap(8.0)
                 .child({
                     let mut list = ScrollRegion::new()
-                        .height(Length::Px(180.0))
-                        .width(Length::Px(300.0));
+                        .height(180.0)
+                        .width(300.0);
                     for i in 1..=25 {
                         list = list.child(
                             Item::new(format!("item {i:02}"))
@@ -1683,15 +1775,15 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child({
             let mut grid = ScrollRegion::new()
                 .both()
-                .width(Length::Px(240.0))
-                .height(Length::Px(140.0))
+                .width(240.0)
+                .height(140.0)
                 .background(theme.colors.surface)
                 .border(theme.colors.accent, 1.0);
             for r in 1..=14 {
                 grid = grid.child(
                     Flex::row()
                         .gap(6.0)
-                        .width(Length::Px(440.0)) // wider than the viewport → overflow
+                        .width(440.0) // wider than the viewport → overflow
                         .child(
                             Icon::new(Glyph::FileCode)
                                 .color(theme.colors.accent)
@@ -1713,12 +1805,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             Flex::column()
                 .gap(8.0)
                 .child({
-                    let bar = ScrollBar::new().height(Length::Px(180.0));
+                    let bar = ScrollBar::new().height(180.0);
                     bar.content_extent_signal().set(240.0);
                     bar.viewport_extent_signal().set(48.0);
                     bar.offset_signal().set(96.0);
                     Flex::row()
-                        .align(Align::Center)
+                        .align("center")
                         .gap(14.0)
                         .child(bar)
                         .child(BadgeButton::accent("144 lines above"))
@@ -1765,7 +1857,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                   -> Row {
                 let git_row = Visibility::new(
                     Flex::row()
-                        .align(Align::Center)
+                        .align("center")
                         .gap(6.0)
                         .child(Icon::new(Glyph::GitBranch).size(12.0).color(theme.colors.warning))
                         .child(
@@ -1775,7 +1867,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         )
                         .child(Visibility::new(
                             Flex::row()
-                                .align(Align::Center)
+                                .align("center")
                                 .gap(4.0)
                                 .child(Icon::new(Glyph::Plus).size(12.0).color(theme.colors.success))
                                 .child(
@@ -1787,7 +1879,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         ))
                         .child(Visibility::new(
                             Flex::row()
-                                .align(Align::Center)
+                                .align("center")
                                 .gap(4.0)
                                 .child(Icon::new(Glyph::Warning).size(12.0).color(theme.colors.warning))
                                 .child(
@@ -1799,7 +1891,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         ))
                         .child(Visibility::new(
                             Flex::row()
-                                .align(Align::Center)
+                                .align("center")
                                 .gap(4.0)
                                 .child(Icon::new(Glyph::Minus).size(12.0).color(theme.colors.danger))
                                 .child(
@@ -1834,26 +1926,26 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                             .grow(1.0)
                             .child(
                                 Flex::row()
-                                    .align(Align::Center)
+                                    .align("center")
                                     .gap(8.0)
                                     .child(
                                         Flex::row()
-                                            .align(Align::Center)
-                                            .width(Length::Px(12.0))
+                                            .align("center")
+                                            .width(12.0)
                                             .child(StatusDot::new(status)),
                                     )
                                     .child(
-                                        Flex::row().align(Align::Center).child(
+                                        Flex::row().align("center").child(
                                             Icon::new(icon).color(theme.colors.foreground).size(14.0),
                                         ),
                                     )
-                                    .child(Flex::row().align(Align::Center).child(
+                                    .child(Flex::row().align("center").child(
                                         Flex::column().child(active_title).child(inactive_title),
                                     )),
                             )
                             .child(
                                 Flex::row()
-                                    .child(Flex::row().width(Length::Px(2.0)))
+                                    .child(Flex::row().width(2.0))
                                     .child(git_row),
                             )
                     });
@@ -1892,9 +1984,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 // trailing badges instead of sitting flush at the frame edge.
                 .header(
                     Flex::row()
-                        .align(Align::Center)
+                        .align("center")
                         .child(Badge::accent("3"))
-                        .child(Flex::row().width(Length::Px(14.0))),
+                        .child(Flex::row().width(14.0)),
                 )
                 .child(
                     ItemGroup::new("src")
@@ -1934,9 +2026,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .nav_selected(true)
                 .header(
                     Flex::row()
-                        .align(Align::Center)
+                        .align("center")
                         .child(Badge::warning("3"))
-                        .child(Flex::row().width(Length::Px(14.0))),
+                        .child(Flex::row().width(14.0)),
                 )
                 .child(git_row(
                     Icon::new(Glyph::GitBranch).color(theme.colors.warning).size(18.0),
@@ -2082,8 +2174,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 .gap(4.0)
                                 .child(
                                     IndicatorSwatch::new(false)
-                                        .width(Length::Px(120.0))
-                                        .height(Length::Px(34.0)),
+                                        .width(120.0)
+                                        .height(34.0),
                                 )
                                 .child(Label::new("move").color(theme.colors.muted).font_scale(0.8)),
                         )
@@ -2092,8 +2184,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 .gap(4.0)
                                 .child(
                                     IndicatorSwatch::new(true)
-                                        .width(Length::Px(120.0))
-                                        .height(Length::Px(34.0)),
+                                        .width(120.0)
+                                        .height(34.0),
                                 )
                                 .child(
                                     Label::new("swap (Shift)")
@@ -2118,7 +2210,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(
                     Flex::row()
                         .gap(24.0)
-                        .align(Align::Center)
+                        .align("center")
                         .child(
                             FocusScope::new(
                                 Card::new("dock A").child(Label::new("has keyboard focus")),
@@ -2138,7 +2230,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Label::new(format!("PREFIX AS SYMBOL — {PREFIX_SYMBOL}")).color(theme.colors.muted).font_scale(0.82))
                 .child(
                     Flex::row()
-                        .align(Align::Center)
+                        .align("center")
                         .gap(18.0)
                         .child(Tag::new(display_shortcut("prefix+f")))
                         .child(Tag::new(display_shortcut("prefix+q")))
@@ -2150,7 +2242,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .font_scale(0.74),
                 );
             let panes_col = Flex::column()
-                .width(Length::Px(380.0))
+                .width(380.0)
                 .gap(16.0)
                 .child(panes)
                 .child(marker_demo)
@@ -2168,7 +2260,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 (Glyph::Gear, theme.colors.foreground),
                 (Glyph::Warning, theme.colors.danger),
             ];
-            let mut workspaces_rail = Flex::column().gap(8.0).align(Align::Center);
+            let mut workspaces_rail = Flex::column().gap(8.0).align("center");
             for (i, (glyph, color)) in rail_icons.iter().enumerate() {
                 let cell = RailCell::new(Icon::new(*glyph).color(*color).size(22.0))
                     .cell_size(44.0)
@@ -2188,13 +2280,13 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             }
             let rail_col = Flex::column()
                 .gap(8.0)
-                .align(Align::Center)
+                .align("center")
                 .child(Label::new("WS").color(theme.colors.muted).font_scale(0.8))
                 .child(workspaces_rail);
 
             Flex::row()
                 .gap(28.0)
-                .align(Align::Start)
+                .align("start")
                 .child(rail_col)
                 .child(sidebar)
                 .child(panes_col)
@@ -2213,7 +2305,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // horizontal overflow from its direct child); when the window is wider than the
     // content, `render()` stretches the page back to the window so the centered
     // sections stay centered (two-pass layout there).
-    let ui = ScrollRegion::new().both().align(Align::Start).child(page);
+    let ui = ScrollRegion::new().both().align("start").child(page);
 
     // The overlay layer: viewport-anchored widgets composited ABOVE the scrolled
     // page — a Dialog taffy-centers on the real window (BUG B), the palette/menu
@@ -3082,9 +3174,7 @@ impl ApplicationHandler for App {
                 // Device delta → lines (positive = down / right).
                 let (dx_raw, dy_raw) = match delta {
                     MouseScrollDelta::LineDelta(x, y) => (-x, -y),
-                    MouseScrollDelta::PixelDelta(p) => {
-                        (-(p.x as f32) / 20.0, -(p.y as f32) / 20.0)
-                    }
+                    MouseScrollDelta::PixelDelta(p) => (-(p.x as f32) / 20.0, -(p.y as f32) / 20.0),
                 };
                 if state.zoom_mode || state.accel() {
                     // Wheel zooms the whole UI while in zoom mode, or with the
@@ -3212,8 +3302,14 @@ impl ApplicationHandler for App {
                                 let id = v.iter().map(|s| s.id).max().unwrap_or(0) + 1;
                                 let (severity, variant, how) = match id % 4 {
                                     1 => (ToastSeverity::Info, ButtonVariant::Primary, "primary"),
-                                    2 => (ToastSeverity::Success, ButtonVariant::Secondary, "secondary"),
-                                    3 => (ToastSeverity::Warning, ButtonVariant::Outline, "outline"),
+                                    2 => (
+                                        ToastSeverity::Success,
+                                        ButtonVariant::Secondary,
+                                        "secondary",
+                                    ),
+                                    3 => {
+                                        (ToastSeverity::Warning, ButtonVariant::Outline, "outline")
+                                    }
                                     _ => (ToastSeverity::Danger, ButtonVariant::Ghost, "ghost"),
                                 };
                                 v.push(
@@ -3335,7 +3431,12 @@ mod sweeps {
                 heca_core::layout::Point::default(),
                 Size::new(w, 900.0),
             );
-            escapes.extend(scene.draws_outside(window).iter().map(|e| format!("{w}px: {e}")));
+            escapes.extend(
+                scene
+                    .draws_outside(window)
+                    .iter()
+                    .map(|e| format!("{w}px: {e}")),
+            );
         }
         escapes.sort();
         escapes.dedup();

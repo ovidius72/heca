@@ -7,6 +7,38 @@
     "updatedAt": "2026-09-04T07:43:16.047Z",
     "sessionInfo": [
       {
+        "sessionId": "mcp-process:76ebd5d0-168a-4a97-9b9d-499545debce4",
+        "createdAt": "2026-09-22T07:19:37.060Z"
+      },
+      {
+        "sessionId": "mcp-process:568eb141-6d6b-4fbf-99b5-af757482b0ab",
+        "createdAt": "2026-09-15T12:40:46.846Z"
+      },
+      {
+        "sessionId": "mcp-process:8b24b106-84c9-4960-9cde-3b0cb31552b3",
+        "createdAt": "2026-09-14T12:25:29.588Z"
+      },
+      {
+        "sessionId": "mcp-process:a70b4e20-9380-4450-9aa5-4d6c767bb1aa",
+        "createdAt": "2026-09-11T07:25:02.872Z"
+      },
+      {
+        "sessionId": "mcp-process:65b2ab93-5391-4cfe-920d-9ee1153fe084",
+        "createdAt": "2026-09-09T06:04:17.988Z"
+      },
+      {
+        "sessionId": "mcp-process:689b3f53-6000-4ff5-bdbf-863af99fa381",
+        "createdAt": "2026-09-08T10:01:41.415Z"
+      },
+      {
+        "sessionId": "mcp-process:af580e98-cc45-42af-86e1-fcbc96719b07",
+        "createdAt": "2026-09-07T12:13:36.201Z"
+      },
+      {
+        "sessionId": "mcp-process:4292a20d-dae1-4a5c-8ec5-0bd49c30cf12",
+        "createdAt": "2026-09-05T21:01:47.341Z"
+      },
+      {
         "sessionId": "mcp-process:eff48494-6d25-4c97-a1ac-3c57241b7a93",
         "createdAt": "2026-09-04T14:31:16.439Z"
       }

@@ -79,7 +79,10 @@ fn what_does_not_fit_leaves_the_row() {
         .iter()
         .filter(|c| c.base().style.layout.hidden)
         .count();
-    assert!(hidden > 0, "what cannot fit leaves the row rather than being squashed");
+    assert!(
+        hidden > 0,
+        "what cannot fit leaves the row rather than being squashed"
+    );
     assert!(
         row(&parent).base().children.len() > 3,
         "…and a trigger appears for it"
@@ -152,14 +155,19 @@ fn a_held_on_button_paints_its_status() {
 
     let painted = |active: bool| -> usize {
         let mut b = Button::new("Zoom").icon(Glyph::FrameCorners).active(active);
-        LayoutEngine::new().base_font(13.0).compute(&mut b, Size::new(300.0, 60.0));
+        LayoutEngine::new()
+            .base_font(13.0)
+            .compute(&mut b, Size::new(300.0, 60.0));
         let theme = Theme::default();
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
             heca_grid_ui::paint_child(&b, &mut cx);
         }
-        scene.iter().filter(|c| matches!(c, DrawCommand::Rect(_))).count()
+        scene
+            .iter()
+            .filter(|c| matches!(c, DrawCommand::Rect(_)))
+            .count()
     };
 
     assert!(
@@ -183,7 +191,9 @@ fn a_group_pinned_to_icons_never_renders_its_words() {
 
     // ONE pass — the state the very first frame paints.
     let mut parent = Flex::row().width(Length::Px(900.0)).child(g);
-    LayoutEngine::new().base_font(13.0).compute(&mut parent, Size::new(900.0, 60.0));
+    LayoutEngine::new()
+        .base_font(13.0)
+        .compute(&mut parent, Size::new(900.0, 60.0));
 
     let row = row(&parent);
     for child in row.base().children.iter() {
@@ -205,13 +215,19 @@ fn a_group_pinned_to_icons_never_renders_its_words() {
 fn a_button_with_no_words_is_not_padded_for_them() {
     let wide = {
         let mut b = Button::new("Zoom").icon(Glyph::FrameCorners);
-        LayoutEngine::new().base_font(13.0).compute(&mut b, Size::new(400.0, 60.0));
-        b.base().style.layout.padding_x
+        LayoutEngine::new()
+            .base_font(13.0)
+            .compute(&mut b, Size::new(400.0, 60.0));
+        b.base().style.layout.pad_left(b.base().font)
     };
     let snug = {
-        let mut b = Button::new("Zoom").icon(Glyph::FrameCorners).icon_only(true);
-        LayoutEngine::new().base_font(13.0).compute(&mut b, Size::new(400.0, 60.0));
-        b.base().style.layout.padding_x
+        let mut b = Button::new("Zoom")
+            .icon(Glyph::FrameCorners)
+            .icon_only(true);
+        LayoutEngine::new()
+            .base_font(13.0)
+            .compute(&mut b, Size::new(400.0, 60.0));
+        b.base().style.layout.pad_left(b.base().font)
     };
     assert!(
         snug < wide,
@@ -224,9 +240,14 @@ fn a_button_with_no_words_is_not_padded_for_them() {
 #[test]
 fn a_wordless_button_is_refused_rather_than_emptied() {
     let mut b = Button::new("Rename").icon_only(true);
-    LayoutEngine::new().base_font(13.0).compute(&mut b, Size::new(400.0, 60.0));
+    LayoutEngine::new()
+        .base_font(13.0)
+        .compute(&mut b, Size::new(400.0, 60.0));
     assert!(
-        b.base().children.iter().any(|c| !c.base().style.layout.hidden),
+        b.base()
+            .children
+            .iter()
+            .any(|c| !c.base().style.layout.hidden),
         "a button with no icon still shows something"
     );
 }
@@ -257,13 +278,16 @@ fn the_overflow_trigger_says_what_picking_it_does() {
 fn a_tooltip_does_not_inherit_an_emphasised_control_size() {
     use heca_grid_ui::ComponentExt;
     let mut big = Button::new("Zoom").tooltip("Zoom").size(WidgetSize::Header);
-    LayoutEngine::new().base_font(13.0).compute(&mut big, Size::new(400.0, 60.0));
+    LayoutEngine::new()
+        .base_font(13.0)
+        .compute(&mut big, Size::new(400.0, 60.0));
     assert!(
         big.base().font > big.base().root_font,
         "the control itself is scaled up by its variant"
     );
     assert_eq!(
-        big.base().root_font, 13.0,
+        big.base().root_font,
+        13.0,
         "…and its bubble reads the tree's own base font instead"
     );
 }
@@ -471,7 +495,6 @@ fn constructing_a_group_does_not_request_a_frame() {
     );
 }
 
-
 /// **Giving way is not one-way** — the room coming back brings the buttons back.
 #[test]
 fn a_collapsed_group_fills_up_again_when_the_room_returns() {
@@ -479,7 +502,9 @@ fn a_collapsed_group_fills_up_again_when_the_room_returns() {
     // Collapse it hard, then widen the same group and let it settle.
     let mut parent = Flex::row().width(Length::Px(40.0)).child(g);
     for _ in 0..6 {
-        LayoutEngine::new().base_font(13.0).compute(&mut parent, Size::new(40.0, 60.0));
+        LayoutEngine::new()
+            .base_font(13.0)
+            .compute(&mut parent, Size::new(40.0, 60.0));
     }
     let collapsed = row(&parent)
         .base()
@@ -490,7 +515,9 @@ fn a_collapsed_group_fills_up_again_when_the_room_returns() {
 
     parent.base_mut().style.layout.width = Length::Px(900.0);
     for _ in 0..12 {
-        LayoutEngine::new().base_font(13.0).compute(&mut parent, Size::new(900.0, 60.0));
+        LayoutEngine::new()
+            .base_font(13.0)
+            .compute(&mut parent, Size::new(900.0, 60.0));
     }
     let reopened = row(&parent)
         .base()
@@ -610,4 +637,32 @@ fn a_button_the_room_brings_back_paints_nothing_until_it_has_a_box() {
         corner.is_empty(),
         "a widget with no box yet drew in the window corner: {corner:?}"
     );
+}
+
+/// **A group is right on the FIRST frame it is laid out** (F003/P097/T500).
+///
+/// It decides what fits by reading the room it was given, and that answer only exists once the
+/// layout has run — so the decision lands in `on_layout`, *after* the pass that informed it. Left
+/// there, the arrangement being replaced is what gets painted and the corrected one appears a frame
+/// later: a visible flash on every rebuild.
+///
+/// No caller can prevent that or is even in a position to know about it, which is why the layout
+/// settles before anything is painted rather than every host learning to re-run it. Antonio,
+/// driving (2026-09-05): the pane header's buttons blinked on every terminal command, on a focus
+/// change, on a split, and when the working directory was detected — four symptoms, one widget.
+///
+/// ⚠️ **The helper above lays out FOUR times**, which is this defect written into the tests: they
+/// could not see it because they always gave the group the extra passes a real frame never does.
+#[test]
+fn a_group_holds_its_final_arrangement_after_a_single_layout() {
+    for w in [90.0, 120.0, 149.0, 200.0] {
+        let once = lay_n(group(), w, 1);
+        let settled = lay_n(group(), w, 4);
+        assert_eq!(
+            (visible(&once), widths(&once)),
+            (visible(&settled), widths(&settled)),
+            "at {w}px the first frame showed a different row than the settled one — that \
+             difference IS the flash",
+        );
+    }
 }

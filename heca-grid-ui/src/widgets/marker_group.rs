@@ -143,7 +143,7 @@ impl Component for MarkerGroup {
     /// the layout is the base column style.
     fn taffy_style(&self) -> taffy::Style {
         use taffy::prelude::length;
-        let mut s = self.base.style.layout.to_taffy();
+        let mut s = self.base.style.layout.to_taffy(self.base.font);
         s.padding.left = length(GRIP_W as f32);
         s
     }
@@ -185,7 +185,11 @@ impl Component for MarkerGroup {
         // (it owns scanlines only). Nothing about the *look* is fixed here.
         let (accent, glow_c, glow_strength) = {
             let t = cx.theme();
-            (t.colors.accent, t.colors.glow, t.colors.glow_size.strength_scale())
+            (
+                cx.accent(),
+                t.colors.glow,
+                t.colors.glow_size.strength_scale(),
+            )
         };
         let b = self.base.bounds;
         let bar_w = if hovered { BAR_W_HOVER } else { BAR_W };
@@ -205,9 +209,15 @@ impl Component for MarkerGroup {
             // clearly the cursor yet distinct from the active column's glowing bar.
             (accent, None)
         } else if hovered {
-            (accent.with_alpha(cx.theme().colors.interaction.thumb_hover), None)
+            (
+                accent.with_alpha(cx.theme().colors.interaction.thumb_hover),
+                None,
+            )
         } else {
-            (accent.with_alpha(cx.theme().colors.interaction.thumb_rest), None)
+            (
+                accent.with_alpha(cx.theme().colors.interaction.thumb_rest),
+                None,
+            )
         };
         // Radius from the theme token (small-control radius) — not a hardcoded
         // width/2 literal — so `border_radius` in config / `prefix+Shift+r` reflows

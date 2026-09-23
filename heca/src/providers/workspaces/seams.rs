@@ -23,6 +23,7 @@ use crate::chrome::{
 use heca_config::programs::ProgramsConfig;
 use heca_core::layout::PaneId;
 use heca_grid_ui::theme::Theme as GuiTheme;
+use std::rc::Rc;
 
 /// What every row of this dock reads, gathered once in `mod.rs`.
 pub(crate) struct DockSeams<'a> {
@@ -32,8 +33,10 @@ pub(crate) struct DockSeams<'a> {
     pub(crate) mount: &'a str,
     /// Every colour, size and radius. A component names a token, never a literal.
     pub(crate) theme: &'a GuiTheme,
-    /// How a program is recognised and what icon it gets.
-    pub(crate) programs: &'a ProgramsConfig,
+    /// How a program is recognised and what icon it gets. The `Rc` travels, not a bare
+    /// reference: a row keeps it alive inside the subscription that recomputes its labels, which
+    /// outlives this borrow.
+    pub(crate) programs: &'a Rc<ProgramsConfig>,
     /// Where a row's declared gesture goes. A row names an action; it never runs one.
     pub(crate) emit: &'a ChromeIntentEmitter,
     /// What an action **looks like** — the one thing a row cannot answer for itself, needed
@@ -43,6 +46,25 @@ pub(crate) struct DockSeams<'a> {
     pub(crate) ws_state: &'a WorkspacesContainerState,
     /// The pane holding focus, read once at the top rather than by each row.
     pub(crate) active_pane: Option<PaneId>,
+}
+
+impl DockSeams<'_> {
+    /// **What a pick on this row does** — the caller says only WHICH row.
+    ///
+    /// `chrome::picks` takes the mount and the emitter alongside the intent, and both of those are
+    /// already in here: this group exists so a component is handed the app's edges once instead of
+    /// threading them (AGENTS.md § 0b-bis rule 3). Every call site was unpacking the group to pass
+    /// two of its own fields back, in a fixed order, with nothing to catch a swap.
+    ///
+    /// ```ignore
+    /// .on_hint(seams.picks(row_hint(workspace_key(ws_id))))
+    /// ```
+    ///
+    /// The intent stays visible because it is the part that differs and the part that says what
+    /// the pick *is*; the seating and the channel are never the caller's choice.
+    pub(crate) fn picks(&self, intent: heca_view::Intent) -> heca_grid_ui::Hint {
+        crate::chrome::picks(self.mount, intent, self.emit)
+    }
 }
 
 /// What every row of this dock registers into.

@@ -20,10 +20,10 @@
 //! And the fifth, because a right-click aims the keyboard exactly as a left-click does:
 //! does `on_right_click` behave the same way?
 
+use heca_core::layout::Point;
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::widgets::{Flex, FocusScope, Item};
 use heca_grid_ui::{Event, LayoutEngine, PointerButton, Size};
-use heca_core::layout::Point;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -46,9 +46,7 @@ fn dock(log: &Log) -> Box<dyn Component> {
         });
 
     let log = log.clone();
-    Box::new(
-        FocusScope::new(body).on_click(move |_| log.borrow_mut().push("container")),
-    )
+    Box::new(FocusScope::new(body).on_click(move |_| log.borrow_mut().push("container")))
 }
 
 /// Click at `at`, through the same entry point the app uses.

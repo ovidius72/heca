@@ -26,6 +26,22 @@ fn empty_root() -> Box<dyn Component> {
     Box::new(Flex::row())
 }
 
+/// **A surface that declares what it is** — the two things an overlay says about the application
+/// underneath it, said the way a plugin author says them: one builder each, on the widget
+/// (F003/P097/T499). The registry is told neither.
+fn declaring(
+    mut root: Box<dyn Component>,
+    captures_keyboard: bool,
+    lock: bool,
+) -> Box<dyn Component> {
+    // **Taking the keyboard is read from the tree**, not declared — a surface that wants keys holds
+    // focus. These fixtures are bare `Flex`es with no focus of their own, so they override it; a
+    // real overlay writes nothing and answers by being open.
+    root.base_mut().captures_keyboard = Some(captures_keyboard);
+    root.base_mut().lock = lock;
+    root
+}
+
 /// **A real layer root**: a surface that names its own gesture, exactly as the exposé and a
 /// plugin's panel do — one builder on the widget, nothing said to the registry.
 fn fading_root() -> Box<dyn Component> {
@@ -65,9 +81,7 @@ fn re_showing_a_leaving_layer_does_not_cancel_its_exit() {
     let id = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        true,
-        fading_root(),
+        declaring(fading_root(), true, true),
         &mut window,
     );
     reg.show(&mut window, id);
@@ -94,9 +108,7 @@ fn removing_a_fading_layer_waits_for_the_fade() {
     let id = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        true,
-        fading_root(),
+        declaring(fading_root(), true, true),
         &mut window,
     );
     reg.show(&mut window, id);
@@ -145,9 +157,7 @@ fn a_dissolving_layer_no_longer_covers_the_content() {
     let id = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        true,
-        fading_root(),
+        declaring(fading_root(), true, true),
         &mut window,
     );
     reg.show(&mut window, id);
@@ -173,9 +183,7 @@ fn removing_a_plain_layer_is_immediate() {
     let id = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        true,
-        empty_root(),
+        declaring(empty_root(), true, true),
         &mut window,
     );
     reg.show(&mut window, id);
@@ -197,9 +205,7 @@ fn coverage_is_what_the_surface_declared_not_what_its_place_implies() {
         LayerId(7),
         None,
         LayerKind::OnDemand,
-        true,
-        false,
-        empty_root(),
+        declaring(empty_root(), true, false),
         &mut window,
     );
     assert!(
@@ -213,9 +219,7 @@ fn coverage_is_what_the_surface_declared_not_what_its_place_implies() {
         LayerId(8),
         None,
         LayerKind::OnDemand,
-        true,
-        true,
-        empty_root(),
+        declaring(empty_root(), true, true),
         &mut window,
     );
     assert!(
@@ -226,7 +230,7 @@ fn coverage_is_what_the_surface_declared_not_what_its_place_implies() {
 
 /// **Below the `Modal` band, coverage is what the layer declared — `modal` says nothing about
 /// it.** The two answer different questions: `modal` is "does this take the keyboard",
-/// `covers_content` is "may actions still touch the panes". Conflating them made one surface
+/// `lock` is "may actions still touch the panes". Conflating them made one surface
 /// impossible to describe — the exposé takes the keyboard *and* is a map of the panes, so while
 /// `modal` implied coverage it refused every act on the pane it exists to let you choose.
 #[test]
@@ -236,9 +240,7 @@ fn an_overlay_that_takes_the_keyboard_can_still_declare_it_covers_nothing() {
     let map = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        false,
-        empty_root(),
+        declaring(empty_root(), true, false),
         &mut window,
     );
     reg.show(&mut window, map);
@@ -262,9 +264,7 @@ fn coverage_is_reported_only_while_the_layer_is_visible() {
     let corner = reg.add(
         None,
         LayerKind::Persistent,
-        false,
-        false,
-        empty_root(),
+        declaring(empty_root(), false, false),
         &mut window,
     );
     assert!(
@@ -275,9 +275,7 @@ fn coverage_is_reported_only_while_the_layer_is_visible() {
     let over = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        true,
-        empty_root(),
+        declaring(empty_root(), true, true),
         &mut window,
     );
     assert!(!reg.content_covered(&window), "on-demand starts hidden");
@@ -298,17 +296,13 @@ fn on_demand_starts_hidden_persistent_starts_visible() {
     let a = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        false,
-        empty_root(),
+        declaring(empty_root(), true, false),
         &mut window,
     );
     let b = reg.add(
         None,
         LayerKind::Persistent,
-        false,
-        false,
-        empty_root(),
+        declaring(empty_root(), false, false),
         &mut window,
     );
     let vis: Vec<LayerId> = reg.visible_front_to_back().iter().map(|l| l.id).collect();
@@ -338,17 +332,13 @@ fn z_is_a_path_so_a_child_is_in_front_of_its_parent_and_a_later_sibling_of_an_ea
     let first = reg.add(
         None,
         LayerKind::Persistent,
-        false,
-        false,
-        empty_root(),
+        declaring(empty_root(), false, false),
         &mut window,
     );
     let second = reg.add(
         None,
         LayerKind::Persistent,
-        false,
-        false,
-        empty_root(),
+        declaring(empty_root(), false, false),
         &mut window,
     );
     // Opened BY `first`, so it hangs from it — and sits above it without outranking `second`'s
@@ -356,9 +346,7 @@ fn z_is_a_path_so_a_child_is_in_front_of_its_parent_and_a_later_sibling_of_an_ea
     let childs_child = reg.add(
         Some(first),
         LayerKind::Persistent,
-        false,
-        false,
-        empty_root(),
+        declaring(empty_root(), false, false),
         &mut window,
     );
 
@@ -380,25 +368,19 @@ fn an_overlay_sits_above_its_opener_not_above_the_newest_layer() {
     let panel = reg.add(
         None,
         LayerKind::Persistent,
-        false,
-        false,
-        empty_root(),
+        declaring(empty_root(), false, false),
         &mut window,
     );
     let unrelated = reg.add(
         None,
         LayerKind::Persistent,
-        false,
-        false,
-        empty_root(),
+        declaring(empty_root(), false, false),
         &mut window,
     );
     let modal = reg.add(
         Some(panel),
         LayerKind::Persistent,
-        true,
-        false,
-        empty_root(),
+        declaring(empty_root(), true, false),
         &mut window,
     );
 
@@ -408,6 +390,103 @@ fn an_overlay_sits_above_its_opener_not_above_the_newest_layer() {
         reg.top_modal_id(&window),
         Some(modal),
         "and input agrees with the picture, because both read the one order",
+    );
+}
+
+/// **A surface that names itself is reachable by that name**. ⚠️ Ran red first.
+///
+/// The third of the three doors — `default_open` for the starting value, `open_when` for state you
+/// hold, and *point at it by name* — was never connected to anything. A widget's `key` is the name
+/// the component chose about itself, but nothing read it when the surface was seated, and worse,
+/// seating **overwrote** it with the host's internal slot. So
+/// `Dialog::new("..").key("confirm")` declared a name that was destroyed on the way onto the
+/// screen, and the only surfaces `show_layer` could reach were the ones the host had registered by
+/// hand under a name typed in a second place — two answers to one question, and a plugin could
+/// give neither.
+#[test]
+fn a_surface_that_names_itself_can_be_reached_by_that_name() {
+    let mut reg = LayerRegistry::default();
+    let mut window = crate::chrome::new_window_root();
+
+    let mut root = empty_root();
+    root.base_mut().key = Some("confirm".to_string());
+    let id = reg.reserve_id();
+    reg.insert(id, None, LayerKind::OnDemand, root, &mut window);
+
+    assert_eq!(
+        reg.by_name("heca.confirm"),
+        Some(id),
+        "the surface's own key becomes the name `show_layer` resolves, with the owner half stamped \
+         here so it cannot be forged",
+    );
+    assert_eq!(
+        crate::chrome::surface_node(&window, id).and_then(|n| n.base().key.clone()),
+        Some("confirm".to_string()),
+        "and seating it leaves the author's own name alone — it used to be overwritten by the \
+         host's internal slot, so the declaration was gone the moment it went on screen",
+    );
+}
+
+/// **A surface that names nothing stays anonymous, and that is fine.**
+///
+/// `key` is optional everywhere in this codebase and a surface is no exception: one that declares
+/// no name is reached by the id its opener kept, exactly as a dropdown or a modal always has been.
+/// Guarding it because the tempting fix for the test above is to require a key.
+#[test]
+fn a_surface_that_names_nothing_is_still_a_perfectly_good_surface() {
+    let mut reg = LayerRegistry::default();
+    let mut window = crate::chrome::new_window_root();
+
+    let id = reg.reserve_id();
+    reg.insert(id, None, LayerKind::OnDemand, empty_root(), &mut window);
+
+    assert_eq!(reg.name_of(id), None, "no name declared, so none invented");
+    reg.show(&mut window, id);
+    assert!(
+        reg.visible_front_to_back().iter().any(|l| l.id == id),
+        "and it is on screen like any other surface",
+    );
+}
+
+/// **A described layer can be named, so something can point at it** (F003/P097/T502).
+///
+/// `show_layer` / `hide_layer` address a surface **by name** — that is how a key binding, the
+/// palette or RPC reaches one, none of which could ever know a runtime `LayerId`. Until this,
+/// `add_named` took a native tree and `add_view` took a description and wrote no name at all, so a
+/// plugin could have a surface it could put up and then nothing that could point at it: the two
+/// halves were reachable one at a time and never together.
+#[test]
+fn a_described_layer_can_be_named_so_an_action_can_reach_it() {
+    use heca_view::{ViewNode, WidgetKind};
+    let mut reg = LayerRegistry::default();
+    let mut window = crate::chrome::new_window_root();
+
+    let slot = reg.reserve_id();
+    let named = reg.add_view(
+        slot,
+        Some("heca.confirm".to_string()),
+        None,
+        LayerKind::OnDemand,
+        ViewNode::new(WidgetKind::Label),
+        declaring(empty_root(), false, true),
+        &mut window,
+    );
+
+    assert_eq!(
+        reg.by_name("heca.confirm"),
+        Some(named),
+        "a described surface answers to its name, so `show_layer heca.confirm` reaches it",
+    );
+    reg.show(&mut window, named);
+    let layers = reg.visible_front_to_back();
+    let layer = layers
+        .iter()
+        .find(|l| l.id == named)
+        .expect("the layer is registered");
+    assert!(
+        layer.node.is_some(),
+        "and naming it did not cost it its description — that is what a theme reload re-realizes \
+         from",
     );
 }
 
@@ -421,9 +500,7 @@ fn a_view_layer_behaves_like_any_other_and_keeps_its_description() {
     let native = reg.add(
         None,
         LayerKind::Persistent,
-        false,
-        false,
-        empty_root(),
+        declaring(empty_root(), false, false),
         &mut window,
     );
     let node = ViewNode::new(WidgetKind::Label);
@@ -431,11 +508,10 @@ fn a_view_layer_behaves_like_any_other_and_keeps_its_description() {
     let described = reg.add_view(
         slot,
         None,
+        None,
         LayerKind::Persistent,
-        false,
-        true,
         node,
-        empty_root(),
+        declaring(empty_root(), false, true),
         &mut window,
     );
 
@@ -516,9 +592,7 @@ fn re_showing_a_visible_layer_does_not_restart_its_zoom() {
         name.clone(),
         None,
         LayerKind::OnDemand,
-        true,
-        false,
-        zooming_root(),
+        declaring(zooming_root(), true, false),
         &mut window,
     );
     reg.show(&mut window, id);
@@ -540,9 +614,7 @@ fn re_showing_a_visible_layer_does_not_restart_its_zoom() {
         name.clone(),
         None,
         LayerKind::OnDemand,
-        true,
-        false,
-        zooming_root(),
+        declaring(zooming_root(), true, false),
         &mut window,
     );
     reg.show(&mut window, rebuilt);
@@ -572,9 +644,7 @@ fn showing_a_layer_puts_its_surface_on_screen() {
     let id = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        true,
-        zooming_root(),
+        declaring(zooming_root(), true, true),
         &mut window,
     );
     let theme = Theme::default();
@@ -623,9 +693,7 @@ fn a_rebuild_part_way_through_an_arrival_carries_it_on() {
         name.clone(),
         None,
         LayerKind::OnDemand,
-        true,
-        false,
-        zooming_root(),
+        declaring(zooming_root(), true, false),
         &mut window,
     );
     reg.show(&mut window, id);
@@ -640,9 +708,7 @@ fn a_rebuild_part_way_through_an_arrival_carries_it_on() {
         name.clone(),
         None,
         LayerKind::OnDemand,
-        true,
-        false,
-        zooming_root(),
+        declaring(zooming_root(), true, false),
         &mut window,
     );
     reg.show(&mut window, rebuilt);
@@ -670,9 +736,7 @@ fn input_goes_to_the_front_most_surface_not_the_last_one_added() {
     let map = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        false,
-        empty_root(),
+        declaring(empty_root(), true, false),
         &mut window,
     );
     reg.show(&mut window, map);
@@ -680,9 +744,7 @@ fn input_goes_to_the_front_most_surface_not_the_last_one_added() {
     let dialog = reg.add(
         Some(map),
         LayerKind::OnDemand,
-        true,
-        true,
-        empty_root(),
+        declaring(empty_root(), true, true),
         &mut window,
     );
     reg.show(&mut window, dialog);
@@ -697,9 +759,7 @@ fn input_goes_to_the_front_most_surface_not_the_last_one_added() {
     let second_dialog = reg.add(
         Some(map),
         LayerKind::OnDemand,
-        true,
-        true,
-        empty_root(),
+        declaring(empty_root(), true, true),
         &mut window,
     );
     reg.show(&mut window, second_dialog);
@@ -733,9 +793,7 @@ fn the_active_context_follows_the_modal_surfaces() {
     let map = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        false,
-        empty_root(),
+        declaring(empty_root(), true, false),
         &mut window,
     );
     reg.show(&mut window, map);
@@ -744,9 +802,7 @@ fn the_active_context_follows_the_modal_surfaces() {
     let dialog = reg.add(
         reg.current(),
         LayerKind::OnDemand,
-        true,
-        true,
-        empty_root(),
+        declaring(empty_root(), true, true),
         &mut window,
     );
     reg.show(&mut window, dialog);
@@ -790,9 +846,7 @@ fn re_registering_a_layer_does_not_promote_it_above_a_newer_one() {
         name.clone(),
         None,
         LayerKind::OnDemand,
-        true,
-        false,
-        empty_root(),
+        declaring(empty_root(), true, false),
         &mut window,
     );
     reg.show(&mut window, map);
@@ -800,9 +854,7 @@ fn re_registering_a_layer_does_not_promote_it_above_a_newer_one() {
     let dialog = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        true,
-        empty_root(),
+        declaring(empty_root(), true, true),
         &mut window,
     );
     reg.show(&mut window, dialog);
@@ -819,9 +871,7 @@ fn re_registering_a_layer_does_not_promote_it_above_a_newer_one() {
         name.clone(),
         None,
         LayerKind::OnDemand,
-        true,
-        false,
-        empty_root(),
+        declaring(empty_root(), true, false),
         &mut window,
     );
     reg.show(&mut window, rebuilt);
@@ -847,9 +897,7 @@ fn a_named_layer_is_addressable_and_re_registering_replaces_it() {
     let anonymous = reg.add(
         None,
         LayerKind::OnDemand,
-        false,
-        false,
-        empty_root(),
+        declaring(empty_root(), false, false),
         &mut window,
     );
     let name = layer_name(HOST_OWNER, "expose").expect("valid");
@@ -860,9 +908,7 @@ fn a_named_layer_is_addressable_and_re_registering_replaces_it() {
         name.clone(),
         None,
         LayerKind::OnDemand,
-        false,
-        true,
-        empty_root(),
+        declaring(empty_root(), false, true),
         &mut window,
     );
     assert_eq!(reg.by_name(&name), Some(first));
@@ -888,9 +934,7 @@ fn a_named_layer_is_addressable_and_re_registering_replaces_it() {
         name.clone(),
         None,
         LayerKind::OnDemand,
-        false,
-        true,
-        empty_root(),
+        declaring(empty_root(), false, true),
         &mut window,
     );
     // **And it keeps its ID.** Changed 2026-08-12 (F003/P082/T416): a rebuild used to mint a
@@ -951,13 +995,15 @@ fn a_key_dispatched_at_the_window_root_reaches_a_placed_surface() {
     let id = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        true,
-        Box::new(
-            Dialog::new("Close pane?")
-                .action(Button::new("Cancel"))
-                .action(Button::new("OK"))
-                .open(true),
+        declaring(
+            Box::new(
+                Dialog::new("Close pane?")
+                    .action(Button::new("Cancel"))
+                    .action(Button::new("OK"))
+                    .default_open(true),
+            ),
+            true,
+            true,
         ),
         &mut window,
     );
@@ -992,8 +1038,8 @@ fn a_key_dispatched_at_the_window_root_reaches_a_placed_surface() {
 #[test]
 fn a_menu_seated_as_a_surface_keeps_its_own_height() {
     use heca_core::layout::Size;
-    use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
     use heca_grid_ui::LayoutEngine;
+    use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
 
     let viewport = Size::new(1400.0, 900.0);
     let menu = ContextMenu::new("pane")
@@ -1003,16 +1049,14 @@ fn a_menu_seated_as_a_surface_keeps_its_own_height() {
                 .child(MenuItem::new().label("New pane"))
                 .child(MenuItem::new().label("Close pane")),
         )
-        .open(true);
+        .default_open(true);
 
     let mut reg = LayerRegistry::default();
     let mut window = crate::chrome::new_window_root();
     let id = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        true,
-        Box::new(menu),
+        declaring(Box::new(menu), true, true),
         &mut window,
     );
     reg.show(&mut window, id);
@@ -1034,7 +1078,7 @@ fn a_menu_seated_as_a_surface_keeps_its_own_height() {
 /// An open layer, built the way `fading_root` builds one.
 fn fading_root_open() -> Overlay {
     let mut o = Overlay::new().panel(Flex::row());
-    o.open();
+    o.show();
     o
 }
 
@@ -1055,9 +1099,7 @@ fn a_layer_seated_as_a_surface_still_fills_the_window() {
     let id = reg.add(
         None,
         LayerKind::OnDemand,
-        true,
-        true,
-        Box::new(fading_root_open()),
+        declaring(Box::new(fading_root_open()), true, true),
         &mut window,
     );
     reg.show(&mut window, id);
@@ -1099,7 +1141,7 @@ fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
     // The chrome: a plain child of the window root, and the thing the pointer must reach.
     crate::chrome::seat_chrome(
         &mut window,
-        Flex::row().width(Length::Pct(1.0)).height(Length::Pct(1.0)),
+        Flex::row().width(Length::FULL).height(Length::FULL),
     );
     // The stack, seated **exactly as the app seats it** — wrapped in its picker group, and empty,
     // as it is nearly always. The wrapper is the point: a first version of this guard placed a bare
@@ -1108,9 +1150,7 @@ fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
     crate::chrome::place_surface(
         &mut window,
         "heca.notifications",
-        Box::new(KeyHintGroup::new_boxed(Box::new(ToastStack::new(signal(
-            Vec::new(),
-        ))))),
+        Box::new(KeyHintGroup::new(ToastStack::new(signal(Vec::new())))),
     );
     LayoutEngine::new().compute(&mut window, viewport);
 
@@ -1122,5 +1162,61 @@ fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
         "the pointer reached child {:?} — the chrome is child 0 and an empty surface must not \
          claim the point in front of it",
         path.first(),
+    );
+}
+
+/// **A dismissed surface declares nothing** (F003/P097/T499, found by Antonio driving).
+///
+/// Hiding a surface calls `node.close()` and leaves it **seated** in the window root —
+/// `remove_surface` runs only when it is destroyed — so presence in the tree says nothing about
+/// being in charge. The exposé and the command palette both declare `lock` and `modal`,
+/// so a reader that takes a seated surface's declaration at face value applies a hidden exposé's
+/// occluders and treats a hidden modal as the active context.
+///
+/// That is exactly what happened: the `prefix+/` stack stopped asking the registry for its visible
+/// layers and started walking the tree's children, and lost the `visible` filter it had been
+/// getting for free — **every letter in the app disappeared**, the universal picker and `prefix+q`
+/// alike, in every state.
+#[test]
+fn a_hidden_surfaces_declaration_is_not_live() {
+    let mut window = Flex::column();
+    let mut reg = LayerRegistry::default();
+
+    // An on-demand surface that declares BOTH things a dismissed one must stop declaring — said
+    // on the widget, which is the only place they live now.
+    let id = reg.add(
+        None,
+        LayerKind::OnDemand,
+        declaring(empty_root(), true, true),
+        &mut window,
+    );
+    let slot = crate::chrome::surface_slot(id);
+
+    // On-demand starts hidden, and its node is already seated.
+    assert!(
+        reg.declaration_at(&slot).is_some(),
+        "the surface is seated and registered whether or not it is up",
+    );
+    assert!(
+        !reg.slot_is_live(&window, &slot),
+        "a surface that is not up declares nothing — reading it anyway is what blanked \
+         every letter in the app",
+    );
+
+    reg.show(&mut window, id);
+    assert!(
+        reg.slot_is_live(&window, &slot),
+        "a surface that is up declares what it declared",
+    );
+    let node = crate::chrome::surface_node(&window, id).expect("seated");
+    assert!(
+        node.base().lock,
+        "and coverage is the widget's own declaration, not a record the registry kept",
+    );
+
+    reg.hide(&mut window, id);
+    assert!(
+        !reg.slot_is_live(&window, &slot),
+        "dismissed again: seated, still registered, and declaring nothing",
     );
 }

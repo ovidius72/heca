@@ -12,7 +12,7 @@
   "summary": "The layer registry ships with native content only. Its own comments say the ViewNode path (plugins) and paint/input wiring land later — this is that work.",
   "description": "Transferred from docs/surface-compositor.md §9 on 2026-07-26, before that file was deleted. §§1–8 of it are IMPLEMENTED; §9 was marked DRAFT and is now built. **Updated 2026-08-12** — the original plugin-11 work has landed and the phase now carries the exposé that was built on it.\n\n═══ WHAT SHIPPED — the layer stack (the phase's original scope) ═══\n`heca/src/chrome/layers.rs` (1150 lines): `LayerBand` (semantic z bands, no magic numbers), `LayerKind::{Persistent, OnDemand}`, `ShowLayer`/`HideLayer`/`ToggleLayer`, and — the part §9 said would land later — **`LayerContent::{Native(Box<dyn Component>), View(ViewNode)}`** :208, realized through the one bridge (`chrome/realize.rs`). Layers paint in stack order and input routes to the active or modal layer (T336). `add_layer` returns a stable `LayerId` a plugin can hold.\n\nThe migration order from §9 is complete:\n1. ~~Introduce the stack, register the existing surfaces, hints read it~~ — DONE.\n2. ~~Convert the confirm dialog to a layer with hintable buttons~~ — DONE (T320), as an `OverlayHost::open_modal` with a ViewNode body and actions, not a bespoke modal.\n3. ~~`ShowLayer` on-demand layers → the first native exposé~~ — DONE (T327's first half; its **exit sequencing**, fade over shrink, is the open remainder and waits on a layer's lifetime following the whole exit).\n4. ~~The ViewNode content path → plugins add layers~~ — DONE (T339).\n\n⚠️ **The KeyHint half of §9 is obsolete as written.** It described `collect_hint_targets` finding subtrees carrying `.hint_target(...)`. That API is **deleted**: `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Base::hint_target` and `named_press` were removed by F004/P084/T399 under ⭐⭐ RULE ZERO, because a plugin could construct none of them. A pick is now **one line on the widget** — `KeyHint::new(w).on_peek(…)` — collected out of the laid-out tree by `heca_grid_ui::collect_peeks` and run by `fire_peek`. Nothing is registered, so nothing has to be un-registered when a tree rebuilds. Do not reintroduce any of the deleted names.\n\n═══ WHAT THE PHASE IS NOW — the exposé ═══\nThe first real layer is the **exposé** (`heca/src/chrome/expose.rs`, 2028 lines): a bird's-eye of every workspace, one row each, with a `CardGrid` cursor, surface-scoped delete keys (T416) and the open/close zoom effect. It is where the layer stack is proven, and where the remaining tasks are:\n\n- **T417** — the layer stack becomes the surface TREE: z is a path, not a band.\n- **T418** — the map's hover behaviour. The reveal now follows the **keyboard**, never the pointer (`CardGrid::reveal_state()` + `Row::reveal_when`), which Antonio confirmed. Two reported symptoms — the animation \"is strange\", a card is hard to click — are **still unconfirmed**, and may be consequences of the reveal loop that is now fixed. Check before changing anything.\n- **T419** — the fit: the zoom is computed from the session's extents, not configured. Shipped in `4eb3136` as `fit_zoom`, and **superseded by T420**, which deletes it: under shares there is no zoom to compute.\n- **T420** — split `map()` into components: `ExposeGrid` / `WorkspaceRow` / `ColumnCard` / `PaneCard`, **beside the surface** in `heca/src/chrome/expose/`, sized by **shares** (`Length::Pct` of one shared denominator, `grow` weights) with **no pixel scale anywhere**. This is the phase's centre of gravity — see its own description and the phase handoff.\n- **T421** — the map is laggy with many panes (26 across 3 workspaces), worst on open/close. Prime suspect, **unmeasured**: `layout_layers` (`chrome/mod.rs`) recomputes a full `LayoutEngine::compute` over every visible layer each frame with no dirty check. Second: the frosted backdrop's full-screen blur pass per animation frame. **Measure first.**\n\n═══ THE DECISIONS THAT GOVERN THE REMAINING WORK (Antonio, 2026-08-12) ═══\n- **Components, Flutter/SwiftUI style**: *\"reason in terms of Components that encapsulate their internal logic and are reusable. Like in React but write code Flutter/SwiftUI style.\"* A surface is components, never one function that draws a picture.\n- **They live beside their surface** (`heca/src/chrome/expose/`) and move up to `heca/src/components/` when a second surface needs them.\n- **Every size is a share; nothing is a pixel.** The exposé's `map()` computed a zoom and emitted `Length::Px(col.width * zoom)` — which is taking over the layout engine's job, and then owning every term (window, overlay margin, panel padding, card gaps, row count, row heights, scroll centring). Seven attempts, six wrong, each missing a different term.\n- **The zoom EFFECT stays.** `effects::Zoom` + `LayerRegistry::set_zoom` (with `PaintCx::with_scale` underneath) is the open/close animation and is already generic for any layer including a plugin's. Only `overview_zoom` / `overview_scale` — the *fit* scale — goes.\n- **Measure before fixing.** Six wrong guesses in one day; instrumenting named the cause in one round, every time.\n\n═══ THE INVARIANTS THAT MUST SURVIVE (§6 of the deleted file) ═══\n- NO hardcoded z or levels anywhere. z is tree position; occluders come from real layout geometry.\n- Buttons NEVER declare a layer. A button inherits its layer from the surface it is mounted in.\n- The active context is moved ONLY by context surfaces (exposé, modal) — never by zoom, scroll or provider selection.\n- Occlusion is decided by draw order plus geometry, not by the coarse level.\n- Overlays and modals are children of their opener, and exclusive when modal.\n- ONE rule for visibility. If you are special-casing a surface's hints, the surface is mis-modelled — fix the model, do not add a filter.\n\n═══ BUILD ON, DO NOT DUPLICATE ═══\n`OverlayHost` is NOT a second stack — it is built ON this one. `open_modal` realizes the ViewNode body plus its action buttons into a native tree, pushes it as a Modal-band layer, and resolves the returned result when a button's intent fires. Its overlays ARE layers here.\n\n═══ VERIFICATION ═══\nLayering, paint order, hint visibility and the map are all **visible** behaviour. Green tests are not verification: Antonio drives every visual check, and green tests found none of the exposé's seven failures.",
   "descriptionUpdatedAt": "2026-07-26T11:28:31.721Z",
-  "notes": "**Handoff context update:**\nT481 closed 2026-08-27 on Antonio's showcase verification. T491 filed. Three framework rules centralised and pushed as ed6edd5: mark_needs_layout + needs_layout(root) so a widget can say its TREE changed rather than its pixels; set_hidden as the only way to show or hide anything (13 sites converted, guarded by a build-failing test); and focused_by_keyboard so pointing at something never scrolls it. All three came out of Antonio driving the showcase; none was reachable by tests.\n\n**Remaining work:**\nThe agreed order minus T481: T479, T477, T475, T478, T458 (must precede T474), T474, then the file splits T471/T468/T466/T472/T470. Plus T482 (the dock naming, four failed attempts recorded) and T491 (the showcase's hand-rolled row). Two things need Antonio's agreement before filing: the host-side content builder on ToastStack for rich notifications (approved in principle, orphaned when P096 closed), and the row extraction behind T491.\n\n---\n**Handoff context update:**\n37 of 48 tasks done, 1 canceled. The phase's framework work is finished: T479 and T481 both closed on Antonio's visual verification. What remains is five open bugs (T474, T475, T477, T478, T491) and five file splits (T466, T468, T470, T471, T472) that are deliberately deferred.\n\n**Remaining work:**\nFive bugs: T474 (a column does not own its identity), T475 (a pick with no candidates dies silently), T477 (a sidebar pane row that had no cwd can never show one — READ THE TASK, my notes on it carry two wrong diagnoses), T478 (a zero-width pane still gets a letter, drawn outside itself), T491 (the showcase teaches hand-rolling a row the app has as a component). Five deferred splits: T466, T468, T470, T471, T472 — they carve up files P097(F003) is still rewriting and must not be interleaved with it.",
+  "notes": "**Handoff context update:**\nT481 closed 2026-08-27 on Antonio's showcase verification. T491 filed. Three framework rules centralised and pushed as ed6edd5: mark_needs_layout + needs_layout(root) so a widget can say its TREE changed rather than its pixels; set_hidden as the only way to show or hide anything (13 sites converted, guarded by a build-failing test); and focused_by_keyboard so pointing at something never scrolls it. All three came out of Antonio driving the showcase; none was reachable by tests.\n\n**Remaining work:**\nThe agreed order minus T481: T479, T477, T475, T478, T458 (must precede T474), T474, then the file splits T471/T468/T466/T472/T470. Plus T482 (the dock naming, four failed attempts recorded) and T491 (the showcase's hand-rolled row). Two things need Antonio's agreement before filing: the host-side content builder on ToastStack for rich notifications (approved in principle, orphaned when P096 closed), and the row extraction behind T491.\n\n---\n**Handoff context update:**\n37 of 48 tasks done, 1 canceled. The phase's framework work is finished: T479 and T481 both closed on Antonio's visual verification. What remains is five open bugs (T474, T475, T477, T478, T491) and five file splits (T466, T468, T470, T471, T472) that are deliberately deferred.\n\n**Remaining work:**\nFive bugs: T474 (a column does not own its identity), T475 (a pick with no candidates dies silently), T477 (a sidebar pane row that had no cwd can never show one — READ THE TASK, my notes on it carry two wrong diagnoses), T478 (a zero-width pane still gets a letter, drawn outside itself), T491 (the showcase teaches hand-rolling a row the app has as a component). Five deferred splits: T466, T468, T470, T471, T472 — they carve up files P097(F003) is still rewriting and must not be interleaved with it.\n\n---\n**Handoff context update:**\n42 of 51 tasks done. This session closed T477 and T475 and added and closed T515 and T516, all driven by Antonio and committed at 60965b6 (16 ahead of main, unpushed). P097(F003) is DONE, which unblocks the eleven file splits this phase had deferred.\n\n**Remaining work:**\nThree bugs: T478 (zero-width pane still lettered — the starter), T474 (column identity; waits on T458 and needs Antonio's decisions), T491 (the showcase hand-rolls a row the app has as a component). Eleven now-unblocked splits: T466, T468, T470, T471, T472, T509–T514. 71 files exceed 600 lines and heca-view-realize/src/lib.rs at 5215 has no task covering it.\n\n---\n**Handoff context update:**\nT474's authoring-API half is 5 of 7 and committed; T461 (scoped hints, from P095) landed alongside it and is verified on screen. 44 commits ahead of main, not pushed.\n\n**Remaining work:**\nT474: C5's SDK half, the 282-site Length sweep, its docs — then the column parent move, unstarted, with four traps unguarded by tests.\n\n---\n**Handoff context update:**\nT474's authoring-API half is complete (checklist 8/8) and four library capabilities landed with it, three of them found by Antonio driving the app. The work is uncommitted: 69 files, 1825 tests green. Trap 4 of the column parent move no longer exists.\n\n**Remaining work:**\nThe column parent move (T474's other half, three traps). Six KeyHint wrappers to remove. Per-widget pickable defaults to decide. The single dock letter under prefix+Shift+e. The layer record's second visible flag.",
   "goals": [],
   "nonGoals": [],
   "dependencies": [],
@@ -25,7 +25,18 @@
     "The app does NOT need needs_layout wiring: layout_layers already re-lays-out every visible layer every frame with no dirty check. The showcase does need it.",
     "Decide where a fix belongs BEFORE writing the first line, not as a check before reporting. Grep for the count first and state it in the report.",
     "The five file splits stay DEFERRED until P097(F003) is finished. They carve up app/registry.rs, showcase.rs, scroll_region.rs, heca-view/src/lib.rs and the multi-job files — several of which P097 is actively rewriting. A split landing mid-migration produces a diff nobody can review.",
-    "T491 is more than a showcase tidy-up: the showcase is what AGENTS § 1 tells every developer to copy from, and it currently demonstrates hand-rolling a row that exists as a component. Until it is fixed, treat the showcase as a place to see a widget run, not as authority on how to compose one."
+    "T491 is more than a showcase tidy-up: the showcase is what AGENTS § 1 tells every developer to copy from, and it currently demonstrates hand-rolling a row that exists as a component. Until it is fixed, treat the showcase as a place to see a widget run, not as authority on how to compose one.",
+    "The refused-pick message is a bottom-bar line, not a toast — Antonio rejected the toast as too intrusive for a key that could not act.",
+    "A nested identity owns its own hint letter: the offer walk stops at a subtree holding a different key, so a workspace's letter is never drawn on a pane inside it.",
+    "Whoever counts pick candidates decides what a candidate is — 'never letter the pane you are on' moved from the letter layer into candidate collection.",
+    "The physical-key repair for a rewritten character fires on the symptom, not on which modifier is held, so a layout that produced a real character keeps its own answer.",
+    "REJECTED: the terminal next_wake deadline for the cwd, built on a wrong diagnosis and reverted — on macOS the directory comes from OSC 7, not the foreground sample.",
+    "REJECTED: attributing the ~130 ms cwd latency to the per-frame scans; measured, it sits around request_redraw and the frame being served.",
+    "The authoring API jumped the queue because P094's next tasks are new code that would otherwise be written in the spellings being deleted.",
+    "The app assigns what a keycap MEANS; the widget only places it.",
+    "KeyHint is only for a region that is not a widget you can put a builder on.",
+    "A widget says its own pick; KeyHint is only for a region that is not a widget you can put a builder on.",
+    "One walk for every picker, with the scope passed in — KeyHintGroup's private copy is deleted."
   ],
   "acceptedDecisions": [],
   "completionCriteria": [],
@@ -83,7 +94,10 @@
     "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b",
     "736a6912-1297-48b3-89c1-e32559a024d9",
     "073f4e71-0b10-4a50-9e42-66eafdf4de7d",
-    "92358ff7-5c34-441b-aed0-fa803f0d9486"
+    "92358ff7-5c34-441b-aed0-fa803f0d9486",
+    "02a7180e-c7ae-47dc-8719-08678e8fbade",
+    "e3b07070-5b0a-406c-bc85-680b396a9a14",
+    "3597adf8-2e77-4829-8a7d-d21e2c2e760a"
   ],
   "tasks": [
     {
@@ -129,7 +143,8 @@
       "completedAt": "2026-08-04T19:31:52.135Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
       "updatedAt": "2026-08-04T19:31:52.135Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "87f64d16-9cf8-48bf-bbe4-1542954e23b1",
@@ -199,7 +214,8 @@
       "completedAt": "2026-08-20T13:46:54.766Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
       "updatedAt": "2026-08-20T13:46:54.766Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "eaff801f-599f-4580-b20c-a2abfb842142",
@@ -250,7 +266,8 @@
       "completedAt": "2026-08-04T19:32:03.187Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
       "updatedAt": "2026-08-04T19:32:03.187Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "fe6f4b88-4cd7-4c0b-8f04-53c1bc03937e",
@@ -295,7 +312,8 @@
       "completedAt": "2026-08-04T19:42:24.499Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
       "updatedAt": "2026-08-04T19:42:24.499Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "41d7338d-9648-4f26-910a-1563aad7dabb",
@@ -338,7 +356,8 @@
       "completedAt": "2026-08-12T07:03:09.534Z",
       "createdAt": "2026-08-11T22:38:47.582Z",
       "updatedAt": "2026-08-12T07:03:09.534Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "4582600e-e395-4323-a9fc-0aff8a8afd96",
@@ -364,7 +383,8 @@
       "completedAt": "2026-08-19T15:58:23.880Z",
       "createdAt": "2026-08-11T22:39:14.614Z",
       "updatedAt": "2026-08-19T15:58:23.880Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "dcb1fdd2-065e-4632-a80b-19c1c7835e85",
@@ -407,7 +427,8 @@
       "completedAt": "2026-08-13T20:39:27.135Z",
       "createdAt": "2026-08-11T22:55:42.451Z",
       "updatedAt": "2026-08-13T20:39:27.135Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "7028cfd0-d674-4d51-ac5c-97213108ca6c",
@@ -433,7 +454,8 @@
       "completedAt": "2026-08-12T22:21:58.873Z",
       "createdAt": "2026-08-12T08:47:42.555Z",
       "updatedAt": "2026-08-12T22:21:58.873Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "e139107d-dc27-4e5d-84b7-0d8adc9393d3",
@@ -459,7 +481,8 @@
       "completedAt": "2026-08-13T12:27:07.910Z",
       "createdAt": "2026-08-12T16:11:51.102Z",
       "updatedAt": "2026-08-13T12:27:07.910Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "03a5c4c2-9bfd-4c8a-abe2-4ab1eb2b5875",
@@ -502,7 +525,8 @@
       "completedAt": "2026-08-20T14:38:35.438Z",
       "createdAt": "2026-08-12T16:12:10.071Z",
       "updatedAt": "2026-08-20T14:38:35.438Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "fb73a5e4-dea9-4d86-8219-71c103ada2a5",
@@ -545,7 +569,8 @@
       "completedAt": "2026-08-21T14:58:33.222Z",
       "createdAt": "2026-08-12T22:22:21.740Z",
       "updatedAt": "2026-08-27T13:59:40.197Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "e42ba40f-d15b-42e4-a145-8dfc05d0643d",
@@ -571,7 +596,8 @@
       "completedAt": "2026-08-13T07:55:44.769Z",
       "createdAt": "2026-08-13T07:25:46.853Z",
       "updatedAt": "2026-08-13T07:55:44.769Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "e21ee3b7-63a1-4e3a-a3de-b37f8e9ca032",
@@ -606,7 +632,8 @@
       "completedAt": "2026-08-13T12:27:24.200Z",
       "createdAt": "2026-08-13T08:16:01.978Z",
       "updatedAt": "2026-08-13T12:27:24.200Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "21518dd0-4ef6-47fd-b62c-1c309001d5db",
@@ -641,7 +668,8 @@
       "completedAt": "2026-08-13T19:55:37.837Z",
       "createdAt": "2026-08-13T12:13:05.159Z",
       "updatedAt": "2026-08-13T19:55:37.837Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "0e53fc99-b4e3-43ec-91b2-30db27f3cea9",
@@ -667,7 +695,8 @@
       "completedAt": "2026-08-18T09:58:37.343Z",
       "createdAt": "2026-08-13T12:20:54.816Z",
       "updatedAt": "2026-08-18T09:58:37.343Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "94b1b049-ad77-497c-a7e8-8e2c8bc788b8",
@@ -702,7 +731,8 @@
       "completedAt": "2026-08-13T19:39:16.929Z",
       "createdAt": "2026-08-13T14:51:11.720Z",
       "updatedAt": "2026-08-13T19:39:16.929Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "aa96a9a3-bd5b-425f-863b-d3111af3bd53",
@@ -728,7 +758,8 @@
       "completedAt": "2026-08-17T13:56:04.101Z",
       "createdAt": "2026-08-17T08:21:09.188Z",
       "updatedAt": "2026-08-17T13:56:04.101Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "ec2f214b-e40d-41f9-ab60-f3aacd2b6821",
@@ -771,7 +802,8 @@
       "completedAt": "2026-08-21T14:49:47.750Z",
       "createdAt": "2026-08-17T08:21:21.318Z",
       "updatedAt": "2026-08-27T13:59:40.197Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "206dfe29-866a-4138-9ae5-667a8502e77b",
@@ -797,7 +829,8 @@
       "completedAt": "2026-08-17T16:21:27.436Z",
       "createdAt": "2026-08-17T08:21:32.792Z",
       "updatedAt": "2026-08-17T16:21:27.436Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "905a0d1d-1170-4acd-aea8-e3d517f3549c",
@@ -840,7 +873,8 @@
       "completedAt": "2026-08-21T15:16:09.918Z",
       "createdAt": "2026-08-17T08:21:41.749Z",
       "updatedAt": "2026-08-21T15:16:09.918Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "a338bad7-be16-429e-b682-1d1188362c91",
@@ -883,7 +917,8 @@
       "completedAt": "2026-08-21T15:18:23.686Z",
       "createdAt": "2026-08-17T08:21:50.685Z",
       "updatedAt": "2026-08-21T15:18:23.686Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "e9253856-83ee-43d9-afb4-728eed62b301",
@@ -926,7 +961,8 @@
       "completedAt": "2026-08-23T11:43:52.309Z",
       "createdAt": "2026-08-17T08:22:00.289Z",
       "updatedAt": "2026-08-23T11:43:52.309Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "2493f22e-5578-4d22-b799-eff6d6347b31",
@@ -1022,7 +1058,8 @@
       "completedAt": "2026-08-24T15:21:17.520Z",
       "createdAt": "2026-08-17T08:22:19.479Z",
       "updatedAt": "2026-08-27T13:59:40.197Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "1cd64e74-b98c-4b0a-b311-b704ef31c73e",
@@ -1067,7 +1104,8 @@
       "completedAt": "2026-08-24T15:37:57.960Z",
       "createdAt": "2026-08-17T08:22:29.058Z",
       "updatedAt": "2026-08-27T13:59:40.197Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "59d6697f-96fb-40dc-880e-f0bf7de7b612",
@@ -1093,7 +1131,8 @@
       "completedAt": "2026-08-17T16:03:47.435Z",
       "createdAt": "2026-08-17T11:30:20.300Z",
       "updatedAt": "2026-08-17T16:03:47.435Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "bd588dd5-e7b8-45cb-90ec-e4c35795fc94",
@@ -1119,7 +1158,8 @@
       "completedAt": "2026-08-17T16:33:06.613Z",
       "createdAt": "2026-08-17T15:54:31.087Z",
       "updatedAt": "2026-08-17T16:33:06.613Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "e719e062-052c-4901-88b4-07c298b72711",
@@ -1162,7 +1202,8 @@
       "completedAt": "2026-08-19T14:57:44.057Z",
       "createdAt": "2026-08-17T15:54:49.547Z",
       "updatedAt": "2026-08-19T14:57:44.057Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "28072415-5aa4-4d4a-b444-1489906a0579",
@@ -1188,7 +1229,8 @@
       "completedAt": "2026-08-19T08:57:13.092Z",
       "createdAt": "2026-08-17T15:55:02.914Z",
       "updatedAt": "2026-08-19T08:57:13.092Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "783f66a3-1635-4b08-b869-0624b313c0e3",
@@ -1233,7 +1275,8 @@
       "completedAt": "2026-08-25T08:23:37.041Z",
       "createdAt": "2026-08-17T21:34:09.347Z",
       "updatedAt": "2026-08-27T13:59:40.197Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "288b4d88-6142-41ef-a5c1-8a018d4806f9",
@@ -1268,7 +1311,8 @@
       "completedAt": "",
       "createdAt": "2026-08-18T10:00:25.903Z",
       "updatedAt": "2026-08-18T14:25:38.103Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "88c8a8ef-5576-4b4e-a6f9-e8022bae7148",
@@ -1316,7 +1360,8 @@
           "sessionId": "mcp-process:f2720c67-3db6-4507-82df-f5b669c10418",
           "createdAt": "2026-08-27T20:14:32.984Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5",
@@ -1432,7 +1477,8 @@
       "completedAt": "2026-08-21T11:03:50.951Z",
       "createdAt": "2026-08-20T14:05:13.632Z",
       "updatedAt": "2026-08-21T11:03:50.951Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "a38641d7-ef78-4179-b11e-1e7c9a65f288",
@@ -1467,7 +1513,8 @@
       "completedAt": "",
       "createdAt": "2026-08-21T11:28:23.578Z",
       "updatedAt": "2026-08-28T08:22:56.310Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258",
@@ -1502,7 +1549,8 @@
       "completedAt": "",
       "createdAt": "2026-08-21T13:58:02.209Z",
       "updatedAt": "2026-09-04T13:59:25.862Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "2d174619-b5c0-4040-9c32-133096cb4251",
@@ -1537,7 +1585,8 @@
       "completedAt": "",
       "createdAt": "2026-08-24T13:57:46.417Z",
       "updatedAt": "2026-08-28T08:23:01.395Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "6e46956d-0432-4aa1-a476-114c07d33d93",
@@ -1572,7 +1621,8 @@
       "completedAt": "",
       "createdAt": "2026-08-24T13:58:03.101Z",
       "updatedAt": "2026-08-28T08:23:03.078Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "6265e66c-6caf-400e-8e75-20dbe93dae09",
@@ -1607,7 +1657,8 @@
       "completedAt": "",
       "createdAt": "2026-08-24T13:58:21.061Z",
       "updatedAt": "2026-08-28T08:23:07.454Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "51703eae-6940-479b-a36e-e2a40cccd3cc",
@@ -1652,7 +1703,8 @@
       "completedAt": "2026-08-24T14:42:48.123Z",
       "createdAt": "2026-08-24T14:32:48.198Z",
       "updatedAt": "2026-08-27T13:59:40.197Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "c1274274-47c6-4aaf-84d0-b1d43d4f0225",
@@ -1662,23 +1714,143 @@
       "priority": 6,
       "shortName": "a-column-in-the-scrolling-area",
       "title": "The column in the scrolling area does not own its identity — only its sidebar view does",
-      "status": "planned",
-      "description": "Found by Antonio driving T438, 2026-08-24: \"prefix+shift+c works but show letters only in the sidebar. not in the scrolling area. not sure this is what we deciced.\" It is not. It is the ownership inversion already decided against, still open for columns.\n\n⚠️ TWO PARTS. (A) the identity fix below, and (B) a new action Antonio asked for on 2026-08-24 — move the current pane to a NEW column. They ship together because they are the same gesture: when the column pick is up you are choosing a destination, and \"a column that does not exist yet\" is one of the destinations.\n\n═══════════ PART A — the column owns its identity ═══════════\n\nTHE RULE, ALREADY SETTLED\nP082(F003)/T447: \"WHOEVER OWNS THE THING DECLARES ITS IDENTITY; anything else displaying it is a view. A pane owns 'pane:7'. A sidebar row showing that pane is a second view of it, not the owner. Today that is inverted — the only declarer is a row inside the workspaces dock.\"\n\nThat was fixed FOR PANES by P094(F011)/T451 (done, verified on screen): the pane shell carries `.key(pane_key(id))`, `pane_key` was given ONE home in heca/src/chrome/mod.rs, and the sidebar row became a view of it. Columns never got the same treatment.\n\nWHAT HAPPENS\n`prefix+Ctrl+c` (`move_pane_to_column_pick` — rebound from prefix+Shift+c by T476) letters every column, and the letters appear ONLY on the sidebar's column groups. The columns you are looking at, in the scrolling area, get nothing — so the pick asks you to aim at a target visible only in a dock you may have collapsed.\n\nWHY — traced, not guessed\nLetters are offered BY KEY: heca/src/chrome/hint/letters.rs:80 makes `Offer::ByKey(column_key(ws, col))`, and `offer_hint_by_key` lands it on whatever widget carries that key. The only widget carrying it is the SIDEBAR's — heca/src/providers/workspaces/column_group.rs:71:\n\n    MarkerGroup::new().key(column_key(ws_idx, column.col_idx))\n\nNothing in the scrolling area declares it, so the letter has nowhere to go. It is not dropped by candidacy and not clipped — there is no target.\n\nThe handler's doc comment (heca/src/handlers.rs:995) says \"shown as a `KeyHint` over its **sidebar** column\", i.e. written to the pre-T447 model. That comment is wrong now and goes with the fix.\n\nWHAT TO BUILD\nThe same shape as T451, one level up: the thing that OWNS a column declares `column_key(..)` and what picking it means; the sidebar's `MarkerGroup` keeps showing the letter as a VIEW, exactly as the sidebar pane row does for a pane. Do not add a second lettering path for the content area — ⭐⭐ RULE ZERO and the DRY rule both forbid it, and T451 already proved the by-key offer reaches every view of one identity.\n\nAnswer BEFORE writing code, by tracing:\n- **Is there a column-level component in the scrolling area at all?** T451 had to BUILD `heca/src/chrome/pane/` because no pane component existed. If columns are the same, this task is \"the column becomes a component\", not \"add a key\". Check before scoping.\n- **Where does `column_key` live?** It is in heca/src/providers/workspaces/mod.rs today; if chrome/ needs it, it MOVES rather than being copied — that is what T451 had to do for `pane_key`.\n\n═══════════ PART B — move the current pane to a NEW column ═══════════\nAntonio, 2026-08-24: \"A new action to move the current pane to a new column.\"\n\nPRE-FLIGHT — it does not exist. Checked:\n- `SplitHorizontal` (\"split_horizontal\", prefix+Enter) — creates a NEW PANE in a new column. Does not move the pane you are on.\n- `MovePaneToColumn { col_idx }` (input.rs:197) — stacks the active pane into an EXISTING column.\n- `move_pane_left` / `move_pane_right` (prefix+Ctrl+[ / ]) — walk between EXISTING columns.\nNothing extracts the current pane into a column of its own. The nearest neighbours are `SplitHorizontal` for \"make a column here\" and `MovePaneToColumn` for \"put this pane in that column\"; the new action is their intersection and should read like both.\n\nWHAT TO BUILD — the full § \"Adding New Actions\" checklist, all 11 steps, not a shortcut:\n1. A `WmAction` variant in heca/src/input.rs.\n2. `action_from_name()` — the bare name says everything (it acts on the focused pane and needs no\n   target), so it belongs there, unlike the *_pick actions.\n3. `action_priority()` — explicit arm, no catch-all.\n4. Handler in heca/src/handlers.rs. It must NOT compute geometry: the column insert lives in\n   heca-core/src/layout, the same way every other structural action does.\n5. `build_registry()` in heca/src/app/registry.rs.\n6. A default binding in keybindings.default.toml — an action with no default is the exact bug T476\n   just fixed. Pick it beside the neighbours it reads like (the split and move-pane families).\n7. Descriptor in `ActionRegistry::ALL` with declared `args` (`args: &[]` if it takes none — the\n   field has no default, so the question cannot be skipped).\n8. `action_policy()` in heca/src/app/interaction.rs — the match is exhaustive so it will not compile\n   until classified. It restructures the tiled layout, so `TiledOnly` is the likely arm; confirm\n   against the table rather than assuming.\n9. RPC parser support in heca/src/rpc.rs.\n10. README.md key table + keybindings.default.toml comment.\n11. Reachable from mouse/UI, keyboard and RPC — not trapped behind one surface.\n\nSettle with Antonio:\n- **Where does the new column go** — immediately right of the current one (like split_horizontal),\n  or at the end of the strip?\n- **Does it appear as a target in the `prefix+Ctrl+c` pick** — a \"new column\" letter alongside the\n  existing ones? That is the reason A and B are one task. If yes, it needs somewhere to draw that\n  letter, which Part A is what makes possible.\n- **What happens to a pane that is alone in its column** — the move is a no-op, or refused with the\n  feedback P082(F003)/T475 is about?\n\n═══════════ ORDER — READ THIS ═══════════\n⚠️ **P082(F003)/T458 changes what `column_key` IS.** It replaces the positional `column_key(ws_idx, col_idx)` → \"col:0:2\" with one built from the `ColumnId` that already exists in heca-core, because a split renumbers every column after it and resets everything keyed on the old spelling. Declaring the positional key in a second place first means threading the id change through two declarers instead of one. Settle with Antonio whether T458 lands first, or the two are done together.\n\n═══════════ VERIFICATION ═══════════\nRendering. Green tests do not show where a letter is, and every defect in T451 was found by eye against a green suite. Antonio drives:\n- `prefix+Ctrl+c` with two or more columns letters the scrolling area AND the sidebar; the typed letter moves the active pane into that column; the letters withdraw together; check with the sidebar shown and hidden.\n- Watch for the same-letter-drawn-twice question — correct if the two are one target seen in two places (as a pane and its sidebar row already are), but confirm by eye and check the identity rule does not warn about a duplicate key.\n- Part B: the new action moves the focused pane out into its own column, the strip re-lays out, and the pane keeps its letter across the move (which is what T458 is about — if it does not, that is T458 and not a regression here).",
-      "descriptionUpdatedAt": "2026-08-24T14:58:55.536Z",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
+      "status": "done",
+      "description": "⚠️ THIS TASK NOW CARRIES TWO BODIES OF WORK. The authoring-API section immediately below is what is being done FIRST (Antonio, 2026-09-11); the column-identity work it was opened for — Parts A and B — starts further down and is unstarted.\n\n⚠️ WHAT LANDED 2026-09-14/15 IS IN THIS TASK'S **NOTES**, and in full in\n`.planner/docs/t474-library-capabilities-2026-09-15.md`. Four library capabilities beyond the\nchecklist: a space is one property; `.accent(Color)` overrides the accent for a widget and its\nsubtree; a container's letter no longer depends on how many children it holds; an exit animation now\nends. **Read the notes before Part A** — the second of those removed the blocker Part A reverted on\ntwice, and the trap list below is written as if it were still there.\n\n═══════════ THE AUTHORING API — library-wide, and the current work ═══════════\n\nWHY NOW, AND NOT LATER. P094(F011)'s next tasks (T449 Terminal-as-a-component, T450 the header) are NEW code. If the API lands first they get written right once; if it does not, they get written in the spellings being deleted and then swept. That is the whole reason this jumped the queue — it is not needed by Parts A/B and does not block them.\n\nTHE ORDER. Checklist items 1–6 are ADDITIVE to callers — `impl Into<..>`, `.child` taking a box, `.border_style` beside the existing builders, one spacing builder taking either kind — so nothing breaks and no call site is forced to change. Item 7 (the sweep) goes last and in its own commits, because a mechanical change across hundreds of sites mixed into a design commit is a diff nobody can review.\n\n⚠️ THIS DESCRIPTION IS THE PLAN; THE CHECKLIST IS THE STATE. They disagreed once — this text said the wire must move while the code deliberately had not moved it — because one was updated and the other was not. Trust the checklist and the commits; correct this text when they diverge.\n\nTHE DECISIONS, with the reasoning and the plugin impact:\n\n- SIZES — DONE (a73034e). `Length` already read `\"200px\"` / `\"100%\"` / `\"auto\"` and a bare number — its serde impl does exactly that — but `.width()` took `Length` by value, so none of it reached a call site and `Length::Px/Percent` is written by hand hundreds of times. The six sizing builders take `impl Into<Length>`; `Length::FULL/HALF/THIRD/QUARTER` are the named fractions. NO WIRE CHANGE: the described side already speaks these spellings, so this is the native side catching up.\n  ⚠️ `Percent` is a FRACTION 0.0..=1.0, not 0-100. Half is `Percent(0.5)`. Renamed from `Pct` because the abbreviation hid the question.\n  ⚠️ Unset ALREADY stretches, like CSS — so `.width(Length::FULL)` on a child that fills says nothing. Deleting those is a JUDGEMENT per call site (it depends on the parent), not part of the sweep, and Antonio drives it.\n\n- CHILDREN — DONE (69e8e05). `Box<dyn Component>` is not itself `Component`, which is the only reason sixteen `*_boxed` twins existed. `.child(..)` takes `impl IntoComponent` covering both and they all went AT ONCE — one widget at a time is how a library ends up half-converted. Native-only: `child_boxed` was realize's own seam and had no described name.\n\n- BORDER STYLE — DONE (350e0d8). `PaneFrame`'s three modes were all about the border — none, a continuous line, corner brackets — so the builder is named for what it is. `.border_style(..)` and NOT `.border(..)`, because `StyleExt::border(Color, width)` already exists; CSS separates `border-style` from colour and width for the same reason. It takes the theme's own `FrameStyle`, which the config's `BorderStyle` converts into — so `PaneFrame` was a THIRD copy of one vocabulary and is deleted, and `chrome::apply_pane_frame` with it. `Pane` is not a `WidgetKind`, so nothing on the wire changed.\n\n- SPACING — DONE. Native half in dbbab0d; the rest on 2026-09-14. `.gap(f32)` and `.gap_spacing(Spacing)` wrote to two different fields, and `.padding(px)` sat beside `.pad_all/.pad_x/.pad_y(Spacing)` — two paths over one property, in the library itself. The counts show what that cost: `.gap` 112 uses against `.gap_spacing` 8, and `.padding` 19 against the three token builders' 11, while the docs said PREFER THE TOKEN. Advice loses to whichever name is shorter.\n  `.gap` / `.padding` / `.padding_x` / `.padding_y` / the four per-side paddings / `.margin` / `.margin_x` / `.margin_y` all take a number, a `Spacing` step, or a string (`\"8px\"` / `\"sm\"`) through `style::Space`. The twins are deleted.\n  ⚠️ MARGIN IS DONE TOO (Antonio, 2026-09-14). It had no token twin to merge, so it was skipped at first; he decided it should speak a space like the other two rather than leave one of the three answering a different question.\n  ⚠️ THE AUTHORED STEP NOW SURVIVES LAYOUT. The old code resolved `gap_spacing`/`pad_spacing_*` into the px fields on every pass, which destroyed the authored value — a font, size-variant or zoom change then had nothing left to re-resolve. Pixels are produced only where the font is known (`Space::resolve`, the four padding-cascade accessors, `to_taffy`), and the rounding-to-whole-pixels rule moved there with it.\n\n- THE WIRE — DONE (Antonio decided 2026-09-14). One name, every spelling: `\"gap\": 8` and `\"gap\": \"sm\"` both land, and so does `\"padding\": \"md\"`. The retired names — `gap_spacing`, `pad_spacing_x`, `pad_spacing_y` — are still READ, so no existing tree breaks; nothing writes them any more.\n  HOW, and why there was only ever one shape: the described vocabulary IS the layout field list (docs/plugins.md § 8, \"Layout properties are read from the layout type itself — no list in the app\"). A property is accepted when its value fits that field's TYPE. So the fields themselves hold a `Space`, exactly as `width` holds a `Length` and has always read `\"50%\"`. No name table was added and none should be.\n  The guard that asserted a string on `\"padding\"` never parses now says what is true: a step name lands, nonsense still degrades to nothing.\n  ⚠️ The retired names are mapped in ONE place, in the merge that already resolves property names. That map is the cost of renaming a described field, and it should stay short.\n  ⚠️ A guard on the SDK side pins the property name a builder writes. Without it nothing can catch the builder emitting the retired name, because the retired name still works — that guard passed with its own fix deleted until it was rewritten.\n\nCONTAINERS, while touching this. A component composes whatever it needs — Flex, Grid, Surface, ScrollRegion, nested to any depth, picked per case. What is never right, whichever container is chosen, is a PARENT THAT COUNTS ITS CHILDREN to tell them apart: the pane holds `[header, content]` and the host asks \"does it have two children?\" to decide whether there is a header, so two things in the body make the first look like one. Documented in docs/widgets.md → Grid and Flex.\n  ⚠️ The picker was doing exactly this and was fixed 2026-09-15 — see the notes. It decided \"this node is a mere wrapper\" by counting children, so a container's letter appeared and vanished with the number of things inside it.\n\nNAMING. Never name a UI box `Column` — `Column` already means a column of panes in heca-core. That convention must be written in docs/widgets.md and AGENTS.md, not only in a phase description, because the obvious name for a vertical box is `Column` and the reason it is taken has to sit in front of whoever reaches for it.\n\nGATES. `./scripts/lint-changed.sh test`, then `./scripts/lint-changed.sh`. Never `--workspace`. Grep that output for `warning:` as well as `error` — a warning was missed by grepping for errors only. Per-file rustfmt count must not rise; a longer name pushes lines over the limit, which happened six times across this work. Sabotage every new guard: across this work three passed with their own fix deleted, and one did not exist until a sabotage passed.\n\n═══════════ PART A — the column owns its identity (UNSTARTED) ═══════════\n\nFound by Antonio driving T438, 2026-08-24: \"prefix+shift+c works but show letters only in the sidebar. not in the scrolling area. not sure this is what we deciced.\" It is not. It is the ownership inversion already decided against, still open for columns.\n\nTHE RULE, ALREADY SETTLED — P082(F003)/T447: \"WHOEVER OWNS THE THING DECLARES ITS IDENTITY; anything else displaying it is a view. A pane owns 'pane:7'. A sidebar row showing that pane is a second view of it, not the owner.\"\n\nThat was fixed FOR PANES by P094(F011)/T451: the pane shell carries `.key(pane_key(id))`, `pane_key` was given ONE home in heca/src/chrome/mod.rs, and the sidebar row became a view of it.\n\nSTATUS — HALF LANDED. `heca/src/chrome/column/` exists: the column in the scrolling area owns `col:<id>`, declares what picking it means, and wears its letter (6ab3058, 9bd6e8d, 518d4ba). What remains is THE COLUMN BECOMING THE PARENT OF ITS PANES — chosen over a sibling shell because a pane should move between containers like a div, with sticky columns and sticky panes later.\n\n⚠️ THE PARENT MOVE WAS TRIED ONCE AND REVERTED. It was done as one lump — ownership + sizing + placement + painting + focus — in the one part of the app no test can see; 1765 tests stayed green through every defect. FOUR TRAPS:\n1. Flex stacking the panes DROPS THE GAP between them, so every pane below the first is drawn higher than its terminal content and its header sits over the text. The WM owns pane geometry: place children at the slots `columns_with_positions` gives.\n2. Moving placement to the column skips the per-frame `shell::focus_state_to` write, so THE ACTIVE PANE LOSES ITS HIGHLIGHT. Nothing else writes it.\n3. A pane's key sits on the `Pane` INSIDE its `KeyHint` wrapper, so a naive `base().key` lookup on the column's child finds nothing — every tiled pane looks unbuilt and is REBUILT EVERY FRAME (100% CPU idle). Resolve through the wrapper.\n   ⚠️ 2026-09-14: this wrapper is gone from the SIDEBAR's rows — a `DockFrame`, a `MarkerGroup` and a `Row` are widgets and now declare their own pick — but the PANE shell is still `KeyHint::new(pane)`, so the trap stands here.\n4. ✅ **TRAP 4 IS GONE (2026-09-15).** It read: panes are painted individually under a per-pane theme, so a column painting its children either flattens them to one accent or double-paints them. The cause was that a pane re-tinted its contents by being painted under a COPY OF THE THEME with the accent swapped — which is what forced one paint call per pane, and therefore what stopped any container from painting its own children. A pane publishes its hue on itself now (`.accent`), so painting is the same walk for every widget and a column may own and paint its panes. See the notes and `.planner/docs/t474-library-capabilities-2026-09-15.md` § 2.\n\n⚠️ OWNERSHIP AND PAINTING CANNOT BE SEPARATED — the column's `paint_child` walks its children, so the moment panes are children they are painted twice. A first attempt at \"ownership only, painting unchanged\" was wrong for this reason, and its replacement — a host lookup function `pane::shell(state, id)` — was a registry by another name and was reverted too. With trap 4 gone this is no longer a blocker but it is still the shape of the work: ownership and painting move together, in steps Antonio drives one at a time (four commits after the first revert, each verified before the next).\n\nAlso asked for, not started: a \"new column\" PLACEHOLDER — while the column pick is open, a slim empty slot right of the current column wearing its own letter, gone when the pick closes. The same affordance a drag insertion marker needs later; `move_pane_to_new_column` already exists to run it.\n\n═══════════ PART B — move the current pane to a NEW column (DONE) ═══════════\nAntonio, 2026-08-24: \"A new action to move the current pane to a new column.\"\n\nLanded in 10bcdf8 as `move_pane_to_new_column` on `prefix+Shift+Enter`, with `act_refusal` for a key that cannot act. Decided while building it: a new column goes RIGHT OF THE CURRENT ONE, not at the end — \"you keep your place in the strip\"; and a pane alone in its column is NOT OFFERED a new column at all, rather than refused afterwards, the same rule that excludes the current column from the pick.\n\n═══════════ VERIFICATION ═══════════\nThe authoring-API work is mechanical and test-covered: green tests, no newly unformatted line, and every guard run red against its own bug. Nothing should change on screen, which is why none of it is visually verified.\n\nVerified on screen by Antonio 2026-09-14/15: panes look unchanged after the accent move; the workspaces dock's letter is consistent at one, two and three workspaces and no longer appears in `prefix+/`. NOT yet verified: the exposé no longer being lettered after it is closed.\n\nParts A/B are RENDERING. Green tests do not show where a letter is, and every defect in T451 was found by eye against a green suite. Antonio drives:\n- `prefix+Ctrl+c` with two or more columns letters the scrolling area AND the sidebar; the typed letter moves the active pane into that column; the letters withdraw together; check with the sidebar shown and hidden.\n- Watch for the same-letter-drawn-twice question — correct if the two are one target seen in two places, but confirm by eye.\n- The parent move: panes keep their gaps, the active pane keeps its highlight, nothing rebuilds every frame (watch idle CPU), and no pane is painted twice.\n\n⚠️ 45 commits sit on `feat/hint-collapses-to-the-tree` and are NOT PUSHED, plus a large uncommitted working tree. Pushing was never discussed; ask before doing it.\n\n---\n**Completion summary:**\nThe authoring-API half is COMPLETE: checklist 8 of 8. Sizes, children, border style, spacing (native and wire), the sweep and the docs. Four library capabilities landed with it — a space is one property, .accent overrides the accent for a widget and its subtree, the picker stopped counting children to decide what a node is, and an exit animation now ends. The column parent move, which this task was opened for, is still unstarted — but trap 4 is gone, because .accent removed the per-pane theme swap that forced one paint call per pane.\n\n**Verification:**\n1825 tests pass; clippy clean at the one pre-existing toast/stack.rs warning; no file left worse formatted than HEAD. Every new guard run red against its own bug by sabotage — except a_card_is_one_pick_target_not_two, which passes but could not be falsified and should be treated as unproven. Verified on screen by Antonio: panes unchanged after the accent move; the dock's letter consistent at one, two and three workspaces and absent from prefix+/; the exposé no longer lettered once closed. NOT yet checked on screen: one letter per card under the exposé's own s picker.\n\n**Remaining or unverified:**\nThe column parent move (three traps left). Six KeyHint wrappers still in the app, candidates for the same fix the exposé card got. Per-widget pickable defaults, untouched. The single dock letter under prefix+Shift+e when two mounts exist. The layer record's second visible flag, still unsettled after an animated close.\n\n**Files touched:**\n- heca-grid-ui/src/style.rs\n- heca-grid-ui/src/builders.rs\n- heca-grid-ui/src/component.rs\n- heca-grid-ui/src/layout.rs\n- heca-grid-ui/src/animation/presence.rs\n- heca-grid-ui/src/hint/collect.rs\n- heca-grid-ui/src/hint/offer.rs\n- heca-grid-ui/src/hint/mod.rs\n- heca-grid-ui/src/hint/tests.rs\n- heca-grid-ui/src/widgets/key_hint_group.rs\n- heca-grid-ui/tests/phase_a.rs\n- heca-view/src/lib.rs\n- heca-view/src/build.rs\n- heca-view-realize/src/lib.rs\n- heca/src/chrome/pane/shell.rs\n- heca/src/chrome/scene.rs\n- heca/src/chrome/mod.rs\n- heca/src/chrome/expose/pane_card.rs\n- heca/src/app/terminal_render.rs\n- heca/src/app/render.rs\n- docs/widgets.md\n- docs/plugins.md\n- docs/hint-architecture.md\n\n---\n**Completion summary:**\nDONE 2026-09-23, every part confirmed on screen by Antonio.\n\n═══ WHAT SHIPPED ═══\n\n**The authoring API** (checklist 8/8, done 2026-09-14/15): sizes, children, border style, spacing native and on the wire, the call-site sweep, the docs. Four library capabilities came with it — a space is one property, `.accent` overrides the accent for a widget and its subtree, the picker stopped counting children to decide what a node is, an exit animation now ends.\n\n**Part B** (done earlier): `move_pane_to_new_column` on `prefix+Shift+Enter`.\n\n**Part A — the column holds its panes** (ca9ea2b). A pane is a child of its column, placed with `at_rect` at the rect the layout engine gave it, so the space the WM leaves between panes survives; stacking them would close it and draw each pane over its own text. Children are reconciled, so a pane still there keeps its widget — its letter, a gesture in flight, an animation. `sync_panes` keeps only floating panes, which belong to no column. One place says where a pane's tree lives: `chrome::pane_roots` for the walks, `hint_surface_root` for a surface.\n\n**Naming** (ca9ea2b). A key says WHICH THING, so one thing has one name wherever it is drawn: the pane in the scrolling area, the sidebar row and the exposé card are three views of one pane and wear one letter between them. A control is `pane:7-zoom`, not `zoom`. `target_identity` stops prefixing by the tree a target was found in; that prefix remains only for a widget with no key.\n\n**The new-column offer** (a243f307), the last piece of Part A. A slim lettered slot right of the column the picked pane is in, gone when the pick closes. A destination is named rather than signalled by a magic id. It comes last so no existing letter moves. A pane alone in its column is not offered one — refused before the letter, not after.\n\n**Carried out of the leftovers, all confirmed:** a placement is named and a clash warns (4f1661b1); `prefix_timeout_ms` is configurable and its deadline is booked (e24e3579); a warning fails the lint gate (28c0cc67).\n\n═══ SUPPORTING WORK, IN ITS OWN COMMITS ═══\nKeyed child reconciliation in the library (1e9775d) — `ToastStack` had written it by hand and the column needed the same. A derived name counts the named things, not what is inside them (dcbd6fb) — three identical rows were `×`, `×[2]`, `×[4]`, and adding a label inside the first renamed the other two. The dock caps and scrolls (af03262). Frame requests coalesce (a2f3326). The workspace formatted (7231e2db).\n\n═══ VERIFICATION ═══\n1883 tests, clippy clean, formatting clean, all three gates green — and the gate now fails on a warning rather than printing it.\n\nConfirmed on screen by Antonio: panes keep their gaps; the active pane keeps its highlight; `prefix+/` letters the panes; `prefix+Ctrl+c` letters the columns and the typed letter moves the pane; a pane shows the same letter in the sidebar and the scrolling area while zoom/float/close differ per pane; the new-column slot appears and works; `prefix+Shift+e` letters all three dock placements and each focuses its own; idle CPU back to normal.\n\nEvery guard was broken on purpose and seen to fail before being put back.\n\n═══ NOT DONE, AND WHY ═══\n**Per-widget pickable defaults.** No symptom behind it, and it reverses a settled rule: `hint/collect.rs:111` says being pickable is NOT opt-in, because requiring a declaration made the picker show a curated handful and feel not worth having. Left alone deliberately.\n\n⚠️ THE HANDOFF'S CPU HYPOTHESIS WAS WRONG — do not re-derive it. It said a layout pass that never settles. Measuring showed 0 frames drawn while spinning, so nothing was laying out. The cause was every widget posting its own frame request; see the notes.\n\n═══ FILES ═══\nheca/src/chrome/{column/*, pane/*, mod.rs, scene.rs, host.rs, identity.rs, focus.rs, pane_header.rs, hint/*}, heca/src/app/{lifecycle.rs, input.rs, selection.rs, startup.rs}, heca/src/{app_state.rs, handlers.rs}, heca-grid-ui/src/{reconcile.rs, nav.rs, builders.rs, layout.rs, style.rs, component.rs, widgets/dock_frame.rs}, heca-config/src/keys.rs, scripts/lint-changed.sh, keybindings.default.toml, docs/keybindings.md, README.md, AGENTS.md.",
+      "descriptionUpdatedAt": "2026-09-23T08:50:09.778Z",
+      "notes": "WHAT LANDED 2026-09-14/15 — full detail in .planner/docs/t474-library-capabilities-2026-09-15.md (read it; this is the index).\n\nFour library capabilities, each found by Antonio driving the app, each fixing a rule that sat in the wrong place:\n\n1. A SPACE IS ONE PROPERTY (C5/C6, checklist 8/8). gap/padding/margin take a number, a Spacing step or a string through style::Space, one parser shared with serde; the described side got it free because the vocabulary IS the layout field list. Retired names still read, mapped in one place. The authored step now survives layout — it used to be overwritten by its own resolved pixels every pass.\n\n2. .accent(Color) — override the accent for a widget AND everything inside it. Theme first, then an ancestor's, then the widget's own. It exists because a pane re-tinted its contents under a COPY OF THE THEME, which forces one paint call per pane and is exactly what blocked the column parent move. Verified on screen: panes unchanged.\n\n3. A CONTAINER'S LETTER NO LONGER DEPENDS ON HOW MANY CHILDREN IT HOLDS. The picker decided \"wrapper\" by counting children — the forbidden pattern — so the workspaces dock wore a letter with two workspaces and none with one. Base::transparent replaces the count. The dock's own letter is now scoped to the dock pick. Scoping it broke that pick, which forced the real fix: a scope governs COLLECTION, naming a target outright does not. Verified on screen at one, two and three workspaces.\n\n4. AN EXIT ANIMATION NOW ENDS. close() left a surface visible while its exit played and nothing took it down, so the exposé kept being offered letters after being shut. Presence::take_finished_exit reports the one frame it ends. VERIFIED ON SCREEN: the exposé is no longer lettered once closed. A second copy of the same bug remains in LayerRegistry::hide (the layer RECORD's visible is never settled) — two visibilities for one surface is the underlying smell.\n\nVERIFIED ON SCREEN BY ANTONIO 2026-09-15: ONE letter per card under the exposé's own picker (prefix+Tab to open, then s), after the KeyHint wrapper was removed from PaneCard. Before the fix there were two — one from the wrapper, one from the Row inside it. Note the guard a_card_is_one_pick_target_not_two still could not be falsified by sabotage: the real protection is that PaneCard::build returns Row, so the compiler rejects the wrapper.\n\nOPEN, reported 2026-09-15, not traced: prefix+Shift+e shows ONE letter though the workspaces dock is mounted in both sidebars and dock_candidates builds one per mount. And the dock pick's keycap is tinted warning — the same tone a workspace's own peek letter uses, so two different acts read identically.\n\n═══ 2026-09-21 — SIDEBAR VERIFIED, DOCKS CAPPED, AND THE CPU CAUSE FOUND ═══\n\nVerified on screen by Antonio: the left sidebar is right. Two docks, full width, half the height each. That closes the three uncommitted layout fixes (share as a property, Track::Fr as minmax(0,1fr), a grid filling the axis nobody templated).\n\nDOCKS NOW CAP AND SCROLL. DockFrame was a hand-stacked flex column, so its body sized to its rows: 914px of body inside a 450px frame, rows running off the bottom, and its own scroll area handed more height than it held, so it had nothing to scroll. It declares auto 1fr now — title at its height, body takes the rest. Measured 914 → 404 in a 450 frame, content 900 in 404. Guard: heca-grid-ui/tests/dock_body.rs, red when the fraction is made auto. This is T517's DockFrame half, arrangement only; deleting DockFrame::header(..) is still T517's and untouched.\n\nTHE 100% CPU CAUSE — FOUND, FIXED, NOT TRACKED AS ITS OWN TASK (Antonio, 2026-09-21).\nEvery widget that changes anything calls heca_grid_ui::request_frame, through mark_needs_paint and mark_needs_layout. Each call reached the host, and the host's hook posts a winit event — so the app woke once per WIDGET, not once per frame. Measured on an idle window: 101, 133, 176 and 185 wake-ups in a single second to draw 3 to 15 frames. request_frame's own doc already said the host coalesces; nothing did. Fixed in the library: one ask reaches the host per turn of the loop, re-armed by frame_served() which the loop calls once per pass. Measured after: 1 to 8 events a second. CPU went from pegged to 1–20%.\n\n⚠️ THE HANDOFF'S HYPOTHESIS WAS WRONG — do not re-derive it. It said a layout pass that never settles. The instrument showed 0 frames drawn while spinning, so nothing was laying out or painting. A second guess (a stuck timer deadline) was also wrong: no timer was ever armed. Only measuring found it.\n\nTHE INSTRUMENT, keep it: HECA_LOG_FRAMES=1, debug-only, heca/src/app/frame_reasons.rs. Prints once a second which reasons asked for a frame, which source armed the wake timer, and which events came through the loop's door. needs_frame was a ten-term boolean chain and is now named fields, which is why the question became answerable at all — the same defect T515 already fixed for the wake side one line below.\n\nSTILL OPEN: about 90 idle wakes a second right after activity, no events, no timer, nothing drawn. Smaller than what was fixed and unmeasured — the window-event counter was added but has not been run yet. Likeliest remaining path to the slow climb.\n\nSTATE: 1854 tests pass; clippy clean at the one pre-existing toast/stack.rs warning; nothing left worse formatted. NOTHING COMMITTED, HEAD 5cbc5d6 on feat/hint-collapses-to-the-tree.",
+      "statusLog": [
+        {
+          "id": "c1274274-47c6-4aaf-84d0-b1d43d4f0225-check-001-planned-in-progress",
+          "date": "2026-09-11T07:28:41.221Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "05c2e548-f2f2-4e16-b575-885286c09094",
+          "date": "2026-09-11T14:13:19.932Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Antonio drove prefix+/ and found the sidebar's column groups wearing green letters that do nothing useful — a column is a DESTINATION for prefix+Ctrl+c, not a global pick target. The one-line fix (hintable(false)) is wrong in a known way: hintable gates every COLLECTED picker, so it would also hide the column from a plugin's own KeyHintGroup picker, and it says nothing about which pick a target belongs to. T461 is the designed mechanism for exactly this and is already written down; doing the real fix rather than landing a line we have already agreed to delete.\nWhat was being done: T474's authoring-API half. Checklist 4 of 7 done and committed: Length speaks every spelling with one shared parser and the six sizing builders take impl Into&lt;Length&gt; (a73034e), .child absorbs all sixteen *_boxed twins via IntoComponent (69e8e05), and Pane::border_style replaces .frame with PaneFrame deleted as a third copy of the theme's FrameStyle (350e0d8). Eleven new guards, each run red by sabotage. 1786 tests pass, clippy clean at the one pre-existing warning, no rustfmt count raised. Tree clean, 35 ahead of main, not pushed.\nResume location: P082(F003)/T474 checklist item C5 — the spacing merge. .gap / .padding / .margin take impl Into&lt;Spacing&gt;; gap_spacing and the pad_all/pad_x/pad_y twins delete.\nHow to resume: Read T474's description (the authoring-API section at the top) and its checklist. Counts measured 2026-09-11: .gap 112 uses against .gap_spacing 8, .padding 19 against the three token builders' 11 — the docs say prefer the token and the token is the one nobody reaches for, because it has a different name. C5 is the only step that moves the WIRE: \"gap\" and \"gap_spacing\" are BOTH described props in heca-view/src/build.rs, as are pad_all/pad_x/pad_y, so \"gap\" must accept a number or a token name with \"gap_spacing\" kept as an alias — merging the native builders alone leaves plugins on the old pair. Then C6, the 282-site Length sweep, in its own commits so the mechanical change is not mixed into the design ones, and C7 its docs. Gates: ./scripts/lint-changed.sh test then ./scripts/lint-changed.sh, never --workspace; per-file rustfmt count must not rise — a longer name pushed lines over the limit three times this session."
+        },
+        {
+          "id": "448203e2-24be-4565-b0f1-b38928700547",
+          "date": "2026-09-14T12:28:01.663Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from P082(F003)/T474 checklist item C5 — the spacing merge. .gap / .padding / .margin take impl Into&lt;Spacing&gt;; gap_spacing and the pad_all/pad_x/pad_y twins delete.. Read T474's description (the authoring-API section at the top) and its checklist. Counts measured 2026-09-11: .gap 112 uses against .gap_spacing 8, .padding 19 against the three token builders' 11 — the docs say prefer the token and the token is the one nobody reaches for, because it has a different name. C5 is the only step that moves the WIRE: \"gap\" and \"gap_spacing\" are BOTH described props in heca-view/src/build.rs, as are pad_all/pad_x/pad_y, so \"gap\" must accept a number or a token name with \"gap_spacing\" kept as an alias — merging the native builders alone leaves plugins on the old pair. Then C6, the 282-site Length sweep, in its own commits so the mechanical change is not mixed into the design ones, and C7 its docs. Gates: ./scripts/lint-changed.sh test then ./scripts/lint-changed.sh, never --workspace; per-file rustfmt count must not rise — a longer name pushed lines over the limit three times this session."
+        },
+        {
+          "id": "c1274274-47c6-4aaf-84d0-b1d43d4f0225-check-004-in-progress-done",
+          "date": "2026-09-23T08:50:09.772Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE 2026-09-23, every part confirmed on screen by Antonio.\n\n═══ WHAT SHIPPED ═══\n\n**The authoring API** (checklist 8/8, done 2026-09-14/15): sizes, children, border style, spacing native and on the wire, the call-site sweep, the docs. Four library capabilities came with it — a space is one property, `.accent` overrides the accent for a widget and its subtree, the picker stopped counting children to decide what a node is, an exit animation now ends.\n\n**Part B** (done earlier): `move_pane_to_new_column` on `prefix+Shift+Enter`.\n\n**Part A — the column holds its panes** (ca9ea2b). A pane is a child of its column, placed with `at_rect` at the rect the layout engine gave it, so the space the WM leaves between panes survives; stacking them would close it and draw each pane over its own text. Children are reconciled, so a pane still there keeps its widget — its letter, a gesture in flight, an animation. `sync_panes` keeps only floating panes, which belong to no column. One place says where a pane's tree lives: `chrome::pane_roots` for the walks, `hint_surface_root` for a surface.\n\n**Naming** (ca9ea2b). A key says WHICH THING, so one thing has one name wherever it is drawn: the pane in the scrolling area, the sidebar row and the exposé card are three views of one pane and wear one letter between them. A control is `pane:7-zoom`, not `zoom`. `target_identity` stops prefixing by the tree a target was found in; that prefix remains only for a widget with no key.\n\n**The new-column offer** (a243f307), the last piece of Part A. A slim lettered slot right of the column the picked pane is in, gone when the pick closes. A destination is named rather than signalled by a magic id. It comes last so no existing letter moves. A pane alone in its column is not offered one — refused before the letter, not after.\n\n**Carried out of the leftovers, all confirmed:** a placement is named and a clash warns (4f1661b1); `prefix_timeout_ms` is configurable and its deadline is booked (e24e3579); a warning fails the lint gate (28c0cc67).\n\n═══ SUPPORTING WORK, IN ITS OWN COMMITS ═══\nKeyed child reconciliation in the library (1e9775d) — `ToastStack` had written it by hand and the column needed the same. A derived name counts the named things, not what is inside them (dcbd6fb) — three identical rows were `×`, `×[2]`, `×[4]`, and adding a label inside the first renamed the other two. The dock caps and scrolls (af03262). Frame requests coalesce (a2f3326). The workspace formatted (7231e2db).\n\n═══ VERIFICATION ═══\n1883 tests, clippy clean, formatting clean, all three gates green — and the gate now fails on a warning rather than printing it.\n\nConfirmed on screen by Antonio: panes keep their gaps; the active pane keeps its highlight; `prefix+/` letters the panes; `prefix+Ctrl+c` letters the columns and the typed letter moves the pane; a pane shows the same letter in the sidebar and the scrolling area while zoom/float/close differ per pane; the new-column slot appears and works; `prefix+Shift+e` letters all three dock placements and each focuses its own; idle CPU back to normal.\n\nEvery guard was broken on purpose and seen to fail before being put back.\n\n═══ NOT DONE, AND WHY ═══\n**Per-widget pickable defaults.** No symptom behind it, and it reverses a settled rule: `hint/collect.rs:111` says being pickable is NOT opt-in, because requiring a declaration made the picker show a curated handful and feel not worth having. Left alone deliberately.\n\n⚠️ THE HANDOFF'S CPU HYPOTHESIS WAS WRONG — do not re-derive it. It said a layout pass that never settles. Measuring showed 0 frames drawn while spinning, so nothing was laying out. The cause was every widget posting its own frame request; see the notes.\n\n═══ FILES ═══\nheca/src/chrome/{column/*, pane/*, mod.rs, scene.rs, host.rs, identity.rs, focus.rs, pane_header.rs, hint/*}, heca/src/app/{lifecycle.rs, input.rs, selection.rs, startup.rs}, heca/src/{app_state.rs, handlers.rs}, heca-grid-ui/src/{reconcile.rs, nav.rs, builders.rs, layout.rs, style.rs, component.rs, widgets/dock_frame.rs}, heca-config/src/keys.rs, scripts/lint-changed.sh, keybindings.default.toml, docs/keybindings.md, README.md, AGENTS.md."
+        }
+      ],
+      "decisions": [
+        "A capability is one builder taking any spelling of its value — one parser, and the enum variant never written at a call site.",
+        "All sixteen *_boxed twins go at once; one widget at a time is how a library ends up half-converted.",
+        "PaneFrame was a third copy of the theme's FrameStyle and is deleted rather than renamed around.",
+        "Length::FULL/HALF/THIRD/QUARTER as constants rather than a Width enum, which reads wrong on a height.",
+        "Naming one kind of space clears the other, which two builders could not — setting both left the token winning silently at layout.",
+        "A space is one property: gap/padding/margin take a number, a step or a string through one parser shared with serde.",
+        "The wire moves with it, because the described vocabulary IS the layout field list — there is no name table to extend.",
+        "The accent override is named .accent, not .tone, so tone means only what hint_tone means: a declared meaning the theme colours.",
+        "A node says whether it is a transparent wrapper; the picker never counts children to decide what a node is.",
+        "A scope governs COLLECTION; naming a target outright is not a collection, so a target can leave prefix+/ without vanishing from the pick that owns it.",
+        "An exit's end is asked of the presence, never inferred from not-open-and-not-leaving, which is also true of a widget that was never up.",
+        "A widget says its own pick; KeyHint is only for a region that is not a widget you can put a builder on."
+      ],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "c1274274-47c6-4aaf-84d0-b1d43d4f0225-check-001-length-speaks-every-spelling-from-i32-f32-f64-px-from-str-200px-100-auto-plus-length-full-half-third-quarter-reuse-the-parser-length-s-serde-already-has-do-not-write-a-second",
+          "number": 1,
+          "title": "Length speaks every spelling: From<i32>/<f32>/<f64> = px, From<&str> = \"200px\"/\"100%\"/\"auto\", plus Length::FULL/HALF/THIRD/QUARTER. Reuse the parser Length's serde already has - do not write a second",
+          "checked": true
+        },
+        {
+          "id": "c1274274-47c6-4aaf-84d0-b1d43d4f0225-check-002-the-six-sizing-builders-width-height-min-max-of-both-take-impl-into-length-purely-additive-every-existing-length-px-8-0-still-compiles",
+          "number": 2,
+          "title": "The six sizing builders (width, height, min_/max_ of both) take impl Into<Length>. Purely additive: every existing Length::Px(8.0) still compiles",
+          "checked": true
+        },
+        {
+          "id": "c1274274-47c6-4aaf-84d0-b1d43d4f0225-check-003-child-absorbs-child-boxed-via-impl-intocomponent-all-sixteen-boxed-setters-go-together-not-one-widget-at-a-time",
+          "number": 3,
+          "title": ".child absorbs .child_boxed via impl IntoComponent - all sixteen *_boxed setters go together, not one widget at a time",
+          "checked": true
+        },
+        {
+          "id": "c1274274-47c6-4aaf-84d0-b1d43d4f0225-check-004-pane-border-style-framestyle-replaces-frame-paneframe-paneframe-deleted-as-a-third-copy-of-the-theme-s-own-framestyle-and-chrome-apply-pane-frame-with-it",
+          "number": 4,
+          "title": "Pane::border_style(FrameStyle) replaces .frame(PaneFrame); PaneFrame deleted as a third copy of the theme's own FrameStyle, and chrome::apply_pane_frame with it",
+          "checked": true
+        },
+        {
+          "id": "c1274274-47c6-4aaf-84d0-b1d43d4f0225-check-005-spacing-merges-natively-gap-padding-padding-x-padding-y-margin-take-a-number-a-spacing-step-or-a-string-via-style-space-gap-spacing-pad-all-pad-x-pad-y-deleted-margin-included-antonio-decided-2026-09-14-that-it-speaks-a-space-too-though-it-had-no-token-twin-to-merge",
+          "number": 5,
+          "title": "Spacing merges NATIVELY: .gap / .padding / .padding_x / .padding_y / .margin take a number, a Spacing step or a string via style::Space. gap_spacing, pad_all, pad_x, pad_y deleted. MARGIN INCLUDED - Antonio decided 2026-09-14 that it speaks a space too, though it had no token twin to merge",
+          "checked": true
+        },
+        {
+          "id": "c1274274-47c6-4aaf-84d0-b1d43d4f0225-check-006-the-wire-decided-by-antonio-2026-09-14-one-name-every-spelling-gap-8-and-gap-sm-both-work-and-the-retired-names-gap-spacing-pad-spacing-x-y-are-still-read-so-no-existing-tree-breaks-done-by-making-the-layout-settings-themselves-hold-a-space-because-the-described-vocabulary-is-the-layout-field-list-plugins-md-section-8-there-is-no-name-table-to-extend-the-guard-at-heca-view-realize-that-asserted-a-string-on-padding-never-parses-now-says-what-is-actually-true-a-step-name-lands-nonsense-still-does-not",
+          "number": 6,
+          "title": "THE WIRE - DECIDED by Antonio 2026-09-14: one name, every spelling. \"gap\": 8 and \"gap\": \"sm\" both work, and the retired names (gap_spacing, pad_spacing_x/y) are still READ so no existing tree breaks. Done by making the layout settings themselves hold a Space, because the described vocabulary IS the layout field list (plugins.md section 8) - there is no name table to extend. The guard at heca-view-realize that asserted a string on \"padding\" never parses now says what is actually true: a step name lands, nonsense still does not",
+          "checked": true
+        },
+        {
+          "id": "c1274274-47c6-4aaf-84d0-b1d43d4f0225-check-007-sweep-the-hand-written-length-px-percent-call-sites-to-the-new-spellings-decided-by-antonio-2026-09-14-real-code-only-one-commit-per-crate-heca-grid-ui-then-heca-the-renderer-showcase-included-because-it-is-what-teaches-the-spellings-test-files-skipped-since-some-name-the-old-variant-deliberately-measured-2026-09-14-302-in-non-test-files-52-of-them-the-showcase-153-more-in-tests-455-total-across-58-files-the-earlier-282-is-stale",
+          "number": 7,
+          "title": "Sweep the hand-written Length::Px/Percent call sites to the new spellings. DECIDED by Antonio 2026-09-14: real code only, one commit per crate (heca-grid-ui, then heca), the renderer showcase included because it is what teaches the spellings; test files skipped, since some name the old variant deliberately. Measured 2026-09-14: 302 in non-test files (52 of them the showcase), 153 more in tests, 455 total across 58 files - the earlier 282 is stale",
+          "checked": true
+        },
+        {
+          "id": "c1274274-47c6-4aaf-84d0-b1d43d4f0225-check-008-document-the-new-spellings-in-docs-widgets-md-where-the-builders-are-listed-the-grid-rule-and-the-size-reference-are-already-there-and-in-docs-plugins-md-section-6-which-still-lists-only-sizes-as-taking-a-spelling",
+          "number": 8,
+          "title": "Document the new spellings in docs/widgets.md where the builders are listed (the Grid rule and the size reference are already there), and in docs/plugins.md section 6, which still lists only sizes as taking a spelling",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
-      "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseHistory": [
+        {
+          "id": "fa12a46c-69a2-477a-881d-ea9e0bf22879",
+          "reason": "Antonio drove prefix+/ and found the sidebar's column groups wearing green letters that do nothing useful — a column is a DESTINATION for prefix+Ctrl+c, not a global pick target. The one-line fix (hintable(false)) is wrong in a known way: hintable gates every COLLECTED picker, so it would also hide the column from a plugin's own KeyHintGroup picker, and it says nothing about which pick a target belongs to. T461 is the designed mechanism for exactly this and is already written down; doing the real fix rather than landing a line we have already agreed to delete.",
+          "whatWasBeingDone": "T474's authoring-API half. Checklist 4 of 7 done and committed: Length speaks every spelling with one shared parser and the six sizing builders take impl Into&lt;Length&gt; (a73034e), .child absorbs all sixteen *_boxed twins via IntoComponent (69e8e05), and Pane::border_style replaces .frame with PaneFrame deleted as a third copy of the theme's FrameStyle (350e0d8). Eleven new guards, each run red by sabotage. 1786 tests pass, clippy clean at the one pre-existing warning, no rustfmt count raised. Tree clean, 35 ahead of main, not pushed.",
+          "resumeLocation": "P082(F003)/T474 checklist item C5 — the spacing merge. .gap / .padding / .margin take impl Into&lt;Spacing&gt;; gap_spacing and the pad_all/pad_x/pad_y twins delete.",
+          "howToResume": "Read T474's description (the authoring-API section at the top) and its checklist. Counts measured 2026-09-11: .gap 112 uses against .gap_spacing 8, .padding 19 against the three token builders' 11 — the docs say prefer the token and the token is the one nobody reaches for, because it has a different name. C5 is the only step that moves the WIRE: \"gap\" and \"gap_spacing\" are BOTH described props in heca-view/src/build.rs, as are pad_all/pad_x/pad_y, so \"gap\" must accept a number or a token name with \"gap_spacing\" kept as an alias — merging the native builders alone leaves plugins on the old pair. Then C6, the 282-site Length sweep, in its own commits so the mechanical change is not mixed into the design ones, and C7 its docs. Gates: ./scripts/lint-changed.sh test then ./scripts/lint-changed.sh, never --workspace; per-file rustfmt count must not rise — a longer name pushed lines over the limit three times this session.",
+          "relatedTaskId": "5db4fb02-c198-4924-9cd9-f1b3cb8e70d8",
+          "pausedAt": "2026-09-11T14:13:19.932Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-09-11T07:28:41.221Z",
+      "completedAt": "2026-09-23T08:50:09.772Z",
       "createdAt": "2026-08-24T14:48:00.678Z",
-      "updatedAt": "2026-08-25T08:32:19.489Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-23T08:50:09.772Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:76ebd5d0-168a-4a97-9b9d-499545debce4",
+          "createdAt": "2026-09-21T15:48:34.857Z"
+        },
+        {
+          "sessionId": "mcp-process:8b24b106-84c9-4960-9cde-3b0cb31552b3",
+          "createdAt": "2026-09-14T12:28:01.544Z"
+        },
+        {
+          "sessionId": "mcp-process:a70b4e20-9380-4450-9aa5-4d6c767bb1aa",
+          "createdAt": "2026-09-11T07:28:40.989Z"
+        }
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "0c3f1d41-816d-4c18-9f57-bf595849bceb",
@@ -1688,11 +1860,28 @@
       "priority": 3,
       "shortName": "a-pick-with-no-candidates-dies",
       "title": "A pick with no candidates dies silently — the key looks broken",
-      "status": "planned",
-      "description": "Found by Antonio driving T438, 2026-08-24: \"prefix+g do nothing. what should it be?\" — with one workspace open. With two, it letters correctly, so the pick itself is sound.\n\nWHAT HAPPENS\n`prefix+g` is `move_pane_to_workspace_pick`. `collect_workspace_candidates` (`heca/src/app/selection.rs:73`) filters out the ACTIVE workspace — correct, you cannot move a pane where it already is. With a single workspace open that leaves an empty list, and `handle_move_pane_to_workspace_pick` (`heca/src/handlers.rs:979`) returns without entering the mode:\n\n    let Some(pane_id) = state.focused_pane else { return; };\n    let candidates = collect_workspace_candidates(&state.session);\n    if !candidates.is_empty() { … }        // ← nothing at all happens if it is empty\n\nNo prompt, no message, no flash. The key is indistinguishable from unbound, which is exactly how a user concludes a feature is broken.\n\nTHIS IS NOT ONE HANDLER'S BUG\nEvery pick handler has the same two silent exits — no focused pane, or no candidates:\n- `handle_move_column_to_workspace_pick` (handlers.rs:960)\n- `handle_move_pane_to_workspace_pick` (handlers.rs:979)\n- `handle_move_pane_to_column_pick` (handlers.rs:997)\nand the pane/swap/take picks have the same shape. Per the no-per-widget-copies rule, fixing one handler is the wrong move: N copies of a rule means the rule belongs one level up.\n\nWHERE IT SHOULD LIVE\nThe pick modes already share a vocabulary — `InputMode::pending_pick()` (`heca/src/app_state.rs:252`) maps each mode to its action and pulls the human prompt and label from the `ActionCatalog`, which is the single source of truth for action text. A refused pick should report through that same seam, so a plugin's pick gets the feedback heca's does with nothing written. Reach for the existing notification path (`ToastSpec` / the toast stack) rather than inventing a per-pick message channel.\n\nDecide with Antonio before building:\n- What a refused pick should DO — a toast, the existing prompt bar showing \"no other workspace\", or a brief flash on the thing that would have been the target. Do not guess; this is the visible half.\n- Whether \"no focused pane\" and \"no candidates\" read the same to the user, or want different words.\n\nVERIFY\nWith exactly one workspace: `prefix+g` says something instead of nothing. With two or more it letters as it does today — Antonio confirmed that path already works, so the fix must not disturb it. He drives the check.",
-      "descriptionUpdatedAt": "2026-08-24T14:48:16.036Z",
+      "status": "done",
+      "description": "Found by Antonio driving T438, 2026-08-24: \"prefix+g do nothing. what should it be?\" — with one workspace open. With two, it letters correctly, so the pick itself is sound.\n\nWHAT HAPPENS\n`prefix+g` is `move_pane_to_workspace_pick`. `collect_workspace_candidates` (`heca/src/app/selection.rs:73`) filters out the ACTIVE workspace — correct, you cannot move a pane where it already is. With a single workspace open that leaves an empty list, and `handle_move_pane_to_workspace_pick` (`heca/src/handlers.rs:979`) returns without entering the mode:\n\n    let Some(pane_id) = state.focused_pane else { return; };\n    let candidates = collect_workspace_candidates(&state.session);\n    if !candidates.is_empty() { … }        // ← nothing at all happens if it is empty\n\nNo prompt, no message, no flash. The key is indistinguishable from unbound, which is exactly how a user concludes a feature is broken.\n\nTHIS IS NOT ONE HANDLER'S BUG\nEvery pick handler has the same two silent exits — no focused pane, or no candidates:\n- `handle_move_column_to_workspace_pick` (handlers.rs:960)\n- `handle_move_pane_to_workspace_pick` (handlers.rs:979)\n- `handle_move_pane_to_column_pick` (handlers.rs:997)\nand the pane/swap/take picks have the same shape. Per the no-per-widget-copies rule, fixing one handler is the wrong move: N copies of a rule means the rule belongs one level up.\n\nWHERE IT SHOULD LIVE\nThe pick modes already share a vocabulary — `InputMode::pending_pick()` (`heca/src/app_state.rs:252`) maps each mode to its action and pulls the human prompt and label from the `ActionCatalog`, which is the single source of truth for action text. A refused pick should report through that same seam, so a plugin's pick gets the feedback heca's does with nothing written. Reach for the existing notification path (`ToastSpec` / the toast stack) rather than inventing a per-pick message channel.\n\nDecide with Antonio before building:\n- What a refused pick should DO — a toast, the existing prompt bar showing \"no other workspace\", or a brief flash on the thing that would have been the target. Do not guess; this is the visible half.\n- Whether \"no focused pane\" and \"no candidates\" read the same to the user, or want different words.\n\nVERIFY\nWith exactly one workspace: `prefix+g` says something instead of nothing. With two or more it letters as it does today — Antonio confirmed that path already works, so the fix must not disturb it. He drives the check.\n\n---\n**Completion summary:**\nDONE — Antonio drove it and confirmed both cases. NOT COMMITTED.\n\nTHE DEFECT\n`prefix+g` with one workspace open did nothing at all — no prompt, no message, no flash, which is indistinguishable from an unbound key. It was never one handler's bug: ELEVEN handlers each wrote `if !candidates.is_empty() { state.input_mode = ..; state.needs_redraw = true; }` for themselves, and the empty case fell off the end of every one.\n\nWHAT SHIPPED\n- heca/src/handlers.rs — one door, `begin_pick(state, mode)`. A handler hands over the mode it wants; there is no branch left for a caller to omit. All eleven call sites go through it.\n- heca/src/app_state.rs — `InputMode::pick_candidate_count()` (exhaustive, no wildcard, for the reason `awaits_pick_letter` is) and `PickKind::subject()`, the word a refusal needs and the one thing the ActionCatalog cannot know, because it describes what an action *does* rather than what it picks among.\n- The refusal reads `\"<action label> — there is no other <subject> to pick\"`, the label taken from the catalog so the bar names the act in the same words as the palette and the tooltip.\n\nWHERE IT SAYS IT — CHANGED AFTER ANTONIO SAW IT\nFirst built as a toast. He rejected that: *\"i don't want a toast for the one only pane in prefix+q. this can be a message to show in the bottom bar. less intrusive.\"* Right call — a key that could not do its thing is a reply to what you just pressed, not an event worth covering the work with an overlay.\n\nNow `AppState.status_note`, shown by `chrome_status` in the tail of the bottom bar **in place of** the mode's usual prompt (showing both would answer a question nobody asked), cleared at the top of `handle_keyboard_input` so it survives the press that set it and is gone the moment you do anything else. No timer and no wake to schedule — a stale line in a status bar costs nothing, which is the whole reason it is not a toast.\n\nA SECOND SILENT EXIT NOT FIXED: `let Some(pane_id) = state.focused_pane else { return; }` still returns without a word in three handlers. Different guard, not what Antonio hit, and left deliberately.\n\nVERIFICATION\n1616 tests pass, 0 failures. `./scripts/lint-changed.sh` exit 0 at the one pre-existing warning (heca-grid-ui toast/stack.rs) plus the third-party block v0.1.6 note. No file's rustfmt violation count raised.\n\nGuards, each run red against its own bug:\n- heca/tests/pick_refusal.rs — a SOURCE LINT: no handler may enter a pick mode by assigning `input_mode` itself, because that is the shape with nowhere to put the empty case. It caught an eleventh copy written inverted (`if candidates.is_empty() { return; }`) that the first pass missed — the lint earning its keep before it was even finished.\n- `a_pick_with_nothing_to_offer_still_counts_as_a_pick` / `a_mode_that_is_not_a_pick_has_no_count` — an empty pick answering `None` would be treated as \"not a pick\" and go back to failing silently.\n- `a_refused_pick_names_the_act_and_what_was_missing` / `a_pane_pick_says_pane`.\n\nA FOURTH GUARD WAS WRITTEN AND DELETED: `a_held_toast_deadline_books_nothing` restated another case and would have passed with the thing it named removed.\n\nDRIVEN BY ANTONIO: `prefix+q` with one pane and `prefix+g` with one workspace both put one line in the bottom bar; with two or more, both letter as before.\n\nFOLLOW-ON, FILED AS AN IDEA (I001): the bottom bar should be a styled widget with one door a plugin or component can speak through. `status_note` is a string on `AppState` — host-private, one message, last writer wins — so it is the plain version on purpose, and it goes when that door exists.",
+      "descriptionUpdatedAt": "2026-09-08T19:15:29.098Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "0c3f1d41-816d-4c18-9f57-bf595849bceb-check-001-planned-in-progress",
+          "date": "2026-09-08T13:36:47.441Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "0c3f1d41-816d-4c18-9f57-bf595849bceb-check-002-in-progress-done",
+          "date": "2026-09-08T19:15:29.095Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE — Antonio drove it and confirmed both cases. NOT COMMITTED.\n\nTHE DEFECT\n`prefix+g` with one workspace open did nothing at all — no prompt, no message, no flash, which is indistinguishable from an unbound key. It was never one handler's bug: ELEVEN handlers each wrote `if !candidates.is_empty() { state.input_mode = ..; state.needs_redraw = true; }` for themselves, and the empty case fell off the end of every one.\n\nWHAT SHIPPED\n- heca/src/handlers.rs — one door, `begin_pick(state, mode)`. A handler hands over the mode it wants; there is no branch left for a caller to omit. All eleven call sites go through it.\n- heca/src/app_state.rs — `InputMode::pick_candidate_count()` (exhaustive, no wildcard, for the reason `awaits_pick_letter` is) and `PickKind::subject()`, the word a refusal needs and the one thing the ActionCatalog cannot know, because it describes what an action *does* rather than what it picks among.\n- The refusal reads `\"<action label> — there is no other <subject> to pick\"`, the label taken from the catalog so the bar names the act in the same words as the palette and the tooltip.\n\nWHERE IT SAYS IT — CHANGED AFTER ANTONIO SAW IT\nFirst built as a toast. He rejected that: *\"i don't want a toast for the one only pane in prefix+q. this can be a message to show in the bottom bar. less intrusive.\"* Right call — a key that could not do its thing is a reply to what you just pressed, not an event worth covering the work with an overlay.\n\nNow `AppState.status_note`, shown by `chrome_status` in the tail of the bottom bar **in place of** the mode's usual prompt (showing both would answer a question nobody asked), cleared at the top of `handle_keyboard_input` so it survives the press that set it and is gone the moment you do anything else. No timer and no wake to schedule — a stale line in a status bar costs nothing, which is the whole reason it is not a toast.\n\nA SECOND SILENT EXIT NOT FIXED: `let Some(pane_id) = state.focused_pane else { return; }` still returns without a word in three handlers. Different guard, not what Antonio hit, and left deliberately.\n\nVERIFICATION\n1616 tests pass, 0 failures. `./scripts/lint-changed.sh` exit 0 at the one pre-existing warning (heca-grid-ui toast/stack.rs) plus the third-party block v0.1.6 note. No file's rustfmt violation count raised.\n\nGuards, each run red against its own bug:\n- heca/tests/pick_refusal.rs — a SOURCE LINT: no handler may enter a pick mode by assigning `input_mode` itself, because that is the shape with nowhere to put the empty case. It caught an eleventh copy written inverted (`if candidates.is_empty() { return; }`) that the first pass missed — the lint earning its keep before it was even finished.\n- `a_pick_with_nothing_to_offer_still_counts_as_a_pick` / `a_mode_that_is_not_a_pick_has_no_count` — an empty pick answering `None` would be treated as \"not a pick\" and go back to failing silently.\n- `a_refused_pick_names_the_act_and_what_was_missing` / `a_pane_pick_says_pane`.\n\nA FOURTH GUARD WAS WRITTEN AND DELETED: `a_held_toast_deadline_books_nothing` restated another case and would have passed with the thing it named removed.\n\nDRIVEN BY ANTONIO: `prefix+q` with one pane and `prefix+g` with one workspace both put one line in the bottom bar; with two or more, both letter as before.\n\nFOLLOW-ON, FILED AS AN IDEA (I001): the bottom bar should be a styled widget with one door a plugin or component can speak through. `status_note` is a string on `AppState` — host-private, one message, last writer wins — so it is the plain version on purpose, and it goes when that door exists."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -1700,11 +1889,17 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-08T13:36:47.441Z",
+      "completedAt": "2026-09-08T19:15:29.095Z",
       "createdAt": "2026-08-24T14:48:15.995Z",
-      "updatedAt": "2026-08-25T08:32:14.369Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-08T19:15:29.095Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:689b3f53-6000-4ff5-bdbf-863af99fa381",
+          "createdAt": "2026-09-08T13:36:47.326Z"
+        }
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "64022392-8de4-49ec-be3e-48a69e777b8f",
@@ -1747,7 +1942,8 @@
       "completedAt": "2026-08-24T14:55:44.193Z",
       "createdAt": "2026-08-24T14:54:29.149Z",
       "updatedAt": "2026-08-27T13:59:40.197Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "d8c9a847-6a82-42e4-b7bb-56183f81826e",
@@ -1757,23 +1953,83 @@
       "priority": 2,
       "shortName": "a-sidebar-pane-row-that-had-no",
       "title": "A sidebar pane row that had no cwd when it was built can never show one",
-      "status": "planned",
-      "description": "Found by Antonio driving T438, 2026-08-24 (screenshot): some sidebar pane rows show the folder icon + `~` path line, others show only `zsh` with nothing under it. Adjacent rows in the same column, same program.\n\nWHERE\nheca/src/providers/workspaces/pane_row.rs:224-259.\n\n    let cwd_path = runtime.as_ref().and_then(|rt| rt.cwd.clone());\n    let cwd_text  = cwd_path.as_deref().map(home_relative_path);\n    let cwd = crate::components::FolderLine { path: cwd_text.as_deref(), show: ws_state.pane_show_cwd(), .. };\n    let show_cwd = ws_state.pane_show_cwd() && cwd_text.is_some();\n    ...\n    if show_cwd {                      // ← the row is only ATTACHED when this is true at BUILD time\n        column = column.child(Flex::row()...child(cwd_row));\n    }\n\nHYPOTHESIS — not yet proved, instrument before changing anything\nThe file's own comment two lines above says the opposite of what the code does: \"the row's visibility follows `[settings] pane_show_cwd` and whether the pane has a cwd … a `cd` updates the path in place, and `pane_show_cwd` turns the line on and off the same way.\" The `FolderLine` does carry a `visible` signal for exactly that.\n\nBut the row is only added as a CHILD when `show_cwd` is true at build time. A pane whose runtime has no `cwd` yet is built without the row at all, and no signal can reveal a child that is not in the tree. It would then take a rebuild to appear — and if the rebuild key does not include the cwd, that rebuild never comes.\n\nThat matches the symptom exactly: whether a row has its path line depends on whether the cwd had arrived at the instant that row was built, which is why it looks arbitrary and differs between neighbours.\n\nINSTRUMENT FIRST (the rule that has paid off every time here — six wrong guesses in one day on the exposé, one round of tracing named it)\nLog, per pane, at build: `pane_id`, `runtime.is_some()`, `rt.cwd`, `show_cwd`, and whether the child was attached. Then watch a pane that is missing its line — does its `cwd` become `Some` later while `show_cwd` stayed false? That confirms it in one round. Do NOT change the attach condition before seeing this.\n\nIF CONFIRMED, THE FIX SHAPE\nAttach the row ALWAYS and let its `visible` signal decide — which is what the comment already describes and what `Visibility` is for. Then a cwd arriving later flips a signal instead of needing a rebuild, and `pane_show_cwd` keeps working the same way. Check the empty row costs no vertical space when hidden (`Visibility` folds it out of layout, but confirm on screen — an empty gap under half the rows is a worse bug than the one being fixed).\n\nVERIFY\nAntonio drives. Open panes, `cd` in one of them, and watch the line appear without the row being rebuilt. Check a freshly spawned pane gets its line as soon as the cwd is known, and that toggling `[settings] pane_show_cwd` still turns every line on and off.",
-      "descriptionUpdatedAt": "2026-08-24T15:03:37.909Z",
+      "status": "done",
+      "description": "Found by Antonio driving T438, 2026-08-24 (screenshot): some sidebar pane rows show the folder icon + `~` path line, others show only `zsh` with nothing under it. Adjacent rows in the same column, same program.\n\nWHERE\nheca/src/providers/workspaces/pane_row.rs:224-259.\n\n    let cwd_path = runtime.as_ref().and_then(|rt| rt.cwd.clone());\n    let cwd_text  = cwd_path.as_deref().map(home_relative_path);\n    let cwd = crate::components::FolderLine { path: cwd_text.as_deref(), show: ws_state.pane_show_cwd(), .. };\n    let show_cwd = ws_state.pane_show_cwd() && cwd_text.is_some();\n    ...\n    if show_cwd {                      // ← the row is only ATTACHED when this is true at BUILD time\n        column = column.child(Flex::row()...child(cwd_row));\n    }\n\nHYPOTHESIS — not yet proved, instrument before changing anything\nThe file's own comment two lines above says the opposite of what the code does: \"the row's visibility follows `[settings] pane_show_cwd` and whether the pane has a cwd … a `cd` updates the path in place, and `pane_show_cwd` turns the line on and off the same way.\" The `FolderLine` does carry a `visible` signal for exactly that.\n\nBut the row is only added as a CHILD when `show_cwd` is true at build time. A pane whose runtime has no `cwd` yet is built without the row at all, and no signal can reveal a child that is not in the tree. It would then take a rebuild to appear — and if the rebuild key does not include the cwd, that rebuild never comes.\n\nThat matches the symptom exactly: whether a row has its path line depends on whether the cwd had arrived at the instant that row was built, which is why it looks arbitrary and differs between neighbours.\n\nINSTRUMENT FIRST (the rule that has paid off every time here — six wrong guesses in one day on the exposé, one round of tracing named it)\nLog, per pane, at build: `pane_id`, `runtime.is_some()`, `rt.cwd`, `show_cwd`, and whether the child was attached. Then watch a pane that is missing its line — does its `cwd` become `Some` later while `show_cwd` stayed false? That confirms it in one round. Do NOT change the attach condition before seeing this.\n\nIF CONFIRMED, THE FIX SHAPE\nAttach the row ALWAYS and let its `visible` signal decide — which is what the comment already describes and what `Visibility` is for. Then a cwd arriving later flips a signal instead of needing a rebuild, and `pane_show_cwd` keeps working the same way. Check the empty row costs no vertical space when hidden (`Visibility` folds it out of layout, but confirm on screen — an empty gap under half the rows is a worse bug than the one being fixed).\n\nVERIFY\nAntonio drives. Open panes, `cd` in one of them, and watch the line appear without the row being rebuilt. Check a freshly spawned pane gets its line as soon as the cwd is known, and that toggling `[settings] pane_show_cwd` still turns every line on and off.\n\n---\n**Completion summary:**\nDONE — Antonio drove it and confirmed: \"works great\". NOT COMMITTED; the tree carries it uncommitted.\n\nTHE CAUSE, CONFIRMED (not the hypothesis being guessed at — reproduced red headlessly before a line was changed)\nThe hypothesis in this task was right. The sidebar pane card built a `Visibility` for its directory line, published that line's text and visibility signals, and then attached the line as a child ONLY when `pane_show_cwd && cwd.is_some()` at build time. A signal reveals a child; it cannot create one. `chrome_signature` carries no term for a pane's cwd, so the tree is never rebuilt when the shell reports one — whether a pane showed its path came down to whether the answer had arrived by the instant that row was built. Neighbouring rows, same column, same program, disagreed.\n\nTHE SECOND COPY, FOUND BY SWEEPING (not reported, not asked for)\nThe git line was written the same way — `Visibility::new(.., git.is_some())` and then `if info.git_branch.is_some() { attach }`. It only ever LOOKED correct because `chrome_signature` hashed \"does this pane have a branch\" for every tiled and floating pane, forcing the whole chrome tree to rebuild so the line got attached. That is the rule written twice: once in the card, once in a hash function in another file that nobody adding a metadata line would think to open. Nothing did the same for the directory, which is why one line worked and the other did not.\n\nWHAT SHIPPED\n- heca/src/providers/workspaces/pane_row.rs — both metadata lines are attached ALWAYS; each `Visibility` decides for itself. `show_cwd` deleted. The card's inner column is now a plain `.child(name_row).child(cwd_row).child(git_row)`.\n- The inset moved INSIDE each line. It was a wrapper — `Flex::row().child(2px spacer).child(line)` — and a wrapper holding a hidden child is still a visible widget: it keeps its box and its parent still spends a gap on it, which is the empty strip this task warned about. It is now `pad_x(META_INDENT)` on the line's own row, inside its own visibility, so it disappears with the line. `META_INDENT` is one `Spacing::Xs` token stated once and read by every line under the name, replacing two hand-written `Length::Px(2.0)` spacers.\n- heca/src/components/folder_line.rs — new `indent: Spacing` property, applied inside the component's own `Visibility`. It is a property because the inset is the surrounding card's taste: the dock steps its metadata in under the name, the exposé centres it and steps nothing.\n- heca/src/chrome/expose/pane_card.rs — passes `Spacing::None`. (The exposé already attached its folder line unconditionally; it was the sidebar that was the odd one out.)\n- heca/src/chrome/mod.rs — the per-pane git term is REMOVED from `chrome_signature`, for both tiled and floating panes, with a comment saying why it must not come back. With every line attached always and showing itself, the term bought nothing and would have put the next line's author back in that file.\n- heca/src/chrome/pane/shell.rs — cleared a stray `let_and_return` clippy warning sitting in the tree (not from this task).\n\nWHERE THE RULE NOW LIVES — so no other developer or agent has to discover this\n- heca-grid-ui/src/widgets/visibility.rs rustdoc: \"Attach it always\", and \"nothing may wrap it\", with the reason.\n- docs/widgets.md, the `Visibility` entry: the same rule with the ✅/❌ pair, since that is the widget that exists for this.\n- docs/widgets.md, the \"Pane Info Rows\" recipe: a note that the second row is attached unconditionally on purpose and must not become `if has_branch { .. }`. That recipe is what a developer copies.\n\nVERIFICATION\n1510 tests pass, 0 failures (1507 before, plus the 3 new guards). `./scripts/lint-changed.sh` exit 0 at the ONE pre-existing warning (heca-grid-ui toast/stack.rs \"very complex type\") plus the third-party block v0.1.6 note. No file's rustfmt violation count raised (edition 2024, per file, before vs after).\n\nThree guards, in heca/src/providers/workspaces/pane_row.rs, each RUN RED against its own bug:\n- `a_directory_that_arrives_after_the_row_was_built_still_shows` — builds the row with no cwd, then writes the signals `sync_chrome_signals` writes, lays out and paints, asserts the path is drawn. Red before the fix.\n- `a_branch_that_arrives_after_the_row_was_built_still_shows` — the same for the git line, which the removed signature term used to cover.\n- `a_card_with_nothing_to_show_is_exactly_as_tall_as_its_name` — the empty-strip fear this task named. Sabotaged by putting the inset wrapper back outside the visibility: goes red.\n\nDRIVEN BY ANTONIO: a `cd` updates the path with no rebuild; a fresh pane gets its line as soon as its directory is known; toggling `[settings] pane_show_cwd` still turns every line on and off; no empty strip under rows with nothing to show.\n\nVISUAL CHANGE TO KNOW ABOUT: the inset is a theme token now rather than a flat 2px, so metadata lines sit about a pixel further in and gained the same breathing room on the right. Antonio saw it and accepted it.\n\nFOUND WHILE VERIFYING, NOT PART OF THIS TASK: Antonio observed the directory takes about a second to appear after a `cd`. That latency is in the terminal backend's foreground detection, not in the card — it predates this task and only became visible because rows that never had a path line now have one. Read `heca-core/src/backend/terminal.rs` (the `FOREGROUND_DEBOUNCE` re-sample on the output wake) together with `heca/src/app/lifecycle.rs` (`ControlFlow::Wait` when idle): a re-sample refused by the 250 ms debounce is dropped with nothing scheduled to retry it, and an idle shell produces no further wake. Proposed to Antonio, not filed and not started.",
+      "descriptionUpdatedAt": "2026-09-08T10:43:33.348Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "d8c9a847-6a82-42e4-b7bb-56183f81826e-check-001-planned-in-progress",
+          "date": "2026-09-08T10:09:07.373Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "d8c9a847-6a82-42e4-b7bb-56183f81826e-check-002-in-progress-done",
+          "date": "2026-09-08T10:43:33.345Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE — Antonio drove it and confirmed: \"works great\". NOT COMMITTED; the tree carries it uncommitted.\n\nTHE CAUSE, CONFIRMED (not the hypothesis being guessed at — reproduced red headlessly before a line was changed)\nThe hypothesis in this task was right. The sidebar pane card built a `Visibility` for its directory line, published that line's text and visibility signals, and then attached the line as a child ONLY when `pane_show_cwd && cwd.is_some()` at build time. A signal reveals a child; it cannot create one. `chrome_signature` carries no term for a pane's cwd, so the tree is never rebuilt when the shell reports one — whether a pane showed its path came down to whether the answer had arrived by the instant that row was built. Neighbouring rows, same column, same program, disagreed.\n\nTHE SECOND COPY, FOUND BY SWEEPING (not reported, not asked for)\nThe git line was written the same way — `Visibility::new(.., git.is_some())` and then `if info.git_branch.is_some() { attach }`. It only ever LOOKED correct because `chrome_signature` hashed \"does this pane have a branch\" for every tiled and floating pane, forcing the whole chrome tree to rebuild so the line got attached. That is the rule written twice: once in the card, once in a hash function in another file that nobody adding a metadata line would think to open. Nothing did the same for the directory, which is why one line worked and the other did not.\n\nWHAT SHIPPED\n- heca/src/providers/workspaces/pane_row.rs — both metadata lines are attached ALWAYS; each `Visibility` decides for itself. `show_cwd` deleted. The card's inner column is now a plain `.child(name_row).child(cwd_row).child(git_row)`.\n- The inset moved INSIDE each line. It was a wrapper — `Flex::row().child(2px spacer).child(line)` — and a wrapper holding a hidden child is still a visible widget: it keeps its box and its parent still spends a gap on it, which is the empty strip this task warned about. It is now `pad_x(META_INDENT)` on the line's own row, inside its own visibility, so it disappears with the line. `META_INDENT` is one `Spacing::Xs` token stated once and read by every line under the name, replacing two hand-written `Length::Px(2.0)` spacers.\n- heca/src/components/folder_line.rs — new `indent: Spacing` property, applied inside the component's own `Visibility`. It is a property because the inset is the surrounding card's taste: the dock steps its metadata in under the name, the exposé centres it and steps nothing.\n- heca/src/chrome/expose/pane_card.rs — passes `Spacing::None`. (The exposé already attached its folder line unconditionally; it was the sidebar that was the odd one out.)\n- heca/src/chrome/mod.rs — the per-pane git term is REMOVED from `chrome_signature`, for both tiled and floating panes, with a comment saying why it must not come back. With every line attached always and showing itself, the term bought nothing and would have put the next line's author back in that file.\n- heca/src/chrome/pane/shell.rs — cleared a stray `let_and_return` clippy warning sitting in the tree (not from this task).\n\nWHERE THE RULE NOW LIVES — so no other developer or agent has to discover this\n- heca-grid-ui/src/widgets/visibility.rs rustdoc: \"Attach it always\", and \"nothing may wrap it\", with the reason.\n- docs/widgets.md, the `Visibility` entry: the same rule with the ✅/❌ pair, since that is the widget that exists for this.\n- docs/widgets.md, the \"Pane Info Rows\" recipe: a note that the second row is attached unconditionally on purpose and must not become `if has_branch { .. }`. That recipe is what a developer copies.\n\nVERIFICATION\n1510 tests pass, 0 failures (1507 before, plus the 3 new guards). `./scripts/lint-changed.sh` exit 0 at the ONE pre-existing warning (heca-grid-ui toast/stack.rs \"very complex type\") plus the third-party block v0.1.6 note. No file's rustfmt violation count raised (edition 2024, per file, before vs after).\n\nThree guards, in heca/src/providers/workspaces/pane_row.rs, each RUN RED against its own bug:\n- `a_directory_that_arrives_after_the_row_was_built_still_shows` — builds the row with no cwd, then writes the signals `sync_chrome_signals` writes, lays out and paints, asserts the path is drawn. Red before the fix.\n- `a_branch_that_arrives_after_the_row_was_built_still_shows` — the same for the git line, which the removed signature term used to cover.\n- `a_card_with_nothing_to_show_is_exactly_as_tall_as_its_name` — the empty-strip fear this task named. Sabotaged by putting the inset wrapper back outside the visibility: goes red.\n\nDRIVEN BY ANTONIO: a `cd` updates the path with no rebuild; a fresh pane gets its line as soon as its directory is known; toggling `[settings] pane_show_cwd` still turns every line on and off; no empty strip under rows with nothing to show.\n\nVISUAL CHANGE TO KNOW ABOUT: the inset is a theme token now rather than a flat 2px, so metadata lines sit about a pixel further in and gained the same breathing room on the right. Antonio saw it and accepted it.\n\nFOUND WHILE VERIFYING, NOT PART OF THIS TASK: Antonio observed the directory takes about a second to appear after a `cd`. That latency is in the terminal backend's foreground detection, not in the card — it predates this task and only became visible because rows that never had a path line now have one. Read `heca-core/src/backend/terminal.rs` (the `FOREGROUND_DEBOUNCE` re-sample on the output wake) together with `heca/src/app/lifecycle.rs` (`ControlFlow::Wait` when idle): a re-sample refused by the 250 ms debounce is dropped with nothing scheduled to retry it, and an idle shell produces no further wake. Proposed to Antonio, not filed and not started."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "d8c9a847-6a82-42e4-b7bb-56183f81826e-check-001-reproduce-it-headlessly-a-directory-arriving-after-the-row-was-built-is-never-drawn-test-run-red-first",
+          "number": 1,
+          "title": "Reproduce it headlessly: a directory arriving after the row was built is never drawn (test run red first)",
+          "checked": true
+        },
+        {
+          "id": "d8c9a847-6a82-42e4-b7bb-56183f81826e-check-002-attach-every-metadata-line-always-each-visibility-decides-for-itself-the-inset-moves-inside-the-line-pad-x-token-so-it-disappears-with-it",
+          "number": 2,
+          "title": "Attach every metadata line always; each Visibility decides for itself. The inset moves inside the line (pad_x token) so it disappears with it",
+          "checked": true
+        },
+        {
+          "id": "d8c9a847-6a82-42e4-b7bb-56183f81826e-check-003-same-defect-in-the-git-line-it-only-looked-right-because-chrome-signature-carried-a-term-forcing-the-rebuild-fixed-and-the-term-removed",
+          "number": 3,
+          "title": "Same defect in the git line — it only looked right because chrome_signature carried a term forcing the rebuild. Fixed, and the term removed",
+          "checked": true
+        },
+        {
+          "id": "d8c9a847-6a82-42e4-b7bb-56183f81826e-check-004-three-guards-each-run-red-against-its-own-bug-directory-arrives-branch-arrives-and-a-card-with-nothing-to-show-is-exactly-as-tall-as-its-name",
+          "number": 4,
+          "title": "Three guards, each run red against its own bug: directory arrives, branch arrives, and a card with nothing to show is exactly as tall as its name",
+          "checked": true
+        },
+        {
+          "id": "d8c9a847-6a82-42e4-b7bb-56183f81826e-check-005-write-the-rule-where-a-developer-meets-it-visibility-rustdoc-docs-widgets-md-visibility-entry-the-pane-info-rows-recipe",
+          "number": 5,
+          "title": "Write the rule where a developer meets it: Visibility rustdoc + docs/widgets.md Visibility entry + the Pane Info Rows recipe",
+          "checked": true
+        },
+        {
+          "id": "d8c9a847-6a82-42e4-b7bb-56183f81826e-check-006-antonio-drives-cd-in-a-pane-and-the-path-appears-with-no-rebuild-a-fresh-pane-gets-its-line-as-soon-as-the-cwd-is-known-toggling-settings-pane-show-cwd-still-turns-every-line-on-and-off-no-empty-strip-under-rows-with-nothing-to-show",
+          "number": 6,
+          "title": "ANTONIO DRIVES: cd in a pane and the path appears with no rebuild; a fresh pane gets its line as soon as the cwd is known; toggling [settings] pane_show_cwd still turns every line on and off; no empty strip under rows with nothing to show",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-08T10:09:07.373Z",
+      "completedAt": "2026-09-08T10:43:33.345Z",
       "createdAt": "2026-08-24T15:03:37.863Z",
-      "updatedAt": "2026-08-25T08:32:13.873Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-08T10:43:33.345Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:689b3f53-6000-4ff5-bdbf-863af99fa381",
+          "createdAt": "2026-09-08T10:09:07.264Z"
+        }
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "aa013577-c605-4880-a90a-765238780c49",
@@ -1783,11 +2039,28 @@
       "priority": 4,
       "shortName": "a-zero-width-pane-still-gets-a",
       "title": "A zero-width pane still gets a letter, drawn outside itself in the gutter",
-      "status": "planned",
-      "description": "Found by tracing T438 case 4 (narrow window), 2026-08-24. This is the explanation of the letter pile-up Antonio photographed, and it is NOT the clamp that was first suspected.\n\nMEASURED, not reasoned. Temporary probe at heca-grid-ui/src/widgets/key_hint.rs (paint_hint_label), printing placement / row bounds / clip / room / cap / fitted for every letter. 9060 lines over one session. The probe has been removed.\n\nTHE DATA\n    [hint] \"p\" place=Center row=(318,40 0x728) clip=none room=EMPTY cap=(308,394) -> (308,394)\n    [hint] \"v\" place=Center row=(314,40 0x728) clip=none room=EMPTY cap=(304,394) -> (304,394)\n\nRead the row size: **0x728**. Two panes with ZERO WIDTH, each still handed a letter.\n\n`HintPlacement::Center` computes `x = loc.x + (w - capW) / 2`. With `w = 0` that is `loc.x - capW/2` — the cap is centred on a pane that has no width, so it lands OUTSIDE the pane, half a keycap to its left. At 318 and 314 the two caps are 4px apart and overlap each other.\n\nTHAT IS THE PILE-UP. In the first screenshot several letters sat side by side in the narrow gutter between the two sidebars, looking like they had been dragged there. They had not been dragged anywhere: they are zero-width panes' own Center caps, drawn where the arithmetic puts them, stacking on each other because the panes they belong to are all at nearly the same x.\n\nWHY THE PANES ARE ZERO-WIDTH: two sidebars, each 288 logical px (clip=(6,50 288x708) and (306,50 288x708)), in a window ~575 wide. The sidebars consume the whole width and the scrolling area is squeezed to nothing.\n\nTHE DEFECT IS CANDIDACY, NOT PLACEMENT\nA pane you cannot see is not a target — you cannot aim at it, and activating it by letter is a gesture with no visible referent. `heca_grid_ui::hint::collect` already drops a target outside its clipping ancestors; it does not drop one that has collapsed to zero (or near-zero) size. A pane at 0x728 passes every existing check because it is technically inside its clip.\n\nFIX SHAPE — one rule, in the collector, not per widget\nDrop a candidate whose laid-out bounds cannot hold its own cap. That is the same judgement `fit_into_view` already makes at the other end (\"None when the visible sliver is too small to hold the cap\"), applied one level up where it decides whether to spend a letter at all. Doing it in the collector also means the letter is not wasted — there are only 52.\n\n⚠️ Do NOT fix this by clamping the Center placement into the pane's bounds. A zero-width pane has no inside; clamping would stack every cap on one pixel instead of four, which is the same bug with a smaller radius.\n\nDecide with Antonio: is the threshold \"smaller than its own keycap\", or something more generous (a pane you can see a sliver of is arguably still aimable, which is the rule for a half-visible sidebar row)? The two cases differ — a sidebar row's letter is drawn INSIDE the row, a pane's is centred, so a sliver of pane cannot hold a centred cap the way a sliver of row can.\n\nRELATED, SAME TRACE, SEPARATE TASKS\n- 474 compact `TopCenter` caps were yanked back onto the icons they caption — filed separately.\n- The two sidebars overflow the window at this width (the right one's clip runs to x=594 in a ~575-wide window, which is why the workspace dock's \"d\" keycap is cut in half by the window edge). That is a layout problem, not a hint one.\n\nVERIFY\nAntonio drives. Narrow the window until the scrolling area is squeezed away, press prefix+/ — no letters in the gutter, and no letter spent on a pane nobody can see. Widen it again and the pane's letter comes back, centred over the pane.",
-      "descriptionUpdatedAt": "2026-08-24T15:20:22.641Z",
+      "status": "done",
+      "description": "Found by tracing T438 case 4 (narrow window), 2026-08-24. This is the explanation of the letter pile-up Antonio photographed, and it is NOT the clamp that was first suspected.\n\nMEASURED, not reasoned. Temporary probe at heca-grid-ui/src/widgets/key_hint.rs (paint_hint_label), printing placement / row bounds / clip / room / cap / fitted for every letter. 9060 lines over one session. The probe has been removed.\n\nTHE DATA\n    [hint] \"p\" place=Center row=(318,40 0x728) clip=none room=EMPTY cap=(308,394) -> (308,394)\n    [hint] \"v\" place=Center row=(314,40 0x728) clip=none room=EMPTY cap=(304,394) -> (304,394)\n\nRead the row size: **0x728**. Two panes with ZERO WIDTH, each still handed a letter.\n\n`HintPlacement::Center` computes `x = loc.x + (w - capW) / 2`. With `w = 0` that is `loc.x - capW/2` — the cap is centred on a pane that has no width, so it lands OUTSIDE the pane, half a keycap to its left. At 318 and 314 the two caps are 4px apart and overlap each other.\n\nTHAT IS THE PILE-UP. In the first screenshot several letters sat side by side in the narrow gutter between the two sidebars, looking like they had been dragged there. They had not been dragged anywhere: they are zero-width panes' own Center caps, drawn where the arithmetic puts them, stacking on each other because the panes they belong to are all at nearly the same x.\n\nWHY THE PANES ARE ZERO-WIDTH: two sidebars, each 288 logical px (clip=(6,50 288x708) and (306,50 288x708)), in a window ~575 wide. The sidebars consume the whole width and the scrolling area is squeezed to nothing.\n\nTHE DEFECT IS CANDIDACY, NOT PLACEMENT\nA pane you cannot see is not a target — you cannot aim at it, and activating it by letter is a gesture with no visible referent. `heca_grid_ui::hint::collect` already drops a target outside its clipping ancestors; it does not drop one that has collapsed to zero (or near-zero) size. A pane at 0x728 passes every existing check because it is technically inside its clip.\n\nFIX SHAPE — one rule, in the collector, not per widget\nDrop a candidate whose laid-out bounds cannot hold its own cap. That is the same judgement `fit_into_view` already makes at the other end (\"None when the visible sliver is too small to hold the cap\"), applied one level up where it decides whether to spend a letter at all. Doing it in the collector also means the letter is not wasted — there are only 52.\n\n⚠️ Do NOT fix this by clamping the Center placement into the pane's bounds. A zero-width pane has no inside; clamping would stack every cap on one pixel instead of four, which is the same bug with a smaller radius.\n\nDecide with Antonio: is the threshold \"smaller than its own keycap\", or something more generous (a pane you can see a sliver of is arguably still aimable, which is the rule for a half-visible sidebar row)? The two cases differ — a sidebar row's letter is drawn INSIDE the row, a pane's is centred, so a sliver of pane cannot hold a centred cap the way a sliver of row can.\n\nRELATED, SAME TRACE, SEPARATE TASKS\n- 474 compact `TopCenter` caps were yanked back onto the icons they caption — filed separately.\n- The two sidebars overflow the window at this width (the right one's clip runs to x=594 in a ~575-wide window, which is why the workspace dock's \"d\" keycap is cut in half by the window edge). That is a layout problem, not a hint one.\n\nVERIFY\nAntonio drives. Narrow the window until the scrolling area is squeezed away, press prefix+/ — no letters in the gutter, and no letter spent on a pane nobody can see. Widen it again and the pane's letter comes back, centred over the pane.\n\n---\n**Completion summary:**\nDONE — verified on screen by Antonio (\"works great\"), 2026-09-10. Branch feat/hint-collapses-to-the-tree, NOT committed.\n\nROOT CAUSE WAS UPSTREAM OF THE PICKER. The task assumed the fix was candidacy. Antonio asked \"how is it possible to have a zero width pane? we have a min width\" — there was no minimum at layout time. `Column::resolve_width` had no floor (MIN_COLUMN_WIDTH was only read by the resize handlers), and `ChromeConfig::content_rect` ended in `.max(0.0)`, so two 288px sidebars in a 575px window left the scrolling area exactly 0 wide.\n\nTHREE LAYERS, each where the rule is decided:\n1. `ChromeConfig::for_window` (heca/src/chrome/mod.rs) — the panes take MIN_COLUMN_WIDTH first; the sidebars split what is left in proportion to what each asked for. Antonio chose this over \"column overflows\" and \"hide the sidebars\". Nothing is written to the stored region size, so widening restores the user's width exactly.\n2. `Column::resolve_width` (heca-core) — floors at MIN_COLUMN_WIDTH where the width is decided. The zoomed branch's private `.max(50.0)` is gone; one constant now.\n3. `heca_grid_ui::hint::collect::collapsed` + `unseen` — a target laid out with no width or no height gets no letter. Asked in BOTH places a letter is decided (the collector and the offer walk), so they cannot disagree. A box with no position AND no size still counts as \"not laid out yet\" — load-bearing: sabotaging that clause breaks 14 existing tests.\n\nPER VIEW, NOT PER PANE (Antonio, explicitly). A pane squeezed away in the scrolling area keeps its letter on its sidebar row and its exposé card, and picking either still acts on the pane. Held by `a_squeezed_view_loses_its_letter_and_the_other_views_keep_it`.\n\nSMELL FIXED ON THE WAY. ChromeConfig was built by hand in EIGHT places (grep found six; making the `window` field private made the compiler find the rest). All eight are now `ChromeConfig::of(state).content_rect()`; `content_rect` takes no arguments, so nobody can divide against one window and ask about another. Deleted: two private `chrome_config(state)` helpers and two private `window_logical_size(state)` helpers.\n\nVERIFICATION: 1762 tests pass, 0 failures. Clippy exit 0 at the one pre-existing warning (heca-grid-ui toast/stack.rs). No file's rustfmt count raised. Every new guard was run RED against its own bug by sabotage.\n\nFILES: heca/src/chrome/mod.rs, heca/src/chrome/hint/targets.rs, heca/src/mouse.rs, heca/src/mouse/{hit_test,surface_left,tests}.rs, heca/src/app/{render,startup,terminal_host}.rs, heca-core/src/layout/column.rs, heca-grid-ui/src/hint/{collect,offer,tests}.rs, docs/widgets.md.\n\nFOUND AND NOT FIXED — both older than this change, both in heca/src/mouse/hit_test.rs: (a) a hardcoded 40.0 dead zone on the left when the sidebar is HIDDEN, a rail width for the icon rail that was deleted — clicks in the leftmost 40px are swallowed; (b) `pos.0 > win_h / 2.0` compares an x position against half the window HEIGHT, gating the right-sidebar hit test. Neither is filed anywhere.",
+      "descriptionUpdatedAt": "2026-09-10T07:44:48.306Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "aa013577-c605-4880-a90a-765238780c49-check-001-planned-in-progress",
+          "date": "2026-09-09T06:54:09.405Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "aa013577-c605-4880-a90a-765238780c49-check-002-in-progress-done",
+          "date": "2026-09-10T07:44:48.302Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE — verified on screen by Antonio (\"works great\"), 2026-09-10. Branch feat/hint-collapses-to-the-tree, NOT committed.\n\nROOT CAUSE WAS UPSTREAM OF THE PICKER. The task assumed the fix was candidacy. Antonio asked \"how is it possible to have a zero width pane? we have a min width\" — there was no minimum at layout time. `Column::resolve_width` had no floor (MIN_COLUMN_WIDTH was only read by the resize handlers), and `ChromeConfig::content_rect` ended in `.max(0.0)`, so two 288px sidebars in a 575px window left the scrolling area exactly 0 wide.\n\nTHREE LAYERS, each where the rule is decided:\n1. `ChromeConfig::for_window` (heca/src/chrome/mod.rs) — the panes take MIN_COLUMN_WIDTH first; the sidebars split what is left in proportion to what each asked for. Antonio chose this over \"column overflows\" and \"hide the sidebars\". Nothing is written to the stored region size, so widening restores the user's width exactly.\n2. `Column::resolve_width` (heca-core) — floors at MIN_COLUMN_WIDTH where the width is decided. The zoomed branch's private `.max(50.0)` is gone; one constant now.\n3. `heca_grid_ui::hint::collect::collapsed` + `unseen` — a target laid out with no width or no height gets no letter. Asked in BOTH places a letter is decided (the collector and the offer walk), so they cannot disagree. A box with no position AND no size still counts as \"not laid out yet\" — load-bearing: sabotaging that clause breaks 14 existing tests.\n\nPER VIEW, NOT PER PANE (Antonio, explicitly). A pane squeezed away in the scrolling area keeps its letter on its sidebar row and its exposé card, and picking either still acts on the pane. Held by `a_squeezed_view_loses_its_letter_and_the_other_views_keep_it`.\n\nSMELL FIXED ON THE WAY. ChromeConfig was built by hand in EIGHT places (grep found six; making the `window` field private made the compiler find the rest). All eight are now `ChromeConfig::of(state).content_rect()`; `content_rect` takes no arguments, so nobody can divide against one window and ask about another. Deleted: two private `chrome_config(state)` helpers and two private `window_logical_size(state)` helpers.\n\nVERIFICATION: 1762 tests pass, 0 failures. Clippy exit 0 at the one pre-existing warning (heca-grid-ui toast/stack.rs). No file's rustfmt count raised. Every new guard was run RED against its own bug by sabotage.\n\nFILES: heca/src/chrome/mod.rs, heca/src/chrome/hint/targets.rs, heca/src/mouse.rs, heca/src/mouse/{hit_test,surface_left,tests}.rs, heca/src/app/{render,startup,terminal_host}.rs, heca-core/src/layout/column.rs, heca-grid-ui/src/hint/{collect,offer,tests}.rs, docs/widgets.md.\n\nFOUND AND NOT FIXED — both older than this change, both in heca/src/mouse/hit_test.rs: (a) a hardcoded 40.0 dead zone on the left when the sidebar is HIDDEN, a rail width for the icon rail that was deleted — clicks in the leftmost 40px are swallowed; (b) `pos.0 > win_h / 2.0` compares an x position against half the window HEIGHT, gating the right-sidebar hit test. Neither is filed anywhere."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -1795,11 +2068,17 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-09T06:54:09.405Z",
+      "completedAt": "2026-09-10T07:44:48.302Z",
       "createdAt": "2026-08-24T15:20:22.596Z",
-      "updatedAt": "2026-08-25T08:32:14.539Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-10T07:44:48.302Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:65b2ab93-5391-4cfe-920d-9ee1153fe084",
+          "createdAt": "2026-09-09T06:54:09.290Z"
+        }
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "e7b4a04b-83c7-4f82-8ffa-bc5d9c8e2e38",
@@ -1847,7 +2126,8 @@
           "sessionId": "mcp-process:f2720c67-3db6-4507-82df-f5b669c10418",
           "createdAt": "2026-08-27T15:02:47.532Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "651a5f5e-5c44-47db-82f8-6cb32865db19",
@@ -1884,7 +2164,8 @@
       "completedAt": "2026-08-25T08:27:34.375Z",
       "createdAt": "2026-08-25T07:41:54.936Z",
       "updatedAt": "2026-08-27T13:59:40.197Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "04ff12a9-ccd2-4aeb-ba7e-416ef8ebb9bf",
@@ -1975,7 +2256,8 @@
           "sessionId": "01f86c94-7f92-4e8a-b8bd-b845e9032ae7",
           "createdAt": "2026-08-27T09:54:28.651Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "9f47e368-e39a-4f2b-a5b7-6ecd79eb00c5",
@@ -2010,7 +2292,8 @@
       "completedAt": "2026-08-27T20:00:36.877Z",
       "createdAt": "2026-08-25T09:58:38.105Z",
       "updatedAt": "2026-08-27T20:00:36.877Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "599c8f7e-52d3-4d18-95cc-aaa13d67e374",
@@ -2036,7 +2319,8 @@
       "completedAt": "",
       "createdAt": "2026-08-26T14:38:26.210Z",
       "updatedAt": "2026-08-26T14:38:26.210Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b",
@@ -2071,7 +2355,8 @@
       "completedAt": "",
       "createdAt": "2026-09-04T14:01:39.862Z",
       "updatedAt": "2026-09-04T14:28:59.808Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1",
@@ -2106,7 +2391,8 @@
       "completedAt": "",
       "createdAt": "2026-09-04T14:01:58.389Z",
       "updatedAt": "2026-09-04T14:29:05.056Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b",
@@ -2141,7 +2427,8 @@
       "completedAt": "",
       "createdAt": "2026-09-04T14:02:14.825Z",
       "updatedAt": "2026-09-04T14:29:09.866Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "736a6912-1297-48b3-89c1-e32559a024d9",
@@ -2176,7 +2463,8 @@
       "completedAt": "",
       "createdAt": "2026-09-04T14:02:29.970Z",
       "updatedAt": "2026-09-04T14:29:16.375Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "073f4e71-0b10-4a50-9e42-66eafdf4de7d",
@@ -2211,7 +2499,8 @@
       "completedAt": "",
       "createdAt": "2026-09-04T14:02:46.187Z",
       "updatedAt": "2026-09-04T14:29:21.241Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "92358ff7-5c34-441b-aed0-fa803f0d9486",
@@ -2246,15 +2535,441 @@
       "completedAt": "",
       "createdAt": "2026-09-04T14:03:05.191Z",
       "updatedAt": "2026-09-04T14:29:26.834Z",
-      "sessionInfo": []
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "02a7180e-c7ae-47dc-8719-08678e8fbade",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 515,
+      "shortId": "K3RHS",
+      "priority": 56,
+      "shortName": "a-booked-wake-is-dropped-whene",
+      "title": "A booked wake is dropped whenever anything animates — the loop picks its deadline with a chain, not a list",
+      "status": "done",
+      "description": "Found while tracing the sidebar cwd latency, 2026-09-08. Not the cause of that, and worth fixing on its own.\n\nWHERE\nheca/src/app/lifecycle.rs, the end of the frame pass (`ControlFlow` selection, after `needs_frame`).\n\nWHAT IT DOES NOW\nThe loop chooses when to wake next with an if / else-if chain:\n\n    if animations_ongoing || terminal_animating || image_animating || chrome_animating {\n        WaitUntil(now + FRAME_INTERVAL)\n    } else if let Some(secs) = widget_wake {\n        state.widget_frame_due = Some(now + secs);      // ← armed ONLY in this arm\n        WaitUntil(that)\n    } else if let Some(expiry) = notifications.next_expiry() {\n        WaitUntil(expiry)\n    } else {\n        Wait\n    }\n\nOnly the winning arm runs, so only the winning arm's deadline is booked. A widget that asked to be\nwoken — a tooltip due under a resting pointer, a caret blink — has its request DROPPED whenever\nanything is animating, and `state.widget_frame_due` is left `None`, which is also the flag that\nmakes arriving at the deadline a reason to draw. Nothing looks wrong because frames are arriving\nanyway while something animates; the moment the animation ends, the widget's deadline is simply\ngone and it waits for the user to nudge something.\n\nSame shape for the notification expiry, one arm further down: outranked by both.\n\nWHY IT IS THE WRONG SHAPE, NOT JUST A BUG\nEvery subsystem that needs the loop back at a TIME rather than on an event has to find a place in\nthat chain, and whoever adds the next one has to reason about what outranks what. That is a rule a\ncaller has to remember (AGENTS.md § 0 rule 2). There is no ordering question in the problem itself —\nthe answer is always \"the nearest deadline\".\n\nTHE FIX\nCollect the pending deadlines into one list and take the minimum; `None` from all of them means\n`ControlFlow::Wait`. Arm `state.widget_frame_due` from `widget_wake` unconditionally, before the\nchoice, so the request survives whatever else wins — waking earlier for another reason is harmless,\nbecause the widget's wake is recomputed on that frame and re-booked.\n\n    let deadlines = [\n        animating.then(|| now + FRAME_INTERVAL),\n        state.widget_frame_due,\n        match notifications.is_hovered() { true => None, false => notifications.next_expiry() },\n    ];\n    match deadlines.into_iter().flatten().min() { Some(at) => WaitUntil(at), None => Wait }\n\nKeep the two behaviours the current comments record, because both are real and were paid for:\n- a hovered toast stack books NOTHING (its deadlines are frozen, so waking at one would find\n  nothing due and re-arm at the same instant — a spin for as long as the pointer rested);\n- arriving at `widget_frame_due` is itself a reason to draw, because by then the widget no longer\n  reports a pending wake and every other reason is false.\n\nEDGE CASES\n- Do not let the list become a way to book a periodic wake. Every entry must be a deadline someone\n  is actually waiting for; an entry that is always `Some` turns the idle app into a poller.\n- `state.widget_frame_due` is cleared earlier in the same pass when it comes due; the unconditional\n  arming must happen after that clear, not before.\n\nVERIFY\nThe selection is pure once the inputs are gathered — extract it if that is what it takes to test it,\nthe same way `fg_re_sample_due` was extracted so a threshold could be asserted without PTY plumbing.\nA guard must fail when a deadline is dropped: give it an animating frame plus a widget deadline\nsooner than the frame interval and assert the widget's is chosen. Antonio drives the visible half —\na tooltip must still appear under a resting pointer while something on screen is animating.\n\n---\n**Completion summary:**\nDONE — code complete and green. NOT COMMITTED. The visible half (a tooltip appearing under a resting pointer while something animates) still wants Antonio's drive.\n\nWHAT SHIPPED — heca/src/app/lifecycle.rs\nThe if / else-if chain that chose the loop's next wake is replaced by `next_wake(now, WakeRequests) -> Wake`, a pure function taking the three pending deadlines as data and returning the nearest plus the widget deadline to remember. The frame pass now gathers the inputs, stores `schedule.widget_frame_due`, and sets `WaitUntil(at)` or `Wait`.\n\nTHE ACTUAL DEFECT, and why it was invisible: only the winning arm ran, so only the winning arm's deadline was booked. `state.widget_frame_due` was assigned inside the widget arm alone, and that arm was unreachable whenever anything was animating — so a widget that asked to be woken had its request dropped outright, and the flag that makes arriving at a deadline a reason to draw stayed empty. Frames arrive anyway while something animates, which is why nothing looked wrong; the deadline went missing the moment the animation stopped. The toast expiry was outranked by both.\n\nThe widget deadline is now computed unconditionally, before the choice. Waking earlier for another reason is harmless — the wake is recomputed and re-booked on that frame.\n\nDECISIONS\n- Extracted as a pure function rather than fixed in place, because `AppState` needs a window and the choice is the part worth asserting — same reason `fg_re_sample_due` exists in the terminal backend.\n- The hovered-toast contract (a held stack books NOTHING, or the loop spins re-arming a frozen deadline) stays at the CALL SITE, where `is_hovered` is read, not inside `next_wake`. A guard for it here could only restate the idle case.\n- The two behaviours the old comments recorded are kept and re-stated on the new function: the hover hold, and \"arriving at the deadline is itself the reason to draw\".\n\nGUARDS — heca/src/app/lifecycle.rs `mod tests`, each run red against its own bug:\n- `an_animation_does_not_swallow_a_widget_deadline` — sabotaged by gating the widget deadline on `!animating`, which is exactly what the chain did: red.\n- `the_nearest_pending_deadline_is_the_one_chosen` — sabotaged by taking `.next()` instead of `.min()`, the chain's first-match behaviour: red.\n- `an_idle_window_books_no_wake` — the entry that must never become always-`Some`, which would turn an idle window into a poller.\n\nA FOURTH GUARD WAS WRITTEN AND DELETED: `a_held_toast_deadline_books_nothing` restated the idle case and would have passed with the hover check removed. A vacuous guard is worse than none.\n\nVERIFICATION\n1513 tests pass, 0 failures (1510 before, plus these 3). `./scripts/lint-changed.sh` exit 0 at the one pre-existing warning (heca-grid-ui toast/stack.rs) plus the third-party block v0.1.6 note. `lifecycle.rs` rustfmt violation count unchanged at 0 (edition 2024).\n\nNOT VERIFIED BY ME: nothing here was seen running. Antonio drives — a tooltip must still reveal under a resting pointer while something on screen is animating, and a toast must still auto-dismiss on time.\n\nHOW IT WAS FOUND: while tracing the sidebar cwd latency, which it turned out not to cause. It was first fixed inside that (wrong) diagnosis and reverted with it; Antonio asked for it back on its own.",
+      "descriptionUpdatedAt": "2026-09-08T13:02:12.458Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "02a7180e-c7ae-47dc-8719-08678e8fbade-check-001-planned-in-progress",
+          "date": "2026-09-08T12:59:51.166Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "02a7180e-c7ae-47dc-8719-08678e8fbade-check-002-in-progress-done",
+          "date": "2026-09-08T13:02:12.455Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE — code complete and green. NOT COMMITTED. The visible half (a tooltip appearing under a resting pointer while something animates) still wants Antonio's drive.\n\nWHAT SHIPPED — heca/src/app/lifecycle.rs\nThe if / else-if chain that chose the loop's next wake is replaced by `next_wake(now, WakeRequests) -> Wake`, a pure function taking the three pending deadlines as data and returning the nearest plus the widget deadline to remember. The frame pass now gathers the inputs, stores `schedule.widget_frame_due`, and sets `WaitUntil(at)` or `Wait`.\n\nTHE ACTUAL DEFECT, and why it was invisible: only the winning arm ran, so only the winning arm's deadline was booked. `state.widget_frame_due` was assigned inside the widget arm alone, and that arm was unreachable whenever anything was animating — so a widget that asked to be woken had its request dropped outright, and the flag that makes arriving at a deadline a reason to draw stayed empty. Frames arrive anyway while something animates, which is why nothing looked wrong; the deadline went missing the moment the animation stopped. The toast expiry was outranked by both.\n\nThe widget deadline is now computed unconditionally, before the choice. Waking earlier for another reason is harmless — the wake is recomputed and re-booked on that frame.\n\nDECISIONS\n- Extracted as a pure function rather than fixed in place, because `AppState` needs a window and the choice is the part worth asserting — same reason `fg_re_sample_due` exists in the terminal backend.\n- The hovered-toast contract (a held stack books NOTHING, or the loop spins re-arming a frozen deadline) stays at the CALL SITE, where `is_hovered` is read, not inside `next_wake`. A guard for it here could only restate the idle case.\n- The two behaviours the old comments recorded are kept and re-stated on the new function: the hover hold, and \"arriving at the deadline is itself the reason to draw\".\n\nGUARDS — heca/src/app/lifecycle.rs `mod tests`, each run red against its own bug:\n- `an_animation_does_not_swallow_a_widget_deadline` — sabotaged by gating the widget deadline on `!animating`, which is exactly what the chain did: red.\n- `the_nearest_pending_deadline_is_the_one_chosen` — sabotaged by taking `.next()` instead of `.min()`, the chain's first-match behaviour: red.\n- `an_idle_window_books_no_wake` — the entry that must never become always-`Some`, which would turn an idle window into a poller.\n\nA FOURTH GUARD WAS WRITTEN AND DELETED: `a_held_toast_deadline_books_nothing` restated the idle case and would have passed with the hover check removed. A vacuous guard is worse than none.\n\nVERIFICATION\n1513 tests pass, 0 failures (1510 before, plus these 3). `./scripts/lint-changed.sh` exit 0 at the one pre-existing warning (heca-grid-ui toast/stack.rs) plus the third-party block v0.1.6 note. `lifecycle.rs` rustfmt violation count unchanged at 0 (edition 2024).\n\nNOT VERIFIED BY ME: nothing here was seen running. Antonio drives — a tooltip must still reveal under a resting pointer while something on screen is animating, and a toast must still auto-dismiss on time.\n\nHOW IT WAS FOUND: while tracing the sidebar cwd latency, which it turned out not to cause. It was first fixed inside that (wrong) diagnosis and reverted with it; Antonio asked for it back on its own."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-08T12:59:51.166Z",
+      "completedAt": "2026-09-08T13:02:12.455Z",
+      "createdAt": "2026-09-08T12:59:19.068Z",
+      "updatedAt": "2026-09-08T13:02:12.455Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:689b3f53-6000-4ff5-bdbf-863af99fa381",
+          "createdAt": "2026-09-08T12:59:51.061Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "e3b07070-5b0a-406c-bc85-680b396a9a14",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 516,
+      "shortId": "8L7TA",
+      "priority": 57,
+      "shortName": "a-pane-s-runtime-reaches-the-s",
+      "title": "A pane's runtime reaches the sidebar by a per-frame push through three hops, not by the row subscribing",
+      "status": "done",
+      "description": "Found while tracing the sidebar cwd latency, 2026-09-08. The code already carries a TODO saying this (heca/src/chrome/signals.rs, above `sync_pane_runtime_state`: \"per-frame full-sync push of every pane's runtime state into the store — the same push model Phase 0 is moving away from ... Fold this into the reactive damage-path work\").\n\nWHAT HAPPENS NOW — three hops, two full scans, every frame\n\n1. heca/src/app/process_monitor.rs:80,89 — `sync_pane_runtime_from_backends` walks every workspace,\n   column and floating pane and copies `backend.runtime()` onto the canonical `Pane.runtime`.\n2. heca/src/chrome/signals.rs:85 — `sync_pane_runtime_state` walks the same tree again and pushes\n   each `Pane.runtime` into the chrome store's `PaneRuntimeSignals` (per-field, change-guarded).\n3. heca/src/chrome/signals.rs (the `pane_info` loop) — a third pass reads the store back, formats\n   text (home-relative path, truncated branch, the `(process)` suffix) and writes ~15 more signals\n   per pane: the ones the retained row's own `Label`s and `Visibility`s are bound to\n   (`PaneInfoSignals`, heca/src/chrome/pane_header.rs:35).\n\nSo the store holds signals nothing subscribes to, and the row holds signals nobody but hop 3 writes.\nThe reactive library is being used as a change-guarded mailbox.\n\nWHY IT MATTERS BEYOND TIDINESS\n- **Every new piece of pane state costs four edits** — the runtime field, the store signal, the\n  formatting pass, and the row's own signal — and forgetting the third or fourth fails silently.\n  That is exactly the class F003/P082/T477 was: the row published a visibility signal, the sync\n  wrote it, and the thing it controlled was not in the tree. Nothing connected the two ends.\n- **It is a push, so nothing can be derived.** A row that wanted to show something computed from\n  two runtime fields has nowhere to put it except a fourth signal and a fourth write.\n- **A plugin cannot join in.** Its row would need a hand-written arm in `sync_chrome_signals`, a\n  host-private function — the RULE ZERO failure: there is no line a plugin author can write.\n\nWHAT TO BUILD\nThe row binds its labels to the store's signals, so hop 3 disappears: the store is the one place a\npane's runtime lives reactively, and a `Label`/`Visibility` follows it directly (a memo where text\nhas to be formatted — `home_relative_path`, `truncate_sidebar_git_branch`, the `(process)` suffix —\nso the formatting is declared once at the binding rather than recomputed by a scan).\n\n⚠️ ALL OF `PaneInfoSignals` MOVES, OR NONE OF IT DOES. Converting the cwd alone leaves two paths\nover one input, which is the thing this project forbids (AGENTS.md ⭐⭐ RULE ZERO, \"never add a\nsecond path beside one that exists\"): the tests would exercise one and the user would see the other.\nThe same holds for the pane header, which reads the same `PaneInfoSignals`.\n\nHop 1 (backend → canonical `Pane.runtime`) is a separate question and can stay for now — the\ncanonical layout owning its own runtime is not obviously wrong. Hop 2 and hop 3 collapsing into one\nsubscription is the work.\n\nMEASURE BEFORE CLAIMING A SPEED WIN. The observed latency on 2026-09-08 was Enter → shell OSC 7\n94 ms, then OSC 7 → the row's signal written 130 ms. That 130 ms was NOT attributed to these scans —\na scan over three panes is microseconds, and the two gaps in the trace sat around `request_redraw`\nand the frame being served, which points at frame scheduling rather than the push. Do not sell this\nas the fix for that number without measuring it; it is a correctness and reachability change.\n\nVERIFY\nHeadless: the row renders what the store says and follows it when the store changes, with no sync\npass run at all — that is the assertion the current shape cannot make. Antonio drives the visible\nhalf: rename a pane, `cd`, change branch, change a process's status, and watch every one of them\nstill update live without a tree rebuild.\n\n---\n**Completion summary:**\nDONE — code complete and green. NOT COMMITTED. Antonio drives the visible half.\n\nWHAT SHIPPED — the row subscribes; the host's scan is deleted\n\n- heca/src/providers/workspaces/pane_row.rs — the row registers ONE `create_effect` that reads its own pane's runtime signals, computes `pane_info_view`, and writes the sixteen signals its widgets are bound to. New `PaneFace` type holds those sixteen and owns the formatting (`home_relative_path`, `truncate_sidebar_git_branch`, the `(process)` suffix) in one `show` method beside the widgets they feed, with a `set_if_changed` helper stating the change-guard once instead of sixteen times.\n- heca/src/chrome/signals.rs — the 97-line per-frame `pane_info` scan is GONE, along with the `ChromeSignals::pane_info` mailbox field and the three tree lookups (`find_pane_entry`, `pane_fallback_name`, `pane_custom_name`) that existed only to feed it. `sync_chrome_signals` no longer returns a bool: nothing consumed it once rows subscribe. The file went 358 → 225 lines.\n- heca/src/chrome/pane_header.rs — `PaneInfoSignals` deleted. It lived in the pane header and was used by neither the header nor anything else; the row owns its own face now.\n- heca/src/chrome/state.rs — `PaneRuntimeSignals::snapshot()` leaves `#[cfg(test)]` and its reads become TRACKED, which is what makes a subscription depend on this pane's six fields and not on the map. New `pane_runtime_signals(pane)` hands out the `Copy` handles; new `pane_show_cwd_signal` / `pane_renamed_add_process_name_signal` so the two display settings are followed rather than read once at build.\n- heca/src/providers/workspaces/seams.rs + testing.rs — `DockSeams::programs` carries the `Rc<ProgramsConfig>` (already an `Rc` on `AppState`), because the row keeps it alive inside a subscription that outlives the borrow.\n- heca/src/app/render.rs — the catch-up `window_root.tick(0.0)` runs unconditionally. It was gated on the sync pass reporting a change, which is no longer a question one return value can answer; a `Visibility` revealed by a subscription would otherwise land a frame late, or not at all.\n\nA REAL DEFECT FOUND WHILE BUILDING IT, of the same class as T477\n`pane_runtime_signals` first returned `Option`, `None` when the store had not yet met the pane. A row built in the frame its pane appeared captured that `None` and was deaf for the life of the tree — a subscription that can never form, exactly like a line that was never attached. It now CREATES the entry, so asking about a pane gives it a home; the per-frame mirror fills it in, and `retain_panes` prunes it when the pane goes. `a_branch_that_arrives_after_the_row_was_built_still_shows` is the guard, and it caught this before the code was finished.\n\nDECISIONS\n- The subscription reads per-pane field signals, never `panes` itself. Subscribing to the map would wake every row on every frame, because the mirror calls `panes.update` whether anything changed or not — worse than the scan it replaces.\n- `custom_name` comes from the store signal rather than the tree, so a rename reaches the row without a rebuild.\n- All sixteen signals moved together. Converting the directory alone would have left two paths over one input, which is the thing this project forbids.\n- Hop 1 (backend → canonical `Pane.runtime`) is untouched and still per-frame, as the task scoped it.\n\nVERIFICATION\n1513 tests pass, 0 failures. `./scripts/lint-changed.sh` exit 0 at the one pre-existing warning (heca-grid-ui toast/stack.rs) plus the third-party block v0.1.6 note. No file's rustfmt violation count raised (edition 2024, per file).\n\nThe two T477 guards were REWRITTEN to drive the store — `set_pane_runtime`, then lay out and paint — with no sync pass run at all. That is the assertion the old shape could not make, and it is now the test. Two sabotages, both red: the row not reading its pane, and the store handing back a detached handle for a pane it had not met.\n\nNOT VERIFIED BY ME — Antonio drives: rename a pane, `cd`, change branch, change a process's status, spawn and close panes, and confirm each still updates live with no tree rebuild and no empty strip under a card.\n\nDO NOT CLAIM THIS AS A SPEED FIX. The measured latency on 2026-09-08 was Enter → shell OSC 7 94 ms, OSC 7 → the row's signal 130 ms, and the 130 ms sat around `request_redraw` and the frame being served, not in these scans. This is a correctness and reachability change.\n\nPROCESS NOTE FOR THE NEXT SESSION: I ran `git checkout -- heca/src/chrome/state.rs` to undo a sabotage and destroyed every uncommitted change in that file. AGENTS.md warns about exactly this. Restore from a copy; never checkout a modified file.",
+      "descriptionUpdatedAt": "2026-09-08T13:12:05.402Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "e3b07070-5b0a-406c-bc85-680b396a9a14-check-001-planned-in-progress",
+          "date": "2026-09-08T13:02:17.643Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "e3b07070-5b0a-406c-bc85-680b396a9a14-check-002-in-progress-done",
+          "date": "2026-09-08T13:12:05.398Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE — code complete and green. NOT COMMITTED. Antonio drives the visible half.\n\nWHAT SHIPPED — the row subscribes; the host's scan is deleted\n\n- heca/src/providers/workspaces/pane_row.rs — the row registers ONE `create_effect` that reads its own pane's runtime signals, computes `pane_info_view`, and writes the sixteen signals its widgets are bound to. New `PaneFace` type holds those sixteen and owns the formatting (`home_relative_path`, `truncate_sidebar_git_branch`, the `(process)` suffix) in one `show` method beside the widgets they feed, with a `set_if_changed` helper stating the change-guard once instead of sixteen times.\n- heca/src/chrome/signals.rs — the 97-line per-frame `pane_info` scan is GONE, along with the `ChromeSignals::pane_info` mailbox field and the three tree lookups (`find_pane_entry`, `pane_fallback_name`, `pane_custom_name`) that existed only to feed it. `sync_chrome_signals` no longer returns a bool: nothing consumed it once rows subscribe. The file went 358 → 225 lines.\n- heca/src/chrome/pane_header.rs — `PaneInfoSignals` deleted. It lived in the pane header and was used by neither the header nor anything else; the row owns its own face now.\n- heca/src/chrome/state.rs — `PaneRuntimeSignals::snapshot()` leaves `#[cfg(test)]` and its reads become TRACKED, which is what makes a subscription depend on this pane's six fields and not on the map. New `pane_runtime_signals(pane)` hands out the `Copy` handles; new `pane_show_cwd_signal` / `pane_renamed_add_process_name_signal` so the two display settings are followed rather than read once at build.\n- heca/src/providers/workspaces/seams.rs + testing.rs — `DockSeams::programs` carries the `Rc<ProgramsConfig>` (already an `Rc` on `AppState`), because the row keeps it alive inside a subscription that outlives the borrow.\n- heca/src/app/render.rs — the catch-up `window_root.tick(0.0)` runs unconditionally. It was gated on the sync pass reporting a change, which is no longer a question one return value can answer; a `Visibility` revealed by a subscription would otherwise land a frame late, or not at all.\n\nA REAL DEFECT FOUND WHILE BUILDING IT, of the same class as T477\n`pane_runtime_signals` first returned `Option`, `None` when the store had not yet met the pane. A row built in the frame its pane appeared captured that `None` and was deaf for the life of the tree — a subscription that can never form, exactly like a line that was never attached. It now CREATES the entry, so asking about a pane gives it a home; the per-frame mirror fills it in, and `retain_panes` prunes it when the pane goes. `a_branch_that_arrives_after_the_row_was_built_still_shows` is the guard, and it caught this before the code was finished.\n\nDECISIONS\n- The subscription reads per-pane field signals, never `panes` itself. Subscribing to the map would wake every row on every frame, because the mirror calls `panes.update` whether anything changed or not — worse than the scan it replaces.\n- `custom_name` comes from the store signal rather than the tree, so a rename reaches the row without a rebuild.\n- All sixteen signals moved together. Converting the directory alone would have left two paths over one input, which is the thing this project forbids.\n- Hop 1 (backend → canonical `Pane.runtime`) is untouched and still per-frame, as the task scoped it.\n\nVERIFICATION\n1513 tests pass, 0 failures. `./scripts/lint-changed.sh` exit 0 at the one pre-existing warning (heca-grid-ui toast/stack.rs) plus the third-party block v0.1.6 note. No file's rustfmt violation count raised (edition 2024, per file).\n\nThe two T477 guards were REWRITTEN to drive the store — `set_pane_runtime`, then lay out and paint — with no sync pass run at all. That is the assertion the old shape could not make, and it is now the test. Two sabotages, both red: the row not reading its pane, and the store handing back a detached handle for a pane it had not met.\n\nNOT VERIFIED BY ME — Antonio drives: rename a pane, `cd`, change branch, change a process's status, spawn and close panes, and confirm each still updates live with no tree rebuild and no empty strip under a card.\n\nDO NOT CLAIM THIS AS A SPEED FIX. The measured latency on 2026-09-08 was Enter → shell OSC 7 94 ms, OSC 7 → the row's signal 130 ms, and the 130 ms sat around `request_redraw` and the frame being served, not in these scans. This is a correctness and reachability change.\n\nPROCESS NOTE FOR THE NEXT SESSION: I ran `git checkout -- heca/src/chrome/state.rs` to undo a sabotage and destroyed every uncommitted change in that file. AGENTS.md warns about exactly this. Restore from a copy; never checkout a modified file."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-08T13:02:17.643Z",
+      "completedAt": "2026-09-08T13:12:05.398Z",
+      "createdAt": "2026-09-08T12:59:43.649Z",
+      "updatedAt": "2026-09-08T13:12:05.398Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:689b3f53-6000-4ff5-bdbf-863af99fa381",
+          "createdAt": "2026-09-08T13:02:17.538Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 518,
+      "shortId": "66FM8",
+      "priority": 6,
+      "shortName": "a-region-is-reached-by-name-an",
+      "title": "A region is reached by name and holds a list — regions(\"sidebar.left\").append(..)",
+      "status": "planned",
+      "description": "Decided with Antonio 2026-09-21, in conversation. Next task after T474 closes. NO CODE YET beyond what is described here.\n\n═══ THE DECISION ═══\nA region is a PLACE, not a widget. `Region::LeftSidebar.child(..)` (landed 14452a9) reads like building a component, and a sidebar is not one. Replace it with a handle fetched by name that owns a LIST:\n\n    regions(\"sidebar.left\").append(FileTree::new())\n    regions(\"sidebar.left\").prepend(Outline::new())\n    regions(\"sidebar.right\").remove(\"workspaces\")\n    regions(\"sidebar.left\").retain(|id| id != \"docker\")\n\nThat is the line a plugin author types — Rule Zero. No host object, no crate-private type, no registry id.\n\nThe dotted string matches what `ContextPath` already does (`\"sidebar.workspace\"`, accepted decision cm-d1), so a plugin learns ONE spelling for \"where\".\n\n═══ WHAT WAS REJECTED, AND WHY ═══\n- `add_at(index, ..)` / `remove_at(index)` — Antonio's first sketch, dropped in the same conversation. Addressing a member by POSITION is the exact defect P052(F004)/T517 exists to delete: a plugin inserting anything shifts everyone after it and nothing fails, because the indices are still valid indices. Ends are stable, so `append`/`prepend` stay.\n- `filter(..)` as the name. In Rust `filter` returns a new lazy sequence; the in-place one is `retain`. Same idea, honest name.\n- A predicate over an opaque `Box<dyn Component>` — it could not tell one dock from another. The predicate takes the CONTRIBUTION ID, which region children already carry (`c.id`, read in `heca/src/chrome/scene.rs::build_region_content`).\n- `weight` as the ordering name. Checked 2026-09-21: in `heca-grid-ui` **weight means font weight** (`label.rs:73`, `item.rs:441`). Reusing it would give one word two meanings inside the library. The `weight: Vec<i64>` that exists is app-side only, `heca/src/chrome/context_menu.rs:94`, for merging menu entries.\n- Deriving the region's template from how many children it has. That is counting children, which T517 exists to delete.\n\n═══ ORDER ═══\n`.order(..)` on the CHILD — CSS's own name, and the layout API already speaks CSS. There is no `.order` builder and no ordering enum in the library today (checked).\n\nSemantics: lower first; unset means declaration order; ties keep declaration order (stable sort).\n\nIt takes a NUMBER OR A LIST — `.order(1)` and `.order([0, 5])` — through one parser, exactly as `Length` and `Space` do (T474's recorded decision: \"A capability is one builder taking any spelling of its value\"). The list is what lets a plugin slot between two children it does not control: with plain `i32`, built-ins at 0 and 1 leave no integer between them. This is the same shape as the context menu's `weight`, so the app ends with ONE ordering idea under the CSS name and two call sites — consider whether `context_menu.rs` should move onto it rather than keep its own.\n\nAntonio first said `i32` is enough, then reversed: \"if plugin need vec<i64> go for it.\"\n\n═══ PLACEMENT ═══\nA child may instead say where it sits: `.area(..)`, `.row(..)`, `.column_span(..)`, `.row_span(..)` — already on every widget since 47356a0. The REGION owns only the shape (`template_row`, landed a3bc234).\n\nRule between them: EXPLICIT PLACEMENT WINS; `.order` only sorts whatever was not placed. Also CSS.\n\n═══ THE DEFAULT — LIKELY ALREADY FREE, PROVE IT FIRST ═══\nBelieved, NOT verified: a region with no template needs no derived template at all. A grid creates tracks to fit what children declare, and the uncommitted `to_taffy_grid` change makes an implicit track `minmax(0, 1fr)` — so two children with no template should already come out as two equal halves, and a child saying `.row(3)` in a two-row template should already get a third row.\n\n⚠️ FIRST STEP IS A HEADLESS TEST OF THAT CLAIM. If it holds, the auto-template question Antonio raised is answered by doing nothing. Reasoning was wrong twice in the 2026-09-21 session and measuring was right every time.\n\nOpen: what \"no template, nobody declared\" should MEAN — equal shares (what the tree does today) or content-sized. Right for a sidebar, probably wrong for a toolbar region.\n\n═══ STARTUP ONLY (Antonio, explicitly) ═══\n\"do not make it automatically update for now. keep it at startup.\"\n\nSo this task does NOT make regions reactive. But the silent failure must go: `ChromeHost::mount_pending` is called once in `heca/src/app/startup.rs`, so a `Region::child` after startup queues and is DROPPED with no error. A call after startup must FAIL LOUDLY. Silently vanishing is worse than either option.\n\n═══ WHAT EXISTS TODAY ═══\n- `Region::LeftSidebar.child(..)` — one or many, works before the host exists by queuing (14452a9). This task replaces its spelling.\n- `Region::LeftSidebar.template_row(\"1fr 1fr\").gap(\"sm\")` (a3bc234). Kept.\n- `placed(id, region)` became `named(id)`.\n- `heca/src/chrome/scene.rs::build_region_content` builds a region's body from `host.contributions(region)` and is where the list and its order are read.\n- A provider's `default_order` still decides where it sits among siblings. THAT GOES — it is the same inversion `Region::child` removed for the parent, and with the region owning the list there would be two sources of order.\n\n═══ EDGE CASES ═══\n- Two children declaring the same cell; a child naming an area the region's template does not have. CSS overlaps or auto-places SILENTLY — wrong here, because a plugin's mistake shows up as a layout nobody can explain. Decide: warn, or refuse.\n- A name nobody registered (`regions(\"sidebar.lft\")`). Must be visible, not a no-op.\n- Removing a built-in the app relies on, e.g. `remove(\"workspaces\")`. Allowed — it is the point — but the app must not assume it is there.\n\n═══ VERIFICATION ═══\nRendering. Green tests do not show where anything sits. Antonio drives: both sidebars after an append, a prepend, a remove, and an `.order` that reverses two docks. Sabotage every guard.",
+      "descriptionUpdatedAt": "2026-09-21T18:06:28.516Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-001-headless-test-first-a-region-with-no-template-and-two-children-comes-out-as-equal-halves-and-a-child-declaring-row-3-in-a-two-row-template-gets-a-third-row-if-it-holds-the-auto-template-question-needs-no-code",
+          "number": 1,
+          "title": "Headless test FIRST: a region with no template and two children comes out as equal halves, and a child declaring .row(3) in a two-row template gets a third row. If it holds, the auto-template question needs no code",
+          "checked": false
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-002-regions-sidebar-left-returns-a-handle-by-dotted-name-matching-contextpath-s-spelling-a-name-nobody-registered-is-visible-never-a-silent-no-op",
+          "number": 2,
+          "title": "regions(\"sidebar.left\") returns a handle by dotted name, matching ContextPath's spelling. A name nobody registered is visible, never a silent no-op",
+          "checked": false
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-003-append-prepend-remove-id-retain-id-on-the-handle-no-index-methods-the-predicate-takes-the-contribution-id-not-an-opaque-component",
+          "number": 3,
+          "title": "append / prepend / remove(id) / retain(|id| ..) on the handle. No index methods. The predicate takes the contribution id, not an opaque component",
+          "checked": false
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-004-layoutext-order-on-the-child-taking-a-number-or-a-list-through-one-parser-like-length-and-space-lower-first-unset-means-declaration-order-ties-stable",
+          "number": 4,
+          "title": "LayoutExt::order(..) on the child, taking a number or a list through one parser (like Length and Space). Lower first, unset means declaration order, ties stable",
+          "checked": false
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-005-explicit-placement-area-row-spans-wins-over-order-order-sorts-only-what-was-not-placed",
+          "number": 5,
+          "title": "Explicit placement (.area/.row/spans) wins over .order; order sorts only what was not placed",
+          "checked": false
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-006-delete-the-provider-s-default-order-the-region-s-list-owns-the-order-now-and-two-sources-would-drift",
+          "number": 6,
+          "title": "Delete the provider's default_order — the region's list owns the order now, and two sources would drift",
+          "checked": false
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-007-a-call-after-startup-fails-loudly-mount-pending-runs-once-in-app-startup-rs-and-today-drops-later-additions-silently",
+          "number": 7,
+          "title": "A call after startup FAILS LOUDLY. mount_pending runs once in app/startup.rs and today drops later additions silently",
+          "checked": false
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-008-decide-and-implement-the-collision-behaviour-two-children-in-one-cell-or-an-area-the-template-does-not-have-warn-or-refuse-never-silent",
+          "number": 8,
+          "title": "Decide and implement the collision behaviour: two children in one cell, or an area the template does not have — warn or refuse, never silent",
+          "checked": false
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-009-consider-moving-context-menu-rs-s-weight-vec-i64-onto-the-same-order-vocabulary-so-the-app-has-one-ordering-idea-rather-than-two",
+          "number": 9,
+          "title": "Consider moving context_menu.rs's weight: Vec<i64> onto the same order vocabulary, so the app has one ordering idea rather than two",
+          "checked": false
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-010-antonio-drives-both-sidebars-append-prepend-remove-and-an-order-that-reverses-two-docks",
+          "number": 10,
+          "title": "Antonio drives both sidebars: append, prepend, remove, and an .order that reverses two docks",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-21T18:06:28.452Z",
+      "updatedAt": "2026-09-21T18:09:08.061Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-09-04T14:29:26.834Z",
-  "handoff": "# P082 — 37 of 48 done; five bugs open, five splits deferred behind P097\n\nCreated at: 2026-08-27\nUpdated at: 2026-08-31\nReason: **The previous handoff was stale in three ways and would have misdirected a resume.** It said\n\"next work is § 4's table, starting at **T479**\" — T479 is **done**. It said the tree was \"clean and\npushed at `ed6edd5`\" — that commit is now 33 behind, and the branch is **not pushed**. And it\npredated `P097(F003)` landing the one-tree migration, which is what the deferred splits are waiting\non. Rewritten, and shortened: its § 0 restated AGENTS.md § 0, and a second copy of a rule is the\nthing this phase exists to stop.\n\n## Current focus\n\n**Nothing is in progress.** The phase's framework work is **finished** — `T479` and `T481` both\nclosed on Antonio's visual verification. What is left is five bugs and five deferred splits.\n\n⚠️ **`P097(F003)` is F003's priority 0 and is mid-flight** (T494 done, T495 next). If you are picking\nup F003 work at all, read **`P097`'s handoff first** — it is current as of 2026-08-31.\n\n## What was being done\n\nThis phase carried two things: layer content from a `ViewNode` (done), and **how code must be written\nhere** — the rule that a fix belongs in the model, not at the call site.\n\n**That rule now lives in `AGENTS.md` § 0 (the PRE-FLIGHT) and § 0b/0b-bis.** It is not restated here;\nthe previous handoff duplicated it, and a duplicated rule drifts. What is worth keeping is *why it was\nwritten*, in Antonio's words, 2026-08-27:\n\n> *\"Why after every fix/implementation do I have to ask always the same thing, discovering you\n> didn't? That's annoying and embarrassing.\"*\n\n**The failure is the timing, not the rule.** The pattern was: fix the reported instance → report it →\nhe asks *\"is this at the call site or centralised?\"* → only then grep → discover the real shape.\n**Decide where the fix belongs before writing the first line**, and name the one owner.\n\n## How to resume\n\n1. Read **AGENTS.md in full**, then **F003**, then this phase, then the task. All of it, before\n   starting.\n2. **Read `P097(F003)`'s handoff** — it is F003's priority 0 and it is where the live work is.\n3. Pick a bug from the list below. **`T477`'s entry in my old notes carried two wrong diagnoses of\n   mine — use the task's own description, not any summary of it.**\n4. **Do not start any of the five splits** — see Blockers.\n5. Gates: `./scripts/lint-changed.sh test`, then `./scripts/lint-changed.sh`. **Never `--workspace`.**\n   Two clippy warnings are expected (the pre-existing `heca-grid-ui/src/widgets/toast/stack.rs:80`\n   callback type, counted for lib and lib-test).\n6. **Antonio drives every visual check.** Every one of the open bugs below is a visual or input\n   defect; green tests prove nothing about them.\n\n## Files touched\n\nNothing new in this phase since `ed6edd5` (2026-08-27). Its framework work is committed and closed.\n\nThe branch has moved a long way since: **81 commits ahead of `main`, not pushed**, with `P097`'s\none-tree migration landing in `f5f2262` … `a34ca0b`. If you are reasoning about what a file looks\nlike, read it — do not trust a path from this phase's earlier notes.\n\n## Blockers\n\n**The five splits are DEFERRED, and this is the reason** — `T466` (`app/registry.rs`), `T468` (the\nmulti-job files), `T470` (`heca-renderer/examples/showcase.rs`, 3254 lines), `T471`\n(`heca-grid-ui/src/widgets/scroll_region.rs`, 2565), `T472` (`heca-view/src/lib.rs`, 1423).\n\n`P097(F003)` is rewriting several of the same files. A split landing mid-migration produces a diff\nnobody can review, and the two would conflict continuously. **Do them after P097 finishes**, not\nbefore.\n\nNothing blocks the five bugs.\n\n## Next steps\n\n**Five open bugs**, none started:\n\n| task | what |\n|---|---|\n| `T474` | the column in the scrolling area does not own its identity |\n| `T475` | a pick with no candidates dies silently — the key looks broken |\n| `T477` | a sidebar pane row built without a cwd can never show one. ⚠️ **read the task, not my old notes** |\n| `T478` | a zero-width pane still gets a letter, drawn outside itself |\n| `T491` | the showcase teaches developers to hand-roll a row the app has as a component |\n\n**Five deferred splits**: `T466`, `T468`, `T470`, `T471`, `T472` — after `P097`.\n\n⚠️ **`T491` is bigger than a tidy-up.** AGENTS § 1 tells every developer the showcase is \"the living\nreference — look at it before hand-rolling anything\", and the showcase currently demonstrates exactly\nthe hand-rolling the project forbids. `T332` (\"the showcase stops hardcoding 2.0\") is the same shape.\nUntil both land, the showcase is a place to *see a widget run*, not authority on how to compose one —\nand it is worth saying so to anyone who cites it.\n\n## Recent decisions\n\n- **The five splits wait for `P097(F003)`.** Same files, and a reorganisation landing mid-migration is\n  unreviewable.\n- **`T479` and `T481` are done**, both verified on screen by Antonio. The phase's framework half is\n  finished; only bugs and splits remain.\n- **The \"how code must be written here\" rule lives in AGENTS.md § 0**, not in this handoff. It was\n  duplicated here and that duplication is the same defect the rule itself describes.\n- **`T477`'s analysis in my notes is wrong — twice.** The task's own description is correct. This is\n  recorded because a wrong diagnosis left lying around costs more than no diagnosis.",
-  "handoffUpdatedAt": "2026-08-31T16:14:48.165Z",
-  "handoffAudit": null,
-  "handoffReadAt": "",
+  "updatedAt": "2026-09-23T08:50:09.772Z",
+  "handoff": "# The sidebar is mid-fix and NOT verified — a region takes children and a template, three layout defects are fixed, and the last one is unconfirmed on screen\n\nCreated at: 2026-08-27\nUpdated at: 2026-09-21T15:45:56.420Z\nReason: Work is stopping with uncommitted changes that Antonio has not signed off. The sidebar was photographed wrong three times in a row and each screenshot uncovered a different defect; the third fix is verified only headlessly. A cold agent must not commit, must re-drive the sidebar first, and must know which decisions are settled and which are still open — including two that Antonio raised and nobody has answered.\n\n## Current focus\nExact focus and resume point are preserved in the supporting document.\n\n## Current and partial state\nEarlier sessions: `.planner/docs/handoff-p082-2026-09-15-detail.md` — four library capabilities, the guards that proved nothing, and a \"Carried over — filed NOWHERE\" list. Its two `hit_test.rs` defects are now DONE; the rest stand.\n\n**Committed and verified on screen by Antonio:**\n- The layout API is CSS-shaped — tracks, keywords, child-side placement, one `child` door, `flex-basis`. Commit `47356a0`, plus `docs/layout.md` (`eed9fd7`).\n- The exposé's columns-of-two bug (`Flex::on_layout` walked into layouts, not just wrappers) and the mouse hit-test defects.\n- `Pane` and `DockFrame` find their parts BY NAME — `area(..)` reads one back, `area_slot(..)` hands over the slot so a part can be replaced. `DockFrame`'s five positional constants are gone. Commits `8c31419`, `d913683`. Antonio: \"it looks as before now.\"\n- `Region::LeftSidebar.child(..)` — a region takes children, one or many; no `Box`, no host object, no `::placed`; works before the host exists. `placed(id, region)` became `named(id)`. Commit `14452a9`.\n- A region takes a template — `Region::LeftSidebar.template_row(\"1fr 1fr\").gap(\"sm\")`. Commit `a3bc234`. **A third dock is registered in the left sidebar on purpose**, so two share a region and the arrangement is observable.\n\n**UNCOMMITTED, and the last one is UNVERIFIED on screen.** Three separate defects, found one at a time across three of Antonio's screenshots:\n1. Containers collap\n\n[Extended detail continues in the linked planner document.]\n\n## Preservation constraints\n- **The column parent move is unstarted.** Two traps remain (3 and 4 are gone — the pane's key is on its own node, and `.accent` removed the per-pane theme swap): (1) flex stacking the panes DROPS THE GAP, so place children at the slots `columns_with_positions` gives; (2) moving placement skips the per-frame `shell::focus_state_to` write, so the active pane loses its highlight. **Agree the steps with Antonio before writing any of it.**\n- **Ownership and painting move together** — \"ownership only\" was tried and was wrong; a host lookup `pane::shell(state, id)` was a registry by another name and was reverted too.\n- **`KeyHint` is only for a region that is not a widget you can put a builder on.** Three remain and are correct.\n\n## Supporting documents\n- .planner/docs/handoff-p082-2026-09-21T15-45-56-420Z.md — Full submitted handoff detail externalized automatically because the inline resume capsule exceeded 8000 characters. Read this document before resuming.\n\n## Blockers and risks\n- ⚠️ **TWO KNOWN DEFECTS, NEITHER DIAGNOSED.** **(a) Idle CPU reaches 100%** after a while — Antonio reported it returning during this session and it was never traced. Suspect a layout pass that never settles, since that re-requests a frame for ever; `LayoutEngine::compute` runs up to `SETTLE_PASSES` and then lays out once more regardless. **(b) `Region::child` after startup queues but is never seated** — `ChromeHost::mount_pending` is called once in `app/startup.rs`. A plugin adding a container later is silently dropped. Needs a drain point in the frame loop, or `child` seating directly when a host exists.\n- ⚠️ **The workspaces dock does not cap its own height.** It already nests its own `ScrollRegion` (`providers/workspaces/dock_view.rs`), so the scroll area exists — what is missing is the dock's body\n\n[Extended detail continues in the linked planner document.]\n\n## How to resume\n1. **Re-drive the left sidebar with Antonio.** Two docks, each capped to half, each scrolling its own rows, full width. If it is still wrong, STOP PATCHING — build a headless reproduction of the real region body first.\n2. Read `AGENTS.md`, then `docs/layout.md`, then T474's description and **notes**.\n3. **Gates:** `./scripts/lint-changed.sh test`, then `./scripts/lint-changed.sh`. Never `--workspace`. Grep for `warning:` as well as `error`. Formatting: compare newly-unformatted lines against HEAD, not hunk counts.\n4. **Sabotage every new guard.** Copy the file first; never `git checkout --` a modified file.\n5. **Never commit or push unasked. Propose planner entries, never create them.** Short, plain answers.",
+  "handoffUpdatedAt": "2026-09-21T15:45:56.420Z",
+  "handoffAudit": {
+    "version": 1,
+    "entries": [
+      {
+        "category": "exact-focus-resume-point",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "first-resume-action",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "partial-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "remaining-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "decisions-rationale",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "rejected-alternatives",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "files-symbols",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "branch-worktree",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "commands-tools",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "pending-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "runtime-limitations-workarounds",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "blockers-risks",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "user-visible-behavior",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "operator-actions",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "project-operating-notes",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "conversation-only-facts",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      }
+    ],
+    "coldStartInventory": {
+      "version": 1,
+      "sourceReviews": [
+        {
+          "source": "conversation",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "planner-entities",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "working-tree",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "verification-runtime",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "peer-agent-output",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        }
+      ],
+      "entries": [
+        {
+          "category": "files",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "symbols",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "working-tree-ownership",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "negative-state",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "commands-tools",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "runtime-wiring",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "preservation-constraints",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "verification-evidence",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "related-planned-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "user-visible-behavior",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "operator-actions",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "blockers-risks",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "remaining-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "ordered-resume-steps",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        }
+      ]
+    },
+    "supportingDocuments": [
+      {
+        "path": ".planner/docs/handoff-p082-2026-09-21T15-45-56-420Z.md",
+        "description": "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.",
+        "contentHash": "cf5cfac196629a605a27b1c0f733e66d112fa172f7206211166f98ad9298a37e",
+        "contentLength": 9710
+      }
+    ],
+    "contentHash": "da2a7187db28eb1f0cfc2ceebe55f998cc81ca7a7ba7e0c239bd55acb387fe39",
+    "contentLength": 4870,
+    "verifiedAt": "2026-09-21T15:45:56.420Z",
+    "resumeReadyAt": "2026-09-21T15:46:00.455Z",
+    "readBackSourceReviews": [
+      {
+        "source": "conversation",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "planner-entities",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "working-tree",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "verification-runtime",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "peer-agent-output",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      }
+    ]
+  },
+  "handoffReadAt": "2026-09-21T15:46:00.455Z",
   "handoffHistory": [
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-25T08-59-39-784Z.md",
@@ -2293,6 +3008,26 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:76ebd5d0-168a-4a97-9b9d-499545debce4",
+      "createdAt": "2026-09-21T15:48:34.857Z"
+    },
+    {
+      "sessionId": "mcp-process:8b24b106-84c9-4960-9cde-3b0cb31552b3",
+      "createdAt": "2026-09-14T12:28:01.544Z"
+    },
+    {
+      "sessionId": "mcp-process:a70b4e20-9380-4450-9aa5-4d6c767bb1aa",
+      "createdAt": "2026-09-11T07:28:40.989Z"
+    },
+    {
+      "sessionId": "mcp-process:65b2ab93-5391-4cfe-920d-9ee1153fe084",
+      "createdAt": "2026-09-09T06:54:09.290Z"
+    },
+    {
+      "sessionId": "mcp-process:689b3f53-6000-4ff5-bdbf-863af99fa381",
+      "createdAt": "2026-09-08T13:36:47.326Z"
+    },
     {
       "sessionId": "mcp-process:f2720c67-3db6-4507-82df-f5b669c10418",
       "createdAt": "2026-08-27T20:14:32.984Z"

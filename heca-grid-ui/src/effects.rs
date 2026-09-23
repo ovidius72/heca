@@ -143,7 +143,12 @@ pub struct Eased {
 impl Eased {
     /// Settled at `0.0`, gliding with time constant `tau` seconds.
     pub fn new(tau: f32) -> Self {
-        Self { current: 0.0, target: 0.0, tau: tau.max(1e-3), epsilon: 0.5 }
+        Self {
+            current: 0.0,
+            target: 0.0,
+            tau: tau.max(1e-3),
+            epsilon: 0.5,
+        }
     }
 
     /// How close counts as arrived (default `0.5`, half a pixel). Set it in the units of whatever
@@ -207,7 +212,11 @@ mod tests {
             frames += 1;
         }
         assert!(frames < 240, "it finishes rather than easing forever");
-        assert!((e.value() - 20.0).abs() < 0.5, "and it arrives at the LAST target: {}", e.value());
+        assert!(
+            (e.value() - 20.0).abs() < 0.5,
+            "and it arrives at the LAST target: {}",
+            e.value()
+        );
     }
 
     /// A move the user drives lands on the same frame — a view that trails a finger reads as broken.

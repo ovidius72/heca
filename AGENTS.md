@@ -77,16 +77,51 @@ reinventing something, and it will be rejected.
    host wiring with a component. This applies to code you are only passing through: when you meet an
    oversized file while fixing something else, **say so and agree the split first** — a large file
    quietly reorganised is a diff nobody can review.
-2. **Write it for the next caller, not for this one.** Every widget, component and function will be
-   used by another developer, another agent, or a plugin — and none of them should have to make the
-   same fix or build the same thing twice. So **centralise the logic**: a second copy of a rule is
-   the bug, not the copy you are about to write. And a capability must be reachable from all three
-   surfaces — the app, a plugin, and RPC — never trapped in the one that needed it first. This is
-   ⭐⭐ RULE ZERO stated up front; that section is the full form.
+2. ⛔ **THE FIX IS ALWAYS CENTRALIZED. NEVER HARDCODED. ALWAYS COMPOSED AND REUSABLE.**
+
+   This is not a question to weigh up, and there is no "where does this one belong" to decide.
+   Centralized is the answer, every time, before the first line. If the centralized version looks
+   too big, that is the work — it is not a reason to write the local one.
+
+   **The test is not "did I put it in the library".** It is:
+
+   > **Will any other developer or agent ever have to know this problem exists?**
+
+   If yes, the fix is in the wrong place, however central the file looks. A rule a caller has to
+   remember is the bug, even when it is written down once. Code that sits in a library and still
+   has to be repeated by the next person who composes something is a call-site fix wearing a
+   library's address.
+
+   **The tells you are writing the local version — stop at any one of them:**
+   - You are typing the same method, field or block into a **second** type. Three copies is not a
+     pattern to extend; it is the framework telling you the capability is missing. **Count them
+     before writing the next one** (`grep -rn "<the pattern>" src/`), because the count changes
+     what you build.
+   - You are reaching for a number, a key, a flag or an id at the place that *consumes* it.
+   - The fix works for the thing in front of you and the next widget of a different shape would
+     need its own version.
+   - You are about to ask permission to change a shared type. Centralizing IS the standing
+     decision; asking is a slower way of not doing it. Do it, then say what changed.
+
+   **Then build it once**, composed from what exists — Flex, Grid, Surface, the widgets in
+   `docs/widgets.md` — with every size a share and no pixel constants. And a capability must be
+   reachable from all three surfaces — the app, a plugin, and RPC — never trapped in the one that
+   needed it first. This is ⭐⭐ RULE ZERO stated up front; that section is the full form.
 
 **The tell you are about to fail this**: you are writing `paint`, a measure, a hit-test, a scroll
 offset, or an event-forwarding `match` inside a widget or the app. Every one of those is some
 existing widget's job. Stop and answer the three questions.
+
+### 0a. ⛔ `key` IS OPTIONAL. A WIDGET NEVER HAS TO BE NAMED
+
+**Never gate a capability on `Base::key` being present**, and never add `.key("…")` at a call site so
+that something *else* works. A widget that declares none still has an identity, derived from its
+content. Any capability needing to know *which* widget takes the declared key when there is one and
+the derived identity when there is not — one function, read by every side.
+
+**Full rule, with the two capabilities that shipped broken this way and the code to copy:**
+[`docs/widgets.md` → "`key` is OPTIONAL — never require one, and never gate on one"](docs/widgets.md).
+It lives there because it is a rule for **anyone building on the library**, not only for agents.
 
 ### 0b. WIDGET vs COMPONENT — where a thing lives, and how it is built
 
@@ -126,7 +161,7 @@ window, the overlay margin, the panel padding, the gaps, the row count, each row
 centring. Miss one and everything is wrong by exactly that term. The exposé did this and took **seven
 attempts, six of them wrong, each missing a different term** — and since nothing was a component,
 nothing had a headless test, so the only way to see any of it was to photograph the running app.
-Express it as `Length::Pct` of a shared denominator and `grow` weights, and taffy answers it exactly
+Express it as `Length::Percent` of a shared denominator and `grow` weights, and taffy answers it exactly
 at every window size. (`grow` alone always fills its container — that is what flex-grow *means*, so
 "a share of the widest sibling" is a percentage, not a grow weight.)
 
@@ -248,7 +283,7 @@ rather than reaching into a registry — see ⭐⭐ RULE ZERO.
 
 #### 6. Sizes are shares; the PARENT sizes the CHILD
 
-`Length::Pct` of one shared denominator, or a `grow` weight. Never a model number times a scale of
+`Length::Percent` of one shared denominator, or a `grow` weight. Never a model number times a scale of
 your own (§ 0b). Two traps, both real:
 
 - **`grow` alone always fills.** That is what flex-grow *means*: it distributes free space. "A share
@@ -266,6 +301,13 @@ shares, add the test the shares exist for: **lay it out in a box and assert it n
 at several sizes and child counts. In the exposé that is
 `the_whole_map_never_exceeds_the_box_it_is_given` — the one assertion that would have caught all
 seven failures. Fixtures live in `testing.rs` so each test reads as its assertion, not its setup.
+
+**Then break the thing the test protects, on purpose, and check the test goes red.** Put the bug
+back in — change the number, delete the line, return the wrong branch — run the test, see it fail,
+then undo it. A test that still passes while the bug is present proves nothing, and you will not
+find that out by reading it. Three tests in this codebase passed with their own fix deleted, and one
+did not exist until breaking the code showed there was nothing watching it. Copy the file before you
+break it; never `git checkout --` a file you have uncommitted work in.
 
 #### 8. It moves to `heca/src/components/` on the SECOND caller
 
@@ -353,6 +395,9 @@ are already 16 and they are being deleted.
 ### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase
 
 - **Before building ANY UI**, look at what already exists:
+  - **Laying things out:** [`docs/layout.md`](docs/layout.md) — Grid, Flex, Surface, sizes, spaces,
+    alignment and shares, in the spellings the builders actually take. **Read it before arranging
+    anything with more than one part.**
   - **Widget catalog + recipes:** [`docs/widgets.md`](docs/widgets.md) (every widget + a "Drag and drop" section + patterns).
   - **Layering / overlays / KeyHint visibility:** [`docs/surface-compositor.md`](docs/surface-compositor.md) — the surface-tree model that decides which layers/buttons are interactive, and [`docs/overlay-design.md`](docs/overlay-design.md). **Required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface.**
   - **The living reference:** run the showcase — `cargo run -p heca-renderer --example showcase` —
@@ -710,7 +755,7 @@ from the whole `AppState` and handed to the (still pure, still unit-tested) rout
 | `Tiled` | a pane has the keyboard |
 | `Floating` | a floating pane is active |
 | `Container` | a **dock** has the keyboard (keyboard/provider sources; a mouse click is judged by what it landed on) |
-| `Overlay` | a layer **covers the tiled area** — `DynamicLayer::covers_content` |
+| `Overlay` | a layer **covers the tiled area** — `DynamicLayer::lock` |
 
 `Overlay` permits **only** `Global`, which is what stops `prefix+Enter` adding a pane behind a
 plugin's overlay — the plugin declares only that its overlay obscures the panes, never which actions
@@ -882,15 +927,23 @@ row = row.child(action_tooltip(button, action_name, label, &state.action_shortcu
   the macOS `⌃⌥⇧⌘` form. Rebinding in `config.toml` + reload updates every tooltip.
 - Result: `tip = "<label>  <shortcut(s)>"`, or the label alone when unbound.
 
-**2. KeyHint (vimium-style `prefix+/` pick)** — declare **what a pick does** on the
-wrapper that draws the letter. One line, no id, no registry:
+**2. The pick (vimium-style `prefix+/`)** — declare **what a pick does** on the widget
+itself. One line, no id, no registry, **no wrapper**:
 
 ```rust
 let fire = crate::chrome::fires(pane_row_press(pane_id), emit);   // the click
 let hint = crate::chrome::fires(row_hint(pane_key(pane_id)), emit); // the pick
-let row = Row::new().on_activate(fire);
-KeyHint::new(row).on_hint(hint)
+Row::new().on_activate(fire).on_hint(hint)
 ```
+
+⛔ **Do not wrap it in `KeyHint` to do this.** A wrapper round a widget that is already
+actionable is a **second pick target**: the wrapper declares, the widget inside is
+actionable, so a picker offers two letters where the author wrote one. It also hides the
+widget's `key` one level in, so anything looking the widget up by name finds an anonymous
+wrapper — which is how every pane came to be rebuilt every frame. `KeyHint` is only for a
+region that is **not** a widget you can put a builder on, such as a boxed `WidgetModel`
+whose type is unknown. Which to reach for, with a symptom→cause table:
+[`docs/hint-architecture.md` § 5a](docs/hint-architecture.md).
 
 The slot is `Base::hint`, universal, and so is the **builder**: `on_hint` is on
 `ComponentExt`, so every widget takes one and `KeyHint` stays what it
@@ -904,7 +957,8 @@ nothing has to be un-registered when a tree rebuilds; a candidate is a
 letters are up. The pick path is `handle_hint_pick` → `chrome::active_hint_targets`
 (eligibility, once) and `chrome::paint_hint_letters` (live bounds, every frame); both
 walk the chrome tree, every `state.pane_headers` tree and every visible layer. See
-`sidebar_toggle_button` for a complete example (tooltip + hint together).
+`sidebar_toggle_button` for a complete example (tooltip + hint together, declared on the
+`IconButton` itself).
 
 - **A pick is not a click.** They are different gestures and a region may answer them
   differently: a sidebar row activates the pane and *leaves* on a click, and stays in the
@@ -1217,7 +1271,7 @@ remembered. When you touch a capability, check its neighbours for the same shape
 
 **heca's UI is a declarative, compositional tree — the same shape SwiftUI/Flutter use — and this is the target architecture for EVERY widget.** Two layers, one shape:
 
-- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `VStack`/`HStack`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`Overlay`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling IS a prop** — the `Theme` gives the default and code may override it with a string; the old "styling is not a prop" rule is dead. See [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
+- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `VStack`/`HStack`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`Overlay`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling IS a prop** — the `Theme` gives the default and code may override it with a string; the old "styling is not a prop" rule is dead. See [`docs/plugins.md`](docs/plugins.md). **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
 - **`realize(&ViewNode, …) -> Box<dyn Component>`** (`heca/src/chrome/realize.rs`) — the recursive host mapper: build the `heca-grid-ui` widget for `kind`, resolve props against `Theme`, wire events to intents, recurse `children`, attach via `.child(...)`. It **translates**; it never re-implements layout/paint/focus.
 
 **THE RULE (mandatory, every task): a widget's content is COMPOSED from child components — the very tree `realize` produces — never hand-drawn in `paint`.** A widget draws its own *chrome* (background/border/glow/focus ring, from `Theme`); its *content* (labels, icons, rows) must be child `Component`s laid out by the engine, so that:
@@ -1247,9 +1301,9 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the r
 | Is `realize` the only `ViewNode`→widget path? | **YES.** One bridge, app-side (`heca/src/chrome/realize.rs`). |
 | Do widgets hold children, or hand-draw content? | **CHILDREN.** Hand-drawn content is a refactor target (THE RULE above). |
 | What type is a slot / child? | **`impl Component`** — any widget. **Never** narrow it to a closed `Icon\|Label` enum. |
-| How does a **realized** subtree enter a widget? | Via a **`*_boxed` setter**: `realize` returns `Box<dyn Component>`, which is not itself `Component`, so it cannot go through `Parent::child`. `Dialog::body_boxed(Box<dyn Component>)` is the precedent. |
+| How does a **realized** subtree enter a widget? | **Through the slot's own builder** — `.child(..)`, `Dialog::body(..)`, `DockFrame::header(..)`. They take `impl IntoComponent`, which covers a widget and a `Box<dyn Component>` alike, and hand an already-boxed subtree through rather than boxing it twice. **The sixteen `*_boxed` twins are DELETED; do not add a seventeenth.** A new slot takes `impl IntoComponent` — that is the whole rule. |
 | How does behaviour cross the plugin boundary? | As an **`Intent`** (action id + args), never a callback. Click, KeyHint pick, and RPC all fire the same intent. |
-| Is styling a prop? | **YES.** The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name like `"muted"`). Set nothing and you follow the theme, which is what most widgets should do — a literal colour will not follow a theme reload, and that is the author's trade to make. **The old rule ("NO — the host resolves the pixels") is dead; do not restore it.** `Visual` (fill, border, glow, radius, font size) serializes and merges through the same generic path as `Layout`; a token name resolves against the theme the tree is built with, and a theme reload rebuilds the trees, so the token follows. `border` and `glow` are **structs**, so a scalar property value could not carry them however serde was derived — `PropValue::Map` carries a named group of values, and a colour nested in one is still a theme token. Nothing tested that gap, so nothing failed while it was open: **adding serde to a type is not the same as being able to author it — check the value channel.** Full model: [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). |
+| Is styling a prop? | **YES.** The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name like `"muted"`). Set nothing and you follow the theme, which is what most widgets should do — a literal colour will not follow a theme reload, and that is the author's trade to make. **The old rule ("NO — the host resolves the pixels") is dead; do not restore it.** `Visual` (fill, border, glow, radius, font size) serializes and merges through the same generic path as `Layout`; a token name resolves against the theme the tree is built with, and a theme reload rebuilds the trees, so the token follows. `border` and `glow` are **structs**, so a scalar property value could not carry them however serde was derived — `PropValue::Map` carries a named group of values, and a colour nested in one is still a theme token. Nothing tested that gap, so nothing failed while it was open: **adding serde to a type is not the same as being able to author it — check the value channel.** Full model: [`docs/plugins.md`](docs/plugins.md). |
 
 **Both authoring paths converge on the same retained tree — that is the whole point:**
 
@@ -1372,7 +1426,7 @@ truncation/ellipsis + wrapping (a long label overflows its box today).
   `Scroll`); it also applies to individual builders, e.g. `DockFrame::rail(..)`.
 
 Background reading (the rules above are self-contained — you do **not** need these to avoid the
-mistakes): `docs/widget-architecture.md` (same content, with rationale); `docs/chrome-and-ui.md` §2.6.2 + §2.7.2; `docs/widgets.md` → "Declarative UI model (`ViewNode`)"; `docs/chrome-and-ui.md`.
+mistakes): `docs/widget-architecture.md` (same content, with rationale); `docs/plugins.md` (everything a plugin author writes); `docs/chrome-and-ui.md` §2.6.2 + §2.7.2 (the chrome's own architecture); `docs/widgets.md` → "Declarative UI model (`ViewNode`)".
 
 ---
 

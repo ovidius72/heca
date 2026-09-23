@@ -122,15 +122,13 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     // border and background), so a letter looks the same on the active pane, an inactive one, a
     // header button and a sidebar row.
     theme.hint_font_size = state.appearance.hint_font_size.clamp(6.0, 48.0);
-    theme.hint_color = state.theme.accent;
+    theme.hint_color = state.appearance.effective_hint_color(&state.theme);
     theme.colors.glow_size = state.appearance.effective_glow_size(&state.theme);
     theme.colors.intensity = state.appearance.effective_intensity(&state.theme);
     // Focus-outline visibility (config `show_focus_border`, theme fallback) — the
     // app-wide focus-ring kill switch; rings additionally show only on keyboard
     // focus (focus-visible), never on click.
-    theme.colors.show_focus_border = state
-        .appearance
-        .effective_show_focus_border(&state.theme);
+    theme.colors.show_focus_border = state.appearance.effective_show_focus_border(&state.theme);
     // Overlay-panel frame style (config `overlay_border_style`, theme fallback) —
     // bracket reticle / plain edge / none for dialogs, dropdowns, context menus and
     // the command palette. Read at paint time, so it live-reloads like the rest.
@@ -149,21 +147,6 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     // `border_width = 0`.
     theme.focus_border_width = state.appearance.effective_focus_border_width();
     theme
-}
-
-/// Apply a config [`BorderStyle`](heca_config::appearance::BorderStyle) as the
-/// grid-ui [`Pane`] frame — the single mapping used for both terminal panes
-/// (`pane_border_style`) and the sidebar shell (`sidebar_border_style`).
-pub(crate) fn apply_pane_frame(
-    pane: Pane,
-    style: heca_config::appearance::BorderStyle,
-) -> Pane {
-    use heca_config::appearance::BorderStyle;
-    match style {
-        BorderStyle::None => pane.frameless(),
-        BorderStyle::Bordered => pane.bordered(),
-        BorderStyle::Bracketed => pane.bracketed(),
-    }
 }
 
 /// The status-bar text projection (`N panes | focus | MODE…`).
@@ -187,9 +170,12 @@ pub(crate) fn chrome_status(state: &crate::app_state::AppState) -> String {
         .unwrap_or("—");
     let (mode_str, rename_hint) =
         crate::app::render::status_mode_parts(&state.input_mode, &state.action_catalog);
-    format!(
-        "{} panes | {} | {}{}",
-        pane_count, focus_title, mode_str, rename_hint
-    )
+    // **A reply to the last key wins the tail of the bar.** It is there because that key could not
+    // do what was asked, so showing the mode's ordinary prompt beside it would answer a question
+    // nobody asked. The mode word stays: what you are in has not changed.
+    let tail = match &state.status_note {
+        Some(note) => format!(" — {note}"),
+        None => rename_hint,
+    };
+    format!("{pane_count} panes | {focus_title} | {mode_str}{tail}")
 }
-

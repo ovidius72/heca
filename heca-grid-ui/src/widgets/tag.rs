@@ -47,7 +47,7 @@ pub struct Tag {
 
 /// Build an empty segment container (a centered row of slots).
 fn segment() -> Flex {
-    Flex::row().align(Align::Center).gap(SLOT_GAP)
+    Flex::row().align("center").gap(SLOT_GAP)
 }
 
 #[heca_grid_ui_macros::props]
@@ -59,9 +59,9 @@ impl Tag {
         base.style.layout.direction = Direction::Row;
         base.style.layout.align = Align::Center;
         base.style.layout.justify = Justify::Center;
-        base.style.layout.padding_x = Some(PAD_X);
-        base.style.layout.padding_y = Some(PAD_Y);
-        base.style.layout.gap = SEG_GAP;
+        base.style.layout.padding_x = Some((PAD_X).into());
+        base.style.layout.padding_y = Some((PAD_Y).into());
+        base.style.layout.gap = (SEG_GAP).into();
         let label = Label::new(label).font_scale(FONT_SCALE);
         let label_signal = label.text_signal();
         base.children.push(Box::new(segment().child(label)));
@@ -110,7 +110,25 @@ impl Tag {
         label: impl Into<String>,
         leading: Option<Box<dyn Component>>,
     ) -> Self {
-        let mut seg = segment().child(Label::new(label).font_scale(FONT_SCALE));
+        self.segment_text_keyed(label, leading, None)
+    }
+
+    /// The same, **naming the words** so a host can change them later without rebuilding the tag
+    /// (`set_text_by_key`). A pane header does this: the program it shows changes twice per
+    /// command, and rebuilding for it blinks the whole bar out.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
+    pub fn segment_text_keyed(
+        self,
+        label: impl Into<String>,
+        leading: Option<Box<dyn Component>>,
+        key: Option<&str>,
+    ) -> Self {
+        use crate::builders::ComponentExt as _;
+        let mut text = Label::new(label).font_scale(FONT_SCALE);
+        if let Some(k) = key {
+            text = text.key(k);
+        }
+        let mut seg = segment().child(text);
         if let Some(icon) = leading {
             seg.base_mut().children.insert(0, icon);
         }
@@ -131,6 +149,14 @@ impl Tag {
 }
 
 impl Component for Tag {
+    /// **A tag's first segment is its own words**, so it answers a text write in place — the same
+    /// as a `Label`. Later segments are child labels and answer for themselves.
+    fn set_text(&self, text: String) -> bool {
+        use crate::reactive::SignalUpdate as _;
+        self.label.set(text);
+        true
+    }
+
     fn base(&self) -> &Base {
         &self.base
     }
@@ -150,7 +176,12 @@ impl Component for Tag {
         }
         let (muted, radius_tok, border_w, ia) = {
             let t = cx.theme();
-            (t.colors.muted, t.colors.border_radius, t.colors.border_width, t.colors.interaction)
+            (
+                t.colors.muted,
+                t.colors.border_radius,
+                t.colors.border_width,
+                t.colors.interaction,
+            )
         };
         let c = self.color.unwrap_or(muted);
         let pill = self.base.bounds;

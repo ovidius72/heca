@@ -27,7 +27,7 @@ type Opened = Rc<RefCell<Vec<ContextMenu>>>;
 fn recording_sink() -> Opened {
     let opened: Opened = Rc::new(RefCell::new(Vec::new()));
     let sink = opened.clone();
-    heca_grid_ui::install_menu_sink(move |menu, anchor| {
+    heca_grid_ui::install_menu_sink(move |menu, anchor, _subject| {
         sink.borrow_mut().push(anchor.open(menu));
     });
     opened
@@ -38,15 +38,20 @@ fn labels(opened: &Opened) -> Vec<String> {
     opened
         .borrow()
         .iter()
-        .map(|m| m.entry_labels().first().cloned().flatten().unwrap_or_default())
+        .map(|m| {
+            m.entry_labels()
+                .first()
+                .cloned()
+                .flatten()
+                .unwrap_or_default()
+        })
         .collect()
 }
 
 fn menu_named(first: &str) -> ContextMenu {
     let first = first.to_string();
-    ContextMenu::new("test-menu").child(
-        Menu::new("Test", "a menu").child(MenuItem::new().label(first).on_click(|| {})),
-    )
+    ContextMenu::new("test-menu")
+        .child(Menu::new("Test", "a menu").child(MenuItem::new().label(first).on_click(|| {})))
 }
 
 fn right_click(root: &mut dyn Component, pos: Point) {
@@ -101,14 +106,12 @@ fn the_click_bubbles_out_to_the_declaring_ancestor() {
 #[test]
 fn the_innermost_declaration_wins_and_menus_are_never_merged() {
     let opened = recording_sink();
-    let mut root = Flex::row()
-        .context_menu(menu_named("New workspace"))
-        .child(
-            Row::new()
-                .width(Length::Px(100.0))
-                .height(Length::Px(40.0))
-                .context_menu(menu_named("Rename")),
-        );
+    let mut root = Flex::row().context_menu(menu_named("New workspace")).child(
+        Row::new()
+            .width(Length::Px(100.0))
+            .height(Length::Px(40.0))
+            .context_menu(menu_named("Rename")),
+    );
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
 
     right_click(&mut root, AT);
@@ -124,11 +127,7 @@ fn the_innermost_declaration_wins_and_menus_are_never_merged() {
 #[test]
 fn nothing_declared_opens_nothing_and_a_root_declaration_covers_the_gaps() {
     let opened = recording_sink();
-    let mut bare = Flex::row().child(
-        Row::new()
-            .width(Length::Px(100.0))
-            .height(Length::Px(40.0)),
-    );
+    let mut bare = Flex::row().child(Row::new().width(Length::Px(100.0)).height(Length::Px(40.0)));
     LayoutEngine::new().compute(&mut bare, Size::new(200.0, 40.0));
     right_click(&mut bare, AT);
     assert!(opened.borrow().is_empty(), "no declaration, no menu");
@@ -140,11 +139,7 @@ fn nothing_declared_opens_nothing_and_a_root_declaration_covers_the_gaps() {
         .width(Length::Px(400.0))
         .height(Length::Px(40.0))
         .context_menu(menu_named("New workspace"))
-        .child(
-            Row::new()
-                .width(Length::Px(100.0))
-                .height(Length::Px(40.0)),
-        );
+        .child(Row::new().width(Length::Px(100.0)).height(Length::Px(40.0)));
     LayoutEngine::new().compute(&mut with_root, Size::new(400.0, 40.0));
     // A point past the row — the "empty space" case, with nothing declared about empty space.
     right_click(&mut with_root, Point::new(300.0, 10.0));
@@ -162,8 +157,12 @@ fn the_items_are_built_when_the_menu_opens_not_when_it_was_declared() {
         Row::new()
             .width(Length::Px(100.0))
             .height(Length::Px(40.0))
-            .context_menu(move || {
-                menu_named(if r.get() { "Use default name" } else { "Rename" })
+            .context_menu(move |_at| {
+                menu_named(if r.get() {
+                    "Use default name"
+                } else {
+                    "Rename"
+                })
             }),
     );
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
@@ -174,13 +173,18 @@ fn the_items_are_built_when_the_menu_opens_not_when_it_was_declared() {
     assert_eq!(labels(&opened), vec!["Rename", "Use default name"]);
 }
 
-/// A widget that **claims** its own right-click wins: the declared menu is what happens when
-/// nothing claims the click, not something that overrides a widget's own behaviour.
+/// A widget that wants to show **something other than** its declared menu says so, by name:
+/// `prevent_default`, exactly as a browser does.
 ///
-/// The claim is a call, not a side effect of registering a handler (F004/P084/T400): a handler
-/// runs and the event carries on, the way a DOM listener does, until one says `stop_propagation`.
+/// The claim is a call, not a side effect of registering a handler.
+///
+/// ⚠️ **It used to be `stop_propagation` that cancelled the menu**, and that was a trap: stopping
+/// the walk is about who *else* sees the event, not about what the framework does afterwards. A
+/// widget that stopped the walk for an unrelated reason — to keep something behind from also
+/// reacting — silently lost its own declared menu, with nothing failing and no warning. The two
+/// are separate levers now.
 #[test]
-fn a_widget_that_claims_its_own_right_click_beats_the_declaration() {
+fn a_widget_that_prevents_the_default_beats_the_declaration() {
     let opened = recording_sink();
     let hits = Rc::new(std::cell::Cell::new(0));
     let h = hits.clone();
@@ -190,7 +194,7 @@ fn a_widget_that_claims_its_own_right_click_beats_the_declaration() {
             .height(Length::Px(40.0))
             .on_right_click(move |e| {
                 h.set(h.get() + 1);
-                e.stop_propagation();
+                e.prevent_default();
             })
             .context_menu(menu_named("Rename")),
     );
@@ -198,7 +202,34 @@ fn a_widget_that_claims_its_own_right_click_beats_the_declaration() {
 
     right_click(&mut root, AT);
     assert_eq!(hits.get(), 1, "the widget's own handler ran");
-    assert!(opened.borrow().is_empty(), "and it owned the click");
+    assert!(
+        opened.borrow().is_empty(),
+        "and it said not to open the declared one"
+    );
+}
+
+/// **Stopping the walk does NOT cancel the menu** — the whole point of splitting the two.
+///
+/// This is the trap that prompted the split: a widget answers its right-click and stops the event
+/// reaching anything behind it, and its own menu still opens, because it never said otherwise.
+#[test]
+fn stopping_the_walk_does_not_withhold_the_declared_menu() {
+    let opened = recording_sink();
+    let mut root = Flex::row().child(
+        Row::new()
+            .width(Length::Px(100.0))
+            .height(Length::Px(40.0))
+            .on_right_click(|e| e.stop_propagation())
+            .context_menu(menu_named("Rename")),
+    );
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
+
+    right_click(&mut root, AT);
+    assert_eq!(
+        labels(&opened),
+        vec!["Rename"],
+        "nobody said prevent_default, so the menu the widget declared still opens",
+    );
 }
 
 /// …and a handler that only **watches** the click gets both: it runs, and the declared menu still
@@ -219,7 +250,11 @@ fn a_handler_that_does_not_claim_the_click_still_lets_the_menu_open() {
 
     right_click(&mut root, AT);
     assert_eq!(hits.get(), 1, "the observer ran");
-    assert_eq!(opened.borrow().len(), 1, "and the menu it did not claim still opened");
+    assert_eq!(
+        opened.borrow().len(),
+        1,
+        "and the menu it did not claim still opened"
+    );
 }
 
 /// The **keyboard** trigger: the same declaration, found from focus rather than from a position,
@@ -291,7 +326,7 @@ fn a_menu_is_declared_as_a_value_or_as_a_closure() {
             Row::new()
                 .width(Length::Px(100.0))
                 .height(Length::Px(40.0))
-                .context_menu(move || ctx.clone()),
+                .context_menu(move |_at| ctx.clone()),
         );
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
 
@@ -368,8 +403,8 @@ fn composed_content_wins_over_the_label_and_both_become_real_children() {
                 .child(|| Label::new("Close"))
                 .on_click(|| {}),
         );
-    let mut panel = MenuAnchor::At(Point::new(0.0, 0.0))
-        .open(ContextMenu::new("pane-menu").child(menu));
+    let mut panel =
+        MenuAnchor::At(Point::new(0.0, 0.0)).open(ContextMenu::new("pane-menu").child(menu));
     LayoutEngine::new().compute(&mut panel, Size::new(400.0, 400.0));
 
     assert_eq!(
@@ -391,8 +426,8 @@ fn composed_content_wins_over_the_label_and_both_become_real_children() {
 /// guessing a corner of the screen.
 #[test]
 fn the_anchor_is_read_from_the_event_that_asked_for_the_menu() {
-    use heca_grid_ui::event::PointerEvent;
     use heca_grid_ui::Rectangle;
+    use heca_grid_ui::event::PointerEvent;
 
     let at = Point::new(30.0, 40.0);
     assert_eq!(
@@ -447,7 +482,12 @@ fn rows_stack_vertically() {
     let mut panels = opened.borrow_mut();
     let panel = &mut panels[0];
     LayoutEngine::new().compute(panel, Size::new(600.0, 600.0));
-    let rows: Vec<_> = panel.base().children.iter().map(|c| c.base().bounds).collect();
+    let rows: Vec<_> = panel
+        .base()
+        .children
+        .iter()
+        .map(|c| c.base().bounds)
+        .collect();
 
     assert_eq!(rows.len(), 2, "one child per row");
     assert!(
@@ -485,10 +525,19 @@ fn the_menu_assigns_quick_pick_letters() {
 
     let keys = opened.borrow()[0].quick_pick_keys();
     assert_eq!(keys[1], Some('s'), "an explicit key is kept");
-    assert_eq!(keys[2], None, "a disabled row cannot be picked, so it gets no letter");
-    assert!(keys[0].is_some() && keys[3].is_some(), "every enabled row got one: {keys:?}");
+    assert_eq!(
+        keys[2], None,
+        "a disabled row cannot be picked, so it gets no letter"
+    );
+    assert!(
+        keys[0].is_some() && keys[3].is_some(),
+        "every enabled row got one: {keys:?}"
+    );
     assert_ne!(keys[0], keys[3], "and no letter is handed out twice");
-    assert!(keys[0] != Some('s') && keys[3] != Some('s'), "the explicit letter was not reused");
+    assert!(
+        keys[0] != Some('s') && keys[3] != Some('s'),
+        "the explicit letter was not reused"
+    );
 }
 
 /// **A menu is clamped on its very first frame.** Placement happens during layout, and the
@@ -504,9 +553,10 @@ fn a_menu_near_the_edge_is_clamped_on_the_first_layout_pass() {
                 .child(MenuItem::new().label("Rename").on_click(|| {}))
                 .child(MenuItem::new().label("Close").on_click(|| {})),
         )
-        .open(true);
+        .default_open(true);
     // Anchored hard against the bottom-right corner: unclamped, the panel would hang off-screen.
-    menu.anchor_signal().set(heca_core::layout::Point::new(390.0, 290.0));
+    menu.anchor_signal()
+        .set(heca_core::layout::Point::new(390.0, 290.0));
 
     LayoutEngine::new().compute(&mut menu, viewport);
 
@@ -530,29 +580,43 @@ fn an_open_menu_mounted_as_a_layer_root_answers_dismiss_and_a_quick_pick() {
     let mut menu = ContextMenu::new("m")
         .child(
             Menu::new("Pane", "what you can do")
-                .child(MenuItem::new().label("Rename").key('r').on_click(move || r.set(1)))
+                .child(
+                    MenuItem::new()
+                        .label("Rename")
+                        .key('r')
+                        .on_click(move || r.set(1)),
+                )
                 .child(MenuItem::new().label("Close").on_click(|| {})),
         )
         .on_dismiss(move || d.set(true))
-        .open(true);
+        .default_open(true);
     LayoutEngine::new().compute(&mut menu, Size::new(400.0, 300.0));
 
     // The quick-pick letter, as a raw key.
-    heca_grid_ui::dispatch(&mut menu, &heca_grid_ui::Event::Key {
-        key: heca_grid_ui::GridKey::Char('r'),
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut menu,
+        &heca_grid_ui::Event::Key {
+            key: heca_grid_ui::GridKey::Char('r'),
+            pressed: true,
+        },
+    );
     assert_eq!(ran.get(), 1, "the quick-pick letter reached the menu");
 
     // …and the intent the host resolves Esc into, on a menu that is still open (running an entry
     // closes the one above).
     let d2 = dismissed.clone();
     let mut menu = ContextMenu::new("m")
-        .child(Menu::new("Pane", "what you can do").child(MenuItem::new().label("Rename").on_click(|| {})))
+        .child(
+            Menu::new("Pane", "what you can do")
+                .child(MenuItem::new().label("Rename").on_click(|| {})),
+        )
         .on_dismiss(move || d2.set(true))
-        .open(true);
+        .default_open(true);
     LayoutEngine::new().compute(&mut menu, Size::new(400.0, 300.0));
-    heca_grid_ui::dispatch(&mut menu, &heca_grid_ui::Event::Widget(WidgetIntent::Dismiss));
+    heca_grid_ui::dispatch(
+        &mut menu,
+        &heca_grid_ui::Event::Widget(WidgetIntent::Dismiss),
+    );
     assert!(dismissed.get(), "Dismiss reached the menu");
 }
 
@@ -585,11 +649,22 @@ fn a_hint_is_declared_on_the_wrapper_and_the_framework_finds_and_runs_it() {
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 60.0));
 
     let targets = heca_grid_ui::hint::collect_hints(&root);
-    assert_eq!(targets.len(), 2, "only the widgets that declared one: {targets:?}");
-    assert!(targets[0].1.size.h > 0.0, "each carries the rect its letter goes over");
+    assert_eq!(
+        targets.len(),
+        2,
+        "only the widgets that declared one: {targets:?}"
+    );
+    assert!(
+        targets[0].1.size.h > 0.0,
+        "each carries the rect its letter goes over"
+    );
 
     assert!(heca_grid_ui::hint::fire_hint(&mut root, &targets[1].0));
-    assert_eq!(*picked.borrow(), vec!["second"], "the pick ran the closure that row was built with");
+    assert_eq!(
+        *picked.borrow(),
+        vec!["second"],
+        "the pick ran the closure that row was built with"
+    );
 
     // A path into a tree that no longer has that widget is not an error.
     assert!(!heca_grid_ui::hint::fire_hint(&mut root, &[99]));

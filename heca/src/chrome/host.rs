@@ -27,6 +27,14 @@ use crate::providers::{ChromeCtx, Provider, ProviderHandles};
 
 /// A provider seated in a region, with its activation handles once activated.
 pub struct MountedContribution {
+    /// **This seating's own name**, given by the host when it seated it.
+    ///
+    /// Usually the provider's id. When that id is already seated somewhere, the host numbers this
+    /// one — so putting the same dock in both sidebars is two working placements, each with its own
+    /// cursor, scroll position and letter, and **the caller names nothing**. It used to be written
+    /// by hand at the call site (`::named("workspaces.right")`), which meant a plugin author placing
+    /// a dock twice had to invent an id and know why.
+    id: ContainerId,
     provider: Box<dyn Provider>,
     /// `Some` once [`Provider::on_activate`] has run (plugin-03 wiring); the held
     /// subscriptions live as long as this stays mounted.
@@ -34,9 +42,9 @@ pub struct MountedContribution {
 }
 
 impl MountedContribution {
-    /// The container's stable id (== its provider id).
+    /// **This seating's own name** — see [`id`](Self::id).
     pub fn id(&self) -> &str {
-        self.provider.id()
+        &self.id
     }
 
     /// Human title.
@@ -146,6 +154,8 @@ pub struct ChromeHost {
     regions: [RegionHost; 4],
     /// Reverse index: which region each container currently lives in.
     placement: HashMap<ContainerId, RegionId>,
+    /// What each region was told about arranging its own contents, by [`RegionId::index`].
+    layouts: [super::events::RegionLayout; 4],
     events: ChromeEventBus,
 }
 
@@ -161,6 +171,7 @@ impl ChromeHost {
                 RegionHost::new(),
             ],
             placement: HashMap::new(),
+            layouts: Default::default(),
             events,
         }
     }
@@ -169,21 +180,75 @@ impl ChromeHost {
     /// `default_order`. Reads only provider metadata — the render seam
     /// (`build_contribution`) is not touched here.
     pub fn register(&mut self, provider: Box<dyn Provider>) {
-        let id = provider.id().to_string();
         let region = provider.default_region();
+        self.seat(region, provider);
+    }
+
+    /// Seat one container in `region` — the one place a container enters the host, whether it came
+    /// from [`Region::child`](super::Region::child) or from its own default region.
+    fn seat(&mut self, region: RegionId, provider: Box<dyn Provider>) {
+        let id = self.free_mount_id(provider.id());
         debug_assert!(
             provider.supported_regions().contains(region),
-            "ChromeHost::register: provider '{}' default_region {:?} not in supported_regions {:?}",
+            "a container was seated in a region it does not support: '{}' in {:?}, supports {:?}",
             provider.id(),
             region,
             provider.supported_regions(),
         );
         let mc = MountedContribution {
+            id: id.clone(),
             provider,
             handles: None,
         };
         self.regions[region.index()].insert_ordered(mc);
         self.placement.insert(id, region);
+    }
+
+    /// **A name nobody else is using**, from the one the provider gave.
+    ///
+    /// The first seating of a container keeps its own id, so every existing name, binding and
+    /// config line still means what it meant. A second is `workspaces.2`, a third `workspaces.3`.
+    /// The host does this because it is the only thing that knows what is already seated — asking
+    /// the caller to know it is how `::named("workspaces.right")` ended up written in the app and
+    /// would have had to be written again by every plugin.
+    fn free_mount_id(&self, wanted: &str) -> ContainerId {
+        if !self.placement.contains_key(wanted) {
+            return wanted.to_string();
+        }
+        // **Say so.** A name is how everything else refers to this seating — a keybinding, the
+        // action registry, `focus_dock`, RPC — so two placements answering to one name is a
+        // mistake, not a shorthand. The app keeps working under a name the host picks, but that
+        // name is not one the author chose, so nothing they write can reach it.
+        super::identity::warn_author(format!(
+            "[heca] a second container is already named '{wanted}' — give this placement its own \
+             name, or nothing you write in config or a keybinding can refer to it",
+        ));
+        (2..)
+            .map(|n| format!("{wanted}.{n}"))
+            .find(|candidate| !self.placement.contains_key(candidate))
+            .expect("the range is unbounded, so some number is free")
+    }
+
+    /// **Take whatever [`Region::child`] has queued** and seat it.
+    ///
+    /// A caller names a region before this host exists — a plugin loading at startup, the app's own
+    /// wiring — so the containers wait and are seated here. Called when the host is built, and
+    /// again whenever something may have added one since.
+    ///
+    /// [`Region::child`]: super::Region::child
+    pub fn mount_pending(&mut self) {
+        for (region, provider) in super::events::take_pending() {
+            self.seat(region, provider);
+        }
+        for (region, layout) in super::events::take_pending_layout() {
+            self.layouts[region.index()] = layout;
+        }
+    }
+
+    /// **How this region was told to arrange its contents**, if anything was said. The render path
+    /// asks this when it builds the region's body.
+    pub fn layout(&self, region: RegionId) -> &super::events::RegionLayout {
+        &self.layouts[region.index()]
     }
 
     /// The ordered containers currently mounted in `region`.
@@ -200,7 +265,11 @@ impl ChromeHost {
     /// `supported_regions`; a no-op (still `Ok`) if it's already there. Emits
     /// [`ChromeEvent::ContainerPlacementChanged`] on a real move.
     pub fn move_container(&mut self, id: &str, to: RegionId) -> Result<(), MoveError> {
-        let from = self.placement.get(id).copied().ok_or(MoveError::UnknownContainer)?;
+        let from = self
+            .placement
+            .get(id)
+            .copied()
+            .ok_or(MoveError::UnknownContainer)?;
         let idx = self.regions[from.index()]
             .contributions
             .iter()
@@ -234,7 +303,11 @@ impl ChromeHost {
     /// "put X before Y" fails loudly rather than silently appending. Emits
     /// [`ChromeEvent::ContainerPlacementChanged`].
     pub fn reorder(&mut self, id: &str, before: Option<&str>) -> Result<(), MoveError> {
-        let region = self.placement.get(id).copied().ok_or(MoveError::UnknownContainer)?;
+        let region = self
+            .placement
+            .get(id)
+            .copied()
+            .ok_or(MoveError::UnknownContainer)?;
         let list = &mut self.regions[region.index()].contributions;
         let from = list
             .iter()
@@ -274,7 +347,11 @@ impl ChromeHost {
     /// container not in the region is an error ([`MoveError::TargetNotFound`]); when `after` is the
     /// last container, X lands at the end. Emits [`ChromeEvent::ContainerPlacementChanged`].
     pub fn reorder_after(&mut self, id: &str, after: &str) -> Result<(), MoveError> {
-        let region = self.placement.get(id).copied().ok_or(MoveError::UnknownContainer)?;
+        let region = self
+            .placement
+            .get(id)
+            .copied()
+            .ok_or(MoveError::UnknownContainer)?;
         let list = &self.regions[region.index()].contributions;
         // The container that follows `after` is the one to insert before; none ⇒ append (`None`).
         let after_idx = list
@@ -334,7 +411,132 @@ impl ChromeHost {
 }
 
 #[cfg(test)]
+mod region_child_tests {
+    use super::*;
+    use crate::chrome::Region;
+    use crate::providers::WorkspacesContainerProvider;
+
+    /// **A container is added to the region that is already there** — the region is the receiver,
+    /// so nothing declares its own parent, and one call or a list both work.
+    ///
+    /// ⚠️ Ran red first: this read
+    /// `host.register(Box::new(Provider::placed("id", RegionId::LeftSidebar)))` — a box, a host to
+    /// reach, and the parent named by the child.
+    #[test]
+    fn a_region_takes_one_container_or_several_and_the_host_seats_them() {
+        let _ = crate::chrome::events::take_pending(); // start from empty
+
+        Region::LeftSidebar.child(WorkspacesContainerProvider::new("one"));
+        Region::RightSidebar.child([
+            WorkspacesContainerProvider::new("two"),
+            WorkspacesContainerProvider::new("three"),
+        ]);
+
+        let mut host = ChromeHost::new(ChromeEventBus::default());
+        host.mount_pending();
+
+        let ids = |r: RegionId| -> Vec<String> {
+            host.contributions(r)
+                .iter()
+                .map(|c| c.provider.id().to_string())
+                .collect()
+        };
+        assert_eq!(ids(RegionId::LeftSidebar), ["one"]);
+        assert_eq!(
+            ids(RegionId::RightSidebar),
+            ["two", "three"],
+            "a list lands in order"
+        );
+        assert_eq!(
+            host.placement("two"),
+            Some(RegionId::RightSidebar),
+            "it sits where it was put, not where the container would default to",
+        );
+    }
+
+    /// **A region says how it arranges what is in it**, in one line, and the host keeps it.
+    ///
+    /// ⚠️ Ran red first: a region had no say at all — the containers stacked and divided it by the
+    /// share each had asked for, so two docks could only be arranged by editing both of them.
+    #[test]
+    fn a_region_holds_the_arrangement_it_was_given() {
+        let _ = crate::chrome::events::take_pending();
+        let _ = crate::chrome::events::take_pending_layout();
+
+        Region::LeftSidebar
+            .template_row("1fr 1fr")
+            .gap("sm")
+            .child(WorkspacesContainerProvider::new("a"));
+
+        let mut host = ChromeHost::new(ChromeEventBus::default());
+        host.mount_pending();
+
+        let arrangement = host.layout(RegionId::LeftSidebar);
+        assert_eq!(arrangement.rows.as_deref(), Some("1fr 1fr"));
+        assert!(
+            arrangement.is_set(),
+            "the region has something to say about itself"
+        );
+        assert!(
+            !host.layout(RegionId::TopBar).is_set(),
+            "a region nobody arranged stacks as it always did",
+        );
+    }
+
+    /// **Naming a region before the host exists still works** — which is what lets a plugin add a
+    /// container at load time without finding the host first.
+    #[test]
+    fn a_container_named_before_the_host_existed_is_still_seated() {
+        let _ = crate::chrome::events::take_pending();
+        Region::RightSidebar.child(WorkspacesContainerProvider::new("early"));
+
+        // The host is built only now, after the call above.
+        let mut host = ChromeHost::new(ChromeEventBus::default());
+        host.mount_pending();
+        assert_eq!(host.placement("early"), Some(RegionId::RightSidebar));
+    }
+}
+
+#[cfg(test)]
 mod tests {
+
+    /// **Two placements never answer to one name.**
+    ///
+    /// A name is how everything else refers to a seating — a keybinding, the action registry,
+    /// `focus_dock`, RPC. Two of them under one name means one is unreachable, and the reference
+    /// the author wrote lands on whichever the host happened to find first. Saying so is
+    /// `warn_author`; the app keeps running under a name the host picked, which is deliberately
+    /// not a name anything can refer to.
+    #[test]
+    fn seating_one_container_twice_gives_each_placement_its_own_name() {
+        let mut host = ChromeHost::new(ChromeEventBus::default());
+        let dock = |region| {
+            Box::new(TestProvider::new(
+                "workspaces",
+                RegionSet::sidebars(),
+                region,
+                0,
+            )) as Box<dyn Provider>
+        };
+        host.seat(RegionId::LeftSidebar, dock(RegionId::LeftSidebar));
+        host.seat(RegionId::RightSidebar, dock(RegionId::RightSidebar));
+        host.seat(RegionId::LeftSidebar, dock(RegionId::LeftSidebar));
+
+        let names: Vec<&str> = RegionId::ALL
+            .iter()
+            .flat_map(|r| host.contributions(*r).iter().map(|m| m.id()))
+            .collect();
+        assert_eq!(
+            names.iter().collect::<std::collections::HashSet<_>>().len(),
+            3,
+            "three placements, three names: {names:?}",
+        );
+        assert!(
+            names.contains(&"workspaces"),
+            "the first keeps the id it was given, so existing bindings and config still mean what \
+             they meant: {names:?}",
+        );
+    }
     use super::*;
     use crate::chrome::{Contribution, RegionSet};
     use std::cell::RefCell;
@@ -422,11 +624,17 @@ mod tests {
         let mut h = host();
         let seen: Rc<RefCell<Vec<(String, RegionId)>>> = Rc::new(RefCell::new(Vec::new()));
         let log = seen.clone();
-        let _sub = h.events.subscribe("chrome.container.placement.changed", move |e| {
-            if let ChromeEvent::ContainerPlacementChanged { container_id, region } = e {
-                log.borrow_mut().push((container_id.clone(), *region));
-            }
-        });
+        let _sub = h
+            .events
+            .subscribe("chrome.container.placement.changed", move |e| {
+                if let ChromeEvent::ContainerPlacementChanged {
+                    container_id,
+                    region,
+                } = e
+                {
+                    log.borrow_mut().push((container_id.clone(), *region));
+                }
+            });
 
         h.register(Box::new(TestProvider::new(
             "ws",
@@ -439,7 +647,10 @@ mod tests {
         assert!(h.contributions(RegionId::LeftSidebar).is_empty());
         assert_eq!(ids(&h, RegionId::RightSidebar), ["ws"]);
         assert_eq!(h.placement("ws"), Some(RegionId::RightSidebar));
-        assert_eq!(seen.borrow().as_slice(), [("ws".to_string(), RegionId::RightSidebar)]);
+        assert_eq!(
+            seen.borrow().as_slice(),
+            [("ws".to_string(), RegionId::RightSidebar)]
+        );
     }
 
     #[test]
@@ -515,10 +726,7 @@ mod tests {
         h.reorder_after("c", "a").unwrap();
         assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "c", "b"]);
         // A missing target errors and leaves the order untouched.
-        assert_eq!(
-            h.reorder_after("a", "zzz"),
-            Err(MoveError::TargetNotFound)
-        );
+        assert_eq!(h.reorder_after("a", "zzz"), Err(MoveError::TargetNotFound));
         assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "c", "b"]);
     }
 

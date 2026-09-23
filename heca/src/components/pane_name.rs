@@ -1,11 +1,11 @@
 //! [`PaneName`] — what a pane is called, wherever a surface shows it.
 
-use heca_grid_ui::reactive::Signal;
-use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::builders::LayoutExt;
-use heca_grid_ui::style::Length;
-use heca_grid_ui::widgets::{Ellipsis, Label};
 use heca_grid_ui::Color;
+use heca_grid_ui::builders::LayoutExt;
+use heca_grid_ui::reactive::Signal;
+use heca_grid_ui::style::Length;
+use heca_grid_ui::theme::Theme as GuiTheme;
+use heca_grid_ui::widgets::{Ellipsis, Label};
 
 /// **A pane's name, and it stays inside its box.**
 ///
@@ -35,7 +35,10 @@ pub(crate) struct PaneName<'a> {
     pub(crate) bold: bool,
     /// Size relative to the surrounding text. `1.0` is the surface's own size.
     pub(crate) font_scale: f32,
-    #[allow(dead_code, reason = "held for symmetry with FolderLine; colours come from the caller")]
+    #[allow(
+        dead_code,
+        reason = "held for symmetry with FolderLine; colours come from the caller"
+    )]
     pub(crate) theme: &'a GuiTheme,
 }
 
@@ -63,7 +66,7 @@ impl PaneName<'_> {
             // free to overflow its container — which is how the exposé's cards, whose column
             // centres this, kept drawing a full name out of a card far too narrow for it. CSS's
             // `max-width: 100%`, said once here rather than at each surface.
-            .max_width(Length::Pct(1.0));
+            .max_width(Length::FULL);
         if (self.font_scale - 1.0).abs() > f32::EPSILON {
             widget = widget.font_scale(self.font_scale);
         }
@@ -75,10 +78,10 @@ impl PaneName<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use heca_core::layout::Size;
     use heca_grid_ui::builders::{LayoutExt, Parent};
     use heca_grid_ui::widgets::Flex;
-    use heca_grid_ui::{Component, LayoutEngine, Scene, PaintCx, DrawCommand};
-    use heca_core::layout::Size;
+    use heca_grid_ui::{Component, DrawCommand, LayoutEngine, PaintCx, Scene};
 
     fn built(text: &str) -> BuiltPaneName {
         PaneName {

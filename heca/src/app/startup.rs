@@ -65,21 +65,25 @@ pub(crate) fn layout_options_from(
 ) -> heca_core::layout::types::LayoutOptions {
     use heca_core::layout::types::CenterFocusedColumn as C;
     heca_core::layout::types::LayoutOptions {
-            gaps: app_config
-                .config
-                .appearance
-                .effective_pane_gap(&app_config.theme) as f64,
-            always_center_single_column: app_config.config.settings.always_center_single_column,
-            // Clamped like niri's, so a typo in a config file cannot produce a map at 4000% or 0%.
-            overview_zoom_from: app_config.config.settings.overview_zoom_from.clamp(0.2, 4.0),
-            overview_gap: app_config.config.settings.overview_gap.clamp(0.0, 1.0),
-            center_focused_column: match app_config.config.settings.center_focused_column {
-                heca_config::settings::CenterFocusedColumn::Never => C::Never,
-                heca_config::settings::CenterFocusedColumn::OnOverflow => C::OnOverflow,
-                heca_config::settings::CenterFocusedColumn::Always => C::Always,
-            },
-            ..Default::default()
-        }
+        gaps: app_config
+            .config
+            .appearance
+            .effective_pane_gap(&app_config.theme) as f64,
+        always_center_single_column: app_config.config.settings.always_center_single_column,
+        // Clamped like niri's, so a typo in a config file cannot produce a map at 4000% or 0%.
+        overview_zoom_from: app_config
+            .config
+            .settings
+            .overview_zoom_from
+            .clamp(0.2, 4.0),
+        overview_gap: app_config.config.settings.overview_gap.clamp(0.0, 1.0),
+        center_focused_column: match app_config.config.settings.center_focused_column {
+            heca_config::settings::CenterFocusedColumn::Never => C::Never,
+            heca_config::settings::CenterFocusedColumn::OnOverflow => C::OnOverflow,
+            heca_config::settings::CenterFocusedColumn::Always => C::Always,
+        },
+        ..Default::default()
+    }
 }
 
 pub(crate) fn apply_window_vibrancy(
@@ -181,13 +185,26 @@ pub(crate) async fn init_state(
     // widget built it and the framework anchored it; only the host can reach a layer. Queued
     // rather than mounted here because this closure has no `&mut AppState` — the event loop drains
     // it before the next frame.
-    type PendingMenu = (heca_grid_ui::widgets::ContextMenu, heca_grid_ui::widgets::MenuAnchor);
+    use crate::app_state::PendingMenu;
     let pending_menus: std::rc::Rc<std::cell::RefCell<Vec<PendingMenu>>> = Default::default();
     let queue = pending_menus.clone();
     let menu_proxy = event_proxy.clone();
-    heca_grid_ui::install_menu_sink(move |menu, anchor| {
-        queue.borrow_mut().push((menu, anchor));
+    heca_grid_ui::install_menu_sink(move |menu, anchor, subject| {
+        queue.borrow_mut().push((menu, anchor, subject));
         let _ = menu_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
+    });
+
+    // **Where a widget's act goes.** The twin of the menu sink above, and the reason a widget no
+    // longer needs a struct of host callbacks to do anything: it names the action, and this routes
+    // it through the one dispatch door — the same permission rules and the same confirmation on
+    // anything destructive that a keypress gets. A plugin's widget names an action the same way and
+    // is judged identically.
+    let intent_proxy = event_proxy.clone();
+    heca_grid_ui::intent::install_intent_sink(move |intent| {
+        let _ = intent_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+            source: crate::app::interaction::InteractionSource::MouseContent,
+            intent: crate::app::interaction::InteractionIntent::View(intent),
+        });
     });
 
     // **A drop nobody took**, queued the same way and for the same reason: the row owns the
@@ -298,27 +315,31 @@ pub(crate) async fn init_state(
     let backdrop = Backdrop::new(&device, surface_format);
     let background = BackgroundLayer::new(&device, surface_format, physical.width, physical.height);
 
-    let chrome = ChromeConfig {
-        tab_bar_height: if app_config.config.settings.show_top_bar {
+    // Before `AppState` exists, so the division is asked for directly rather than through
+    // `ChromeConfig::of` — same rule either way, because there is only the one.
+    let chrome = ChromeConfig::for_window(
+        heca_core::layout::types::Size::new(
+            (physical.width as f32 / scale_factor as f32) as f64,
+            (physical.height as f32 / scale_factor as f32) as f64,
+        ),
+        if app_config.config.settings.show_top_bar {
             DEFAULT_TAB_BAR_HEIGHT
         } else {
             0.0
         },
-        status_bar_height: if app_config.config.settings.show_bottom_bar {
+        if app_config.config.settings.show_bottom_bar {
             DEFAULT_STATUS_BAR_HEIGHT
         } else {
             0.0
         },
-        left_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
-        right_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
-        sidebar_gap: app_config
+        crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+        crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+        app_config
             .config
             .appearance
             .effective_sidebar_gap(&app_config.theme),
-    };
-    let log_w = physical.width as f32 / scale_factor as f32;
-    let log_h = physical.height as f32 / scale_factor as f32;
-    let pane_area = chrome.content_rect(log_w, log_h);
+    );
+    let pane_area = chrome.content_rect();
 
     let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     let layout_options = layout_options_from(app_config);
@@ -372,7 +393,9 @@ pub(crate) async fn init_state(
     // from whatever the host has seated in it (`chrome::build_region_content`), so this
     // registration is *why* there is a workspace tree in the sidebar at all. Move the
     // container to the right region and its UI goes with it.
-    chrome_host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
+    crate::chrome::Region::LeftSidebar.child(crate::providers::WorkspacesContainerProvider::new(
+        "workspaces",
+    ));
     // A **second placement** of the same container, in the right sidebar (F003/P085/T359, user
     // 2026-07-30). Not scaffolding: with one dock on screen none of this phase is observable — not
     // a letter per dock, not focus moving between them, not "the focused one answers and every
@@ -381,12 +404,24 @@ pub(crate) async fn init_state(
     //
     // It is also the only thing that exercises the kind/mount split for real: same content, same
     // bindings, separate cursor / scroll / focus, because those are keyed by mount id.
-    chrome_host.register(Box::new(
-        crate::providers::WorkspacesContainerProvider::placed(
-            "workspaces.right",
-            crate::chrome::RegionId::RightSidebar,
-        ),
+    crate::chrome::Region::RightSidebar.child(crate::providers::WorkspacesContainerProvider::new(
+        "workspaces.right",
     ));
+    // A **third placement, beside the first**, so two docks share one region. One dock per sidebar
+    // never shows whether two of them divide the height, hold their own space as one folds, or line
+    // their title rows up with each other — which is the whole of what a region has to get right.
+    // **The region says how its two docks divide it**, in one line rather than in each dock's own
+    // share: equal halves with air between them.
+    crate::chrome::Region::LeftSidebar
+        .template_row("1fr 1fr")
+        .gap("sm")
+        .child(crate::providers::WorkspacesContainerProvider::new(
+            "workspaces.left2",
+        ));
+
+    // Everything named above was queued before this host existed — which is the point: a plugin
+    // adding a container at load time writes the same call and does not have to find the host.
+    chrome_host.mount_pending();
 
     // Loaded from disk when `[settings] search_history` allows it; a missing, corrupt or
     // unknown-version file is simply an empty store, so a first run and a broken file behave
@@ -397,7 +432,10 @@ pub(crate) async fn init_state(
             history: app_config.config.settings.search_history_size,
             usage: app_config.config.settings.search_usage_size,
         };
-        match (app_config.config.settings.search_history, crate::search_state::default_path()) {
+        match (
+            app_config.config.settings.search_history,
+            crate::search_state::default_path(),
+        ) {
             (true, Some(path)) => crate::search_state::load(&path, caps),
             _ => (
                 heca_grid_ui::search::SearchStore::with_caps(caps),
@@ -446,11 +484,13 @@ pub(crate) async fn init_state(
         pane_cell_override: std::collections::HashMap::new(),
         scale_factor,
         needs_redraw: true,
+        status_note: None,
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,
         window_root: crate::chrome::new_window_root(),
         chrome_tree: None,
         panes: std::collections::HashMap::new(),
+        columns: std::collections::HashMap::new(),
         layers: crate::chrome::LayerRegistry::default(),
         overlays: crate::chrome::OverlayHost::default(),
         pane_viewport_widgets: std::collections::HashMap::new(),
@@ -494,6 +534,7 @@ pub(crate) async fn init_state(
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
+        prefix_timeout_ms: app_config.config.keys.prefix_timeout_ms,
         widget_keymap: crate::app::registry::build_widget_keymap(&app_config.config),
         pending_menus: pending_menus.clone(),
         pending_drops: pending_drops.clone(),
@@ -505,7 +546,11 @@ pub(crate) async fn init_state(
         notifications: crate::notification::NotificationRuntime::with_capacity(
             50,
             std::time::Duration::from_millis(
-                app_config.config.settings.notification_system.auto_dismiss_ms,
+                app_config
+                    .config
+                    .settings
+                    .notification_system
+                    .auto_dismiss_ms,
             ),
             app_config.config.settings.notification_system.mode,
             app_config.config.settings.notification_system.max_visible,
@@ -524,7 +569,8 @@ pub(crate) async fn init_state(
     {
         let event_proxy = state.event_proxy.clone();
         crate::notification::install_notification_sink(move |draft| {
-            let _ = event_proxy.send_event(crate::app::events::AppEvent::RaiseNotification { draft });
+            let _ =
+                event_proxy.send_event(crate::app::events::AppEvent::RaiseNotification { draft });
         });
     }
     // Register the exposé under `heca.expose`, hidden, so `toggle_layer` has something to reach

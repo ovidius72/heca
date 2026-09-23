@@ -18,8 +18,8 @@ use heca_grid_ui::drag::DropSide;
 
 /// Helper: compute sidebar geometry (width, top, bottom).
 fn sidebar_bounds(state: &AppState) -> (f32, f32, f32, f32) {
-    let chrome = super::chrome_config(state);
-    let (_win_w, win_h) = super::window_logical_size(state);
+    let chrome = crate::chrome::ChromeConfig::of(state);
+    let win_h = chrome.window().h as f32;
     // `left_sidebar_width` is 0 when Hidden (no icon rail), so the bounds collapse
     // to nothing and no click lands in the region — see `docs/sidebar-provider-modes.md`.
     let total_w = chrome.left_sidebar_width;
@@ -211,7 +211,9 @@ fn place_pane_at_sidebar_target(
                 );
             }
         }
-        crate::providers::workspaces::WorkspaceRow::Column { ws_idx, col_idx, .. } => {
+        crate::providers::workspaces::WorkspaceRow::Column {
+            ws_idx, col_idx, ..
+        } => {
             let new_col_id = ColumnId(state.session.next_id());
             if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                 let target_col = col_idx.min(ws.scrolling.columns.len().saturating_sub(1));
@@ -357,7 +359,10 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
                         ws.add_pane(pane, None, true, width, new_column_id);
                     }
                 }
-                ChromeDragItem::Column { ws: ws_idx, col: col_idx } => {
+                ChromeDragItem::Column {
+                    ws: ws_idx,
+                    col: col_idx,
+                } => {
                     if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                         let target_col = col_idx.min(ws.scrolling.columns.len().saturating_sub(1));
                         ws.scrolling

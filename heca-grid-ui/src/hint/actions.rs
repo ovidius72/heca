@@ -1,8 +1,8 @@
 //! **Verbs a widget answers to by name** — what a host lists to answer "what can this surface do
 //! right now". The same uniform walk [`super::collect`] is, over the same retained trees.
 
-use crate::component::Component;
 use super::collect::skip;
+use crate::component::Component;
 
 /// **A verb a widget answers to, by name** — see [`Base::actions`](crate::component::Base::actions).
 pub struct DeclaredAction {
@@ -16,7 +16,9 @@ pub struct DeclaredAction {
 
 impl std::fmt::Debug for DeclaredAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DeclaredAction").field("name", &self.name).finish()
+        f.debug_struct("DeclaredAction")
+            .field("name", &self.name)
+            .finish()
     }
 }
 

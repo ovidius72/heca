@@ -71,5 +71,8 @@ fn the_ui_face_cannot_spell_a_shortcut() {
         );
     }
     // …while the prefix symbol it *does* use is there, which is why `λ` stays plain text.
-    assert!(has_glyph(ui, 0x03BB), "the UI face must have λ (PREFIX_SYMBOL)");
+    assert!(
+        has_glyph(ui, 0x03BB),
+        "the UI face must have λ (PREFIX_SYMBOL)"
+    );
 }

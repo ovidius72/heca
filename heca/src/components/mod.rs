@@ -53,7 +53,7 @@
 //!    *every* term: the window, the overlay margin, the panel padding, the gaps, the row count,
 //!    each row's height, the scroll centring. Miss one and everything is wrong by exactly that
 //!    term. The exposé did this and took **seven attempts, six of them wrong, each missing a
-//!    different term**. Express it as `Length::Pct` of a shared denominator and `grow` weights and
+//!    different term**. Express it as `Length::Percent` of a shared denominator and `grow` weights and
 //!    taffy answers it exactly, at every window size. (`grow` alone always *fills* its container —
 //!    that is what flex-grow means — so "a share of the widest sibling" is a percentage, not a
 //!    grow weight.)

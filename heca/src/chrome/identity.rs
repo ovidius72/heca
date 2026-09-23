@@ -47,6 +47,15 @@ fn say_once(message: String) {
     });
 }
 
+/// **Tell whoever is building the UI something is wrong, once.**
+///
+/// The same channel the unkeyed-collection warning uses, for the same audience: an author writing
+/// chrome or a plugin, who can fix it. Repeated silently, so a message from a tree rebuilt every
+/// frame is said once and not sixty times a second.
+pub(crate) fn warn_author(message: String) {
+    say_once(message);
+}
+
 /// Warn about every collection in `root` whose items were never keyed — two or more unkeyed
 /// siblings that derive the same name, so nothing can tell them apart.
 ///
@@ -84,6 +93,23 @@ pub(crate) fn report_ambiguous_widgets(_surface: &str, _root: &dyn Component) {}
 ///
 /// It runs in release too, unlike its widget-tree twin: a plugin author is not building heca, so a
 /// diagnostic they can only see in our debug build is one they never see.
+/// **A surface named itself something nothing can reach.**
+///
+/// A layer's addressable name is `<owner>.<short>`, and the owner half is stamped by the host so a
+/// plugin cannot claim `heca.*` or another component's namespace — which means the short half may
+/// not contain a dot of its own. A surface whose declared `key` breaks that is simply left
+/// anonymous, and the whole point of saying so here is that the alternative is silence: the
+/// declaration was read, could not be used, and the author is told rather than left wondering why
+/// `show_layer` finds nothing.
+pub(crate) fn report_unusable_surface_name(declared: &str) {
+    say_once(format!(
+        "[heca] a surface declares key '{declared}', which cannot become an addressable layer \
+         name — a name is <owner>.<short> and the owner half is stamped for you, so the key may \
+         not be empty or contain a dot. The surface is on screen and works; it simply cannot be \
+         reached by name, so `show_layer` will not find it"
+    ));
+}
+
 pub(crate) fn report_unkeyed_description(source: &str, node: &ViewNode) {
     for item in heca_view::unkeyed_collection_items(node) {
         let path = item

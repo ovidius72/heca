@@ -3,9 +3,7 @@
 //! shaped glyphs for a ligature sequence in the embedded terminal font — and
 //! leaving them on must keep the ligature. GPU-free (cosmic-text shaping only).
 
-use cosmic_text::{
-    Attrs, Buffer, FeatureTag, Family, FontFeatures, FontSystem, Metrics, Shaping,
-};
+use cosmic_text::{Attrs, Buffer, Family, FeatureTag, FontFeatures, FontSystem, Metrics, Shaping};
 
 fn glyph_ids(fs: &mut FontSystem, text: &str, ligatures: bool) -> Vec<u16> {
     let mut buffer = Buffer::new(fs, Metrics::new(24.0, 28.8));
@@ -38,10 +36,16 @@ fn disabling_features_turns_off_ligatures() {
     // characters shaped standalone.
     let on = glyph_ids(&mut fs, "=>", true);
     let off = glyph_ids(&mut fs, "=>", false);
-    let standalone: Vec<u16> = [glyph_ids(&mut fs, "=", false), glyph_ids(&mut fs, ">", false)]
-        .concat();
+    let standalone: Vec<u16> = [
+        glyph_ids(&mut fs, "=", false),
+        glyph_ids(&mut fs, ">", false),
+    ]
+    .concat();
 
-    assert_ne!(on, off, "disabling calt/liga/clig must change the shaped glyphs");
+    assert_ne!(
+        on, off,
+        "disabling calt/liga/clig must change the shaped glyphs"
+    );
     assert_eq!(
         off, standalone,
         "with ligatures off, `=>` must shape as the standalone `=` + `>` glyphs"

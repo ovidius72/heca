@@ -10,10 +10,11 @@
 //! opening its own group is not `HintPick`, so its letters were clobbered identically and the
 //! plugin author had no way to add themselves to that match. Ownership has no such list.
 
-use crate::app_state::InputMode;
 use super::surfaces::{HintSurface, HintTarget};
-use super::targets::visible_hint_surfaces;
+use super::targets::{VisibleViews, visible_views};
+use crate::app_state::InputMode;
 use crate::providers::workspaces::{column_key, pane_key, workspace_key};
+use heca_grid_ui::Component;
 
 /// **A thing a picker asked to be lettered**, addressed the way that picker knows it.
 ///
@@ -58,15 +59,17 @@ pub(crate) struct OfferedLetters {
 ///
 /// One place that knows how a mode's candidates become row identities, so a new pick mode is one
 /// arm here rather than a fifth signal list and a fifth projection.
-fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> Vec<(Offer, char)> {
+fn wanted(mode: &InputMode) -> Vec<(Offer, char)> {
     let mut out = Vec::new();
     if let Some(cands) = mode.candidates() {
-        // **The focused pane is never a target**, even when the mode lists it: every one of these
-        // picks means "the other one", so lettering where you already are offers a move to nowhere.
+        // **Every candidate is lettered.** "The focused pane is never a target" used to be applied
+        // here, which made this disagree with whoever counted the candidates: a pick could be
+        // entered, announce itself in the bottom bar, and then have its only letter filtered away
+        // right here. The rule belongs to `collect_all_pane_candidates`, which is what decides
+        // whether the pick happens at all.
         out.extend(
             cands
                 .iter()
-                .filter(|(_, id)| Some(*id) != active_pane)
                 .map(|(ch, id)| (Offer::ByKey(pane_key(*id)), *ch)),
         );
     }
@@ -78,11 +81,16 @@ fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> V
         );
     }
     if let Some(cands) = mode.col_candidates() {
-        out.extend(
-            cands
-                .iter()
-                .map(|(ch, _ws_idx, _col_idx, col_id)| (Offer::ByKey(column_key(*col_id)), *ch)),
-        );
+        out.extend(cands.iter().map(|(ch, target)| {
+            let key = match target {
+                crate::app_state::ColumnPickTarget::Existing { col_id, .. } => column_key(*col_id),
+                // The offer of a new column wears a letter like any other destination.
+                crate::app_state::ColumnPickTarget::New => {
+                    crate::chrome::NEW_COLUMN_KEY.to_string()
+                }
+            };
+            (Offer::ByKey(key), *ch)
+        }));
     }
     // A dock names itself with `scope_key` rather than `key` — a container's identity, not a
     // row's — and `offer_hint_by_key` matches either, so this is the same one line as the rest.
@@ -108,13 +116,13 @@ fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> V
 /// Runs every frame and is cheap when nothing is picking — the common case is two empty vectors.
 /// Returns whether anything changed, so the caller can decide to repaint.
 pub(crate) fn sync_offered_letters(state: &crate::app_state::AppState) -> bool {
-    let wanted = wanted(&state.input_mode, state.focused_pane);
+    let wanted = wanted(&state.input_mode);
     // **Which views could actually show a letter.** Computed ONCE per pass, not per key: it
     // resolves the whole surface stack.
     let visible = if wanted.is_empty() {
-        std::collections::HashSet::new()
+        VisibleViews::default()
     } else {
-        visible_hint_surfaces(state)
+        visible_views(state)
     };
     let mut changed = false;
 
@@ -152,10 +160,7 @@ pub(crate) fn sync_offered_letters(state: &crate::app_state::AppState) -> bool {
             .chrome_state
             .events()
             .emit(crate::chrome::ChromeEvent::HintLettersChanged {
-                letters: wanted
-                    .iter()
-                    .map(|(o, ch)| (*ch, o.name(state)))
-                    .collect(),
+                letters: wanted.iter().map(|(o, ch)| (*ch, o.name(state))).collect(),
             });
     }
     offered.offers = next;
@@ -168,22 +173,24 @@ fn offer_in_every_tree(
     state: &crate::app_state::AppState,
     offer: &Offer,
     label: Option<String>,
-    visible: &std::collections::HashSet<HintSurface>,
+    visible: &VisibleViews,
 ) -> bool {
     // **What this view gets this pass** — the letter when it can be seen, a *withdrawal* when it
     // cannot. Every view's label goes through here, so no loop below can decide on its own.
-    let for_view = |surface: HintSurface| label_for(&label, visible.contains(&surface));
+    let for_view = |surface: HintSurface| label_for(&label, visible.surfaces.contains(&surface));
 
-    // **A path names one view already**, so there is nothing to search: the surface it was
-    // collected from is the surface that shows it, and the same visibility question is asked of it
-    // as of every other view.
+    // **A path names one target already**, so there is nothing to search — and the question asked
+    // of it is about *itself*, not about its tree. Every surface seated beside the chrome is one
+    // tree now (F003/P097/T499), so asking whether its surface is visible would ask whether
+    // anything in the window is visible, which is always true: a target behind a covering exposé
+    // would have kept its letter.
     let key = match offer {
         Offer::ByKey(key) => key.as_str(),
         Offer::ByPath(target) => {
             let Some((root, paths)) = super::surfaces::resolve(state, target) else {
                 return false;
             };
-            let label = for_view(target.surface.clone());
+            let label = label_for(&label, visible.targets.contains(target));
             let mut offered = false;
             for path in &paths {
                 offered |= heca_grid_ui::offer_hint(root, path, label.clone());
@@ -191,11 +198,15 @@ fn offer_in_every_tree(
             return offered;
         }
     };
-    for layer in state.layers.visible_front_to_back() {
-        let Some(node) = crate::chrome::surface_node(&state.window_root, layer.id) else {
-            continue;
-        };
-        if heca_grid_ui::offer_hint_by_key(node, key, label.clone()) {
+    // **A surface in front shadows one behind it**, and in one tree that is the children reversed:
+    // the chrome is child 0, so everything seated beside it is nearer the viewer. This asked the
+    // registry for its visible layers, which listed only what it owned — a surface placed without
+    // registering (the toast stack) was never given the chance to shadow anything.
+    for child in state.window_root.base().children.iter().rev() {
+        if child.base().key.as_deref() == Some(crate::chrome::CHROME_KEY) {
+            break;
+        }
+        if heca_grid_ui::offer_hint_by_key(child.as_ref(), key, label.clone()) {
             return true;
         }
     }
@@ -222,6 +233,21 @@ fn offer_in_every_tree(
             for_view(HintSurface::Pane(*pane_id)),
         );
     }
+    // **A tiled pane is a node inside its column**, so its surface is asked for the same way any
+    // other is — `hint_surface_root` knows where a pane's tree is (F003/P082/T474).
+    for column in state.columns.values() {
+        for pane_id in &column.panes {
+            let surface = HintSurface::Pane(*pane_id);
+            if let Some(root) = super::surfaces::hint_surface_root(state, &surface) {
+                offered |= heca_grid_ui::offer_hint_by_key(root, key, for_view(surface));
+            }
+        }
+    }
+    // **And the columns in the scrolling area.** A column is a third place a letter can land: it is
+    // drawn in the content area, so it is not in the window root, and it is not a pane. Its sidebar
+    // group is a second view of the same identity and is reached by the window-root walk above —
+    // both wear the letter, exactly as a pane and its sidebar row do (F003/P082/T474).
+    offered |= crate::chrome::offer_to_columns(state, key, label.clone());
     offered
 }
 
@@ -245,7 +271,7 @@ fn label_for(label: &Option<String>, visible: bool) -> Option<String> {
 /// this file, so its assertions live wherever the case is clearest rather than being re-derived.
 #[cfg(test)]
 pub(crate) fn wanted_for_tests(mode: &InputMode) -> Vec<(Offer, char)> {
-    wanted(mode, None)
+    wanted(mode)
 }
 
 #[cfg(test)]
@@ -261,7 +287,11 @@ mod tests {
     #[test]
     fn an_unseen_view_is_withdrawn_from_rather_than_left_alone() {
         let letter = Some("a".to_string());
-        assert_eq!(label_for(&letter, true).as_deref(), Some("a"), "seen: it wears the letter");
+        assert_eq!(
+            label_for(&letter, true).as_deref(),
+            Some("a"),
+            "seen: it wears the letter"
+        );
         assert_eq!(
             label_for(&letter, false),
             None,
@@ -280,7 +310,7 @@ mod tests {
             candidates: vec![('a', PaneId(7)), ('b', PaneId(9))],
         };
         assert_eq!(
-            wanted(&mode, None),
+            wanted(&mode),
             vec![
                 (Offer::ByKey(pane_key(PaneId(7))), 'a'),
                 (Offer::ByKey(pane_key(PaneId(9))), 'b'),
@@ -294,20 +324,26 @@ mod tests {
     /// letters and would have erased a plugin's.
     #[test]
     fn a_mode_that_is_not_picking_wants_nothing() {
-        assert!(wanted(&InputMode::Normal, None).is_empty());
+        assert!(wanted(&InputMode::Normal).is_empty());
     }
 
-    /// **The focused pane is never a target**, even when the mode lists it as a candidate: every
-    /// one of these picks means "the other one", so a letter where you already are offers a move to
-    /// nowhere. The rule came from the host projection this replaced and had to travel with it.
+    /// **Every candidate is lettered**, and deciding who is a candidate is somebody else's job.
+    ///
+    /// This used to filter out the focused pane here, which made it disagree with whoever counted
+    /// the candidates: a pick could be entered and announce itself with the only letter then
+    /// filtered away right here. The rule moved to `collect_all_pane_candidates`, and its guard
+    /// went with it.
     #[test]
-    fn the_pane_you_are_on_gets_no_letter() {
+    fn every_candidate_a_mode_lists_gets_a_letter() {
         let mode = InputMode::PaneSelect {
             candidates: vec![('a', PaneId(1)), ('s', PaneId(2))],
         };
         assert_eq!(
-            wanted(&mode, Some(PaneId(1))),
-            vec![(Offer::ByKey(pane_key(PaneId(2))), 's')],
+            wanted(&mode),
+            vec![
+                (Offer::ByKey(pane_key(PaneId(1))), 'a'),
+                (Offer::ByKey(pane_key(PaneId(2))), 's'),
+            ],
         );
     }
     /// **`hint.changed` fires when the lettering changes, and not otherwise** — the event a plugin
@@ -325,9 +361,9 @@ mod tests {
         let store = SharedChromeState::new(300.0, true, 300.0, false);
         let seen: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
         let log = seen.clone();
-        let _sub = store
-            .events()
-            .subscribe("hint.changed", move |e| log.borrow_mut().push(e.name().to_string()));
+        let _sub = store.events().subscribe("hint.changed", move |e| {
+            log.borrow_mut().push(e.name().to_string())
+        });
 
         store
             .events()
@@ -335,9 +371,12 @@ mod tests {
                 letters: vec![('a', pane_key(PaneId(1)))],
             });
 
-        assert_eq!(seen.borrow().len(), 1, "the name a plugin filters on is `hint.changed`");
+        assert_eq!(
+            seen.borrow().len(),
+            1,
+            "the name a plugin filters on is `hint.changed`"
+        );
     }
-
 }
 
 // ── Which targets exist, and which of them are reachable ─────────────────────

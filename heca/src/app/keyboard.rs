@@ -19,7 +19,7 @@ pub(crate) fn build_event_combo(
             logical_key,
             key_text,
             modifiers.shift_key(),
-            modifiers.control_key(),
+            modifiers.control_key() || modifiers.alt_key(),
             physical_key,
         ),
         ctrl: modifiers.control_key(),
@@ -77,6 +77,66 @@ pub(crate) fn event_combo_matches(event: &KeyCombo, configured: &KeyCombo) -> bo
 }
 
 /// Normalize a winit key event into a config-compatible key string.
+/// **What key this physically is**, whatever a modifier did to the character it produced.
+///
+/// One table, because there were two: this one for punctuation and digits (so `Ctrl+[` matched a
+/// config `[`) and a letters-only copy inside [`typed_candidate_char`] (so a picker's letter could
+/// be typed while Ctrl was held). Two halves of one question, and only the half each caller
+/// happened to need — which is why `Alt+l` matched nothing: the letters were in the copy that
+/// keybindings do not read.
+///
+/// The codes are physical positions, so this answers for a US layout. That is why it is used only
+/// when the character is unusable (see [`character_is_unusable`]) rather than in preference to it —
+/// a layout that types `q` where US types `a` keeps its own answer whenever it produced one.
+fn key_at_physical(physical_key: &PhysicalKey) -> Option<String> {
+    let PhysicalKey::Code(code) = physical_key else {
+        return None;
+    };
+    let named = format!("{code:?}");
+    if let Some(letter) = named.strip_prefix("Key") {
+        return Some(letter.to_ascii_lowercase());
+    }
+    if let Some(digit) = named.strip_prefix("Digit") {
+        return Some(digit.to_string());
+    }
+    let punctuation = match code {
+        winit::keyboard::KeyCode::BracketLeft => "[",
+        winit::keyboard::KeyCode::BracketRight => "]",
+        winit::keyboard::KeyCode::Semicolon => ";",
+        winit::keyboard::KeyCode::Quote => "'",
+        winit::keyboard::KeyCode::Comma => ",",
+        winit::keyboard::KeyCode::Period => ".",
+        winit::keyboard::KeyCode::Slash => "/",
+        winit::keyboard::KeyCode::Backslash => "\\",
+        winit::keyboard::KeyCode::Minus => "-",
+        winit::keyboard::KeyCode::Equal => "=",
+        winit::keyboard::KeyCode::Backquote => "`",
+        _ => return None,
+    };
+    Some(punctuation.to_string())
+}
+
+/// **Did a modifier leave anything a keybinding could name?**
+///
+/// A held modifier can rewrite the character the OS reports, and the two ways it does are not the
+/// same: `Ctrl+l` empties the text or yields a control character, while macOS's Option turns `l`
+/// into `¬`. Both mean the same thing here — *this character is not the key the user pressed* — so
+/// the physical position is asked instead.
+///
+/// Asked as "is what we got unusable" rather than "is Alt held", because on a layout where Alt does
+/// **not** rewrite anything, the character it produced is the right answer and the physical position
+/// would be a US-layout guess. So the fallback is a repair, never a preference.
+fn character_is_unusable(logical_key: &Key, key_text: &str) -> bool {
+    let produced = match logical_key {
+        Key::Character(c) => c.chars().next(),
+        _ => key_text.chars().next(),
+    };
+    match produced {
+        None => true,
+        Some(c) => !c.is_ascii_graphic(),
+    }
+}
+
 /// Named keys become their canonical name (Enter, Tab, ArrowLeft, etc.).
 /// Character keys are lowercased so 'Q' from Shift+q matches config 'q'.
 /// When `shift` is true, shifted symbols are mapped back to their unshifted
@@ -85,41 +145,22 @@ pub(crate) fn normalize_key_text(
     logical_key: &Key,
     key_text: &str,
     shift: bool,
-    ctrl: bool,
+    // **Whether a modifier that rewrites characters is held** — Ctrl, or Option on macOS. Not "is
+    // Ctrl down": it was, and Alt got none of the repair below, so `Alt+l` matched nothing at all.
+    rewriting_modifier: bool,
     physical_key: &PhysicalKey,
 ) -> String {
-    if ctrl && let PhysicalKey::Code(code) = physical_key {
-        let mapped = match code {
-            winit::keyboard::KeyCode::BracketLeft => "[",
-            winit::keyboard::KeyCode::BracketRight => "]",
-            winit::keyboard::KeyCode::Semicolon => ";",
-            winit::keyboard::KeyCode::Quote => "'",
-            winit::keyboard::KeyCode::Comma => ",",
-            winit::keyboard::KeyCode::Period => ".",
-            winit::keyboard::KeyCode::Slash => "/",
-            winit::keyboard::KeyCode::Backslash => "\\",
-            winit::keyboard::KeyCode::Minus => "-",
-            winit::keyboard::KeyCode::Equal => "=",
-            winit::keyboard::KeyCode::Backquote => "`",
-            winit::keyboard::KeyCode::Digit0 => "0",
-            winit::keyboard::KeyCode::Digit1 => "1",
-            winit::keyboard::KeyCode::Digit2 => "2",
-            winit::keyboard::KeyCode::Digit3 => "3",
-            winit::keyboard::KeyCode::Digit4 => "4",
-            winit::keyboard::KeyCode::Digit5 => "5",
-            winit::keyboard::KeyCode::Digit6 => "6",
-            winit::keyboard::KeyCode::Digit7 => "7",
-            winit::keyboard::KeyCode::Digit8 => "8",
-            winit::keyboard::KeyCode::Digit9 => "9",
-            _ => "",
-        };
-        if !mapped.is_empty() {
-            return mapped.to_string();
-        }
+    // A modifier rewrote the character, so ask the keyboard which key it actually was.
+    if rewriting_modifier
+        && !matches!(logical_key, Key::Named(_))
+        && character_is_unusable(logical_key, key_text)
+        && let Some(key) = key_at_physical(physical_key)
+    {
+        return key;
     }
 
     let mut key = match logical_key {
-        Key::Named(NamedKey::Escape) if ctrl => {
+        Key::Named(NamedKey::Escape) if rewriting_modifier => {
             if let PhysicalKey::Code(code) = physical_key {
                 let mapped = match code {
                     winit::keyboard::KeyCode::BracketLeft => "[",
@@ -178,24 +219,20 @@ pub(crate) fn typed_candidate_char(
     // everything to lowercase makes the capitals unreachable: the letter is drawn on screen and
     // pressing it matches nothing. It only stayed hidden while pickers never had more than 26
     // targets at once.
-    key_text
-        .chars()
-        .next()
-        .or_else(|| match physical_key {
-            // The physical fallback (macOS `Ctrl+letter` gives a control char, so `key_text` is
-            // empty) names a key, not a character, so the shift state decides its case.
-            PhysicalKey::Code(code) => {
-                let s = format!("{:?}", code);
-                s.strip_prefix("Key").and_then(|n| n.chars().next()).map(|c| {
-                    if shift {
-                        c.to_ascii_uppercase()
-                    } else {
-                        c.to_ascii_lowercase()
-                    }
-                })
-            }
-            _ => None,
+    key_text.chars().next().or_else(|| {
+        // The physical fallback (macOS `Ctrl+letter` gives a control char, so `key_text` is empty)
+        // names a KEY, not a character, so the shift state decides its case. The table is
+        // `key_at_physical`, shared with keybinding matching — it used to be a letters-only copy
+        // here, and keybindings had a copy with no letters, so each worked for exactly the case it
+        // was written for.
+        let key = key_at_physical(physical_key)?;
+        let c = key.chars().next().filter(|c| c.is_ascii_alphabetic())?;
+        Some(if shift {
+            c.to_ascii_uppercase()
+        } else {
+            c.to_ascii_lowercase()
         })
+    })
 }
 
 /// **Is this key press just a modifier being held?**
@@ -348,10 +385,79 @@ pub(crate) fn winit_key_to_backend_event(
 
 #[cfg(test)]
 mod tests {
-    use super::{prefix_combo_to_literal_input, typed_candidate_char, winit_key_to_backend_event};
+    use super::{
+        build_event_combo, normalize_key_text, prefix_combo_to_literal_input, typed_candidate_char,
+        winit_key_to_backend_event,
+    };
     use crate::keymap::KeyCombo;
     use heca_core::backend::BackendKeyCode;
+    use winit::keyboard::Key;
     use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
+
+    /// **A binding on `Alt+l` must match the L key**, whatever Option turned the character into.
+    ///
+    /// macOS rewrites the character a modified key produces — Option+L types `¬` — so the combo
+    /// heca compared against the config was `¬`, and no `Alt+…` binding could ever match. The
+    /// repair existed for `Ctrl`, which empties the text instead, and was gated on Ctrl being
+    /// held; Alt has the same problem for a different reason and got none of it.
+    #[test]
+    fn a_rewritten_character_is_read_off_the_key_that_was_pressed() {
+        // Through `build_event_combo`, which is what the app actually calls — asserting
+        // `normalize_key_text` directly proves nothing about whether Alt reaches it, and that is
+        // exactly the wiring that was missing.
+        let combo = build_event_combo(
+            &Key::Character("¬".into()),
+            &PhysicalKey::Code(KeyCode::KeyL),
+            "¬",
+            ModifiersState::ALT,
+        );
+        assert_eq!(combo.key, "l", "Option+L is the L key");
+        assert!(combo.alt, "and it is still Alt that was held");
+
+        let ctrl = build_event_combo(
+            &Key::Character("\u{0c}".into()),
+            &PhysicalKey::Code(KeyCode::KeyL),
+            "",
+            ModifiersState::CONTROL,
+        );
+        assert_eq!(
+            ctrl.key, "l",
+            "and so is Ctrl+L, which empties the text rather than replacing it",
+        );
+    }
+
+    /// **The repair is a repair, never a preference.** A layout that produced a perfectly good
+    /// character keeps it — the physical codes are US positions, so preferring them would bind
+    /// AZERTY's `Alt+a` to whatever sits at the US `q`.
+    #[test]
+    fn a_character_the_layout_produced_is_kept_over_the_physical_position() {
+        assert_eq!(
+            normalize_key_text(
+                &Key::Character("a".into()),
+                "a",
+                false,
+                true,
+                &PhysicalKey::Code(KeyCode::KeyQ),
+            ),
+            "a",
+            "Alt+a on a layout that does not rewrite: the layout's answer wins",
+        );
+    }
+
+    /// A named key is what it is called, and no modifier turns it into a letter.
+    #[test]
+    fn a_named_key_is_never_read_off_the_physical_position() {
+        assert_eq!(
+            normalize_key_text(
+                &Key::Named(winit::keyboard::NamedKey::Enter),
+                "",
+                false,
+                true,
+                &PhysicalKey::Code(KeyCode::KeyL),
+            ),
+            "Enter",
+        );
+    }
 
     /// **The typed text wins, and its case is kept.** A picker hands out `a`-`z` then `A`-`Z`, so
     /// folding to lowercase makes every capital unreachable — drawn on screen, matching nothing.

@@ -8,10 +8,10 @@
 //! routes a grip press to the column and a card press to the pane for free — no geometry here.
 
 use super::seams::{DockRegistries, DockSeams};
-use super::{column_key, column_row_items, pane_row::PaneRow, ColumnEntry, MENU_COLUMN};
+use super::{ColumnEntry, MENU_COLUMN, column_key, column_row_items, pane_row::PaneRow, row_hint};
 use crate::chrome::{ChromeDragItem, RepaintWatch};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
-use heca_grid_ui::widgets::{HintPlacement, KeyHint, MarkerGroup};
+use heca_grid_ui::widgets::{HintPlacement, HintTone, MarkerGroup};
 
 /// A generic [`MarkerGroup`] (left marker bar + grip gutter) holding the column's stacked pane
 /// cards — no per-column header row, because columns are spatial groupings whose only user-facing
@@ -77,13 +77,33 @@ impl ColumnGroup<'_> {
             column_key(column.col_id),
             col.nav_state(),
         ));
-        // Wrap the column in the universal `KeyHint` so a "move pane → column" pick can stamp this
-        // column's letter over it (tinted `success`, distinct from pane/workspace picks). **The
-        // letter is offered by key** (`chrome::hint`) and drawn by the widget — nothing is
-        // registered here and nothing is projected onto it every frame.
-        let hinted = KeyHint::new(col)
-            .color(seams.theme.colors.success)
-            .placement(HintPlacement::CenterRight);
+        // **The group says all of this about itself** — no `KeyHint` wrapper. That is for a
+        // region which is not a widget you can put a builder on; a `MarkerGroup` is one, and the
+        // letter is drawn by `paint_child` for any widget carrying one. The letter itself is
+        // offered **by key** (`chrome::hint`): nothing is registered here and nothing is projected
+        // onto it every frame.
+        let hinted = col
+            // **What a pick does to this row** — the cursor lands on the column and the dock keeps
+            // the keyboard, exactly as a pane row and a workspace row already declare.
+            //
+            // Without it this wrapper carried a colour and a placement and nothing else, so the
+            // group was not a pick target at all: a letter offered by `col:<id>` could not land on
+            // it and climbed to the nearest thing that could — the **workspace header** above it.
+            // That is why a column pick lettered workspaces (Antonio, driving, 2026-09-10).
+            .on_hint(seams.picks(row_hint(column_key(column.col_id))))
+            // **A column is a DESTINATION, not somewhere `prefix+/` sends you.** Its letter means
+            // "move the pane here", which only makes sense while that pick is up — so it names
+            // that scope and drops out of the ordinary picker (Antonio, driving, 2026-09-11:
+            // the sidebar's columns wore green letters under `prefix+/` that landed you in the
+            // dock having selected nothing).
+            //
+            // Addressing it **by key** is untouched: `prefix+Ctrl+c` names `col:<id>` outright
+            // rather than collecting a set, so there is nothing for a scope to filter.
+            .hint_scope([crate::chrome::COLUMN_PICK_SCOPE])
+            // The tone says what the target IS; the theme colours it, so this file names no
+            // colour and a column still reads distinctly from a pane and a workspace.
+            .hint_tone(HintTone::Success)
+            .hint_placement(HintPlacement::CenterRight);
         let (watch, _repaint) = RepaintWatch::new(hinted);
         watch
     }
@@ -91,9 +111,55 @@ impl ColumnGroup<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::testing::{self, Fixture};
+    use super::*;
     use heca_core::layout::PaneId;
+
+    /// **The sidebar's column is a pick target** (F003/P082/T474).
+    ///
+    /// It carried its key, a colour and a placement — and no declaration, so it was not a target at
+    /// all. A letter offered by `col:<id>` could not land on it and climbed to the nearest thing
+    /// that could: the workspace header above it. `prefix+Ctrl+c` therefore lettered *workspaces*
+    /// while asking you to pick a column (Antonio, driving, 2026-09-10).
+    #[test]
+    fn a_sidebar_column_can_take_the_letter_its_own_key_is_offered() {
+        use heca_grid_ui::Component as _;
+        use heca_grid_ui::reactive::SignalGet as _;
+        let mut fx = Fixture::default();
+        let column = testing::column();
+        let group = {
+            let (seams, mut reg) = fx.split("left");
+            ColumnGroup {
+                column: &column,
+                ws_idx: 0,
+            }
+            .build(&seams, &mut reg)
+        };
+        let mut root = heca_grid_ui::widgets::Flex::column();
+        root.base_mut().bounds = heca_core::layout::Rectangle::new(
+            heca_core::layout::types::Point::new(0.0, 0.0),
+            heca_core::layout::types::Size::new(300.0, 800.0),
+        );
+        root.base_mut().children.push(Box::new(group));
+
+        let key = column_key(column.col_id);
+        assert!(
+            heca_grid_ui::offer_hint_by_key(&root, &key, Some("a".into())),
+            "the column must be able to take its own letter",
+        );
+        // …and it must land INSIDE the column's subtree, never on something enclosing it.
+        fn labelled(c: &dyn heca_grid_ui::Component) -> Vec<String> {
+            let mut out = Vec::new();
+            if let Some(l) = c.base().hint_label.get_untracked() {
+                out.push(l);
+            }
+            for child in &c.base().children {
+                out.extend(labelled(child.as_ref()));
+            }
+            out
+        }
+        assert_eq!(labelled(&root), vec!["a".to_string()], "exactly one letter");
+    }
 
     /// A column holds one row per pane and declares its own identity beside them, so a grip press
     /// finds the column and a card press finds the pane.

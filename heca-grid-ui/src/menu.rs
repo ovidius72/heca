@@ -70,7 +70,7 @@ use heca_core::layout::{Point, Rectangle};
 use std::cell::RefCell;
 
 /// The host's presenter: given a built, anchored menu, put it on screen.
-type MenuSink = Box<dyn Fn(ContextMenu, MenuAnchor)>;
+type MenuSink = Box<dyn Fn(ContextMenu, MenuAnchor, Option<String>)>;
 
 thread_local! {
     /// Host-installed sink every [`ContextMenu::show_at`] posts to. Thread-local because the UI
@@ -89,7 +89,7 @@ thread_local! {
 ///     layers.insert_menu(menu);
 /// });
 /// ```
-pub fn install_menu_sink(f: impl Fn(ContextMenu, MenuAnchor) + 'static) {
+pub fn install_menu_sink(f: impl Fn(ContextMenu, MenuAnchor, Option<String>) + 'static) {
     MENU_SINK.with(|c| *c.borrow_mut() = Some(Box::new(f)));
 }
 
@@ -100,15 +100,15 @@ pub fn install_menu_sink(f: impl Fn(ContextMenu, MenuAnchor) + 'static) {
 /// the event that asked for the menu; this exists for the caller that genuinely has a position and
 /// no event, and it is the same door — every road ends here.
 pub fn show(menu: ContextMenu, anchor: MenuAnchor) {
-    present(menu, anchor);
+    present(menu, anchor, None);
 }
 
 /// Hand a built, anchored menu to the host. A no-op until a sink is installed, so widget
 /// code and headless tests can always call it.
-pub(crate) fn present(menu: ContextMenu, anchor: MenuAnchor) {
+pub(crate) fn present(menu: ContextMenu, anchor: MenuAnchor, subject: Option<String>) {
     MENU_SINK.with(|c| {
         if let Some(f) = c.borrow().as_ref() {
-            f(menu, anchor);
+            f(menu, anchor, subject);
         }
     });
 }
@@ -127,9 +127,9 @@ pub fn has_menu_sink() -> bool {
 /// reaches the end of its walk unclaimed — so a widget that answers its own right-click still wins,
 /// and a declared menu is simply what happens when nothing does.
 pub(crate) fn open_declared_at(root: &dyn Component, path: &[usize], at: Point) -> bool {
-    match menu_on(root, path) {
-        Some(menu) => {
-            present(menu, MenuAnchor::At(at));
+    match menu_on(root, path, at) {
+        Some((menu, subject)) => {
+            present(menu, MenuAnchor::At(at), subject);
             true
         }
         None => false,
@@ -159,9 +159,13 @@ pub fn open_for_keyboard(root: &dyn Component, cursor: Option<&str>) -> bool {
         return false;
     };
     let bounds = node_bounds(root, &path);
-    match menu_on(root, &path) {
-        Some(menu) => {
-            present(menu, MenuAnchor::Under(bounds));
+    // **A keyboard-opened menu is asked about the widget, not a point**, so it is handed the
+    // widget's own origin — the nearest thing to "where this was opened" when no pointer was
+    // involved. A builder that varies by point (a terminal's *Open link*) therefore offers nothing
+    // extra here, which is right: there is no cell under a keystroke.
+    match menu_on(root, &path, bounds.loc) {
+        Some((menu, subject)) => {
+            present(menu, MenuAnchor::Under(bounds), subject);
             true
         }
         None => false,
@@ -192,9 +196,19 @@ fn key_path(root: &dyn Component, key: &str) -> Option<Vec<usize>> {
 /// **Nearest wins, and it stops there.** Two ancestors declaring menus do not produce a merged one:
 /// a menu is a statement about one thing, and stitching two together would make the entries mean
 /// different targets in the same list.
-fn menu_on(root: &dyn Component, path: &[usize]) -> Option<ContextMenu> {
+fn menu_on(
+    root: &dyn Component,
+    path: &[usize],
+    at: Point,
+) -> Option<(ContextMenu, Option<String>)> {
     let mut node = root;
     let mut best = root.base().context_menu.as_deref();
+    // **Who the menu is about**, taken from the identity the declaring widget already publishes.
+    // A menu is opened *about* something, and the thing it is about is the widget that declared it
+    // — which, if it is anything a cursor, a right-click or a drag can point at, has already said
+    // so via `Base::key`. So the host learns the subject from a declaration that exists rather than
+    // from a hit test of its own, and an author writes nothing new.
+    let mut subject = root.base().key.clone();
     for i in path {
         let Some(child) = node.base().children.get(*i) else {
             break;
@@ -202,11 +216,12 @@ fn menu_on(root: &dyn Component, path: &[usize]) -> Option<ContextMenu> {
         node = child.as_ref();
         if let Some(f) = node.base().context_menu.as_deref() {
             best = Some(f);
+            subject = node.base().key.clone();
         }
     }
     // Built **now**, not when it was written: an item's label and its `enabled` are answers about
     // the state the menu is being opened in.
-    best.map(|f| f())
+    best.map(|f| (f(at), subject))
 }
 
 /// The path to the focused widget, if one holds the keyboard.

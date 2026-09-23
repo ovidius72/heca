@@ -4,10 +4,11 @@
 //! Two questions, deliberately separate: *can you see it* is geometry, *would it do anything* is
 //! policy.
 
-use super::surfaces::{hint_surface_root, HintSurface, HintTarget};
-use super::visibility::{resolve_hint_layers, HintLayer};
+use super::surfaces::{HintSurface, HintTarget, hint_surface_root};
+use super::visibility::{HintLayer, resolve_hint_layers};
 use crate::chrome::ChromeConfig;
 use heca_core::layout::{Point, Rectangle, Size};
+use heca_grid_ui::Component;
 
 /// Build the current surface stack (front → back) and resolve the reachable hint targets
 /// for the universal picker. **The one place hint visibility is decided.** The stack
@@ -30,7 +31,7 @@ pub(crate) fn active_hint_targets(
     //
     // A pick is a **keyboard** gesture: it lands on nothing, so where the keyboard is *is* its
     // context — the same reasoning `chrome/pane/mod.rs` and RPC already apply.
-    visible_hint_targets(state)
+    let offered: Vec<(HintTarget, Rectangle)> = visible_hint_targets(state)
         .into_iter()
         .filter(|(target, _)| {
             let Some(root) = hint_surface_root(state, &target.surface) else {
@@ -38,7 +39,66 @@ pub(crate) fn active_hint_targets(
             };
             candidate_allowed(state, target, root)
         })
-        .collect()
+        .collect();
+    log_offered(state, &offered);
+    offered
+}
+
+/// **Say what the picker is about to letter, and where each one came from.**
+///
+/// A letter that turns up somewhere unexpected is the hardest kind of thing to trace by reading:
+/// the picker walks trees the app never names, a target may be a widget nobody declared (anything
+/// actionable gets one), and the tree it sits in is rebuilt constantly. Reasoning about it has been
+/// wrong every time; this prints the answer instead.
+///
+/// Debug builds only, and only while something is picking — the common case is nothing, and this
+/// runs every time the letters are worked out.
+#[cfg(debug_assertions)]
+fn log_offered(state: &crate::app_state::AppState, offered: &[(HintTarget, Rectangle)]) {
+    if offered.is_empty() || std::env::var_os("HECA_LOG_HINTS").is_none() {
+        return;
+    }
+    eprintln!("[hints] {} target(s) offered a letter:", offered.len());
+    for (target, rect) in offered {
+        let (name, declared) = match hint_surface_root(state, &target.surface) {
+            Some(root) => (
+                heca_grid_ui::identity_of(root, &target.path).unwrap_or_else(|| "<unnamed>".into()),
+                node_at(root, &target.path).is_some_and(|n| n.base().hint.is_some()),
+            ),
+            None => ("<no surface>".into(), false),
+        };
+        eprintln!(
+            "[hints]   {:<28} declared={:<5} surface={:?} path={:?} at ({:.0},{:.0}) {:.0}x{:.0}",
+            name,
+            declared,
+            target.surface,
+            target.path,
+            rect.loc.x,
+            rect.loc.y,
+            rect.size.w,
+            rect.size.h,
+        );
+    }
+    eprintln!(
+        "[hints]   declared=false means nobody asked for it — it is lettered because it is \
+         actionable, which is the rule, applied to a widget's own internals."
+    );
+}
+
+#[cfg(not(debug_assertions))]
+fn log_offered(_: &crate::app_state::AppState, _: &[(HintTarget, Rectangle)]) {}
+
+/// The node a path names, for the log above.
+#[cfg(debug_assertions)]
+fn node_at<'a>(
+    root: &'a dyn heca_grid_ui::Component,
+    path: &[usize],
+) -> Option<&'a dyn heca_grid_ui::Component> {
+    let mut node = root;
+    for step in path {
+        node = node.base().children.get(*step)?.as_ref();
+    }
+    Some(node)
 }
 
 /// **Is this candidate worth a letter?** — judged by *what it says it does*, and by nothing else
@@ -65,11 +125,9 @@ fn candidate_allowed(
     root: &dyn heca_grid_ui::Component,
 ) -> bool {
     match heca_grid_ui::hint_intent(root, &target.path) {
-        Some(intent) => crate::app::interaction::view_intent_allowed(
-            state,
-            pick_source(state, &target.surface),
-            &intent,
-        ),
+        Some(intent) => {
+            crate::app::interaction::view_intent_allowed(state, pick_source(state, target), &intent)
+        }
         // Nothing to ask — a declaration that is only a closure, or a widget whose letter simply
         // runs its own click. Offered, as it always was.
         None => true,
@@ -90,36 +148,67 @@ fn candidate_allowed(
 /// keyboard gesture `chrome/pane/mod.rs` posts.
 fn pick_source(
     state: &crate::app_state::AppState,
-    surface: &HintSurface,
+    target: &HintTarget,
 ) -> crate::app::interaction::InteractionSource {
     use crate::app::interaction::InteractionSource as S;
-    match surface {
-        HintSurface::Chrome => state
+    let HintSurface::Window = target.surface else {
+        return S::Keyboard;
+    };
+    // **Which surface a target sits in is the first step of its path.** The window root's children
+    // are the chrome and the surfaces seated beside it, so `path[0]` names one of them and the
+    // node's own declared key says which. Nothing is parsed out of that key: the registry is asked
+    // by it, because the registry is what holds the name.
+    let Some(slot) = window_slot_of(state, target) else {
+        return S::Keyboard;
+    };
+    if slot == crate::chrome::CHROME_KEY {
+        return state
             .chrome_tree
             .as_ref()
             .map(|t| t.intent_source)
-            .unwrap_or(S::Keyboard),
-        HintSurface::Layer(id) => S::Surface(state.layers.surface_key(*id)),
-        HintSurface::Pane(_) => S::Keyboard,
+            .unwrap_or(S::Keyboard);
     }
+    // A registered surface answers by its addressable **name** (`heca.expose`), not by the slot it
+    // is seated in; one that registered nothing already *is* named by the key it declared on
+    // itself (the toast stack's `heca.notifications`). Both spellings arrive here as the same
+    // `SurfaceKey`, which is what stops a surface having two identities.
+    S::Surface(
+        state
+            .layers
+            .declaration_at(&slot)
+            .map(|l| state.layers.surface_key(l.id))
+            .unwrap_or_else(|| crate::app::interaction::SurfaceKey::of(&slot)),
+    )
+}
+
+/// **The window-root child a target fell under**, by its own declared key.
+///
+/// `None` when the target names the root itself (an empty path) or the child has gone — both of
+/// which mean "no surface to ask about", never "the chrome".
+fn window_slot_of(state: &crate::app_state::AppState, target: &HintTarget) -> Option<String> {
+    let first = *target.path.first()?;
+    state
+        .window_root
+        .base()
+        .children
+        .get(first)?
+        .base()
+        .key
+        .clone()
 }
 
 /// **What a layer hides from the letters beneath it.**
 ///
-/// `covers_content` is the layer's own declaration and the action router already acts on it;
+/// `lock` is the layer's own declaration and the action router already acts on it;
 /// occlusion is the same question asked about letters, so it is answered from the declaration
 /// rather than assumed from the root's box.
 ///
-/// An ambient overlay fills the viewport and draws in a corner of it: a toast stack is `Pct(1.0)`
+/// An ambient overlay fills the viewport and draws in a corner of it: a toast stack is `Percent(1.0)`
 /// square because it *positions* its cards on screen, not because it covers the screen. Reading its
 /// bounds as an occluder blanked every letter in the app for as long as the stack was mounted —
 /// chrome, panes and all — leaving letters only on the toast itself.
-fn layer_occluders(covers_content: bool, bounds: Rectangle) -> Vec<Rectangle> {
-    if covers_content {
-        vec![bounds]
-    } else {
-        Vec::new()
-    }
+fn layer_occluders(lock: bool, bounds: Rectangle) -> Vec<Rectangle> {
+    if lock { vec![bounds] } else { Vec::new() }
 }
 
 /// The candidates the **one visibility rule** leaves — context activation, then geometric occlusion
@@ -130,71 +219,87 @@ fn layer_occluders(covers_content: bool, bounds: Rectangle) -> Vec<Rectangle> {
 /// [`visible_pane_targets`] wants the first alone — a pane-select mode letters a pane for reasons of
 /// its own, and answering it with the `prefix+/` picker's policy would be one surface's judgement
 /// applied to another's.
-fn visible_hint_targets(
-    state: &crate::app_state::AppState,
-) -> Vec<(HintTarget, Rectangle)> {
-    let (vw, vh) = {
-        let phys = state.window.inner_size();
-        let s = state.scale_factor;
-        (phys.width as f64 / s, phys.height as f64 / s)
-    };
+fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, Rectangle)> {
+    let chrome = ChromeConfig::of(state);
+    let (vw, vh) = (chrome.window().w, chrome.window().h);
     let viewport = Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, vh));
-    let content = ChromeConfig {
-        tab_bar_height: state.tab_bar_height(),
-        status_bar_height: state.status_bar_height(),
-        left_sidebar_width: state.left_sidebar_width(),
-        right_sidebar_width: state.right_sidebar_width(),
-        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
-    }
-    .content_rect(vw as f32, vh as f32);
+    let content = chrome.content_rect();
 
     let mut layers: Vec<HintLayer> = Vec::new();
 
-    // The stack is assembled **front → back, in paint order reversed** — layers, then the chrome
-    // shell, then the panes. That is literally how the frame is drawn (`render.rs`: chrome scene,
-    // then `paint_layers` into a scene flushed after it), so building the stack this way makes the
-    // two agree by construction instead of by a second ordering rule that has to be kept in step.
+    // The stack is assembled **front → back**, which in one tree is simply the children reversed:
+    // a later sibling is drawn above an earlier one, so the last child is front-most and the chrome
+    // (child 0) sits behind every surface placed beside it. That is the same order the frame is
+    // painted in, so the two agree by construction rather than by a second ordering rule kept in
+    // step by hand — which is what the registry's own `z_path` sort had become, and it could not
+    // see a surface that never registered.
     //
-    // 1. Dynamically registered layers (the exposé, the context menu, the confirm dialog, a plugin
-    //    panel), front → back among themselves. Their targets and occluder come from their
-    //    laid-out tree, never a constant. The first **modal** one among them is the active context
-    //    and `resolve_hint_layers` stops there — which is what suppresses the chrome and the panes
-    //    beneath an exposé.
-    for layer in state.layers.visible_front_to_back() {
-        // **A layer hides what it says it hides.** `covers_content` is the declaration the action
-        // router already acts on, and occlusion is the same question asked about letters, so it is
-        // read here rather than assumed from the root's box.
-        //
-        // An ambient overlay fills the viewport and draws in a corner of it: a toast stack is
-        // `Pct(1.0)` square because it *positions* its cards on screen, not because it covers the
-        // screen. Taking its bounds as an occluder blanked every letter in the app for as long as
-        // the stack was mounted — chrome, panes and all — leaving letters only on the toast.
-        let Some(node) = crate::chrome::surface_node(&state.window_root, layer.id) else {
-            continue;
-        };
-        let occluders = layer_occluders(layer.covers_content, node.base().bounds);
-        layers.push(HintLayer {
-            targets: hints_of(&HintSurface::Layer(layer.id), node),
-            occluders,
-            modal: layer.modal,
-        });
-    }
+    // 1. The chrome and every surface seated beside it — the exposé, a context menu, a confirm
+    //    dialog, the toast stack, a plugin's panel. The first **modal** one is the active context
+    //    and `resolve_hint_layers` stops there, which is what suppresses everything beneath an
+    //    exposé.
+    // 1. The page and every surface seated above it — the exposé, a context menu, a confirm
+    //    dialog, the toast stack, a plugin's panel. The **library** groups the targets and orders
+    //    them front → back (`collect_hints_by_surface`), so nothing here walks the tree, assumes
+    //    where a surface is seated, or keeps a second answer to what is in front. The first
+    //    **modal** group is the active context and `resolve_hint_layers` stops there, which is what
+    //    suppresses everything beneath an exposé.
+    for group in heca_grid_ui::collect_hints_by_surface(&state.window_root) {
+        let targets: Vec<(HintTarget, Rectangle)> = group
+            .targets
+            .iter()
+            .map(|(path, bounds)| {
+                (
+                    HintTarget::new(&HintSurface::Window, &state.window_root, path.clone()),
+                    *bounds,
+                )
+            })
+            .collect();
 
-    // 2. Chrome (top bar + sidebars), drawn on top of all pane content. Its own targets
-    //    are eligible; the chrome frame AROUND the content (bars + sidebars) occludes pane
-    //    targets beneath it. Occluders come from `content_rect`, not constants.
-    {
-        let (cl, ct) = (content.loc.x, content.loc.y);
-        let (cr, cb) = (content.loc.x + content.size.w, content.loc.y + content.size.h);
+        // **The page is not a surface, and says so structurally** — an empty path, never a matched
+        // name. What the page hides is the chrome frame AROUND the content: the bars and the
+        // sidebars, taken from `content_rect` and never from constants.
+        let (occluders, modal) = if group.path.is_empty() {
+            let (cl, ct) = (content.loc.x, content.loc.y);
+            let (cr, cb) = (
+                content.loc.x + content.size.w,
+                content.loc.y + content.size.h,
+            );
+            (
+                vec![
+                    Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, ct)), // top bar
+                    Rectangle::new(Point::new(0.0, 0.0), Size::new(cl, vh)), // left sidebar
+                    Rectangle::new(Point::new(cr, 0.0), Size::new(vw - cr, vh)), // right sidebar
+                    Rectangle::new(Point::new(0.0, cb), Size::new(vw, vh - cb)), // status bar
+                ],
+                false,
+            )
+        } else {
+            // **A surface hides what it says it hides.** `lock` is the declaration the
+            // action router already acts on, and occlusion is the same question asked about
+            // letters, so it is read rather than assumed from the node's box. An ambient overlay
+            // fills the viewport and draws in a corner of it: a toast stack is `Percent(1.0)` because
+            // it *positions* its cards, not because it covers the screen.
+            //
+            // **Declaring nothing is declaring `false`** — a surface that registered no entry (the
+            // toast stack) covers no content and takes no keyboard, so there is no name written
+            // here and no case to special-case. A surface that is no longer up declares nothing
+            // either: `live_declaration_at` is the registry's own "still in charge" rule, and
+            // reading a dismissed surface's declaration is what blanked every letter in the app.
+            let live = group
+                .key
+                .as_deref()
+                .is_some_and(|slot| state.layers.slot_is_live(&state.window_root, slot));
+            let declares = |yes: bool| live && yes;
+            (
+                layer_occluders(declares(group.lock), group.bounds),
+                declares(group.holds_keyboard),
+            )
+        };
         layers.push(HintLayer {
-            targets: hints_of(&HintSurface::Chrome, &state.window_root),
-            occluders: vec![
-                Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, ct)), // top bar
-                Rectangle::new(Point::new(0.0, 0.0), Size::new(cl, vh)), // left sidebar
-                Rectangle::new(Point::new(cr, 0.0), Size::new(vw - cr, vh)), // right sidebar
-                Rectangle::new(Point::new(0.0, cb), Size::new(vw, vh - cb)), // status bar
-            ],
-            modal: false,
+            targets,
+            occluders,
+            modal,
         });
     }
 
@@ -209,10 +314,13 @@ fn visible_hint_targets(
         // The pane's shell and its info bar are ONE tree now — the bar is a child of the pane —
         // so one walk collects the pane's own letter and its bar buttons' together. They were
         // always hidden by the same occluder anyway, because they are one pane.
-        let targets = match state.panes.get(&pane_id) {
-            Some(shell) => hints_of(&HintSurface::Pane(pane_id), &shell.root),
-            None => Vec::new(),
-        };
+        // **Ask where the surface is, never where it used to be kept.** A floating pane is the
+        // host's own tree; a tiled one is a node inside its column. `hint_surface_root` is the one
+        // function that answers that, and collecting, offering and running the pick all ask it —
+        // so none of them can disagree about where a pane is.
+        let targets = super::surfaces::hint_surface_root(state, &HintSurface::Pane(pane_id))
+            .map(|root| hints_of(&HintSurface::Pane(pane_id), root))
+            .unwrap_or_default();
         if targets.is_empty() {
             continue;
         }
@@ -229,29 +337,43 @@ fn visible_hint_targets(
     resolve_hint_layers(layers, viewport)
 }
 
-/// **Which surfaces could actually show a letter right now**, by the one visibility rule.
+/// **What can show a letter right now**, resolved once (F003/P082/T438, F003/P097/T499).
 ///
 /// A pane scrolled behind a sidebar is still a pane, and a pick mode reading the SESSION happily
 /// letters it — so its keycap draws on top of the sidebar covering it (Antonio, driving,
-/// 2026-08-19). `prefix+/` never had this problem because [`active_hint_targets`] resolves the
-/// surface stack first: a target whose centre is covered by something in front is dropped.
+/// 2026-08-19). `prefix+/` never had this problem because the surface stack is resolved first: a
+/// target whose centre is covered by something in front is dropped.
 ///
 /// So this asks that same function rather than testing rects again here. Occlusion is decided in
 /// exactly one place — `resolve_hint_layers` — and a second copy would be one more thing to keep in
-/// step with the layer stack. It collapses entirely when the pick modes become the one picker
-/// (F011/P094/T457).
+/// step with the stack.
 ///
-/// **Surfaces, not pane ids.** It answered `HashSet<PaneId>` and the caller then had to decide what
-/// that meant for a pane's *header*, which is a different surface over the same pane — so the
-/// header was left ungated and kept a letter its pane had lost. A view is what can or cannot show a
-/// letter, so a view is what this names (F003/P082/T438).
-pub(crate) fn visible_hint_surfaces(
-    state: &crate::app_state::AppState,
-) -> std::collections::HashSet<HintSurface> {
-    visible_hint_targets(state)
-        .into_iter()
-        .map(|(target, _)| target.surface)
-        .collect()
+/// **Both shapes come from ONE resolve.** The two pickers address different things: a pick mode
+/// names a *view* by identity ("can this pane show a letter"), the universal picker names a
+/// *target* exactly — and since every surface seated above the page is one tree, asking the latter
+/// about its surface would ask whether anything in the window is visible, which is always true.
+/// They were two calls, each resolving the whole stack, every frame; one answer served two ways
+/// cannot disagree and costs half as much.
+pub(super) fn visible_views(state: &crate::app_state::AppState) -> VisibleViews {
+    let mut views = VisibleViews::default();
+    for (target, _) in visible_hint_targets(state) {
+        views.surfaces.insert(target.surface.clone());
+        views.targets.insert(target);
+    }
+    views
+}
+
+/// The two questions the letter pass asks of one resolve — see [`visible_views`].
+#[derive(Default)]
+pub(super) struct VisibleViews {
+    /// Which **views** can show a letter — what a pick mode's identity-addressed offer asks.
+    ///
+    /// **Surfaces, not pane ids.** It answered `HashSet<PaneId>` and the caller then had to decide
+    /// what that meant for a pane's *header*, which is a different view over the same pane — so the
+    /// header was left ungated and kept a letter its pane had lost (F003/P082/T438).
+    pub(super) surfaces: std::collections::HashSet<HintSurface>,
+    /// Which **targets** survived — what the universal picker's path-addressed offer asks.
+    pub(super) targets: std::collections::HashSet<HintTarget>,
 }
 
 /// One surface's hint declarations, addressed by [`HintTarget`].
@@ -277,7 +399,7 @@ mod tests {
     /// **An ambient overlay hides nothing** (F009 toast stack, found 2026-08-27).
     ///
     /// A toast stack sizes itself to the whole viewport because that is how it *positions* its
-    /// cards — top-right, bottom-left. It covers a corner and declares `covers_content: false`.
+    /// cards — top-right, bottom-left. It covers a corner and declares `lock: false`.
     /// Taking its root box as an occluder suppressed every letter in the app for as long as the
     /// stack was mounted, so `prefix+/` lettered the toast and nothing else — no chrome, no panes.
     #[test]

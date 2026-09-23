@@ -10,7 +10,6 @@ fn fixed_box(w: f32, h: f32) -> Flex {
     Flex::column().width(Length::Px(w)).height(Length::Px(h))
 }
 
-
 /// A click: a press **and** the release that completes it, on the same spot.
 ///
 /// Since F004/P084/T394 a control fires on the click, not on the press — so pressing and dragging
@@ -183,7 +182,10 @@ fn a_truncating_label_shrinks_inside_a_container_that_is_too_narrow() {
     let theme = Theme::default();
     let text = "projects/heca/src/widgets/label.rs";
     let paint_in_row = |label: Label| {
-        let mut row = Flex::row().width(Length::Px(120.0)).height(Length::Px(40.0)).child(label);
+        let mut row = Flex::row()
+            .width(Length::Px(120.0))
+            .height(Length::Px(40.0))
+            .child(label);
         LayoutEngine::new().compute(&mut row, Size::new(120.0, 40.0));
         let child_w = row.base().children[0].base().bounds.size.w;
         let mut scene = Scene::new();
@@ -214,14 +216,15 @@ fn a_truncating_label_shrinks_inside_a_container_that_is_too_narrow() {
     // The opt-out keeps its natural width and overflows — which is now something a caller asks for
     // rather than what they get by saying nothing (F003/P082/T438).
     let (w_plain, plain) = paint_in_row(Label::new(text).truncate(Ellipsis::None));
-    assert_eq!(plain, text, "opted out, it draws its whole string whatever box it is given");
+    assert_eq!(
+        plain, text,
+        "opted out, it draws its whole string whatever box it is given"
+    );
     // Its **box** does not exceed the row, whatever it opts out of: shrinking is the engine's
     // default and nothing is wider than what holds it (`max-width: 100%`, applied in the layout
     // pass). Opting out of the *cut* is a statement about the text, not a licence for the box —
     // the text simply paints past its own edge, which is what asking not to be cut means.
-    let (w_rigid, rigid) = paint_in_row(
-        Label::new(text).truncate(Ellipsis::None).shrink(0.0),
-    );
+    let (w_rigid, rigid) = paint_in_row(Label::new(text).truncate(Ellipsis::None).shrink(0.0));
     assert_eq!(rigid, text, "still whole");
     assert!(
         w_rigid <= 120.5 && w_plain <= 120.5,
@@ -317,11 +320,18 @@ fn a_wrapping_label_reflows_and_its_height_follows_its_width() {
 
     // The text survives the break: same words, same order, nothing dropped or duplicated.
     let rejoined: Vec<&str> = narrow.iter().flat_map(|(l, _)| l.split(' ')).collect();
-    assert_eq!(rejoined.join(" "), text, "wrapping is not allowed to lose text");
+    assert_eq!(
+        rejoined.join(" "),
+        text,
+        "wrapping is not allowed to lose text"
+    );
 
     // Every line fits the box it was measured against.
     for (line, _) in &narrow {
-        assert!(line.chars().count() <= cells, "{line:?} overflows {cells} cells");
+        assert!(
+            line.chars().count() <= cells,
+            "{line:?} overflows {cells} cells"
+        );
     }
 }
 
@@ -331,9 +341,15 @@ fn a_wrapping_label_reflows_and_its_height_follows_its_width() {
 fn a_wrapping_label_hard_breaks_a_word_too_long_for_the_line() {
     let word = "supercalifragilisticexpialidocious";
     let (lines, _, cells) = wrapped(word, 120.0);
-    assert!(lines.len() > 1, "an unbreakable word must still be broken: {lines:?}");
+    assert!(
+        lines.len() > 1,
+        "an unbreakable word must still be broken: {lines:?}"
+    );
     for (line, _) in &lines {
-        assert!(line.chars().count() <= cells, "{line:?} overflows {cells} cells");
+        assert!(
+            line.chars().count() <= cells,
+            "{line:?} overflows {cells} cells"
+        );
     }
     assert_eq!(
         lines.iter().map(|(l, _)| l.as_str()).collect::<String>(),
@@ -355,7 +371,10 @@ fn a_plain_label_is_untouched_by_the_measure_path() {
         matches!(plain.base().style.layout.height, L::Px(_)),
         "a plain label still reports its own height, not `auto`",
     );
-    assert!(plain.measure_text().is_none(), "…and is not handed to taffy's measure path");
+    assert!(
+        plain.measure_text().is_none(),
+        "…and is not handed to taffy's measure path"
+    );
 
     let wrapping = Label::new("some text").wrap(true);
     assert!(
@@ -406,7 +425,10 @@ fn a_label_marks_the_characters_it_was_given() {
     // Marked ⇒ **the whole line is still one run**, with the marked characters over-drawn on top.
     // Splitting the line at the mark boundaries loses a run's leading space in the shaper, which
     // walks every space in the label — so the text must never be cut into pieces.
-    let marked = runs_of(Label::new("close pane").marks([0, 1, 6]).mark_color(mark), 40.0);
+    let marked = runs_of(
+        Label::new("close pane").marks([0, 1, 6]).mark_color(mark),
+        40.0,
+    );
     assert_eq!(
         marked.first().map(|(t, _)| t.as_str()),
         Some("close pane"),
@@ -417,7 +439,10 @@ fn a_label_marks_the_characters_it_was_given() {
         .filter(|(_, c)| *c == mark)
         .map(|(t, _)| t.as_str())
         .collect();
-    assert_eq!(in_mark, "clp", "exactly the marked characters are accented: {marked:?}");
+    assert_eq!(
+        in_mark, "clp",
+        "exactly the marked characters are accented: {marked:?}"
+    );
 }
 
 /// A mark follows **its character** through a cut. `Ellipsis::Start` drops the head, so every
@@ -433,16 +458,29 @@ fn marks_survive_a_truncation_at_either_end() {
 
     // Cutting the head keeps them: they are the tail the ellipsis preserved.
     let start = runs_of(
-        Label::new(text).truncate(Ellipsis::Start).marks(marks).mark_color(mark),
+        Label::new(text)
+            .truncate(Ellipsis::Start)
+            .marks(marks)
+            .mark_color(mark),
         10.0,
     );
-    let kept: String = start.iter().filter(|(_, c)| *c == mark).map(|(t, _)| t.as_str()).collect();
-    assert_eq!(kept, "src", "the marks moved with their characters: {start:?}");
+    let kept: String = start
+        .iter()
+        .filter(|(_, c)| *c == mark)
+        .map(|(t, _)| t.as_str())
+        .collect();
+    assert_eq!(
+        kept, "src",
+        "the marks moved with their characters: {start:?}"
+    );
 
     // Cutting the tail throws those characters away, so nothing is marked — and nothing is stamped
     // onto the ellipsis.
     let end = runs_of(
-        Label::new(text).truncate(Ellipsis::End).marks(marks).mark_color(mark),
+        Label::new(text)
+            .truncate(Ellipsis::End)
+            .marks(marks)
+            .mark_color(mark),
         10.0,
     );
     assert!(
@@ -477,23 +515,31 @@ fn marks_survive_a_wrap() {
             _ => None,
         })
         .collect();
-    assert_eq!(accented, "lazy", "the mark landed on the line its characters wrapped to");
+    assert_eq!(
+        accented, "lazy",
+        "the mark landed on the line its characters wrapped to"
+    );
 }
 
 /// A wrapped label's rules follow **each line**, not one rule spanning the whole box.
 #[test]
 fn decorations_follow_every_wrapped_line() {
     let theme = Theme::default();
-    let mut col = Flex::column()
-        .width(Length::Px(120.0))
-        .child(Label::new("the quick brown fox jumps over the lazy dog").wrap(true).underline(true));
+    let mut col = Flex::column().width(Length::Px(120.0)).child(
+        Label::new("the quick brown fox jumps over the lazy dog")
+            .wrap(true)
+            .underline(true),
+    );
     LayoutEngine::new().compute(&mut col, Size::new(800.0, 600.0));
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
         col.paint(&mut cx);
     }
-    let texts = scene.iter().filter(|c| matches!(c, DrawCommand::Text(_))).count();
+    let texts = scene
+        .iter()
+        .filter(|c| matches!(c, DrawCommand::Text(_)))
+        .count();
     let rules: Vec<Rectangle> = scene
         .iter()
         .filter_map(|c| match c {
@@ -502,7 +548,11 @@ fn decorations_follow_every_wrapped_line() {
         })
         .collect();
     assert!(texts > 1, "the fixture must actually wrap");
-    assert_eq!(rules.len(), texts, "one rule per drawn line, not one for the box");
+    assert_eq!(
+        rules.len(),
+        texts,
+        "one rule per drawn line, not one for the box"
+    );
     assert!(
         rules.windows(2).all(|p| p[1].loc.y > p[0].loc.y),
         "each rule sits under its own line: {rules:?}",
@@ -545,7 +595,11 @@ fn label_weight_and_slant_are_font_attributes_decorations_are_rects() {
 
     // …while the decorations never touch it: they are rects the widget draws.
     let (runs, rules, bounds, font) = paint(Label::new("STATUS").underline(true));
-    assert_eq!(runs, vec![TextStyle::REGULAR], "a rule is not a font attribute");
+    assert_eq!(
+        runs,
+        vec![TextStyle::REGULAR],
+        "a rule is not a font attribute"
+    );
     assert_eq!(rules.len(), 1, "the underline");
     let rule = rules[0];
     let mid = bounds.loc.y + bounds.size.h / 2.0;
@@ -554,7 +608,11 @@ fn label_weight_and_slant_are_font_attributes_decorations_are_rects() {
         (rule.size.w - bounds.size.w).abs() < 0.5,
         "it spans the text run, which for a Start-aligned label is its whole box",
     );
-    assert!(rule.size.h >= 1.0, "never thinner than a pixel: {}", rule.size.h);
+    assert!(
+        rule.size.h >= 1.0,
+        "never thinner than a pixel: {}",
+        rule.size.h
+    );
 
     // Strikethrough goes through the text; both together draw two rules.
     let (_, rules, bounds, _) = paint(Label::new("STATUS").strikethrough(true));
@@ -718,12 +776,18 @@ fn widget_size_scales_font_and_box_proportionally() {
     let (normal_f, normal_b) = measure(WidgetSize::Normal);
     let (big_f, big_b) = measure(WidgetSize::Large);
 
-    assert!(small_f < normal_f && normal_f < big_f, "font grows Small < Normal < Big");
+    assert!(
+        small_f < normal_f && normal_f < big_f,
+        "font grows Small < Normal < Big"
+    );
     assert!(
         small_b.size.h < normal_b.size.h && normal_b.size.h < big_b.size.h,
         "box height grows with the size variant"
     );
-    assert!(small_b.size.w < big_b.size.w, "box width grows with the size variant");
+    assert!(
+        small_b.size.w < big_b.size.w,
+        "box width grows with the size variant"
+    );
 
     // The default is Normal.
     let mut default_btn = Button::new("RUN");
@@ -753,9 +817,15 @@ fn button_hover_tracks_pointer() {
     let hovered = button.hovered();
     let b = button.base().bounds;
 
-    heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(Point::new(b.loc.x + 2.0, b.loc.y + 2.0)));
+    heca_grid_ui::dispatch(
+        &mut button,
+        &Event::pointer_moved(Point::new(b.loc.x + 2.0, b.loc.y + 2.0)),
+    );
     assert!(hovered.get_untracked(), "entering bounds sets hover");
-    heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(Point::new(b.loc.x + b.size.w + 50.0, b.loc.y)));
+    heca_grid_ui::dispatch(
+        &mut button,
+        &Event::pointer_moved(Point::new(b.loc.x + b.size.w + 50.0, b.loc.y)),
+    );
     assert!(!hovered.get_untracked(), "leaving bounds clears hover");
 }
 
@@ -867,11 +937,21 @@ fn dispatch_focuses_on_press_and_falls_through_when_unconsumed() {
     );
 
     // A press dispatches with focus-on-press semantics: the clicked widget focuses.
-    focus.dispatch(&mut ui, &Event::pointer_pressed(center, PointerButton::Left));
-    assert_eq!(focus.focused(), Some(1), "dispatch focuses the pressed widget");
+    focus.dispatch(
+        &mut ui,
+        &Event::pointer_pressed(center, PointerButton::Left),
+    );
+    assert_eq!(
+        focus.focused(),
+        Some(1),
+        "dispatch focuses the pressed widget"
+    );
 
     // A press that misses every focusable clears focus.
-    focus.dispatch(&mut ui, &Event::pointer_pressed(Point::new(9999.0, 9999.0), PointerButton::Left));
+    focus.dispatch(
+        &mut ui,
+        &Event::pointer_pressed(Point::new(9999.0, 9999.0), PointerButton::Left),
+    );
     assert_eq!(focus.focused(), None, "dispatch clears focus on a miss");
 
     // No widget consumes a scroll → dispatch reports No so the host can page-scroll.
@@ -896,7 +976,13 @@ fn dispatch_gives_an_open_overlay_first_dibs() {
     let sb = ui.base().children[1].base().bounds;
 
     // Press on the Select trigger opens its dropdown (no overlay yet → normal route).
-    focus.dispatch(&mut ui, &Event::pointer_pressed(Point::new(sb.loc.x + 5.0, sb.loc.y + 5.0), PointerButton::Left));
+    focus.dispatch(
+        &mut ui,
+        &Event::pointer_pressed(
+            Point::new(sb.loc.x + 5.0, sb.loc.y + 5.0),
+            PointerButton::Left,
+        ),
+    );
     assert!(
         focus.overlay_active(&mut ui),
         "pressing the trigger opens the dropdown overlay"
@@ -907,7 +993,13 @@ fn dispatch_gives_an_open_overlay_first_dibs() {
     // than being treated as a fresh focus/click on the tree behind it. The row is
     // found by its **bounds**: the options are real children, placed in the panel.
     let row2 = ui.base().children[1].base().children[2].base().bounds;
-    let handled = focus.dispatch(&mut ui, &Event::pointer_pressed(Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0), PointerButton::Left));
+    let handled = focus.dispatch(
+        &mut ui,
+        &Event::pointer_pressed(
+            Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0),
+            PointerButton::Left,
+        ),
+    );
     assert_eq!(handled, Handled::Yes, "the open overlay consumes the press");
     assert!(
         !focus.overlay_active(&mut ui),
@@ -934,7 +1026,10 @@ fn glow_none_suppresses_glow() {
         DrawCommand::Rect(r) => r.glow.is_some(),
         _ => false,
     });
-    assert!(!glow_present, "glow must be suppressed when glow_size is None");
+    assert!(
+        !glow_present,
+        "glow must be suppressed when glow_size is None"
+    );
 
     // And with a glow size set, the glow survives.
     theme.colors.glow_size = GlowLevel::Medium;
@@ -943,7 +1038,9 @@ fn glow_none_suppresses_glow() {
         let mut cx = PaintCx::new(&mut scene2, &theme);
         Surface::new().glow(Color::rgb(64, 224, 255)).paint(&mut cx);
     }
-    let glow_present2 = scene2.iter().any(|c| matches!(c, DrawCommand::Rect(r) if r.glow.is_some()));
+    let glow_present2 = scene2
+        .iter()
+        .any(|c| matches!(c, DrawCommand::Rect(r) if r.glow.is_some()));
     assert!(glow_present2, "glow present when glow_size is Medium");
 }
 
@@ -980,7 +1077,10 @@ fn glow_strength_scales_with_glow_size() {
         (thin - medium * GlowLevel::Thin.strength_scale()).abs() < 1e-4,
         "thin follows its strength_scale"
     );
-    assert!(thin > 0.0 && thin < medium, "thin sits between none and medium");
+    assert!(
+        thin > 0.0 && thin < medium,
+        "thin sits between none and medium"
+    );
     assert!(
         (large - medium * GlowLevel::Large.strength_scale()).abs() < 1e-4,
         "large follows its strength_scale"
@@ -1115,7 +1215,10 @@ fn disabled_button_ignores_clicks_and_focus() {
 #[test]
 fn focusable_is_driven_by_the_base_flag_and_disabled() {
     // Non-interactive widgets stay unfocusable (default `Base.focusable == false`).
-    assert!(!Label::new("x").focusable(), "a plain label is not focusable");
+    assert!(
+        !Label::new("x").focusable(),
+        "a plain label is not focusable"
+    );
 
     // Always-focusable controls opt in from their constructor…
     assert!(Input::new().focusable(), "an input is focusable");
@@ -1171,8 +1274,10 @@ fn disabled_button_label_is_muted_and_faded_on_every_variant() {
         ButtonVariant::Ghost,
         ButtonVariant::Link,
     ] {
-        let disabled =
-            button_label_color(&mut Button::new("OK").variant(variant).disabled(true), &theme);
+        let disabled = button_label_color(
+            &mut Button::new("OK").variant(variant).disabled(true),
+            &theme,
+        );
         let enabled = button_label_color(&mut Button::new("OK").variant(variant), &theme);
         // Disabled label is the theme `muted` hue (not the variant's vivid color)…
         assert_eq!(
@@ -1356,14 +1461,20 @@ fn input_backspace_and_midword_insert_respect_cursor() {
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
 
     // Caret starts at end (after 'c'). Move left → between 'b' and 'c'.
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::ArrowLeft,
-        pressed: true,
-    });
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Backspace,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::ArrowLeft,
+            pressed: true,
+        },
+    );
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::Backspace,
+            pressed: true,
+        },
+    );
     assert_eq!(
         input.value_str(),
         "ac",
@@ -1456,19 +1567,28 @@ fn input_ctrl_backspace_deletes_previous_word() {
     give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
 
-    heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
-        ctrl: true,
-        ..Default::default()
-    }));
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Backspace,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::ModifiersChanged(Modifiers {
+            ctrl: true,
+            ..Default::default()
+        }),
+    );
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::Backspace,
+            pressed: true,
+        },
+    );
     assert_eq!(input.value_str(), "alpha ", "deletes the word at the caret");
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Backspace,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::Backspace,
+            pressed: true,
+        },
+    );
     assert_eq!(
         input.value_str(),
         "",
@@ -1483,20 +1603,29 @@ fn input_alt_delete_removes_next_word() {
     give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
     for _ in 0..20 {
-        heca_grid_ui::dispatch(&mut input, &Event::Key {
-            key: GridKey::ArrowLeft,
-            pressed: true,
-        });
+        heca_grid_ui::dispatch(
+            &mut input,
+            &Event::Key {
+                key: GridKey::ArrowLeft,
+                pressed: true,
+            },
+        );
     }
     // On macOS the word modifier is Alt/Option — accepted cross-platform.
-    heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
-        alt: true,
-        ..Default::default()
-    }));
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Delete,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::ModifiersChanged(Modifiers {
+            alt: true,
+            ..Default::default()
+        }),
+    );
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::Delete,
+            pressed: true,
+        },
+    );
     assert_eq!(
         input.value_str(),
         " beta",
@@ -1508,10 +1637,13 @@ fn input_alt_delete_removes_next_word() {
 fn meta_backspace_and_delete_clear_to_boundary() {
     use heca_grid_ui::Modifiers;
     let arrow_left = |i: &mut Input| {
-        heca_grid_ui::dispatch(&mut *i, &Event::Key {
-            key: GridKey::ArrowLeft,
-            pressed: true,
-        });
+        heca_grid_ui::dispatch(
+            &mut *i,
+            &Event::Key {
+                key: GridKey::ArrowLeft,
+                pressed: true,
+            },
+        );
     };
 
     // Meta+Backspace deletes from the caret to the start.
@@ -1521,14 +1653,20 @@ fn meta_backspace_and_delete_clear_to_boundary() {
     for _ in 0..4 {
         arrow_left(&mut a); // caret 10 → 6 (start of "beta")
     }
-    heca_grid_ui::dispatch(&mut a, &Event::ModifiersChanged(Modifiers {
-        meta: true,
-        ..Default::default()
-    }));
-    heca_grid_ui::dispatch(&mut a, &Event::Key {
-        key: GridKey::Backspace,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut a,
+        &Event::ModifiersChanged(Modifiers {
+            meta: true,
+            ..Default::default()
+        }),
+    );
+    heca_grid_ui::dispatch(
+        &mut a,
+        &Event::Key {
+            key: GridKey::Backspace,
+            pressed: true,
+        },
+    );
     assert_eq!(a.value_str(), "beta", "meta+backspace deletes to start");
     // **Meta comes back up.** Modifiers are device state the framework keeps once, not a copy each
     // widget owns, so a second field built here still sees what is held — exactly as a second field
@@ -1542,14 +1680,20 @@ fn meta_backspace_and_delete_clear_to_boundary() {
     for _ in 0..5 {
         arrow_left(&mut b); // caret 10 → 5 (after "alpha")
     }
-    heca_grid_ui::dispatch(&mut b, &Event::ModifiersChanged(Modifiers {
-        meta: true,
-        ..Default::default()
-    }));
-    heca_grid_ui::dispatch(&mut b, &Event::Key {
-        key: GridKey::Delete,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut b,
+        &Event::ModifiersChanged(Modifiers {
+            meta: true,
+            ..Default::default()
+        }),
+    );
+    heca_grid_ui::dispatch(
+        &mut b,
+        &Event::Key {
+            key: GridKey::Delete,
+            pressed: true,
+        },
+    );
     assert_eq!(b.value_str(), "alpha", "meta+delete deletes to end");
     heca_grid_ui::dispatch(&mut b, &Event::ModifiersChanged(Modifiers::default()));
 }
@@ -1561,22 +1705,31 @@ fn shift_arrow_extends_and_shrinks_char_selection() {
     give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
     let left = |i: &mut Input| {
-        heca_grid_ui::dispatch(&mut *i, &Event::Key {
-            key: GridKey::ArrowLeft,
-            pressed: true,
-        })
+        heca_grid_ui::dispatch(
+            &mut *i,
+            &Event::Key {
+                key: GridKey::ArrowLeft,
+                pressed: true,
+            },
+        )
     };
     let right = |i: &mut Input| {
-        heca_grid_ui::dispatch(&mut *i, &Event::Key {
-            key: GridKey::ArrowRight,
-            pressed: true,
-        })
+        heca_grid_ui::dispatch(
+            &mut *i,
+            &Event::Key {
+                key: GridKey::ArrowRight,
+                pressed: true,
+            },
+        )
     };
 
-    heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
-        shift: true,
-        ..Default::default()
-    }));
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::ModifiersChanged(Modifiers {
+            shift: true,
+            ..Default::default()
+        }),
+    );
     left(&mut input);
     assert_eq!(input.selected_text().as_deref(), Some("o"));
     left(&mut input);
@@ -1598,24 +1751,33 @@ fn shift_ctrl_arrow_selects_to_boundary() {
     give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
 
-    heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
-        ctrl: true,
-        shift: true,
-        ..Default::default()
-    }));
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::ArrowLeft,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::ModifiersChanged(Modifiers {
+            ctrl: true,
+            shift: true,
+            ..Default::default()
+        }),
+    );
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::ArrowLeft,
+            pressed: true,
+        },
+    );
     assert_eq!(
         input.selected_text().as_deref(),
         Some("alpha beta"),
         "shift+ctrl+left selects to the start"
     );
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::ArrowRight,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::ArrowRight,
+            pressed: true,
+        },
+    );
     assert_eq!(
         input.selection(),
         None,
@@ -1630,24 +1792,33 @@ fn shift_alt_arrow_selects_by_word() {
     give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
-    heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
-        alt: true,
-        shift: true,
-        ..Default::default()
-    }));
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::ArrowLeft,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::ModifiersChanged(Modifiers {
+            alt: true,
+            shift: true,
+            ..Default::default()
+        }),
+    );
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::ArrowLeft,
+            pressed: true,
+        },
+    );
     assert_eq!(
         input.selected_text().as_deref(),
         Some("gamma"),
         "first word back"
     );
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::ArrowLeft,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::ArrowLeft,
+            pressed: true,
+        },
+    );
     assert_eq!(
         input.selected_text().as_deref(),
         Some("beta gamma"),
@@ -1679,10 +1850,13 @@ fn home_end_move_caret_to_bounds() {
     give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Home,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::Home,
+            pressed: true,
+        },
+    );
     type_text(&mut input, "X");
     assert_eq!(
         input.value_str(),
@@ -1690,10 +1864,13 @@ fn home_end_move_caret_to_bounds() {
         "Home moves the caret to the start"
     );
 
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::End,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::End,
+            pressed: true,
+        },
+    );
     type_text(&mut input, "Y");
     assert_eq!(
         input.value_str(),
@@ -1709,23 +1886,32 @@ fn shift_home_end_select_to_bounds() {
     give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
-    heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
-        shift: true,
-        ..Default::default()
-    }));
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Home,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::ModifiersChanged(Modifiers {
+            shift: true,
+            ..Default::default()
+        }),
+    );
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::Home,
+            pressed: true,
+        },
+    );
     assert_eq!(
         input.selected_text().as_deref(),
         Some("hello"),
         "Shift+Home selects to start"
     );
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::End,
-        pressed: true,
-    });
+    heca_grid_ui::dispatch(
+        &mut input,
+        &Event::Key {
+            key: GridKey::End,
+            pressed: true,
+        },
+    );
     assert_eq!(
         input.selection(),
         None,
@@ -1882,7 +2068,10 @@ fn select_click_row_commits_and_closes() {
         row2.loc.y > b.loc.y + b.size.h,
         "the rows are placed in the panel, below the trigger"
     );
-    click_at(&mut sel, Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0));
+    click_at(
+        &mut sel,
+        Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0),
+    );
     assert_eq!(sel.index(), 2, "clicking a row selects it");
     assert!(!sel.overlay_active(), "selection closes the dropdown");
     assert_eq!(
@@ -1987,8 +2176,7 @@ fn select_sugar_builds_choice_children_and_composed_options_carry_their_content(
         .rposition(|(t, _)| t == "HIGH")
         .expect("the HIGH row is painted");
     assert_eq!(
-        runs[high_row].1,
-        theme.colors.accent,
+        runs[high_row].1, theme.colors.accent,
         "the selected option's content is accent-tinted",
     );
 
@@ -2041,7 +2229,10 @@ fn select_rows_outside_the_visible_window_are_not_clickable() {
     }
     // Closing collapses every row **except the chosen one**, which goes back to standing in the
     // trigger (that is how the trigger shows the option's own content).
-    heca_grid_ui::dispatch(&mut sel, &Event::Widget(heca_grid_ui::WidgetIntent::Dismiss));
+    heca_grid_ui::dispatch(
+        &mut sel,
+        &Event::Widget(heca_grid_ui::WidgetIntent::Dismiss),
+    );
     let chosen = sel.index();
     for i in 0..20 {
         if i == chosen {
@@ -2081,7 +2272,13 @@ fn select_flips_above_the_trigger_when_there_is_no_room_below() {
     }
 
     let trigger = ui.base().children[0].base().bounds;
-    heca_grid_ui::dispatch(ui.base_mut().children[0].as_mut(), &Event::pointer_pressed(Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0), PointerButton::Left));
+    heca_grid_ui::dispatch(
+        ui.base_mut().children[0].as_mut(),
+        &Event::pointer_pressed(
+            Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0),
+            PointerButton::Left,
+        ),
+    );
 
     let first_row = ui.base().children[0].base().children[0].base().bounds;
     assert!(
@@ -2136,7 +2333,15 @@ fn select_keyboard_navigates_and_escape_closes() {
     let mut sel = Select::new(["A", "B", "C"]);
     give_keyboard(&mut sel);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
-    let raw = |s: &mut Select, k: GridKey| heca_grid_ui::dispatch(&mut *s, &Event::Key { key: k, pressed: true });
+    let raw = |s: &mut Select, k: GridKey| {
+        heca_grid_ui::dispatch(
+            &mut *s,
+            &Event::Key {
+                key: k,
+                pressed: true,
+            },
+        )
+    };
     let nav = |s: &mut Select, i: WidgetIntent| heca_grid_ui::dispatch(&mut *s, &Event::Widget(i));
 
     // A closed Select opens on a raw activation key (Enter/Space/↓), like a button.
@@ -2196,7 +2401,10 @@ fn tabs_menu_nav_and_click_change_selection() {
 
     // A click near the left edge selects the first tab again.
     let b = tabs.base().bounds;
-    click_at(&mut tabs, Point::new(b.loc.x + 2.0, b.loc.y + b.size.h / 2.0));
+    click_at(
+        &mut tabs,
+        Point::new(b.loc.x + 2.0, b.loc.y + b.size.h / 2.0),
+    );
     assert_eq!(tabs.index(), 0, "click selects the hit tab");
 }
 
@@ -2230,7 +2438,10 @@ fn tabs_underline_slides_toward_the_selected_tabs_bounds() {
     assert!((u0.loc.x - first.loc.x).abs() < 0.01, "starts on tab 0");
     assert!((u0.size.w - first.size.w).abs() < 0.01, "as wide as tab 0");
 
-    heca_grid_ui::dispatch(&mut tabs, &Event::Widget(heca_grid_ui::WidgetIntent::ItemNext));
+    heca_grid_ui::dispatch(
+        &mut tabs,
+        &Event::Widget(heca_grid_ui::WidgetIntent::ItemNext),
+    );
     let mid = underline(&tabs);
     assert!(
         mid.loc.x == u0.loc.x,
@@ -2361,7 +2572,10 @@ fn a_separators_length_and_orientation_can_be_set_in_either_order() {
         .child(Separator::vertical());
     LayoutEngine::new().compute(&mut row, Size::new(200.0, 80.0));
     let bounds = row.base().children[0].base().bounds;
-    assert_eq!(bounds.size.h, 80.0, "a vertical rule stretches to the container height");
+    assert_eq!(
+        bounds.size.h, 80.0,
+        "a vertical rule stretches to the container height"
+    );
     assert!(bounds.size.w <= 1.0, "and stays thin");
 }
 
@@ -2389,7 +2603,11 @@ fn a_panel_titles_itself_whichever_order_it_is_built_in() {
 
     for (which, panel) in [("title first", &a), ("children first", &b)] {
         let kids = &panel.base().children;
-        assert_eq!(kids.len(), 4, "{which}: header + rule + two content children");
+        assert_eq!(
+            kids.len(),
+            4,
+            "{which}: header + rule + two content children"
+        );
         assert!(
             !kids[0].base().style.layout.hidden && !kids[1].base().style.layout.hidden,
             "{which}: the header AND its rule show once titled",
@@ -2577,14 +2795,23 @@ fn item_activates_on_click_when_interactive() {
 
     assert!(item.focusable(), "interactive item is focusable");
     let b = item.base().bounds;
-    click_at(&mut item, Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0));
+    click_at(
+        &mut item,
+        Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0),
+    );
     assert_eq!(hits.get(), 1, "click activates the row");
 
     // Space activates too (keyboard).
     // A raw key reaches only the widget that owns the keyboard — focus it, as a real surface
     // would before sending one.
     item.base_mut().focused.set(true);
-    heca_grid_ui::dispatch(&mut item, &Event::Key { key: GridKey::Space, pressed: true });
+    heca_grid_ui::dispatch(
+        &mut item,
+        &Event::Key {
+            key: GridKey::Space,
+            pressed: true,
+        },
+    );
     assert_eq!(hits.get(), 2);
 }
 
@@ -2599,7 +2826,13 @@ fn display_only_item_is_inert_and_unfocusable() {
     let b = item.base().bounds;
     // No panic / no effect; just confirms it ignores the press.
     assert_eq!(
-        heca_grid_ui::dispatch(&mut item, &Event::pointer_pressed(Point::new(b.loc.x + 1.0, b.loc.y + 1.0), PointerButton::Left)),
+        heca_grid_ui::dispatch(
+            &mut item,
+            &Event::pointer_pressed(
+                Point::new(b.loc.x + 1.0, b.loc.y + 1.0),
+                PointerButton::Left
+            )
+        ),
         Handled::No,
     );
 }
@@ -2710,7 +2943,10 @@ fn pane_draws_rounded_accent_border_no_brackets() {
         .iter()
         .filter(|c| matches!(c, DrawCommand::Brackets(_)))
         .count();
-    assert_eq!(brackets, 0, "pane no longer uses the square bracket primitive");
+    assert_eq!(
+        brackets, 0,
+        "pane no longer uses the square bracket primitive"
+    );
 
     let rounded_border = scene.iter().any(|c| {
         matches!(
@@ -2719,7 +2955,10 @@ fn pane_draws_rounded_accent_border_no_brackets() {
                 if r.border.is_some() && r.radius == theme.colors.border_radius
         )
     });
-    assert!(rounded_border, "pane draws a rounded accent border at the theme radius");
+    assert!(
+        rounded_border,
+        "pane draws a rounded accent border at the theme radius"
+    );
 
     // The surface carries the faint theme REST glow (`interaction.control_rest_glow`)
     // so the `glow_size` setting visibly scales panes at rest too (T011).
@@ -2739,9 +2978,7 @@ fn pane_draws_rounded_accent_border_no_brackets() {
 fn item_group_collapses_rows_out_of_layout() {
     use heca_grid_ui::ItemGroup;
     let row = || Item::new("row").on_activate(|| {});
-    let mut group = ItemGroup::new("GROUP")
-        .child(row())
-        .child(row());
+    let mut group = ItemGroup::new("GROUP").child(row()).child(row());
 
     // Expanded: header + 2 rows all take height.
     LayoutEngine::new().compute(&mut group, Size::new(200.0, 400.0));
@@ -2754,7 +2991,10 @@ fn item_group_collapses_rows_out_of_layout() {
     LayoutEngine::new().compute(&mut group, Size::new(200.0, 400.0));
     let collapsed_h = group.base().bounds.size.h;
     let r1c = group.base().children[1].base().bounds.size.h;
-    assert!(collapsed_h < expanded_h, "collapsed group is shorter ({collapsed_h} < {expanded_h})");
+    assert!(
+        collapsed_h < expanded_h,
+        "collapsed group is shorter ({collapsed_h} < {expanded_h})"
+    );
     assert_eq!(r1c, 0.0, "collapsed rows take no layout space");
 }
 
@@ -2764,14 +3004,14 @@ fn grid_places_children_in_named_areas_and_cells() {
     // 2 cols × 2 rows; areas: icon spans both rows in col 1, title top-right,
     // sub bottom-right. Fixed sizes so we can assert exact bounds.
     let mut grid = Grid::new()
-        .columns([Track::Px(40.0), Track::Px(100.0)])
-        .rows([Track::Px(20.0), Track::Px(20.0)])
-        .areas(["icon title", "icon sub"])
-        .area(Flex::column(), "icon")
-        .area(Flex::column(), "title")
-        .area(Flex::column(), "sub")
-        // explicit cell: a 4th child pinned to col2,row2.
-        .cell(Flex::column(), 2, 2, 1, 1);
+        .template_column([Track::Px(40.0), Track::Px(100.0)])
+        .template_row([Track::Px(20.0), Track::Px(20.0)])
+        .template_area(["icon title", "icon sub"])
+        .child(Flex::column().area("icon"))
+        .child(Flex::column().area("title"))
+        .child(Flex::column().area("sub"))
+        // explicit placement: a 4th child pinning its own column and row.
+        .child(Flex::column().column(2).row(2));
 
     LayoutEngine::new().compute(&mut grid, Size::new(140.0, 40.0));
 
@@ -2800,21 +3040,21 @@ fn grid_areas_template_defines_the_rows_not_the_row_tracks() {
     // stops sharing their centre line. This is the mistake that reads as "the text is off-centre".
     let centres = |areas: &[&str]| {
         let mut grid = Grid::new()
-            .columns([Track::Px(30.0), Track::Fr(1.0)])
-            .rows([Track::Auto]) // one row track, whatever the template says
-            .areas(areas.iter().copied())
+            .template_column([Track::Px(30.0), Track::Fr(1.0)])
+            .template_row([Track::Auto]) // one row track, whatever the template says
+            .template_area(areas.to_vec())
             .align(Align::Center)
-            .area(
+            .child(
                 Surface::new()
                     .width(Length::Px(26.0))
-                    .height(Length::Px(26.0)),
-                "icon",
+                    .height(Length::Px(26.0))
+                    .area("icon"),
             )
-            .area(
+            .child(
                 Surface::new()
                     .width(Length::Px(40.0))
-                    .height(Length::Px(10.0)),
-                "title",
+                    .height(Length::Px(10.0))
+                    .area("title"),
             );
         LayoutEngine::new().compute(&mut grid, Size::new(200.0, 60.0));
         let mid = |i: usize| {
@@ -2845,7 +3085,11 @@ fn grid_items_align_in_their_cell_on_both_axes() {
     use heca_grid_ui::{Grid, Track};
 
     // One 100×40 cell holding a 20×10 item, so the alignment is unambiguous.
-    let item = || Surface::new().width(Length::Px(20.0)).height(Length::Px(10.0));
+    let item = || {
+        Surface::new()
+            .width(Length::Px(20.0))
+            .height(Length::Px(10.0))
+    };
     let cell = |grid: Grid| {
         let mut grid = grid;
         LayoutEngine::new().compute(&mut grid, Size::new(100.0, 40.0));
@@ -2855,19 +3099,29 @@ fn grid_items_align_in_their_cell_on_both_axes() {
     // Default (Stretch on both axes): the item is pinned to the top-left of its cell — an explicit
     // size means there is nothing to stretch. This is why an Icon (h = font) and a Label
     // (h = font × 1.4) in the same row do NOT share a centre line by default.
-    let default = cell(Grid::new()
-        .columns([Track::Px(100.0)])
-        .rows([Track::Px(40.0)])
-        .child(item()));
-    assert!(default.loc.y < 0.01, "default: pinned to the top of the cell");
-    assert!(default.loc.x < 0.01, "default: pinned to the left of the cell");
+    let default = cell(
+        Grid::new()
+            .template_column([Track::Px(100.0)])
+            .template_row([Track::Px(40.0)])
+            .child(item()),
+    );
+    assert!(
+        default.loc.y < 0.01,
+        "default: pinned to the top of the cell"
+    );
+    assert!(
+        default.loc.x < 0.01,
+        "default: pinned to the left of the cell"
+    );
 
     // `.align(..)` is the VERTICAL knob: it centres the items in their cells.
-    let centered = cell(Grid::new()
-        .columns([Track::Px(100.0)])
-        .rows([Track::Px(40.0)])
-        .align(Align::Center)
-        .child(item()));
+    let centered = cell(
+        Grid::new()
+            .template_column([Track::Px(100.0)])
+            .template_row([Track::Px(40.0)])
+            .align(Align::Center)
+            .child(item()),
+    );
     assert!(
         (centered.loc.y - 15.0).abs() < 0.5,
         "align(Center) centres vertically: (40 - 10) / 2 = 15, got {}",
@@ -2875,11 +3129,13 @@ fn grid_items_align_in_their_cell_on_both_axes() {
     );
 
     // `.justify_items(..)` is the HORIZONTAL one.
-    let justified = cell(Grid::new()
-        .columns([Track::Px(100.0)])
-        .rows([Track::Px(40.0)])
-        .justify_items(Align::Center)
-        .child(item()));
+    let justified = cell(
+        Grid::new()
+            .template_column([Track::Px(100.0)])
+            .template_row([Track::Px(40.0)])
+            .justify_items(Align::Center)
+            .child(item()),
+    );
     assert!(
         (justified.loc.x - 40.0).abs() < 0.5,
         "justify_items(Center) centres horizontally: (100 - 20) / 2 = 40, got {}",
@@ -2887,12 +3143,14 @@ fn grid_items_align_in_their_cell_on_both_axes() {
     );
 
     // The per-item overrides win over the grid's defaults, one axis each.
-    let overridden = cell(Grid::new()
-        .columns([Track::Px(100.0)])
-        .rows([Track::Px(40.0)])
-        .align(Align::Center)
-        .justify_items(Align::Center)
-        .child(item().align_self(Align::End).justify_self(Align::End)));
+    let overridden = cell(
+        Grid::new()
+            .template_column([Track::Px(100.0)])
+            .template_row([Track::Px(40.0)])
+            .align(Align::Center)
+            .justify_items(Align::Center)
+            .child(item().align_self(Align::End).justify_self(Align::End)),
+    );
     assert!(
         (overridden.loc.y - 30.0).abs() < 0.5 && (overridden.loc.x - 80.0).abs() < 0.5,
         "align_self / justify_self override the grid, got {overridden:?}",
@@ -2901,11 +3159,13 @@ fn grid_items_align_in_their_cell_on_both_axes() {
     // The trap this exists to avoid: on a grid, `justify` is `justify-content` — it distributes the
     // whole TRACK SET inside the container and does not move the item within its cell. With one
     // 100px track filling a 100px container there is nothing to distribute, so the item stays put.
-    let justify_content = cell(Grid::new()
-        .columns([Track::Px(100.0)])
-        .rows([Track::Px(40.0)])
-        .justify(Justify::Center)
-        .child(item()));
+    let justify_content = cell(
+        Grid::new()
+            .template_column([Track::Px(100.0)])
+            .template_row([Track::Px(40.0)])
+            .justify(Justify::Center)
+            .child(item()),
+    );
     assert!(
         justify_content.loc.x < 0.01,
         "`justify` does not align items in their cells — use `justify_items`",
@@ -2937,7 +3197,10 @@ fn dock_frame_collapse_folds_body_out_of_layout() {
     let body_h = dock.base().children[1].base().bounds.size.h;
     assert_eq!(body_h, 0.0, "collapsed body takes no layout space");
     let collapsed_h = dock.base().bounds.size.h;
-    assert!(collapsed_h < expanded_h, "collapsed dock is shorter ({collapsed_h} < {expanded_h})");
+    assert!(
+        collapsed_h < expanded_h,
+        "collapsed dock is shorter ({collapsed_h} < {expanded_h})"
+    );
 }
 
 #[test]
@@ -2954,10 +3217,16 @@ fn dock_frame_header_click_toggles_and_emits_dock_toggle() {
 
     // Click the toggle area of the title bar (header child 0): collapses + reports.
     let toggle = dock.base().children[0].base().children[0].base().bounds;
-    let center = Point::new(toggle.loc.x + toggle.size.w / 2.0, toggle.loc.y + toggle.size.h / 2.0);
+    let center = Point::new(
+        toggle.loc.x + toggle.size.w / 2.0,
+        toggle.loc.y + toggle.size.h / 2.0,
+    );
     click_at(&mut dock, center);
 
-    assert!(!dock.state().get_untracked(), "header click collapses the frame");
+    assert!(
+        !dock.state().get_untracked(),
+        "header click collapses the frame"
+    );
     assert_eq!(
         log.borrow().last(),
         Some(&Action::value("dock-toggle", SignalData::Bool(false))),
@@ -2979,11 +3248,17 @@ fn dock_frame_header_control_receives_events_before_toggle() {
 
     // Click the control (header child 1): it consumes the event; frame must NOT toggle.
     let ctrl = dock.base().children[0].base().children[1].base().bounds;
-    let center = Point::new(ctrl.loc.x + ctrl.size.w / 2.0, ctrl.loc.y + ctrl.size.h / 2.0);
+    let center = Point::new(
+        ctrl.loc.x + ctrl.size.w / 2.0,
+        ctrl.loc.y + ctrl.size.h / 2.0,
+    );
     click_at(&mut dock, center);
 
     assert_eq!(control_clicks.get(), 1, "header control received the click");
-    assert!(dock.state().get_untracked(), "clicking the control did not toggle the frame");
+    assert!(
+        dock.state().get_untracked(),
+        "clicking the control did not toggle the frame"
+    );
 }
 
 #[test]
@@ -2996,9 +3271,17 @@ fn dock_frame_collapsed_body_is_skipped_by_focus_traversal() {
 
     let mut focus = FocusManager::new();
     focus.advance(&mut dock, true);
-    assert_eq!(focus.focused(), Some(0), "header toggle is first in tab order");
+    assert_eq!(
+        focus.focused(),
+        Some(0),
+        "header toggle is first in tab order"
+    );
     focus.advance(&mut dock, true);
-    assert_eq!(focus.focused(), Some(1), "body row is tabbable while expanded");
+    assert_eq!(
+        focus.focused(),
+        Some(1),
+        "body row is tabbable while expanded"
+    );
 
     // Collapse + relayout: the body subtree becomes display:none and drops out of
     // the tab order, so only the header toggle remains (forward Tab wraps to it).
@@ -3007,9 +3290,17 @@ fn dock_frame_collapsed_body_is_skipped_by_focus_traversal() {
 
     let mut focus = FocusManager::new();
     focus.advance(&mut dock, true);
-    assert_eq!(focus.focused(), Some(0), "only the header toggle is focusable when collapsed");
+    assert_eq!(
+        focus.focused(),
+        Some(0),
+        "only the header toggle is focusable when collapsed"
+    );
     focus.advance(&mut dock, true);
-    assert_eq!(focus.focused(), Some(0), "collapsed body row is not reachable by Tab");
+    assert_eq!(
+        focus.focused(),
+        Some(0),
+        "collapsed body row is not reachable by Tab"
+    );
 }
 
 #[test]
@@ -3022,7 +3313,11 @@ fn chrome_region_expanded_uses_full_width() {
 
     LayoutEngine::new().compute(&mut region, Size::new(400.0, 600.0));
 
-    assert_eq!(region.base().bounds.size.w, 240.0, "expanded sidebar uses its full width");
+    assert_eq!(
+        region.base().bounds.size.w,
+        240.0,
+        "expanded sidebar uses its full width"
+    );
 }
 
 #[test]
@@ -3036,7 +3331,11 @@ fn chrome_region_collapses_to_rail_width() {
     region.mode_signal().set(RegionMode::CollapsedRail);
     LayoutEngine::new().compute(&mut region, Size::new(400.0, 600.0));
 
-    assert_eq!(region.base().bounds.size.w, 48.0, "collapsed sidebar shrinks to the rail width");
+    assert_eq!(
+        region.base().bounds.size.w,
+        48.0,
+        "collapsed sidebar shrinks to the rail width"
+    );
 }
 
 #[test]
@@ -3047,7 +3346,11 @@ fn chrome_region_hidden_folds_out_of_layout() {
     region.mode_signal().set(RegionMode::Hidden);
     LayoutEngine::new().compute(&mut region, Size::new(400.0, 600.0));
 
-    assert_eq!(region.base().bounds.size.w, 0.0, "hidden region takes no layout space");
+    assert_eq!(
+        region.base().bounds.size.w,
+        0.0,
+        "hidden region takes no layout space"
+    );
 }
 
 #[test]
@@ -3061,7 +3364,11 @@ fn chrome_region_horizontal_bar_collapses_height() {
     bar.mode_signal().set(RegionMode::CollapsedRail);
     LayoutEngine::new().compute(&mut bar, Size::new(800.0, 300.0));
 
-    assert_eq!(bar.base().bounds.size.h, 40.0, "collapsed top/bottom bar shrinks to the rail height");
+    assert_eq!(
+        bar.base().bounds.size.h,
+        40.0,
+        "collapsed top/bottom bar shrinks to the rail height"
+    );
 }
 
 #[test]
@@ -3071,9 +3378,17 @@ fn chrome_region_toggle_flips_expanded_and_rail() {
     assert_eq!(region.mode_signal().get_untracked(), RegionMode::Expanded);
 
     region.toggle();
-    assert_eq!(region.mode_signal().get_untracked(), RegionMode::CollapsedRail, "toggle collapses to rail");
+    assert_eq!(
+        region.mode_signal().get_untracked(),
+        RegionMode::CollapsedRail,
+        "toggle collapses to rail"
+    );
     region.toggle();
-    assert_eq!(region.mode_signal().get_untracked(), RegionMode::Expanded, "toggle expands again");
+    assert_eq!(
+        region.mode_signal().get_untracked(),
+        RegionMode::Expanded,
+        "toggle expands again"
+    );
 }
 
 #[test]
@@ -3106,9 +3421,13 @@ fn collapsed_dock_body_is_not_painted() {
         "expanded dock paints its body row"
     );
 
-    let mut collapsed = DockFrame::new("FILES").expanded(false).child(Item::new("SECRET.rs"));
+    let mut collapsed = DockFrame::new("FILES")
+        .expanded(false)
+        .child(Item::new("SECRET.rs"));
     assert!(
-        collect_labels(&mut collapsed).iter().all(|t| t != "SECRET.rs"),
+        collect_labels(&mut collapsed)
+            .iter()
+            .all(|t| t != "SECRET.rs"),
         "collapsed dock must not paint its hidden body row"
     );
 }
@@ -3132,7 +3451,10 @@ fn icon_lays_out_as_a_square() {
     let mut small = Icon::new(Glyph::GitBranch).size(24.0);
     small.base_mut().style.layout.set_size(WidgetSize::Small);
     LayoutEngine::new().compute(&mut small, Size::new(200.0, 200.0));
-    assert!(small.base().bounds.size.w < 24.0, "Small scales the explicit glyph size down");
+    assert!(
+        small.base().bounds.size.w < 24.0,
+        "Small scales the explicit glyph size down"
+    );
 }
 
 #[test]
@@ -3158,9 +3480,20 @@ fn icon_paints_duotone_layers_in_the_icon_font() {
     // Two stacked layers: secondary (:before) then primary (secondary+1), both
     // shaped with the icon font.
     assert_eq!(glyphs.len(), 2, "duotone icon paints two layers");
-    assert!(glyphs.iter().all(|(_, f)| *f == FontRole::Icon), "both shaped with the icon font");
-    assert_eq!(glyphs[0].0, char::from_u32(0xe24a).unwrap().to_string(), "secondary layer first");
-    assert_eq!(glyphs[1].0, char::from_u32(0xe24b).unwrap().to_string(), "primary layer on top");
+    assert!(
+        glyphs.iter().all(|(_, f)| *f == FontRole::Icon),
+        "both shaped with the icon font"
+    );
+    assert_eq!(
+        glyphs[0].0,
+        char::from_u32(0xe24a).unwrap().to_string(),
+        "secondary layer first"
+    );
+    assert_eq!(
+        glyphs[1].0,
+        char::from_u32(0xe24b).unwrap().to_string(),
+        "primary layer on top"
+    );
 }
 
 #[test]
@@ -3188,10 +3521,22 @@ fn row_activates_on_click_and_key_when_interactive() {
     assert_eq!(clicks.get(), 1, "a click inside the row activates it");
     // **A raw key reaches the widget that owns the keyboard.** Unfocused, the row no longer
     // takes Enter — which is what stopped it eating keys meant for the list it sits in.
-    heca_grid_ui::dispatch(&mut row, &Event::Key { key: GridKey::Enter, pressed: true });
+    heca_grid_ui::dispatch(
+        &mut row,
+        &Event::Key {
+            key: GridKey::Enter,
+            pressed: true,
+        },
+    );
     assert_eq!(clicks.get(), 1, "an unfocused row ignores Enter");
     row.base_mut().focused.set(true);
-    heca_grid_ui::dispatch(&mut row, &Event::Key { key: GridKey::Enter, pressed: true });
+    heca_grid_ui::dispatch(
+        &mut row,
+        &Event::Key {
+            key: GridKey::Enter,
+            pressed: true,
+        },
+    );
     assert_eq!(clicks.get(), 2, "Enter activates the focused row");
 }
 
@@ -3210,10 +3555,23 @@ fn tag_lays_out_leading_and_label_and_hugs_content() {
 
     // The first segment holds [leading, label].
     let seg0 = tag.base().children[0].base();
-    assert_eq!(seg0.children.len(), 2, "first segment holds [leading, label]");
-    assert!(seg0.children[0].base().bounds.size.w > 0.0, "leading icon is laid out");
-    assert!(seg0.children[1].base().bounds.size.w > 0.0, "label is laid out");
-    assert!(tag.base().bounds.size.w < 300.0, "chip hugs its content, not the full width");
+    assert_eq!(
+        seg0.children.len(),
+        2,
+        "first segment holds [leading, label]"
+    );
+    assert!(
+        seg0.children[0].base().bounds.size.w > 0.0,
+        "leading icon is laid out"
+    );
+    assert!(
+        seg0.children[1].base().bounds.size.w > 0.0,
+        "label is laid out"
+    );
+    assert!(
+        tag.base().bounds.size.w < 300.0,
+        "chip hugs its content, not the full width"
+    );
 }
 
 #[test]
@@ -3228,7 +3586,10 @@ fn tag_with_multiple_segments_lays_them_in_a_row() {
     assert_eq!(tag.base().children.len(), 2, "two segments");
     let s0 = tag.base().children[0].base().bounds;
     let s1 = tag.base().children[1].base().bounds;
-    assert!(s1.loc.x > s0.loc.x + s0.size.w - 1.0, "the second segment sits right of the first");
+    assert!(
+        s1.loc.x > s0.loc.x + s0.size.w - 1.0,
+        "the second segment sits right of the first"
+    );
 }
 
 #[test]
@@ -3237,19 +3598,35 @@ fn dock_frame_rail_mode_folds_header_and_body_to_icon() {
 
     // A rail-aware dock bound to its region's mode signal (obtained before the
     // region is moved into `.dock(...)`).
-    let sidebar = ChromeRegion::vertical().expanded_size(240.0).rail_size(48.0);
+    let sidebar = ChromeRegion::vertical()
+        .expanded_size(240.0)
+        .rail_size(48.0);
     let mode = sidebar.mode_signal();
-    let dock = DockFrame::new("FILES").rail(mode, Glyph::FolderOpen).child(Item::new("main.rs"));
+    let dock = DockFrame::new("FILES")
+        .rail(mode, Glyph::FolderOpen)
+        .child(Item::new("main.rs"));
     let mut sidebar = sidebar.dock(dock);
 
     // Expanded: header + body are shown; the rail icon is hidden.
     LayoutEngine::new().compute(&mut sidebar, Size::new(400.0, 600.0));
     {
         let dock = sidebar.base().children[0].base();
-        assert!(!dock.children[0].base().style.layout.hidden, "header shown while expanded");
-        assert!(!dock.children[1].base().style.layout.hidden, "body shown while expanded");
-        assert!(dock.children[2].base().style.layout.hidden, "rail icon hidden while expanded");
-        assert!(dock.children[1].base().bounds.size.h > 0.0, "expanded body has height");
+        assert!(
+            !dock.children[0].base().style.layout.hidden,
+            "header shown while expanded"
+        );
+        assert!(
+            !dock.children[1].base().style.layout.hidden,
+            "body shown while expanded"
+        );
+        assert!(
+            dock.children[2].base().style.layout.hidden,
+            "rail icon hidden while expanded"
+        );
+        assert!(
+            dock.children[1].base().bounds.size.h > 0.0,
+            "expanded body has height"
+        );
     }
 
     // Collapse the region to its rail: header + body fold away; the rail icon shows.
@@ -3257,11 +3634,27 @@ fn dock_frame_rail_mode_folds_header_and_body_to_icon() {
     LayoutEngine::new().compute(&mut sidebar, Size::new(400.0, 600.0));
     {
         let dock = sidebar.base().children[0].base();
-        assert!(dock.children[0].base().style.layout.hidden, "header folds away in rail mode");
-        assert!(dock.children[1].base().style.layout.hidden, "body folds away in rail mode");
-        assert!(!dock.children[2].base().style.layout.hidden, "rail icon shows in rail mode");
-        assert_eq!(dock.children[1].base().bounds.size.h, 0.0, "folded body takes no layout space");
-        assert!(dock.children[2].base().bounds.size.h > 0.0, "rail icon is laid out");
+        assert!(
+            dock.children[0].base().style.layout.hidden,
+            "header folds away in rail mode"
+        );
+        assert!(
+            dock.children[1].base().style.layout.hidden,
+            "body folds away in rail mode"
+        );
+        assert!(
+            !dock.children[2].base().style.layout.hidden,
+            "rail icon shows in rail mode"
+        );
+        assert_eq!(
+            dock.children[1].base().bounds.size.h,
+            0.0,
+            "folded body takes no layout space"
+        );
+        assert!(
+            dock.children[2].base().bounds.size.h > 0.0,
+            "rail icon is laid out"
+        );
     }
 }
 
@@ -3269,9 +3662,13 @@ fn dock_frame_rail_mode_folds_header_and_body_to_icon() {
 fn dock_frame_rail_paints_icon_not_title() {
     use heca_grid_ui::{ChromeRegion, DockFrame, DrawCommand, FontRole, Glyph, Item, RegionMode};
 
-    let sidebar = ChromeRegion::vertical().expanded_size(240.0).rail_size(48.0);
+    let sidebar = ChromeRegion::vertical()
+        .expanded_size(240.0)
+        .rail_size(48.0);
     let mode = sidebar.mode_signal();
-    let dock = DockFrame::new("FILES").rail(mode, Glyph::FolderOpen).child(Item::new("main.rs"));
+    let dock = DockFrame::new("FILES")
+        .rail(mode, Glyph::FolderOpen)
+        .child(Item::new("main.rs"));
     let mut sidebar = sidebar.dock(dock);
 
     let paint = |sidebar: &mut ChromeRegion| -> (Vec<String>, usize) {
@@ -3298,15 +3695,30 @@ fn dock_frame_rail_paints_icon_not_title() {
 
     // Expanded: the title + body row paint as text; no icon-rail glyph yet.
     let (texts, _) = paint(&mut sidebar);
-    assert!(texts.iter().any(|t| t == "FILES"), "title paints while expanded");
-    assert!(texts.iter().any(|t| t == "main.rs"), "body row paints while expanded");
+    assert!(
+        texts.iter().any(|t| t == "FILES"),
+        "title paints while expanded"
+    );
+    assert!(
+        texts.iter().any(|t| t == "main.rs"),
+        "body row paints while expanded"
+    );
 
     // Rail mode: the title + body text are gone; a duotone icon (2 glyph runs) paints.
     mode.set(RegionMode::CollapsedRail);
     let (texts, icons) = paint(&mut sidebar);
-    assert!(texts.iter().all(|t| t != "FILES"), "title is not painted in rail mode");
-    assert!(texts.iter().all(|t| t != "main.rs"), "body row is not painted in rail mode");
-    assert!(icons >= 2, "rail paints the duotone dock icon (secondary + primary), got {icons}");
+    assert!(
+        texts.iter().all(|t| t != "FILES"),
+        "title is not painted in rail mode"
+    );
+    assert!(
+        texts.iter().all(|t| t != "main.rs"),
+        "body row is not painted in rail mode"
+    );
+    assert!(
+        icons >= 2,
+        "rail paints the duotone dock icon (secondary + primary), got {icons}"
+    );
 }
 
 #[test]
@@ -3324,8 +3736,14 @@ fn rail_cell_lays_out_a_square_with_centered_icon() {
     let icon = cell.base().children[0].base().bounds;
     let icon_cx = icon.loc.x + icon.size.w / 2.0;
     let icon_cy = icon.loc.y + icon.size.h / 2.0;
-    assert!((icon_cx - (b.loc.x + b.size.w / 2.0)).abs() < 1.0, "icon centered horizontally");
-    assert!((icon_cy - (b.loc.y + b.size.h / 2.0)).abs() < 1.0, "icon centered vertically");
+    assert!(
+        (icon_cx - (b.loc.x + b.size.w / 2.0)).abs() < 1.0,
+        "icon centered horizontally"
+    );
+    assert!(
+        (icon_cy - (b.loc.y + b.size.h / 2.0)).abs() < 1.0,
+        "icon centered vertically"
+    );
 }
 
 #[test]
@@ -3346,7 +3764,13 @@ fn rail_cell_activates_on_click_and_enter() {
     // would before sending one.
     cell.base_mut().focused.set(true);
     click_at(&mut cell, center);
-    heca_grid_ui::dispatch(&mut cell, &Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
+    heca_grid_ui::dispatch(
+        &mut cell,
+        &Event::Key {
+            key: heca_grid_ui::GridKey::Enter,
+            pressed: true,
+        },
+    );
     assert_eq!(clicks.get(), 2, "click + Enter both activate the cell");
 }
 
@@ -3386,13 +3810,19 @@ fn key_hint_overlays_letter_only_when_set() {
     // No hint: the child icon paints, no keycap letter.
     let (texts, icons) = paint(&mut wrapped);
     assert!(icons >= 2, "wrapped icon still paints (duotone = 2 runs)");
-    assert!(texts.iter().all(|t| t != "a"), "no keycap letter while hint is None");
+    assert!(
+        texts.iter().all(|t| t != "a"),
+        "no keycap letter while hint is None"
+    );
 
     // Hint set: the letter overlays; the child icon still paints underneath.
     hint.set(Some("a".to_string()));
     let (texts, icons) = paint(&mut wrapped);
     assert!(icons >= 2, "child icon still paints under the keycap");
-    assert!(texts.iter().any(|t| t == "a"), "keycap letter paints while hint is Some");
+    assert!(
+        texts.iter().any(|t| t == "a"),
+        "keycap letter paints while hint is Some"
+    );
 }
 
 /// **A widget that is not a `KeyHint` gets its letter drawn too** (F003/P082/T431).
@@ -3427,12 +3857,21 @@ fn any_widget_carrying_a_letter_gets_a_keycap_not_only_key_hint() {
             .collect()
     };
 
-    assert!(!caps(&mut plain).iter().any(|t| t == "b"), "no letter while none is offered");
+    assert!(
+        !caps(&mut plain).iter().any(|t| t == "b"),
+        "no letter while none is offered"
+    );
 
     letter.set(Some("b".to_string()));
     let texts = caps(&mut plain);
-    assert!(texts.iter().any(|t| t == "b"), "the framework draws the letter over a bare Label");
-    assert!(texts.iter().any(|t| t == "nvim"), "and the widget's own content still paints");
+    assert!(
+        texts.iter().any(|t| t == "b"),
+        "the framework draws the letter over a bare Label"
+    );
+    assert!(
+        texts.iter().any(|t| t == "nvim"),
+        "and the widget's own content still paints"
+    );
 }
 
 #[test]
@@ -3444,13 +3883,18 @@ fn key_hint_is_transparent_to_focus_and_activation() {
     // A focusable child wrapped in a KeyHint must stay reachable + activatable.
     let clicks = Rc::new(Cell::new(0u32));
     let sink = clicks.clone();
-    let mut wrapped = KeyHint::new(Item::new("file.rs").on_activate(move || sink.set(sink.get() + 1)));
+    let mut wrapped =
+        KeyHint::new(Item::new("file.rs").on_activate(move || sink.set(sink.get() + 1)));
     LayoutEngine::new().compute(&mut wrapped, Size::new(200.0, 60.0));
 
     // Focus traversal recurses through the transparent wrapper to the child.
     let mut focus = FocusManager::new();
     focus.advance(&mut wrapped, true);
-    assert_eq!(focus.focused(), Some(0), "wrapped child is reachable by Tab");
+    assert_eq!(
+        focus.focused(),
+        Some(0),
+        "wrapped child is reachable by Tab"
+    );
 
     // Events route through the wrapper to the child.
     focus.deliver_key(&mut wrapped, heca_grid_ui::GridKey::Enter);
@@ -3485,7 +3929,10 @@ fn row_attention_request_pulses_then_settles() {
     LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
 
     req.set(true);
-    assert!(row.tick(0.0), "attention request triggers an animating pulse");
+    assert!(
+        row.tick(0.0),
+        "attention request triggers an animating pulse"
+    );
     assert!(!req.get_untracked(), "the request signal is consumed");
 
     // The sequence is finite — ticking it out eventually settles (no animation).
@@ -3496,7 +3943,10 @@ fn row_attention_request_pulses_then_settles() {
             break;
         }
     }
-    assert!(settled, "attention pulse sequence ends and the row stops animating");
+    assert!(
+        settled,
+        "attention pulse sequence ends and the row stops animating"
+    );
 }
 
 #[test]
@@ -3527,7 +3977,10 @@ fn icon_button_activates_on_click_and_enter_only_when_wired() {
     // No on_click → inert + unfocusable.
     let mut bare = IconButton::new(Icon::new(Glyph::Search).size(18.0));
     LayoutEngine::new().compute(&mut bare, Size::new(100.0, 100.0));
-    assert!(!bare.focusable(), "an icon button without on_click is not focusable");
+    assert!(
+        !bare.focusable(),
+        "an icon button without on_click is not focusable"
+    );
 
     let clicks = Rc::new(Cell::new(0u32));
     let sink = clicks.clone();
@@ -3542,7 +3995,13 @@ fn icon_button_activates_on_click_and_enter_only_when_wired() {
     // A raw key reaches only the widget that owns the keyboard — focus it, as a real surface
     // would before sending one.
     btn.base_mut().focused.set(true);
-    heca_grid_ui::dispatch(&mut btn, &Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
+    heca_grid_ui::dispatch(
+        &mut btn,
+        &Event::Key {
+            key: heca_grid_ui::GridKey::Enter,
+            pressed: true,
+        },
+    );
     assert_eq!(clicks.get(), 2, "click + Enter both fire on_click");
 }
 
@@ -3566,7 +4025,9 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
             // drag feedback, so a bare `.paint(cx)` shows the widget and none of the three.
             heca_grid_ui::paint_child(tip, &mut cx);
         }
-        scene.iter().any(|c| matches!(c, DrawCommand::Text(t) if t.text == "HELP"))
+        scene
+            .iter()
+            .any(|c| matches!(c, DrawCommand::Text(t) if t.text == "HELP"))
     };
 
     // Idle: no bubble.
@@ -3577,7 +4038,10 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     let b = tip.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     heca_grid_ui::dispatch(&mut tip, &Event::pointer_moved(center));
-    assert!(!shows_help(&mut tip), "still hidden before the delay elapses");
+    assert!(
+        !shows_help(&mut tip),
+        "still hidden before the delay elapses"
+    );
 
     // Past the delay: the bubble shows.
     std::thread::sleep(std::time::Duration::from_millis(120));
@@ -3598,7 +4062,9 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
 fn any_widget_declares_its_own_tooltip_without_being_wrapped() {
     use heca_grid_ui::ComponentExt;
 
-    let mut button = Button::new("Close").tooltip("Close the pane").tooltip_delay(0.02);
+    let mut button = Button::new("Close")
+        .tooltip("Close the pane")
+        .tooltip_delay(0.02);
 
     let shows = |b: &mut Button| -> bool {
         LayoutEngine::new().compute(b, Size::new(300.0, 200.0));
@@ -3613,17 +4079,26 @@ fn any_widget_declares_its_own_tooltip_without_being_wrapped() {
             .any(|c| matches!(c, DrawCommand::Text(t) if t.text == "Close the pane"))
     };
 
-    assert!(!shows(&mut button), "nothing is said before the pointer arrives");
+    assert!(
+        !shows(&mut button),
+        "nothing is said before the pointer arrives"
+    );
 
     LayoutEngine::new().compute(&mut button, Size::new(300.0, 200.0));
     let b = button.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(center));
     std::thread::sleep(std::time::Duration::from_millis(60));
-    assert!(shows(&mut button), "the bubble reveals once the pointer has rested");
+    assert!(
+        shows(&mut button),
+        "the bubble reveals once the pointer has rested"
+    );
 
     heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(Point::new(-50.0, -50.0)));
-    assert!(!shows(&mut button), "and goes as soon as the pointer leaves");
+    assert!(
+        !shows(&mut button),
+        "and goes as soon as the pointer leaves"
+    );
 }
 
 /// **The host is woken to show a bubble the pointer is already resting on.** Without this the
@@ -3635,12 +4110,18 @@ fn a_pending_tooltip_asks_the_host_to_wake_for_it() {
 
     let mut button = Button::new("Close").tooltip("Close the pane");
     LayoutEngine::new().compute(&mut button, Size::new(300.0, 200.0));
-    assert_eq!(button.next_redraw(), None, "nothing pending while unhovered");
+    assert_eq!(
+        button.next_redraw(),
+        None,
+        "nothing pending while unhovered"
+    );
 
     let b = button.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(center));
-    let wake = button.next_redraw().expect("a pending reveal wakes the host");
+    let wake = button
+        .next_redraw()
+        .expect("a pending reveal wakes the host");
     assert!(
         wake > 0.0 && wake <= 0.5,
         "it wakes at the reveal, not sooner or later (got {wake})"
@@ -3655,14 +4136,25 @@ fn tooltip_is_transparent_to_child_events() {
 
     let clicks = Rc::new(Cell::new(0u32));
     let sink = clicks.clone();
-    let mut tip = Tooltip::new(Item::new("file").on_activate(move || sink.set(sink.get() + 1)), "open");
+    let mut tip = Tooltip::new(
+        Item::new("file").on_activate(move || sink.set(sink.get() + 1)),
+        "open",
+    );
     LayoutEngine::new().compute(&mut tip, Size::new(200.0, 60.0));
 
     let mut focus = FocusManager::new();
     focus.advance(&mut tip, true);
-    assert_eq!(focus.focused(), Some(0), "wrapped child is reachable by Tab");
+    assert_eq!(
+        focus.focused(),
+        Some(0),
+        "wrapped child is reachable by Tab"
+    );
     focus.deliver_key(&mut tip, heca_grid_ui::GridKey::Enter);
-    assert_eq!(clicks.get(), 1, "Enter activates the wrapped child through the tooltip");
+    assert_eq!(
+        clicks.get(),
+        1,
+        "Enter activates the wrapped child through the tooltip"
+    );
 }
 
 #[test]
@@ -3672,7 +4164,9 @@ fn tooltip_flips_to_fit_the_viewport() {
     // A `Bottom` tooltip whose target sits near the viewport's bottom edge has no
     // room below → it must flip above the target.
     let vp = Size::new(300.0, 100.0);
-    let mut tip = Tooltip::new(Item::new("X"), "HELP").side(TooltipSide::Bottom).delay(0.0);
+    let mut tip = Tooltip::new(Item::new("X"), "HELP")
+        .side(TooltipSide::Bottom)
+        .delay(0.0);
     LayoutEngine::new().compute(&mut tip, vp);
 
     // Shove the whole subtree down so the target is near the bottom edge.
@@ -3711,7 +4205,10 @@ fn tooltip_flips_to_fit_the_viewport() {
 
 // --- CommandPalette --------------------------------------------------------
 
-fn palette_with_markers() -> (heca_grid_ui::CommandPalette, std::rc::Rc<std::cell::Cell<u8>>) {
+fn palette_with_markers() -> (
+    heca_grid_ui::CommandPalette,
+    std::rc::Rc<std::cell::Cell<u8>>,
+) {
     use heca_grid_ui::{Command, CommandPalette};
     let ran = std::rc::Rc::new(std::cell::Cell::new(0u8));
     let (r1, r2, r3) = (ran.clone(), ran.clone(), ran.clone());
@@ -3727,15 +4224,18 @@ fn command_palette_is_overlay_active_only_while_open() {
     use heca_grid_ui::Component;
     let (p, _) = palette_with_markers();
     assert!(!p.overlay_active() && !p.focusable(), "inert while closed");
-    let p = p.open(true);
-    assert!(p.overlay_active() && p.focusable(), "captures input while open");
+    let p = p.default_open(true);
+    assert!(
+        p.overlay_active() && p.focusable(),
+        "captures input while open"
+    );
 }
 
 #[test]
 fn command_palette_typing_filters_then_activate_runs_top_result() {
     use heca_grid_ui::{Component, WidgetIntent};
     let (mut p, ran) = palette_with_markers();
-    p = p.open(true);
+    p = p.default_open(true);
 
     // Type "tog" → "Toggle sidebar" is the top (only) match.
     for c in "tog".chars() {
@@ -3743,22 +4243,33 @@ fn command_palette_typing_filters_then_activate_runs_top_result() {
     }
     // Nav is host-resolved: `activate` arrives as WidgetIntent::Activate.
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), 3, "activate runs the filtered top result (Toggle sidebar)");
-    assert!(!p.overlay_active(), "palette closes after running a command");
+    assert_eq!(
+        ran.get(),
+        3,
+        "activate runs the filtered top result (Toggle sidebar)"
+    );
+    assert!(
+        !p.overlay_active(),
+        "palette closes after running a command"
+    );
 }
 
 #[test]
 fn command_palette_navigates_via_menu_nav() {
     use heca_grid_ui::WidgetIntent;
     let (mut p, ran) = palette_with_markers();
-    p = p.open(true);
+    p = p.default_open(true);
 
     // No query → all three; selection starts at 0. Down ×2 → idx 2, Up → idx 1.
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuDown));
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuDown));
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuUp));
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), 2, "MenuDown ×2 then MenuUp lands on the 2nd command (Close pane)");
+    assert_eq!(
+        ran.get(),
+        2,
+        "MenuDown ×2 then MenuUp lands on the 2nd command (Close pane)"
+    );
 }
 
 /// A description is a **second line under its label**, and it makes every row two lines high — the
@@ -3773,7 +4284,7 @@ fn command_palette_describes_a_command_on_a_second_line() {
                 .description("New column to the right of the active pane."),
         )
         .command(Command::new("Close pane", || {}).description("Close the focused pane."))
-        .open(true);
+        .default_open(true);
 
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
@@ -3831,7 +4342,7 @@ fn command_palette_stacks_a_binding_per_row_in_a_reserved_column() {
                 .keys([KeyCap::Nf(NfGlyph::Control), cap("e")]),
         )
         .command(Command::new("Reload Config", || {}).description("Re-read config.toml."))
-        .open(true);
+        .default_open(true);
 
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
@@ -3855,7 +4366,10 @@ fn command_palette_stacks_a_binding_per_row_in_a_reserved_column() {
         .collect();
     // Three chords of 3 + 2 + 2 caps = 7 chips (plus the panel/query/selection chrome, which is why
     // this asserts on the ROWS the chips occupy rather than an exact count).
-    let mut rows: Vec<f64> = chips.iter().map(|r| (r.loc.y * 10.0).round() / 10.0).collect();
+    let mut rows: Vec<f64> = chips
+        .iter()
+        .map(|r| (r.loc.y * 10.0).round() / 10.0)
+        .collect();
     rows.sort_by(|a, b| a.partial_cmp(b).unwrap());
     rows.dedup();
     assert!(
@@ -3897,7 +4411,7 @@ fn command_palette_rows_are_only_as_tall_as_their_own_bindings() {
         )
         .command(Command::new("Close Pane", || {}).description("Close the focused pane."))
         .command(Command::new("Reload Config", || {}).description("Re-read config.toml."))
-        .open(true);
+        .default_open(true);
 
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
@@ -3944,7 +4458,7 @@ fn command_palette_reflows_the_selected_description_and_cuts_the_rest() {
                 .keys([KeyCap::Text("λ".into()), KeyCap::Text("e".into())]),
         )
         .command(Command::new("Reload Config", || {}).description(other))
-        .open(true);
+        .default_open(true);
 
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
@@ -3967,7 +4481,10 @@ fn command_palette_reflows_the_selected_description_and_cuts_the_rest() {
         // Longer than a keycap: a single-cap chip like "e" is also a substring of the description.
         .filter(|(t, _)| t.trim().chars().count() > 2 && long.contains(t.trim()))
         .collect();
-    assert!(lines.len() > 1, "the selected description reflows, got {drawn:?}");
+    assert!(
+        lines.len() > 1,
+        "the selected description reflows, got {drawn:?}"
+    );
     assert!(
         lines.iter().all(|(t, _)| !t.ends_with('…')),
         "a reflowed description is not also cut: {lines:?}",
@@ -3985,7 +4502,10 @@ fn command_palette_reflows_the_selected_description_and_cuts_the_rest() {
         .iter()
         .find(|(t, _)| t.starts_with("Re-read config"))
         .expect("the second description is drawn");
-    assert!(cut.ends_with('…'), "an unselected description is cut: {cut:?}");
+    assert!(
+        cut.ends_with('…'),
+        "an unselected description is cut: {cut:?}"
+    );
     let lowest_selected_line = lines.iter().map(|(_, r)| r.loc.y).fold(0.0_f64, f64::max);
     assert!(
         cut_rect.loc.y > lowest_selected_line,
@@ -4005,7 +4525,7 @@ fn command_palette_query_takes_the_edit_intents() {
     let mut p = CommandPalette::new()
         .command(Command::new("Close pane", move || r1.set(1)))
         .command(Command::new("Toggle sidebar", move || r2.set(2)))
-        .open(true);
+        .default_open(true);
 
     // Type a query that matches only "Close pane", then select-all + type over it: the field must
     // replace the selection, leaving "tog" → "Toggle sidebar".
@@ -4017,20 +4537,28 @@ fn command_palette_query_takes_the_edit_intents() {
         type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), 2, "Ctrl+a selected the whole query so typing replaced it");
+    assert_eq!(
+        ran.get(),
+        2,
+        "Ctrl+a selected the whole query so typing replaced it"
+    );
 
     // Ctrl+u (delete to line start) clears a query back to everything.
     let ran = std::rc::Rc::new(std::cell::Cell::new(0u8));
     let r = ran.clone();
     let mut p = CommandPalette::new()
         .command(Command::new("Close pane", move || r.set(1)))
-        .open(true);
+        .default_open(true);
     for c in "zzz".chars() {
         type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::EditDeleteToLineStart));
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), 1, "Ctrl+u emptied the query, so the only command matched again");
+    assert_eq!(
+        ran.get(),
+        1,
+        "Ctrl+u emptied the query, so the only command matched again"
+    );
 }
 
 /// **The icon column is reserved for every row.** A list where some commands carry a glyph and some
@@ -4043,7 +4571,7 @@ fn command_palette_reserves_the_icon_column_even_for_a_command_without_one() {
     let mut p = CommandPalette::new()
         .command(Command::new("With Icon", || {}).icon(Glyph::Search))
         .command(Command::new("Without Icon", || {}))
-        .open(true);
+        .default_open(true);
 
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
@@ -4077,7 +4605,7 @@ fn the_palette_size_is_capped_by_the_window() {
         let mut p = CommandPalette::new()
             .panel_size(size)
             .command(Command::new("Close Pane", || {}))
-            .open(true);
+            .default_open(true);
         LayoutEngine::new().compute(&mut p, viewport);
         let mut scene = Scene::new();
         {
@@ -4145,7 +4673,7 @@ fn the_palette_never_runs_off_a_short_window() {
                 .keys([cap("λ"), cap("b")]),
         );
     }
-    let mut p = p.open(true);
+    let mut p = p.default_open(true);
 
     // The room kept clear beneath the panel, as a fraction of the window height — wider than the
     // gap at its sides, since a bottom edge resting on a pane boundary still reads as touching.
@@ -4197,7 +4725,7 @@ fn command_palette_recalls_past_queries_from_its_history() {
             .search(SearchModel::new("command", store.clone()))
             .command(Command::new("Close pane", || {}).id("close"))
             .command(Command::new("Split pane", || {}).id("split"))
-            .open(true)
+            .default_open(true)
     };
     // The drawn query line: the first text run inside the panel is the field's.
     let query_text = |p: &CommandPalette| {
@@ -4233,13 +4761,25 @@ fn command_palette_recalls_past_queries_from_its_history() {
     }
     assert_eq!(query_text(&p), "dra");
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryUp));
-    assert_eq!(query_text(&p), "split", "one step back is the newest past query");
+    assert_eq!(
+        query_text(&p),
+        "split",
+        "one step back is the newest past query"
+    );
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryUp));
-    assert_eq!(query_text(&p), "close", "a second step keeps walking — the cursor is not reset");
+    assert_eq!(
+        query_text(&p),
+        "close",
+        "a second step keeps walking — the cursor is not reset"
+    );
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryDown));
     assert_eq!(query_text(&p), "split");
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryDown));
-    assert_eq!(query_text(&p), "dra", "past the newest, the draft comes back");
+    assert_eq!(
+        query_text(&p),
+        "dra",
+        "past the newest, the draft comes back"
+    );
 }
 
 /// **Past choices order the list, and typing overrules them.** With nothing typed the palette shows
@@ -4257,7 +4797,7 @@ fn command_palette_ranks_by_past_use_until_something_is_typed() {
             .search(SearchModel::new("command", store.clone()))
             .command(Command::new("Close pane", move || a.set("close")).id("close"))
             .command(Command::new("Split pane", move || b.set("split")).id("split"))
-            .open(true)
+            .default_open(true)
     };
 
     // Use "Split pane" — it is second in the caller's order.
@@ -4291,14 +4831,26 @@ fn a_group_leads_an_empty_query_and_dissolves_once_typing_starts() {
         let (a, b) = (ran.clone(), ran.clone());
         CommandPalette::new()
             // Declared second, but in the leading block.
-            .command(Command::new("Zoom out", move || a.set("zoom")).id("zoom").group(1))
-            .command(Command::new("Workspaces › Delete row", move || b.set("del")).id("del").group(0))
-            .open(true)
+            .command(
+                Command::new("Zoom out", move || a.set("zoom"))
+                    .id("zoom")
+                    .group(1),
+            )
+            .command(
+                Command::new("Workspaces › Delete row", move || b.set("del"))
+                    .id("del")
+                    .group(0),
+            )
+            .default_open(true)
     };
 
     let mut p = open();
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), "del", "the leading block comes first while nothing is typed");
+    assert_eq!(
+        ran.get(),
+        "del",
+        "the leading block comes first while nothing is typed"
+    );
 
     let mut p = open();
     for c in "zoom".chars() {
@@ -4319,7 +4871,7 @@ fn command_palette_remembers_only_what_was_run() {
         CommandPalette::new()
             .search(SearchModel::new("command", store.clone()))
             .command(Command::new("Close pane", || {}).id("close"))
-            .open(true)
+            .default_open(true)
     };
 
     let mut p = open();
@@ -4355,7 +4907,7 @@ fn command_palette_filters_on_the_label_not_the_description() {
     let mut p = CommandPalette::new()
         .command(Command::new("Close pane", move || r1.set(1)).description("Splits nothing."))
         .command(Command::new("Split pane", move || r2.set(2)).description("Adds a column."))
-        .open(true);
+        .default_open(true);
 
     for c in "split".chars() {
         type_text(&mut p, &c.to_string());
@@ -4380,15 +4932,27 @@ fn a_sigil_switches_the_mode_without_filtering_by_itself() {
             .mode(':', "command")
             .mode('@', "pane")
             .command(Command::new("Close pane", move || a.set("close")).id("close"))
-            .command(Command::new("nvim", move || b.set("nvim")).id("nvim").mode("pane"))
-            .command(Command::new("zsh", move || c.set("zsh")).id("zsh").mode("pane"))
-            .open(true)
+            .command(
+                Command::new("nvim", move || b.set("nvim"))
+                    .id("nvim")
+                    .mode("pane"),
+            )
+            .command(
+                Command::new("zsh", move || c.set("zsh"))
+                    .id("zsh")
+                    .mode("pane"),
+            )
+            .default_open(true)
     };
 
     // No sigil: the default mode, exactly as before modes existed.
     let mut p = open();
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), "close", "an unsigiled query is in the default mode");
+    assert_eq!(
+        ran.get(),
+        "close",
+        "an unsigiled query is in the default mode"
+    );
 
     // A lone sigil lists that mode unfiltered — the first pane runs, and `@` matched nothing.
     let mut p = open();
@@ -4402,7 +4966,11 @@ fn a_sigil_switches_the_mode_without_filtering_by_itself() {
         type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), "zsh", "the effective query is what matched, the sigil is not");
+    assert_eq!(
+        ran.get(),
+        "zsh",
+        "the effective query is what matched, the sigil is not"
+    );
 
     // A leading character that is not a sigil is the first letter of a search, not a mode.
     let mut p = open();
@@ -4410,7 +4978,11 @@ fn a_sigil_switches_the_mode_without_filtering_by_itself() {
         type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), "close", "an unknown leading char is matched literally");
+    assert_eq!(
+        ran.get(),
+        "close",
+        "an unknown leading char is matched literally"
+    );
 }
 
 /// **Each mode remembers separately.** A pane searched for is recalled under `@` and is invisible
@@ -4429,7 +5001,7 @@ fn every_mode_keeps_its_own_history_and_ranking() {
             .mode('@', "pane")
             .command(Command::new("Close pane", || {}).id("close"))
             .command(Command::new("nvim", || {}).id("nvim").mode("pane"))
-            .open(true)
+            .default_open(true)
     };
     let query_text = |p: &CommandPalette| {
         let mut scene = Scene::new();
@@ -4471,7 +5043,11 @@ fn every_mode_keeps_its_own_history_and_ranking() {
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     type_text(&mut p, "@");
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryUp));
-    assert_eq!(query_text(&p), "@nvi", "the mode's own history, sigil restored");
+    assert_eq!(
+        query_text(&p),
+        "@nvi",
+        "the mode's own history, sigil restored"
+    );
 
     // The stored query itself carries no sigil: it is filed *inside* the pane memory, and a sigil
     // kept there would come back doubled on every recall.
@@ -4482,7 +5058,11 @@ fn every_mode_keeps_its_own_history_and_ranking() {
         .history
         .entries()
         .to_vec();
-    assert_eq!(recalled, vec!["nvi".to_string()], "the history stores the effective query");
+    assert_eq!(
+        recalled,
+        vec!["nvi".to_string()],
+        "the history stores the effective query"
+    );
 }
 
 /// **The marks follow the effective query.** Under `@zs` the `z` and `s` of `zsh` are highlighted;
@@ -4497,7 +5077,7 @@ fn the_marks_land_on_the_effective_query_not_the_sigil() {
             .mode('@', "pane")
             .command(Command::new("Close pane", || {}).id("close"))
             .command(Command::new("zsh", || {}).id("zsh").mode("pane"))
-            .open(true)
+            .default_open(true)
     };
     // Marks are **over-drawn per character**, so a marked label leaves single-character runs on top
     // of the whole line (see `a_label_marks_the_characters_it_was_given`).
@@ -4522,8 +5102,14 @@ fn the_marks_land_on_the_effective_query_not_the_sigil() {
         type_text(&mut p, &c.to_string());
     }
     let marks = marked_chars(&p);
-    assert!(marks.contains(&"z".to_string()), "the effective query marked 'z': {marks:?}");
-    assert!(marks.contains(&"s".to_string()), "the effective query marked 's': {marks:?}");
+    assert!(
+        marks.contains(&"z".to_string()),
+        "the effective query marked 'z': {marks:?}"
+    );
+    assert!(
+        marks.contains(&"s".to_string()),
+        "the effective query marked 's': {marks:?}"
+    );
     assert!(
         !marks.contains(&"@".to_string()),
         "the sigil is not part of the match, so it marks nothing: {marks:?}",
@@ -4541,7 +5127,7 @@ fn a_live_label_is_both_redrawn_and_matched_by_its_new_name() {
     let mut p = CommandPalette::new()
         .command(Command::new("zsh", move || a.set("first")).id("one"))
         .command(Command::new("bash", move || b.set("second")).id("two"))
-        .open(true);
+        .default_open(true);
 
     // The host renames the first row — a pane's process changed, or it was renamed.
     p.label_signals()[0].set("nvim".to_string());
@@ -4568,20 +5154,32 @@ fn the_selection_starts_on_the_preselected_row_until_something_is_typed() {
         CommandPalette::new()
             .command(Command::new("alpha", move || a.set("alpha")).id("a"))
             // Declared second, and the row the caller wants Enter to land on.
-            .command(Command::new("beta", move || b.set("beta")).id("b").preselect(true))
+            .command(
+                Command::new("beta", move || b.set("beta"))
+                    .id("b")
+                    .preselect(true),
+            )
             .command(Command::new("gamma", move || c.set("gamma")).id("c"))
-            .open(true)
+            .default_open(true)
     };
 
     let mut p = open();
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), "beta", "an untyped list opens on the preselected row");
+    assert_eq!(
+        ran.get(),
+        "beta",
+        "an untyped list opens on the preselected row"
+    );
 
     // Navigation still moves from there, rather than from the top.
     let mut p = open();
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuDown));
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), "gamma", "the selection moved from the preselected row, not from row 0");
+    assert_eq!(
+        ran.get(),
+        "gamma",
+        "the selection moved from the preselected row, not from row 0"
+    );
 
     // Typing overrules it: the best match leads, exactly as `group` is dissolved by a query.
     let mut p = open();
@@ -4589,7 +5187,11 @@ fn the_selection_starts_on_the_preselected_row_until_something_is_typed() {
         type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), "alpha", "a query hands the lead back to the match");
+    assert_eq!(
+        ran.get(),
+        "alpha",
+        "a query hands the lead back to the match"
+    );
 }
 
 /// A palette that declares no modes is the palette that existed before modes did: one scope, no
@@ -4602,20 +5204,24 @@ fn a_palette_without_modes_is_unchanged() {
     let mut p = CommandPalette::new()
         .command(Command::new("Close pane", move || a.set("close")).id("close"))
         .command(Command::new(":wq", move || b.set("wq")).id("wq"))
-        .open(true);
+        .default_open(true);
 
     for c in ":w".chars() {
         type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), "wq", "with no modes declared, a leading ':' is ordinary text");
+    assert_eq!(
+        ran.get(),
+        "wq",
+        "with no modes declared, a leading ':' is ordinary text"
+    );
 }
 
 #[test]
 fn command_palette_query_reuses_input_word_delete() {
     use heca_grid_ui::{Modifiers, WidgetIntent};
     let (mut p, ran) = palette_with_markers();
-    p = p.open(true);
+    p = p.default_open(true);
 
     // "Toggle xyz" matches nothing (no command contains "...xyz").
     for c in "Toggle xyz".chars() {
@@ -4624,11 +5230,27 @@ fn command_palette_query_reuses_input_word_delete() {
     // Ctrl+Backspace word-deletes the whole "xyz" (not one char), leaving
     // "Toggle " — which now matches "Toggle sidebar". A char-delete would leave
     // "Toggle xy" (still no match), so this proves the Input editing is wired.
-    heca_grid_ui::dispatch(&mut p, &Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
-    heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Backspace, pressed: true });
+    heca_grid_ui::dispatch(
+        &mut p,
+        &Event::ModifiersChanged(Modifiers {
+            ctrl: true,
+            ..Default::default()
+        }),
+    );
+    heca_grid_ui::dispatch(
+        &mut p,
+        &Event::Key {
+            key: GridKey::Backspace,
+            pressed: true,
+        },
+    );
     heca_grid_ui::dispatch(&mut p, &Event::ModifiersChanged(Modifiers::default()));
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(ran.get(), 3, "Ctrl+Backspace word-delete leaves 'Toggle ' → runs Toggle sidebar");
+    assert_eq!(
+        ran.get(),
+        3,
+        "Ctrl+Backspace word-delete leaves 'Toggle ' → runs Toggle sidebar"
+    );
 }
 
 #[test]
@@ -4640,9 +5262,20 @@ fn input_edit_deletes_char_and_deletes_to_line_start() {
     give_keyboard(&mut inp);
 
     heca_grid_ui::dispatch(&mut inp, &Event::Widget(WidgetIntent::EditDeleteBack));
-    assert_eq!(inp.value_str(), "hello worl", "EditDeleteBack removes one char back");
-    heca_grid_ui::dispatch(&mut inp, &Event::Widget(WidgetIntent::EditDeleteToLineStart));
-    assert_eq!(inp.value_str(), "", "EditDeleteToLineStart clears to the start of the line");
+    assert_eq!(
+        inp.value_str(),
+        "hello worl",
+        "EditDeleteBack removes one char back"
+    );
+    heca_grid_ui::dispatch(
+        &mut inp,
+        &Event::Widget(WidgetIntent::EditDeleteToLineStart),
+    );
+    assert_eq!(
+        inp.value_str(),
+        "",
+        "EditDeleteToLineStart clears to the start of the line"
+    );
 }
 
 #[test]
@@ -4654,9 +5287,21 @@ fn a_raw_char_key_is_a_shortcut_not_text() {
     // character, not the lowercased combo key" fixup used to work around.
     let mut inp = Input::new().value("hi");
     inp.base_mut().focused.set(true);
-    heca_grid_ui::dispatch(&mut inp, &Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
+    heca_grid_ui::dispatch(
+        &mut inp,
+        &Event::ModifiersChanged(Modifiers {
+            ctrl: true,
+            ..Default::default()
+        }),
+    );
     assert_eq!(
-        heca_grid_ui::dispatch(&mut inp, &Event::Key { key: GridKey::Char('h'), pressed: true }),
+        heca_grid_ui::dispatch(
+            &mut inp,
+            &Event::Key {
+                key: GridKey::Char('h'),
+                pressed: true
+            }
+        ),
         heca_grid_ui::Handled::No,
         "a raw char key is left for whoever resolves shortcuts",
     );
@@ -4670,15 +5315,20 @@ fn a_raw_char_key_is_a_shortcut_not_text() {
 // --- A container tints the controls inside it (F003/P096/T484) ---------------
 
 /// Paint `w` inside a container that published `tone`, and report the hues it drew its chrome in.
-fn chrome_hues(w: &mut dyn heca_grid_ui::Component, tone: Option<heca_grid_ui::Color>) -> Vec<(u8, u8, u8)> {
+fn chrome_hues(
+    w: &mut dyn heca_grid_ui::Component,
+    tone: Option<heca_grid_ui::Color>,
+) -> Vec<(u8, u8, u8)> {
     use heca_grid_ui::{DrawCommand, PaintCx, Scene};
     let theme = Theme::default();
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
+        // **Through `paint_child`, never `paint`** — the chokepoint is what applies a widget's own
+        // published hue, so painting directly here would test a path no widget is ever drawn by.
         match tone {
-            Some(t) => cx.with_control_tone(t, |cx| w.paint(cx)),
-            None => w.paint(&mut cx),
+            Some(t) => cx.with_accent(t, |cx| heca_grid_ui::paint_child(w, cx)),
+            None => heca_grid_ui::paint_child(w, &mut cx),
         }
     }
     scene
@@ -4700,17 +5350,24 @@ fn a_button_takes_the_tone_its_container_published() {
 
     // A Primary carries its accent border at rest; an Outline's is muted until hover, so it would
     // show nothing to compare without driving an animation.
-    let mut plain = Button::primary("Retry").width(Length::Px(90.0)).height(Length::Px(28.0));
+    let mut plain = Button::primary("Retry")
+        .width(Length::Px(90.0))
+        .height(Length::Px(28.0));
     LayoutEngine::new().compute(&mut plain, Size::new(200.0, 60.0));
     let rest = chrome_hues(&mut plain, None);
 
     let tone = Color::rgb(240, 80, 60);
     let toned = chrome_hues(&mut plain, Some(tone));
 
-    assert!(!rest.is_empty(), "a primary button draws a border to compare");
+    assert!(
+        !rest.is_empty(),
+        "a primary button draws a border to compare"
+    );
     assert_ne!(rest, toned, "the published tone must reach the chrome");
     assert!(
-        toned.iter().any(|&(r, g, b)| (r, g, b) == (tone.r, tone.g, tone.b)),
+        toned
+            .iter()
+            .any(|&(r, g, b)| (r, g, b) == (tone.r, tone.g, tone.b)),
         "and it is the tone that was published, not some blend of it: {toned:?}",
     );
 }
@@ -4720,7 +5377,7 @@ fn a_button_takes_the_tone_its_container_published() {
 /// channel safe to add to a library where six widgets already publish a *content* colour.
 #[test]
 fn a_control_outside_a_publishing_container_is_unchanged() {
-    use heca_grid_ui::{IconButton, Icon, Glyph, LayoutExt, Length};
+    use heca_grid_ui::{Glyph, Icon, IconButton, LayoutExt, Length};
 
     let mut b = IconButton::new(Icon::new(Glyph::Close))
         .active(true) // a held-on frame, so it draws chrome at rest
@@ -4731,7 +5388,8 @@ fn a_control_outside_a_publishing_container_is_unchanged() {
     let accent = theme.colors.accent;
     let hues = chrome_hues(&mut b, None);
     assert!(
-        hues.iter().all(|&(r, g, b)| (r, g, b) == (accent.r, accent.g, accent.b)),
+        hues.iter()
+            .all(|&(r, g, b)| (r, g, b) == (accent.r, accent.g, accent.b)),
         "with nothing published, the theme accent is still the hue: {hues:?}",
     );
 }
@@ -4743,15 +5401,113 @@ fn an_explicit_tone_wins_over_the_container() {
 
     let own = Color::rgb(10, 200, 120);
     let mut b = IconButton::new(Icon::new(Glyph::Close))
-        .tone(own)
+        .accent(own)
         .active(true)
         .width(Length::Px(28.0))
         .height(Length::Px(28.0));
     LayoutEngine::new().compute(&mut b, Size::new(60.0, 60.0));
     let hues = chrome_hues(&mut b, Some(Color::rgb(240, 80, 60)));
     assert!(
-        hues.iter().all(|&(r, g, b)| (r, g, b) == (own.r, own.g, own.b)),
+        hues.iter()
+            .all(|&(r, g, b)| (r, g, b) == (own.r, own.g, own.b)),
         "the control's own tone must win: {hues:?}",
+    );
+}
+
+/// **A container publishes its hue with one builder, and everything inside follows.**
+///
+/// The tone had consumers and no publishers: the only way to set one was for a widget to call
+/// `with_control_tone` inside its own `paint`, so a plain container could not publish at all. The
+/// remaining way to re-tint a subtree was to paint it under a *swapped theme* — which needs a
+/// separate paint call per subtree, and is what stopped a container from painting its own children.
+#[test]
+fn a_container_publishes_its_hue_to_everything_inside_it() {
+    use heca_grid_ui::widgets::Surface;
+    use heca_grid_ui::{Button, Color, ComponentExt, LayoutExt, Parent};
+
+    let tone = Color::rgb(240, 80, 60);
+    let mut card = Surface::new()
+        .accent(tone)
+        .width(200)
+        .height(60)
+        .child(Button::primary("Retry").width(90).height(28));
+    LayoutEngine::new().compute(&mut card, Size::new(200.0, 60.0));
+
+    let hues = chrome_hues(&mut card, None);
+    assert!(
+        hues.iter()
+            .any(|&(r, g, b)| (r, g, b) == (tone.r, tone.g, tone.b)),
+        "the button inside was never told anything, and still follows: {hues:?}",
+    );
+}
+
+/// **A declared meaning is not re-toned.** What a variant *names* is not decoration a container may
+/// restyle — the same rule that keeps a destructive button destructive inside a warning-toned card.
+#[test]
+fn a_published_hue_does_not_redefine_what_a_variant_means() {
+    use heca_grid_ui::widgets::Surface;
+    use heca_grid_ui::{
+        Badge, Color, ComponentExt, DrawCommand, LayoutExt, PaintCx, Parent, Scene,
+    };
+
+    let tone = Color::rgb(240, 80, 60);
+    let theme = Theme::default();
+    let mut card = Surface::new()
+        .accent(tone)
+        .width(200)
+        .height(60)
+        .child(Badge::accent("3"));
+    LayoutEngine::new().compute(&mut card, Size::new(200.0, 60.0));
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        heca_grid_ui::paint_child(&card, &mut cx);
+    }
+    let fills: Vec<(u8, u8, u8)> = scene
+        .base_layer()
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Rect(r) => Some((r.fill.r, r.fill.g, r.fill.b)),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !fills
+            .iter()
+            .any(|&(r, g, b)| (r, g, b) == (tone.r, tone.g, tone.b)),
+        "an accent badge keeps the colour its variant names, not the container's: {fills:?}",
+    );
+}
+
+/// **A widget's own hue and the hue it passes down are one property.** They were two — a private
+/// `tone` field on `Button` and `IconButton`, beside the inherited channel — so the same word meant
+/// "mine" on two widgets and "everything inside me" everywhere else.
+#[test]
+fn a_widgets_own_hue_outranks_the_one_it_inherits() {
+    use heca_grid_ui::widgets::Surface;
+    use heca_grid_ui::{Button, Color, ComponentExt, LayoutExt, Parent};
+
+    let outer = Color::rgb(240, 80, 60);
+    let own = Color::rgb(10, 200, 120);
+    let mut card = Surface::new()
+        .accent(outer)
+        .width(200)
+        .height(60)
+        .child(Button::primary("Retry").accent(own).width(90).height(28));
+    LayoutEngine::new().compute(&mut card, Size::new(200.0, 60.0));
+
+    let hues = chrome_hues(&mut card, None);
+    assert!(
+        hues.iter()
+            .any(|&(r, g, b)| (r, g, b) == (own.r, own.g, own.b)),
+        "the innermost declaration wins: {hues:?}",
+    );
+    assert!(
+        !hues
+            .iter()
+            .any(|&(r, g, b)| (r, g, b) == (outer.r, outer.g, outer.b)),
+        "…and the container's hue does not also reach it: {hues:?}",
     );
 }
 
@@ -4769,10 +5525,11 @@ fn toast_height_grows_with_body_then_action() {
     use heca_grid_ui::Toast;
     let bare = layout_toast(&mut Toast::info("Saved"));
     let with_body = layout_toast(&mut Toast::info("Saved").body_text("All files written"));
-    let with_action =
-        layout_toast(&mut Toast::info("Saved")
+    let with_action = layout_toast(
+        &mut Toast::info("Saved")
             .body_text("All files written")
-            .action(heca_grid_ui::Button::outline("Undo").on_click(|| {})));
+            .action(heca_grid_ui::Button::outline("Undo").on_click(|| {})),
+    );
     assert!(with_body > bare, "a body line adds height");
     assert!(with_action > with_body, "an action row adds further height");
 }
@@ -4791,9 +5548,15 @@ fn toast_dismiss_button_fires_on_dismiss_and_consumes() {
     // The × is a real `IconButton` now, so it takes a **click** — press and release — like every
     // other control, and it is wherever the engine placed it rather than at a remembered pixel.
     let cross = t.base().children[2].base().bounds;
-    let centre = Point::new(cross.loc.x + cross.size.w / 2.0, cross.loc.y + cross.size.h / 2.0);
+    let centre = Point::new(
+        cross.loc.x + cross.size.w / 2.0,
+        cross.loc.y + cross.size.h / 2.0,
+    );
     let _ = heca_grid_ui::dispatch(&mut t, &Event::pointer_pressed(centre, PointerButton::Left));
-    let hit = heca_grid_ui::dispatch(&mut t, &Event::pointer_released(centre, PointerButton::Left));
+    let hit = heca_grid_ui::dispatch(
+        &mut t,
+        &Event::pointer_released(centre, PointerButton::Left),
+    );
     assert_eq!(dismissed.get(), 1, "clicking × fires on_dismiss");
     assert!(matches!(hit, Handled::Yes), "the × consumes the click");
 }
@@ -4822,7 +5585,8 @@ fn toast_action_button_fires_on_action() {
 fn toast_action_button_hugs_its_label() {
     use heca_grid_ui::{DrawCommand, PaintCx, Scene, Toast};
 
-    let mut t = Toast::info("File deleted").action(heca_grid_ui::Button::outline("Undo").on_click(|| {}));
+    let mut t =
+        Toast::info("File deleted").action(heca_grid_ui::Button::outline("Undo").on_click(|| {}));
     layout_toast(&mut t);
     let theme = Theme::default();
     let mut scene = Scene::new();
@@ -4862,8 +5626,14 @@ fn toast_body_click_fires_on_click_only_when_set() {
     // Without on_click, a body click is not consumed (it can fall through).
     let mut inert = Toast::info("Build finished").dismissible(false);
     layout_toast(&mut inert);
-    let hit = heca_grid_ui::dispatch(&mut inert, &Event::pointer_pressed(Point::new(160.0, 20.0), PointerButton::Left));
-    assert!(matches!(hit, Handled::No), "a non-clickable toast doesn't eat body clicks");
+    let hit = heca_grid_ui::dispatch(
+        &mut inert,
+        &Event::pointer_pressed(Point::new(160.0, 20.0), PointerButton::Left),
+    );
+    assert!(
+        matches!(hit, Handled::No),
+        "a non-clickable toast doesn't eat body clicks"
+    );
 
     // With on_click, the same click activates + consumes.
     let clicked = Rc::new(Cell::new(0u32));
@@ -4872,9 +5642,15 @@ fn toast_body_click_fires_on_click_only_when_set() {
         .dismissible(false)
         .on_click(move || c.set(c.get() + 1));
     layout_toast(&mut t);
-    let hit = heca_grid_ui::dispatch(&mut t, &Event::pointer_pressed(Point::new(160.0, 20.0), PointerButton::Left));
+    let hit = heca_grid_ui::dispatch(
+        &mut t,
+        &Event::pointer_pressed(Point::new(160.0, 20.0), PointerButton::Left),
+    );
     assert_eq!(clicked.get(), 1, "body click fires on_click");
-    assert!(matches!(hit, Handled::Yes), "a clickable toast consumes the body click");
+    assert!(
+        matches!(hit, Handled::Yes),
+        "a clickable toast consumes the body click"
+    );
 }
 
 /// **The body is whatever you composed** — the card gives it the column and the engine lays it out.
@@ -4893,8 +5669,15 @@ fn toast_body_takes_a_component_and_lays_it_out() {
     LayoutEngine::new().compute(&mut t, Size::new(400.0, 300.0));
 
     let body = t.base().children[1].base().children[1].base();
-    assert_eq!(body.children.len(), 2, "the composed body is the card's body slot");
-    assert!(body.bounds.size.w > 0.0 && body.bounds.size.h > 0.0, "and it was laid out");
+    assert_eq!(
+        body.children.len(),
+        2,
+        "the composed body is the card's body slot"
+    );
+    assert!(
+        body.bounds.size.w > 0.0 && body.bounds.size.h > 0.0,
+        "and it was laid out"
+    );
     let _ = Length::Px(0.0); // keep the import honest
 }
 
@@ -4990,8 +5773,18 @@ fn toast_focusable_only_when_clickable_and_enter_activates() {
     // A raw key reaches only the widget that owns the keyboard — the assertion below already
     // says "focused", so make it so rather than relying on an unfocused widget taking Enter.
     t.base_mut().focused.set(true);
-    heca_grid_ui::dispatch(&mut t, &Event::Key { key: GridKey::Enter, pressed: true });
-    assert_eq!(clicked.get(), 1, "Enter activates a focused clickable toast");
+    heca_grid_ui::dispatch(
+        &mut t,
+        &Event::Key {
+            key: GridKey::Enter,
+            pressed: true,
+        },
+    );
+    assert_eq!(
+        clicked.get(),
+        1,
+        "Enter activates a focused clickable toast"
+    );
 }
 
 // --- Button respects theme border_width + radius ----------------------------
@@ -5007,7 +5800,9 @@ fn button_derives_border_width_and_radius_from_theme() {
     let expected_radius = theme.colors.control_radius();
 
     let mut btn = Button::primary("OK");
-    LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
+    LayoutEngine::new()
+        .base_font(theme.font_size)
+        .compute(&mut btn, Size::new(300.0, 80.0));
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
@@ -5017,11 +5812,17 @@ fn button_derives_border_width_and_radius_from_theme() {
     // The button's background box uses the surface fill; it must round to the
     // theme's control radius and stroke at the theme's border width — not the
     // old hardcoded 0.0 / 1.5.
-    let bg = scene.iter().find_map(|cmd| match cmd {
-        DrawCommand::Rect(r) if r.fill == theme.colors.surface => Some(*r),
-        _ => None,
-    }).expect("button paints a surface-filled background box");
-    assert_eq!(bg.radius, expected_radius, "button corner radius follows theme.colors.control_radius()");
+    let bg = scene
+        .iter()
+        .find_map(|cmd| match cmd {
+            DrawCommand::Rect(r) if r.fill == theme.colors.surface => Some(*r),
+            _ => None,
+        })
+        .expect("button paints a surface-filled background box");
+    assert_eq!(
+        bg.radius, expected_radius,
+        "button corner radius follows theme.colors.control_radius()"
+    );
     assert_eq!(
         bg.border.expect("primary button has a border").width,
         theme.colors.border_width,
@@ -5031,17 +5832,25 @@ fn button_derives_border_width_and_radius_from_theme() {
     // border_width == 0 → no border drawn (borders off, like every surface).
     theme.colors.border_width = 0.0;
     let mut btn = Button::primary("OK");
-    LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
+    LayoutEngine::new()
+        .base_font(theme.font_size)
+        .compute(&mut btn, Size::new(300.0, 80.0));
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
         btn.paint(&mut cx);
     }
-    let bg = scene.iter().find_map(|cmd| match cmd {
-        DrawCommand::Rect(r) if r.fill == theme.colors.surface => Some(*r),
-        _ => None,
-    }).expect("button still paints its background box");
-    assert!(bg.border.is_none(), "border_width == 0 means no button border");
+    let bg = scene
+        .iter()
+        .find_map(|cmd| match cmd {
+            DrawCommand::Rect(r) if r.fill == theme.colors.surface => Some(*r),
+            _ => None,
+        })
+        .expect("button still paints its background box");
+    assert!(
+        bg.border.is_none(),
+        "border_width == 0 means no button border"
+    );
 }
 
 // --- border_width == 0 ⇒ no borders anywhere (bracket_frame draws nothing) ----
@@ -5077,10 +5886,22 @@ fn bracket_frame_zero_border_draws_nothing_nonzero_draws_reticle() {
     let dim_line = scene.iter().any(|c| matches!(
         c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color.a < theme.colors.accent.a && b.width > 0.0)
     ));
-    let clips = scene.iter().filter(|c| matches!(c, DrawCommand::PushClip(_))).count();
-    assert_eq!(bright_corners, 4, "border>0 draws four bright accent corner brackets");
-    assert!(dim_line, "border>0 traces a dimmed continuous accent line under the corners");
-    assert_eq!(clips, 4, "each bright corner is clipped to its own corner box");
+    let clips = scene
+        .iter()
+        .filter(|c| matches!(c, DrawCommand::PushClip(_)))
+        .count();
+    assert_eq!(
+        bright_corners, 4,
+        "border>0 draws four bright accent corner brackets"
+    );
+    assert!(
+        dim_line,
+        "border>0 traces a dimmed continuous accent line under the corners"
+    );
+    assert_eq!(
+        clips, 4,
+        "each bright corner is clipped to its own corner box"
+    );
 }
 
 #[test]
@@ -5101,7 +5922,10 @@ fn bracket_frame_with_honors_explicit_width_independent_of_theme() {
     let bright_corners = scene.iter().filter(|c| matches!(
         c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.colors.accent && b.width > 0.0)
     )).count();
-    assert_eq!(bright_corners, 4, "explicit width draws the reticle even when theme.colors.border_width == 0");
+    assert_eq!(
+        bright_corners, 4,
+        "explicit width draws the reticle even when theme.colors.border_width == 0"
+    );
 
     // An explicit width of 0 draws nothing, regardless of the theme.
     theme.colors.border_width = 5.0;
@@ -5110,7 +5934,10 @@ fn bracket_frame_with_honors_explicit_width_independent_of_theme() {
         let mut cx = PaintCx::new(&mut scene, &theme);
         cx.bracket_frame_with(rect, 0.0, 8.0);
     }
-    assert!(scene.is_empty(), "explicit width 0 draws no reticle even with theme border on");
+    assert!(
+        scene.is_empty(),
+        "explicit width 0 draws no reticle even with theme border on"
+    );
 }
 
 #[test]
@@ -5123,7 +5950,9 @@ fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
     // `explicit_border` width is the literal a caller passes to `.border()` — it must
     // be ignored in favour of the live theme width, so a build-time literal can't
     // survive a global border change (the showcase bug). `None` ⇒ no `.border()`.
-    let border_rects = |theme: &Theme, explicit: Option<(heca_grid_ui::Color, f32)>| -> Vec<heca_grid_ui::scene::RectCmd> {
+    let border_rects = |theme: &Theme,
+                        explicit: Option<(heca_grid_ui::Color, f32)>|
+     -> Vec<heca_grid_ui::scene::RectCmd> {
         let mut p = Pane::new()
             .background(theme.colors.surface)
             .width(Length::Px(120.0))
@@ -5138,17 +5967,22 @@ fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
             let mut cx = PaintCx::new(&mut scene, theme);
             p.paint(&mut cx);
         }
-        scene.iter().filter_map(|c| match c {
-            DrawCommand::Rect(r) if r.border.is_some_and(|b| b.width > 0.0) => Some(*r),
-            _ => None,
-        }).collect()
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) if r.border.is_some_and(|b| b.width > 0.0) => Some(*r),
+                _ => None,
+            })
+            .collect()
     };
 
     let mut theme = Theme::default();
     theme.colors.border_width = 2.0;
     let on = border_rects(&theme, None);
     assert!(
-        on.iter().any(|r| r.border.is_some_and(|b| b.color == theme.colors.border && b.width == 2.0)),
+        on.iter().any(|r| r
+            .border
+            .is_some_and(|b| b.color == theme.colors.border && b.width == 2.0)),
         "Bordered pane draws theme.colors.border at theme.colors.border_width without an explicit .border()",
     );
 
@@ -5156,13 +5990,16 @@ fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
     // theme (2.0), never the 9.0 literal.
     let explicit = border_rects(&theme, Some((theme.colors.accent, 9.0)));
     assert!(
-        explicit.iter().any(|r| r.border.is_some_and(|b| b.color == theme.colors.accent && b.width == 2.0)),
+        explicit.iter().any(|r| r
+            .border
+            .is_some_and(|b| b.color == theme.colors.accent && b.width == 2.0)),
         "explicit .border() supplies color only; width tracks theme.colors.border_width",
     );
 
     theme.colors.border_width = 0.0;
     assert!(
-        border_rects(&theme, None).is_empty() && border_rects(&theme, Some((theme.colors.accent, 9.0))).is_empty(),
+        border_rects(&theme, None).is_empty()
+            && border_rects(&theme, Some((theme.colors.accent, 9.0))).is_empty(),
         "border_width == 0 leaves the Bordered pane with no visible border, even with an explicit .border()",
     );
 }
@@ -5174,7 +6011,10 @@ fn bordered_pane_border_width_override_is_independent_of_theme() {
     // own thickness (`[appearance] sidebar_border_width`). Color still resolves
     // from `.border(color, _)` when set, else `theme.colors.border`.
     use heca_grid_ui::{Color, Component, Pane};
-    let border_rects = |theme: &Theme, override_w: Option<f32>, explicit: Option<Color>| -> Vec<heca_grid_ui::scene::RectCmd> {
+    let border_rects = |theme: &Theme,
+                        override_w: Option<f32>,
+                        explicit: Option<Color>|
+     -> Vec<heca_grid_ui::scene::RectCmd> {
         let mut p = Pane::new()
             .background(theme.colors.surface)
             .border_width(override_w)
@@ -5190,10 +6030,13 @@ fn bordered_pane_border_width_override_is_independent_of_theme() {
             let mut cx = PaintCx::new(&mut scene, theme);
             p.paint(&mut cx);
         }
-        scene.iter().filter_map(|c| match c {
-            DrawCommand::Rect(r) if r.border.is_some_and(|b| b.width > 0.0) => Some(*r),
-            _ => None,
-        }).collect()
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) if r.border.is_some_and(|b| b.width > 0.0) => Some(*r),
+                _ => None,
+            })
+            .collect()
     };
 
     let mut theme = Theme::default();
@@ -5202,14 +6045,18 @@ fn bordered_pane_border_width_override_is_independent_of_theme() {
     theme.colors.border_width = 0.0;
     let forced = border_rects(&theme, Some(3.0), None);
     assert!(
-        forced.iter().any(|r| r.border.is_some_and(|b| b.color == theme.colors.border && b.width == 3.0)),
+        forced.iter().any(|r| r
+            .border
+            .is_some_and(|b| b.color == theme.colors.border && b.width == 3.0)),
         "override draws its own width even when the global border is off",
     );
 
     // Override width + explicit color: width = override, color = explicit.
     let colored = border_rects(&theme, Some(3.0), Some(theme.colors.accent));
     assert!(
-        colored.iter().any(|r| r.border.is_some_and(|b| b.color == theme.colors.accent && b.width == 3.0)),
+        colored.iter().any(|r| r
+            .border
+            .is_some_and(|b| b.color == theme.colors.accent && b.width == 3.0)),
         "override sets width; explicit .border() sets color",
     );
 
@@ -5227,16 +6074,22 @@ fn visible_border_widths_at_zero<C: heca_grid_ui::Component>(mut w: C) -> Vec<f3
     let mut theme = Theme::default();
     theme.colors.border_width = 0.0;
     let vp = Size::new(400.0, 200.0);
-    LayoutEngine::new().base_font(theme.font_size).compute(&mut w, vp);
+    LayoutEngine::new()
+        .base_font(theme.font_size)
+        .compute(&mut w, vp);
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
         w.paint(&mut cx);
     }
-    scene.iter().filter_map(|c| match c {
-        DrawCommand::Rect(r) => r.border.map(|b| b.width),
-        _ => None,
-    }).filter(|w| *w > 0.0).collect()
+    scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Rect(r) => r.border.map(|b| b.width),
+            _ => None,
+        })
+        .filter(|w| *w > 0.0)
+        .collect()
 }
 
 #[test]
@@ -5245,13 +6098,28 @@ fn non_container_widgets_drop_their_border_at_zero_border_width() {
     // Guard against the recurring regression: a widget that hardcodes a border
     // stroke instead of routing it through the theme (cx.border / border_width).
     for (name, widths) in [
-        ("button", visible_border_widths_at_zero(Button::primary("OK"))),
+        (
+            "button",
+            visible_border_widths_at_zero(Button::primary("OK")),
+        ),
         ("badge", visible_border_widths_at_zero(Badge::success("ON"))),
-        ("alert", visible_border_widths_at_zero(Alert::warning("W").body("b"))),
-        ("progress", visible_border_widths_at_zero(ProgressBar::new().value(0.5))),
-        ("toggle", visible_border_widths_at_zero(Toggle::new().on(true))),
+        (
+            "alert",
+            visible_border_widths_at_zero(Alert::warning("W").body("b")),
+        ),
+        (
+            "progress",
+            visible_border_widths_at_zero(ProgressBar::new().value(0.5)),
+        ),
+        (
+            "toggle",
+            visible_border_widths_at_zero(Toggle::new().on(true)),
+        ),
     ] {
-        assert!(widths.is_empty(), "{name}: expected no border at border_width=0, got {widths:?}");
+        assert!(
+            widths.is_empty(),
+            "{name}: expected no border at border_width=0, got {widths:?}"
+        );
     }
 }
 
@@ -5266,21 +6134,49 @@ fn drop_shadow_emits_a_shadow_rect_and_respects_zero_alpha() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow_color(), radius: 24.0, dx: 0.0, dy: 10.0 });
+        cx.drop_shadow(
+            rect,
+            8.0,
+            Shadow {
+                color: theme.shadow_color(),
+                radius: 24.0,
+                dx: 0.0,
+                dy: 10.0,
+            },
+        );
     }
-    let sh = scene.iter().find_map(|c| match c {
-        DrawCommand::Rect(r) => r.shadow,
-        _ => None,
-    }).expect("drop_shadow emits a rect carrying a Shadow");
-    assert_eq!((sh.radius, sh.dy), (24.0, 10.0), "shadow blur + offset are threaded through");
+    let sh = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Rect(r) => r.shadow,
+            _ => None,
+        })
+        .expect("drop_shadow emits a rect carrying a Shadow");
+    assert_eq!(
+        (sh.radius, sh.dy),
+        (24.0, 10.0),
+        "shadow blur + offset are threaded through"
+    );
 
     // A fully-transparent shadow (alpha 0) or zero radius is a no-op.
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow_color().with_alpha(0), radius: 24.0, dx: 0.0, dy: 10.0 });
+        cx.drop_shadow(
+            rect,
+            8.0,
+            Shadow {
+                color: theme.shadow_color().with_alpha(0),
+                radius: 24.0,
+                dx: 0.0,
+                dy: 10.0,
+            },
+        );
     }
-    assert!(scene.is_empty(), "a zero-alpha shadow draws nothing (shadows-off)");
+    assert!(
+        scene.is_empty(),
+        "a zero-alpha shadow draws nothing (shadows-off)"
+    );
 }
 
 #[test]
@@ -5290,7 +6186,8 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
 
     // Press the Retry action, then paint: the press flash must cover only the
     // action button, not the whole card (no "whole widget clicked" feedback).
-    let mut t = Toast::info("File deleted").action(heca_grid_ui::Button::outline("Retry").on_click(|| {}));
+    let mut t =
+        Toast::info("File deleted").action(heca_grid_ui::Button::outline("Retry").on_click(|| {}));
     layout_toast(&mut t);
     let card_w = t.base().bounds.size.w;
     click_at(&mut t, Point::new(60.0, 50.0));
@@ -5302,10 +6199,17 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
     }
     // The flash is drawn in the theme's foreground color (see PaintCx::flash).
     let fg = theme.colors.foreground;
-    let flash = scene.iter().find_map(|c| match c {
-        DrawCommand::Rect(r) if r.fill.r == fg.r && r.fill.g == fg.g && r.fill.b == fg.b && r.fill.a > 0 => Some(*r),
-        _ => None,
-    }).expect("an action press emits a press-flash rect");
+    let flash = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Rect(r)
+                if r.fill.r == fg.r && r.fill.g == fg.g && r.fill.b == fg.b && r.fill.a > 0 =>
+            {
+                Some(*r)
+            }
+            _ => None,
+        })
+        .expect("an action press emits a press-flash rect");
     assert!(
         flash.rect.size.w < card_w - 1.0,
         "action flash ({}) must be narrower than the whole card ({card_w})",
@@ -5326,7 +6230,10 @@ fn toast_stack_is_overlay_active_only_when_it_has_toasts() {
 
     items.set(vec![ToastSpec::new(1, "Saved"), ToastSpec::new(2, "Done")]);
     stack.tick(0.0); // reconcile (now 2)
-    assert!(stack.overlay_active(), "a non-empty stack is overlay-active");
+    assert!(
+        stack.overlay_active(),
+        "a non-empty stack is overlay-active"
+    );
 }
 
 /// Lay a stack out the way a host does: settle its arrivals, then let the **engine** place the
@@ -5364,9 +6271,19 @@ fn toast_stack_dismiss_reports_the_clicked_id() {
         x_bounds.loc.y + x_bounds.size.h / 2.0,
     );
     let _ = heca_grid_ui::dispatch(&mut stack, &Event::pointer_pressed(at, PointerButton::Left));
-    let hit = heca_grid_ui::dispatch(&mut stack, &Event::pointer_released(at, PointerButton::Left));
-    assert!(matches!(hit, Handled::Yes), "a click on a toast's × is consumed");
-    assert_eq!(dismissed.get(), 7, "the dismissed toast's id is reported to the host");
+    let hit = heca_grid_ui::dispatch(
+        &mut stack,
+        &Event::pointer_released(at, PointerButton::Left),
+    );
+    assert!(
+        matches!(hit, Handled::Yes),
+        "a click on a toast's × is consumed"
+    );
+    assert_eq!(
+        dismissed.get(),
+        7,
+        "the dismissed toast's id is reported to the host"
+    );
 }
 
 #[test]
@@ -5381,7 +6298,10 @@ fn toast_stack_passes_through_clicks_that_miss_every_toast() {
         &mut stack,
         &Event::pointer_pressed(Point::new(700.0, 500.0), PointerButton::Left),
     );
-    assert!(matches!(hit, Handled::No), "clicks that miss every toast pass through");
+    assert!(
+        matches!(hit, Handled::No),
+        "clicks that miss every toast pass through"
+    );
 }
 
 /// **A stacked card's action is reachable by keyboard** — the whole reason the cards had to be in
@@ -5391,7 +6311,9 @@ fn toast_stack_passes_through_clicks_that_miss_every_toast() {
 fn a_stacked_cards_action_is_a_pick_target() {
     use heca_grid_ui::{ToastPosition, ToastSpec, ToastStack};
 
-    let items = signal(vec![ToastSpec::new(1, "Build failed").action("retry", "Retry")]);
+    let items = signal(vec![
+        ToastSpec::new(1, "Build failed").action("retry", "Retry"),
+    ]);
     let mut stack = ToastStack::new(items).position(ToastPosition::TopRight);
     settled_stack(&mut stack, Size::new(800.0, 600.0));
 
@@ -5416,7 +6338,9 @@ fn a_stacked_cards_action_is_a_pick_target() {
 fn hovering_a_stacked_cards_action_lights_it_and_claims_the_move() {
     use heca_grid_ui::{ToastPosition, ToastSpec, ToastStack};
 
-    let items = signal(vec![ToastSpec::new(1, "Build failed").action("retry", "Retry")]);
+    let items = signal(vec![
+        ToastSpec::new(1, "Build failed").action("retry", "Retry"),
+    ]);
     let mut stack = ToastStack::new(items).position(ToastPosition::TopLeft);
     settled_stack(&mut stack, Size::new(800.0, 600.0));
 
@@ -5440,11 +6364,17 @@ fn hovering_a_stacked_cards_action_lights_it_and_claims_the_move() {
     let action_widget = &stack.base().children[0].base().children[1].base().children[2]
         .base()
         .children[0];
-    assert!(action_widget.base().hovered(), "the action under the pointer is not lit");
+    assert!(
+        action_widget.base().hovered(),
+        "the action under the pointer is not lit"
+    );
 
     // …and a move that misses every card is not claimed, so the page keeps hovering normally.
     let miss = heca_grid_ui::dispatch(&mut stack, &Event::pointer_moved(Point::new(700.0, 560.0)));
-    assert!(matches!(miss, Handled::No), "a move between the cards must fall through");
+    assert!(
+        matches!(miss, Handled::No),
+        "a move between the cards must fall through"
+    );
 }
 
 /// **Pointing at something never scrolls it.** A reveal brings into view what the user cannot see
@@ -5456,9 +6386,13 @@ fn hovering_a_stacked_cards_action_lights_it_and_claims_the_move() {
 fn a_click_does_not_ask_to_be_scrolled_into_view_but_the_keyboard_does() {
     use heca_grid_ui::{Component, FocusManager, Label, Parent as _, PointerButton};
 
-    let mut row = heca_grid_ui::Row::new().child(Label::new("pane-1")).on_activate(|| {});
+    let mut row = heca_grid_ui::Row::new()
+        .child(Label::new("pane-1"))
+        .on_activate(|| {});
     row.base_mut().style.layout.width = Length::Px(200.0);
-    LayoutEngine::new().base_font(14.0).compute(&mut row, Size::new(200.0, 40.0));
+    LayoutEngine::new()
+        .base_font(14.0)
+        .compute(&mut row, Size::new(200.0, 40.0));
     assert!(!row.wants_visible(), "an untouched row asks for nothing");
 
     // Clicking focuses it — but the mouse is already looking at it.
@@ -5467,7 +6401,10 @@ fn a_click_does_not_ask_to_be_scrolled_into_view_but_the_keyboard_does() {
     let mut focus = FocusManager::new();
     focus.dispatch(&mut row, &Event::pointer_pressed(at, PointerButton::Left));
     focus.dispatch(&mut row, &Event::pointer_released(at, PointerButton::Left));
-    assert!(row.base().focused.get_untracked(), "the click should still focus it");
+    assert!(
+        row.base().focused.get_untracked(),
+        "the click should still focus it"
+    );
     assert!(
         !row.wants_visible(),
         "a clicked row asked to be scrolled into view — the region centres it and eats the click",
@@ -5476,7 +6413,10 @@ fn a_click_does_not_ask_to_be_scrolled_into_view_but_the_keyboard_does() {
     // Tab is the case a reveal exists for: the cursor can go somewhere you cannot see. This is
     // the hook `FocusManager::advance` calls — `visible: true` is what "the keyboard did it" means.
     row.on_focus(true);
-    assert!(row.wants_visible(), "keyboard focus must still bring the row into view");
+    assert!(
+        row.wants_visible(),
+        "keyboard focus must still bring the row into view"
+    );
 }
 
 /// **Collapsing a dock or a group asks for the layout pass that re-places its rows.**
@@ -5490,13 +6430,20 @@ fn collapsing_a_dock_or_a_group_asks_for_a_layout() {
     use heca_grid_ui::{Component, DockFrame, Item, ItemGroup, PointerButton};
 
     // A dock and a group, each collapsed by the same gesture a user makes: a click on its header.
-    let mut dock = DockFrame::new("PANES").child(Item::new("zsh")).child(Item::new("nvim"));
+    let mut dock = DockFrame::new("PANES")
+        .child(Item::new("zsh"))
+        .child(Item::new("nvim"));
     dock.base_mut().style.layout.width = Length::Px(300.0);
-    LayoutEngine::new().base_font(14.0).compute(&mut dock, Size::new(300.0, 400.0));
+    LayoutEngine::new()
+        .base_font(14.0)
+        .compute(&mut dock, Size::new(300.0, 400.0));
     let _ = heca_grid_ui::needs_layout(&dock);
 
     let header = dock.base().children[0].base().bounds;
-    let at = Point::new(header.loc.x + header.size.w / 2.0, header.loc.y + header.size.h / 2.0);
+    let at = Point::new(
+        header.loc.x + header.size.w / 2.0,
+        header.loc.y + header.size.h / 2.0,
+    );
     heca_grid_ui::dispatch(&mut dock, &Event::pointer_pressed(at, PointerButton::Left));
     heca_grid_ui::dispatch(&mut dock, &Event::pointer_released(at, PointerButton::Left));
     assert!(
@@ -5504,15 +6451,25 @@ fn collapsing_a_dock_or_a_group_asks_for_a_layout() {
         "a dock collapsed and nobody asked for a layout — its rows keep their old bounds",
     );
 
-    let mut group = ItemGroup::new("COLUMN").child(Item::new("a")).child(Item::new("b"));
+    let mut group = ItemGroup::new("COLUMN")
+        .child(Item::new("a"))
+        .child(Item::new("b"));
     group.base_mut().style.layout.width = Length::Px(300.0);
-    LayoutEngine::new().base_font(14.0).compute(&mut group, Size::new(300.0, 400.0));
+    LayoutEngine::new()
+        .base_font(14.0)
+        .compute(&mut group, Size::new(300.0, 400.0));
     let _ = heca_grid_ui::needs_layout(&group);
 
     let header = group.base().children[0].base().bounds;
-    let at = Point::new(header.loc.x + header.size.w / 2.0, header.loc.y + header.size.h / 2.0);
+    let at = Point::new(
+        header.loc.x + header.size.w / 2.0,
+        header.loc.y + header.size.h / 2.0,
+    );
     heca_grid_ui::dispatch(&mut group, &Event::pointer_pressed(at, PointerButton::Left));
-    heca_grid_ui::dispatch(&mut group, &Event::pointer_released(at, PointerButton::Left));
+    heca_grid_ui::dispatch(
+        &mut group,
+        &Event::pointer_released(at, PointerButton::Left),
+    );
     assert!(
         heca_grid_ui::needs_layout(&group),
         "a group collapsed and nobody asked for a layout — its rows keep their old bounds",
@@ -5529,11 +6486,16 @@ fn revealing_a_hidden_child_asks_for_the_layout_that_moves_its_siblings() {
     let row = Visibility::new(Label::new("~/projects/heca"), false);
     let shown = row.visible_signal();
     let mut page = Flex::column().child(Label::new("zsh")).child(row);
-    LayoutEngine::new().base_font(14.0).compute(&mut page, Size::new(300.0, 200.0));
+    LayoutEngine::new()
+        .base_font(14.0)
+        .compute(&mut page, Size::new(300.0, 200.0));
     let _ = heca_grid_ui::needs_layout(&page);
 
     page.tick(1.0 / 60.0);
-    assert!(!heca_grid_ui::needs_layout(&page), "nothing changed, nothing to lay out");
+    assert!(
+        !heca_grid_ui::needs_layout(&page),
+        "nothing changed, nothing to lay out"
+    );
 
     // The path arrives.
     shown.set(true);
@@ -5554,12 +6516,19 @@ fn revealing_a_hidden_child_asks_for_the_layout_that_moves_its_siblings() {
 fn a_dismissed_card_asks_for_the_relayout_that_moves_the_others_up() {
     use heca_grid_ui::{ToastSpec, ToastStack};
 
-    let items = signal(vec![ToastSpec::new(1, "one"), ToastSpec::new(2, "two"), ToastSpec::new(3, "three")]);
+    let items = signal(vec![
+        ToastSpec::new(1, "one"),
+        ToastSpec::new(2, "two"),
+        ToastSpec::new(3, "three"),
+    ]);
     let mut stack = ToastStack::new(items);
     settled_stack(&mut stack, Size::new(800.0, 600.0));
     // Clear whatever the arrivals asked for; we are testing the dismissal.
     let _ = heca_grid_ui::needs_layout(&stack);
-    assert!(!heca_grid_ui::needs_layout(&stack), "a settled stack keeps asking for layout");
+    assert!(
+        !heca_grid_ui::needs_layout(&stack),
+        "a settled stack keeps asking for layout"
+    );
 
     // Drop the MIDDLE one — the case where the others must move.
     items.set(vec![ToastSpec::new(1, "one"), ToastSpec::new(3, "three")]);
@@ -5577,7 +6546,10 @@ fn a_dismissed_card_asks_for_the_relayout_that_moves_the_others_up() {
         heca_grid_ui::needs_layout(&stack),
         "the card left the tree and nobody asked for a layout — the cards below it stay put",
     );
-    assert!(!heca_grid_ui::needs_layout(&stack), "the flag is cleared as it is read");
+    assert!(
+        !heca_grid_ui::needs_layout(&stack),
+        "the flag is cleared as it is read"
+    );
 }
 
 /// **A corner means the WINDOW's corner, whatever slot a host gives the stack.**
@@ -5607,21 +6579,37 @@ fn the_cards_anchor_to_the_window_corner_not_to_the_slot_a_parent_gave() {
         overlays.base_mut().style.layout.height = Length::Px(vp.h as f32);
         overlays.tick(0.0);
         while overlays.tick(1.0 / 60.0) {}
-        LayoutEngine::new().base_font(14.0).compute(&mut overlays, vp);
+        LayoutEngine::new()
+            .base_font(14.0)
+            .compute(&mut overlays, vp);
 
         let card = overlays.base().children[2].base().children[0].base().bounds;
         let (right, top) = want;
         if right {
             let gap = vp.w - (card.loc.x + card.size.w);
-            assert!((gap - margin).abs() < 1.0, "{corner:?}: {gap}px from the right edge");
+            assert!(
+                (gap - margin).abs() < 1.0,
+                "{corner:?}: {gap}px from the right edge"
+            );
         } else {
-            assert!((card.loc.x - margin).abs() < 1.0, "{corner:?}: {} from the left", card.loc.x);
+            assert!(
+                (card.loc.x - margin).abs() < 1.0,
+                "{corner:?}: {} from the left",
+                card.loc.x
+            );
         }
         if top {
-            assert!((card.loc.y - margin).abs() < 1.0, "{corner:?}: {} from the top", card.loc.y);
+            assert!(
+                (card.loc.y - margin).abs() < 1.0,
+                "{corner:?}: {} from the top",
+                card.loc.y
+            );
         } else {
             let gap = vp.h - (card.loc.y + card.size.h);
-            assert!((gap - margin).abs() < 1.0, "{corner:?}: {gap}px from the bottom edge");
+            assert!(
+                (gap - margin).abs() < 1.0,
+                "{corner:?}: {gap}px from the bottom edge"
+            );
         }
     }
 }
@@ -5649,13 +6637,20 @@ fn a_spec_with_two_actions_renders_two_and_reports_the_pressed_key() {
 
     // The action row is the third child of the card's text column.
     let row = &stack.base().children[0].base().children[1].base().children[2];
-    assert_eq!(row.base().children.len(), 2, "two actions in the spec, two controls on the card");
+    assert_eq!(
+        row.base().children.len(),
+        2,
+        "two actions in the spec, two controls on the card"
+    );
 
     // Press the SECOND one — the point is that the key distinguishes them.
     let b = row.base().children[1].base().bounds;
     let at = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     let _ = heca_grid_ui::dispatch(&mut stack, &Event::pointer_pressed(at, PointerButton::Left));
-    let _ = heca_grid_ui::dispatch(&mut stack, &Event::pointer_released(at, PointerButton::Left));
+    let _ = heca_grid_ui::dispatch(
+        &mut stack,
+        &Event::pointer_released(at, PointerButton::Left),
+    );
     assert_eq!(
         pressed.borrow().as_slice(),
         &[(9, "open_log".to_string())],
@@ -5674,8 +6669,16 @@ fn a_spec_with_no_actions_renders_no_action_row() {
     settled_stack(&mut stack, Size::new(800.0, 600.0));
 
     let row = &stack.base().children[0].base().children[1].base().children[2];
-    assert!(row.base().children.is_empty(), "an empty action slot built controls");
-    assert_eq!(row.base().bounds.size.h, 0.0, "an empty action row still takes {}px", row.base().bounds.size.h);
+    assert!(
+        row.base().children.is_empty(),
+        "an empty action slot built controls"
+    );
+    assert_eq!(
+        row.base().bounds.size.h,
+        0.0,
+        "an empty action row still takes {}px",
+        row.base().bounds.size.h
+    );
 }
 
 /// **One vocabulary places the stack at every one of its members**, including the centres a
@@ -5705,14 +6708,20 @@ fn the_position_vocabulary_places_the_stack_at_each_of_its_members() {
             ToastPosition::TopRight | ToastPosition::TopLeft | ToastPosition::TopCenter => {
                 assert!((top - margin).abs() < 1.0, "{pos:?}: {top} from the top")
             }
-            _ => assert!((bottom - margin).abs() < 1.0, "{pos:?}: {bottom} from the bottom"),
+            _ => assert!(
+                (bottom - margin).abs() < 1.0,
+                "{pos:?}: {bottom} from the bottom"
+            ),
         }
 
         let left = c.loc.x;
         let right = vp.w - (c.loc.x + c.size.w);
         match pos {
             ToastPosition::TopRight | ToastPosition::BottomRight => {
-                assert!((right - margin).abs() < 1.0, "{pos:?}: {right} from the right")
+                assert!(
+                    (right - margin).abs() < 1.0,
+                    "{pos:?}: {right} from the right"
+                )
             }
             ToastPosition::TopLeft | ToastPosition::BottomLeft => {
                 assert!((left - margin).abs() < 1.0, "{pos:?}: {left} from the left")
@@ -5745,7 +6754,11 @@ fn a_dropped_card_plays_its_exit_before_it_goes() {
         "the dropped card went the frame its id did — its exit had nothing to play over",
     );
     while stack.tick(1.0 / 60.0) {}
-    assert_eq!(stack.base().children.len(), 1, "…and once it has played, it is gone");
+    assert_eq!(
+        stack.base().children.len(),
+        1,
+        "…and once it has played, it is gone"
+    );
 }
 
 // --- viewport culling -------------------------------------------------------
@@ -5770,7 +6783,14 @@ fn paint_cx_culls_offscreen_content_but_not_headless() {
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
         cx.rect(off, theme.colors.surface, None, 0.0, None);
-        cx.text(off, "hidden", theme.colors.foreground, 15.0, TextAlign::Start, TextStyle::REGULAR);
+        cx.text(
+            off,
+            "hidden",
+            theme.colors.foreground,
+            15.0,
+            TextAlign::Start,
+            TextStyle::REGULAR,
+        );
     }
     assert!(scene.is_empty(), "content far below the viewport is culled");
 
@@ -5780,7 +6800,11 @@ fn paint_cx_culls_offscreen_content_but_not_headless() {
         let mut cx = PaintCx::new(&mut scene, &theme);
         cx.rect(off, theme.colors.surface, None, 0.0, None);
     }
-    assert_eq!(scene.len(), 1, "no viewport ⇒ no culling (headless default)");
+    assert_eq!(
+        scene.len(),
+        1,
+        "no viewport ⇒ no culling (headless default)"
+    );
 }
 
 #[test]
@@ -5826,9 +6850,16 @@ fn focused_input_requests_a_timed_caret_redraw_not_continuous() {
     LayoutEngine::new().compute(&mut input, Size::new(200.0, 60.0));
 
     // The caret is never a continuous animation: tick reports no animating frame.
-    assert!(!input.tick(0.016), "an input never drives the continuous redraw loop");
+    assert!(
+        !input.tick(0.016),
+        "an input never drives the continuous redraw loop"
+    );
     // Unfocused: nothing to redraw on a timer.
-    assert_eq!(input.next_redraw(), None, "an unfocused input asks for no timed redraw");
+    assert_eq!(
+        input.next_redraw(),
+        None,
+        "an unfocused input asks for no timed redraw"
+    );
 
     // Focused: it schedules a wake at its next caret toggle (within a half period),
     // so the host sleeps until then instead of redrawing every frame.
@@ -5854,7 +6885,10 @@ fn collect_damage_unions_dirty_widgets_then_clears_flags() {
     LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
 
     // A fresh tree needs its first paint; collecting reports damage and clears flags.
-    assert!(collect_damage(&ui).is_some(), "a fresh tree needs its first paint");
+    assert!(
+        collect_damage(&ui).is_some(),
+        "a fresh tree needs its first paint"
+    );
     assert!(
         collect_damage(&ui).is_none(),
         "flags cleared → no damage on the next collect"
@@ -5877,16 +6911,32 @@ fn collect_damage_unions_dirty_widgets_then_clears_flags() {
 /// `ViewNode` mapper) would compose by hand, so there is one layout and one paint path.
 #[test]
 fn button_sugar_desugars_into_children() {
-    assert_eq!(Button::empty().base().children.len(), 0, "empty button has no content");
-    assert_eq!(Button::new("Delete").base().children.len(), 1, "label sugar → one Label child");
+    assert_eq!(
+        Button::empty().base().children.len(),
+        0,
+        "empty button has no content"
+    );
+    assert_eq!(
+        Button::new("Delete").base().children.len(),
+        1,
+        "label sugar → one Label child"
+    );
 
     let with_icon = Button::new("Delete").icon(Glyph::Trash);
-    assert_eq!(with_icon.base().children.len(), 2, "icon sugar prepends → [Icon, Label]");
+    assert_eq!(
+        with_icon.base().children.len(),
+        2,
+        "icon sugar prepends → [Icon, Label]"
+    );
 
     // Arbitrary content, any depth — the same vector, composed instead of sugared.
     let composed = Button::empty().child(
         Flex::column()
-            .child(Flex::row().child(Icon::new(Glyph::Trash)).child(Label::new("Delete")))
+            .child(
+                Flex::row()
+                    .child(Icon::new(Glyph::Trash))
+                    .child(Label::new("Delete")),
+            )
             .child(Label::new("Ctrl+D")),
     );
     assert_eq!(composed.base().children.len(), 1, "one composed subtree");
@@ -5936,12 +6986,19 @@ fn button_grows_to_fit_composed_content() {
     };
     let plain = measure(Button::new("Delete"));
     let with_icon = measure(Button::new("Delete").icon(Glyph::Trash));
-    let stacked = measure(Button::empty().child(
-        Flex::column().child(Label::new("Delete")).child(Label::new("Ctrl+D")),
-    ));
+    let stacked = measure(
+        Button::empty().child(
+            Flex::column()
+                .child(Label::new("Delete"))
+                .child(Label::new("Ctrl+D")),
+        ),
+    );
 
     assert!(with_icon.w > plain.w, "a leading icon widens the button");
-    assert!(stacked.h > plain.h, "a two-line column makes the button taller");
+    assert!(
+        stacked.h > plain.h,
+        "a two-line column makes the button taller"
+    );
 }
 
 /// The size variant cascades into composed content: a `Small` button's `Label` must shrink with
@@ -5962,10 +7019,17 @@ fn button_size_variant_cascades_to_composed_content() {
 
     // An explicit choice on the child wins over the inherited one.
     let mut b = Button::new("SAVE").size(WidgetSize::Small);
-    b.base_mut().children[0].base_mut().style.layout.set_size(WidgetSize::Large);
+    b.base_mut().children[0]
+        .base_mut()
+        .style
+        .layout
+        .set_size(WidgetSize::Large);
     LayoutEngine::new().compute(&mut b, Size::new(400.0, 200.0));
     let pinned = b.base().children[0].base().font;
-    assert!(pinned > label_font(WidgetSize::Small), "an explicit child variant is not overwritten");
+    assert!(
+        pinned > label_font(WidgetSize::Small),
+        "an explicit child variant is not overwritten"
+    );
 }
 
 /// Composed content inherits the button's **state color**: the button publishes one color per
@@ -5977,7 +7041,10 @@ fn composed_content_inherits_the_buttons_state_color() {
 
     // Disabled ⇒ the content fades to `muted` at reduced alpha, on every variant.
     let disabled = button_label_color(&mut Button::primary("OK").disabled(true), &theme);
-    assert_eq!(disabled.r, theme.colors.muted.r, "disabled content takes the muted tone");
+    assert_eq!(
+        disabled.r, theme.colors.muted.r,
+        "disabled content takes the muted tone"
+    );
     assert!(disabled.a < 255, "disabled content is faded");
 
     // Enabled ⇒ the variant's own tone, not the theme foreground.
@@ -5989,7 +7056,10 @@ fn composed_content_inherits_the_buttons_state_color() {
         &mut Button::empty().child(Label::new("OK").color(theme.colors.success)),
         &theme,
     );
-    assert_eq!(pinned, theme.colors.success, "an explicit child color wins over the inherited one");
+    assert_eq!(
+        pinned, theme.colors.success,
+        "an explicit child color wins over the inherited one"
+    );
 }
 
 /// A control is **one** Tab stop, whatever it composes. Focus traversal must not descend into a
@@ -6008,7 +7078,11 @@ fn a_button_is_one_tab_stop_whatever_it_contains() {
     let second = focus.focused();
     focus.advance(&mut ui, true);
 
-    assert_eq!(focus.focused(), first, "exactly two focusables: focus wraps after the 2nd button");
+    assert_eq!(
+        focus.focused(),
+        first,
+        "exactly two focusables: focus wraps after the 2nd button"
+    );
     assert_ne!(first, second, "each button is its own (single) Tab stop");
 }
 
@@ -6020,15 +7094,25 @@ fn a_button_is_one_tab_stop_whatever_it_contains() {
 fn choice_carries_a_value_and_composes_its_content() {
     let sugar = Choice::labeled("high", "HIGH");
     assert_eq!(sugar.value(), "high", "the value is what the option means");
-    assert_eq!(sugar.base().children.len(), 1, "labeled sugar → one Label child");
+    assert_eq!(
+        sugar.base().children.len(),
+        1,
+        "labeled sugar → one Label child"
+    );
 
     // Composed: arbitrary content, and the value is unchanged by it.
     let composed = Choice::new("high").child(
-        Flex::row().child(Icon::new(Glyph::Warning)).child(Label::new("HIGH")),
+        Flex::row()
+            .child(Icon::new(Glyph::Warning))
+            .child(Label::new("HIGH")),
     );
     assert_eq!(composed.value(), "high");
     assert_eq!(composed.base().children.len(), 1, "one composed subtree");
-    assert_eq!(composed.base().children[0].base().children.len(), 2, "icon + label inside");
+    assert_eq!(
+        composed.base().children[0].base().children.len(),
+        2,
+        "icon + label inside"
+    );
 
     // Empty is legal — content is the caller's business.
     assert_eq!(Choice::new("v").base().children.len(), 0);
@@ -6055,11 +7139,16 @@ fn choice_content_inherits_the_selected_state_color() {
             .expect("the option paints its composed label")
     };
 
-    assert_eq!(color_of(Choice::labeled("a", "A").selected(true)), theme.colors.accent);
+    assert_eq!(
+        color_of(Choice::labeled("a", "A").selected(true)),
+        theme.colors.accent
+    );
     assert_eq!(color_of(Choice::labeled("a", "A")), theme.colors.foreground);
     // An explicit child color opts out of the inheritance.
     let pinned = color_of(
-        Choice::new("a").child(Label::new("A").color(theme.colors.danger)).selected(true),
+        Choice::new("a")
+            .child(Label::new("A").color(theme.colors.danger))
+            .selected(true),
     );
     assert_eq!(pinned, theme.colors.danger, "an explicit child color wins");
 }
@@ -6068,7 +7157,11 @@ fn choice_content_inherits_the_selected_state_color() {
 #[test]
 fn a_choice_is_one_tab_stop_whatever_it_contains() {
     let mut ui = Flex::row()
-        .child(Choice::labeled("a", "A").child(Toggle::new()).on_activate(|| {}))
+        .child(
+            Choice::labeled("a", "A")
+                .child(Toggle::new())
+                .on_activate(|| {}),
+        )
         .child(Choice::labeled("b", "B").on_activate(|| {}));
 
     let mut focus = FocusManager::new();
@@ -6077,7 +7170,11 @@ fn a_choice_is_one_tab_stop_whatever_it_contains() {
     focus.advance(&mut ui, true);
     assert_ne!(focus.focused(), first, "each option is its own Tab stop");
     focus.advance(&mut ui, true);
-    assert_eq!(focus.focused(), first, "exactly two focusables — focus wraps");
+    assert_eq!(
+        focus.focused(),
+        first,
+        "exactly two focusables — focus wraps"
+    );
 }
 
 /// Containers must resolve a pick from the children's **real bounds**, never from row arithmetic,
@@ -6091,10 +7188,17 @@ fn choice_at_resolves_a_pick_from_real_bounds() {
 
     let second = list.base().children[1].base().bounds;
     let inside_second = Point::new(second.loc.x + 2.0, second.loc.y + 2.0);
-    assert_eq!(heca_grid_ui::widgets::choice_at(&list.base().children, inside_second), Some(1));
+    assert_eq!(
+        heca_grid_ui::widgets::choice_at(&list.base().children, inside_second),
+        Some(1)
+    );
 
     let miss = Point::new(second.loc.x - 50.0, second.loc.y - 500.0);
-    assert_eq!(heca_grid_ui::widgets::choice_at(&list.base().children, miss), None, "a miss picks nothing");
+    assert_eq!(
+        heca_grid_ui::widgets::choice_at(&list.base().children, miss),
+        None,
+        "a miss picks nothing"
+    );
 }
 
 /// Whole-page scroll premise (T009): a root `ScrollRegion` sized to the viewport,
@@ -6145,7 +7249,10 @@ fn focus_ring_shows_on_keyboard_focus_not_on_mouse_click() {
 
     let mut focus = FocusManager::new();
     // Click-focus: focused (activation works) but the ring must NOT draw.
-    focus.dispatch(&mut ui, &Event::pointer_pressed(center, PointerButton::Left));
+    focus.dispatch(
+        &mut ui,
+        &Event::pointer_pressed(center, PointerButton::Left),
+    );
     let a = &ui.base().children[0];
     assert!(a.base().focused.get_untracked(), "click focuses the widget");
     assert!(
@@ -6156,7 +7263,10 @@ fn focus_ring_shows_on_keyboard_focus_not_on_mouse_click() {
     // Keyboard navigation: the newly-focused widget rings.
     focus.advance(&mut ui, true);
     assert!(
-        ui.base().children.iter().any(|c| c.base().shows_focus_ring()),
+        ui.base()
+            .children
+            .iter()
+            .any(|c| c.base().shows_focus_ring()),
         "keyboard focus (advance) shows the ring"
     );
 }
@@ -6181,7 +7291,10 @@ fn a_state_highlight_never_crops_the_content_it_covers() {
         let b = row.base().bounds;
         heca_grid_ui::dispatch(
             &mut row,
-            &Event::pointer_moved(Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0)),
+            &Event::pointer_moved(Point::new(
+                b.loc.x + b.size.w / 2.0,
+                b.loc.y + b.size.h / 2.0,
+            )),
         );
         let mut scene = Scene::new();
         {
@@ -6201,8 +7314,14 @@ fn a_state_highlight_never_crops_the_content_it_covers() {
 
     // No padding: the content reaches the row's edges, so the pill covers the row exactly.
     let (sel, content, bounds) = hovered_pill(0.0);
-    assert_eq!(sel.loc.y, bounds.loc.y, "unpadded: no vertical inset to take");
-    assert_eq!(sel.size.h, bounds.size.h, "unpadded: the pill is the full row height");
+    assert_eq!(
+        sel.loc.y, bounds.loc.y,
+        "unpadded: no vertical inset to take"
+    );
+    assert_eq!(
+        sel.size.h, bounds.size.h,
+        "unpadded: the pill is the full row height"
+    );
     assert!(
         sel.loc.y <= content.loc.y && sel.loc.y + sel.size.h >= content.loc.y + content.size.h,
         "pill {sel:?} crops content {content:?}",
@@ -6220,7 +7339,6 @@ fn a_state_highlight_never_crops_the_content_it_covers() {
         "pill {sel:?} crops content {content:?}",
     );
 }
-
 
 /// A margin can be set per **axis**, not only per side.
 ///
@@ -6245,7 +7363,10 @@ fn a_margin_can_be_set_per_axis() {
 
     let first = root.base().children[0].base().bounds;
     let second = root.base().children[1].base().bounds;
-    assert_eq!(first.loc.y, 10.0, "the y margin pushed it down from the top");
+    assert_eq!(
+        first.loc.y, 10.0,
+        "the y margin pushed it down from the top"
+    );
     assert_eq!(first.loc.x, 4.0, "and the x margin in from the left");
     assert_eq!(
         second.loc.y, 40.0,
@@ -6253,9 +7374,12 @@ fn a_margin_can_be_set_per_axis() {
     );
 
     // A side still wins over its axis.
-    let mut root = Flex::column()
-        .height(Length::Px(200.0))
-        .child(Flex::column().height(Length::Px(20.0)).margin_y(10.0).margin_top(2.0));
+    let mut root = Flex::column().height(Length::Px(200.0)).child(
+        Flex::column()
+            .height(Length::Px(20.0))
+            .margin_y(10.0)
+            .margin_top(2.0),
+    );
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 200.0));
     assert_eq!(
         root.base().children[0].base().bounds.loc.y,
@@ -6268,9 +7392,9 @@ fn a_margin_can_be_set_per_axis() {
 /// the outer row on `menu_history_*` — all on the shared vocabulary, so the widget owns no keys.
 #[test]
 fn a_card_grid_walks_three_axes_and_returns_the_callers_key() {
-    use heca_grid_ui::reactive::{signal, SignalGet};
-    use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label};
     use heca_grid_ui::WidgetIntent;
+    use heca_grid_ui::reactive::{SignalGet, signal};
+    use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label};
 
     let lit: Vec<Signal<bool>> = (0..5).map(|_| signal(false)).collect();
     let chosen = std::rc::Rc::new(std::cell::RefCell::new(String::new()));
@@ -6299,8 +7423,15 @@ fn a_card_grid_walks_three_axes_and_returns_the_callers_key() {
 
     // A column with depth: menu_down walks WITHIN it — the case that used to switch workspace.
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuDown));
-    assert_eq!(grid.selected_key(), Some("b"), "j moves to the next pane in the split column");
-    assert!(lit[1].get_untracked() && !lit[0].get_untracked(), "exactly one cell is lit");
+    assert_eq!(
+        grid.selected_key(),
+        Some("b"),
+        "j moves to the next pane in the split column"
+    );
+    assert!(
+        lit[1].get_untracked() && !lit[0].get_untracked(),
+        "exactly one cell is lit"
+    );
 
     // item_next crosses to the next COLUMN, clamping the cell index into the shorter column.
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::ItemNext));
@@ -6308,7 +7439,11 @@ fn a_card_grid_walks_three_axes_and_returns_the_callers_key() {
 
     // menu_history_* is the OUTER axis here — the workspace.
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuHistoryDown));
-    assert_eq!(grid.selected_key(), Some("d"), "n moves to the next workspace");
+    assert_eq!(
+        grid.selected_key(),
+        Some("d"),
+        "n moves to the next workspace"
+    );
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuHistoryDown));
     assert_eq!(grid.selected_key(), Some("d"), "and stops at the last one");
 
@@ -6316,9 +7451,17 @@ fn a_card_grid_walks_three_axes_and_returns_the_callers_key() {
     // row's first — the position used to be destroyed by the trip (the cursor carried its column
     // index across, clamped it into the shorter row, and clamped it again on the way back).
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuHistoryUp));
-    assert_eq!(grid.selected_key(), Some("c"), "back to the column we left row 0 on");
+    assert_eq!(
+        grid.selected_key(),
+        Some("c"),
+        "back to the column we left row 0 on"
+    );
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuDown));
-    assert_eq!(grid.selected_key(), Some("d"), "no depth here, so j moved to the next row");
+    assert_eq!(
+        grid.selected_key(),
+        Some("d"),
+        "no depth here, so j moved to the next row"
+    );
 
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::Activate));
     assert_eq!(chosen.borrow().as_str(), "d");
@@ -6331,22 +7474,28 @@ fn a_card_grid_walks_three_axes_and_returns_the_callers_key() {
 /// arrives — which is how Esc stopped closing an overlay and `Ctrl+h` never reached `item_previous`.
 #[test]
 fn a_blocking_overlay_reports_a_key_its_panel_ignored_as_unhandled() {
-    use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label, Overlay};
+    use heca_grid_ui::WidgetIntent;
     use heca_grid_ui::reactive::signal;
-    use heca_grid_ui::{WidgetIntent};
+    use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label, Overlay};
 
     let dismissed = std::rc::Rc::new(std::cell::Cell::new(false));
     let d = dismissed.clone();
     let lit = signal(false);
     let grid = CardGrid::new()
-        .row(vec![vec![GridCell::new("a", lit)]], Flex::row().child(Label::new("a")))
+        .row(
+            vec![vec![GridCell::new("a", lit)]],
+            Flex::row().child(Label::new("a")),
+        )
         .on_dismiss(move || d.set(true));
-    let mut overlay = Overlay::new().blocking(true).panel(grid).opened(true);
+    let mut overlay = Overlay::new().blocking(true).panel(grid).default_open(true);
 
     // A raw key the panel has no use for: the overlay must NOT claim it, or the keymap stops here.
     let handled = heca_grid_ui::dispatch(
         &mut overlay,
-        &Event::Key { key: GridKey::Escape, pressed: true },
+        &Event::Key {
+            key: GridKey::Escape,
+            pressed: true,
+        },
     );
     assert_eq!(handled, Handled::No, "an unwanted key is not swallowed");
 
@@ -6354,7 +7503,6 @@ fn a_blocking_overlay_reports_a_key_its_panel_ignored_as_unhandled() {
     heca_grid_ui::dispatch(&mut overlay, &Event::Widget(WidgetIntent::Dismiss));
     assert!(dismissed.get(), "Dismiss reached the panel");
 }
-
 
 /// **A zoom scales the picture, not just the box** (F003/P082/T327 item 1).
 ///
@@ -6377,7 +7525,10 @@ fn a_scaled_subtree_shrinks_its_text_radius_and_border_with_its_box() {
                 cx.rect(
                     Rectangle::new(Point::new(100.0, 100.0), Size::new(200.0, 80.0)),
                     Color::rgb(10, 20, 30),
-                    Some(heca_grid_ui::scene::Border { color: Color::rgb(1, 2, 3), width: 2.0 }),
+                    Some(heca_grid_ui::scene::Border {
+                        color: Color::rgb(1, 2, 3),
+                        width: 2.0,
+                    }),
                     8.0,
                     None,
                 );
@@ -6402,21 +7553,29 @@ fn a_scaled_subtree_shrinks_its_text_radius_and_border_with_its_box() {
     let half = draw(0.5);
 
     let rect_of = |s: &Scene| {
-        s.iter().find_map(|c| match c {
-            DrawCommand::Rect(r) => Some(*r),
-            _ => None,
-        }).expect("a rect")
+        s.iter()
+            .find_map(|c| match c {
+                DrawCommand::Rect(r) => Some(*r),
+                _ => None,
+            })
+            .expect("a rect")
     };
     let text_of = |s: &Scene| {
-        s.iter().find_map(|c| match c {
-            DrawCommand::Text(t) => Some(t.clone()),
-            _ => None,
-        }).expect("a text run")
+        s.iter()
+            .find_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+            .expect("a text run")
     };
 
     let (a, b) = (rect_of(&life), rect_of(&half));
     assert_eq!(b.rect.size.w, a.rect.size.w / 2.0, "the box halves");
-    assert_eq!(b.rect.loc.x, a.rect.loc.x / 2.0, "and moves toward the origin");
+    assert_eq!(
+        b.rect.loc.x,
+        a.rect.loc.x / 2.0,
+        "and moves toward the origin"
+    );
     assert_eq!(b.radius, a.radius / 2.0, "the corner radius halves with it");
     assert_eq!(
         b.border.expect("border").width,
@@ -6432,7 +7591,6 @@ fn a_scaled_subtree_shrinks_its_text_radius_and_border_with_its_box() {
     assert_eq!(life.len(), half.len());
 }
 
-
 /// **A closed select is one hover target, not two.** The chosen option is echoed inside the
 /// trigger, and while it stands there it is decoration: left hittable it hovered on its own, and
 /// its pill stops at the chevron gutter — so the text lit up and the caret beside it did not
@@ -6446,9 +7604,15 @@ fn a_closed_select_hovers_as_one_control() {
     let trigger = sel.base().bounds;
     heca_grid_ui::dispatch(
         &mut sel,
-        &Event::pointer_moved(Point::new(trigger.loc.x + 8.0, trigger.loc.y + trigger.size.h / 2.0)),
+        &Event::pointer_moved(Point::new(
+            trigger.loc.x + 8.0,
+            trigger.loc.y + trigger.size.h / 2.0,
+        )),
     );
-    assert!(sel.base().hovered(), "the trigger is what the pointer found");
+    assert!(
+        sel.base().hovered(),
+        "the trigger is what the pointer found"
+    );
     for (i, option) in sel.base().children.iter().enumerate() {
         assert!(
             !option.base().hovered(),
@@ -6495,7 +7659,12 @@ fn an_open_select_leaves_the_row_around_it_alone() {
         .child(Select::new(["NORMAL", "PREFIX", "PASSTHROUGH"]))
         .child(Label::new("WORKSPACE"));
     LayoutEngine::new().compute(&mut row, Size::new(900.0, 400.0));
-    let closed: Vec<f64> = row.base().children.iter().map(|c| c.base().bounds.loc.y).collect();
+    let closed: Vec<f64> = row
+        .base()
+        .children
+        .iter()
+        .map(|c| c.base().bounds.loc.y)
+        .collect();
 
     let trigger = row.base().children[1].base().bounds;
     click_at(
@@ -6503,7 +7672,12 @@ fn an_open_select_leaves_the_row_around_it_alone() {
         Point::new(trigger.loc.x + 20.0, trigger.loc.y + trigger.size.h / 2.0),
     );
     LayoutEngine::new().compute(&mut row, Size::new(900.0, 400.0));
-    let open: Vec<f64> = row.base().children.iter().map(|c| c.base().bounds.loc.y).collect();
+    let open: Vec<f64> = row
+        .base()
+        .children
+        .iter()
+        .map(|c| c.base().bounds.loc.y)
+        .collect();
 
     for (i, (before, after)) in closed.iter().zip(open.iter()).enumerate() {
         assert!(
@@ -6512,7 +7686,6 @@ fn an_open_select_leaves_the_row_around_it_alone() {
         );
     }
 }
-
 
 /// **A fixed-size box keeps its shape when the row runs out of room.** Everything gives way by
 /// default, which is right for text and for a card carrying a design width — and wrong for a
@@ -6531,7 +7704,10 @@ fn a_dot_stays_round_in_a_row_too_narrow_for_it() {
     LayoutEngine::new().compute(&mut row, Size::new(120.0, 40.0));
 
     let dot = row.base().children[0].base().bounds.size;
-    assert_eq!(dot.w, dot.h, "the dot is {dot:?} — round, or it is not a dot");
+    assert_eq!(
+        dot.w, dot.h,
+        "the dot is {dot:?} — round, or it is not a dot"
+    );
 }
 
 /// **A wrapper gives way exactly as much as what it wraps.** The app shows a pane's status through
@@ -6539,7 +7715,9 @@ fn a_dot_stays_round_in_a_row_too_narrow_for_it() {
 /// it was drawn as a sliver. A wrapper has no opinion of its own (F003/P096/T483).
 #[test]
 fn a_wrapped_dot_is_still_round() {
-    use heca_grid_ui::{Component, DotStatus, Flex, Label, LayoutExt, Length, Parent, StatusDot, Visibility};
+    use heca_grid_ui::{
+        Component, DotStatus, Flex, Label, LayoutExt, Length, Parent, StatusDot, Visibility,
+    };
 
     let mut row = Flex::row()
         .width(Length::Px(120.0))
@@ -6559,7 +7737,9 @@ fn a_wrapped_dot_is_still_round() {
 /// it (F003/P096/T483).
 #[test]
 fn a_hidden_wrapper_leaves_the_slot_to_the_visible_one() {
-    use heca_grid_ui::{Align, Component, DotStatus, Flex, LayoutExt, Length, Parent, StatusDot, Visibility};
+    use heca_grid_ui::{
+        Align, Component, DotStatus, Flex, LayoutExt, Length, Parent, StatusDot, Visibility,
+    };
 
     let mut slot = Flex::row()
         .align(Align::Center)
@@ -6570,7 +7750,11 @@ fn a_hidden_wrapper_leaves_the_slot_to_the_visible_one() {
     LayoutEngine::new().compute(&mut slot, Size::new(200.0, 40.0));
 
     let shown = slot.base().children[1].base().bounds;
-    assert_eq!(shown.size.w, shown.size.h, "the visible dot is {:?}", shown.size);
+    assert_eq!(
+        shown.size.w, shown.size.h,
+        "the visible dot is {:?}",
+        shown.size
+    );
     assert!(
         shown.loc.x + shown.size.w <= 12.5,
         "it spans {}..{} of a 12px slot — the hidden ones are still taking room",
@@ -6587,20 +7771,23 @@ fn a_toast_opens_hides_and_takes_no_space_while_closed() {
 
     let mut page = Flex::column()
         .width(Length::Px(400.0))
-        .child(Toast::info("Saved").opened(false))
+        .child(Toast::info("Saved").default_open(false))
         .child(Toast::info("Also saved"));
     LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
     let closed = page.base().children[0].base().bounds.size.h;
     assert_eq!(closed, 0.0, "a closed card still occupies {closed}px");
 
     // Opening puts it back in the flow; hiding takes it out again.
-    page.base_mut().children[0].open();
+    page.base_mut().children[0].show();
     LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
-    assert!(page.base().children[0].base().bounds.size.h > 0.0, "open, it is laid out");
+    assert!(
+        page.base().children[0].base().bounds.size.h > 0.0,
+        "open, it is laid out"
+    );
 
     // Hiding starts the exit. **It stays laid out while it plays** — that is what the gesture has
     // to play over — and takes no space only once it has finished (the card's default is a slide).
-    page.base_mut().children[0].hide();
+    page.base_mut().children[0].close();
     LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
     assert!(
         page.base().children[0].base().bounds.size.h > 0.0,
@@ -6608,7 +7795,11 @@ fn a_toast_opens_hides_and_takes_no_space_while_closed() {
     );
     while page.base_mut().children[0].tick(1.0 / 60.0) {}
     LayoutEngine::new().compute(&mut page, Size::new(400.0, 300.0));
-    assert_eq!(page.base().children[0].base().bounds.size.h, 0.0, "gone, it is gone");
+    assert_eq!(
+        page.base().children[0].base().bounds.size.h,
+        0.0,
+        "gone, it is gone"
+    );
 }
 
 /// **Nothing is painted before the layout has given it a box.**

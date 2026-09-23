@@ -8,11 +8,11 @@
 //! serves both.
 
 use heca_core::layout::PaneId;
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::style::{Align, Justify, Length, Spacing};
-use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{Flex, GridCell, HintPlacement, KeyHint, Row};
 use heca_grid_ui::Component;
+use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::style::{Length, Spacing};
+use heca_grid_ui::theme::Theme as GuiTheme;
+use heca_grid_ui::widgets::{Flex, GridCell, HintPlacement, Row};
 
 /// The `key` of a pane's box — the row's one identity, so the cursor, the right-click target
 /// and later a drag are three readers of a single declaration (F003/P085/T354).
@@ -87,16 +87,21 @@ pub(crate) struct PaneCard<'a> {
 impl PaneCard<'_> {
     /// Build the card and the cell the grid navigates it by.
     ///
-    /// Returns the concrete [`KeyHint`] rather than a boxed component **on purpose**: the parent
-    /// still has to give it its size — a share of a column, or a rect of a row — and a box has no
-    /// builders left to do it with. `KeyHint` is transparent (it hugs its child and routes events,
-    /// focus and drag straight through), so wrapping costs the parent nothing.
-    pub(crate) fn build(self) -> (KeyHint, GridCell) {
+    /// Returns the concrete [`Row`] rather than a boxed component **on purpose**: the parent still
+    /// has to give it its size — a share of a column, or a rect of a row — and a box has no
+    /// builders left to do it with.
+    ///
+    /// **It declares its own pick.** It used to be wrapped in a `KeyHint`, which is the shape from
+    /// before `on_hint` moved onto every widget (F003/P082/T432) — and the wrapper then cost a
+    /// letter of its own, because a picker saw two targets where an author had written one thing.
+    /// `KeyHint` is for a region that is not a widget you can put a builder on; a card is one.
+    pub(crate) fn build(self) -> (Row, GridCell) {
         let theme = self.theme;
         // The card's own cursor signal, created before anything reads it: the `GridCell` lights it,
         // the card is focused by it, and both are the same value rather than two kept in step.
         let card = Row::new();
-        let cell = GridCell::new(self.pane_id.0.to_string(), card.nav_state()).hovered(card.hovered());
+        let cell =
+            GridCell::new(self.pane_id.0.to_string(), card.nav_state()).hovered(card.hovered());
         let mut card = card
             // **A card in the map is a SURFACE, not a wash.**
             //
@@ -109,19 +114,19 @@ impl PaneCard<'_> {
             // 2026-08-13). An opaque `surface` is a box in every theme, and `foreground` on
             // `surface` is legible by the palette's own construction.
             .background(theme.colors.surface)
-                        .radius(theme.colors.control_radius())
-            .pad_all(Spacing::Xs)
+            .radius(theme.colors.control_radius())
+            .padding(Spacing::Xs)
             // **The name sits in the middle of the card.** A card in the map is a picture of a
             // pane, not a row in a list: there is no column of names to align down, and a label
             // against the left edge reads as the start of a list item (Antonio, driving,
             // 2026-08-13). `Row` already centres on its cross axis; this is the main one.
-            .justify(Justify::Center)
+            .justify("center")
             // **The card fills the wrapper the parent sized.** `KeyHint` is transparent and hugs
             // its child, so the share or the rect the parent handed the wrapper has to be passed on
             // deliberately — a card left to hug its own label would collapse to the width of the
             // word in it, whatever the column was given.
-            .width(Length::Pct(1.0))
-            .height(Length::Pct(1.0))
+            .width(Length::FULL)
+            .height(Length::FULL)
             .active(self.active)
             .previous(self.previous)
             // **A card has a scale of its own.** The theme's default previous mark is tuned for a
@@ -130,6 +135,7 @@ impl PaneCard<'_> {
             // wrong, in opposite directions — so the theme carries the third scale, and this asks
             // for it by name rather than picking a number.
             .previous_tint(theme.colors.effective_card_previous_background())
+            // A view of that pane — the same letter it wears everywhere else.
             .key(pane_key(self.pane_id));
         // **The pane you are on wears the frame it wears in the app.**
         //
@@ -183,11 +189,13 @@ impl PaneCard<'_> {
                     // same absence, so a card has one question to answer rather than two.
                     show: true,
                     font_scale: crate::chrome::CARD_META_FONT_SCALE,
+                    // A card centres its content, so there is nothing to step in from.
+                    indent: heca_grid_ui::style::Spacing::None,
                     theme,
                 }
                 .build();
                 Flex::column()
-                    .align(Align::Center)
+                    .align("center")
                     .gap(2.0)
                     // **A card is a share of the strip, so its content absorbs the squeeze** —
                     // which is how a widget asks for it here (`Style::flex_shrink`: nothing shrinks
@@ -195,7 +203,7 @@ impl PaneCard<'_> {
                     // cannot be narrower than the longest path inside it, and a narrow window drew
                     // every card's text across its neighbours.
                     .shrink(1.0)
-                    .max_width(Length::Pct(1.0))
+                    .max_width(Length::FULL)
                     // The name as every surface shows it — and it stays inside the card, however
                     // narrow the window makes it (`components::PaneName`).
                     .child(
@@ -222,7 +230,7 @@ impl PaneCard<'_> {
         // surface may answer them differently. In the sidebar a pick means *look at that one* and
         // keeps the keyboard, while a click means *go there and leave*. In the map both mean choose
         // that pane — the map exists to be left.
-        let card = KeyHint::new(card)
+        let card = card
             .on_hint({
                 let choose = self.cb.choose.clone();
                 let id = self.pane_id;
@@ -232,7 +240,7 @@ impl PaneCard<'_> {
             // border, where it reads as falling out of the box (Antonio, driving, 2026-08-14) —
             // and it was invisible as a choice until now, because the deleted host pass drew every
             // large target's cap in a top band and ignored what the widget declared.
-            .placement(HintPlacement::TopLeft);
+            .hint_placement(HintPlacement::TopLeft);
         (card, cell)
     }
 }
@@ -338,7 +346,7 @@ mod tests {
                 cb: &cb,
             }
             .build();
-            // The card is a **share** of the strip it sits in (`Pct`), so it is laid out inside a
+            // The card is a **share** of the strip it sits in (`Percent`), so it is laid out inside a
             // parent that gives it one — as the map does. At the root of a layout a percentage has
             // nothing to be a percentage of.
             use heca_grid_ui::builders::{LayoutExt as _, Parent as _};
@@ -349,7 +357,9 @@ mod tests {
             if box_w == 80.0 {
                 fn dump(n: &dyn heca_grid_ui::Component, d: usize) {
                     eprintln!("{:i$}{:?}", "", n.base().bounds, i = d * 2);
-                    for c in &n.base().children { dump(c.as_ref(), d + 1); }
+                    for c in &n.base().children {
+                        dump(c.as_ref(), d + 1);
+                    }
                 }
                 dump(root.as_ref(), 0);
             }
@@ -408,10 +418,16 @@ mod tests {
 
         let shown = text_of(Some("~/projects/heca"));
         assert!(shown.iter().any(|t| t == "editor"), "the name: {shown:?}");
-        assert!(shown.iter().any(|t| t == "~/projects/heca"), "and the folder: {shown:?}");
+        assert!(
+            shown.iter().any(|t| t == "~/projects/heca"),
+            "and the folder: {shown:?}"
+        );
 
         let bare = text_of(None);
-        assert!(bare.iter().any(|t| t == "editor"), "the name is always there: {bare:?}");
+        assert!(
+            bare.iter().any(|t| t == "editor"),
+            "the name is always there: {bare:?}"
+        );
         assert!(
             !bare.iter().any(|t| t.contains('/')),
             "and nothing is drawn where there is no folder: {bare:?}",
@@ -439,12 +455,16 @@ mod tests {
                 cb: &cb,
             }
             .build();
-            let card = &row.base().children[0];
-            let v = card.base().style.visual;
+            // The card IS the row — it declares its own pick, so there is no wrapper to step into.
+            let v = row.base().style.visual;
             (v.border.is_some(), v.glow.is_some())
         };
 
-        assert_eq!(visual(true), (true, true), "the current card: an accent edge and a halo");
+        assert_eq!(
+            visual(true),
+            (true, true),
+            "the current card: an accent edge and a halo"
+        );
         assert_eq!(
             visual(false),
             (false, false),
@@ -507,17 +527,22 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert!(drawn.iter().any(|t| t == "editor"), "the card shows its name: {drawn:?}");
-        let inner = root.base().children[0].base();
+        assert!(
+            drawn.iter().any(|t| t == "editor"),
+            "the card shows its name: {drawn:?}"
+        );
+        let inner = root.base();
         assert_eq!(
             inner.key.as_deref(),
             Some(pane_key(PaneId(7)).as_str()),
             "and answers to its pane's one identity",
         );
+        // (the one-target guard lives in `a_card_is_one_pick_target_not_two`)
         // **Centred, not against the left edge** — a card is a picture of a pane, not a list row.
         let card = inner.bounds;
         let label = inner.children[0].base().bounds;
-        let slack = (label.loc.x - card.loc.x) - ((card.loc.x + card.size.w) - (label.loc.x + label.size.w));
+        let slack = (label.loc.x - card.loc.x)
+            - ((card.loc.x + card.size.w) - (label.loc.x + label.size.w));
         // One pixel of asymmetry is centred: a 49px label in a 200px card has 75.5px either side,
         // and boxes are whole pixels.
         assert!(
@@ -549,7 +574,10 @@ mod tests {
         press("x");
         assert_eq!(
             actions(&sink),
-            vec![("close_pane_by_id".to_string(), vec![("pane_id".to_string(), 7)])],
+            vec![(
+                "close_pane_by_id".to_string(),
+                vec![("pane_id".to_string(), 7)]
+            )],
         );
         // …and the cursor was handed to the neighbour FIRST, while it could still be resolved.
         assert!(
@@ -576,12 +604,18 @@ mod tests {
         press("d");
         assert_eq!(
             actions(&sink),
-            vec![("delete_workspace".to_string(), vec![("ws_idx".to_string(), 2)])],
+            vec![(
+                "delete_workspace".to_string(),
+                vec![("ws_idx".to_string(), 2)]
+            )],
         );
 
         sink.borrow_mut().clear();
         press("z");
-        assert!(actions(&sink).is_empty(), "an unclaimed letter dispatches nothing");
+        assert!(
+            actions(&sink).is_empty(),
+            "an unclaimed letter dispatches nothing"
+        );
     }
 
     /// **A click activates it** — the same act the cursor performs, so the mouse and the keyboard
@@ -637,6 +671,44 @@ mod tests {
         assert!(
             got.contains("FocusPaneThenAction") && got.contains("PaneId(7)"),
             "the pick chooses this card's pane, exactly as a click does: {got}",
+        );
+    }
+    /// **A card is ONE pick target, not two.**
+    ///
+    /// It used to be wrapped in a `KeyHint` — the shape from before `on_hint` moved onto every
+    /// widget. The wrapper declared the pick and the card inside was actionable, so a picker saw
+    /// two targets where the author had written one thing, and the exposé drew two keycaps on
+    /// every card under its own `s` picker (Antonio, driving, 2026-09-15).
+    ///
+    /// `KeyHint` is for a region that is not a widget you can put a builder on. A card is one.
+    #[test]
+    fn a_card_is_one_pick_target_not_two() {
+        let (cb, _sink) = callbacks();
+        let theme = theme();
+        let (mut card, _) = PaneCard {
+            pane_id: PaneId(7),
+            folder: None,
+            name: "editor",
+            active: true,
+            previous: false,
+            ws_idx: 0,
+            col_idx: 0,
+            next: None,
+            theme: &theme,
+            cb: &cb,
+        }
+        .build();
+        heca_grid_ui::LayoutEngine::new().compute(&mut card, heca_grid_ui::Size::new(200.0, 100.0));
+
+        let targets = heca_grid_ui::collect_hints(&card);
+        assert_eq!(
+            targets.len(),
+            1,
+            "one card, one letter — a wrapper around it would be a second target",
+        );
+        assert!(
+            card.base().hint.is_some(),
+            "and the card itself is what declares the pick",
         );
     }
 }

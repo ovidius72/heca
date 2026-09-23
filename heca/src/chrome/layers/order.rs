@@ -24,7 +24,9 @@ impl LayerRegistry {
         // walk is bounded by the layer count regardless so a malformed registry cannot hang a frame.
         for _ in 0..=self.layers.len() {
             let Some(this) = at else { break };
-            let Some(layer) = self.layers.iter().find(|l| l.id == this) else { break };
+            let Some(layer) = self.layers.iter().find(|l| l.id == this) else {
+                break;
+            };
             let among = self
                 .layers
                 .iter()
@@ -105,7 +107,14 @@ impl LayerRegistry {
         self.layers
             .iter()
             .enumerate()
-            .filter(|(_, l)| l.is_active(self.is_leaving(window, l.id)) && l.modal)
+            .filter(|(_, l)| {
+                l.is_active(self.is_leaving(window, l.id))
+                    && crate::chrome::surface_node(window, l.id).is_some_and(|n| {
+                        n.base()
+                            .captures_keyboard
+                            .unwrap_or_else(|| heca_grid_ui::holds_keyboard(n))
+                    })
+            })
             // The front-most is the greatest z-path. Paint reads the same order, so the two can no
             // longer disagree about which surface is in front.
             .max_by_key(|(_, l)| self.z_path(l.id))

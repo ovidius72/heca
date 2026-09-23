@@ -37,11 +37,11 @@
 //! write-via-actions* contract — the host's toggle action expands the rail back.
 
 use crate::action::{Action, SignalData};
-use crate::builders::{LayoutExt, Parent, StyleExt};
+use crate::builders::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::style::{Align, Direction, Justify};
 use crate::scene::{Border, Glow};
+use crate::style::Track;
 use crate::widgets::{Flex, Glyph, Icon, Item, Label, RegionMode};
 
 /// Chevron glyphs for expanded / collapsed states.
@@ -70,13 +70,23 @@ const BODY_GAP: f32 = 4.0;
 /// Size (logical px) of the centered glyph shown in [`RegionMode::CollapsedRail`].
 const RAIL_ICON_SIZE: f32 = 22.0;
 
-/// Index of the header (a [`Flex`] row) / body within `base.children`. The rail
-/// icon, when configured via [`DockFrame::rail`], is appended at [`RAIL`].
-const HEADER: usize = 0;
-const BODY: usize = 1;
-const RAIL: usize = 2;
-/// Index of the controls slot within the header row (after the toggle [`Item`]).
-const CONTROLS: usize = 1;
+/// **The frame's parts, named.** Each says which one it is
+/// ([`PlaceExt::area`](crate::builders::PlaceExt::area)) and the frame asks by name through
+/// [`area`](crate::component::area) — never by its position in `children`.
+///
+/// An index is right only for the arrangement it was written for: insert a part and every index
+/// after it is wrong, while nothing fails, because the indices are still valid indices. These used
+/// to be `HEADER = 0`, `BODY = 1`, `RAIL = 2`, `TOGGLE = 0`, `CONTROLS = 1`, documented as an
+/// invariant and asserted at construction — which is the shape a template removes the need for.
+pub const HEADER_AREA: &str = "header";
+/// The dock's content.
+pub const BODY_AREA: &str = "body";
+/// The single glyph shown instead of everything else in [`RegionMode::CollapsedRail`].
+pub const RAIL_AREA: &str = "rail";
+/// The title row's fold toggle.
+pub const TOGGLE_AREA: &str = "toggle";
+/// The title row's slot for a caller's own affordances.
+pub const CONTROLS_AREA: &str = "controls";
 /// A titled, collapsible, bracket-framed container for a Dock.
 pub struct DockFrame {
     base: Base,
@@ -107,6 +117,10 @@ pub struct DockFrame {
     /// tightened — for docks hosted inside an already-framed container (e.g. a
     /// sidebar shell) where per-dock brackets would be a redundant double border.
     frameless: bool,
+    /// The named rows of [`ROWS`], as a stylesheet writes `grid-template-areas`: the title
+    /// then the body. Held rather than made per call because
+    /// [`grid_template`](Component::grid_template) hands out a borrow of it.
+    areas: Vec<String>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -121,41 +135,46 @@ impl DockFrame {
         // Leading slot: drag grip + chevron. Body visibility + chevron are synced
         // in `remeasure`/`event` (which have `&mut self`).
         let leading = Flex::row()
-            .align(Align::Center)
+            .align("center")
             .gap(LEADING_GAP)
             .child(Label::new(GRIP))
             .child(chevron_label);
         // The toggle Item carries the title and flips `expanded` on activate; it
         // grows so the controls slot sits at the right edge.
+        // **Its letter sits on the chevron it folds.**
+        //
+        // Folding a dock is a real act, so it earns one of the 52 — but it was wearing the default
+        // cap in the default place: centred on the title, on top of whatever the dock's own author
+        // declared there (Antonio, driving, 2026-09-14 — two letters stacked on one workspace
+        // header). Top-left puts it over the chevron, which is the thing it operates, and that is
+        // geometry only this widget knows.
+        //
+        // **What the letter MEANS is not this widget's to say** — accent, warning, success are a
+        // vocabulary the app assigns, and a domain-neutral widget picking one of them is the
+        // library deciding app styling. A caller says it with `fold_hint_tone`.
         let toggle = Item::new(title)
             .leading(leading)
             .on_activate(move || expanded.set(!expanded.get_untracked()))
+            .hint_placement(crate::widgets::HintPlacement::TopLeft)
             .grow(1.0);
         // Header row: [toggle (grows), controls slot]. Children — not the toggle
         // Item — so an interactive control (e.g. a search Input) still receives
         // events: `event` routes to the header's children, controls-first.
         let header = Flex::row()
-            .align(Align::Center)
-            .child(toggle)
-            .child(Flex::empty());
+            .align("center")
+            .child(toggle.area(TOGGLE_AREA))
+            .child(Flex::empty().area(CONTROLS_AREA))
+            .area(HEADER_AREA);
 
         // Body holds the dock content; folds out of layout when collapsed.
-        let body = Flex::column().gap(BODY_GAP);
+        let body = Flex::column().gap(BODY_GAP).area(BODY_AREA);
 
         let mut base = Base::new();
-        base.style.layout.direction = Direction::Column;
         // Inset content from the brackets and space the title bar off the body.
-        base.style.layout.padding = CONTENT_PAD;
-        base.style.layout.gap = HEADER_BODY_GAP;
+        base.style.layout.padding = (CONTENT_PAD).into();
+        base.style.layout.gap = (HEADER_BODY_GAP).into();
         base.children.push(Box::new(header));
         base.children.push(Box::new(body));
-        // Invariant relied on by `header`/`child`/`sync` index access below.
-        debug_assert_eq!(base.children.len(), 2, "DockFrame children: [HEADER, BODY]");
-        debug_assert_eq!(
-            base.children[HEADER].base().children.len(),
-            2,
-            "DockFrame header children: [toggle, CONTROLS]"
-        );
         Self {
             base,
             expanded,
@@ -167,6 +186,7 @@ impl DockFrame {
             on_toggle: None,
             rail_mode: None,
             frameless: false,
+            areas: vec![HEADER_AREA.to_string(), BODY_AREA.to_string()],
         }
     }
 
@@ -198,37 +218,45 @@ impl DockFrame {
     /// Fill the header-controls slot — the Dock's own affordances (e.g. a search
     /// field). Interactive controls work: events reach the slot before the toggle.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn header(mut self, c: impl Component + 'static) -> Self {
-        self.base.children[HEADER].base_mut().children[CONTROLS] = Box::new(c);
+    pub fn header(mut self, c: impl crate::builders::IntoComponent) -> Self {
+        let mut fresh = c.into_component();
+        fresh.base_mut().grid_area = Some(CONTROLS_AREA.to_string());
+        if let Some(slot) = crate::component::area_slot(&mut self.base, CONTROLS_AREA) {
+            *slot = fresh;
+        }
         self
     }
 
     /// Append body content (folds away when collapsed). This is also the seam P079(F004)
     /// uses to make the frame draggable via the shipped `drag/` framework.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn child(mut self, c: impl Component + 'static) -> Self {
-        self.base.children[BODY]
+    pub fn child(mut self, c: impl crate::builders::IntoComponent) -> Self {
+        if let Some(body) = crate::component::area_slot(&mut self.base, BODY_AREA) {
+            body.base_mut().children.push(c.into_component());
+        }
+        self
+    }
+
+    /// **What the fold control's letter means**, for the theme to colour.
+    ///
+    /// Folding is a real act, so the toggle earns a letter — but which *class* of target it reads
+    /// as belongs to whoever is assembling the surface, not here: `accent`, `warning` and the rest
+    /// are a vocabulary an app assigns across its own kinds, and a domain-neutral widget claiming
+    /// one of them would be the library deciding app styling.
+    ///
+    /// Unset, the letter takes the picker's own colour, exactly as every letter did before tones
+    /// existed. heca passes `Muted`: a fold is a structural control, not somewhere to navigate to.
+    ///
+    /// ```ignore
+    /// DockFrame::new("Docker").fold_hint_tone(HintTone::Muted)
+    /// ```
+    #[heca_grid_ui_macros::prop]
+    pub fn fold_hint_tone(mut self, tone: crate::widgets::HintTone) -> Self {
+        crate::component::area_slot(&mut self.base, TOGGLE_AREA)
+            .expect("the title row always holds its toggle")
             .base_mut()
-            .children
-            .push(Box::new(c));
-        self
-    }
-
-    /// [`header`](DockFrame::header) for an **already-boxed** child — what a host mapper has after
-    /// realizing a declarative subtree. `Box<dyn Component>` is not itself `Component`, so it cannot
-    /// go through the `impl Component` setters; same seam as
-    /// [`Dialog::body_boxed`](super::Dialog::body_boxed).
-    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn header_boxed(mut self, c: Box<dyn Component>) -> Self {
-        self.base.children[HEADER].base_mut().children[CONTROLS] = c;
-        self
-    }
-
-    /// [`child`](DockFrame::child) for an already-boxed component — see
-    /// [`header_boxed`](DockFrame::header_boxed).
-    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
-    pub fn child_boxed(mut self, c: Box<dyn Component>) -> Self {
-        self.base.children[BODY].base_mut().children.push(c);
+            .hint_style
+            .tone = Some(tone);
         self
     }
 
@@ -295,12 +323,18 @@ impl DockFrame {
         self.rail_mode = Some(mode);
         // Stretch the wrapper across the rail's width and center the glyph in it.
         let icon = Flex::row()
-            .justify(Justify::Center)
+            .justify("center")
             .child(Icon::new(glyph).size(RAIL_ICON_SIZE));
-        if self.base.children.len() > RAIL {
-            self.base.children[RAIL] = Box::new(icon);
-        } else {
-            self.base.children.push(Box::new(icon));
+        // The rail replaces everything, so it covers both tracks. It is not in the template's
+        // areas — it is not a third part beside the other two, it is what is there instead of
+        // them — so it says where it sits itself.
+        let icon = icon
+            .area(RAIL_AREA)
+            .row(1)
+            .row_span(crate::style::Span::All);
+        match crate::component::area_slot(&mut self.base, RAIL_AREA) {
+            Some(slot) => *slot = Box::new(icon),
+            None => self.base.children.push(Box::new(icon)),
         }
         self.sync();
         self
@@ -315,11 +349,14 @@ impl DockFrame {
         let rail = self
             .rail_mode
             .is_some_and(|m| m.get_untracked() == RegionMode::CollapsedRail);
-        self.base.children[HEADER].base_mut().set_hidden(rail);
-        self.base.children[BODY].base_mut().set_hidden(rail || !open);
-        if self.base.children.len() > RAIL {
-            self.base.children[RAIL].base_mut().set_hidden(!rail);
-        }
+        let hide = |base: &mut Base, name: &str, hidden: bool| {
+            if let Some(part) = crate::component::area_slot(base, name) {
+                part.base_mut().set_hidden(hidden);
+            }
+        };
+        hide(&mut self.base, HEADER_AREA, rail);
+        hide(&mut self.base, BODY_AREA, rail || !open);
+        hide(&mut self.base, RAIL_AREA, !rail);
         // Tighten the frame inset in the rail so the icon fits the thin column;
         // frameless docks tighten too since there are no brackets to clear.
         self.base.style.layout.padding = if rail {
@@ -328,7 +365,8 @@ impl DockFrame {
             FRAMELESS_PAD
         } else {
             CONTENT_PAD
-        };
+        }
+        .into();
     }
 }
 
@@ -336,11 +374,38 @@ fn chevron_for(open: bool) -> &'static str {
     if open { CHEVRON_OPEN } else { CHEVRON_CLOSED }
 }
 
+/// **The frame's shape, as a stylesheet would write it: a title at its own height over a body
+/// that takes the rest.**
+///
+/// It used to be a flex column, which meant the body sized to its rows — so a dock given half a
+/// sidebar drew a 914px body inside a 450px frame, its rows ran off the bottom, and its own scroll
+/// area, handed more height than it held, had nothing left to scroll. `1fr` is the whole of that:
+/// what the title leaves, and no more, whatever is inside it.
+const ROWS: [Track; 2] = [Track::Auto, Track::Fr(1.0)];
+
 impl Component for DockFrame {
     /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
     /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
     fn wants_visible(&self) -> bool {
         self.nav.get_untracked() || self.base.focused_by_keyboard()
+    }
+
+    /// The frame arranges its parts; [`ROWS`] says how.
+    fn taffy_style(&self) -> taffy::Style {
+        self.base
+            .style
+            .layout
+            .to_taffy_grid(self.base.font, &[], &ROWS)
+    }
+
+    /// **The header and the body are placed by NAME, against this.** The column track is left
+    /// unsaid on purpose: an implicit track fills, so the frame's parts are as wide as the frame.
+    fn grid_template(&self) -> Option<crate::style::GridTemplate<'_>> {
+        Some(crate::style::GridTemplate {
+            columns: &[],
+            rows: &ROWS,
+            areas: &self.areas,
+        })
     }
 
     fn base(&self) -> &Base {
@@ -368,7 +433,12 @@ impl Component for DockFrame {
         // (StyleExt) wins; otherwise the theme rest glow gives the frame the
         // shared neon identity at rest, scaled by `glow_size` (T011).
         if let Some(f) = fill {
-            let glow = self.base.style.visual.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
+            let glow = self
+                .base
+                .style
+                .visual
+                .glow
+                .or_else(|| cx.rest_glow(GLOW_RADIUS));
             cx.rect(b, f, None, radius, glow);
         }
 
@@ -386,7 +456,13 @@ impl Component for DockFrame {
             // siblings in exactly the workspace it was meant to be found in (Antonio, driving, both
             // dark themes, 2026-08-13). So this is derived from `active_wash_alpha`, the theme's own
             // answer for how faint a container hint is, and sits below it.
-            cx.rect(b, cx.theme().colors.effective_workspace_previous_background(), None, radius, None);
+            cx.rect(
+                b,
+                cx.theme().colors.effective_workspace_previous_background(),
+                None,
+                radius,
+                None,
+            );
         }
         if self.active.get_untracked() {
             // **A faint WASH of the selected colour — never the panel itself.**
@@ -398,7 +474,13 @@ impl Component for DockFrame {
             // only the column's marker bar still said which row it was (Antonio, driving, with
             // three themes, 2026-08-13). `active_wash_alpha` is the theme's own answer to how
             // faint a container hint should be.
-            cx.rect(b, cx.theme().colors.effective_workspace_active_background(), None, radius, None);
+            cx.rect(
+                b,
+                cx.theme().colors.effective_workspace_active_background(),
+                None,
+                radius,
+                None,
+            );
         }
 
         // Nav-cursor outline — a thick border + faint fill marking the cursor on this frame.
@@ -413,7 +495,13 @@ impl Component for DockFrame {
         if self.nav.get_untracked() {
             let (cursor_c, glow, border_w, nav_wash, nav_outline) = {
                 let t = cx.theme();
-                (t.colors.accent, t.colors.glow, t.focus_border_width, t.colors.interaction.nav_wash, t.colors.interaction.nav_outline)
+                (
+                    cx.accent(),
+                    t.colors.glow,
+                    t.focus_border_width,
+                    t.colors.interaction.nav_wash,
+                    t.colors.interaction.nav_outline,
+                )
             };
             cx.rect(
                 b,
@@ -423,7 +511,11 @@ impl Component for DockFrame {
                     width: (border_w * 2.0).max(2.5),
                 }),
                 radius,
-                Some(Glow { color: glow, radius: 8.0, intensity: 0.25 }),
+                Some(Glow {
+                    color: glow,
+                    radius: 8.0,
+                    intensity: 0.25,
+                }),
             );
         }
 

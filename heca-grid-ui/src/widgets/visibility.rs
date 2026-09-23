@@ -5,6 +5,21 @@ use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{Signal, SignalGet, signal};
 
 /// A wrapper that toggles one child's layout and paint presence from a boolean signal.
+///
+/// # Attach it always
+///
+/// A `Visibility` is what lets a line be **in the tree while it has nothing to say**, so put it in
+/// the tree unconditionally and let its signal decide. Adding it only when its content already
+/// exists cannot work: a signal reveals a child, it cannot create one, and a tree that is not
+/// rebuilt when the content arrives never gets a second chance. In heca that is exactly how a
+/// pane's directory line behaved — the shell reports a directory *after* the row is on screen, so
+/// whether a pane showed its path came down to whether the answer had arrived by the instant that
+/// row was built, and neighbouring rows disagreed.
+///
+/// It follows that **nothing may wrap it**. An inset, an alignment box or a spacer put around a
+/// `Visibility` is a visible widget holding an invisible one: it keeps its own box and its parent
+/// still spends a gap on it, which is the empty strip that makes hiding look broken. Put that
+/// decoration on the child *inside*, as padding, so it disappears with the line.
 pub struct Visibility {
     base: Base,
     visible: Signal<bool>,

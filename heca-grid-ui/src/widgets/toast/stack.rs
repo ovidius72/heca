@@ -69,6 +69,12 @@ fn showing(card: &dyn Component) -> bool {
         .unwrap_or(true)
 }
 
+/// **What a card's action button reports** — which toast, and which of its actions by name.
+///
+/// Named because the shape is what a reader trips over, not the callback: `Rc<dyn Fn(u64, &str)>`
+/// says nothing about which number is the toast and which string is the action.
+type OnToastAction = Rc<dyn Fn(u64, &str)>;
+
 /// An overlay that stacks host-supplied toasts in a corner. Presentation only.
 pub struct ToastStack {
     base: Base,
@@ -77,7 +83,7 @@ pub struct ToastStack {
     gap: f32,
     margin: f32,
     on_dismiss: Option<Rc<dyn Fn(u64)>>,
-    on_action: Option<Rc<dyn Fn(u64, &str)>>,
+    on_action: Option<OnToastAction>,
     /// **Is the pointer resting on one of the cards** — see [`hovered_signal`](Self::hovered_signal).
     hovered: Option<Signal<bool>>,
     /// One per child, same index — see [`Slot`].
@@ -106,8 +112,8 @@ impl ToastStack {
         base.style.layout.width = Length::Auto;
         base.style.layout.height = Length::Auto;
         base.style.layout.direction = Direction::Column;
-        base.style.layout.padding = DEFAULT_MARGIN;
-        base.style.layout.gap = DEFAULT_GAP;
+        base.style.layout.padding = (DEFAULT_MARGIN).into();
+        base.style.layout.gap = (DEFAULT_GAP).into();
         let mut stack = Self {
             base,
             items,
@@ -140,7 +146,7 @@ impl ToastStack {
     #[heca_grid_ui_macros::prop]
     pub fn gap(mut self, gap: f32) -> Self {
         self.gap = gap;
-        self.base.style.layout.gap = gap;
+        self.base.style.layout.gap = (gap).into();
         self
     }
 
@@ -148,7 +154,7 @@ impl ToastStack {
     #[heca_grid_ui_macros::prop]
     pub fn margin(mut self, margin: f32) -> Self {
         self.margin = margin;
-        self.base.style.layout.padding = margin;
+        self.base.style.layout.padding = (margin).into();
         self
     }
 
@@ -262,7 +268,7 @@ impl ToastStack {
         // 1. A card the host has dropped is asked to leave. Once, on the frame its id goes.
         for (slot, card) in self.slots.iter_mut().zip(self.base.children.iter_mut()) {
             if !slot.leaving && !specs.iter().any(|s| s.id == slot.id) {
-                card.hide();
+                card.close();
                 slot.leaving = true;
             }
         }
@@ -273,8 +279,11 @@ impl ToastStack {
         // 3. A spec with no card yet gets one, closed, so its arrival plays.
         for spec in &specs {
             if !self.slots.iter().any(|s| s.id == spec.id) {
-                let card = self.build(spec).opened(false);
-                self.slots.push(Slot { id: spec.id, leaving: false });
+                let card = self.build(spec).default_open(false);
+                self.slots.push(Slot {
+                    id: spec.id,
+                    leaving: false,
+                });
                 self.base.children.push(Box::new(card));
                 // A new card has to be measured and placed before it can arrive.
                 self.base.mark_needs_layout();
@@ -283,10 +292,17 @@ impl ToastStack {
 
         // 4. The live cards take the host's order; the leaving ones hold the slots they are in.
         let mut order: Vec<usize> = (0..self.slots.len()).collect();
-        let live: Vec<usize> = order.iter().copied().filter(|&i| !self.slots[i].leaving).collect();
+        let live: Vec<usize> = order
+            .iter()
+            .copied()
+            .filter(|&i| !self.slots[i].leaving)
+            .collect();
         let mut wanted: Vec<usize> = live.clone();
         wanted.sort_by_key(|&i| {
-            specs.iter().position(|s| s.id == self.slots[i].id).unwrap_or(usize::MAX)
+            specs
+                .iter()
+                .position(|s| s.id == self.slots[i].id)
+                .unwrap_or(usize::MAX)
         });
         for (at, from) in live.iter().zip(wanted) {
             order[*at] = from;
@@ -296,7 +312,8 @@ impl ToastStack {
             let mut cards: Vec<Option<Box<dyn Component>>> =
                 self.base.children.drain(..).map(Some).collect();
             for from in order {
-                self.slots.push(slots[from].take().expect("each index is used once"));
+                self.slots
+                    .push(slots[from].take().expect("each index is used once"));
                 self.base
                     .children
                     .push(cards[from].take().expect("each index is used once"));
@@ -307,7 +324,7 @@ impl ToastStack {
         //    reconcile, which is what plays its arrival rather than cutting it in.
         for (slot, card) in self.slots.iter_mut().zip(self.base.children.iter_mut()) {
             if !slot.leaving && !showing(card.as_ref()) {
-                card.open();
+                card.show();
             }
         }
     }

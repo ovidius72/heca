@@ -116,7 +116,12 @@ impl Component for Alert {
         }
         let (foreground, muted, radius, tag_fill) = {
             let t = cx.theme();
-            (t.colors.foreground, t.colors.muted, t.colors.control_radius(), t.colors.interaction.tag_fill)
+            (
+                t.colors.foreground,
+                t.colors.muted,
+                t.colors.control_radius(),
+                t.colors.interaction.tag_fill,
+            )
         };
         let title_fs = self.base.font;
         let body_fs = self.base.font * BODY_SCALE;

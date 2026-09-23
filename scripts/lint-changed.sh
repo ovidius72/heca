@@ -3,6 +3,7 @@
 #
 #   scripts/lint-changed.sh              # clippy the changed crates
 #   scripts/lint-changed.sh test         # test the changed crates
+#   scripts/lint-changed.sh fmt          # check formatting of the changed crates
 #   scripts/lint-changed.sh clippy main  # diff against a different base
 #
 # Falls back to the whole workspace only if it cannot work out the base.
@@ -57,6 +58,53 @@ if [ -z "$pkgs" ]; then
 fi
 
 args=(); while read -r p; do args+=(-p "$p"); done <<< "$pkgs"
-echo "==> cargo $CMD ${args[*]} --all-targets"
+
+# `--all-targets` covers lib, bins, tests, benches and examples -- but NOT doctests. So for years
+# this gate ran none of them: every `///` example in the workspace was unverified, including the
+# runnable native + declarative examples AGENTS.md makes mandatory for every widget. Found when a
+# broken one passed this gate four times in a row (F003/P097/T501).
+#
+# Doctests need their own invocation, so `test` is two runs and the exit code is the worse of them.
+if [ "$CMD" = "test" ]; then
+  echo "==> cargo test ${args[*]} --all-targets"
+  echo "==> cargo test ${args[*]} --doc"
+  [ -n "${DRY_RUN:-}" ] && exit 0
+  cargo test "${args[@]}" --all-targets; targets=$?
+  # `--doc` is refused outright when no selected crate is a library (a bins-only selection), which
+  # is not a failure -- there is simply nothing to run.
+  doc_out=$(cargo test "${args[@]}" --doc 2>&1); doc=$?
+  printf '%s\n' "$doc_out"
+  if [ $doc -ne 0 ] && grep -q "no library targets found" <<< "$doc_out"; then
+    doc=0
+  fi
+  [ $targets -ne 0 ] && exit $targets
+  exit $doc
+fi
+
+# **Formatting is asked of the CRATE, never of a file.**
+#
+# `rustfmt <file>` treats that file as its own root, and `rustfmt <crate root>` follows every `mod`
+# and formats the whole crate — and the two do not agree. Checking files one at a time said this
+# workspace was clean while `rustfmt lib.rs` rewrote 83 of them, all of it trailing commas and line
+# wrapping inside test modules. `cargo fmt` asks the crate, which is the answer that counts.
+#
+# It was also simply missing: this gate ran clippy and tests and never once looked at formatting,
+# which is why nobody knew the two answers differed.
+if [ "$CMD" = "fmt" ]; then
+  echo "==> cargo fmt ${args[*]} --check"
+  [ -n "${DRY_RUN:-}" ] && exit 0
+  exec cargo fmt "${args[@]}" --check
+fi
+
+# **A warning fails the gate.**
+#
+# It used to print them and exit 0, so "clean" meant whatever the reader had grepped for — and a
+# dead constant sat in `chrome/mod.rs` through a green run because the eye that checked was looking
+# for `error`. AGENTS.md already said to grep for `warning:` as well; a rule a reader has to
+# remember is the bug. `-D warnings` makes the exit code say it.
+#
+# Nothing is allowed through: the one warning this workspace used to carry (a complex type in
+# `toast/stack.rs`) was given a name instead of an exemption.
+echo "==> cargo $CMD ${args[*]} --all-targets -- -D warnings"
 [ -n "${DRY_RUN:-}" ] && exit 0
-exec cargo "$CMD" "${args[@]}" --all-targets
+exec cargo "$CMD" "${args[@]}" --all-targets -- -D warnings
