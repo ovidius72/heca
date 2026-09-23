@@ -47,6 +47,15 @@ fn say_once(message: String) {
     });
 }
 
+/// **Tell whoever is building the UI something is wrong, once.**
+///
+/// The same channel the unkeyed-collection warning uses, for the same audience: an author writing
+/// chrome or a plugin, who can fix it. Repeated silently, so a message from a tree rebuilt every
+/// frame is said once and not sixty times a second.
+pub(crate) fn warn_author(message: String) {
+    say_once(message);
+}
+
 /// Warn about every collection in `root` whose items were never keyed — two or more unkeyed
 /// siblings that derive the same name, so nothing can tell them apart.
 ///

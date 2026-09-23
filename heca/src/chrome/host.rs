@@ -27,6 +27,14 @@ use crate::providers::{ChromeCtx, Provider, ProviderHandles};
 
 /// A provider seated in a region, with its activation handles once activated.
 pub struct MountedContribution {
+    /// **This seating's own name**, given by the host when it seated it.
+    ///
+    /// Usually the provider's id. When that id is already seated somewhere, the host numbers this
+    /// one — so putting the same dock in both sidebars is two working placements, each with its own
+    /// cursor, scroll position and letter, and **the caller names nothing**. It used to be written
+    /// by hand at the call site (`::named("workspaces.right")`), which meant a plugin author placing
+    /// a dock twice had to invent an id and know why.
+    id: ContainerId,
     provider: Box<dyn Provider>,
     /// `Some` once [`Provider::on_activate`] has run (plugin-03 wiring); the held
     /// subscriptions live as long as this stays mounted.
@@ -34,9 +42,9 @@ pub struct MountedContribution {
 }
 
 impl MountedContribution {
-    /// The container's stable id (== its provider id).
+    /// **This seating's own name** — see [`id`](Self::id).
     pub fn id(&self) -> &str {
-        self.provider.id()
+        &self.id
     }
 
     /// Human title.
@@ -179,7 +187,7 @@ impl ChromeHost {
     /// Seat one container in `region` — the one place a container enters the host, whether it came
     /// from [`Region::child`](super::Region::child) or from its own default region.
     fn seat(&mut self, region: RegionId, provider: Box<dyn Provider>) {
-        let id = provider.id().to_string();
+        let id = self.free_mount_id(provider.id());
         debug_assert!(
             provider.supported_regions().contains(region),
             "a container was seated in a region it does not support: '{}' in {:?}, supports {:?}",
@@ -188,11 +196,37 @@ impl ChromeHost {
             provider.supported_regions(),
         );
         let mc = MountedContribution {
+            id: id.clone(),
             provider,
             handles: None,
         };
         self.regions[region.index()].insert_ordered(mc);
         self.placement.insert(id, region);
+    }
+
+    /// **A name nobody else is using**, from the one the provider gave.
+    ///
+    /// The first seating of a container keeps its own id, so every existing name, binding and
+    /// config line still means what it meant. A second is `workspaces.2`, a third `workspaces.3`.
+    /// The host does this because it is the only thing that knows what is already seated — asking
+    /// the caller to know it is how `::named("workspaces.right")` ended up written in the app and
+    /// would have had to be written again by every plugin.
+    fn free_mount_id(&self, wanted: &str) -> ContainerId {
+        if !self.placement.contains_key(wanted) {
+            return wanted.to_string();
+        }
+        // **Say so.** A name is how everything else refers to this seating — a keybinding, the
+        // action registry, `focus_dock`, RPC — so two placements answering to one name is a
+        // mistake, not a shorthand. The app keeps working under a name the host picks, but that
+        // name is not one the author chose, so nothing they write can reach it.
+        super::identity::warn_author(format!(
+            "[heca] a second container is already named '{wanted}' — give this placement its own \
+             name, or nothing you write in config or a keybinding can refer to it",
+        ));
+        (2..)
+            .map(|n| format!("{wanted}.{n}"))
+            .find(|candidate| !self.placement.contains_key(candidate))
+            .expect("the range is unbounded, so some number is free")
     }
 
     /// **Take whatever [`Region::child`] has queued** and seat it.
@@ -392,10 +426,10 @@ mod region_child_tests {
     fn a_region_takes_one_container_or_several_and_the_host_seats_them() {
         let _ = crate::chrome::events::take_pending(); // start from empty
 
-        Region::LeftSidebar.child(WorkspacesContainerProvider::named("one"));
+        Region::LeftSidebar.child(WorkspacesContainerProvider::new("one"));
         Region::RightSidebar.child([
-            WorkspacesContainerProvider::named("two"),
-            WorkspacesContainerProvider::named("three"),
+            WorkspacesContainerProvider::new("two"),
+            WorkspacesContainerProvider::new("three"),
         ]);
 
         let mut host = ChromeHost::new(ChromeEventBus::default());
@@ -432,7 +466,7 @@ mod region_child_tests {
         Region::LeftSidebar
             .template_row("1fr 1fr")
             .gap("sm")
-            .child(WorkspacesContainerProvider::named("a"));
+            .child(WorkspacesContainerProvider::new("a"));
 
         let mut host = ChromeHost::new(ChromeEventBus::default());
         host.mount_pending();
@@ -454,7 +488,7 @@ mod region_child_tests {
     #[test]
     fn a_container_named_before_the_host_existed_is_still_seated() {
         let _ = crate::chrome::events::take_pending();
-        Region::RightSidebar.child(WorkspacesContainerProvider::named("early"));
+        Region::RightSidebar.child(WorkspacesContainerProvider::new("early"));
 
         // The host is built only now, after the call above.
         let mut host = ChromeHost::new(ChromeEventBus::default());
@@ -465,6 +499,44 @@ mod region_child_tests {
 
 #[cfg(test)]
 mod tests {
+
+    /// **Two placements never answer to one name.**
+    ///
+    /// A name is how everything else refers to a seating — a keybinding, the action registry,
+    /// `focus_dock`, RPC. Two of them under one name means one is unreachable, and the reference
+    /// the author wrote lands on whichever the host happened to find first. Saying so is
+    /// `warn_author`; the app keeps running under a name the host picked, which is deliberately
+    /// not a name anything can refer to.
+    #[test]
+    fn seating_one_container_twice_gives_each_placement_its_own_name() {
+        let mut host = ChromeHost::new(ChromeEventBus::default());
+        let dock = |region| {
+            Box::new(TestProvider::new(
+                "workspaces",
+                RegionSet::sidebars(),
+                region,
+                0,
+            )) as Box<dyn Provider>
+        };
+        host.seat(RegionId::LeftSidebar, dock(RegionId::LeftSidebar));
+        host.seat(RegionId::RightSidebar, dock(RegionId::RightSidebar));
+        host.seat(RegionId::LeftSidebar, dock(RegionId::LeftSidebar));
+
+        let names: Vec<&str> = RegionId::ALL
+            .iter()
+            .flat_map(|r| host.contributions(*r).iter().map(|m| m.id()))
+            .collect();
+        assert_eq!(
+            names.iter().collect::<std::collections::HashSet<_>>().len(),
+            3,
+            "three placements, three names: {names:?}",
+        );
+        assert!(
+            names.contains(&"workspaces"),
+            "the first keeps the id it was given, so existing bindings and config still mean what \
+             they meant: {names:?}",
+        );
+    }
     use super::*;
     use crate::chrome::{Contribution, RegionSet};
     use std::cell::RefCell;

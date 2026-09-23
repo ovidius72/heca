@@ -190,6 +190,26 @@ mod tests {
         );
     }
 
+    /// **The same dock seated twice is two destinations.**
+    ///
+    /// Named by the container alone both mounts answered to `workspaces`, so a letter offered to
+    /// that name reached both trees: the pick handed out two letters and drew one.
+    #[test]
+    fn a_dock_seated_in_two_regions_gets_a_letter_each() {
+        let host = host(vec![
+            Dock::new("workspaces", RegionId::LeftSidebar, true),
+            Dock::new("workspaces.right", RegionId::RightSidebar, true),
+        ]);
+        assert_eq!(
+            dock_candidates(&host, everywhere),
+            vec![
+                ('a', "workspaces".to_string()),
+                ('s', "workspaces.right".to_string()),
+            ],
+            "one letter per placement, and each names the placement it belongs to",
+        );
+    }
+
     #[test]
     fn a_dock_in_a_region_that_is_not_drawn_gets_no_letter() {
         let host = host(vec![

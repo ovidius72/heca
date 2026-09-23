@@ -55,23 +55,21 @@ pub struct WorkspacesContainerProvider {
 
 impl WorkspacesContainerProvider {
     /// This container, under its own name.
-    pub fn new() -> Self {
-        Self::named("workspaces")
-    }
-
     /// **Name this placement.** Everything that belongs to one seating keys off it — the cursor,
     /// the scroll offset, whether it holds chrome focus — so two of these are two placements of one
     /// container, not two containers.
     ///
-    /// Where it sits is said by whoever puts it somewhere:
-    /// `Region::RightSidebar.child(WorkspacesContainerProvider::named("workspaces.right"))`. It
-    /// used to be an argument here, which had the container declaring its own parent.
+    /// It is required, because a name is how everything else refers to this seating: a keybinding,
+    /// the action registry, `focus_dock`, RPC. A placement the host had to name for you is one
+    /// nothing you write can reach.
     ///
-    /// The **content is the same either way**: the workspaces come from the shared store, exactly as
-    /// two renders of one component show the same data.
-    pub fn named(id: impl Into<String>) -> Self {
+    /// ```ignore
+    /// Region::LeftSidebar.child(Workspaces::new("workspaces"));
+    /// Region::RightSidebar.child(Workspaces::new("workspaces.right"));
+    /// ```
+    pub fn new(name: impl Into<String>) -> Self {
         Self {
-            id: id.into(),
+            id: name.into(),
             region: RegionId::LeftSidebar,
         }
     }
@@ -79,7 +77,7 @@ impl WorkspacesContainerProvider {
 
 impl Default for WorkspacesContainerProvider {
     fn default() -> Self {
-        Self::new()
+        Self::new("workspaces")
     }
 }
 
@@ -1045,7 +1043,7 @@ mod tests {
 
     #[test]
     fn it_declares_only_what_acts_on_its_own_cursor() {
-        let declared: Vec<String> = WorkspacesContainerProvider::new()
+        let declared: Vec<String> = WorkspacesContainerProvider::new("workspaces")
             .actions()
             .into_iter()
             .map(|m| m.name)
@@ -1079,7 +1077,7 @@ mod tests {
     #[test]
     fn the_cursor_moves_over_the_components_own_rows() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
         let first = store.workspaces.tree().cursor;
@@ -1098,7 +1096,7 @@ mod tests {
     #[test]
     fn moving_the_cursor_publishes_it_for_this_mount() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
         p.perform(CURSOR_DOWN, &Intent::new(CURSOR_DOWN), &mut cx);
@@ -1120,7 +1118,7 @@ mod tests {
     #[test]
     fn activating_a_row_asks_the_host_rather_than_acting() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
 
         let mut cx = ProviderCx::new("workspaces", store.clone());
         p.perform(ACTIVATE_SELECTED, &Intent::new(ACTIVATE_SELECTED), &mut cx);
@@ -1148,7 +1146,7 @@ mod tests {
     #[test]
     fn a_click_moves_the_cursor_so_stepping_continues_from_it() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
         // The fixture's rows are the workspace and its one pane; aim at the pane.
@@ -1182,7 +1180,7 @@ mod tests {
     #[test]
     fn a_key_this_component_did_not_write_leaves_the_cursor_alone() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
         let before = store.workspaces.tree().cursor;
 
@@ -1203,7 +1201,7 @@ mod tests {
     #[test]
     fn hint_and_activate_differ_only_by_the_release_they_ask_for() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
 
         // Park the cursor on the pane: the workspace row takes the `focus_workspace` arm, which
         // never releases either way, so it cannot tell the two verbs apart.
@@ -1252,7 +1250,7 @@ mod tests {
     #[test]
     fn a_hint_can_be_aimed_at_a_row_by_key_and_moves_the_cursor_there() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
         // The cursor starts on the workspace row; aim at the pane row instead.
@@ -1293,7 +1291,7 @@ mod tests {
     /// activates the pane but the keyboard goes to the terminal"*.
     #[test]
     fn a_hint_from_outside_the_dock_asks_for_the_keyboard_and_from_inside_does_not() {
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
 
         // Nothing holds chrome focus (the keyboard is in a pane).
         let away = store();
@@ -1325,7 +1323,7 @@ mod tests {
     #[test]
     fn an_aimed_hint_with_a_stale_key_leaves_the_cursor_where_it_was() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
         let before = store.workspaces.tree().cursor;
 
@@ -1394,7 +1392,7 @@ mod tests {
     #[test]
     fn rename_selected_targets_the_cursor_row_by_id() {
         let store = store_with_tree("workspaces");
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
         let intent = Intent::new(RENAME_SELECTED);
 
@@ -1418,7 +1416,7 @@ mod tests {
         let store = store_with_tree("workspaces");
         let mut cx = ProviderCx::new("workspaces", store);
         assert_eq!(
-            WorkspacesContainerProvider::new().perform(
+            WorkspacesContainerProvider::new("workspaces").perform(
                 "docker.restart_selected",
                 &Intent::new("docker.restart_selected"),
                 &mut cx,
@@ -1429,7 +1427,7 @@ mod tests {
 
     #[test]
     fn provider_metadata_is_self_consistent() {
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         assert_eq!(p.id(), "workspaces");
         assert_eq!(p.title(), "Workspaces");
         assert_eq!(p.default_region(), RegionId::LeftSidebar);
@@ -1443,7 +1441,7 @@ mod tests {
     #[test]
     fn register_seats_in_left_sidebar_at_order_zero() {
         let mut host = ChromeHost::new(ChromeEventBus::default());
-        host.register(Box::new(WorkspacesContainerProvider::new()));
+        host.register(Box::new(WorkspacesContainerProvider::new("workspaces")));
         // Seated in the left sidebar (its default_region), not the right.
         let left = host.contributions(RegionId::LeftSidebar);
         assert_eq!(left.len(), 1);
@@ -1455,7 +1453,7 @@ mod tests {
 
     #[test]
     fn contribution_carries_the_provider_metadata() {
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let ctx = ChromeCtx::new(crate::host::App::new(&store()));
         let c = container(&p, &ctx);
         assert_eq!(c.id, "workspaces");
@@ -1474,7 +1472,7 @@ mod tests {
         // child per workspace, and — the part a placeholder could never fake — the
         // drag and hint ids the interactive rows need, allocated in the host's
         // registries.
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let theme = GuiTheme::default();
         let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
             crate::app::interaction::InteractionSource::Keyboard,
@@ -1519,7 +1517,7 @@ mod tests {
     /// rebuilt constantly.
     #[test]
     fn every_pick_target_in_the_sidebar_can_be_found_again_by_its_identity() {
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let theme = GuiTheme::default();
         let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
             crate::app::interaction::InteractionSource::Keyboard,
@@ -1560,7 +1558,7 @@ mod tests {
     /// remembered, so it takes a fresh letter every time.
     #[test]
     fn no_two_pick_targets_in_the_sidebar_share_an_identity() {
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let theme = GuiTheme::default();
         let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
             crate::app::interaction::InteractionSource::Keyboard,
@@ -1625,7 +1623,7 @@ mod tests {
         use super::testing::pane;
         use heca_core::layout::PaneId;
 
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let theme = GuiTheme::default();
         let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
             crate::app::interaction::InteractionSource::Keyboard,
@@ -1684,7 +1682,7 @@ mod tests {
     #[test]
     fn a_rows_gesture_is_a_named_intent_and_a_pick_is_its_own_gesture() {
         use crate::app::interaction::InteractionIntent;
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let theme = GuiTheme::default();
         let fired: Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
         let emit: ChromeIntentEmitter = {
@@ -1763,7 +1761,7 @@ mod tests {
         use crate::providers::SEAT_ARG;
 
         let seats = |mount: &str| {
-            let p = WorkspacesContainerProvider::new();
+            let p = WorkspacesContainerProvider::new("workspaces");
             let theme = GuiTheme::default();
             let fired: Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
             let emit: ChromeIntentEmitter = {
@@ -1814,7 +1812,7 @@ mod tests {
     fn build_outside_a_render_pass_yields_an_empty_body() {
         // An observe-only context has no tree/theme/emitter to project. Building is
         // still legal (a host may want the metadata) and must not panic.
-        let p = WorkspacesContainerProvider::new();
+        let p = WorkspacesContainerProvider::new("workspaces");
         let store = store();
         let ctx = ChromeCtx::new(crate::host::App::new(&store));
         let c = container(&p, &ctx);
