@@ -1,5 +1,5 @@
 {
-  "nextIdeaNumber": 6,
+  "nextIdeaNumber": 7,
   "ideas": [
     {
       "id": "cdc1a35d-f07a-4b94-855f-ab7bd49cc792",
@@ -20,6 +20,16 @@
       "promotion": null,
       "createdAt": "2026-09-17T19:28:41.211Z",
       "updatedAt": "2026-09-17T19:28:41.211Z"
+    },
+    {
+      "id": "edb813cc-8597-4144-b46b-6b6261f444ae",
+      "number": 6,
+      "shortId": "H2TUP",
+      "title": "A pane's actions and segments are a closed enum — nobody but the host can add one",
+      "description": "Raised by Antonio 2026-09-22 while deciding the region API (P082(F003)/T518). Leave the code as it is for now; this records what is wrong and the shape agreed for the fix.\n\nTHE DEFECT\n`PaneAction` (Split, MoveLeft, MoveRight, Close, Zoom, Float) and `PaneSegment` (Location, AppName, PaneName, GitBranch, …) are closed Rust enums in `heca-config/src/appearance.rs`. `config.toml` picks from that list BY NAME, which reads like an open vocabulary and is not: a plugin cannot add an action or a segment at all, because there is no variant for it. Adding one means editing the host and recompiling it.\n\nThe pane header consumes them in `heca/src/chrome/pane_header.rs` — `content.actions` is `&[PaneAction]`, and `pane_action_spec` maps each variant to a glyph, a `WmAction`, a label and a focus rule.\n\nWHY IT IS THE SAME DEFECT AS REGIONS\nA fixed list the host owns, selected from by name, with no way for anyone else to contribute. That is exactly what T518 removes for a chrome region. Antonio, 2026-09-22: a plugin or another developer should add a pane action the way a provider is added to a sidebar —\n\n    pane_actions::append(..).prepend(..).remove(..).retain(..)\n\nand the same for segments. Internally that checks what `config.toml` asked for and builds the keys and ids itself, so no caller composes one.\n\nTHE ORDER, DECIDED\nT518 (the region API) lands first and this reuses its shape — a handle fetched by name, `append`/`prepend`/`remove`/`retain`, placement and `.order` carried by the child, no index methods. Building this before T518 would write the same mechanism twice.\n\nWHAT IT TOUCHES\n- `heca-config/src/appearance.rs` — the two enums stop being the vocabulary. A configured name becomes a name, resolved against what was contributed.\n- `heca/src/chrome/pane_header.rs` — `pane_action_spec`'s match is one contributor among others, not the whole list.\n- The identity work in T474: an action's widget key is composed from the pane it belongs to plus the action's name, so a contributed action gets a correct key without its author knowing the rule.\n\n⚠️ Not a licence to start. Propose the task and agree it when T518 is done.",
+      "promotion": null,
+      "createdAt": "2026-09-22T12:30:05.651Z",
+      "updatedAt": "2026-09-22T12:30:05.651Z"
     }
   ]
 }
