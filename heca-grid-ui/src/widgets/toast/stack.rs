@@ -69,6 +69,12 @@ fn showing(card: &dyn Component) -> bool {
         .unwrap_or(true)
 }
 
+/// **What a card's action button reports** — which toast, and which of its actions by name.
+///
+/// Named because the shape is what a reader trips over, not the callback: `Rc<dyn Fn(u64, &str)>`
+/// says nothing about which number is the toast and which string is the action.
+type OnToastAction = Rc<dyn Fn(u64, &str)>;
+
 /// An overlay that stacks host-supplied toasts in a corner. Presentation only.
 pub struct ToastStack {
     base: Base,
@@ -77,7 +83,7 @@ pub struct ToastStack {
     gap: f32,
     margin: f32,
     on_dismiss: Option<Rc<dyn Fn(u64)>>,
-    on_action: Option<Rc<dyn Fn(u64, &str)>>,
+    on_action: Option<OnToastAction>,
     /// **Is the pointer resting on one of the cards** — see [`hovered_signal`](Self::hovered_signal).
     hovered: Option<Signal<bool>>,
     /// One per child, same index — see [`Slot`].

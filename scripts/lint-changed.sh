@@ -96,6 +96,15 @@ if [ "$CMD" = "fmt" ]; then
   exec cargo fmt "${args[@]}" --check
 fi
 
-echo "==> cargo $CMD ${args[*]} --all-targets"
+# **A warning fails the gate.**
+#
+# It used to print them and exit 0, so "clean" meant whatever the reader had grepped for — and a
+# dead constant sat in `chrome/mod.rs` through a green run because the eye that checked was looking
+# for `error`. AGENTS.md already said to grep for `warning:` as well; a rule a reader has to
+# remember is the bug. `-D warnings` makes the exit code say it.
+#
+# Nothing is allowed through: the one warning this workspace used to carry (a complex type in
+# `toast/stack.rs`) was given a name instead of an exemption.
+echo "==> cargo $CMD ${args[*]} --all-targets -- -D warnings"
 [ -n "${DRY_RUN:-}" ] && exit 0
-exec cargo "$CMD" "${args[@]}" --all-targets
+exec cargo "$CMD" "${args[@]}" --all-targets -- -D warnings
