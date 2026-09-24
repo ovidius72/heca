@@ -21,26 +21,19 @@ use super::*;
 /// its share won and overflows the frame. The fix is CSS's `flex: 1 1 0`: a zero base size plus
 /// permission to shrink, so the parent's box is what there is to divide.
 ///
-/// **Do not copy this trio into new code.** It is the same debt [`with_share`] carries and for the
-/// same reason — `Layout` has no `flex_basis`, so a zero base size has to be written as a height,
-/// which is a fixed measure standing in for a proportion. P052(F004)/T350 replaces both with one
-/// `share(n)` setter in the library; this exists so a *transparent* wrapper stays transparent until
-/// then, rather than each caller rediscovering the combination.
+/// It is `.flex(1.0)` on the node — the library's one builder for "n parts of my parent" — so the
+/// engine applies CSS `flex: 1 1 0` in a flex parent and nothing in a grid.
 pub(super) fn pass_box_down(node: &mut dyn Component) {
-    node.base_mut().style.layout.share = Some(1.0);
+    node.base_mut().style.layout.flex = Some(1.0);
 }
 
-/// Give a container body its declared share of the region's **main axis**, as a flex grow factor
-/// (F003/P011/T021) — height in a sidebar, width in a bar, one number either way.
+/// Put a container's part on the **outermost** node the host built around it.
 ///
-/// Applied to every container however many are seated, so the rule needs no special case: alone it
-/// takes the whole region, two equal shares take half each, `2.0` beside `1.0` takes two thirds,
-/// and `0.0` is content-sized.
-///
-/// Set by the region rather than by the container, because a share only means anything relative to
-/// its siblings — which a container cannot see and should not have to.
-pub(super) fn with_share(mut body: WidgetModel, grow: f32) -> WidgetModel {
-    body.base_mut().style.layout.share = Some(grow);
+/// The container said its part on its own body (`.flex(n)`), but the host wraps that body — focus
+/// ring, dock letter — and a part set only on the inner body would leave the wrapper content-sized
+/// and divide nothing. So the same number is repeated on the wrapper. `0.0` is content-sized.
+pub(super) fn with_flex(mut body: WidgetModel, parts: f32) -> WidgetModel {
+    body.base_mut().style.layout.flex = Some(parts);
     body
 }
 
@@ -153,66 +146,53 @@ pub(super) fn build_region_content(
             Contribution::Container(c) => {
                 let mut bx = BuildCx::new(&c.id, signals, drag);
                 let body = (c.build)(ctx, &mut bx);
-                // The share goes on the OUTERMOST node, so it has to be applied after the wrappers:
-                // a share set on the body would leave the wrapper content-sized and divide nothing
-                // (F003/P011/T021's lesson, one level up).
-                // **The container asks for its share and the engine decides what that means** —
-                // a flex region divides itself by it, a templated one has already sized the track
-                // and ignores it. Neither this code nor a plugin has to know which it is in.
-                Some(with_share(focus_and_pick(body, &c.id, c.grow, ctx), c.grow))
+                // **How big it is and where it sits.** Whoever added the dock may have said
+                // (`.flex` / `.order` on the dock as it was appended), and that wins; otherwise the
+                // dock's own body says (`.flex(n)` / `.order(..)`, natively or as a described
+                // property); otherwise one equal part, in the order added. The region never writes
+                // a size of its own: it is a list anyone may append to.
+                let placed = mounted.placement();
+                let own = &body.base().style.layout;
+                let parts = placed.flex.or(own.flex).unwrap_or(1.0);
+                let order = placed.order.or(own.order).unwrap_or_default();
+                // The part goes on the OUTERMOST node, so it has to be applied after the wrappers:
+                // a part set only on the body would leave the wrapper content-sized and divide
+                // nothing (F003/P011/T021's lesson, one level up).
+                Some((
+                    order,
+                    with_flex(focus_and_pick(body, &c.id, parts, ctx), parts),
+                ))
             }
             _ => None,
         })
         .collect::<Vec<_>>();
+    // Lower first; ties — and every dock that said nothing — keep the order they were added.
+    bodies.sort_by_key(|(order, _)| *order);
+    let mut bodies: Vec<WidgetModel> = bodies.into_iter().map(|(_, body)| body).collect();
     match bodies.len() {
         0 => None,
         // One container owns the region: its own share already makes it fill the region, so
         // there is nothing to wrap it in.
         1 => bodies.pop(),
-        // Several containers share a region: stack them in the host's order (the order
-        // `reorder`/`move_container` maintain), each keeping its own body and its own share. The
-        // stack itself must be allowed to shrink to the region, or it takes its content's height
-        // and overflows before the shares are ever divided.
-        // **The region said how to arrange them**, so it is a grid and the template is the answer.
-        // Each container still carries its own share, which the tracks may override — `"auto 1fr"`
-        // pins the first to its content and gives the rest to the second, whatever either asked for.
-        _ if host.layout(region).is_set() => {
-            let arrangement = host.layout(region);
-            // **The body fills the region on both axes.** The share covers the main one; across it
-            // a grid is auto-sized, so without this it drew at its content's width and left the
-            // rest of the sidebar empty.
-            let mut grid = heca_grid_ui::widgets::Grid::new()
-                .share(1.0)
-                .width(heca_grid_ui::Length::Percent(1.0));
-            if let Some(rows) = &arrangement.rows {
-                grid = grid.template_row(rows.as_str());
-            }
-            if let Some(columns) = &arrangement.columns {
-                grid = grid.template_column(columns.as_str());
-            }
-            if let Some(gap) = arrangement.gap {
-                grid = grid.gap(gap);
-            }
-            {
-                let layout = &mut grid.base_mut().style.layout;
-                layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
-                layout.flex_shrink = Some(1.0);
-            }
-            // No rule between them: a caller that chose the arrangement chose what separates the
-            // parts, and a `Separator` injected here would be a row the template did not ask for.
-            Some(Box::new(grid.child(bodies)))
-        }
+        // Several containers share a region: a column of them in the host's order (the order
+        // `reorder`/`move_container` maintain), **each taking the part its own `.flex` asked for**.
+        // A list of like things, so a `Flex` — never a grid, whose template would be a size list
+        // written for a fixed number of docks.
+        //
+        // The column itself takes the whole region (`.flex(1.0)`), so it is the region's box that
+        // gets divided rather than its content's height.
         _ => {
-            let mut stack = Flex::column().gap(8.0).grow(1.0);
-            {
-                let layout = &mut stack.base_mut().style.layout;
-                layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
-                layout.flex_shrink = Some(1.0);
-            }
+            let gap = host
+                .layout(region)
+                .gap
+                .unwrap_or(heca_grid_ui::style::Space::Step(
+                    heca_grid_ui::style::Spacing::Sm,
+                ));
+            let stack = Flex::column().gap(gap).flex(1.0);
             // A rule between containers, so two of them read as two things rather than one long
-            // list. It takes no share: a `Separator` is a leaf with its own height, and `with_share`
-            // only touches the containers, so the rule keeps its natural 1px and the shares divide
-            // what is left. Its colour comes from the theme's border token, so it follows a reload.
+            // list. It is a sibling, not part of a dock: it asks for no part, so it keeps its
+            // natural 1px and the docks divide what is left exactly as they asked. Its colour comes
+            // from the theme's border token, so it follows a reload.
             let count = bodies.len();
             Some(Box::new(bodies.into_iter().enumerate().fold(
                 stack,
@@ -845,7 +825,7 @@ pub(crate) fn build_chrome_root(
     // expand/collapse control is always visible (works in both expanded + collapsed).
     // The arrow flips with the state: expanded → point at the edge (collapse); collapsed
     // → point away from the edge (expand).
-    let left_toggle = state.show_left_sidebar.then(|| {
+    let left_toggle = state.shown[RegionId::LeftSidebar].then(|| {
         let glyph = if state.chrome_state.left_visible() {
             Glyph::ArrowLineLeft
         } else {
@@ -861,7 +841,7 @@ pub(crate) fn build_chrome_root(
             theme.colors.muted,
         )
     });
-    let right_toggle = state.show_right_sidebar.then(|| {
+    let right_toggle = state.shown[RegionId::RightSidebar].then(|| {
         let glyph = if state.chrome_state.right_visible() {
             Glyph::ArrowLineRight
         } else {

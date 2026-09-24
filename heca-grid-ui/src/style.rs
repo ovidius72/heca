@@ -1189,22 +1189,37 @@ pub struct Layout {
     pub max_height: Option<Length>,
     pub flex_grow: f32,
 
-    /// **Take this much of the room the parent has to give** — a share, whatever kind of parent
-    /// that turns out to be.
+    /// **CSS `flex: <n>`** — take `n` parts of the room the parent has to give. Set it with
+    /// [`LayoutExt::flex`](crate::builders::LayoutExt::flex); `None` means the widget never asked.
     ///
-    /// The mechanism differs and the meaning does not, which is the whole reason this is a property
-    /// and not an idiom a caller writes:
-    /// - **in a flex container** it becomes `flex: <n> 1 0` — grow, a zero basis and permission to
-    ///   shrink — because grow alone distributes only free space and a column of them collapses to
-    ///   its content;
-    /// - **in a grid** it is nothing at all. The track already sized the cell, and the item stretches
-    ///   into it.
+    /// | value | means |
+    /// |---|---|
+    /// | `1.0` beside `3.0` beside `1.0` | a fifth, three fifths, a fifth — **whatever each holds** |
+    /// | `0.0` | as big as its content, no part of the rest (CSS `flex: none`) |
+    ///
+    /// What it does depends on the parent, which is the whole reason it is a property and not an
+    /// idiom a caller writes:
+    /// - **in any parent that is not a grid** — `Flex`, `Surface`, `Pane`, `Card`, all flex boxes
+    ///   underneath — it becomes `flex: <n> 1 0`: grow by `n`, start from zero, allowed to shrink.
+    ///   All three are needed. Grow alone divides only the space left after every child took its
+    ///   content, so a 2:1 pair holding different amounts lands at 606/294 in a 900px box instead of
+    ///   600/300, and a column of them collapses to its content instead of splitting the box. The
+    ///   minimum size **along the parent's direction** also drops to zero, so a child with more
+    ///   content than its part keeps its part instead of pushing its neighbours out;
+    /// - **in a grid** it is nothing at all. The grid's tracks already sized the cell, and the item
+    ///   stretches into it — as in CSS, where `flex` on a grid item does nothing.
     ///
     /// Writing the flex spelling by hand is what broke two docks in one sidebar: a zero base size
     /// is a *definite zero height* in a grid cell, so each container drew its title row and nothing
     /// else. Resolved in [`crate::layout`], against the parent, so no caller has to know which case
     /// they are in.
-    pub share: Option<f32>,
+    pub flex: Option<f32>,
+    /// **CSS `order`** — where this child is laid out among its siblings: lower first, ties in the
+    /// order they were added. `None` is `0`. Set it with
+    /// [`LayoutExt::order`](crate::builders::LayoutExt::order); see [`Order`](crate::order::Order).
+    ///
+    /// Visual only, as in CSS: paint, Tab and the letter picker keep the order children were added.
+    pub order: Option<crate::order::Order>,
     /// Flex shrink factor. `None` ⇒ **`1.0`**, as flexbox has it: an item gives way when its line
     /// is too small, and a widget that must **not** be squeezed opts out with `Some(0.0)`.
     ///
@@ -1317,7 +1332,8 @@ impl Default for Layout {
             max_width: None,
             max_height: None,
             flex_grow: 0.0,
-            share: None,
+            flex: None,
+            order: None,
             flex_shrink: None,
             flex_basis: None,
             size: WidgetSize::Normal,

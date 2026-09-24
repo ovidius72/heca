@@ -71,11 +71,6 @@ pub trait Provider {
     /// Region it mounts in on first run.
     fn default_region(&self) -> RegionId;
 
-    /// Default stacking order within a region (lower = earlier).
-    fn default_order(&self) -> i32 {
-        0
-    }
-
     /// Human title (rail/tab label, move menu).
     fn title(&self) -> &str;
 
@@ -85,13 +80,9 @@ pub trait Provider {
     }
 
     /// Collapsible within its region shell?
-    /// This container's share of its region's **main axis** — height in a sidebar, width in a
-    /// bar — as a flex grow factor. Default `1.0` (an equal share); `0.0` is content-sized. See
-    /// [`ContainerContribution::grow`](crate::chrome::ContainerContribution::grow).
-    fn grow(&self) -> f32 {
-        1.0
-    }
-
+    ///
+    /// (How much of its region a container takes is not asked here. The container says it on the
+    /// body it builds, with `.flex(n)` like any widget — see `docs/layout.md` → Shares.)
     fn collapsible(&self) -> bool {
         true
     }
@@ -115,7 +106,7 @@ pub trait Provider {
 
     /// Context-menu entries this provider contributes (context-menu-5). Declares *where*
     /// (`context_path`) and *what* (`build`) — never *when*: the host decides that, opening the menu
-    /// on right-click / `prefix+>` and merging every provider for that path by `weight`, so these
+    /// on right-click / `prefix+>` and merging every provider for that path by `order`, so these
     /// entries slot **between** the built-ins.
     ///
     /// Separate from [`build_contribution`](Provider::build_contribution) — which returns the one
@@ -572,10 +563,8 @@ mod tests {
                 title: self.title().to_string(),
                 supported_regions: self.supported_regions(),
                 default_region: self.default_region(),
-                default_order: self.default_order(),
                 movable: self.movable(),
                 collapsible: self.collapsible(),
-                grow: self.grow(),
                 build: Box::new(
                     |ctx: &ChromeCtx<'_>, _bx: &mut crate::chrome::BuildCx<'_>| {
                         // The theme is there for anyone; nothing else is needed to render a number.

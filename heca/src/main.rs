@@ -272,10 +272,7 @@ impl HecaApp {
                 self.app_config.config.settings.mouse_wheel_change_font_size;
             state.terminal_scroll_animations_enabled =
                 self.app_config.config.settings.terminal_scroll_animations;
-            state.show_left_sidebar = self.app_config.config.settings.show_left_sidebar;
-            state.show_right_sidebar = self.app_config.config.settings.show_right_sidebar;
-            state.show_top_bar = self.app_config.config.settings.show_top_bar;
-            state.show_bottom_bar = self.app_config.config.settings.show_bottom_bar;
+            state.shown = crate::chrome::shown_from_settings(&self.app_config.config.settings);
             state
                 .notifications
                 .set_auto_dismiss(std::time::Duration::from_millis(

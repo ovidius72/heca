@@ -3306,13 +3306,7 @@ pub fn handle_set_region_visible(state: &mut AppState, action: &WmAction) {
 /// route here. On an actual change it reflows the session viewport + forces a full
 /// chrome rebuild, exactly like the config-reload path (`main.rs`).
 pub fn handle_set_chrome_region_shown(state: &mut AppState, action: &WmAction) {
-    #[derive(Clone, Copy)]
-    enum Region {
-        Left,
-        Right,
-        Top,
-        Bottom,
-    }
+    use crate::chrome::RegionId;
     #[derive(Clone, Copy)]
     enum Mode {
         Show,
@@ -3320,26 +3314,21 @@ pub fn handle_set_chrome_region_shown(state: &mut AppState, action: &WmAction) {
         Toggle,
     }
     let (region, mode) = match action {
-        WmAction::ShowLeftSidebar => (Region::Left, Mode::Show),
-        WmAction::HideLeftSidebar => (Region::Left, Mode::Hide),
-        WmAction::ToggleLeftSidebar => (Region::Left, Mode::Toggle),
-        WmAction::ShowRightSidebar => (Region::Right, Mode::Show),
-        WmAction::HideRightSidebar => (Region::Right, Mode::Hide),
-        WmAction::ToggleRightSidebar => (Region::Right, Mode::Toggle),
-        WmAction::ShowTopBar => (Region::Top, Mode::Show),
-        WmAction::HideTopBar => (Region::Top, Mode::Hide),
-        WmAction::ToggleTopBar => (Region::Top, Mode::Toggle),
-        WmAction::ShowBottomBar => (Region::Bottom, Mode::Show),
-        WmAction::HideBottomBar => (Region::Bottom, Mode::Hide),
-        WmAction::ToggleBottomBar => (Region::Bottom, Mode::Toggle),
+        WmAction::ShowLeftSidebar => (RegionId::LeftSidebar, Mode::Show),
+        WmAction::HideLeftSidebar => (RegionId::LeftSidebar, Mode::Hide),
+        WmAction::ToggleLeftSidebar => (RegionId::LeftSidebar, Mode::Toggle),
+        WmAction::ShowRightSidebar => (RegionId::RightSidebar, Mode::Show),
+        WmAction::HideRightSidebar => (RegionId::RightSidebar, Mode::Hide),
+        WmAction::ToggleRightSidebar => (RegionId::RightSidebar, Mode::Toggle),
+        WmAction::ShowTopBar => (RegionId::TopBar, Mode::Show),
+        WmAction::HideTopBar => (RegionId::TopBar, Mode::Hide),
+        WmAction::ToggleTopBar => (RegionId::TopBar, Mode::Toggle),
+        WmAction::ShowBottomBar => (RegionId::BottomBar, Mode::Show),
+        WmAction::HideBottomBar => (RegionId::BottomBar, Mode::Hide),
+        WmAction::ToggleBottomBar => (RegionId::BottomBar, Mode::Toggle),
         _ => return,
     };
-    let cur = match region {
-        Region::Left => state.show_left_sidebar,
-        Region::Right => state.show_right_sidebar,
-        Region::Top => state.show_top_bar,
-        Region::Bottom => state.show_bottom_bar,
-    };
+    let cur = state.shown[region];
     let new_val = match mode {
         Mode::Show => true,
         Mode::Hide => false,
@@ -3348,12 +3337,7 @@ pub fn handle_set_chrome_region_shown(state: &mut AppState, action: &WmAction) {
     if new_val == cur {
         return;
     }
-    match region {
-        Region::Left => state.show_left_sidebar = new_val,
-        Region::Right => state.show_right_sidebar = new_val,
-        Region::Top => state.show_top_bar = new_val,
-        Region::Bottom => state.show_bottom_bar = new_val,
-    }
+    state.shown[region] = new_val;
     // Geometry changed → recompute the real viewport + force a full chrome rebuild
     // (mirrors the reload path in `main.rs`). Drops the build, never the window root, so any
     // surface that is up rides through it.

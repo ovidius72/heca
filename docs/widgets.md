@@ -21,7 +21,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
-  - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
+  - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`Tile`](#tile), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
@@ -557,7 +557,9 @@ return `Self` for chaining.
 | `.padding_xy(x, y)` | Both axes at once. Either kind, each. |
 | `.padding_left/right/top/bottom(f32)` | **One side**, overriding the axis and the uniform value (side → axis → uniform, the same cascade as the per-side margins). Use it to reserve space along a single edge without moving the opposite one — a [`ScrollRegion`](#scrollregion) keeping content clear of its scrollbar is the case that asked for it. Also settable from a description, for free: the declarative property surface *is* `Layout`'s own fields. |
 | `.width(..)` / `.height(..)` / `.min_*` / `.max_*` | **Any spelling a size is written in** — see the table below. **Set neither width nor height and the widget fills its parent across the cross axis**, exactly as CSS `align-items: stretch` does, so a panel with no width in a 600px column is 600px wide and `.width(Length::FULL)` on a child that already fills says nothing; leave it off. |
-| `.grow(f32)` | Flex-grow factor — a share of what is **left over** after the fixed children. That is what flex-grow means, so "a share of the widest sibling" is a **percentage against one denominator**, not a grow weight. |
+| `.flex(f32)` | **CSS `flex: <n>` — take `n` parts of the room the parent has to give**, whatever this widget holds. `1.0` beside `3.0` is a quarter and three quarters; `0.0` is as big as its content. Runs along the parent's direction (height in a column, width in a row). Does nothing in a [`Grid`](#grid), whose tracks size its cells. Said by the child, so a child added later brings its own part. **The one to reach for** when children should split a box — full reference: [`layout.md` → Shares](layout.md#shares). Declarative: the `flex` property. |
+| `.order(..)` | **CSS `order` — where this child is laid out among its siblings.** Lower first; ties, and siblings that say nothing (`0`), keep the order they were added. A number or a list: `.order(-1)`, `.order([0, 5])` to land between siblings at `0` and `1` you do not own. Visual only — paint, Tab and the picker keep the tree's order. In a `Grid`, a child placed with `.row`/`.column`/`.area` stays put. Full reference: [`layout.md` → Order](layout.md#order). Declarative: the `order` property. |
+| `.grow(f32)` | CSS `flex-grow` **alone** — a share of what is **left over** after every child took its content. Children holding different amounts never land in their ratio (2:1 comes out 606/294 in 900px), so for "n parts" use `.flex(n)`. Keep `grow` for a spacer that pushes its siblings apart. "A share of the widest sibling" is neither: it is a **percentage against one denominator**. |
 | `.disabled(bool)` | Dim + make inert + drop from focus order. |
 | `.tab_index(i32)` | Explicit Tab order; indexed widgets visited first, ascending. |
 
@@ -1774,7 +1776,9 @@ a parent that counts its children to tell them apart.
   a number or a token, the same way.
 - **Margin**: `.margin(..)`, `.margin_x(..)` / `.margin_y(..)` — a number or a token, like padding.
 - **Sizing** (from `LayoutExt`, shared by every widget): `.width(..)` / `.height(..)`
-  (`Auto` / `Px` / `Percent`), `.grow(f32)` (flex-grow, absorb leftover space).
+  (`Auto` / `Px` / `Percent`); on a **child**, `.flex(n)` to take `n` parts of this box whatever it
+  holds, or `.grow(f32)` (flex-grow alone, absorb leftover space). See
+  [`layout.md` → Shares](layout.md#shares).
 - **Traits**: `LayoutExt`, `Parent`. **No `StyleExt`, deliberately** — a `Flex` arranges, it does
   not paint, so `.background(..)` on one is a compile error rather than a missing feature. Put the
   colour on a [`Surface`](#surface) and the `Flex` inside it. See
@@ -2355,34 +2359,59 @@ until there are two.
 
 ### A container's share of its region
 
-A container declares its share as a **flex grow factor**, defaulting to `1.0`:
+A container says how much of its region it takes the way any widget does: **`.flex(n)` on itself**
+(see [`layout.md` → Shares](layout.md#shares)).
 
 | Declared | Result |
 |---|---|
-| nothing | an equal share — alone it takes the whole region, two take half each |
-| `2.0` beside `1.0` | two thirds |
-| `0.0` | content-sized: no share of the leftover |
+| `.flex(1.0)`, or nothing | an equal part — alone it takes the whole region, two take half each |
+| `.flex(3.0)` beside `.flex(1.0)` | three quarters and a quarter |
+| `.flex(0.0)` | as big as its content: no part of the rest |
 
-**Fractional, never fixed.** A share survives a window resize; a pixel height does
-not. It is `flex_grow` because that is exactly what it is — the widget library has
-had it all along, so there is no second sizing language to learn.
+**Parts, never pixels.** A part survives a window resize; a pixel height does not.
 
-**Share of the region's MAIN AXIS, not of its height.** `flex_grow` is main-axis
-relative, so one number is the height in a sidebar (a column) and the width in a bar
-(a row), with nothing to add when bar regions arrive.
+**Along the region's direction, not its height.** One number is the height in a sidebar (a column)
+and the width in a bar (a row), with nothing to add when bar regions arrive.
 
-The *region* applies the share, not the container: a share only means something
-relative to siblings, which a container cannot see and should not have to.
+**Said by the container, not by the region.** A region is a list anyone may append to — a plugin
+adds a dock after the app built its own — so a size list written on the region is wrong the moment
+one more dock arrives. Each dock carries its own part, and a new one brings its own.
 
-> **Implementation note, and a debt.** `flex_grow` distributes only *positive* free
-> space, and container content is routinely taller than a sidebar — measured, two
-> containers took **1214px each inside a 600px body** and divided nothing. A share
-> therefore also needs a **zero base size and permission to shrink** (CSS
-> `flex: 1 1 0`); then the free space is the whole region, and the two measure 296px
-> each. `Layout` has no `flex_basis`, so that zero is written as a height today.
-> **Do not copy that into new code** — expressing a proportion by writing a fixed
-> measure is wrong. Giving the library one `share(n)` setter with the trio behind it
-> is tracked in the planner.
+**Where to write it: on the body the container builds** — or, when you are adding a dock someone
+else wrote, on the dock as you add it: `regions("sidebar.left").append(Docker::new("d").flex(3.0).order(-1))`.
+`.flex` and `.order` are there on every dock type, built once. What the adder says wins over what
+the dock's body says.
+
+The host reads it and repeats
+it on the focus and letter wrappers it puts around the body, so the part lands on the outermost node
+without the container knowing those wrappers exist.
+
+```rust
+// Inside a provider's build seam — the body it returns carries its own part.
+build: Box::new(|ctx, bx| Box::new(my_list(ctx, bx).flex(3.0)) as WidgetModel),
+```
+
+```rust
+// Several docks in one sidebar: 1 : 3 : 1, and a plugin's dock appended later brings its own.
+regions("sidebar.left").append([docker, workspaces, notes]);
+regions("sidebar.left").append(git);   // brings its own part; the others keep theirs
+```
+
+There is no size method on the provider and no size list on the region — a `fn grow()` on the
+provider and a `template_row` on the region both existed and were removed (P082(F003)/T518). The
+region says only the air between its docks, with `regions(..).gap(..)`; unset, the theme's `"sm"`
+step. A rule is drawn between two docks; it asks for no part, so the docks divide what is left
+exactly as asked.
+
+**Where a dock sits** is the order it was added — `append` at the end, `prepend` at the start —
+unless its body says `.order(..)`: lower first, ties as added, and `[0, 5]` to land between two docks
+at `0` and `1` that you do not own. The rule stays between docks whatever their order. See
+[`layout.md` → Order](layout.md#order).
+
+**A container holding more than its part keeps its part.** Two docks with 1214px of rows each in a
+600px sidebar come out 300px each and scroll inside. That is what `.flex` does beyond `.grow`: it
+starts every part from zero and lets it shrink, so the region's box is what gets divided (CSS
+`flex: <n> 1 0`).
 
 ### Using one — the whole surface
 
@@ -3470,6 +3499,78 @@ let row = Row::new().background(color.with_alpha(22)).radius(theme.control_radiu
     .child(/* a Grid of icon + title + Tag + Badge */)
     .on_activate(move || select(i));
 ```
+
+### Tile
+
+**A thing, said in a line or a few** — a status pip, an icon, a title with a quieter suffix, and any
+number of lines under it. The shape of a sidebar pane card, a file in a list, a container in a
+Docker panel; it knows nothing about any of them.
+
+```text
+ ● ▣ Neovim (nvim)        ← the head: status · icon · title · suffix
+   🗀 ~/projects/heca      ← a line
+   ⎇ main  +2  ~3         ← another line
+```
+
+**It only arranges.** Every part is a widget you build and keep, so the signals you hold — a title
+that renames, a pip that changes status, a line that appears when a directory arrives — update the
+tile in place with no rebuild. **Selection is not its job**: put it in a [`Row`](#row) for the
+selected pill, the cursor outline, the attention flash and the click.
+
+| builder | what goes there | unset |
+|---|---|---|
+| `.status(..)` | the pip at the front — usually a [`StatusDot`](#statusdot), which never gives way | no pip, no gap |
+| `.icon(..)` | after the pip — usually an [`Icon`](#icon) | no icon, no gap |
+| `.title(..)` | usually a bold [`Label`](#label). The part that gives way when narrow — give it `.truncate(..)` to cut with `…` | nothing |
+| `.suffix(..)` | a quieter word on the title's line, centred on it — a `(program)`, a count. Pass a [`Visibility`](#visibility) to show it only sometimes | nothing |
+| `.line(..)` | a line under the head; call again for another, they stack in order | — |
+
+Every builder takes any widget (`impl IntoComponent`). Order does not matter: the parts always sit
+pip · icon · title · suffix. Spacing is the theme's rhythm (`sm` along the head, `xs` between lines),
+so it follows the font.
+
+⚠️ **Add a line always, and let it hide itself.** A line with nothing to say yet should be a
+`Visibility` attached from the start, whose signal you flip. Added only once it has something to say,
+it can never appear later without a rebuild — which is how a card showed its path or not depending on
+timing.
+
+**Why the head is a `Flex` row, not a `Grid`.** Every head part is optional, and a missing one must
+leave no track and no gap. A flex row's gap falls only between the items it lays out; a grid keeps an
+empty track and still spends a gap on each side of it.
+
+**Native:**
+
+```rust
+Row::new().on_activate(open).child(
+    Tile::new()
+        .status(StatusDot::online())
+        .icon(Icon::new(Glyph::FileCode))
+        .title(Label::new("Neovim").bold(true))
+        .suffix(Label::new("(nvim)").size(WidgetSize::Small))
+        .line(Visibility::new(folder_line, cwd.is_some()))
+        .line(Visibility::new(git_line, branch.is_some())),
+)
+```
+
+**Declarative** (`WidgetKind::Tile`) — every part is a child, placed by its `slot` prop. A child with
+**no slot is a line** (the default slot); an unknown slot is debug-logged and becomes a line.
+
+```rust
+use heca_view::build::*;
+
+Row::new().on_press(Intent::new("docker.open")).child(
+    Tile::new()
+        .child(StatusDot::new().prop("slot", "status"))
+        .child(Icon::new().glyph(ViewGlyph::Terminal).prop("slot", "icon"))
+        .child(Label::new("nginx").bold(true).prop("slot", "title"))
+        .child(Label::new("(web)").prop("slot", "suffix"))
+        .child(Label::new("up 3 days")),                 // a line
+)
+```
+
+Slots: `status`, `icon`, `title`, `suffix`; anything else (or nothing) is a line. No properties of its
+own — it is all children. heca's sidebar pane row and the showcase's PANES dock both mount it, so the
+two cannot drift (F003/P082/T491).
 
 ### ScrollBar
 
@@ -5744,7 +5845,7 @@ field is — both halves:
 
 - **Layout**: `padding`, `margin` (+ per-axis and per-side), `gap`, `align`, `align_self`,
   `justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
-  `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+  `flex` (n parts of the parent — [Shares](layout.md#shares)), `order` ([Order](layout.md#order)), `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
 - **Appearance**: `fill`, `border`, `glow`, `accent`, `radius`, `font_size`, `font_scale`.
 
 `realize` never enumerates them — it merges by name against each half's own fields. Add a field to
@@ -5955,6 +6056,7 @@ and a bad value costs only itself: the good props on the same node still apply.
 | **`Grid`** | `columns` / `rows` / `areas` (List of CSS-like strings), `align` + `justify_items`; per-**child**: `area` or `col`/`row`/`col_span`/`row_span`, `align_self` / `justify_self` | — |
 | **`DockFrame`** | `text` (title), `expanded` / `frameless` / `active` / `nav_selected` (Bool); **slots**: `header`, else body | `toggle` |
 | **`Item`** | `text` (label); **slots**: `leading`, `trailing` (no default) | `press` |
+| **`Tile`** | no props; **slots**: `status`, `icon`, `title`, `suffix` — any other child is a line (the default slot) | — (put it in a `Row`) |
 | **`Toast`** | `text` (title), `severity`, `icon`, `body`, `action_text`, `dismissible` | `press` · `dismiss` · `action` |
 
 **The event vocabulary** is three names: **`press`** (activated), **`change`** (the value changed),

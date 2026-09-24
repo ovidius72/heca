@@ -430,15 +430,61 @@ pub trait LayoutExt: Component + Sized {
         self
     }
 
-    /// **Take this much of the room the parent has to give.**
+    /// **CSS `flex: <n>` — take `n` parts of the room the parent has to give.**
     ///
-    /// One builder for "a share of whatever holds me": in a flex container it becomes
-    /// `flex: <n> 1 0`; in a grid it is nothing, because the track already sized the cell. Say it
-    /// once and the engine decides which — see [`Layout::share`](crate::style::Layout::share).
+    /// Said by the **child**, about itself, exactly where CSS says it. The parent does not count
+    /// its children or write a size per child, so a child added later — a plugin's dock appended to
+    /// a sidebar — brings its own size and the rest keep theirs.
     ///
-    /// `.share(1.0)` beside `.share(2.0)` is a third and two thirds. `0.0` is content-sized.
-    fn share(mut self, of_the_parent: f32) -> Self {
-        self.base_mut().style.layout.share = Some(of_the_parent);
+    /// ```ignore
+    /// Flex::column()
+    ///     .child(docker.flex(1.0))       // ┐
+    ///     .child(workspaces.flex(3.0))   // ├ 1 : 3 : 1 of the column, whatever each one holds
+    ///     .child(notes.flex(1.0))        // ┘
+    ///     .child(git.flex(0.0));         //   as tall as its content, and no more
+    /// ```
+    ///
+    /// - **`n > 0`** — `n` parts of what the parent has, along its direction (height in a column,
+    ///   width in a row). `1` beside `3` is a quarter and three quarters. A child holding more than
+    ///   its part keeps its part and scrolls or clips inside it; it never pushes its neighbours out.
+    /// - **`0`** — as big as its content (CSS `flex: none`).
+    /// - **in a [`Grid`](crate::widgets::Grid)** — nothing. The grid's own tracks size its cells, as
+    ///   in CSS. Place a grid child with `.row` / `.column` / `.area` instead.
+    ///
+    /// **Why not [`grow`](LayoutExt::grow)?** `grow` is CSS `flex-grow` alone: it divides only the
+    /// space left after every child took its content, so two children asked for 2:1 but holding
+    /// different amounts land at 606/294 in 900px. `flex` is grow **plus** a zero start and
+    /// permission to shrink — CSS `flex: <n> 1 0` — which is what "n parts" means.
+    ///
+    /// Declarative form: the `flex` property, `{"flex": 3}`. Stored in
+    /// [`Layout::flex`](crate::style::Layout::flex), applied during layout against the real parent.
+    fn flex(mut self, parts: f32) -> Self {
+        self.base_mut().style.layout.flex = Some(parts);
+        self
+    }
+
+    /// **CSS `order` — where this child is laid out among its siblings.** Lower first; siblings
+    /// that tie, or say nothing (`0`), keep the order they were added in.
+    ///
+    /// ```ignore
+    /// Flex::column()
+    ///     .child(notes)                  // 0, as added
+    ///     .child(docker.order(-1))       // before everything that said nothing
+    ///     .child(git.order([0, 5]))      // after every plain 0, before any 1
+    /// ```
+    ///
+    /// A number or a list, through one parser (`3`, `[0, 5]`, `"0 5"`). A list compares a place at
+    /// a time, so `[0, 5]` slots between two siblings at `0` and `1` that you do not own — which a
+    /// whole number cannot. See [`Order`](crate::order::Order).
+    ///
+    /// **Visual only**, as in CSS: it moves where the child is laid out, not where it is in the
+    /// tree, so paint order, Tab order and the order the picker hands out letters are unchanged. In a
+    /// [`Grid`](crate::widgets::Grid) it orders what the grid places itself; a child placed with
+    /// `.row` / `.column` / `.area` stays where it said.
+    ///
+    /// Declarative form: the `order` property — `{"order": 3}` or `{"order": [0, 5]}`.
+    fn order(mut self, order: impl Into<crate::order::Order>) -> Self {
+        self.base_mut().style.layout.order = Some(order.into());
         self
     }
 

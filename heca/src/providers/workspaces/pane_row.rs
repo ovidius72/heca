@@ -28,7 +28,7 @@ use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect, signal};
 use heca_grid_ui::style::Spacing;
 use heca_grid_ui::widgets::{
-    Flex, Glyph, HintPlacement, Icon, Label, Row, StatusDot, Tooltip, TooltipSide, Visibility,
+    Flex, Glyph, HintPlacement, Icon, Label, Row, StatusDot, Tile, Tooltip, TooltipSide, Visibility,
 };
 
 /// **How far a metadata line sits in from the name above it.** One token, read by every line under
@@ -220,14 +220,6 @@ impl PaneRow<'_> {
         let process_hint_signal = process_hint_label.text_signal();
         let process_hint = Visibility::new(process_hint_label, info.process_hint.is_some());
         let process_hint_visible = process_hint.visible_signal();
-        // The name and the dimmed `(program)` suffix are two runs on one line, centred on each
-        // other — CSS's `align-items: center`. Measured: the name's box is 18 tall and the
-        // suffix's 14, and centring puts both mid-lines on the same pixel.
-        let title_area = Flex::row()
-            .align("center")
-            .gap(heca_grid_ui::style::Spacing::Sm)
-            .child(title_label)
-            .child(process_hint);
         // Optional cwd row (folder icon + home-relative path), stacked between the name and
         // git rows. Signal-driven like the git branch: the path updates live on `cd`, and the
         // row's visibility follows `[settings] pane_show_cwd` and whether the pane has a cwd.
@@ -246,33 +238,22 @@ impl PaneRow<'_> {
         }
         .build();
         let (cwd_row, cwd_signal, cwd_visible_signal) = (cwd.widget, cwd.text, cwd.visible);
-        // The pane's identity row (status dots + program icon + name) — shared by every card
-        // layout so the cwd and git rows just stack beneath it in one column.
-        let name_row = Flex::row()
-            .align("center")
-            .gap(8.0)
-            .child(status_dot)
-            .child(Flex::row().align("center").child(icon_widget))
-            .child(title_area);
-        // One column: the name row, then the metadata lines under it.
+        // **The card's arrangement is the library's `Tile`** — pip, icon, the name with its dimmed
+        // `(program)` suffix, then the folder and git lines under it. This file keeps only what a
+        // pane row *means*: its signals, its click, its menu, its drag, its pick. The showcase
+        // mounts the same `Tile`, so the two can no longer drift apart (F003/P082/T491).
         //
-        // **Every line is attached, always** — each one is a `Visibility` that decides for itself,
-        // and hidden is `display: none`, so a card with nothing to say lays out exactly like the
-        // one-row card and spends no gap on what it is not showing.
-        //
-        // Attaching a line only when it *already* had something to say is the bug this shape
-        // exists to stop: a directory arrives from the shell after the row is on screen and the
-        // sidebar tree is not rebuilt when it does, so a line left out at build time could never
-        // be revealed by its own signal. Whether a pane showed its path came down to whether the
-        // shell had answered by the instant that row was built. The git line was
-        // written the same way and only looked right because `chrome_signature` carried a term for
-        // it — a second copy of the rule, in a file nobody adding a line would think to open.
-        let content = Flex::column()
-            .gap(4.0)
-            .grow(1.0)
-            .child(name_row)
-            .child(cwd_row)
-            .child(git_row);
+        // **Every line is attached, always** — each is a `Visibility` that decides for itself, so a
+        // directory the shell reports after the row is on screen can still appear: the sidebar tree
+        // is not rebuilt when it does.
+        let content = Tile::new()
+            .status(status_dot)
+            .icon(icon_widget)
+            .title(title_label)
+            .suffix(process_hint)
+            .line(cwd_row)
+            .line(git_row)
+            .grow(1.0);
         let card = Row::new()
             .background(
                 theme

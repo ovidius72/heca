@@ -33,6 +33,7 @@ pub(crate) mod context_menu;
 mod contribution;
 mod events;
 mod expose;
+mod regions;
 pub(crate) use expose::register as register_expose;
 
 mod dispatch;
@@ -48,7 +49,7 @@ use scene::chrome_scene;
 #[allow(unused_imports)]
 use scene::{
     ChromeFrame, build_region_content, build_sidebar_shell, pass_box_down, search_bar_tree,
-    search_field_slot, sidebar_toggle_button, with_share,
+    search_field_slot, sidebar_toggle_button, with_flex,
 };
 pub(crate) use scene::{
     build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints, paint_search,
@@ -105,10 +106,10 @@ pub(crate) use context_menu::{
 // The command palette: every registered action, searchable, dispatched through the one door
 // (F003/P085/T358).
 pub use contribution::{ContextMenuContribution, Contribution, RegionSet};
-pub use events::{
-    ChromeEvent, ChromeEventBus, ChromeSubscription, Region, RegionId, SidebarSelection,
-};
+pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
+// A region is a place reached by name, holding a list (P082(F003)/T518).
 pub(crate) use palette::open_command_palette;
+pub use regions::{PlaceDock, RegionMap, regions, shown_from_settings};
 // Chrome keyboard focus: which dock the keyboard is aimed at (F003/P011/T020).
 pub(crate) use focus::{dock_candidates, navigable_dock, placement_for, region_on_screen};
 pub use host::ChromeHost;
@@ -1101,9 +1102,9 @@ mod tests {
             layout.flex_shrink = Some(1.0);
         }
         // Two containers with a rule between them, as `build_region_content` assembles them.
-        stack.base_mut().children.push(with_share(body(), 1.0));
+        stack.base_mut().children.push(with_flex(body(), 1.0));
         stack = stack.child(Separator::horizontal());
-        stack.base_mut().children.push(with_share(body(), 1.0));
+        stack.base_mut().children.push(with_flex(body(), 1.0));
 
         let mut root = Flex::column().height(600.0).child(stack);
         LayoutEngine::new().compute(&mut root, CoreSize::new(300.0, 600.0));
@@ -1162,7 +1163,7 @@ mod tests {
             layout.flex_shrink = Some(1.0);
         }
         for _ in 0..2 {
-            stack.base_mut().children.push(with_share(tall(), 1.0));
+            stack.base_mut().children.push(with_flex(tall(), 1.0));
         }
         let mut body = Flex::column().height(600.0).child(stack);
         LayoutEngine::new().compute(&mut body, CoreSize::new(300.0, 600.0));
@@ -1190,42 +1191,166 @@ mod tests {
         );
     }
 
-    /// A container's declared share reaches the widget, and saying nothing means an equal share.
+    /// **A dock says its own size, on the body it builds, and the region honours it.**
     ///
-    /// The share is a flex grow factor, so it is the region's **main axis** — height in a sidebar,
-    /// width in a bar — and one number covers both. What this pins is the wiring: the number on the
-    /// contribution has to land on the body that gets laid out, and it would be silently dropped if
-    /// anything rebuilt or rewrapped the body afterwards (F003/P011/T021).
-    ///
-    /// Whether two containers then *look* right side by side is layout, and the user judges that in
-    /// the app — a test asserting taffy divides 200px into 100 and 100 would be testing taffy.
+    /// Two docks in one sidebar, one built with `.flex(3.0)` and one with `.flex(1.0)` — the line a
+    /// plugin author writes. Laid out in a real 400px region they split 3:1, whatever each holds. No
+    /// template on the region and no method on the provider: a region is a list anyone may append
+    /// to, so sizes written there break when one more dock arrives (P082(F003)/T518).
     #[test]
-    fn a_containers_declared_share_reaches_its_body() {
-        let body = || -> WidgetModel { Box::new(Flex::column()) };
+    fn a_dock_says_its_own_size_and_the_region_honours_it() {
+        use crate::chrome::Contribution;
+        use crate::chrome::{BuildCx, ContainerContribution, RegionSet, WidgetModel};
+        use crate::providers::{ChromeCtx, Provider};
+        use heca_grid_ui::{LayoutEngine, Size};
 
-        // The trait default, which is what a provider that says nothing gets.
+        struct Sized(&'static str, f32, Option<heca_grid_ui::order::Order>);
+        impl Provider for Sized {
+            fn id(&self) -> &str {
+                self.0
+            }
+            fn title(&self) -> &str {
+                self.0
+            }
+            fn supported_regions(&self) -> RegionSet {
+                RegionSet::sidebars()
+            }
+            fn default_region(&self) -> super::RegionId {
+                super::RegionId::LeftSidebar
+            }
+            fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
+                let (parts, order) = (self.1, self.2);
+                Contribution::Container(ContainerContribution {
+                    id: self.id().to_string(),
+                    title: self.title().to_string(),
+                    supported_regions: self.supported_regions(),
+                    default_region: self.default_region(),
+                    movable: self.movable(),
+                    collapsible: self.collapsible(),
+                    // The dock's size, said by the dock: one builder on the body, nothing else.
+                    build: Box::new(move |_: &ChromeCtx<'_>, _: &mut BuildCx<'_>| {
+                        // A body far taller than any part, so only `.flex` can explain the split.
+                        let mut body = Flex::column().flex(parts);
+                        if let Some(order) = order {
+                            body = body.order(order);
+                        }
+                        for _ in 0..20 {
+                            body = body.child(Flex::column().height(100.0));
+                        }
+                        Box::new(body) as WidgetModel
+                    }),
+                })
+            }
+        }
+
+        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let mut host = super::ChromeHost::new(chrome.events());
+        host.register(Box::new(Sized("big", 3.0, None)));
+        host.register(Box::new(Sized("small", 1.0, None)));
+        let theme = GuiTheme::default();
+        let emit = ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            |_, _| {},
+        );
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&chrome), &theme, &emit, &catalog);
+        let body = super::build_region_content(
+            &host,
+            super::RegionId::LeftSidebar,
+            &ctx,
+            &mut super::ChromeSignals::default(),
+            &mut super::DragItemRegistry::default(),
+        )
+        .expect("two docks are seated, so the region has a body");
+
+        let mut region: Box<dyn heca_grid_ui::Component> =
+            Box::new(Flex::column().width(200.0).height(400.0).child(body));
+        LayoutEngine::new().compute(region.as_mut(), Size::new(200.0, 400.0));
+
+        // The column holds [big, rule, small]; the rule is a sibling and asks for no part.
+        let column = &region.base().children[0];
+        let heights: Vec<f64> = column
+            .base()
+            .children
+            .iter()
+            .map(|c| c.base().bounds.size.h)
+            .collect();
+        println!("big / rule / small: {heights:?}");
         assert_eq!(
-            crate::providers::Provider::grow(&crate::providers::WorkspacesContainerProvider::new(
-                "workspaces"
-            )),
-            1.0,
-            "saying nothing means one equal share",
+            heights.len(),
+            3,
+            "two docks and one rule between them: {heights:?}"
+        );
+        let (big, small) = (heights[0], heights[2]);
+        assert!(
+            (big / small - 3.0).abs() < 0.05,
+            "the docks split 3:1 as each asked, whatever they hold: {heights:?}",
+        );
+        let bottom = column.base().children[2].base().bounds;
+        assert!(
+            bottom.loc.y + bottom.size.h <= 401.0,
+            "neither dock pushes the other out of the region: {heights:?}",
         );
 
-        // **The body asks for a share; what that means is the engine's answer, not this code's.**
-        // A flex region divides itself by it and a templated one ignores it, because the track has
-        // already sized the cell — which is why the number is read back here rather than the flex
-        // spelling it used to be written as.
-        assert_eq!(with_share(body(), 1.0).base().style.layout.share, Some(1.0));
-        assert_eq!(
-            with_share(body(), 2.0).base().style.layout.share,
-            Some(2.0),
-            "twice the share of a 1.0 beside it",
+        // **And where it sits, said the same way**: the dock added second asks for `.order(-1)` and
+        // comes first, with the rule still between the two rather than above both.
+        let mut host = super::ChromeHost::new(chrome.events());
+        host.register(Box::new(Sized("big", 3.0, None)));
+        host.register(Box::new(Sized("small", 1.0, Some((-1).into()))));
+        let body = super::build_region_content(
+            &host,
+            super::RegionId::LeftSidebar,
+            &ctx,
+            &mut super::ChromeSignals::default(),
+            &mut super::DragItemRegistry::default(),
+        )
+        .expect("two docks are seated");
+        let mut region: Box<dyn heca_grid_ui::Component> =
+            Box::new(Flex::column().width(200.0).height(400.0).child(body));
+        LayoutEngine::new().compute(region.as_mut(), Size::new(200.0, 400.0));
+        let heights: Vec<f64> = region.base().children[0]
+            .base()
+            .children
+            .iter()
+            .map(|c| c.base().bounds.size.h)
+            .collect();
+        println!("ordered small / rule / big: {heights:?}");
+        assert!(
+            heights[0] < heights[2] && heights[1] <= 2.0,
+            "the small dock comes first and the rule sits between: {heights:?}",
         );
-        assert_eq!(
-            with_share(body(), 0.0).base().style.layout.share,
-            Some(0.0),
-            "content-sized: no share of the leftover",
+
+        // **And whoever ADDS a dock can say both, over what its body says** — the line for placing
+        // a dock you did not write. `big` asked for 3 parts on its body; its placer says 1 and puts
+        // it last; `small` asked for 1 and first, and its placer says 3.
+        use crate::chrome::{PlaceDock, regions};
+        let mut host = super::ChromeHost::new(chrome.events());
+        regions("sidebar.left").append([
+            Sized("big", 3.0, None).flex(1.0).order(1),
+            Sized("small", 1.0, Some((-1).into())).flex(3.0).order(0),
+        ]);
+        host.mount_pending();
+        let body = super::build_region_content(
+            &host,
+            super::RegionId::LeftSidebar,
+            &ctx,
+            &mut super::ChromeSignals::default(),
+            &mut super::DragItemRegistry::default(),
+        )
+        .expect("two docks are seated");
+        let mut region: Box<dyn heca_grid_ui::Component> =
+            Box::new(Flex::column().width(200.0).height(400.0).child(body));
+        LayoutEngine::new().compute(region.as_mut(), Size::new(200.0, 400.0));
+        let heights: Vec<f64> = region.base().children[0]
+            .base()
+            .children
+            .iter()
+            .map(|c| c.base().bounds.size.h)
+            .collect();
+        println!("placed small(3) / rule / big(1): {heights:?}");
+        assert!(
+            (heights[0] / heights[2] - 3.0).abs() < 0.05,
+            "the placer's parts and order win over the bodies': {heights:?}",
         );
     }
 
@@ -1265,7 +1390,7 @@ mod tests {
             layout.flex_shrink = Some(1.0);
         }
         for _ in 0..2 {
-            stack.base_mut().children.push(with_share(wrapped(), 1.0));
+            stack.base_mut().children.push(with_flex(wrapped(), 1.0));
         }
         let mut body = Flex::column().height(600.0).child(stack);
         LayoutEngine::new().compute(&mut body, CoreSize::new(300.0, 600.0));
@@ -1312,7 +1437,7 @@ mod tests {
         // What `focus_and_pick` does with `share = 0.0`: wrap, and touch no layout.
         let wrapped: WidgetModel =
             Box::new(FocusScope::new(KeyHint::new(body)).focus(signal(false)));
-        let mut region = Flex::column().height(600.0).child(with_share(wrapped, 0.0));
+        let mut region = Flex::column().height(600.0).child(with_flex(wrapped, 0.0));
         LayoutEngine::new().compute(&mut region, CoreSize::new(300.0, 600.0));
 
         let ring = &region.base().children[0];

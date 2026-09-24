@@ -64,8 +64,8 @@ impl WorkspacesContainerProvider {
     /// nothing you write can reach.
     ///
     /// ```ignore
-    /// Region::LeftSidebar.child(Workspaces::new("workspaces"));
-    /// Region::RightSidebar.child(Workspaces::new("workspaces.right"));
+    /// regions("sidebar.left").append(Workspaces::new("workspaces"));
+    /// regions("sidebar.right").append(Workspaces::new("workspaces.right"));
     /// ```
     pub fn new(name: impl Into<String>) -> Self {
         Self {
@@ -102,10 +102,6 @@ impl Provider for WorkspacesContainerProvider {
         self.region
     }
 
-    fn default_order(&self) -> i32 {
-        0
-    }
-
     fn title(&self) -> &str {
         "Workspaces"
     }
@@ -130,10 +126,8 @@ impl Provider for WorkspacesContainerProvider {
             title: self.title().to_string(),
             supported_regions: self.supported_regions(),
             default_region: self.default_region(),
-            default_order: self.default_order(),
             movable: self.movable(),
             collapsible: self.collapsible(),
-            grow: self.grow(),
             build: Box::new(build_body),
         })
     }
@@ -1433,13 +1427,12 @@ mod tests {
         assert_eq!(p.default_region(), RegionId::LeftSidebar);
         assert!(p.supported_regions().contains(RegionId::LeftSidebar));
         assert!(p.supported_regions().contains(RegionId::RightSidebar));
-        assert_eq!(p.default_order(), 0);
         assert!(p.movable());
         assert!(p.collapsible());
     }
 
     #[test]
-    fn register_seats_in_left_sidebar_at_order_zero() {
+    fn register_seats_in_the_left_sidebar() {
         let mut host = ChromeHost::new(ChromeEventBus::default());
         host.register(Box::new(WorkspacesContainerProvider::new("workspaces")));
         // Seated in the left sidebar (its default_region), not the right.
@@ -1459,7 +1452,6 @@ mod tests {
         assert_eq!(c.id, "workspaces");
         assert_eq!(c.title, "Workspaces");
         assert_eq!(c.default_region, RegionId::LeftSidebar);
-        assert_eq!(c.default_order, 0);
         assert!(c.supported_regions.contains(RegionId::LeftSidebar));
         assert!(c.supported_regions.contains(RegionId::RightSidebar));
         assert!(c.movable);

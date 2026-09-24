@@ -17,6 +17,7 @@ use crate::chrome::{DropdownItem, DropdownSpec, Intent, PropValue, open_dropdown
 use crate::host::App;
 use crate::providers::ChromeCtx;
 use heca_core::layout::{PaneId, Point};
+use heca_grid_ui::order::Order;
 use heca_grid_ui::widgets::Menu;
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -84,20 +85,19 @@ pub enum ContextTarget {
 /// state, its container id); a built-in is a plain fn coerced into it, capturing nothing.
 pub type MenuBuild = std::rc::Rc<dyn Fn(&ChromeCtx, &ContextTarget) -> Vec<DropdownItem>>;
 
-/// A registered context-menu provider: a weight (Dewey/fractional index, C2) for merge ordering
-/// and a build function.
+/// A registered context-menu provider: where its block sits (CSS `order`) and a build function.
 #[derive(Clone)]
 pub struct ContextMenuProvider {
-    /// Merge order within a context path. Built-ins use a stable weight; a plugin inserts
-    /// between two built-ins with a fractional `Vec<i64>` (e.g. `[1,1,1]` between `[1,1]` and
-    /// `[1,2]`). Sorted ascending; ties keep insertion order (stable sort).
-    pub weight: Vec<i64>,
+    /// Where this block sits within a context path — the one [`Order`] every widget's `.order(..)`
+    /// takes. Built-ins use a stable order; a plugin inserts between two of them with a list
+    /// (`[1, 1, 1]` between `[1, 1]` and `[1, 2]`). Lower first; ties keep insertion order.
+    pub order: Order,
     pub build: MenuBuild,
 }
 
 /// Runtime registry of context-menu providers keyed by [`ContextPath`]. Seeded with the
 /// built-in providers at startup; plugins add to it via `Contribution::ContextMenu`
-/// (context-menu-5). `items_for` collects every provider matching a path, sorts by weight, and
+/// (context-menu-5). `items_for` collects every provider matching a path, sorts by order, and
 /// concatenates their items — so a plugin's entries merge with the built-in's.
 #[derive(Default)]
 pub struct ContextMenuRegistry {
@@ -111,30 +111,29 @@ impl ContextMenuRegistry {
     /// (F003/P086/T365).
     pub fn with_builtins() -> Self {
         let mut r = Self::default();
-        // Weight 0, so a component's or plugin's entries (weight 1 upwards) merge after it.
-        r.register(
-            ContextPath::PANE,
-            vec![0],
-            std::rc::Rc::new(build_pane_menu),
-        );
+        // Order 0, so a component's or plugin's entries (1 upwards) merge after it.
+        r.register(ContextPath::PANE, 0, std::rc::Rc::new(build_pane_menu));
         r
     }
 
     /// Register a provider for a context path — the built-in seed and a plugin's
     /// `Contribution::ContextMenu` go through this same call.
-    pub fn register(&mut self, path: &str, weight: Vec<i64>, build: MenuBuild) {
+    pub fn register(&mut self, path: &str, order: impl Into<Order>, build: MenuBuild) {
         self.providers
             .entry(path.to_string())
             .or_default()
-            .push(ContextMenuProvider { weight, build });
+            .push(ContextMenuProvider {
+                order: order.into(),
+                build,
+            });
     }
 
     /// Collect + merge items for a context path: every matching provider — **built-in and
-    /// plugin-contributed alike** — sorted by weight (stable), concatenated. `vec![]` when nothing
+    /// plugin-contributed alike** — sorted by order (stable), concatenated. `vec![]` when nothing
     /// matches (an empty menu — the caller may choose not to open it).
     ///
     /// `plugin` are the [`ContextMenuContribution`](crate::chrome::ContextMenuContribution)s the
-    /// mounted providers declared for this path. They are merged **by weight**, not appended, so a
+    /// mounted providers declared for this path. They are merged **by order**, not appended, so a
     /// plugin's entries land *between* the built-ins (`[1,1,1]` between `[1,1]` and `[1,2]`) rather
     /// than always at the end.
     ///
@@ -150,35 +149,43 @@ impl ContextMenuRegistry {
         let mut providers = self.ordered_providers(path);
         providers.extend(plugin);
 
-        // **One sorted list, not blocks-then-items.** Every entry has a weight: the one it declared
+        // **One sorted list, not blocks-then-items.** Every entry has an order: the one it declared
         // for itself, or its block's when it declared none. So a plugin can place its entries as a
         // block — which is what it usually wants — and still lift a single one to the top, without
         // anyone having to understand two orderings to predict where anything lands
         //.
         //
-        // Stable, so entries that end up with equal weights keep the order their source produced
-        // them in — which is what makes a block with no weights at all come out exactly as written.
-        let mut weighted: Vec<(Vec<i64>, DropdownItem)> = Vec::new();
+        // Stable, so entries that end up with equal orders keep the order their source produced
+        // them in — which is what makes a block where no entry says anything come out as written.
+        let mut ordered: Vec<(Order, DropdownItem)> = Vec::new();
         for p in providers {
             for item in (p.build)(ctx, target) {
-                let weight = item.weight.clone().unwrap_or_else(|| p.weight.clone());
-                weighted.push((weight, item));
+                let order = item.order.as_ref().map_or(p.order, order_of);
+                ordered.push((order, item));
             }
         }
-        weighted.sort_by(|a, b| a.0.cmp(&b.0));
-        weighted.into_iter().map(|(_, item)| item).collect()
+        ordered.sort_by_key(|(order, _)| *order);
+        ordered.into_iter().map(|(_, item)| item).collect()
     }
 
-    /// Providers for a path, cloned + sorted by weight (stable sort keeps insertion order on
+    /// Providers for a path, cloned + sorted by order (stable sort keeps insertion order on
     /// ties). Exposed so the merge ordering is unit-testable without an `AppState`.
     pub(crate) fn ordered_providers(&self, path: &str) -> Vec<ContextMenuProvider> {
         let Some(provs) = self.providers.get(path) else {
             return Vec::new();
         };
         let mut ordered: Vec<ContextMenuProvider> = provs.clone();
-        ordered.sort_by(|a, b| a.weight.cmp(&b.weight));
+        ordered.sort_by_key(|p| p.order);
         ordered
     }
+}
+
+/// **A described entry's order, as the library compares it** — the one place the plugin kit's
+/// `ViewOrder` becomes an [`Order`], so a menu and a widget can never disagree about what `[0, 5]`
+/// means. An order the library cannot hold (more than four places) is `0`, like any other unreadable
+/// value from a description.
+fn order_of(order: &heca_view::ViewOrder) -> Order {
+    Order::from_places(&order.0).unwrap_or_default()
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -225,7 +232,7 @@ pub(crate) fn open_context_menu_for(
 }
 
 /// Every context-menu contribution the **mounted** providers declare for `path`, as providers ready
-/// to be merged with the built-ins by weight.
+/// to be merged with the built-ins by order.
 ///
 /// A provider declares *where* and *what*; the host decides *when*. This is the "when": one pass
 /// over what is mounted, at the moment the menu opens.
@@ -238,7 +245,7 @@ pub(crate) fn plugin_providers_for(
         .flat_map(|p| p.context_menus(ctx))
         .filter(|c| c.context_path == path)
         .map(|c| ContextMenuProvider {
-            weight: c.weight,
+            order: c.order,
             build: c.build,
         })
         .collect()
@@ -557,28 +564,28 @@ mod tests {
     }
 
     #[test]
-    fn ordered_providers_sorts_by_weight() {
-        // A plugin inserts between two built-ins via fractional weights.
+    fn ordered_providers_sorts_by_order() {
+        // A plugin inserts between two built-ins with a list order.
         let mut r = ContextMenuRegistry::with_builtins();
-        // Register a second provider for PANE with a higher weight — it sorts after the built-in.
+        // Register a second provider for PANE with a higher order — it sorts after the built-in.
         r.register(
             ContextPath::PANE,
-            vec![2],
+            2,
             std::rc::Rc::new(|_ctx: &ChromeCtx, _target: &ContextTarget| {
                 vec![DropdownItem::new("plugin_extra", "Plugin")]
             }),
         );
         let ordered = r.ordered_providers(ContextPath::PANE);
         assert_eq!(ordered.len(), 2);
-        assert_eq!(ordered[0].weight, vec![0], "built-in (weight 0) first");
-        assert_eq!(ordered[1].weight, vec![2], "plugin (weight 2) second");
+        assert_eq!(ordered[0].order, Order::from(0), "built-in (order 0) first");
+        assert_eq!(ordered[1].order, Order::from(2), "plugin (order 2) second");
     }
 
     /// **An entry can sit somewhere other than where its block sits.** ⚠️ Ran red first.
     ///
-    /// Block weight is the right granularity most of the time — a plugin thinks in "my entries" —
+    /// Block order is the right granularity most of the time — a plugin thinks in "my entries" —
     /// but a block can only move whole, so a plugin with one entry belonging at the very top and
-    /// the rest at the bottom was stuck. An entry that declares its own weight is placed by it;
+    /// the rest at the bottom was stuck. An entry that declares its own order is placed by it;
     /// one that declares nothing takes its block's, so this changes nothing for anybody who says
     /// nothing.
     #[test]
@@ -587,10 +594,10 @@ mod tests {
         r.register(
             ContextPath::PANE,
             // A block that sorts LAST — and yet one of its entries belongs first.
-            vec![9],
+            9,
             std::rc::Rc::new(|_ctx: &ChromeCtx, _target: &ContextTarget| {
                 vec![
-                    DropdownItem::new("myplugin.pin", "Pin this").weight(vec![-1]),
+                    DropdownItem::new("myplugin.pin", "Pin this").order(-1),
                     DropdownItem::new("myplugin.rest", "Something else"),
                 ]
             }),
@@ -611,7 +618,7 @@ mod tests {
         assert_eq!(
             ids.first(),
             Some(&"myplugin.pin"),
-            "the entry that named a weight is placed by it, above every built-in: {ids:?}",
+            "the entry that named an order is placed by it, above every built-in: {ids:?}",
         );
         assert_eq!(
             ids.last(),
@@ -621,14 +628,14 @@ mod tests {
     }
 
     /// **Saying nothing changes nothing.** The whole ordering is one sorted list now, so this pins
-    /// that a block with no per-entry weights comes out exactly as its provider wrote it — the
+    /// that a block with no per-entry orders comes out exactly as its provider wrote it — the
     /// sort must be stable, and every built-in menu depends on it.
     #[test]
-    fn entries_that_name_no_weight_keep_the_order_their_block_wrote_them_in() {
+    fn entries_that_name_no_order_keep_the_order_their_block_wrote_them_in() {
         let mut r = ContextMenuRegistry::with_builtins();
         r.register(
             ContextPath::PANE,
-            vec![9],
+            9,
             std::rc::Rc::new(|_ctx: &ChromeCtx, _target: &ContextTarget| {
                 vec![
                     DropdownItem::new("one", "One"),
@@ -764,7 +771,7 @@ mod tests {
         }
     }
 
-    /// THE POINT OF THE TASK: a provider's entries merge **between** the built-ins by weight (C2),
+    /// THE POINT OF THE TASK: a provider's entries merge **between** the built-ins by order (C2),
     /// not appended after them — and the entry carries the provider's **own** action id, which no
     /// `WmAction` variant exists for.
     #[test]
@@ -773,21 +780,21 @@ mod tests {
         // Two "built-ins" at [1,1] and [1,2] …
         r.register(
             "docker.container",
-            vec![1, 1],
+            [1, 1],
             std::rc::Rc::new(|_c: &ChromeCtx, _t: &ContextTarget| {
                 vec![DropdownItem::new("first", "First")]
             }),
         );
         r.register(
             "docker.container",
-            vec![1, 2],
+            [1, 2],
             std::rc::Rc::new(|_c: &ChromeCtx, _t: &ContextTarget| {
                 vec![DropdownItem::new("last", "Last")]
             }),
         );
         // … and the plugin slots in at [1,1,1].
         let plugin = vec![ContextMenuProvider {
-            weight: vec![1, 1, 1],
+            order: Order::from([1, 1, 1]),
             build: std::rc::Rc::new(|_c: &ChromeCtx, t: &ContextTarget| {
                 let ContextTarget::Contribution = t else {
                     return Vec::new();
@@ -805,11 +812,15 @@ mod tests {
 
         let mut ordered = r.ordered_providers("docker.container");
         ordered.extend(plugin);
-        ordered.sort_by(|a, b| a.weight.cmp(&b.weight));
-        let order: Vec<Vec<i64>> = ordered.iter().map(|p| p.weight.clone()).collect();
+        ordered.sort_by_key(|p| p.order);
+        let order: Vec<Order> = ordered.iter().map(|p| p.order).collect();
         assert_eq!(
             order,
-            vec![vec![1, 1], vec![1, 1, 1], vec![1, 2]],
+            vec![
+                Order::from([1, 1]),
+                Order::from([1, 1, 1]),
+                Order::from([1, 2])
+            ],
             "the plugin sits BETWEEN the built-ins, not after them"
         );
 

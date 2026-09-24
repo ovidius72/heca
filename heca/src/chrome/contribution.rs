@@ -172,7 +172,7 @@ pub enum Contribution {
 ///
 /// The provider declares *where* (`context_path`) and *what* (`build`); it never decides *when* —
 /// the host opens the menu on right-click or `prefix+>`, resolves the context, and merges every
-/// provider registered for that path in `weight` order, so a plugin's entries slot **between** the
+/// provider registered for that path in `order` order, so a plugin's entries slot **between** the
 /// built-ins rather than after them.
 ///
 /// **Why this is not a [`Contribution`] variant.** `Provider::build_contribution` returns exactly
@@ -187,10 +187,11 @@ pub struct ContextMenuContribution {
     /// `"pane"` (the host's own), or a path the provider defines for its rows
     /// (`"workspaces.pane"`, `"docker.container"`) — namespaced by component, like its action ids.
     pub context_path: String,
-    /// Merge order among the providers of that path (Dewey / fractional index): `[1,1,1]` lands
-    /// between built-ins weighted `[1,1]` and `[1,2]`. Sorted ascending; ties keep registration
-    /// order.
-    pub weight: Vec<i64>,
+    /// **Where this block sits among the other providers of that path** — CSS `order`, the same
+    /// [`Order`](heca_grid_ui::order::Order) every widget's `.order(..)` takes: lower first, ties in
+    /// registration order, and a list slots between two neighbours (`[1, 1, 1]` lands between
+    /// `[1, 1]` and `[1, 2]`). It was `weight: Vec<i64>` — a second word for the same idea.
+    pub order: heca_grid_ui::order::Order,
     /// Builds the entries for one opening of the menu. Reads the app through the
     /// [`ChromeCtx`](crate::providers::ChromeCtx) facade and *what was clicked* from the
     /// [`ContextTarget`](crate::chrome::ContextTarget) — never `AppState`. Each entry carries an
@@ -207,27 +208,10 @@ pub struct ContainerContribution {
     pub supported_regions: RegionSet,
     /// Region it mounts in on first run.
     pub default_region: RegionId,
-    /// Stacking order within a region (lower = earlier).
-    pub default_order: i32,
     /// Host-level move/reorder allowed?
     pub movable: bool,
     /// Collapsible within its region shell?
     pub collapsible: bool,
-    /// This container's share of its region, as a **flex grow factor** (F003/P011/T021).
-    ///
-    /// Fractional, never fixed: `1.0` is one share, `2.0` is twice as much as a `1.0`
-    /// beside it, and `0.0` means "as big as my content" (no share of the leftover). The
-    /// default is `1.0`, which gives the rule without a special case — one container takes
-    /// the whole region, two take half each, `2.0` against `1.0` takes two thirds.
-    ///
-    /// **Share of the region's MAIN AXIS, not of its height.** `flex_grow` is main-axis
-    /// relative, so this one number is the height in a sidebar (a column) and the width in
-    /// a bar (a row), with nothing to add when bar regions arrive. Calling it `height_grow`
-    /// would have baked "regions are vertical" into the contract.
-    ///
-    /// It is `flex_grow` because that is exactly what it is, and the widget library has had
-    /// it all along — no new sizing language to learn or to parse.
-    pub grow: f32,
     /// Builds the container body — **the render seam**. Called by the region host on
     /// (re)mount / invalidation, which for the retained chrome tree means once per
     /// structural change (`chrome_signature`), not once per frame.

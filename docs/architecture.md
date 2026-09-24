@@ -261,7 +261,9 @@ Composition rules (see `docs/surface-compositor.md`):
   mounted in, and get a `KeyHint` target automatically through `.on_hint` / the
   `ViewNode` `hint` event.
 - **Regions host providers, not panes of chrome.** Each `RegionId` holds an ordered
-  `Vec<MountedContribution>` (one per seated `Provider`), ordered by `default_order`.
+  `Vec<MountedContribution>` (one per seated `Provider`), in the order they were added with
+  `regions("sidebar.left").append(..)` / `.prepend(..)`. A dock that must sit elsewhere says
+  `.order(..)` on the body it builds; how big it is, `.flex(n)` on the same body.
   A provider's **DockView selector** (`active_dock_view`) shows exactly one provider
   at a time (mutually exclusive — a selector, not a stack). Within a provider the
   tree is built from `heca-grid-ui` widgets; overlays/modals it opens are compositor

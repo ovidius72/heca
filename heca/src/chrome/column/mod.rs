@@ -40,18 +40,81 @@ pub(crate) fn clear_columns(state: &mut crate::app_state::AppState) {
 /// A column is a third place a letter can land, beside the chrome tree and the pane trees: it is
 /// drawn in the content area, so it is not in the window root, and it is not a pane. Without this
 /// the pick lettered only the sidebar's view of each column.
+///
+/// **Only where it can be seen.** `seen` answers whether a pane's view is visible — the same
+/// question every other view's letter is asked. A column behind a sidebar used to be lettered
+/// regardless, so a pane under the sidebar drew its keycap on top of the sidebar (Antonio, driving,
+/// 2026-09-24): the pane path withdrew the letter and this path put it straight back.
 pub(crate) fn offer_to_columns(
     state: &crate::app_state::AppState,
     key: &str,
     label: Option<String>,
+    seen: impl Fn(PaneId) -> bool,
 ) -> bool {
     let mut offered = false;
     for col in state.columns.values() {
+        let label = if column_view_seen(&col.panes, key, &seen) {
+            label.clone()
+        } else {
+            // A withdrawal, never "leave whatever is there": a letter given while the column was
+            // visible must go when it is covered.
+            None
+        };
         // **By key, into the tree** — the column names itself, and the offer of a new column beside
         // it is a child. Matching only the root meant a target had to BE the tree it lived in.
-        offered |= heca_grid_ui::offer_hint_by_key(&col.root, key, label.clone());
+        offered |= heca_grid_ui::offer_hint_by_key(&col.root, key, label);
     }
     offered
+}
+
+/// **Can this column show the offer for `key`?** A pane it holds is judged by that pane's own view;
+/// anything else in the column — the column itself, the new-column slot beside it — by whether any
+/// of its panes can be seen.
+///
+/// Pure, so the rule is tested without a window.
+pub(crate) fn column_view_seen(panes: &[PaneId], key: &str, seen: impl Fn(PaneId) -> bool) -> bool {
+    match panes
+        .iter()
+        .find(|p| crate::providers::workspaces::pane_key(**p) == key)
+    {
+        Some(pane) => seen(*pane),
+        None => panes.iter().any(|p| seen(*p)),
+    }
+}
+
+#[cfg(test)]
+mod offer_tests {
+    use super::*;
+    use crate::providers::workspaces::{column_key, pane_key};
+
+    /// A pane behind the sidebar gets no letter; a visible one does — and a column is visible when
+    /// any pane in it is.
+    #[test]
+    fn a_column_shows_a_letter_only_where_it_can_be_seen() {
+        let (hidden, shown) = (PaneId(1), PaneId(2));
+        let seen = |p: PaneId| p == shown;
+
+        assert!(
+            !column_view_seen(&[hidden], &pane_key(hidden), seen),
+            "a covered pane"
+        );
+        assert!(
+            column_view_seen(&[shown], &pane_key(shown), seen),
+            "a visible pane"
+        );
+        assert!(
+            !column_view_seen(&[hidden, shown], &pane_key(hidden), seen),
+            "a covered pane in a column whose other pane shows — judged by its own view",
+        );
+        assert!(
+            column_view_seen(&[hidden, shown], &column_key(ColumnId(1)), seen),
+            "the column itself shows while any of its panes does",
+        );
+        assert!(
+            !column_view_seen(&[hidden], &column_key(ColumnId(1)), seen),
+            "a column entirely covered",
+        );
+    }
 }
 
 /// Bring the retained column trees in line with the session: build the ones whose identity changed,

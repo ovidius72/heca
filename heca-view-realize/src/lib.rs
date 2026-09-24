@@ -719,6 +719,32 @@ fn realize_kind(
         // a standalone one is, press intent and composed content included. Anything that is not a
         // button is skipped rather than wrapped: the group reads a label, a glyph and a click out
         // of each child to build its overflow menu, and there is nothing to read in a `Label`.
+        // A tile only arranges, so every part is a child and says where it goes with `slot`.
+        // A child with no slot is a line under the head — the default slot, since a tile may have
+        // any number of lines and exactly one of each other part.
+        WidgetKind::Tile => {
+            let mut tile = with_props(heca_grid_ui::widgets::Tile::new(), node, theme);
+            for child in &node.children {
+                let realized = realize(child, theme, emit, forms);
+                tile = match slot_of(child) {
+                    Some("status") => tile.status(realized),
+                    Some("icon") => tile.icon(realized),
+                    Some("title") => tile.title(realized),
+                    Some("suffix") => tile.suffix(realized),
+                    None => tile.line(realized),
+                    other => {
+                        warn_unknown_slot(
+                            node,
+                            child,
+                            other,
+                            &["status", "icon", "title", "suffix"],
+                        );
+                        tile.line(realized)
+                    }
+                };
+            }
+            Box::new(tile)
+        }
         WidgetKind::ButtonGroup => {
             let mut group = with_props(heca_grid_ui::widgets::ButtonGroup::new(), node, theme);
             for child in &node.children {
@@ -2373,6 +2399,10 @@ mod tests {
             ("Spinner", "no properties; animates off the clock"),
             ("StatusDot", "its state picks the constructor"),
             ("ScrollBar", "host-only; `realize` refuses it"),
+            (
+                "Tile",
+                "it only arranges: every part is a child placed by its `slot`",
+            ),
         ];
 
         let own_source = std::fs::read_to_string(
@@ -3529,6 +3559,45 @@ mod tests {
     /// `Item` has **no default slot** — its middle is the label, which comes from `text` — so a child
     /// naming no slot (or an unknown one) is ignored rather than dropped somewhere it doesn't belong.
     /// Either way: no panic. Realize stays total for untrusted input.
+    /// A described tile places each part by its `slot`, and a child with none becomes a line.
+    #[test]
+    fn tile_routes_each_part_by_its_slot_and_the_rest_become_lines() {
+        let slot = |s: &str| PropValue::Text(s.into());
+        let node = ViewNode::new(WidgetKind::Tile)
+            .child(
+                ViewNode::new(WidgetKind::Label)
+                    .text("T")
+                    .prop("slot", slot("title")),
+            )
+            .child(ViewNode::new(WidgetKind::Label).text("line one"))
+            .child(ViewNode::new(WidgetKind::StatusDot).prop("slot", slot("status")))
+            .child(ViewNode::new(WidgetKind::Label).text("line two"));
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
+        let parts = &w.base().children;
+        assert_eq!(parts.len(), 3, "the head and two lines");
+        assert_eq!(parts[1].text_summary().as_deref(), Some("line one"));
+        assert_eq!(parts[2].text_summary().as_deref(), Some("line two"));
+        let head = &parts[0].base().children;
+        assert!(
+            !head[0].base().style.layout.hidden,
+            "the status slot is filled"
+        );
+        assert!(
+            head[1].base().style.layout.hidden,
+            "no icon was given, so none is shown"
+        );
+        assert_eq!(
+            head[2].text_summary().as_deref(),
+            Some("T"),
+            "the title sits in the text run"
+        );
+    }
+
     #[test]
     fn item_routes_leading_and_trailing_slots_and_ignores_the_rest() {
         let node = ViewNode::new(WidgetKind::Item)
@@ -3824,6 +3893,11 @@ mod tests {
             WidgetKind::NfIcon => node.prop("glyph", PropValue::Text("command".into())),
             // Its children are buttons and nothing else, and each needs the pair the group reads:
             // the words for its menu row and hover bubble, the icon for when there is no room.
+            WidgetKind::Tile => node.child(
+                ViewNode::new(WidgetKind::Label)
+                    .text("title")
+                    .prop("slot", PropValue::Text("title".into())),
+            ),
             WidgetKind::ButtonGroup => node.child(
                 ViewNode::new(WidgetKind::Button)
                     .text("Close")
@@ -5260,6 +5334,49 @@ mod tests {
         assert_eq!(l.justify, Justify::SpaceBetween, "enum by name, snake_case");
         assert_eq!(l.flex_grow, 1.0);
         assert_eq!(l.margin, heca_grid_ui::style::Space::Px(6.0));
+    }
+
+    /// A plugin sizes a node by its parts with the same word native code uses: the typed SDK's
+    /// `.flex(3.0)` writes the `flex` property, and it lands in the one slot `LayoutExt::flex` writes.
+    #[test]
+    fn a_described_node_takes_its_parts_with_flex() {
+        use heca_view::build::{Style as _, VStack};
+        let node: ViewNode = VStack::new().flex(3.0).into();
+        assert_eq!(node.props.get("flex"), Some(&PropValue::Float(3.0)));
+
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut FormBindings::default(),
+        );
+        assert_eq!(w.base().style.layout.flex, Some(3.0));
+    }
+
+    /// A plugin orders a node with the same word native code uses — a number, or a list to slot
+    /// between two siblings it does not own — and it lands in the one slot `LayoutExt::order` writes.
+    #[test]
+    fn a_described_node_says_its_order() {
+        use heca_view::build::{Style as _, VStack};
+        let one: ViewNode = VStack::new().order(-1).into();
+        let list: ViewNode = VStack::new().order([0, 5]).into();
+        let realized = |n: &ViewNode| {
+            realize(
+                n,
+                &Theme::default(),
+                &noop_emitter(),
+                &mut FormBindings::default(),
+            )
+            .base()
+            .style
+            .layout
+            .order
+        };
+        assert_eq!(realized(&one), Some(heca_grid_ui::order::Order::from(-1)));
+        assert_eq!(
+            realized(&list),
+            Some(heca_grid_ui::order::Order::from([0, 5]))
+        );
     }
 
     /// `Length` reads the way an author would write it: a bare number is px, `"auto"` is auto,
