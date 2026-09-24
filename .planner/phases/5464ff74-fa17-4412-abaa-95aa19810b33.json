@@ -1488,7 +1488,7 @@
       "priority": 9,
       "shortName": "split-app-registry-rs-by-job-c",
       "title": "Split app/registry.rs by job — config parsing, keymap building, conflicts, action registration",
-      "status": "deferred",
+      "status": "planned",
       "description": "**Flagged while passing through, 2026-08-21** (Antonio's standing rule: notice a file worth splitting and say so rather than reorganise it quietly). Not urgent, and not to be done inside another task's diff.\n\n`heca/src/app/registry.rs` is ~2600 lines doing four jobs at once:\n1. **Reading config into keymaps** — `build_keymaps`, `build_modes`, the `[keys]` / `[[keys.bind]]` / `[[keys.surface]]` / `[[keys.mode]]` tables, `action_ref_from_config`, `component_action`.\n2. **Conflict tracking + the reverse index** — `Conflicts`, `BindingIndex`, `Written`, `bind_with_conflict_tracking`, `unbind_and_deindex`.\n3. **The floors** — `assert_escape_floor`, `UNTRIGGERED_MODES`, `LAYER_FLOOR`/`FOCUS_LAYER` wiring.\n4. **Action registration** — `registry.register(&WmAction::…, handler)` for every action.\n\nAGENTS.md § 0 rule 4: length is what makes you look, **the defect is always the second job**. Four is three too many, and it is already hard to answer \"where does a binding become an action\" without reading the whole file.\n\n**Shape to agree before starting** (do not just do it): `heca/src/app/registry/` with `mod.rs` (the entry point — `build_keymaps` and what the app calls), `config.rs` (tables → keymaps), `conflicts.rs` (tracking + the index), `floors.rs` (the guaranteed ways out), `actions.rs` (handler registration), and `tests.rs`. Public paths must not change: re-export from `mod.rs` so no call site outside the folder moves.\n\n**Behaviours that must survive** (each already has a test): a mode block's bindings accept one combo, a comma-separated string or a list (`BindingValue`); `Escape` is never a global binding, and neither is `close_overlay`; a floor cannot be unbound; `[[keys.surface]]` is consulted before the global map; a conflict is reported once with the layer that wrote it.\n\nPrecedent for the split: `widgets/overlay/` and `chrome/layers/` (F003/P082/T459) — split by job, every file under 600 lines, public paths unchanged.",
       "descriptionUpdatedAt": "2026-08-21T11:28:23.629Z",
       "notes": "",
@@ -1500,6 +1500,14 @@
           "toStatus": "deferred",
           "title": "Parked 2026-08-28 with the other file splits (see T468). `heca/src/app/registry.rs` neighbours the action/keymap wiring that P097's dispatch collapse touches, so splitting it now means splitting a file about to be reshaped. Resume after P097 and P094's terminal work. No user-visible behaviour waits on it.",
           "description": "Parked 2026-08-28 with the other file splits (see T468). `heca/src/app/registry.rs` neighbours the action/keymap wiring that P097's dispatch collapse touches, so splitting it now means splitting a file about to be reshaped. Resume after P097 and P094's terminal work. No user-visible behaviour waits on it."
+        },
+        {
+          "id": "a38641d7-ef78-4179-b11e-1e7c9a65f288-check-002-deferred-planned",
+          "date": "2026-09-24T16:01:57.757Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Un-parked with Antonio's OK, 2026-09-24. It was parked until P097(F003) and P094(F011) stopped reshaping registry.rs. P097 is done. Of P094's open tasks only T452 touches registry.rs, and only to add one action to build_registry — a line that lands as easily in the split file. T472 stays deferred: P094/T457 (the picker as a describable widget) still adds to heca-view/src/lib.rs.",
+          "description": "Un-parked with Antonio's OK, 2026-09-24. It was parked until P097(F003) and P094(F011) stopped reshaping registry.rs. P097 is done. Of P094's open tasks only T452 touches registry.rs, and only to add one action to build_registry — a line that lands as easily in the split file. T472 stays deferred: P094/T457 (the picker as a describable widget) still adds to heca-view/src/lib.rs."
         }
       ],
       "decisions": [],
@@ -1512,7 +1520,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-21T11:28:23.578Z",
-      "updatedAt": "2026-08-28T08:22:56.310Z",
+      "updatedAt": "2026-09-24T16:01:57.757Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -2303,23 +2311,58 @@
       "priority": 49,
       "shortName": "the-showcase-teaches-developer",
       "title": "The showcase teaches developers to hand-roll a row the app has as a component",
-      "status": "planned",
-      "description": "THE DEFECT\n`heca-renderer/examples/showcase.rs:1672` builds its PANES dock rows with a ~90-line inline closure — nested `Flex`/`Visibility`/`Label`/`Icon` with hardcoded `6.0`, `10.0`, `12.0`, `with_alpha(5)`, `font_scale(0.8)`. The app builds the same row as a component: `PaneRow{..}.build(..)` in `heca/src/providers/workspaces/pane_row.rs`.\n\nTwo implementations of one row, and only one gets fixed. The showcase copy still carries defects already repaired in the app this week:\n- TWO `Label`s for one title, toggled by `Visibility` (app: the name is built once — c4352ac / 33a702f).\n- The `StatusDot` pinned into a 12px slot (app: the dot declares it never gives way, the pinned slot is gone).\n\nAntonio also reports the showcase PANES dock breaking on collapse/reopen (\"all the content overlaps\"). NOT reproduced headlessly: a plain `DockFrame` collapsed and re-expanded is byte-identical to its starting layout, and the same inside a `ScrollRegion` re-clamps correctly. So the fault is in this composed row or in repaint/damage, not in `DockFrame`. Diagnostic that splits the two: when it is broken, resize the window — if it snaps right it is damage, if not it is layout.\n\nWHY IT HAPPENED (not carelessness — arrangement)\n`heca-renderer/Cargo.toml` depends on `heca-core`, `heca-config`, `heca-grid-ui` — NOT on `heca`. So the showcase CANNOT import `PaneRow`. Whoever wrote the demo had one option: rebuild it by hand. The rule was not ignored; obeying it was impossible.\n\nDESIRED (this task)\nDrop the hand-rolled row. Keep the `DockFrame` demo itself — it is honest — with real widget children, so a developer reading the showcase sees a dock composed correctly instead of an invitation to hand-roll one. The showcase exists to show how to implement; a drifted copy is worse than no demo.\n\nNOT THIS TASK\nThe real fix is extracting the row's domain-neutral presentation (status dot / icon / title / metadata line) into a `heca-grid-ui` widget both surfaces mount, leaving the app component to bind only the pane id and its intents (AGENTS.md § 0b: if it can be built inside grid-ui, it belongs there). That is a separate proposal and needs Antonio's agreement on the widget's shape.\n\nEDGE CASES\n- Keep the dock's `drop_target` and the `attention` demo reachable — they are the only examples of either.\n- Do not delete the git-metadata line demo without a replacement; it is the only example of a two-row card.\n\nVERIFY\nAntonio drives it: the showcase still demonstrates a dock, collapse/reopen behaves, and nothing in the example hand-rolls a row shape that a widget already provides.",
-      "descriptionUpdatedAt": "2026-08-26T14:38:26.254Z",
+      "status": "done",
+      "description": "THE DEFECT\n`heca-renderer/examples/showcase.rs:1672` builds its PANES dock rows with a ~90-line inline closure — nested `Flex`/`Visibility`/`Label`/`Icon` with hardcoded `6.0`, `10.0`, `12.0`, `with_alpha(5)`, `font_scale(0.8)`. The app builds the same row as a component: `PaneRow{..}.build(..)` in `heca/src/providers/workspaces/pane_row.rs`.\n\nTwo implementations of one row, and only one gets fixed. The showcase copy still carries defects already repaired in the app this week:\n- TWO `Label`s for one title, toggled by `Visibility` (app: the name is built once — c4352ac / 33a702f).\n- The `StatusDot` pinned into a 12px slot (app: the dot declares it never gives way, the pinned slot is gone).\n\nAntonio also reports the showcase PANES dock breaking on collapse/reopen (\"all the content overlaps\"). NOT reproduced headlessly: a plain `DockFrame` collapsed and re-expanded is byte-identical to its starting layout, and the same inside a `ScrollRegion` re-clamps correctly. So the fault is in this composed row or in repaint/damage, not in `DockFrame`. Diagnostic that splits the two: when it is broken, resize the window — if it snaps right it is damage, if not it is layout.\n\nWHY IT HAPPENED (not carelessness — arrangement)\n`heca-renderer/Cargo.toml` depends on `heca-core`, `heca-config`, `heca-grid-ui` — NOT on `heca`. So the showcase CANNOT import `PaneRow`. Whoever wrote the demo had one option: rebuild it by hand. The rule was not ignored; obeying it was impossible.\n\nDESIRED (this task)\nDrop the hand-rolled row. Keep the `DockFrame` demo itself — it is honest — with real widget children, so a developer reading the showcase sees a dock composed correctly instead of an invitation to hand-roll one. The showcase exists to show how to implement; a drifted copy is worse than no demo.\n\nNOT THIS TASK\nThe real fix is extracting the row's domain-neutral presentation (status dot / icon / title / metadata line) into a `heca-grid-ui` widget both surfaces mount, leaving the app component to bind only the pane id and its intents (AGENTS.md § 0b: if it can be built inside grid-ui, it belongs there). That is a separate proposal and needs Antonio's agreement on the widget's shape.\n\nEDGE CASES\n- Keep the dock's `drop_target` and the `attention` demo reachable — they are the only examples of either.\n- Do not delete the git-metadata line demo without a replacement; it is the only example of a two-row card.\n\nVERIFY\nAntonio drives it: the showcase still demonstrates a dock, collapse/reopen behaves, and nothing in the example hand-rolls a row shape that a widget already provides.\n\n---\n**Completion summary:**\nDONE 2026-09-24, confirmed on screen by Antonio (\"they work fine\"). Uncommitted in the working tree.\n\nSHIPPED\n- New heca-grid-ui widget `Tile` (heca-grid-ui/src/widgets/tile.rs): status / icon / title / suffix slots in a head row + repeatable `.line(..)`. Arranges only; every part is a caller-built widget (impl IntoComponent) so live signals update in place. Selection stays with `Row`. Spacing from theme steps (Sm head, Xs lines). Head is a Flex row on purpose: optional parts must leave no track and no gap (documented).\n- Declarative: `WidgetKind::Tile` (ordinal 39), SDK `build::Tile` (+ Parent, on_hint), realize arm routing children by `slot` (status/icon/title/suffix; anything else is a line).\n- App `PaneRow` (heca/src/providers/workspaces/pane_row.rs) now mounts Tile; its hand-built name_row/title_area/content column are gone.\n- Showcase PANES dock (heca-renderer/examples/showcase.rs) mounts the same Tile; the ~90-line hand-built card, its two stacked title Labels, the 12px pinned pip and `PaneTitleSignals` are gone. Drag and `n` attention kept.\n- Exported in widgets::, crate root and prelude.\n\nTESTS (order test finds parts by text; broken on purpose and seen red): tile::tests::filled_slots_sit_in_order_on_one_line_and_lines_stack_under_it, an_unfilled_slot_takes_no_room; heca-view-realize tile_routes_each_part_by_its_slot_and_the_rest_become_lines; drift guards updated (NO_PROPERTIES_TO_CHECK, with_event on_hint). lint-changed clippy/test/fmt clean.\n\nDOCS: docs/widgets.md `### Tile` (native + declarative + slots, contents list, props-by-kind row); AGENTS.md widget list; rustdoc.\n\nNOTE (Antonio 2026-09-24): the showcase as a whole is behind the app and is better rewritten once components/widgets are stable — relevant to the deferred T470 (split showcase.rs).",
+      "descriptionUpdatedAt": "2026-09-24T16:28:31.485Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "599c8f7e-52d3-4d18-95cc-aaa13d67e374-check-001-planned-in-progress",
+          "date": "2026-09-24T16:02:56.857Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "599c8f7e-52d3-4d18-95cc-aaa13d67e374-check-002-in-progress-done",
+          "date": "2026-09-24T16:28:31.481Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE 2026-09-24, confirmed on screen by Antonio (\"they work fine\"). Uncommitted in the working tree.\n\nSHIPPED\n- New heca-grid-ui widget `Tile` (heca-grid-ui/src/widgets/tile.rs): status / icon / title / suffix slots in a head row + repeatable `.line(..)`. Arranges only; every part is a caller-built widget (impl IntoComponent) so live signals update in place. Selection stays with `Row`. Spacing from theme steps (Sm head, Xs lines). Head is a Flex row on purpose: optional parts must leave no track and no gap (documented).\n- Declarative: `WidgetKind::Tile` (ordinal 39), SDK `build::Tile` (+ Parent, on_hint), realize arm routing children by `slot` (status/icon/title/suffix; anything else is a line).\n- App `PaneRow` (heca/src/providers/workspaces/pane_row.rs) now mounts Tile; its hand-built name_row/title_area/content column are gone.\n- Showcase PANES dock (heca-renderer/examples/showcase.rs) mounts the same Tile; the ~90-line hand-built card, its two stacked title Labels, the 12px pinned pip and `PaneTitleSignals` are gone. Drag and `n` attention kept.\n- Exported in widgets::, crate root and prelude.\n\nTESTS (order test finds parts by text; broken on purpose and seen red): tile::tests::filled_slots_sit_in_order_on_one_line_and_lines_stack_under_it, an_unfilled_slot_takes_no_room; heca-view-realize tile_routes_each_part_by_its_slot_and_the_rest_become_lines; drift guards updated (NO_PROPERTIES_TO_CHECK, with_event on_hint). lint-changed clippy/test/fmt clean.\n\nDOCS: docs/widgets.md `### Tile` (native + declarative + slots, contents list, props-by-kind row); AGENTS.md widget list; rustdoc.\n\nNOTE (Antonio 2026-09-24): the showcase as a whole is behind the app and is better rewritten once components/widgets are stable — relevant to the deferred T470 (split showcase.rs)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "599c8f7e-52d3-4d18-95cc-aaa13d67e374-check-001-tile-widget-in-heca-grid-ui-status-icon-title-suffix-slots-repeatable-line-realized-as-widgetkind-tile-with-slot-props-sdk-builder-app-panerow-and-showcase-panes-both-mount-it-agreed-with-antonio-2026-09-24-complete-it-the-real-fix-the-description-had-parked-built-tested-docs-done",
+          "number": 1,
+          "title": "Tile widget in heca-grid-ui (status/icon/title/suffix slots + repeatable line), realized as WidgetKind::Tile with slot props, SDK builder; app PaneRow and showcase PANES both mount it. Agreed with Antonio 2026-09-24 (\"complete it\") — the \"real fix\" the description had parked. Built, tested, docs done",
+          "checked": true
+        },
+        {
+          "id": "599c8f7e-52d3-4d18-95cc-aaa13d67e374-check-002-antonio-drives-app-sidebar-pane-cards-look-as-before-spacing-now-theme-steps-sm-along-the-head-xs-between-lines-showcase-panes-dock-shows-real-tiles-collapse-reopen-behaves-drag-n-attention-still-work",
+          "number": 2,
+          "title": "Antonio drives: app sidebar pane cards look as before (spacing now theme steps: sm along the head, xs between lines); showcase PANES dock shows real Tiles, collapse/reopen behaves, drag + `n` attention still work",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-24T16:02:56.857Z",
+      "completedAt": "2026-09-24T16:28:31.481Z",
       "createdAt": "2026-08-26T14:38:26.210Z",
-      "updatedAt": "2026-08-26T14:38:26.210Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-24T16:28:31.481Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:0b06056b-4c79-4d0c-a97e-50700cf362f6",
+          "createdAt": "2026-09-24T16:02:56.739Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -2644,11 +2687,28 @@
       "priority": 6,
       "shortName": "a-region-is-reached-by-name-an",
       "title": "A region is reached by name and holds a list — regions(\"sidebar.left\").append(..)",
-      "status": "planned",
-      "description": "Decided with Antonio 2026-09-21, in conversation. Next task after T474 closes. NO CODE YET beyond what is described here.\n\n═══ THE DECISION ═══\nA region is a PLACE, not a widget. `Region::LeftSidebar.child(..)` (landed 14452a9) reads like building a component, and a sidebar is not one. Replace it with a handle fetched by name that owns a LIST:\n\n    regions(\"sidebar.left\").append(FileTree::new())\n    regions(\"sidebar.left\").prepend(Outline::new())\n    regions(\"sidebar.right\").remove(\"workspaces\")\n    regions(\"sidebar.left\").retain(|id| id != \"docker\")\n\nThat is the line a plugin author types — Rule Zero. No host object, no crate-private type, no registry id.\n\nThe dotted string matches what `ContextPath` already does (`\"sidebar.workspace\"`, accepted decision cm-d1), so a plugin learns ONE spelling for \"where\".\n\n═══ WHAT WAS REJECTED, AND WHY ═══\n- `add_at(index, ..)` / `remove_at(index)` — Antonio's first sketch, dropped in the same conversation. Addressing a member by POSITION is the exact defect P052(F004)/T517 exists to delete: a plugin inserting anything shifts everyone after it and nothing fails, because the indices are still valid indices. Ends are stable, so `append`/`prepend` stay.\n- `filter(..)` as the name. In Rust `filter` returns a new lazy sequence; the in-place one is `retain`. Same idea, honest name.\n- A predicate over an opaque `Box<dyn Component>` — it could not tell one dock from another. The predicate takes the CONTRIBUTION ID, which region children already carry (`c.id`, read in `heca/src/chrome/scene.rs::build_region_content`).\n- `weight` as the ordering name. Checked 2026-09-21: in `heca-grid-ui` **weight means font weight** (`label.rs:73`, `item.rs:441`). Reusing it would give one word two meanings inside the library. The `weight: Vec<i64>` that exists is app-side only, `heca/src/chrome/context_menu.rs:94`, for merging menu entries.\n- Deriving the region's template from how many children it has. That is counting children, which T517 exists to delete.\n\n═══ ORDER ═══\n`.order(..)` on the CHILD — CSS's own name, and the layout API already speaks CSS. There is no `.order` builder and no ordering enum in the library today (checked).\n\nSemantics: lower first; unset means declaration order; ties keep declaration order (stable sort).\n\nIt takes a NUMBER OR A LIST — `.order(1)` and `.order([0, 5])` — through one parser, exactly as `Length` and `Space` do (T474's recorded decision: \"A capability is one builder taking any spelling of its value\"). The list is what lets a plugin slot between two children it does not control: with plain `i32`, built-ins at 0 and 1 leave no integer between them. This is the same shape as the context menu's `weight`, so the app ends with ONE ordering idea under the CSS name and two call sites — consider whether `context_menu.rs` should move onto it rather than keep its own.\n\nAntonio first said `i32` is enough, then reversed: \"if plugin need vec<i64> go for it.\"\n\n═══ PLACEMENT ═══\nA child may instead say where it sits: `.area(..)`, `.row(..)`, `.column_span(..)`, `.row_span(..)` — already on every widget since 47356a0. The REGION owns only the shape (`template_row`, landed a3bc234).\n\nRule between them: EXPLICIT PLACEMENT WINS; `.order` only sorts whatever was not placed. Also CSS.\n\n═══ THE DEFAULT — LIKELY ALREADY FREE, PROVE IT FIRST ═══\nBelieved, NOT verified: a region with no template needs no derived template at all. A grid creates tracks to fit what children declare, and the uncommitted `to_taffy_grid` change makes an implicit track `minmax(0, 1fr)` — so two children with no template should already come out as two equal halves, and a child saying `.row(3)` in a two-row template should already get a third row.\n\n⚠️ FIRST STEP IS A HEADLESS TEST OF THAT CLAIM. If it holds, the auto-template question Antonio raised is answered by doing nothing. Reasoning was wrong twice in the 2026-09-21 session and measuring was right every time.\n\nOpen: what \"no template, nobody declared\" should MEAN — equal shares (what the tree does today) or content-sized. Right for a sidebar, probably wrong for a toolbar region.\n\n═══ STARTUP ONLY (Antonio, explicitly) ═══\n\"do not make it automatically update for now. keep it at startup.\"\n\nSo this task does NOT make regions reactive. But the silent failure must go: `ChromeHost::mount_pending` is called once in `heca/src/app/startup.rs`, so a `Region::child` after startup queues and is DROPPED with no error. A call after startup must FAIL LOUDLY. Silently vanishing is worse than either option.\n\n═══ WHAT EXISTS TODAY ═══\n- `Region::LeftSidebar.child(..)` — one or many, works before the host exists by queuing (14452a9). This task replaces its spelling.\n- `Region::LeftSidebar.template_row(\"1fr 1fr\").gap(\"sm\")` (a3bc234). Kept.\n- `placed(id, region)` became `named(id)`.\n- `heca/src/chrome/scene.rs::build_region_content` builds a region's body from `host.contributions(region)` and is where the list and its order are read.\n- A provider's `default_order` still decides where it sits among siblings. THAT GOES — it is the same inversion `Region::child` removed for the parent, and with the region owning the list there would be two sources of order.\n\n═══ EDGE CASES ═══\n- Two children declaring the same cell; a child naming an area the region's template does not have. CSS overlaps or auto-places SILENTLY — wrong here, because a plugin's mistake shows up as a layout nobody can explain. Decide: warn, or refuse.\n- A name nobody registered (`regions(\"sidebar.lft\")`). Must be visible, not a no-op.\n- Removing a built-in the app relies on, e.g. `remove(\"workspaces\")`. Allowed — it is the point — but the app must not assume it is there.\n\n═══ VERIFICATION ═══\nRendering. Green tests do not show where anything sits. Antonio drives: both sidebars after an append, a prepend, a remove, and an `.order` that reverses two docks. Sabotage every guard.",
-      "descriptionUpdatedAt": "2026-09-21T18:06:28.516Z",
+      "status": "done",
+      "description": "Decided with Antonio 2026-09-21, in conversation. Next task after T474 closes. NO CODE YET beyond what is described here.\n\n═══ THE DECISION ═══\nA region is a PLACE, not a widget. `Region::LeftSidebar.child(..)` (landed 14452a9) reads like building a component, and a sidebar is not one. Replace it with a handle fetched by name that owns a LIST:\n\n    regions(\"sidebar.left\").append(FileTree::new())\n    regions(\"sidebar.left\").prepend(Outline::new())\n    regions(\"sidebar.right\").remove(\"workspaces\")\n    regions(\"sidebar.left\").retain(|id| id != \"docker\")\n\nThat is the line a plugin author types — Rule Zero. No host object, no crate-private type, no registry id.\n\nThe dotted string matches what `ContextPath` already does (`\"sidebar.workspace\"`, accepted decision cm-d1), so a plugin learns ONE spelling for \"where\".\n\n═══ WHAT WAS REJECTED, AND WHY ═══\n- `add_at(index, ..)` / `remove_at(index)` — Antonio's first sketch, dropped in the same conversation. Addressing a member by POSITION is the exact defect P052(F004)/T517 exists to delete: a plugin inserting anything shifts everyone after it and nothing fails, because the indices are still valid indices. Ends are stable, so `append`/`prepend` stay.\n- `filter(..)` as the name. In Rust `filter` returns a new lazy sequence; the in-place one is `retain`. Same idea, honest name.\n- A predicate over an opaque `Box<dyn Component>` — it could not tell one dock from another. The predicate takes the CONTRIBUTION ID, which region children already carry (`c.id`, read in `heca/src/chrome/scene.rs::build_region_content`).\n- `weight` as the ordering name. Checked 2026-09-21: in `heca-grid-ui` **weight means font weight** (`label.rs:73`, `item.rs:441`). Reusing it would give one word two meanings inside the library. The `weight: Vec<i64>` that exists is app-side only, `heca/src/chrome/context_menu.rs:94`, for merging menu entries.\n- Deriving the region's template from how many children it has. That is counting children, which T517 exists to delete.\n\n═══ ORDER ═══\n`.order(..)` on the CHILD — CSS's own name, and the layout API already speaks CSS. There is no `.order` builder and no ordering enum in the library today (checked).\n\nSemantics: lower first; unset means declaration order; ties keep declaration order (stable sort).\n\nIt takes a NUMBER OR A LIST — `.order(1)` and `.order([0, 5])` — through one parser, exactly as `Length` and `Space` do (T474's recorded decision: \"A capability is one builder taking any spelling of its value\"). The list is what lets a plugin slot between two children it does not control: with plain `i32`, built-ins at 0 and 1 leave no integer between them. This is the same shape as the context menu's `weight`, so the app ends with ONE ordering idea under the CSS name and two call sites — consider whether `context_menu.rs` should move onto it rather than keep its own.\n\nAntonio first said `i32` is enough, then reversed: \"if plugin need vec<i64> go for it.\"\n\n═══ PLACEMENT ═══\nA child may instead say where it sits: `.area(..)`, `.row(..)`, `.column_span(..)`, `.row_span(..)` — already on every widget since 47356a0. The REGION owns only the shape (`template_row`, landed a3bc234).\n\nRule between them: EXPLICIT PLACEMENT WINS; `.order` only sorts whatever was not placed. Also CSS.\n\n═══ THE DEFAULT — LIKELY ALREADY FREE, PROVE IT FIRST ═══\nBelieved, NOT verified: a region with no template needs no derived template at all. A grid creates tracks to fit what children declare, and the uncommitted `to_taffy_grid` change makes an implicit track `minmax(0, 1fr)` — so two children with no template should already come out as two equal halves, and a child saying `.row(3)` in a two-row template should already get a third row.\n\n⚠️ FIRST STEP IS A HEADLESS TEST OF THAT CLAIM. If it holds, the auto-template question Antonio raised is answered by doing nothing. Reasoning was wrong twice in the 2026-09-21 session and measuring was right every time.\n\nOpen: what \"no template, nobody declared\" should MEAN — equal shares (what the tree does today) or content-sized. Right for a sidebar, probably wrong for a toolbar region.\n\n═══ STARTUP ONLY (Antonio, explicitly) ═══\n\"do not make it automatically update for now. keep it at startup.\"\n\nSo this task does NOT make regions reactive. But the silent failure must go: `ChromeHost::mount_pending` is called once in `heca/src/app/startup.rs`, so a `Region::child` after startup queues and is DROPPED with no error. A call after startup must FAIL LOUDLY. Silently vanishing is worse than either option.\n\n═══ WHAT EXISTS TODAY ═══\n- `Region::LeftSidebar.child(..)` — one or many, works before the host exists by queuing (14452a9). This task replaces its spelling.\n- `Region::LeftSidebar.template_row(\"1fr 1fr\").gap(\"sm\")` (a3bc234). Kept.\n- `placed(id, region)` became `named(id)`.\n- `heca/src/chrome/scene.rs::build_region_content` builds a region's body from `host.contributions(region)` and is where the list and its order are read.\n- A provider's `default_order` still decides where it sits among siblings. THAT GOES — it is the same inversion `Region::child` removed for the parent, and with the region owning the list there would be two sources of order.\n\n═══ EDGE CASES ═══\n- Two children declaring the same cell; a child naming an area the region's template does not have. CSS overlaps or auto-places SILENTLY — wrong here, because a plugin's mistake shows up as a layout nobody can explain. Decide: warn, or refuse.\n- A name nobody registered (`regions(\"sidebar.lft\")`). Must be visible, not a no-op.\n- Removing a built-in the app relies on, e.g. `remove(\"workspaces\")`. Allowed — it is the point — but the app must not assume it is there.\n\n═══ VERIFICATION ═══\nRendering. Green tests do not show where anything sits. Antonio drives: both sidebars after an append, a prepend, a remove, and an `.order` that reverses two docks. Sabotage every guard.\n\n---\n**Completion summary:**\nDONE 2026-09-24 (uncommitted in the working tree on feat/t518-a-region-holds-a-list).\n\nSHIPPED\n- `.share` renamed `.flex` (CSS flex: n) on every widget (LayoutExt) and in the plugin SDK (`flex` property). `.span` rejected: CSS span is grid placement (.row_span/.column_span).\n- A region is a Flex list, never a Grid: `template_row`/`template_column` on regions removed; provider `fn grow()` and `default_order` removed. A dock says its size with `.flex(n)` and place with `.order(..)` on the body it builds; whoever adds a dock can say both on it (`PlaceDock`: `.append(Docker::new(\"d\").flex(3.0).order(-1))`) and wins.\n- `regions(\"sidebar.left\")` handle (heca/src/chrome/regions.rs): append / prepend / remove(id) / retain(|id|..) / gap. Dotted names added to the one RegionId parser (old names still read; printed name is now dotted). Unknown name, remove of a name not there, and any call after startup: loud warning via warn_author, nothing changed. `retain` not `filter`: documented why.\n- `Order` (heca-grid-ui/src/order.rs): number or list, one parser, lexicographic with zero padding, max 4 places; `LayoutExt::order` sorts only the taffy child list (visual only). Plugin SDK `.order`, `ViewOrder`.\n- Context menu `weight: Vec<i64>` replaced by the same Order (`DropdownItem::order`, `ContextMenuContribution::order`); wire still reads \"weight\".\n- Found while testing, fixed, confirmed by Antonio: (1) RegionMap<T> replaces the show/hide handler's private region enum + four show_* fields and ChromeHost's hand-indexed arrays; `shown_from_settings` is the one pairing with config keys. (2) prefix+q lettered a pane tile hidden behind the sidebar: offer_to_columns now asks visibility (column_view_seen); duplicate pane-in-column offer loop removed.\n\nVERIFIED\n- Antonio on screen: sidebar halves unchanged; append/prepend/remove/retain via a temporary HECA_TRY_REGIONS trial (now deleted); the prefix+q stray letter fix.\n- NOT checked on screen by choice (Antonio 2026-09-24 \"move on\"): `.order` reversing two docks. Covered headless by `a_dock_says_its_own_size_and_the_region_honours_it`.\n- Tests (each broken on purpose and seen red): heca-grid-ui tests/fr_share.rs, tests/order.rs, order.rs unit tests; heca-view-realize a_described_node_takes_its_parts_with_flex / a_described_node_says_its_order; heca-view a_menu_entry_reads_its_order_under_either_name; heca chrome::host::region_list_tests, chrome::tests::a_dock_says_its_own_size_and_the_region_honours_it, chrome::column::offer_tests, chrome::regions::region_map_tests, chrome::hint::one_letter_per_row_tests. lint-changed clippy/test/fmt clean.\n\nDOCS: docs/layout.md (Shares rewritten, new Order section), docs/widgets.md, docs/plugins.md (Adding a dock to a region), docs/architecture.md, docs/chrome-and-ui.md, rustdoc throughout.\n\nOPEN / FLAGGED\n- 12 show/hide/toggle WmActions could become 3 taking a region name (not done; not agreed).\n- heca/src/chrome/mod.rs is ~2500 lines (several jobs) — split not agreed.",
+      "descriptionUpdatedAt": "2026-09-24T14:58:29.793Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-001-planned-in-progress",
+          "date": "2026-09-23T12:58:06.781Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-002-in-progress-done",
+          "date": "2026-09-24T14:58:29.789Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE 2026-09-24 (uncommitted in the working tree on feat/t518-a-region-holds-a-list).\n\nSHIPPED\n- `.share` renamed `.flex` (CSS flex: n) on every widget (LayoutExt) and in the plugin SDK (`flex` property). `.span` rejected: CSS span is grid placement (.row_span/.column_span).\n- A region is a Flex list, never a Grid: `template_row`/`template_column` on regions removed; provider `fn grow()` and `default_order` removed. A dock says its size with `.flex(n)` and place with `.order(..)` on the body it builds; whoever adds a dock can say both on it (`PlaceDock`: `.append(Docker::new(\"d\").flex(3.0).order(-1))`) and wins.\n- `regions(\"sidebar.left\")` handle (heca/src/chrome/regions.rs): append / prepend / remove(id) / retain(|id|..) / gap. Dotted names added to the one RegionId parser (old names still read; printed name is now dotted). Unknown name, remove of a name not there, and any call after startup: loud warning via warn_author, nothing changed. `retain` not `filter`: documented why.\n- `Order` (heca-grid-ui/src/order.rs): number or list, one parser, lexicographic with zero padding, max 4 places; `LayoutExt::order` sorts only the taffy child list (visual only). Plugin SDK `.order`, `ViewOrder`.\n- Context menu `weight: Vec<i64>` replaced by the same Order (`DropdownItem::order`, `ContextMenuContribution::order`); wire still reads \"weight\".\n- Found while testing, fixed, confirmed by Antonio: (1) RegionMap<T> replaces the show/hide handler's private region enum + four show_* fields and ChromeHost's hand-indexed arrays; `shown_from_settings` is the one pairing with config keys. (2) prefix+q lettered a pane tile hidden behind the sidebar: offer_to_columns now asks visibility (column_view_seen); duplicate pane-in-column offer loop removed.\n\nVERIFIED\n- Antonio on screen: sidebar halves unchanged; append/prepend/remove/retain via a temporary HECA_TRY_REGIONS trial (now deleted); the prefix+q stray letter fix.\n- NOT checked on screen by choice (Antonio 2026-09-24 \"move on\"): `.order` reversing two docks. Covered headless by `a_dock_says_its_own_size_and_the_region_honours_it`.\n- Tests (each broken on purpose and seen red): heca-grid-ui tests/fr_share.rs, tests/order.rs, order.rs unit tests; heca-view-realize a_described_node_takes_its_parts_with_flex / a_described_node_says_its_order; heca-view a_menu_entry_reads_its_order_under_either_name; heca chrome::host::region_list_tests, chrome::tests::a_dock_says_its_own_size_and_the_region_honours_it, chrome::column::offer_tests, chrome::regions::region_map_tests, chrome::hint::one_letter_per_row_tests. lint-changed clippy/test/fmt clean.\n\nDOCS: docs/layout.md (Shares rewritten, new Order section), docs/widgets.md, docs/plugins.md (Adding a dock to a region), docs/architecture.md, docs/chrome-and-ui.md, rustdoc throughout.\n\nOPEN / FLAGGED\n- 12 show/hide/toggle WmActions could become 3 taking a region name (not done; not agreed).\n- heca/src/chrome/mod.rs is ~2500 lines (several jobs) — split not agreed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -2656,77 +2716,118 @@
           "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-001-headless-test-first-a-region-with-no-template-and-two-children-comes-out-as-equal-halves-and-a-child-declaring-row-3-in-a-two-row-template-gets-a-third-row-if-it-holds-the-auto-template-question-needs-no-code",
           "number": 1,
           "title": "Headless test FIRST: a region with no template and two children comes out as equal halves, and a child declaring .row(3) in a two-row template gets a third row. If it holds, the auto-template question needs no code",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-002-regions-sidebar-left-returns-a-handle-by-dotted-name-matching-contextpath-s-spelling-a-name-nobody-registered-is-visible-never-a-silent-no-op",
           "number": 2,
           "title": "regions(\"sidebar.left\") returns a handle by dotted name, matching ContextPath's spelling. A name nobody registered is visible, never a silent no-op",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-003-append-prepend-remove-id-retain-id-on-the-handle-no-index-methods-the-predicate-takes-the-contribution-id-not-an-opaque-component",
           "number": 3,
           "title": "append / prepend / remove(id) / retain(|id| ..) on the handle. No index methods. The predicate takes the contribution id, not an opaque component",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-004-layoutext-order-on-the-child-taking-a-number-or-a-list-through-one-parser-like-length-and-space-lower-first-unset-means-declaration-order-ties-stable",
           "number": 4,
           "title": "LayoutExt::order(..) on the child, taking a number or a list through one parser (like Length and Space). Lower first, unset means declaration order, ties stable",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-005-explicit-placement-area-row-spans-wins-over-order-order-sorts-only-what-was-not-placed",
           "number": 5,
           "title": "Explicit placement (.area/.row/spans) wins over .order; order sorts only what was not placed",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-006-delete-the-provider-s-default-order-the-region-s-list-owns-the-order-now-and-two-sources-would-drift",
           "number": 6,
           "title": "Delete the provider's default_order — the region's list owns the order now, and two sources would drift",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-007-a-call-after-startup-fails-loudly-mount-pending-runs-once-in-app-startup-rs-and-today-drops-later-additions-silently",
           "number": 7,
           "title": "A call after startup FAILS LOUDLY. mount_pending runs once in app/startup.rs and today drops later additions silently",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-008-decide-and-implement-the-collision-behaviour-two-children-in-one-cell-or-an-area-the-template-does-not-have-warn-or-refuse-never-silent",
           "number": 8,
           "title": "Decide and implement the collision behaviour: two children in one cell, or an area the template does not have — warn or refuse, never silent",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-009-consider-moving-context-menu-rs-s-weight-vec-i64-onto-the-same-order-vocabulary-so-the-app-has-one-ordering-idea-rather-than-two",
           "number": 9,
           "title": "Consider moving context_menu.rs's weight: Vec<i64> onto the same order vocabulary, so the app has one ordering idea rather than two",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-010-antonio-drives-both-sidebars-append-prepend-remove-and-an-order-that-reverses-two-docks",
           "number": 10,
           "title": "Antonio drives both sidebars: append, prepend, remove, and an .order that reverses two docks",
           "checked": false
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-011-rename-share-to-flex-css-flex-n-on-every-widget-and-in-the-plugin-sdk-with-full-docs-decided-with-antonio-2026-09-23-span-rejected-css-span-is-grid-placement-already-row-span-column-span",
+          "number": 11,
+          "title": "Rename .share to .flex (CSS flex: n) on every widget and in the plugin SDK, with full docs. Decided with Antonio 2026-09-23; .span rejected (CSS span is grid placement, already .row_span/.column_span)",
+          "checked": true
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-012-a-region-is-a-flex-list-not-a-grid-each-dock-says-its-own-size-with-flex-n-because-a-region-template-1fr-3fr-1fr-breaks-when-a-plugin-appends-one-more-dock-remove-template-row-from-regions-and-the-grid-path-in-build-region-content-move-the-dock-s-size-from-the-provider-s-fn-grow-to-flex-on-the-dock-drop-the-fixed-8px-gap-keep-the-divider-as-a-sibling",
+          "number": 12,
+          "title": "A region is a Flex list, not a Grid: each dock says its own size with .flex(n), because a region template (\"1fr 3fr 1fr\") breaks when a plugin appends one more dock. Remove template_row from regions and the grid path in build_region_content. Move the dock's size from the provider's fn grow() to .flex on the dock. Drop the fixed 8px gap; keep the divider as a sibling",
+          "checked": true
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-013-c8-is-moot-the-region-is-a-flex-list-now-so-there-are-no-cells-for-two-docks-to-collide-in-antonio-agreed-2026-09-23-region-names-sidebar-left-etc-added-to-the-one-regionid-parser-beside-left-sidebar-left-unknown-name-and-after-startup-calls-warn-via-warn-author-and-do-nothing",
+          "number": 13,
+          "title": "C8 is moot: the region is a Flex list now, so there are no cells for two docks to collide in (Antonio agreed 2026-09-23). Region names: \"sidebar.left\" etc. added to the one RegionId parser beside \"left-sidebar\"/\"left\"; unknown name and after-startup calls warn via warn_author and do nothing",
+          "checked": false
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-014-found-while-testing-fixed-and-confirmed-by-antonio-2026-09-24-1-show-hide-region-handler-kept-a-private-copy-of-the-region-list-and-four-separate-show-fields-now-one-regionmap-bool-also-used-by-chromehost-paired-with-the-config-keys-in-shown-from-settings-2-prefix-q-lettered-a-pane-tile-hidden-behind-the-sidebar-offer-to-columns-now-asks-the-same-visibility-question-as-every-view-column-view-seen-duplicate-pane-in-column-loop-removed",
+          "number": 14,
+          "title": "Found while testing, fixed and confirmed by Antonio 2026-09-24: (1) show/hide region handler kept a private copy of the region list and four separate show_* fields — now one RegionMap<bool> (also used by ChromeHost), paired with the config keys in shown_from_settings; (2) prefix+q lettered a pane tile hidden behind the sidebar — offer_to_columns now asks the same visibility question as every view (column_view_seen), duplicate pane-in-column loop removed",
+          "checked": true
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-015-delete-the-temporary-heca-try-regions-block-in-heca-src-app-startup-rs-once-antonio-has-checked-c10",
+          "number": 15,
+          "title": "Delete the TEMPORARY HECA_TRY_REGIONS block in heca/src/app/startup.rs once Antonio has checked C10",
+          "checked": true
+        },
+        {
+          "id": "3597adf8-2e77-4829-8a7d-d21e2c2e760a-check-016-flex-order-on-any-dock-as-it-is-added-placedock-built-once-for-every-dock-type-regions-append-docker-new-d-flex-3-0-order-1-the-adder-wins-over-the-dock-body-s-own-agreed-with-antonio-2026-09-24",
+          "number": 16,
+          "title": ".flex / .order on any dock as it is added (PlaceDock, built once for every dock type): regions(..).append(Docker::new(\"d\").flex(3.0).order(-1)); the adder wins over the dock body's own. Agreed with Antonio 2026-09-24",
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-23T12:58:06.781Z",
+      "completedAt": "2026-09-24T14:58:29.789Z",
       "createdAt": "2026-09-21T18:06:28.452Z",
-      "updatedAt": "2026-09-21T18:09:08.061Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-24T14:58:29.789Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:0b06056b-4c79-4d0c-a97e-50700cf362f6",
+          "createdAt": "2026-09-23T12:58:06.626Z"
+        }
+      ],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-09-23T08:50:09.772Z",
+  "updatedAt": "2026-09-24T16:28:31.481Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-09-21T15:45:56.420Z",
   "handoffAudit": {
@@ -3008,6 +3109,10 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:0b06056b-4c79-4d0c-a97e-50700cf362f6",
+      "createdAt": "2026-09-24T16:02:56.739Z"
+    },
     {
       "sessionId": "mcp-process:76ebd5d0-168a-4a97-9b9d-499545debce4",
       "createdAt": "2026-09-21T15:48:34.857Z"
