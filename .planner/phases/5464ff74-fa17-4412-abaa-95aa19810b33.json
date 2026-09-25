@@ -1512,7 +1512,14 @@
       ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "a38641d7-ef78-4179-b11e-1e7c9a65f288-check-001-layout-agreed-with-antonio-2026-09-24-agents-md-0b-bis-split-by-what-each-piece-owns-tests-beside-their-code-shared-fixtures-in-testing-rs-heca-src-app-registry-mod-rs-build-keymaps-entry-wiring-only-config-rs-config-tables-bindings-owns-nothing-about-clashes-or-handlers-conflicts-rs-who-wrote-a-key-one-report-per-clash-owns-nothing-about-config-or-floors-floors-rs-keys-that-can-t-be-removed-e-g-escape-actions-rs-action-handler-owns-nothing-about-keys-testing-rs-cfg-test-fixtures-each-file-keeps-its-own-tests-under-400-lines-public-paths-unchanged-via-re-exports",
+          "number": 1,
+          "title": "Layout AGREED with Antonio 2026-09-24 (AGENTS.md §0b-bis: split by what each piece owns, tests beside their code, shared fixtures in testing.rs): heca/src/app/registry/{mod.rs (build_keymaps entry, wiring only), config.rs (config tables → bindings; owns nothing about clashes or handlers), conflicts.rs (who wrote a key, one report per clash; owns nothing about config or floors), floors.rs (keys that can't be removed, e.g. Escape), actions.rs (action → handler; owns nothing about keys), testing.rs (#[cfg(test)] fixtures)}. Each file keeps its own tests, under 400 lines; public paths unchanged via re-exports",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
@@ -1520,7 +1527,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-21T11:28:23.578Z",
-      "updatedAt": "2026-09-24T16:01:57.757Z",
+      "updatedAt": "2026-09-25T10:32:23.686Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -1571,7 +1578,7 @@
       "status": "deferred",
       "description": "Found while adding the layout sweeps (F003/P082/T438, 2026-08-24) and reported to Antonio, who asked for it to be filed. AGENTS § 0 rule 4: aim under 400 lines, above 600 agree a split first. This task is the list and the proposal, NOT a licence — agree the shape with Antonio before moving anything.\n\nCURRENT: heca-renderer/examples/showcase.rs, 3254 lines. Not in T468's list, which predates it being measured.\n\nWHY IT MATTERS MORE THAN ITS LINE COUNT\nIt is the only place every widget appears in a REAL composition, so it is where framework-wide changes are seen first: T438's sweep over it found 54 escapes at three window widths, five of them at 900px, which the synthetic per-kind samples never reached. It is also the second host for CommandPalette (:319) and the one that exposed P087(F011)/T469 — a widget rendering differently in two hosts. A 3254-line example is a bad place for that evidence to live.\n\nTHE JOBS IN IT\n- `build_ui` (:304) — the whole page: sidebar, docks, every widget gallery section, overlays.\n- `ThemeCtl` (:167) + the live theme controls (glow / radius / border / font / intensity / overlay frame / size / zoom / theme index).\n- `build_scene` (:2154) — per-frame paint + the winit event loop, input mapping (`GridKey`), the separate overlay layout pass (:2737-2741).\n- `apply_size` (:184) and other tree-walking helpers.\n- The T438 sweep test (`mod sweeps`, end of file).\n\nPROPOSED SPLIT — an example may be a DIRECTORY with a main.rs, so the shape is the same one the library uses:\n  heca-renderer/examples/showcase/\n  ├── main.rs        the event loop, the window, build_scene, input mapping\n  ├── controls.rs    ThemeCtl + the live theme controls\n  ├── gallery.rs     the widget catalog sections (one section per fn, grouped)\n  ├── overlays.rs    dialog / palette / context menu / toasts + their own layout pass\n  ├── sidebar.rs     the docks, rail and region-mode demo\n  └── tests.rs       the sweep (and anything else headless)\n\nRULES\n- A move, never a rewrite: no behaviour change in the same commit, and the example must still run (`cargo run -p heca-renderer --example showcase`).\n- Watch the trap from the two hint splits: a doc comment at the end of a segment belongs to the NEXT file's first item, and a helper used by two new modules needs one owner rather than a copy.\n- Gate per split: `cargo test -p heca-renderer --all-targets` and `./scripts/lint-changed.sh`.",
       "descriptionUpdatedAt": "2026-08-24T13:57:46.456Z",
-      "notes": "",
+      "notes": "Antonio, 2026-09-24: the showcase as a whole is behind what the app now has, and is better REWRITTEN once components and widgets are stable — not just split. When this is picked up, treat it as a rewrite onto the current widgets (e.g. `Tile`, `.flex`, `.order`, `regions(..)`), done after the widget set settles; splitting the current file first would carve up code that is going to be replaced.",
       "statusLog": [
         {
           "id": "2d174619-b5c0-4040-9c32-133096cb4251-check-001-planned-deferred",
@@ -1592,7 +1599,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-24T13:57:46.417Z",
-      "updatedAt": "2026-08-28T08:23:01.395Z",
+      "updatedAt": "2026-09-25T10:32:21.695Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -2827,9 +2834,9 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-09-24T16:28:31.481Z",
-  "handoff": "",
-  "handoffUpdatedAt": "2026-09-21T15:45:56.420Z",
+  "updatedAt": "2026-09-25T10:32:44.685Z",
+  "handoff": "# T518 and T491 are done and pushed — next is T466 (split registry.rs), layout agreed\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-25T10:32:44.685Z\nReason: Antonio answered the two open questions (T466 layout, T470 note) and asked for them to be in the handoff for the next session, then committed.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Next task: **P082(F003)/T466 — Split app/registry.rs by job** (planned, priority 9 — the lowest open in the phase). Un-parked 2026-09-24 with Antonio's OK.\n- Exact resume point: nothing started. **The layout is AGREED** (Antonio, 2026-09-24) and recorded as T466 checklist C1. It follows AGENTS.md §0b-bis — split by what each piece OWNS, tests beside the code they test, shared fixtures in `testing.rs` (NOT one big `tests.rs`):\n\n```\nheca/src/app/registry/\n├── mod.rs        the entry the app calls (build_keymaps) — wiring only\n├── config.rs     [keys] / [[keys.bind]] / [[keys.surface]] / [[keys.mode]] → bindings\n├── conflicts.rs  who wrote which binding, one report per clash\n├── floors.rs     the keys that are always there (Escape) and cannot be unbound\n├── actions.rs    registers every action's handler\n└── testing.rs    #[cfg(test)] shared fixtures\n```\n| file | owns | owns nothing about |\n|---|---|---|\n| config.rs | config tables → bindings | clashes, what an action does |\n| conflicts.rs | who wrote a key, reporting a clash once | reading config, floors |\n| floors.rs | keys that can't be removed | config, handlers |\n| actions.rs | action → handler | keys |\n\nEach file keeps its own tests, under 400 lines; outside call sites unchanged (re-export from mod.rs). A move, no behaviour change.\n\n## Current and partial state\n- Branch `feat/t518-a-region-holds-a-list`, pushed. Commits on top of `c15eacab`: `020229af` (code), `45b707b7` (planner), then the planner commit carrying this handoff. No PR opened (not asked).\n- **T518 done** (Antonio confirmed on screen, except `.order` reversing two docks — skipped by his choice): `regions(\"sidebar.left\").append/prepend/remove/retain/gap` (`heca/src/chrome/regions.rs`); `.share` → `.flex`; `.order(..)` (`heca-grid-ui/src/order.rs`); region is a Flex list (region `template_row`, provider `grow()`/`default_order` deleted); `PlaceDock` (`.flex/.order` on a dock as it is added, adder wins); context-menu `weight` → `Order` (wire still reads \"weight\"); dotted region names, `as_str()` prints dotted.\n- Fixed while testing, confirmed: `RegionMap<T>` (show/hide + ChromeHost); prefix+q no longer letters a pane tile behind the sidebar (`column::offer_to_columns` + `column_view_seen`).\n- **T491 done** (confirmed): grid-ui `Tile` widget, `WidgetKind::Tile`, SDK builder; app `PaneRow` and showcase PANES mount it.\n- **T470 note added** (Antonio): the showcase is behind the app and is better REWRITTEN once widgets are stable, not just split. T470 stays deferred.\n- T472/T468/T471 stay deferred (P094 still reshapes their files).\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first; fix in the library; compose; hardcode nothing; CSS-shaped layout; propose before coding when a design is open; follow AGENTS.md patterns (read them before proposing a structure); never commit unasked; commit AFTER writing a handoff (it changes planner files); never create planner entries without agreeing.\n- A region never holds sizes or indexes. Do not reintroduce region `template_row` or a provider `grow()`. `retain` not `filter`; `.span` rejected.\n- Every new test: break the code on purpose and see it red.\n- T466 behaviours that must survive (each has a test): mode bindings accept one combo / comma string / list; Escape never global, nor `close_overlay`; floors cannot be unbound; `[[keys.surface]]` before global; a conflict reported once with its layer.\n\n## Supporting documents\n- None needed. T466's own description + checklist C1 hold the agreed shape.\n\n## Blockers and risks\n- None for T466.\n- Flagged, not agreed: 12 show/hide/toggle region actions → 3 taking a region name; `heca/src/chrome/mod.rs` ~2500 lines doing several jobs.\n- CPU >100% reported once after long running; not reproduced (idle 0–3%). If it returns: measure first, do not guess.\n\n## How to resume\n1. `planner-task-show P082(F003)/T466 full=true`, then `planner-task-start`.\n2. Read `heca/src/app/registry.rs` and map every item to one owner in the table above.\n3. Move code into `heca/src/app/registry/` per the layout; tests go with the code they test; shared fixtures to `testing.rs`; re-export from `mod.rs`.\n4. Verify: `./scripts/lint-changed.sh`, `… test`, `… fmt` all clean; each file under 400 lines.\n5. Report, then commit only when asked. Then back to the planner recommendation.",
+  "handoffUpdatedAt": "2026-09-25T10:32:44.685Z",
   "handoffAudit": {
     "version": 1,
     "entries": [
@@ -3035,18 +3042,11 @@
         }
       ]
     },
-    "supportingDocuments": [
-      {
-        "path": ".planner/docs/handoff-p082-2026-09-21T15-45-56-420Z.md",
-        "description": "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.",
-        "contentHash": "cf5cfac196629a605a27b1c0f733e66d112fa172f7206211166f98ad9298a37e",
-        "contentLength": 9710
-      }
-    ],
-    "contentHash": "da2a7187db28eb1f0cfc2ceebe55f998cc81ca7a7ba7e0c239bd55acb387fe39",
-    "contentLength": 4870,
-    "verifiedAt": "2026-09-21T15:45:56.420Z",
-    "resumeReadyAt": "2026-09-21T15:46:00.455Z",
+    "supportingDocuments": [],
+    "contentHash": "151cee63d36e163a4fc12ab8088eee75b9b9ba05a6ebc42e8467454b2aee185c",
+    "contentLength": 4728,
+    "verifiedAt": "2026-09-25T10:32:44.685Z",
+    "resumeReadyAt": "2026-09-25T11:16:43.474Z",
     "readBackSourceReviews": [
       {
         "source": "conversation",
@@ -3070,7 +3070,7 @@
       }
     ]
   },
-  "handoffReadAt": "2026-09-21T15:46:00.455Z",
+  "handoffReadAt": "2026-09-25T11:16:43.474Z",
   "handoffHistory": [
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-09-23T08-58-18-900Z.md",
