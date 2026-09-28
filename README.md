@@ -1282,7 +1282,7 @@ pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
 }
 ```
 
-**5. Register the handler** in `build_registry()` — `heca/src/app/registry.rs`:
+**5. Register the handler** in `build_registry()` — `heca/src/app/registry/actions.rs`:
 
 ```rust
 registry.register(&WmAction::MyCustomAction, handle_my_custom_action);

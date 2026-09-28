@@ -37,7 +37,7 @@ pub(crate) const FOCUS_LAYER: &str = "focus";
 ///
 /// The layer twin of [`FOCUS_LAYER`], and it exists for the same reason: what every layer answers
 /// alike does not belong in each layer's own declaration. Today that is `Escape` — the front-most
-/// layer closes itself — asserted as a floor in `registry::build_mode_keymaps` so a layer that
+/// layer closes itself — asserted as a floor in `registry::floors` so a layer that
 /// declares nothing is still closable from the keyboard.
 pub(crate) const LAYER_FLOOR: &str = "layer";
 

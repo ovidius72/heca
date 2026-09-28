@@ -212,9 +212,9 @@ Key facts (from the code):
   FocusedPaneLocal / WorkspaceLevel / SourceDependent / ContainerFocused), checked
   against the computed `Domain` (Tiled / Floating / Container / Overlay). The match is
   exhaustive — adding a `WmAction` variant won't compile until it is classified.
-- **`build_registry` (`app/registry.rs`)** registers every variant → its `handle_*`
+- **`build_registry` (`app/registry/actions.rs`)** registers every variant → its `handle_*`
   handler. Parameterized variants share one handler (it destructures the action).
-- **Config is the single source of bindings**: `build_keymaps` (`app/registry.rs`)
+- **Config is the single source of bindings**: `build_keymaps` (`app/registry/mod.rs`, one file per config table beside it)
   merges `keybindings.default.toml` + user `keybindings.toml` (deep-merge, arrays
   replaced wholesale), tracks conflicts, builds the reverse `BindingIndex`, and
   re-asserts the `Escape` floor on `focus`/`layer` modes.

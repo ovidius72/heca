@@ -1680,7 +1680,7 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 3. Add builder support in `build_action()` when the action is parameterized
 4. Add priority in `action_priority()`
 5. Create handler in `heca/src/handlers.rs`
-6. Register in `build_registry()` in `heca/src/app/registry.rs`
+6. Register in `build_registry()` in `heca/src/app/registry/actions.rs`
 7. Add default binding in `keybindings.default.toml` (the embedded default keymap). An action with a
    **required argument gets none** — a key cannot supply a pane id.
 8. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
