@@ -1488,9 +1488,9 @@
       "priority": 9,
       "shortName": "split-app-registry-rs-by-job-c",
       "title": "Split app/registry.rs by job — config parsing, keymap building, conflicts, action registration",
-      "status": "planned",
-      "description": "**Flagged while passing through, 2026-08-21** (Antonio's standing rule: notice a file worth splitting and say so rather than reorganise it quietly). Not urgent, and not to be done inside another task's diff.\n\n`heca/src/app/registry.rs` is ~2600 lines doing four jobs at once:\n1. **Reading config into keymaps** — `build_keymaps`, `build_modes`, the `[keys]` / `[[keys.bind]]` / `[[keys.surface]]` / `[[keys.mode]]` tables, `action_ref_from_config`, `component_action`.\n2. **Conflict tracking + the reverse index** — `Conflicts`, `BindingIndex`, `Written`, `bind_with_conflict_tracking`, `unbind_and_deindex`.\n3. **The floors** — `assert_escape_floor`, `UNTRIGGERED_MODES`, `LAYER_FLOOR`/`FOCUS_LAYER` wiring.\n4. **Action registration** — `registry.register(&WmAction::…, handler)` for every action.\n\nAGENTS.md § 0 rule 4: length is what makes you look, **the defect is always the second job**. Four is three too many, and it is already hard to answer \"where does a binding become an action\" without reading the whole file.\n\n**Shape to agree before starting** (do not just do it): `heca/src/app/registry/` with `mod.rs` (the entry point — `build_keymaps` and what the app calls), `config.rs` (tables → keymaps), `conflicts.rs` (tracking + the index), `floors.rs` (the guaranteed ways out), `actions.rs` (handler registration), and `tests.rs`. Public paths must not change: re-export from `mod.rs` so no call site outside the folder moves.\n\n**Behaviours that must survive** (each already has a test): a mode block's bindings accept one combo, a comma-separated string or a list (`BindingValue`); `Escape` is never a global binding, and neither is `close_overlay`; a floor cannot be unbound; `[[keys.surface]]` is consulted before the global map; a conflict is reported once with the layer that wrote it.\n\nPrecedent for the split: `widgets/overlay/` and `chrome/layers/` (F003/P082/T459) — split by job, every file under 600 lines, public paths unchanged.",
-      "descriptionUpdatedAt": "2026-08-21T11:28:23.629Z",
+      "status": "done",
+      "description": "**Flagged while passing through, 2026-08-21** (Antonio's standing rule: notice a file worth splitting and say so rather than reorganise it quietly). Not urgent, and not to be done inside another task's diff.\n\n`heca/src/app/registry.rs` is ~2600 lines doing four jobs at once:\n1. **Reading config into keymaps** — `build_keymaps`, `build_modes`, the `[keys]` / `[[keys.bind]]` / `[[keys.surface]]` / `[[keys.mode]]` tables, `action_ref_from_config`, `component_action`.\n2. **Conflict tracking + the reverse index** — `Conflicts`, `BindingIndex`, `Written`, `bind_with_conflict_tracking`, `unbind_and_deindex`.\n3. **The floors** — `assert_escape_floor`, `UNTRIGGERED_MODES`, `LAYER_FLOOR`/`FOCUS_LAYER` wiring.\n4. **Action registration** — `registry.register(&WmAction::…, handler)` for every action.\n\nAGENTS.md § 0 rule 4: length is what makes you look, **the defect is always the second job**. Four is three too many, and it is already hard to answer \"where does a binding become an action\" without reading the whole file.\n\n**Shape to agree before starting** (do not just do it): `heca/src/app/registry/` with `mod.rs` (the entry point — `build_keymaps` and what the app calls), `config.rs` (tables → keymaps), `conflicts.rs` (tracking + the index), `floors.rs` (the guaranteed ways out), `actions.rs` (handler registration), and `tests.rs`. Public paths must not change: re-export from `mod.rs` so no call site outside the folder moves.\n\n**Behaviours that must survive** (each already has a test): a mode block's bindings accept one combo, a comma-separated string or a list (`BindingValue`); `Escape` is never a global binding, and neither is `close_overlay`; a floor cannot be unbound; `[[keys.surface]]` is consulted before the global map; a conflict is reported once with the layer that wrote it.\n\nPrecedent for the split: `widgets/overlay/` and `chrome/layers/` (F003/P082/T459) — split by job, every file under 600 lines, public paths unchanged.\n\n---\n**Completion summary:**\nSplit heca/src/app/registry.rs (2817 lines) into heca/src/app/registry/, one file per job — a move, no behaviour change. Layout per the task decision 9b9e7362 (agreed 2026-09-28, replacing C1's config.rs/conflicts.rs):\n- mod.rs 63 — build_keymaps + re-exports (build_registry, build_keymap, build_modes, build_component_keymaps, register_component_keybinding, build_widget_keymap, surface_action_id, combo_to_grid). No call site outside the folder changed.\n- names.rs 375 — action_ref_from_config, component_action, surface_action_id, resolves_as_builtin, binding_arg_problems, log_arg_problems.\n- binding.rs 110 — Written, bind_with_conflict_tracking, unbind_and_deindex (reporting stays in app/conflicts.rs).\n- global.rs 183 (+ global/tests.rs 259) — build_keymap, merge_by.\n- surfaces.rs 250 (+ surfaces/tests.rs 374) — build_component_keymaps, layer_component_keys, bind_global_focus, GlobalFocus, GLOBAL_FOCUS, register_component_keybinding.\n- modes.rs 358 — build_modes, UNTRIGGERED_MODES.\n- floors.rs 199 — assert_escape_floor.\n- widgets.rs 161 — build_widget_keymap, combo_to_grid.\n- actions.rs 495 (+ actions/tests.rs 101) — build_registry, kept whole by decision.\n- testing.rs 54 — layers_only, with_layers, with_layer, layer_of.\n\nAlso fixed stale references: heca/src/app/input.rs LAYER_FLOOR doc named a non-existent `registry::build_mode_keymaps` → `registry::floors`; docs/architecture.md, README.md, AGENTS.md now point to registry/actions.rs and registry/mod.rs. Left heca-renderer/src/input.rs:5 alone (past-tense history).\n\nVerification: all 44 registry tests present before and after (`cargo test -p heca --bin heca -- --list app::registry::` = 44 = #[test] count in HEAD's registry.rs). ./scripts/lint-changed.sh (clippy --all-targets -D warnings) clean; ./scripts/lint-changed.sh test all green; fmt --check clean. No new tests (pure move, nothing to break-and-see-red). Not driven in the GPU app — no visible behaviour changed.\n\nNot committed (not asked).",
+      "descriptionUpdatedAt": "2026-09-28T08:30:51.643Z",
       "notes": "",
       "statusLog": [
         {
@@ -1508,27 +1508,57 @@
           "toStatus": "planned",
           "title": "Un-parked with Antonio's OK, 2026-09-24. It was parked until P097(F003) and P094(F011) stopped reshaping registry.rs. P097 is done. Of P094's open tasks only T452 touches registry.rs, and only to add one action to build_registry — a line that lands as easily in the split file. T472 stays deferred: P094/T457 (the picker as a describable widget) still adds to heca-view/src/lib.rs.",
           "description": "Un-parked with Antonio's OK, 2026-09-24. It was parked until P097(F003) and P094(F011) stopped reshaping registry.rs. P097 is done. Of P094's open tasks only T452 touches registry.rs, and only to add one action to build_registry — a line that lands as easily in the split file. T472 stays deferred: P094/T457 (the picker as a describable widget) still adds to heca-view/src/lib.rs."
+        },
+        {
+          "id": "a38641d7-ef78-4179-b11e-1e7c9a65f288-check-003-planned-in-progress",
+          "date": "2026-09-28T08:23:05.024Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "a38641d7-ef78-4179-b11e-1e7c9a65f288-check-004-in-progress-done",
+          "date": "2026-09-28T08:30:51.638Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Split heca/src/app/registry.rs (2817 lines) into heca/src/app/registry/, one file per job — a move, no behaviour change. Layout per the task decision 9b9e7362 (agreed 2026-09-28, replacing C1's config.rs/conflicts.rs):\n- mod.rs 63 — build_keymaps + re-exports (build_registry, build_keymap, build_modes, build_component_keymaps, register_component_keybinding, build_widget_keymap, surface_action_id, combo_to_grid). No call site outside the folder changed.\n- names.rs 375 — action_ref_from_config, component_action, surface_action_id, resolves_as_builtin, binding_arg_problems, log_arg_problems.\n- binding.rs 110 — Written, bind_with_conflict_tracking, unbind_and_deindex (reporting stays in app/conflicts.rs).\n- global.rs 183 (+ global/tests.rs 259) — build_keymap, merge_by.\n- surfaces.rs 250 (+ surfaces/tests.rs 374) — build_component_keymaps, layer_component_keys, bind_global_focus, GlobalFocus, GLOBAL_FOCUS, register_component_keybinding.\n- modes.rs 358 — build_modes, UNTRIGGERED_MODES.\n- floors.rs 199 — assert_escape_floor.\n- widgets.rs 161 — build_widget_keymap, combo_to_grid.\n- actions.rs 495 (+ actions/tests.rs 101) — build_registry, kept whole by decision.\n- testing.rs 54 — layers_only, with_layers, with_layer, layer_of.\n\nAlso fixed stale references: heca/src/app/input.rs LAYER_FLOOR doc named a non-existent `registry::build_mode_keymaps` → `registry::floors`; docs/architecture.md, README.md, AGENTS.md now point to registry/actions.rs and registry/mod.rs. Left heca-renderer/src/input.rs:5 alone (past-tense history).\n\nVerification: all 44 registry tests present before and after (`cargo test -p heca --bin heca -- --list app::registry::` = 44 = #[test] count in HEAD's registry.rs). ./scripts/lint-changed.sh (clippy --all-targets -D warnings) clean; ./scripts/lint-changed.sh test all green; fmt --check clean. No new tests (pure move, nothing to break-and-see-red). Not driven in the GPU app — no visible behaviour changed.\n\nNot committed (not asked)."
         }
       ],
       "decisions": [],
-      "acceptedDecisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "9b9e7362-b7bd-4d90-9d34-4e22ceaed7bc",
+          "title": "registry/ is split one file per config table; actions.rs stays one list",
+          "decision": "heca/src/app/registry/ = mod.rs (build_keymaps + re-exports), names.rs, binding.rs, global.rs, surfaces.rs, modes.rs, floors.rs, widgets.rs, actions.rs, testing.rs. A file whose tests would pass 400 lines keeps them in <file>/tests.rs beside it. actions.rs stays one 485-line list.",
+          "rationale": "Agreed with Antonio 2026-09-28. The 2026-09-24 layout (C1) could not keep files under 400 lines: config.rs would have been ~700 lines of five different tables, and a registry conflicts.rs would have sat next to the existing app/conflicts.rs, which already owns reporting. What registry.rs had was the binding door, so it is binding.rs. actions.rs is a flat handler list with no logic; cutting it by topic would only scatter it.",
+          "implementationNotes": "merge_by lives in global.rs (pub(super)) and surfaces.rs reuses it. Clash reporting stays in heca/src/app/conflicts.rs.",
+          "acceptedAt": "2026-09-28T08:30:43.334Z"
+        }
+      ],
       "checklist": [
         {
           "id": "a38641d7-ef78-4179-b11e-1e7c9a65f288-check-001-layout-agreed-with-antonio-2026-09-24-agents-md-0b-bis-split-by-what-each-piece-owns-tests-beside-their-code-shared-fixtures-in-testing-rs-heca-src-app-registry-mod-rs-build-keymaps-entry-wiring-only-config-rs-config-tables-bindings-owns-nothing-about-clashes-or-handlers-conflicts-rs-who-wrote-a-key-one-report-per-clash-owns-nothing-about-config-or-floors-floors-rs-keys-that-can-t-be-removed-e-g-escape-actions-rs-action-handler-owns-nothing-about-keys-testing-rs-cfg-test-fixtures-each-file-keeps-its-own-tests-under-400-lines-public-paths-unchanged-via-re-exports",
           "number": 1,
           "title": "Layout AGREED with Antonio 2026-09-24 (AGENTS.md §0b-bis: split by what each piece owns, tests beside their code, shared fixtures in testing.rs): heca/src/app/registry/{mod.rs (build_keymaps entry, wiring only), config.rs (config tables → bindings; owns nothing about clashes or handlers), conflicts.rs (who wrote a key, one report per clash; owns nothing about config or floors), floors.rs (keys that can't be removed, e.g. Escape), actions.rs (action → handler; owns nothing about keys), testing.rs (#[cfg(test)] fixtures)}. Each file keeps its own tests, under 400 lines; public paths unchanged via re-exports",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-28T08:23:05.024Z",
+      "completedAt": "2026-09-28T08:30:51.638Z",
       "createdAt": "2026-08-21T11:28:23.578Z",
-      "updatedAt": "2026-09-25T10:32:23.686Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-28T08:30:51.638Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:5255b83f-9d99-4ee5-a3c0-b97db66f44b6",
+          "createdAt": "2026-09-28T08:23:04.889Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -2834,7 +2864,7 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-09-25T10:32:44.685Z",
+  "updatedAt": "2026-09-28T08:30:51.638Z",
   "handoff": "# T518 and T491 are done and pushed — next is T466 (split registry.rs), layout agreed\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-25T10:32:44.685Z\nReason: Antonio answered the two open questions (T466 layout, T470 note) and asked for them to be in the handoff for the next session, then committed.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Next task: **P082(F003)/T466 — Split app/registry.rs by job** (planned, priority 9 — the lowest open in the phase). Un-parked 2026-09-24 with Antonio's OK.\n- Exact resume point: nothing started. **The layout is AGREED** (Antonio, 2026-09-24) and recorded as T466 checklist C1. It follows AGENTS.md §0b-bis — split by what each piece OWNS, tests beside the code they test, shared fixtures in `testing.rs` (NOT one big `tests.rs`):\n\n```\nheca/src/app/registry/\n├── mod.rs        the entry the app calls (build_keymaps) — wiring only\n├── config.rs     [keys] / [[keys.bind]] / [[keys.surface]] / [[keys.mode]] → bindings\n├── conflicts.rs  who wrote which binding, one report per clash\n├── floors.rs     the keys that are always there (Escape) and cannot be unbound\n├── actions.rs    registers every action's handler\n└── testing.rs    #[cfg(test)] shared fixtures\n```\n| file | owns | owns nothing about |\n|---|---|---|\n| config.rs | config tables → bindings | clashes, what an action does |\n| conflicts.rs | who wrote a key, reporting a clash once | reading config, floors |\n| floors.rs | keys that can't be removed | config, handlers |\n| actions.rs | action → handler | keys |\n\nEach file keeps its own tests, under 400 lines; outside call sites unchanged (re-export from mod.rs). A move, no behaviour change.\n\n## Current and partial state\n- Branch `feat/t518-a-region-holds-a-list`, pushed. Commits on top of `c15eacab`: `020229af` (code), `45b707b7` (planner), then the planner commit carrying this handoff. No PR opened (not asked).\n- **T518 done** (Antonio confirmed on screen, except `.order` reversing two docks — skipped by his choice): `regions(\"sidebar.left\").append/prepend/remove/retain/gap` (`heca/src/chrome/regions.rs`); `.share` → `.flex`; `.order(..)` (`heca-grid-ui/src/order.rs`); region is a Flex list (region `template_row`, provider `grow()`/`default_order` deleted); `PlaceDock` (`.flex/.order` on a dock as it is added, adder wins); context-menu `weight` → `Order` (wire still reads \"weight\"); dotted region names, `as_str()` prints dotted.\n- Fixed while testing, confirmed: `RegionMap<T>` (show/hide + ChromeHost); prefix+q no longer letters a pane tile behind the sidebar (`column::offer_to_columns` + `column_view_seen`).\n- **T491 done** (confirmed): grid-ui `Tile` widget, `WidgetKind::Tile`, SDK builder; app `PaneRow` and showcase PANES mount it.\n- **T470 note added** (Antonio): the showcase is behind the app and is better REWRITTEN once widgets are stable, not just split. T470 stays deferred.\n- T472/T468/T471 stay deferred (P094 still reshapes their files).\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first; fix in the library; compose; hardcode nothing; CSS-shaped layout; propose before coding when a design is open; follow AGENTS.md patterns (read them before proposing a structure); never commit unasked; commit AFTER writing a handoff (it changes planner files); never create planner entries without agreeing.\n- A region never holds sizes or indexes. Do not reintroduce region `template_row` or a provider `grow()`. `retain` not `filter`; `.span` rejected.\n- Every new test: break the code on purpose and see it red.\n- T466 behaviours that must survive (each has a test): mode bindings accept one combo / comma string / list; Escape never global, nor `close_overlay`; floors cannot be unbound; `[[keys.surface]]` before global; a conflict reported once with its layer.\n\n## Supporting documents\n- None needed. T466's own description + checklist C1 hold the agreed shape.\n\n## Blockers and risks\n- None for T466.\n- Flagged, not agreed: 12 show/hide/toggle region actions → 3 taking a region name; `heca/src/chrome/mod.rs` ~2500 lines doing several jobs.\n- CPU >100% reported once after long running; not reproduced (idle 0–3%). If it returns: measure first, do not guess.\n\n## How to resume\n1. `planner-task-show P082(F003)/T466 full=true`, then `planner-task-start`.\n2. Read `heca/src/app/registry.rs` and map every item to one owner in the table above.\n3. Move code into `heca/src/app/registry/` per the layout; tests go with the code they test; shared fixtures to `testing.rs`; re-export from `mod.rs`.\n4. Verify: `./scripts/lint-changed.sh`, `… test`, `… fmt` all clean; each file under 400 lines.\n5. Report, then commit only when asked. Then back to the planner recommendation.",
   "handoffUpdatedAt": "2026-09-25T10:32:44.685Z",
   "handoffAudit": {
@@ -3106,9 +3136,21 @@
       "toStatus": "in-progress",
       "title": "draft → in-progress",
       "description": ""
+    },
+    {
+      "id": "785328ec-d527-4c81-9987-f13073364c58",
+      "date": "2026-09-28T08:30:51.675Z",
+      "fromStatus": "in-progress",
+      "toStatus": "deferred",
+      "title": "in-progress → deferred",
+      "description": ""
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:5255b83f-9d99-4ee5-a3c0-b97db66f44b6",
+      "createdAt": "2026-09-28T08:23:04.889Z"
+    },
     {
       "sessionId": "mcp-process:0b06056b-4c79-4d0c-a97e-50700cf362f6",
       "createdAt": "2026-09-24T16:02:56.739Z"

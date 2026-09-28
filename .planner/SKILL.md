@@ -1,4 +1,4 @@
-<!-- agent-plan-managed-skill sha256:2c9cfd58ad714a2b9640f3b7fb21183f0394532547d940aae383a3514fb621d5 -->
+<!-- agent-plan-managed-skill sha256:b02063f43b2dbcbc946bb4b6cf8a432818aba9fe4497b5e266d9e360a169f138 -->
 ---
 name: agent-plan
 summary: Cross-harness operating guide for Agent Plan projects.
@@ -14,6 +14,7 @@ This is the canonical, project-local operating guide for Agent Plan. A managed c
 - Starting only the dashboard does not enable planner context. Pi uses `planner-web`; MCP uses `planner-web`.
 - Stop Pi planner context and its dashboard with `/planner stop`, `planner-stop`, or `/planner disable`. For MCP, `planner-disable` explains how to disable the server.
 - `.planner/` is the operational source of truth. Keep feature, phase, task, requirement, decision, checklist, handoff, and Project Guidelines state synchronized with completed work.
+- Explicit planner load (`/planner load`, `planner-load`) delivers the complete project-level context in one attested read: description, goal, scope, out-of-scope, technologies, tools, language preferences, Project Guidelines, every Requirement, and every project Accepted Decision. Check the result's `contextComplete`/`loaded` field; only `true` proves the project-level context was actually delivered — a bounded response, an omitted field, or a truncated first chunk never proves a full read. If `false`, follow the returned `nextActions` (retry with a larger `maxChars`) before relying on it. `task_start` / `planner-task-start` stays scoped to feature/phase/task context and does not redeliver project-level context; if it changed since your last planner load, task start returns a non-blocking project-context advisory telling you to reload.
 - Planner metadata operations are not code edits. Code, configuration, repository, dependency, or environment changes still require the project’s own approval rules.
 - The Web UI is a human-supervisor surface. It may bypass agent-only governance or motivation gates. Agents must not imitate its source header or treat its exemptions as an agent bypass.
 
@@ -32,24 +33,26 @@ Discover before mutating:
 1. List features, phases, or tasks using compact list tools.
 2. Follow the lowest visible ready priority unless the automatic recommendation or an approved deviation says otherwise.
 3. Use `task_recommend` / `planner-task-recommend` when choosing the next task. Treat its `claims` as bounded evidence: priority is a policy signal, a handoff is actionable only when persisted `resumeReady=true`, and Markdown prose or terminal archives never create an action claim.
-4. Read the exact entity with its full-detail show/get surface when full context is needed.
-5. Never infer an ambiguous bare reference. Ask for the exact composite reference.
-6. Never claim that no task is active from counts, feature summaries, or omitted task detail. Use an explicit `activeTaskState`/`activeTasks` result from `plan_get`, `planner-show`, or the lifecycle recommendation. Only `activeTaskState: none` (verified from all persisted task statuses) proves absence; `conflict` means multiple active tasks must be reconciled.
+4. A task that comes up in conversation is not the next task. Discussing a subject, describing a capability, or naming a task is not an instruction to work on it: the recommendation decides what is next, and a task already in progress stays in progress. When the conversation suggests other work is more valuable, propose it as an explicit deviation with its reason and wait for a decision, or record the change through `task_switch` / `task_deviation`. Being told directly to work on something is an instruction — follow it, and it needs no ceremony.
+5. Read the exact entity with its full-detail show/get surface when full context is needed.
+6. Never infer an ambiguous bare reference. Ask for the exact composite reference.
+7. Never claim that no task is active from counts, feature summaries, or omitted task detail. Use an explicit `activeTaskState`/`activeTasks` result from `plan_get`, `planner-show`, or the lifecycle recommendation. Only `activeTaskState: none` (verified from all persisted task statuses) proves absence; `conflict` means multiple active tasks must be reconciled.
 
 Feature and phase statuses are derived from their children. Do not write their status directly; update the relevant child tasks. A `DERIVED_STATUS_READ_ONLY` result is a non-success result.
 
 ## Lifecycle-first context protocol
 
-Before touching code, call `task_start` / `planner-task-start`, or use `task_switch` / `planner-task-switch` when another task is already active. The lifecycle tool may deny the transition and return typed diagnostics.
+Read before you call the lifecycle tool; do not use a denial to discover what to read. Before touching code:
 
-When denied:
+1. Read the exact task with `task_get` / `planner-task-show` (`full=true`). Its response reports `taskStartGateState` and, when anything is still outstanding, `taskStartNextActions` — the same checks `task_start` itself runs, seen up front instead of from a rejection.
+2. Perform the reads that state still lists as outstanding: the parent phase with `full=true`; the parent feature with `full=true`, when there is one; `project_guidelines_show` / `planner-project-guidelines-show`, when Project Guidelines are listed; and `requirement_list` / `planner-requirement-list` with the exact `phaseRef` given, when linked requirements are listed — a broad unscoped inventory does not attest that every requirement was read. Reads may be completed in any order, and fresh unchanged feature, phase, and linked-requirement reads may be reused across sibling tasks in the same session, so this is usually few or none of these, not a fixed list per task. A full feature/phase/task read is complete only when it delivers all canonical Accepted Decision fields (`id`, `title`, `decision`, `rationale`, `implementationNotes`, `acceptedAt`); title-only summaries never satisfy the read gate.
+3. Use the phase's task list or the task's own sibling refs to review sibling task goals, dependencies, statuses, and remaining capability ownership. Before proposing or creating work, reread the canonical phase and the relevant sibling task full view; never duplicate a capability already owned by another task.
+4. Call `task_start` / `planner-task-start`, or `task_switch` / `planner-task-switch` when another task is already active.
+
+`task_start` still checks every read itself at call time and denies the transition with typed diagnostics if anything is missing or has gone stale since — this is the enforcement, and it is a safety net for a stale or skipped read, not the step that is supposed to teach you what to read. If it denies:
 
 1. Confirm `started` is `false` and read `errorCode` plus `nextActions`.
-2. Perform only the missing or stale reads listed in `nextActions`. Reads may be completed in any order within the current session.
-3. If Project Guidelines are listed, call `project_guidelines_show` or `planner-project-guidelines-show` and retain the content while working.
-4. Read each task on every start or resume. Fresh unchanged feature, phase, and linked-requirement reads may be reused across sibling tasks in the same session. When linked requirements are requested, call `requirement_list` or `planner-requirement-list` with the exact `phaseRef` from `nextActions`; a broad unscoped inventory does not attest that every requirement was read. A full feature/phase/task read is complete only when it delivers all canonical Accepted Decision fields (`id`, `title`, `decision`, `rationale`, `implementationNotes`, `acceptedAt`); title-only summaries never satisfy the read gate.
-5. Use the returned priority-ordered phase work map to review sibling task refs, goals, dependencies, statuses, and remaining capability ownership. Before proposing or creating work, reread the canonical phase and the relevant sibling task full view; never duplicate a capability already owned by another task.
-6. Retry the lifecycle operation. Only `started: true` proves work is active.
+2. Perform only the missing or stale reads listed in `nextActions`, then retry. Only `started: true` proves work is active.
 
 Do not convert a denial into a planner status change merely to bypass the gate. Common typed denials include `PROJECT_GUIDELINES_READ_REQUIRED`, `CONTEXT_READ_REQUIRED`, `REQUIREMENTS_READ_REQUIRED`, `START_NOT_ALLOWED`, `ACTIVE_TASK_CONFLICT`, `TASK_DONE`, and persistence verification failures.
 
@@ -63,6 +66,16 @@ Do not convert a denial into a planner status change merely to bypass the gate. 
 - Update it only through `project_guidelines_update`, `planner-project-guidelines-update`, or Pi `/planner project guidelines`.
 - Explicit planner load automatically and atomically deduplicates legacy `globalRules`, textual `workflowRules`, and project `decisions` into canonical Project Guidelines and Accepted Decisions before recap/context delivery. Ordinary entity reads remain non-mutating. `project_context_migrate` and `planner-project-context-migrate` remain manual preview/recovery diagnostics; repeated applications are idempotent.
 - The Web UI may display the section for the human supervisor, but guideline-read enforcement applies to agents.
+
+## Accepted Decision ownership
+
+A decision has exactly one owner: the project when it is project-wide, a feature when it is feature-wide, a phase when it is phase-specific, or a task when the decision is genuinely local to that task's work and will not outlive it. Never record the same decision on more than one owner — there is no default that duplicates a decision across scopes.
+
+- Record every new decision or user-agreed modification with `accepted_decision_create` / `planner-accepted-decision-create` on that single owner, choosing `targetType` (`project`, `feature`, `phase`, or `task`) by where the decision actually belongs, not by where the discussion happened to take place. A project-wide decision discovered while a task is active still goes to the project, not the task.
+- `accepted_decision_update` / `planner-accepted-decision-update` and `accepted_decision_delete` / `planner-accepted-decision-delete` (confirmation-required) mutate one decision on its existing owner in place; they never move a decision to a different owner or replace the full array.
+- `decision_record` (Pi) is a deprecated, write-disabled compatibility tool. It performs no write and no longer duplicates a decision across a feature and a phase; it resolves the given feature/phase and returns guidance to call `accepted_decision_create` with the correct single owner instead.
+- The legacy free-form `decisions` array (project, phase, task) is read-only history. Supplying it to an update tool is rejected (`LEGACY_DECISIONS_ARRAY_READ_ONLY`); it is not decision authority and is never treated as satisfying a decision-record requirement. The same applies to a description, notes, a status log, or a handoff completion summary — any of these may reference a canonical decision's id, but none of them is the record itself.
+- A completed or archived owner still shows its Accepted Decisions on read; completion never hides them. A decision recorded against a task that is later deleted is deleted with it — record project/feature/phase-durable decisions on an owner that will outlive the task.
 
 ## Task execution
 
@@ -102,7 +115,11 @@ The resume-critical content is: exact focus and resume point; current/partial st
 
 Write the canonical handoff as a compact resume capsule targeting at most 8,000 inline characters (24,000 remains only as an absolute compatibility ceiling). Keep inline only the exact focus, current/partial state, decisions or constraints, relevant verification, blockers, and ordered resume steps. Put extended detail in `.planner/docs/` only when the next agent genuinely needs it; externalization is automatic and does not require a manual inventory.
 
+The `supportingDocuments` manifest is optional and usually unnecessary: content above the target length is externalized automatically, and the planner appends that entry itself. Only pass `supportingDocuments` to link a `.planner/docs/` file you created yourself. If you already know that manifest before drafting, pass it to `handoff_prepare` / `planner-handoff-prepare` too — every defect that does not depend on the drafted body (bad path, missing file, symlink, duplicate, empty file) then fails before a token is issued and before any content is transmitted, instead of costing a full resend at write time. The write-time check remains the authority (it also catches a document deleted after prepare), and any `HANDOFF_SUPPORTING_DOCUMENT_INVALID` failure names dropping the field as a valid retry.
+
 Then call `handoff_write` / `planner-handoff-write` once with the preparation token, structured `reason`, compact capsule, optional supporting-document manifest, and reconciled task/phase/feature context. Missing preflight/reason, unresolved placeholders, invalid documents, or failed persistence read-back are typed failures and must never be reported as success.
+
+If a write fails for any reason, the planner retains the exact capsule you submitted against that phase and preparation token. **Do not redraft or resend `content`/`markdown_content` on the retry** — fix only what the error named (a missing field, a stale token needs a fresh `handoff_prepare`, a corrected supporting-document manifest, etc.) and call `handoff_write` again with the same `expectedHandoffUpdatedAt`, omitting `content`; the retained capsule is reused automatically. Only pass `content` again if you are deliberately changing the body — the new one replaces the retained one. Omitting it when nothing was ever retained for that exact phase + token (a first attempt, an aged-out draft, or a phase that has since gone terminal) is itself a typed failure (`HANDOFF_RETAINED_CONTENT_NOT_FOUND`) naming the fix. A stale token is still refused even when a capsule is retained for it — retention makes the retry cheap, it never lets outdated content overwrite newer state.
 
 A successful write persists only a **handoff candidate** and returns `resumeReady: false`. Immediately call `handoff_show` / `planner-handoff-show` with the exact phase reference and read the persisted capsule. If the capsule omits resume-critical context, rewrite it; otherwise call `handoff_verify` / `planner-handoff-verify` with the content hash. Source reviews and omission lists are optional legacy evidence; the planner derives them when omitted. Only a successful verification result with `resumeReady: true` authorizes telling the user that the handoff is resume-ready.
 
@@ -168,6 +185,7 @@ Supported interactive command paths:
 - `/planner task delete <P00x(F00x)/T00x>`
 - `/planner task start <P00x(F00x)/T00x>`
 - `/planner task complete <P00x(F00x)/T00x>`
+- `/planner task recommend`
 - `/planner task checklist-add <task> <title>`
 - `/planner task checklist-remove <task> <C{n}|id|title>`
 - `/planner task checklist-toggle <task> <C{n}|id|title> [on|off]`
@@ -179,7 +197,7 @@ Supported interactive command paths:
 
 `handoff_verify` is an agent tool rather than an interactive command; call it only after `handoff_show` completes the separate persisted read-back.
 
-Pause, switch, deviation, recommendation, requirement, and decision operations are available through the registered Pi tools below rather than every interactive `/planner` path.
+Pause, switch, deviation, requirement, and decision operations are available through the registered Pi tools below rather than every interactive `/planner` path. Recommendation has both: `/planner task recommend` for a person at the command line, `task_recommend` for an agent.
 
 ### Dashboard, export, and guard
 
@@ -211,7 +229,7 @@ The Pi adapter registers these tools:
 - Project and requirements: `project_set_language_preferences`, `project_update`, `project_guidelines_show`, `project_guidelines_update`, `project_context_migrate`, `accepted_decision_create`, `accepted_decision_update`, `accepted_decision_delete`, `requirement_list`, `requirement_create`, `requirement_update`, `requirement_delete`.
 - Plan: `plan_init`, `plan_get`, `description_freshness`, `plan_render`, `plan_repair`, `plan_cleanup_orphan_phases`, `plan_authorize_bypass`, `plan_clear_bypass`.
 - Features: `feature_list`, `feature_get`, `feature_create`, `feature_discuss`, `feature_update`, `feature_delete`.
-- Phases and decisions: `phase_list`, `phase_get`, `phase_create`, `phase_discuss`, `phase_update`, `phase_delete`, `decision_record`.
+- Phases: `phase_list`, `phase_get`, `phase_create`, `phase_discuss`, `phase_update`, `phase_delete`, `decision_record` (deprecated, write-disabled compatibility redirect — see Accepted Decision ownership).
 - Tasks: `task_list`, `task_get`, `task_create`, `task_update`, `task_dependency_add`, `task_dependency_delete`, `task_delete`, `task_recommend`, `task_deviation`, `task_pause`, `task_switch`, `task_start`, `task_reopen`, `task_complete`, `task_checklist_toggle`, `task_checklist_add`, `task_checklist_remove`.
 - Handoffs: `handoff_list`, `handoff_show`, `handoff_prepare`, `handoff_write`, `handoff_verify`, `handoff_clear`.
 - Dashboard and lifecycle: `planner-web`, `planner-load`, `planner-stop`.
