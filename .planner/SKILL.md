@@ -1,4 +1,4 @@
-<!-- agent-plan-managed-skill sha256:b02063f43b2dbcbc946bb4b6cf8a432818aba9fe4497b5e266d9e360a169f138 -->
+<!-- agent-plan-managed-skill sha256:6631c2a0a8b5d84b28c7896d6fad94e01a673760c0fe48d6239cc1b6a433ed0e -->
 ---
 name: agent-plan
 summary: Cross-harness operating guide for Agent Plan projects.
@@ -87,6 +87,7 @@ A decision has exactly one owner: the project when it is project-wide, a feature
 - A temporary task completion can emit `RESUME REQUIRED`. Resume the preserved source or deliberately switch again; do not silently abandon it.
 - Complete a task only after implementation and verification. Supply durable completion evidence, files touched, decisions, remaining or unverified work, and updated code references.
 - Status changes to `blocked`, `canceled`, `rejected`, `deferred`, `waiting`, or back to `planned` require a substantive motivation on agent surfaces.
+- A task that belongs in a different phase is moved with `task_move` / `planner-task-move`, never recreated. Recreating loses the id, statusLog, checklist, accepted decisions, pause history, and every `dependsOn` edge pointing at it; moving keeps all of it and only the composite ref changes. Pass refs only — the move never needs the task's description.
 
 ## Mutation integrity and oversized descriptions
 
@@ -218,7 +219,7 @@ The MCP adapter publishes these tools:
 - Project: `planner-project-language`, `planner-project-discuss`, `planner-project-guidelines-show`, `planner-project-guidelines-update`, `planner-project-context-migrate`, `planner-accepted-decision-create`, `planner-accepted-decision-update`, `planner-accepted-decision-delete`, `planner-requirement-list`, `planner-requirement-create`, `planner-requirement-update`, `planner-requirement-delete`.
 - Features: `planner-feature-list`, `planner-feature-add`, `planner-feature-show`, `planner-feature-discuss`, `planner-feature-update`, `planner-feature-delete`.
 - Phases: `planner-phase-list`, `planner-phase-add`, `planner-phase-show`, `planner-phase-discuss`, `planner-phase-update`, `planner-phase-delete`.
-- Tasks: `planner-task-list`, `planner-task-add`, `planner-task-show`, `planner-task-discuss`, `planner-task-update`, `planner-task-dependency-add`, `planner-task-dependency-delete`, `planner-task-delete`, `planner-task-recommend`, `planner-task-deviation`, `planner-task-pause`, `planner-task-switch`, `planner-task-start`, `planner-task-reopen`, `planner-task-complete`, `planner-task-checklist-toggle`, `planner-task-checklist-add`, `planner-task-checklist-remove`.
+- Tasks: `planner-task-list`, `planner-task-add`, `planner-task-show`, `planner-task-discuss`, `planner-task-update`, `planner-task-move`, `planner-task-dependency-add`, `planner-task-dependency-delete`, `planner-task-delete`, `planner-task-recommend`, `planner-task-deviation`, `planner-task-pause`, `planner-task-switch`, `planner-task-start`, `planner-task-reopen`, `planner-task-complete`, `planner-task-checklist-toggle`, `planner-task-checklist-add`, `planner-task-checklist-remove`.
 - Handoffs: `planner-handoff-list`, `planner-handoff-show`, `planner-handoff-prepare`, `planner-handoff-write`, `planner-handoff-verify`, `planner-handoff-clear`.
 
 ## Pi tool inventory
@@ -230,7 +231,7 @@ The Pi adapter registers these tools:
 - Plan: `plan_init`, `plan_get`, `description_freshness`, `plan_render`, `plan_repair`, `plan_cleanup_orphan_phases`, `plan_authorize_bypass`, `plan_clear_bypass`.
 - Features: `feature_list`, `feature_get`, `feature_create`, `feature_discuss`, `feature_update`, `feature_delete`.
 - Phases: `phase_list`, `phase_get`, `phase_create`, `phase_discuss`, `phase_update`, `phase_delete`, `decision_record` (deprecated, write-disabled compatibility redirect — see Accepted Decision ownership).
-- Tasks: `task_list`, `task_get`, `task_create`, `task_update`, `task_dependency_add`, `task_dependency_delete`, `task_delete`, `task_recommend`, `task_deviation`, `task_pause`, `task_switch`, `task_start`, `task_reopen`, `task_complete`, `task_checklist_toggle`, `task_checklist_add`, `task_checklist_remove`.
+- Tasks: `task_list`, `task_get`, `task_create`, `task_update`, `task_move`, `task_dependency_add`, `task_dependency_delete`, `task_delete`, `task_recommend`, `task_deviation`, `task_pause`, `task_switch`, `task_start`, `task_reopen`, `task_complete`, `task_checklist_toggle`, `task_checklist_add`, `task_checklist_remove`.
 - Handoffs: `handoff_list`, `handoff_show`, `handoff_prepare`, `handoff_write`, `handoff_verify`, `handoff_clear`.
 - Dashboard and lifecycle: `planner-web`, `planner-load`, `planner-stop`.
 - Deprecated compatibility aliases: `plan_get_handoff`, `plan_write_handoff`, `plan_delete_handoff`. Prefer the entity-scoped handoff tools.

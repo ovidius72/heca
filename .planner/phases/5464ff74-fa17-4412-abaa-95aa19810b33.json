@@ -2951,9 +2951,9 @@
       "priority": 55,
       "shortName": "split-heca-grid-ui-tests-phase",
       "title": "Split heca-grid-ui/tests/phase_a.rs (6654) — the library's whole behaviour in one file",
-      "status": "planned",
-      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. The largest file in the workspace by a wide margin, and a test file — which is why it has escaped notice.\n\nCURRENT STATE. 6654 lines, **432 test functions**, named `phase_a` after a development phase that ended long ago. Its own section comments show it has grown by accretion, each era appending rather than filing:\n\n  :642  `// ── Phase C: surface components ──`\n  :1745 `// ── Phase C: display widgets ──`\n  :2566 `// ── Item (generic list row) ──`\n  :5873 `// ── Button: content is composed from children (viewnode-all-widgets) ──`\n  :6015 `// ── Choice: the value-carrying, content-composable option primitive ──`\n\nThe cost is real, not cosmetic. A test for a widget is not where anyone would look for it — `heca-grid-ui/tests/button_group.rs` exists beside it holding only `ButtonGroup`, which is the shape the rest should have. And a file this size is the one most likely to collect a duplicate of a test already in it.\n\nDESIRED STATE. `heca-grid-ui/tests/` — one file per subject, following the existing `button_group.rs` and `pointer_routing.rs` / `pointer_delivery.rs` precedent:\n\n  reactive.rs · layout.rs · paint.rs (the `Scene`/`DrawCommand` assertions) ·\n  focus.rs · widgets_input.rs · widgets_button.rs · widgets_item.rs ·\n  widgets_select.rs · widgets_overlay.rs · tooltip.rs · …\n\nplus a shared `common/mod.rs` for the helpers every file needs (`fixed_box`, `click_at`, `type_text`, the focus helper) — Rust's integration-test convention, so the helpers are not copied five ways.\n\nSTEPS. (1) Read the section comments and the test names; the grouping is already visible. (2) Move helpers to `tests/common/mod.rs` FIRST, so each subsequent move is a straight cut. (3) One subject per commit, checking the total test count each time. (4) The name `phase_a` retires with the last test in it.\n\nEDGE CASES. ⚠️ The count is the guard here and it must be exact: 432 today. An integration test file gets its own crate, so a helper that was private and shared becomes `pub` in `common` — do not let that quietly widen anything else. ⚠️ `#[cfg(test)]` does NOT enable in the library from an integration test, so a probe guarded that way silently never compiles; anything relying on it must use `cfg(debug_assertions)` (recorded under P097).\n\nRULES. A move, never a rewrite: no test's body changes in the same commit as its move. Agree the grouping first. Gates `cargo test -p heca-grid-ui` then `./scripts/lint-changed.sh`.\n\n⚠️ MUST NOT be interleaved with P097(F003) — that phase is actively adding to this file.",
-      "descriptionUpdatedAt": "2026-09-04T14:03:05.237Z",
+      "status": "done",
+      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. The largest file in the workspace by a wide margin, and a test file — which is why it has escaped notice.\n\nCURRENT STATE. 6654 lines, **432 test functions**, named `phase_a` after a development phase that ended long ago. Its own section comments show it has grown by accretion, each era appending rather than filing:\n\n  :642  `// ── Phase C: surface components ──`\n  :1745 `// ── Phase C: display widgets ──`\n  :2566 `// ── Item (generic list row) ──`\n  :5873 `// ── Button: content is composed from children (viewnode-all-widgets) ──`\n  :6015 `// ── Choice: the value-carrying, content-composable option primitive ──`\n\nThe cost is real, not cosmetic. A test for a widget is not where anyone would look for it — `heca-grid-ui/tests/button_group.rs` exists beside it holding only `ButtonGroup`, which is the shape the rest should have. And a file this size is the one most likely to collect a duplicate of a test already in it.\n\nDESIRED STATE. `heca-grid-ui/tests/` — one file per subject, following the existing `button_group.rs` and `pointer_routing.rs` / `pointer_delivery.rs` precedent:\n\n  reactive.rs · layout.rs · paint.rs (the `Scene`/`DrawCommand` assertions) ·\n  focus.rs · widgets_input.rs · widgets_button.rs · widgets_item.rs ·\n  widgets_select.rs · widgets_overlay.rs · tooltip.rs · …\n\nplus a shared `common/mod.rs` for the helpers every file needs (`fixed_box`, `click_at`, `type_text`, the focus helper) — Rust's integration-test convention, so the helpers are not copied five ways.\n\nSTEPS. (1) Read the section comments and the test names; the grouping is already visible. (2) Move helpers to `tests/common/mod.rs` FIRST, so each subsequent move is a straight cut. (3) One subject per commit, checking the total test count each time. (4) The name `phase_a` retires with the last test in it.\n\nEDGE CASES. ⚠️ The count is the guard here and it must be exact: 432 today. An integration test file gets its own crate, so a helper that was private and shared becomes `pub` in `common` — do not let that quietly widen anything else. ⚠️ `#[cfg(test)]` does NOT enable in the library from an integration test, so a probe guarded that way silently never compiles; anything relying on it must use `cfg(debug_assertions)` (recorded under P097).\n\nRULES. A move, never a rewrite: no test's body changes in the same commit as its move. Agree the grouping first. Gates `cargo test -p heca-grid-ui` then `./scripts/lint-changed.sh`.\n\n⚠️ MUST NOT be interleaved with P097(F003) — that phase is actively adding to this file.\n\n---\n**Completion summary:**\nDONE 2026-09-29 (uncommitted). Work done by a cheaper model (Sonnet) in batches; every batch verified independently by the orchestrating session.\n\nSHIPPED (heca-grid-ui/tests/ only)\n- phase_a.rs (7845 lines, 213 tests) deleted: split by subject into button, display, dock_frame, focus, input, item, key_hint, label, toggle, tone, tooltip .rs and the folder targets below.\n- Every test file over 600 lines is a folder target tests/<subject>/main.rs + parts, all under 400 lines: command_palette, layout, toast, paint, context_menu_declaration, button_group, select, pointer_routing.\n- tests/common/mod.rs: fixed_box, press_at/release_at/click_at(root, pos, button), type_text, give_keyboard, paint/paint_in/paint_via_child, rects, texts. The 4 click copies are gone; 73 of 91 hand-built drawings use the paint helpers (the 18 left test the drawing primitives themselves or a one-off scale/accent/child-with-viewport).\n- label.rs reads heca_grid_ui::font::MONO_ADVANCE_RATIO instead of 0.6.\n- 5 absence-only tests now also assert the widget drew (button_group/overflow, command_palette/sizing, tone ×3); a_backdrop_with_no_strength_is_not_recorded_at_all is correctly empty and unchanged.\n\nVERIFICATION: grid-ui 797 tests before and after, names identical; test bodies byte-identical through both pure moves (scripted compare); assertions 801 unchanged through the helper rewrites, 806 after C8. Helpers proven by sabotage (click 36 tests red, paint 47 + 23 red, each C8 check red on an empty drawing). ./scripts/lint-changed.sh fmt, clippy, cargo test -p heca-grid-ui all green.\n\nNOTE: the task description's numbers (6654 lines / 432 tests) were stale; the real baseline was 7845 / 213.",
+      "descriptionUpdatedAt": "2026-09-29T14:42:21.802Z",
       "notes": "",
       "statusLog": [
         {
@@ -2971,20 +2971,90 @@
           "toStatus": "planned",
           "title": "Un-parked with Antonio's OK, 2026-09-28. It waited only for P097(F003) to stop adding tests to phase_a.rs; P097 is done (8 done, 1 canceled), so the test count is now a fixed target. Layout to agree with Antonio before moving code, as for T466.",
           "description": "Un-parked with Antonio's OK, 2026-09-28. It waited only for P097(F003) to stop adding tests to phase_a.rs; P097 is done (8 done, 1 canceled), so the test count is now a fixed target. Layout to agree with Antonio before moving code, as for T466."
+        },
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-003-planned-in-progress",
+          "date": "2026-09-29T13:03:08.789Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-004-in-progress-done",
+          "date": "2026-09-29T14:42:21.798Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE 2026-09-29 (uncommitted). Work done by a cheaper model (Sonnet) in batches; every batch verified independently by the orchestrating session.\n\nSHIPPED (heca-grid-ui/tests/ only)\n- phase_a.rs (7845 lines, 213 tests) deleted: split by subject into button, display, dock_frame, focus, input, item, key_hint, label, toggle, tone, tooltip .rs and the folder targets below.\n- Every test file over 600 lines is a folder target tests/<subject>/main.rs + parts, all under 400 lines: command_palette, layout, toast, paint, context_menu_declaration, button_group, select, pointer_routing.\n- tests/common/mod.rs: fixed_box, press_at/release_at/click_at(root, pos, button), type_text, give_keyboard, paint/paint_in/paint_via_child, rects, texts. The 4 click copies are gone; 73 of 91 hand-built drawings use the paint helpers (the 18 left test the drawing primitives themselves or a one-off scale/accent/child-with-viewport).\n- label.rs reads heca_grid_ui::font::MONO_ADVANCE_RATIO instead of 0.6.\n- 5 absence-only tests now also assert the widget drew (button_group/overflow, command_palette/sizing, tone ×3); a_backdrop_with_no_strength_is_not_recorded_at_all is correctly empty and unchanged.\n\nVERIFICATION: grid-ui 797 tests before and after, names identical; test bodies byte-identical through both pure moves (scripted compare); assertions 801 unchanged through the helper rewrites, 806 after C8. Helpers proven by sabotage (click 36 tests red, paint 47 + 23 red, each C8 check red on an empty drawing). ./scripts/lint-changed.sh fmt, clippy, cargo test -p heca-grid-ui all green.\n\nNOTE: the task description's numbers (6654 lines / 432 tests) were stale; the real baseline was 7845 / 213."
         }
       ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-001-move-heca-grid-ui-tests-phase-a-rs-7845-lines-213-tests-the-description-s-6654-432-is-stale-into-common-mod-rs-fixed-box-click-at-type-text-give-keyboard-layout-label-paint-focus-button-toggle-input-select-display-item-dock-frame-key-hint-tooltip-command-palette-tone-toast-rs-single-subject-helpers-move-with-their-subject-phase-a-rs-deleted-213-tests-before-and-after",
+          "number": 1,
+          "title": "Move: heca-grid-ui/tests/phase_a.rs (7845 lines, 213 tests — the description's 6654/432 is stale) into common/mod.rs (fixed_box, click_at, type_text, give_keyboard) + layout, label, paint, focus, button, toggle, input, select, display, item, dock_frame, key_hint, tooltip, command_palette, tone, toast .rs; single-subject helpers move with their subject; phase_a.rs deleted; 213 tests before and after",
+          "checked": true
+        },
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-002-review-the-moved-tests-against-the-rules-and-fix-what-is-found-each-as-its-own-checklist-item",
+          "number": 2,
+          "title": "Review the moved tests against the rules and fix what is found, each as its own checklist item",
+          "checked": true
+        },
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-003-move-a-closed-select-hovers-as-one-control-and-an-open-select-leaves-the-row-around-it-alone-from-layout-rs-to-select-rs-agreed-grouping",
+          "number": 3,
+          "title": "Move a_closed_select_hovers_as_one_control and an_open_select_leaves_the_row_around_it_alone from layout.rs to select.rs (agreed grouping)",
+          "checked": true
+        },
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-004-every-test-file-over-600-lines-becomes-a-folder-tests-subject-main-rs-one-file-per-sub-subject-command-palette-layout-toast-paint-context-menu-declaration-button-group-select-pointer-routing-missed-by-the-first-review-635-every-part-under-400-lines-797-tests-and-identical-bodies-before-and-after",
+          "number": 4,
+          "title": "Every test file over 600 lines becomes a folder tests/<subject>/main.rs + one file per sub-subject: command_palette, layout, toast, paint, context_menu_declaration, button_group, select, pointer_routing (missed by the first review, 635); every part under 400 lines; 797 tests and identical bodies before and after",
+          "checked": true
+        },
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-005-one-click-helper-common-click-at-root-pos-button-press-at-release-at-the-copies-in-pointer-routing-context-menu-declaration-and-click-to-focus-by-handler-deleted-the-last-keeps-a-small-wrapper-that-lays-out-and-moves-the-pointer-first-then-calls-common-click-at-breaking-it-turned-36-tests-red",
+          "number": 5,
+          "title": "One click helper: common::click_at(root, pos, button) + press_at/release_at; the copies in pointer_routing, context_menu_declaration and click_to_focus_by_handler deleted (the last keeps a small wrapper that lays out and moves the pointer first, then calls common::click_at); breaking it turned 36 tests red",
+          "checked": true
+        },
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-006-paint-helpers-in-common-paint-widget-theme-paint-in-widget-theme-viewport-paint-via-child-widget-theme-plus-rects-texts-73-of-the-91-hand-built-drawings-use-them-breaking-them-turned-47-23-tests-red-the-18-left-test-the-drawing-primitives-themselves-rect-bracket-frame-clip-drop-shadow-backdrop-or-a-one-off-scale-accent-child-with-viewport-no-shared-shape",
+          "number": 6,
+          "title": "Paint helpers in common: paint(widget, theme), paint_in(widget, theme, viewport), paint_via_child(widget, theme), plus rects()/texts(); 73 of the 91 hand-built drawings use them (breaking them turned 47 + 23 tests red). The 18 left test the drawing primitives themselves (rect, bracket frame, clip, drop shadow, backdrop) or a one-off scale / accent / child-with-viewport — no shared shape",
+          "checked": true
+        },
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-007-label-rs-read-the-character-width-as-0-6-four-times-now-heca-grid-ui-font-mono-advance-ratio",
+          "number": 7,
+          "title": "label.rs read the character width as 0.6 four times — now heca_grid_ui::font::MONO_ADVANCE_RATIO",
+          "checked": true
+        },
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-008-5-tests-asserted-only-that-something-was-absent-so-they-also-passed-when-nothing-was-drawn-button-group-overflow-button-brought-back-command-palette-sizing-never-runs-off-a-short-window-tone-3-each-now-also-asserts-the-widget-drew-each-seen-red-with-an-empty-drawing-a-backdrop-with-no-strength-is-not-recorded-at-all-is-correctly-empty-and-unchanged",
+          "number": 8,
+          "title": "5 tests asserted only that something was ABSENT, so they also passed when nothing was drawn: button_group/overflow (button brought back), command_palette/sizing (never runs off a short window), tone ×3. Each now also asserts the widget drew (each seen red with an empty drawing); a_backdrop_with_no_strength_is_not_recorded_at_all is correctly empty and unchanged",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-29T13:03:08.789Z",
+      "completedAt": "2026-09-29T14:42:21.798Z",
       "createdAt": "2026-09-04T14:03:05.191Z",
-      "updatedAt": "2026-09-28T08:50:23.038Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-29T14:42:31.206Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:bee00513-2e67-451f-a208-f0656ce26711",
+          "createdAt": "2026-09-29T13:03:08.673Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -3233,7 +3303,7 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-09-29T13:02:09.192Z",
+  "updatedAt": "2026-09-29T14:42:31.206Z",
   "handoff": "# T518 and T491 are done and pushed — next is T466 (split registry.rs), layout agreed\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-25T10:32:44.685Z\nReason: Antonio answered the two open questions (T466 layout, T470 note) and asked for them to be in the handoff for the next session, then committed.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Next task: **P082(F003)/T466 — Split app/registry.rs by job** (planned, priority 9 — the lowest open in the phase). Un-parked 2026-09-24 with Antonio's OK.\n- Exact resume point: nothing started. **The layout is AGREED** (Antonio, 2026-09-24) and recorded as T466 checklist C1. It follows AGENTS.md §0b-bis — split by what each piece OWNS, tests beside the code they test, shared fixtures in `testing.rs` (NOT one big `tests.rs`):\n\n```\nheca/src/app/registry/\n├── mod.rs        the entry the app calls (build_keymaps) — wiring only\n├── config.rs     [keys] / [[keys.bind]] / [[keys.surface]] / [[keys.mode]] → bindings\n├── conflicts.rs  who wrote which binding, one report per clash\n├── floors.rs     the keys that are always there (Escape) and cannot be unbound\n├── actions.rs    registers every action's handler\n└── testing.rs    #[cfg(test)] shared fixtures\n```\n| file | owns | owns nothing about |\n|---|---|---|\n| config.rs | config tables → bindings | clashes, what an action does |\n| conflicts.rs | who wrote a key, reporting a clash once | reading config, floors |\n| floors.rs | keys that can't be removed | config, handlers |\n| actions.rs | action → handler | keys |\n\nEach file keeps its own tests, under 400 lines; outside call sites unchanged (re-export from mod.rs). A move, no behaviour change.\n\n## Current and partial state\n- Branch `feat/t518-a-region-holds-a-list`, pushed. Commits on top of `c15eacab`: `020229af` (code), `45b707b7` (planner), then the planner commit carrying this handoff. No PR opened (not asked).\n- **T518 done** (Antonio confirmed on screen, except `.order` reversing two docks — skipped by his choice): `regions(\"sidebar.left\").append/prepend/remove/retain/gap` (`heca/src/chrome/regions.rs`); `.share` → `.flex`; `.order(..)` (`heca-grid-ui/src/order.rs`); region is a Flex list (region `template_row`, provider `grow()`/`default_order` deleted); `PlaceDock` (`.flex/.order` on a dock as it is added, adder wins); context-menu `weight` → `Order` (wire still reads \"weight\"); dotted region names, `as_str()` prints dotted.\n- Fixed while testing, confirmed: `RegionMap<T>` (show/hide + ChromeHost); prefix+q no longer letters a pane tile behind the sidebar (`column::offer_to_columns` + `column_view_seen`).\n- **T491 done** (confirmed): grid-ui `Tile` widget, `WidgetKind::Tile`, SDK builder; app `PaneRow` and showcase PANES mount it.\n- **T470 note added** (Antonio): the showcase is behind the app and is better REWRITTEN once widgets are stable, not just split. T470 stays deferred.\n- T472/T468/T471 stay deferred (P094 still reshapes their files).\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first; fix in the library; compose; hardcode nothing; CSS-shaped layout; propose before coding when a design is open; follow AGENTS.md patterns (read them before proposing a structure); never commit unasked; commit AFTER writing a handoff (it changes planner files); never create planner entries without agreeing.\n- A region never holds sizes or indexes. Do not reintroduce region `template_row` or a provider `grow()`. `retain` not `filter`; `.span` rejected.\n- Every new test: break the code on purpose and see it red.\n- T466 behaviours that must survive (each has a test): mode bindings accept one combo / comma string / list; Escape never global, nor `close_overlay`; floors cannot be unbound; `[[keys.surface]]` before global; a conflict reported once with its layer.\n\n## Supporting documents\n- None needed. T466's own description + checklist C1 hold the agreed shape.\n\n## Blockers and risks\n- None for T466.\n- Flagged, not agreed: 12 show/hide/toggle region actions → 3 taking a region name; `heca/src/chrome/mod.rs` ~2500 lines doing several jobs.\n- CPU >100% reported once after long running; not reproduced (idle 0–3%). If it returns: measure first, do not guess.\n\n## How to resume\n1. `planner-task-show P082(F003)/T466 full=true`, then `planner-task-start`.\n2. Read `heca/src/app/registry.rs` and map every item to one owner in the table above.\n3. Move code into `heca/src/app/registry/` per the layout; tests go with the code they test; shared fixtures to `testing.rs`; re-export from `mod.rs`.\n4. Verify: `./scripts/lint-changed.sh`, `… test`, `… fmt` all clean; each file under 400 lines.\n5. Report, then commit only when asked. Then back to the planner recommendation.",
   "handoffUpdatedAt": "2026-09-25T10:32:44.685Z",
   "handoffAudit": {
@@ -3521,12 +3591,20 @@
       "toStatus": "in-progress",
       "title": "deferred → in-progress",
       "description": ""
+    },
+    {
+      "id": "37eaa2a1-308b-4df4-a65a-b7b924e9f25f",
+      "date": "2026-09-29T14:42:21.836Z",
+      "fromStatus": "in-progress",
+      "toStatus": "deferred",
+      "title": "in-progress → deferred",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "mcp-process:bee00513-2e67-451f-a208-f0656ce26711",
-      "createdAt": "2026-09-29T07:37:21.953Z"
+      "createdAt": "2026-09-29T13:03:08.673Z"
     },
     {
       "sessionId": "mcp-process:382bb24b-8941-4f86-bf51-d81827c11e9f",
