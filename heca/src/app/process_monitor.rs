@@ -113,8 +113,7 @@ mod tests {
     use crate::chrome::{ChromeEvent, ChromeEventBus};
     use heca_core::backend::FakeBackend;
     use heca_core::layout::{
-        ColumnWidth, LayoutOptions, Pane, PaneId, Point, Session, SessionId, Size,
-        workspace::FloatingPane,
+        LayoutOptions, Pane, PaneId, Point, Session, SessionId, Size, workspace::FloatingPane,
     };
     use heca_core::runtime::{ContentKind, PaneClosePolicy, PaneRuntime, ProcessStatus};
     use std::cell::RefCell;
@@ -138,7 +137,6 @@ mod tests {
             Pane::new(id, "editor"),
             None,
             true,
-            ColumnWidth::Proportion(0.5),
             heca_core::layout::ColumnId(id.0),
         );
         session

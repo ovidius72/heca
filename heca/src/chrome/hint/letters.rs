@@ -233,21 +233,16 @@ fn offer_in_every_tree(
             for_view(HintSurface::Pane(*pane_id)),
         );
     }
-    // **A tiled pane is a node inside its column**, so its surface is asked for the same way any
-    // other is — `hint_surface_root` knows where a pane's tree is (F003/P082/T474).
-    for column in state.columns.values() {
-        for pane_id in &column.panes {
-            let surface = HintSurface::Pane(*pane_id);
-            if let Some(root) = super::surfaces::hint_surface_root(state, &surface) {
-                offered |= heca_grid_ui::offer_hint_by_key(root, key, for_view(surface));
-            }
-        }
-    }
-    // **And the columns in the scrolling area.** A column is a third place a letter can land: it is
-    // drawn in the content area, so it is not in the window root, and it is not a pane. Its sidebar
-    // group is a second view of the same identity and is reached by the window-root walk above —
-    // both wear the letter, exactly as a pane and its sidebar row do (F003/P082/T474).
-    offered |= crate::chrome::offer_to_columns(state, key, label.clone());
+    // **The columns in the scrolling area** — a column and the tiled panes inside it. Drawn in the
+    // content area, so neither is in the window root. Asked the same visibility question as every
+    // other view: a pane behind the sidebar is withdrawn here, not lettered over the sidebar.
+    //
+    // This used to be two paths — each tiled pane offered through its own surface, and then every
+    // column offered again with no visibility check, which put the withdrawn letter straight back
+    // (Antonio, driving, 2026-09-24). One path now (F003/P082/T474's node, one door).
+    offered |= crate::chrome::offer_to_columns(state, key, label.clone(), |pane| {
+        visible.surfaces.contains(&HintSurface::Pane(pane))
+    });
     offered
 }
 

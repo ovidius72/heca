@@ -31,6 +31,9 @@ mod targets;
 mod visibility;
 
 #[cfg(test)]
+mod one_letter_per_row_tests;
+
+#[cfg(test)]
 pub(crate) use letters::Offer;
 #[cfg(test)]
 pub(crate) use letters::wanted_for_tests;

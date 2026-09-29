@@ -7,7 +7,7 @@ use crate::actions::ActionRegistry;
 use crate::app::interaction::InteractionSource;
 use crate::app::interaction::{dispatch_action, dispatch_action_ref};
 use crate::app::keyboard::{
-    event_combo_matches, normalize_key_text, prefix_combo_to_literal_input, typed_candidate_char,
+    event_combo_matches, prefix_combo_to_literal_input, typed_candidate_char,
     winit_key_to_backend_event, winit_key_to_terminal_input,
 };
 use crate::app::selection::find_pane_location;
@@ -37,7 +37,7 @@ pub(crate) const FOCUS_LAYER: &str = "focus";
 ///
 /// The layer twin of [`FOCUS_LAYER`], and it exists for the same reason: what every layer answers
 /// alike does not belong in each layer's own declaration. Today that is `Escape` — the front-most
-/// layer closes itself — asserted as a floor in `registry::build_mode_keymaps` so a layer that
+/// layer closes itself — asserted as a floor in `registry::floors` so a layer that
 /// declares nothing is still closable from the keyboard.
 pub(crate) const LAYER_FLOOR: &str = "layer";
 
@@ -145,7 +145,9 @@ pub(crate) fn handle_keyboard_input(
                 return;
             }
 
-            let global_action = keymap.resolve("global", ctx.event_combo).cloned();
+            let global_action = keymap
+                .resolve(crate::keymap::DIRECT_LAYER, ctx.event_combo)
+                .cloned();
             if let Some(act) = global_action {
                 dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
                 return;
@@ -201,7 +203,15 @@ pub(crate) fn handle_keyboard_input(
             handle_chord_mode(registry, state, &sequence, ctx);
         }
         InputMode::Mode { name } => {
-            handle_custom_mode(registry, mode_keymaps, mode_triggers, state, &name, ctx);
+            handle_mode(
+                registry,
+                keymap,
+                mode_keymaps,
+                mode_triggers,
+                state,
+                &name,
+                ctx,
+            );
         }
         InputMode::PaneSelect { candidates } => {
             handle_pane_select_mode(registry, state, &candidates, ctx);
@@ -240,7 +250,15 @@ pub(crate) fn handle_keyboard_input(
             handle_dock_pick_mode(registry, state, &candidates, ctx);
         }
         InputMode::Selection => {
-            handle_selection_mode(registry, mode_keymaps, state, ctx);
+            handle_mode(
+                registry,
+                keymap,
+                mode_keymaps,
+                mode_triggers,
+                state,
+                SELECTION_MODE,
+                ctx,
+            );
         }
         _ => {}
     }
@@ -450,7 +468,9 @@ fn handle_prefix_mode(
         return;
     }
 
-    let combo = mode_combo(ctx);
+    // The key exactly as pressed — the same combo the normal bindings see, so a prefix binding with
+    // Cmd or Alt (`prefix+Alt+n`) is reachable, and a held Cmd never turns into the bare key.
+    let combo = ctx.event_combo.clone();
     let mut entered_mode = None;
     for (mode_name, (trigger_combo, sticky)) in mode_triggers {
         if event_combo_matches(&combo, trigger_combo) {
@@ -469,14 +489,17 @@ fn handle_prefix_mode(
     // before the key is dropped. That fall-through is what lets a component bind `r` without having
     // to know whether the user reaches it directly or through the prefix (user decision,
     // 2026-07-29).
-    let action = keymap.resolve("normal", &combo).cloned().or_else(|| {
-        surface_action(
-            &focused_surface(state),
-            mode_keymaps,
-            component_keymaps,
-            &combo,
-        )
-    });
+    let action = keymap
+        .resolve(crate::keymap::LEADER_LAYER, &combo)
+        .cloned()
+        .or_else(|| {
+            surface_action(
+                &focused_surface(state),
+                mode_keymaps,
+                component_keymaps,
+                &combo,
+            )
+        });
     if let Some(ref act) = action {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
@@ -527,32 +550,138 @@ fn handle_chord_mode(
     state.needs_redraw = true;
 }
 
-fn handle_custom_mode(
+/// The keymap name selection mode's own keys are declared under (`[[keys.mode]] name = "selection"`).
+const SELECTION_MODE: &str = "selection";
+
+/// One key press, as [`mode_key`] needs to see it.
+pub(crate) struct ModeKeyPress<'a> {
+    pub(crate) escape: bool,
+    pub(crate) enter: bool,
+    pub(crate) prefix: bool,
+    /// The key exactly as pressed — one combo for the mode's own keys and the normal bindings, so
+    /// Cmd+V is Cmd+V in both.
+    pub(crate) combo: &'a KeyCombo,
+}
+
+/// What a key does while a mode holds the keyboard.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ModeKey {
+    /// Esc: leave the mode, dropping what it was doing.
+    Cancel,
+    /// Enter: leave the mode, keeping what it made.
+    Confirm,
+    /// The prefix key: leave the mode for the prefix.
+    Prefix,
+    /// One of the mode's own keys; `stay` is false for a one-shot (non-sticky) mode.
+    Own {
+        action: crate::keymap::ActionRef,
+        stay: bool,
+    },
+    /// A key the mode does not bind but the normal bindings do. It **bubbles** to them and the mode
+    /// stays — which is what lets Cmd+V paste while selecting.
+    Normal(crate::keymap::ActionRef),
+    /// Nobody binds it. Swallowed: a mode never lets a key through to the program behind it, so a
+    /// stray `j` does not type into the shell.
+    Swallow,
+}
+
+/// **What a key does in a mode** — one rule for every mode, selection included: Esc cancels, Enter
+/// confirms, the prefix key goes to the prefix, then the mode's own keys, then the normal bindings
+/// (AGENTS § 0c — keys bubble). Pure, like [`surface_action`], so it is testable without a window.
+pub(crate) fn mode_key(
+    mode: &str,
+    sticky: bool,
+    mode_keymaps: &HashMap<String, KeymapRegistry>,
+    keymap: &KeymapRegistry,
+    key: &ModeKeyPress<'_>,
+) -> ModeKey {
+    if key.escape {
+        return ModeKey::Cancel;
+    }
+    if key.enter {
+        return ModeKey::Confirm;
+    }
+    if key.prefix {
+        return ModeKey::Prefix;
+    }
+    if let Some(action) = mode_keymaps
+        .get(mode)
+        .and_then(|map| map.resolve(mode, key.combo))
+    {
+        return ModeKey::Own {
+            action: action.clone(),
+            stay: sticky,
+        };
+    }
+    match keymap.resolve(crate::keymap::DIRECT_LAYER, key.combo) {
+        Some(action) => ModeKey::Normal(action.clone()),
+        None => ModeKey::Swallow,
+    }
+}
+
+/// Carry out [`mode_key`]'s answer — the one handler for selection mode and every custom mode.
+fn handle_mode(
     registry: &ActionRegistry,
+    keymap: &KeymapRegistry,
     mode_keymaps: &HashMap<String, KeymapRegistry>,
     mode_triggers: &HashMap<String, (KeyCombo, bool)>,
     state: &mut AppState,
-    name: &str,
+    mode: &str,
     ctx: KeyInputContext<'_>,
 ) {
-    let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
-    let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
-    if is_escape || is_enter {
-        state.input_mode = InputMode::Normal;
-        state.needs_redraw = true;
-        return;
-    }
-
-    let combo = mode_combo(ctx);
-    if let Some(mode_map) = mode_keymaps.get(name)
-        && let Some(action) = mode_map.resolve(name, &combo).cloned()
-    {
-        let sticky = mode_triggers.get(name).map(|(_, s)| *s).unwrap_or(true);
-        dispatch_action_ref(state, registry, InteractionSource::Keyboard, &action);
-        if !sticky {
-            state.input_mode = InputMode::Normal;
+    let sticky = mode_triggers.get(mode).map(|(_, s)| *s).unwrap_or(true);
+    let key = ModeKeyPress {
+        escape: matches!(ctx.logical_key, Key::Named(NamedKey::Escape)),
+        enter: matches!(ctx.logical_key, Key::Named(NamedKey::Enter)),
+        prefix: ctx.is_prefix,
+        combo: ctx.event_combo,
+    };
+    match mode_key(mode, sticky, mode_keymaps, keymap, &key) {
+        ModeKey::Cancel => leave_mode(registry, state, false),
+        ModeKey::Confirm => leave_mode(registry, state, true),
+        ModeKey::Prefix => {
+            // Match the Normal→Prefix promotion exactly: set the mode AND arm the timeout.
+            state.input_mode = InputMode::Prefix;
+            state.prefix_entered_at = Some(std::time::Instant::now());
             state.needs_redraw = true;
         }
+        ModeKey::Own { action, stay } => {
+            dispatch_action_ref(state, registry, InteractionSource::Keyboard, &action);
+            if !stay {
+                state.input_mode = InputMode::Normal;
+                state.needs_redraw = true;
+            }
+        }
+        ModeKey::Normal(action) => {
+            dispatch_action_ref(state, registry, InteractionSource::Keyboard, &action);
+        }
+        ModeKey::Swallow => {}
+    }
+}
+
+/// Leave the mode in front — `keep` for Enter, dropping what it did for Esc.
+///
+/// Selection mode is the one that made something: Enter keeps the selection (a mode-internal step,
+/// `Selecting → Selected`, not an action of its own), and Esc runs `exit_scrollback`, which snaps
+/// the viewport back to the bottom and clears the selection.
+fn leave_mode(registry: &ActionRegistry, state: &mut AppState, keep: bool) {
+    let selecting = matches!(state.input_mode, InputMode::Selection);
+    state.input_mode = InputMode::Normal;
+    state.needs_redraw = true;
+    if !selecting {
+        return;
+    }
+    if keep {
+        if state.selection.is_active() {
+            state.selection.end();
+        }
+    } else {
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
+            &WmAction::ExitScrollback,
+        );
     }
 }
 
@@ -824,82 +953,6 @@ fn handle_dock_pick_mode(
     state.needs_redraw = true;
 }
 
-fn handle_selection_mode(
-    registry: &ActionRegistry,
-    mode_keymaps: &HashMap<String, KeymapRegistry>,
-    state: &mut AppState,
-    ctx: KeyInputContext<'_>,
-) {
-    // Selection mode keyboard contract (Task 05 — keyboard-first selection):
-    //   Esc     → clear selection/caret and return to Normal.
-    //   Enter   → if selection exists: confirm and return to Normal.
-    //             if caret-only: just return to Normal (no selection to confirm).
-    //   prefix  → return to Prefix mode AND arm the prefix timeout.
-    //   mode bindings → resolve through the `selection` mode keymap and
-    //                   dispatch real actions via the registry.
-    //   other keys → ignored; do not forward to the focused backend.
-    //
-    let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
-    let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
-
-    if is_escape {
-        // Route through the action architecture — no direct selection-state
-        // mutation here, consistent with the "no registry bypasses" rule.
-        // ExitScrollback snaps the viewport to bottom, clears selection,
-        // and exits Selection mode.
-        state.input_mode = InputMode::Normal;
-        dispatch_action(
-            state,
-            registry,
-            InteractionSource::Keyboard,
-            &WmAction::ExitScrollback,
-        );
-    } else if is_enter {
-        // Enter confirms the selection and returns to Normal.
-        // `selection.end()` is a mode-internal state transition (Selecting → Selected),
-        // not a user-visible action. Unlike `ClearSelection` (which is exposed as a
-        // WmAction because it can be triggered from keyboard/mouse/RPC), confirming
-        // a selection only happens via Enter in selection mode — there is no
-        // `ConfirmSelection` action because the confirmation is a mode-internal
-        // gesture (like Enter in rename or confirm-delete modes).
-        if state.selection.is_active() {
-            state.selection.end();
-        }
-        // Whether we had a selection or just a caret, return to Normal.
-        state.input_mode = InputMode::Normal;
-        state.needs_redraw = true;
-    } else if ctx.is_prefix {
-        // Match the Normal→Prefix promotion exactly: set the mode AND
-        // arm the timeout. `handle_prefix_mode` will not arm it later.
-        state.input_mode = InputMode::Prefix;
-        state.prefix_entered_at = Some(std::time::Instant::now());
-        state.needs_redraw = true;
-    } else {
-        let combo = mode_combo(ctx);
-        if let Some(mode_map) = mode_keymaps.get("selection")
-            && let Some(action) = mode_map.resolve("selection", &combo).cloned()
-        {
-            dispatch_action_ref(state, registry, InteractionSource::Keyboard, &action);
-        }
-    }
-}
-
-fn mode_combo(ctx: KeyInputContext<'_>) -> KeyCombo {
-    KeyCombo {
-        key: normalize_key_text(
-            ctx.logical_key,
-            ctx.key_text,
-            ctx.is_shift,
-            ctx.is_ctrl,
-            ctx.physical_key,
-        ),
-        ctrl: ctx.is_ctrl,
-        shift: ctx.is_shift,
-        alt: false,
-        super_: false,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -918,6 +971,87 @@ mod tests {
         let (components, _) =
             build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         (modes, components)
+    }
+
+    /// What `written` does in `mode`, with the shipped default keymaps.
+    fn in_mode(mode: &str, written: &str) -> ModeKey {
+        let combo = KeyCombo::parse(written);
+        press_in_mode(mode, &combo, written == "Escape", written == "Enter")
+    }
+
+    fn press_in_mode(mode: &str, combo: &KeyCombo, escape: bool, enter: bool) -> ModeKey {
+        let keymaps = crate::app::registry::build_keymaps(
+            &heca_config::theme::Config::default(),
+            &mut Conflicts::default(),
+        );
+        let key = ModeKeyPress {
+            escape,
+            enter,
+            prefix: false,
+            combo,
+        };
+        mode_key(mode, true, &keymaps.modes, &keymaps.flat, &key)
+    }
+
+    /// **Cmd+V as the keyboard sends it** — built by the same function the app calls on a key
+    /// press, not parsed from text. A mode used to rebuild the key without Cmd, so Cmd+V reached
+    /// selection mode as a bare `v` and began a selection instead of pasting (Antonio, 2026-09-29).
+    #[test]
+    fn cmd_v_as_pressed_pastes_in_selection_mode() {
+        use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
+        let combo = crate::app::keyboard::build_event_combo(
+            &Key::Character("v".into()),
+            &PhysicalKey::Code(KeyCode::KeyV),
+            "v",
+            ModifiersState::SUPER,
+        );
+        assert_eq!(
+            press_in_mode(SELECTION_MODE, &combo, false, false),
+            ModeKey::Own {
+                action: crate::keymap::ActionRef::Builtin(WmAction::PasteClipboard),
+                stay: true,
+            },
+        );
+    }
+
+    /// **A key a mode does not bind reaches the normal bindings** (Antonio, 2026-09-29: *"it seems
+    /// we don't have paste"*) instead of being thrown away — so Cmd+V pastes in a mode that never
+    /// mentions it, like resize, and a normal key such as `Shift+Home` still scrolls while selecting.
+    #[test]
+    fn a_key_a_mode_does_not_bind_reaches_the_normal_bindings() {
+        assert_eq!(
+            in_mode("resize", "Super+v"),
+            ModeKey::Normal(crate::keymap::ActionRef::Builtin(WmAction::PasteClipboard)),
+        );
+        assert!(
+            matches!(in_mode(SELECTION_MODE, "Shift+Home"), ModeKey::Normal(_)),
+            "selection mode does not bind Shift+Home; the normal bindings do",
+        );
+    }
+
+    /// The mode's own keys still come first, and a key nobody binds never reaches the program.
+    #[test]
+    fn a_modes_own_key_wins_and_an_unbound_one_is_swallowed() {
+        assert_eq!(
+            in_mode(SELECTION_MODE, "y"),
+            ModeKey::Own {
+                action: crate::keymap::ActionRef::Builtin(WmAction::CopySelection),
+                stay: true,
+            },
+        );
+        for key in ["p", "Super+v", "Ctrl+Shift+v"] {
+            assert_eq!(
+                in_mode(SELECTION_MODE, key),
+                ModeKey::Own {
+                    action: crate::keymap::ActionRef::Builtin(WmAction::PasteClipboard),
+                    stay: true,
+                },
+                "{key}: y copies, p (or the usual paste key) pastes — one entry, three keys",
+            );
+        }
+        assert_eq!(in_mode(SELECTION_MODE, "x"), ModeKey::Swallow);
+        assert_eq!(in_mode(SELECTION_MODE, "Escape"), ModeKey::Cancel);
+        assert_eq!(in_mode("resize", "Enter"), ModeKey::Confirm);
     }
 
     fn escape(surface: &FocusedSurface) -> Option<crate::keymap::ActionRef> {

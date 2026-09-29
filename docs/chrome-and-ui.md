@@ -616,7 +616,6 @@ To support this cleanly, mounted containers should expose metadata such as:
 - `title`
 - `supported_regions`
 - `default_region`
-- `default_order`
 - `movable`
 - `collapsible`
 
@@ -887,7 +886,6 @@ pub struct ContainerContribution {
     pub title: String,
     pub supported_regions: RegionSet, // which RegionIds it may live in
     pub default_region: RegionId,
-    pub default_order: i32,           // stacking order within a region (lower = earlier)
     pub movable: bool,
     pub collapsible: bool,
     /// Builds the container body as a host-understood grid-ui subtree. Called by
@@ -1105,8 +1103,6 @@ pub trait Provider {
     fn supported_regions(&self) -> RegionSet;
     /// Where it mounts by default on first run.
     fn default_region(&self) -> RegionId;
-    /// Default stacking order within a region (lower = earlier).
-    fn default_order(&self) -> i32 { 0 }
     /// Human title (rail/tab label, move menu).
     fn title(&self) -> &str;
     /// Host-level move/reorder allowed?
@@ -1141,7 +1137,9 @@ pub struct ChromeCtx {
 **Lifecycle (state machine).**
 
 1. **register** — `ChromeHost::register(Box<dyn Provider>)` records it and reads
-   its placement metadata (`supported_regions` / `default_region` / `default_order`).
+   its placement metadata (`supported_regions` / `default_region`). Where it sits among its region's docks is the
+   order it was added (`regions(..).append` / `.prepend`), or `.order(..)` on its body — there is
+   no order on the provider.
 2. **on_activate** — provider subscribes to events (`ctx.on(...)`) and registers
    actions; returns `ProviderHandles` the host keeps alive.
 3. **build_contribution** — host calls it, receives a `Contribution` *model*, and

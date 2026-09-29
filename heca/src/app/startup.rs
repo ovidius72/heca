@@ -393,9 +393,9 @@ pub(crate) async fn init_state(
     // from whatever the host has seated in it (`chrome::build_region_content`), so this
     // registration is *why* there is a workspace tree in the sidebar at all. Move the
     // container to the right region and its UI goes with it.
-    crate::chrome::Region::LeftSidebar.child(crate::providers::WorkspacesContainerProvider::new(
-        "workspaces",
-    ));
+    use crate::chrome::regions;
+    use crate::providers::WorkspacesContainerProvider as Workspaces;
+    regions("sidebar.left").append(Workspaces::new("workspaces"));
     // A **second placement** of the same container, in the right sidebar (F003/P085/T359, user
     // 2026-07-30). Not scaffolding: with one dock on screen none of this phase is observable — not
     // a letter per dock, not focus moving between them, not "the focused one answers and every
@@ -404,23 +404,16 @@ pub(crate) async fn init_state(
     //
     // It is also the only thing that exercises the kind/mount split for real: same content, same
     // bindings, separate cursor / scroll / focus, because those are keyed by mount id.
-    crate::chrome::Region::RightSidebar.child(crate::providers::WorkspacesContainerProvider::new(
-        "workspaces.right",
-    ));
+    regions("sidebar.right").append(Workspaces::new("workspaces.right"));
     // A **third placement, beside the first**, so two docks share one region. One dock per sidebar
     // never shows whether two of them divide the height, hold their own space as one folds, or line
     // their title rows up with each other — which is the whole of what a region has to get right.
-    // **The region says how its two docks divide it**, in one line rather than in each dock's own
-    // share: equal halves with air between them.
-    crate::chrome::Region::LeftSidebar
-        .template_row("1fr 1fr")
-        .gap("sm")
-        .child(crate::providers::WorkspacesContainerProvider::new(
-            "workspaces.left2",
-        ));
+    // **Each dock says its own size**; saying nothing is one equal part, so two docks are halves.
+    regions("sidebar.left").append(Workspaces::new("workspaces.left2"));
 
-    // Everything named above was queued before this host existed — which is the point: a plugin
-    // adding a container at load time writes the same call and does not have to find the host.
+    // Everything named above is queued — which is the point: a plugin adding a container at load
+    // time writes the same call and does not have to find the host. This applies it, once; a
+    // `regions(..)` call after this is refused out loud.
     chrome_host.mount_pending();
 
     // Loaded from disk when `[settings] search_history` allows it; a missing, corrupt or
@@ -526,10 +519,7 @@ pub(crate) async fn init_state(
         terminal_font_zoom_step: app_config.config.settings.terminal_font_zoom_step,
         mouse_wheel_change_font_size: app_config.config.settings.mouse_wheel_change_font_size,
         terminal_scroll_animations_enabled: app_config.config.settings.terminal_scroll_animations,
-        show_left_sidebar: app_config.config.settings.show_left_sidebar,
-        show_right_sidebar: app_config.config.settings.show_right_sidebar,
-        show_top_bar: app_config.config.settings.show_top_bar,
-        show_bottom_bar: app_config.config.settings.show_bottom_bar,
+        shown: crate::chrome::shown_from_settings(&app_config.config.settings),
         confirm: app_config.config.confirm.clone(),
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
         prefix_entered_at: None,

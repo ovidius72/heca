@@ -35,8 +35,11 @@
 
 pub mod animation;
 pub mod column;
+pub mod floating;
+pub mod placement;
 pub mod scrolling;
 pub mod session;
+pub mod shape;
 pub mod types;
 pub mod view_offset;
 pub mod workspace;
@@ -44,6 +47,7 @@ pub mod workspace;
 pub use column::{Column, Pane};
 pub use scrolling::{LaidOutColumn, LaidOutPane, ScrollingSpace};
 pub use session::{Session, WorkspaceSwitch};
+pub use shape::SessionShape;
 pub use types::*;
 pub use view_offset::ViewOffset;
 pub use workspace::{FocusDomain, Workspace};

@@ -1741,9 +1741,18 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
     // Every widget's paint passes through here, so a container states `tone` once and nothing
     // inside opts in — the alternative is each publisher wrapping its own `paint`, which is how
     // the tone ended up with consumers and no publishers at all.
-    match c.base().style.visual.accent {
-        Some(tone) => cx.with_accent(tone, |cx| paint_subtree(c, cx)),
-        None => paint_subtree(c, cx),
+    //
+    // The same for the colour of the text inside (`content_tone`, CSS `color`): named by meaning,
+    // resolved against this frame's theme, and published for the whole subtree.
+    let visual = &c.base().style.visual;
+    let content = visual.content_tone.map(|tone| tone.resolve(cx.theme()));
+    match (visual.accent, content) {
+        (Some(hue), Some(text)) => cx.with_accent(hue, |cx| {
+            cx.with_content_color(text, |cx| paint_subtree(c, cx))
+        }),
+        (Some(hue), None) => cx.with_accent(hue, |cx| paint_subtree(c, cx)),
+        (None, Some(text)) => cx.with_content_color(text, |cx| paint_subtree(c, cx)),
+        (None, None) => paint_subtree(c, cx),
     }
 }
 
@@ -2337,7 +2346,7 @@ impl<'a> PaintCx<'a> {
     /// else; it lives here now, so the next widget gets it without knowing it exists.
     ///
     /// ⚠️ **Not for the accent as a NAME.** `BadgeVariant::Accent`, `AlertVariant::Info`,
-    /// `ToastSeverity::Info` and `HintTone::Accent` are *declared meanings* — what the author said
+    /// `ToastSeverity::Info` and `Tone::Accent` are *declared meanings* — what the author said
     /// the thing IS — and a container's hue does not get to redefine them, exactly as a
     /// destructive button stays destructive inside a warning-toned panel. Those keep reading the
     /// theme directly.

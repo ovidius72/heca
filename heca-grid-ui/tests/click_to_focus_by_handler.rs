@@ -20,6 +20,9 @@
 //! And the fifth, because a right-click aims the keyboard exactly as a left-click does:
 //! does `on_right_click` behave the same way?
 
+mod common;
+
+use common::click_at;
 use heca_core::layout::Point;
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::widgets::{Flex, FocusScope, Item};
@@ -50,11 +53,14 @@ fn dock(log: &Log) -> Box<dyn Component> {
 }
 
 /// Click at `at`, through the same entry point the app uses.
+///
+/// Two steps belong only here, before the click itself: laying the host out, and moving the
+/// pointer onto `at` first, so the hover state a real cursor would already have set is in place
+/// before the press — `common::click_at` is only the press/release pairing.
 fn click(host: &mut dyn Component, at: Point, button: PointerButton) {
     LayoutEngine::new().compute(host, Size::new(400.0, 400.0));
     let _ = heca_grid_ui::dispatch(host, &Event::pointer_moved(at));
-    let _ = heca_grid_ui::dispatch(host, &Event::pointer_pressed(at, button));
-    let _ = heca_grid_ui::dispatch(host, &Event::pointer_released(at, button));
+    click_at(host, at, button);
 }
 
 /// The row sits inside the body's 40px padding, so a point just inside it is on the row.

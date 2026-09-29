@@ -302,8 +302,7 @@ fn sync_one_pane_git<P: GitProvider>(
 mod tests {
     use super::{GitInfo, GitProvider, GitRuntimeCache, GitSnapshot, sync_pane_git_from_cwds_impl};
     use heca_core::layout::{
-        ColumnWidth, LayoutOptions, Pane, PaneId, Point, Session, SessionId, Size,
-        workspace::FloatingPane,
+        LayoutOptions, Pane, PaneId, Point, Session, SessionId, Size, workspace::FloatingPane,
     };
     use std::cell::Cell;
     use std::collections::HashMap;
@@ -380,7 +379,6 @@ mod tests {
             Pane::new(id, "editor"),
             None,
             true,
-            ColumnWidth::Proportion(0.5),
             heca_core::layout::ColumnId(id.0),
         );
         session

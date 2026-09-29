@@ -142,6 +142,11 @@ pub enum WidgetKind {
     /// The group is why a tooltip and a hint placement had to stop being wrappers: it holds
     /// **typed** buttons, and wrapping one changes what it is.
     ButtonGroup,
+    /// **A thing, said in a line or a few** — a status pip, an icon, a title with a quieter suffix,
+    /// and lines under it. `heca_grid_ui::Tile`. It only arranges: every part is a child, placed by
+    /// its `slot` prop — `status`, `icon`, `title`, `suffix` — and a child with no slot is a line
+    /// under the head. Put it in a `Row` for selection and a click.
+    Tile,
 }
 
 impl WidgetKind {
@@ -191,6 +196,7 @@ impl WidgetKind {
         WidgetKind::Progress,
         WidgetKind::NfIcon,
         WidgetKind::ButtonGroup,
+        WidgetKind::Tile,
     ];
 
     /// This kind's position in [`ALL`](Self::ALL).
@@ -246,6 +252,7 @@ impl WidgetKind {
             WidgetKind::Progress => 36,
             WidgetKind::NfIcon => 37,
             WidgetKind::ButtonGroup => 38,
+            WidgetKind::Tile => 39,
         }
     }
 }
@@ -453,6 +460,80 @@ impl From<ViewSpace> for PropValue {
         match s {
             ViewSpace::Px(v) => PropValue::Float(v as f64),
             ViewSpace::Step(step) => step.into(),
+        }
+    }
+}
+
+/// **CSS `order`** for a described node — mirrors grid-ui `Order`: where a node is laid out among
+/// its siblings. Lower first; ties and nodes that say nothing (`0`) keep the order they were added.
+///
+/// A number or a list: `3`, or `[0, 5]` to slot between two siblings at `0` and `1` that you do not
+/// own. It travels as a number when it is one place and a list of numbers otherwise, which is what
+/// the realizing side's one parser reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewOrder(pub Vec<i64>);
+
+impl From<Vec<i64>> for ViewOrder {
+    fn from(places: Vec<i64>) -> Self {
+        ViewOrder(places)
+    }
+}
+
+/// On the wire: a number when it is one place (`3`), a list otherwise (`[0, 5]`) — the spellings
+/// the realizing side's one parser reads.
+impl serde::Serialize for ViewOrder {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self.0.as_slice() {
+            [one] => s.serialize_i64(*one),
+            places => places.serialize(s),
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ViewOrder {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            One(i64),
+            List(Vec<i64>),
+        }
+        Ok(match Repr::deserialize(d)? {
+            Repr::One(v) => ViewOrder(vec![v]),
+            Repr::List(places) => ViewOrder(places),
+        })
+    }
+}
+
+impl From<i32> for ViewOrder {
+    fn from(v: i32) -> Self {
+        ViewOrder(vec![v as i64])
+    }
+}
+
+impl From<i64> for ViewOrder {
+    fn from(v: i64) -> Self {
+        ViewOrder(vec![v])
+    }
+}
+
+impl<const N: usize> From<[i32; N]> for ViewOrder {
+    fn from(places: [i32; N]) -> Self {
+        ViewOrder(places.iter().map(|&p| p as i64).collect())
+    }
+}
+
+impl<const N: usize> From<[i64; N]> for ViewOrder {
+    fn from(places: [i64; N]) -> Self {
+        ViewOrder(places.to_vec())
+    }
+}
+
+impl From<ViewOrder> for PropValue {
+    fn from(o: ViewOrder) -> Self {
+        match o.0.as_slice() {
+            [one] => PropValue::Int(*one),
+            places => PropValue::List(places.iter().map(|&p| PropValue::Int(p)).collect()),
         }
     }
 }
@@ -1101,7 +1182,7 @@ pub type Events = BTreeMap<String, Intent>;
 /// **Any field of [`Layout`](heca_grid_ui::Layout) or [`Visual`](heca_grid_ui::Visual) is a prop on
 /// any kind**, named exactly as the field is. Layout: `padding`, `margin` (+ per-side), `gap`,
 /// `gap_spacing`, `align`, `align_self`, `justify`, `justify_items`, `justify_self`, `direction`,
-/// `width`, `height`, min/max sizes, `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+/// `width`, `height`, min/max sizes, `flex`, `order`, `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
 /// Appearance: `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
 ///
 /// `realize` does **not** enumerate them — it merges by name against each half's own fields, so a
@@ -1544,21 +1625,26 @@ pub struct DropdownItem {
     pub intent: Intent,
     pub danger: bool,
     pub enabled: bool,
-    /// **Where this entry sits among all the others**, or `None` to sit where its block sits.
+    /// **Where this entry sits among all the others** — CSS `order`, the same idea and the same
+    /// spelling as `.order(..)` on any widget — or `None` to sit where its block sits.
     ///
     /// A menu is filled by several sources at once — heca's own entries and any plugin's — and each
-    /// source declares a weight for its whole block. That is the right granularity most of the
+    /// source declares an order for its whole block. That is the right granularity most of the
     /// time: a plugin thinks in "my entries". It is not enough when one entry belongs at the very
     /// top and the rest belong at the bottom, because a block can only move whole.
     ///
-    /// So an entry may say where it goes, and **one that says nothing takes its block's weight**.
+    /// So an entry may say where it goes, and **one that says nothing takes its block's order**.
     /// There is a single ordering rule rather than "sort the blocks, then sort inside them": every
-    /// entry has a weight, most simply do not spell it, and the whole menu is one sorted list.
+    /// entry has an order, most simply do not spell it, and the whole menu is one sorted list.
     ///
-    /// A list of numbers rather than one, sorted ascending, so an entry can be slotted *between*
-    /// two neighbours without renumbering either — `[1, 1, 1]` lands between `[1, 1]` and `[1, 2]`.
-    /// Ties keep the order the entries were produced in.
-    pub weight: Option<Vec<i64>>,
+    /// A number or a list, lower first, so an entry can be slotted *between* two neighbours without
+    /// renumbering either — `[1, 1, 1]` lands between `[1, 1]` and `[1, 2]`. Ties keep the order the
+    /// entries were produced in.
+    ///
+    /// It was called `weight`, a second word for the same idea — and in the widget library `weight`
+    /// means font weight. `"weight"` is still read on the wire so no existing plugin breaks.
+    #[serde(default, alias = "weight")]
+    pub order: Option<ViewOrder>,
 }
 
 impl DropdownItem {
@@ -1573,7 +1659,7 @@ impl DropdownItem {
             intent,
             danger: false,
             enabled: true,
-            weight: None,
+            order: None,
         }
     }
 
@@ -1587,7 +1673,7 @@ impl DropdownItem {
             intent,
             danger: false,
             enabled: true,
-            weight: None,
+            order: None,
         }
     }
     /// Tint destructive (red) — the confirm gate still applies on dispatch.
@@ -1602,13 +1688,14 @@ impl DropdownItem {
     }
 
     /// **Put this entry somewhere other than where its block sits** — see
-    /// [`weight`](DropdownItem::weight).
+    /// [`order`](DropdownItem::order).
     ///
     /// ```ignore
-    /// DropdownItem::new("myplugin.pin", "Pin this").weight(vec![0])   // above everything
+    /// DropdownItem::new("myplugin.pin", "Pin this").order(-1)       // above every built-in
+    /// DropdownItem::new("myplugin.copy", "Copy path").order([0, 5]) // between two built-ins
     /// ```
-    pub fn weight(mut self, weight: Vec<i64>) -> Self {
-        self.weight = Some(weight);
+    pub fn order(mut self, order: impl Into<ViewOrder>) -> Self {
+        self.order = Some(order.into());
         self
     }
 }
@@ -1616,6 +1703,31 @@ impl DropdownItem {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A menu entry's place is `order` — a number or a list — and a plugin written when it was
+    /// called `weight` still reads.
+    #[test]
+    fn a_menu_entry_reads_its_order_under_either_name() {
+        let base = r#""id": "x", "label": "X", "intent": {"action": "x"}, "danger": false, "enabled": true"#;
+        let one: DropdownItem =
+            serde_json::from_str(&format!("{{{base}, \"order\": -1}}")).unwrap();
+        let list: DropdownItem =
+            serde_json::from_str(&format!("{{{base}, \"order\": [0, 5]}}")).unwrap();
+        let old: DropdownItem =
+            serde_json::from_str(&format!("{{{base}, \"weight\": [1, 2]}}")).unwrap();
+        assert_eq!(one.order, Some(ViewOrder(vec![-1])));
+        assert_eq!(list.order, Some(ViewOrder(vec![0, 5])));
+        assert_eq!(
+            old.order,
+            Some(ViewOrder(vec![1, 2])),
+            "the old name still reads"
+        );
+        assert_eq!(
+            serde_json::to_value(&one).unwrap()["order"],
+            serde_json::json!(-1),
+            "and it is written back under the new name, as a number when it is one place",
+        );
+    }
 
     // ── The identity rule, declarative half: a `press` in a collection needs a `key` ──────────
 

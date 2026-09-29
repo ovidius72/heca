@@ -3,6 +3,7 @@
 //! Two of them: an interactive move (a pane carried out of the content area), and a column dropped
 //! on something — the latter reached from the drop the framework hands back, not from the pointer.
 
+use crate::app::interaction::InteractionSource;
 use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::chrome::ChromeDragItem;
 use crate::input::WmAction;
@@ -27,9 +28,10 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
         if let Some(target_id) =
             super::hit_test::hit_test_pane_excluding(state, state.mouse.pos, Some(source_id))
         {
-            crate::handlers::handle_swap_param(
+            super::dispatch_drop(
                 state,
-                &WmAction::Swap {
+                InteractionSource::MouseContent,
+                WmAction::Swap {
                     a_id: source_id,
                     b_id: target_id,
                 },
@@ -112,11 +114,7 @@ pub(crate) fn column_drop(
         ChromeDragItem::Pane(_) => return,
     };
 
-    match &action {
-        WmAction::SwapColumns { .. } => crate::handlers::handle_swap_columns(state, &action),
-        _ => crate::handlers::handle_move_column(state, &action),
-    }
-    crate::app::mutations::after_layout_change(state);
+    super::dispatch_drop(state, InteractionSource::MouseLeftSidebar, action);
 }
 
 /// Final insert index for a column **move** onto target column `dst_col` in `dst_ws`,
@@ -152,32 +150,30 @@ fn column_move_dst_idx(
 
 // ── Internal helpers ─────────────────────────────────────────────────────
 
-/// Move a pane from its current position and re-insert at the given insert hint.
+/// Place a pane at the insert hint the drag showed, in the active workspace — posted as
+/// `place_pane`, which takes it out of where it was first, as the hint assumes.
 fn handle_content_move(
     state: &mut AppState,
     source_id: PaneId,
     hint: heca_core::layout::types::PaneInsertTarget,
 ) {
-    if let Some((ws_idx, col_idx, pane_idx)) = crate::find_pane_location(&state.session, source_id)
-        && let Some(ws) = state.session.workspaces.get_mut(ws_idx)
-        && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx)
-    {
-        let target_ws = state.session.active_workspace_idx;
-        let new_col_id = heca_core::layout::ColumnId(state.session.next_id());
-        if let Some(target_ws_mut) = state.session.workspaces.get_mut(target_ws) {
-            crate::app::pane_ops::insert_pane_at_position(
-                target_ws_mut,
-                removed,
-                hint,
-                new_col_id,
-                crate::chrome::default_column_width(),
-                true,
-            );
-        }
-    }
-    state.focused_pane = Some(source_id);
-    crate::app::mutations::after_layout_change(state);
+    use heca_core::layout::types::PaneInsertTarget;
+    let (col_idx, pane_idx) = match hint {
+        PaneInsertTarget::NewColumn(col) => (col, None),
+        PaneInsertTarget::InColumn { col_idx, pane_idx } => (col_idx, Some(pane_idx)),
+    };
+    super::dispatch_drop(
+        state,
+        InteractionSource::MouseContent,
+        WmAction::PlacePane {
+            pane_id: source_id,
+            ws_idx: state.session.active_workspace_idx,
+            col_idx,
+            pane_idx,
+        },
+    );
 }
+
 #[cfg(test)]
 mod tests {
     use super::column_move_dst_idx;

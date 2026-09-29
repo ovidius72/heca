@@ -26,7 +26,7 @@ use heca_grid_ui::widgets::{Command, CommandPalette, Glyph};
 use super::{ChromeIntentEmitter, LayerKind, ModalResult, OverlayId};
 use crate::app::interaction::{InteractionIntent, InteractionSource, dispatch_intent};
 use crate::app_state::AppState;
-use crate::chrome::Intent;
+use crate::chrome::{Intent, PropValue};
 use crate::input::WmAction;
 
 /// One row of the palette: what it shows, and what it runs.
@@ -103,26 +103,38 @@ pub(crate) fn entries(
 ) -> Vec<PaletteEntry> {
     let mut rows: Vec<(bool, PaletteEntry)> = catalog
         .all()
-        .filter(|meta| offerable(meta))
-        .map(|meta| {
+        .flat_map(|meta| offers(meta).into_iter().map(move |choice| (meta, choice)))
+        .map(|(meta, choice)| {
             let owner = owners.get(&meta.name);
-            let label = match owner {
-                Some(o) => format!("{} › {}", o.title, meta.label),
+            let base = match &choice {
+                Some((_, value)) => format!("{} › {value}", meta.label),
                 None => meta.label.clone(),
             };
+            let label = match owner {
+                Some(o) => format!("{} › {base}", o.title),
+                None => base,
+            };
+            let mut action = Intent::new(&meta.name);
+            if let Some((arg, value)) = &choice {
+                action = action.arg(arg.clone(), PropValue::Text(value.clone()));
+            }
             let intent = match owner {
                 Some(o) => InteractionIntent::FocusContainerThenAction {
                     container: o.mount.clone(),
-                    action: Intent::new(&meta.name),
+                    action,
                 },
-                None => InteractionIntent::View(Intent::new(&meta.name)),
+                None => InteractionIntent::View(action),
+            };
+            // A name alone, or the name and the one word chosen — unique, and the same tomorrow.
+            let id = match &choice {
+                Some((arg, value)) => format!("{} {arg}={value}", meta.name),
+                None => meta.name.clone(),
             };
             (
                 owner.is_some_and(|o| o.focused),
                 PaletteEntry {
-                    id: meta.name.clone(),
-                    // For an action the two coincide: a name is both unique and durable.
-                    rank_id: Some(meta.name.clone()),
+                    id: id.clone(),
+                    rank_id: Some(id),
                     mode: None,
                     pane: None,
                     current: false,
@@ -268,24 +280,53 @@ fn group_of(entry: &PaletteEntry, owners: &std::collections::HashMap<String, Own
     }
 }
 
-/// Can this action be **invoked with no arguments**? Only those belong in a palette.
+/// The ways a palette can run this action — **one row each**. A palette offers a name and nothing
+/// else, so what it can run is decided by what the action requires:
 ///
-/// A palette offers a name and nothing else, so an action that requires arguments cannot be run
-/// from one — and listing it is worse than useless, because it looks like a working command and does
-/// nothing. Thirty-seven built-ins are in that category: every by-id / by-index form
-/// (`close_pane_by_id`, `add_pane_to_column`, `move_column`, `float_at`, …). They are not
-/// duplicates to be pruned by hand — each is the **targeted** form of an act whose unit form is
-/// already listed, and it exists for the surfaces that *do* carry a target: a header button, a
-/// context-menu entry, a drag, an RPC line with arguments.
+/// - **Nothing required** → one row, run bare (`None`).
+/// - **Exactly one required argument, and it is a fixed word list** → one row per word, the word
+///   supplied (`Some((arg, word))`) — `set_region_visible` is offered once per region. Aliases of
+///   one word (`sidebar.left`, `left-sidebar`, `left`) would be the same command three times, so a
+///   word is kept only when it builds an action no earlier word built; the parser is the judge, and
+///   there is no second list of "canonical" spellings to keep in step.
+/// - **Anything else** → no row. Thirty-odd built-ins take a target (`close_pane_by_id`,
+///   `move_column`, `float_at`, …); each is the targeted form of an act whose bare form is already
+///   listed, and exists for the surfaces that *do* carry a target — a header button, a context-menu
+///   entry, a drag, an RPC line. Listing one would look like a working command and do nothing.
 ///
-/// This is arity, **not policy**. What the current domain permits changes moment to moment and is
-/// judged at dispatch (and a component's `ContainerFocused` verb is reached by focusing it first);
-/// what an action *takes* is fixed at its declaration. So the rule reads the `args` every action is
-/// already required to declare, and no hand-written list can drift from it.
-///
-/// The palette also does not offer the action that opens it.
-fn offerable(meta: &crate::actions::ActionMeta) -> bool {
-    meta.name != "command_palette" && !meta.args.iter().any(|arg| arg.required)
+/// This is arity, **not policy**: what the current domain permits is judged at dispatch, and what an
+/// action takes is fixed at its declaration — so the rule reads the `args` every action is already
+/// required to declare, and no hand-written list can drift from it.
+fn offers(meta: &crate::actions::ActionMeta) -> Vec<Option<(String, String)>> {
+    let mut required = meta.args.iter().filter(|a| a.required);
+    let (Some(only), None) = (required.next(), required.next()) else {
+        return if meta.args.iter().any(|a| a.required) {
+            Vec::new()
+        } else {
+            vec![None]
+        };
+    };
+    if only.kind != crate::args::ArgKind::Enum {
+        return Vec::new();
+    }
+    let mut built: Vec<crate::input::WmAction> = Vec::new();
+    only.values
+        .iter()
+        .filter(|value| {
+            let args = std::collections::HashMap::from([(only.name.clone(), (*value).clone())]);
+            // A name-keyed (component or plugin) action has no `WmAction` to compare; its words are
+            // its own and are all offered.
+            match crate::input::resolve_action(&meta.name, &args) {
+                Some(action) if built.contains(&action) => false,
+                Some(action) => {
+                    built.push(action);
+                    true
+                }
+                None => true,
+            }
+        })
+        .map(|value| Some((only.name.clone(), value.clone())))
+        .collect()
 }
 
 /// Which component owns each declared action right now, and where it would land.
@@ -399,7 +440,7 @@ pub(crate) fn open_command_palette(
         });
     for row in &rows {
         let carrier = InteractionIntent::ActivateAction(WmAction::SubmitOverlay {
-            overlay: id,
+            overlay: Some(id),
             action: row.id.clone(),
         });
         let emit_run = emit.clone();
@@ -730,9 +771,9 @@ mod tests {
     /// new arguments are optional — a required one would take it out of the palette entirely.
     #[test]
     fn command_palette_stays_bindable_and_offerable_with_no_arguments() {
-        use crate::input::{WmAction, action_from_name};
+        use crate::input::{WmAction, resolve_action};
         assert_eq!(
-            action_from_name("command_palette"),
+            resolve_action("command_palette", &std::collections::HashMap::new()),
             Some(WmAction::CommandPalette {
                 mode: None,
                 query: None
@@ -748,6 +789,46 @@ mod tests {
             !meta.args.iter().any(|a| a.required),
             "both arguments are optional — a required one is filtered out of the palette",
         );
+    }
+
+    /// An action whose only required argument is a word list is offered **once per word** — and
+    /// once per *distinct* word: a region's three spellings are one command, not three.
+    #[test]
+    fn a_word_list_argument_is_offered_once_per_distinct_word() {
+        let catalog = ActionCatalog::with_builtins();
+        let rows = entries(
+            &catalog,
+            &std::collections::HashMap::new(),
+            &super::super::ActionShortcuts::default(),
+        );
+        let regions: Vec<&str> = rows
+            .iter()
+            .filter(|r| r.id.starts_with("set_region_visible "))
+            .map(|r| r.label.as_str())
+            .collect();
+        assert_eq!(
+            regions,
+            [
+                "Set Region Visibility › sidebar.left",
+                "Set Region Visibility › sidebar.right",
+                "Set Region Visibility › bar.top",
+                "Set Region Visibility › bar.bottom",
+            ],
+        );
+        let row = rows
+            .iter()
+            .find(|r| r.id == "set_region_visible region=bar.top")
+            .expect("the top bar is offered");
+        let InteractionIntent::View(intent) = &row.intent else {
+            panic!("a built-in runs as a plain intent, got {:?}", row.intent);
+        };
+        assert_eq!(intent.action, "set_region_visible");
+        assert_eq!(
+            intent.args.get("region"),
+            Some(&PropValue::Text("bar.top".into()))
+        );
+        // A target that is not a word list is still not offered at all.
+        assert!(!rows.iter().any(|r| r.id.starts_with("close_pane_by_id")));
     }
 
     /// A built-in is the app's own: no scope prefix, and no container to focus.

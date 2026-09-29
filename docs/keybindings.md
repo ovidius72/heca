@@ -96,8 +96,11 @@ args   = { name = "heca.expose" }
 
 ## 3. A mode — a sub-keymap behind one key
 
-While a mode is active its bindings apply instead of the normal ones. `sticky = true` stays until
-Escape; `sticky = false` runs one binding and returns.
+While a mode is active its own bindings come first. A key the mode does not bind falls through to
+your normal bindings — so Cmd+V still pastes while you select — and a key nobody binds is dropped,
+never typed into the program in the pane. In every mode, Escape leaves it, Enter confirms and leaves,
+and the prefix key starts a prefix. `sticky = true` stays until Escape; `sticky = false` runs one of
+its own bindings and returns.
 
 ```toml
 [[keys.mode]]
@@ -250,6 +253,43 @@ runtime, e.g. `plugin.docker.restart` or `chrome.container.move_to_region`:
 ```
 
 These resolve at press time, so binding one before its plugin loads is fine.
+
+---
+
+## Changed actions — update an old binding
+
+A binding to an action name that no longer exists does nothing (a name is resolved when the key is
+pressed, so no error is raised). If you bound one of these, rewrite it:
+
+**2026-09-29 — showing and hiding a region is one action.** The twelve per-region actions are gone:
+
+| Removed | Now |
+|---|---|
+| `show_left_sidebar` · `hide_left_sidebar` · `toggle_left_sidebar` | `set_region_visible`, `region = "sidebar.left"` |
+| `show_right_sidebar` · `hide_right_sidebar` · `toggle_right_sidebar` | `set_region_visible`, `region = "sidebar.right"` |
+| `show_top_bar` · `hide_top_bar` · `toggle_top_bar` | `set_region_visible`, `region = "bar.top"` |
+| `show_bottom_bar` · `hide_bottom_bar` · `toggle_bottom_bar` | `set_region_visible`, `region = "bar.bottom"` |
+
+`visible` says what to do — `show`, `hide`, or `toggle` (the default when it is left out). It takes
+arguments, so it is written long-hand:
+
+```toml
+# was: toggle_bottom_bar = "prefix+Ctrl+b"
+[[keys.bind]]
+keys   = "prefix+Ctrl+b"
+action = "set_region_visible"
+args   = { region = "bar.bottom" }
+
+# was: hide_left_sidebar = "prefix+Ctrl+h"
+[[keys.bind]]
+keys   = "prefix+Ctrl+h"
+action = "set_region_visible"
+args   = { region = "sidebar.left", visible = "hide" }
+```
+
+The `[settings] show_left_sidebar = true` switches in `config.toml` are not affected — they are the
+startup state, not actions. The command palette offers the new action once per region
+("Set Region Visibility › sidebar.left", …), each toggling.
 
 ---
 

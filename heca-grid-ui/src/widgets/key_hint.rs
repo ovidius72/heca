@@ -16,6 +16,7 @@
 //! and RPC all drive it identically (the chrome plan's read-via-signals /
 //! write-via-actions rule) — matching `heca`'s existing `candidates` flow.
 
+use crate::Tone;
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx, paint_child};
@@ -70,42 +71,9 @@ pub struct HintStyle {
     /// A literal colour cannot be written by a widget that has no theme at build time — which is
     /// every widget, since the theme arrives at paint. So a widget names a tone and the theme
     /// decides the pixels, which is the same rule every other colour in the library follows.
-    pub tone: Option<HintTone>,
+    pub tone: Option<Tone>,
     /// Extra vertical nudge applied after placement — positive moves it down.
     pub offset_y: f64,
-}
-
-/// **What a keycap means**, so the theme can colour it.
-///
-/// heca reads them: a pane is `Accent`, a workspace `Warning`, a column `Success`, and a
-/// structural control — fold this, close that — is `Muted`, because it is not somewhere to go.
-/// A caller names the meaning; which pixels that is stays the theme's business and follows a
-/// reload.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, heca_grid_ui_macros::PropName)]
-pub enum HintTone {
-    /// The default weight — a target you would navigate to.
-    Accent,
-    /// A structural control rather than a destination: a fold, a close, a handle.
-    Muted,
-    /// Reserved for a distinct class of target, so two kinds never read alike.
-    Warning,
-    /// As `Warning`, a third class.
-    Success,
-    /// Something destructive.
-    Danger,
-}
-
-impl HintTone {
-    /// The colour, from the theme this frame.
-    pub fn resolve(self, theme: &crate::theme::Theme) -> Color {
-        match self {
-            HintTone::Accent => theme.colors.accent,
-            HintTone::Muted => theme.colors.muted,
-            HintTone::Warning => theme.colors.warning,
-            HintTone::Success => theme.colors.success,
-            HintTone::Danger => theme.colors.danger,
-        }
-    }
 }
 
 /// **What colour a keycap is: an explicit choice, then a declared meaning, then the picker's own.**
@@ -896,8 +864,9 @@ mod tests {
 #[cfg(test)]
 mod keycap_tint {
     use super::*;
+    use crate::Tone;
     use crate::builders::ComponentExt as _;
-    use crate::widgets::{HintTone, Surface};
+    use crate::widgets::Surface;
 
     fn style_of(w: impl Component) -> HintStyle {
         w.base().hint_style
@@ -912,7 +881,7 @@ mod keycap_tint {
     #[test]
     fn a_tone_decides_the_cap_when_no_colour_was_named() {
         let theme = crate::theme::Theme::default();
-        let muted = style_of(Surface::new().hint_tone(HintTone::Muted));
+        let muted = style_of(Surface::new().hint_tone(Tone::Muted));
         assert_eq!(cap_tint(&muted, &theme), theme.colors.muted);
         assert_ne!(
             cap_tint(&muted, &theme),
@@ -926,7 +895,7 @@ mod keycap_tint {
     fn a_named_colour_outranks_a_tone() {
         let theme = crate::theme::Theme::default();
         let red = crate::Color::new(255, 0, 0, 255);
-        let both = style_of(Surface::new().hint_tone(HintTone::Muted).hint_color(red));
+        let both = style_of(Surface::new().hint_tone(Tone::Muted).hint_color(red));
         assert_eq!(cap_tint(&both, &theme), red);
     }
 

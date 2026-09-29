@@ -17,6 +17,7 @@ what the strings parse *to*; you should not need to type one.
 - [Space — gap, padding, margin](#space--gap-padding-margin)
 - [Alignment](#alignment)
 - [Shares](#shares)
+- [Order](#order)
 - [Traps](#traps)
 
 ---
@@ -314,27 +315,108 @@ Also: `.align_self(..)` overrides the parent's `align` for one child; `.justify_
 
 ## Shares
 
-A child that should take a **weight of what is left** rather than a size of its own:
+**A child that should take a part of its parent says so with `.flex(n)`** — CSS `flex: <n>`, said
+on the child, exactly where CSS says it.
 
 ```rust
-node.grow(weight).basis(0.0).shrink(1.0)      // CSS `flex: 1 1 0`
+Flex::column()
+    .child(docker.flex(1.0))       // ┐
+    .child(workspaces.flex(3.0))   // ├ 1 : 3 : 1 of the column, whatever each one holds
+    .child(notes.flex(1.0))        // ┘
+    .child(git.flex(0.0))          //   as tall as its content, and no more
 ```
 
-Three parts, and each alone does something else:
+| written | means |
+|---|---|
+| `.flex(1.0)` beside `.flex(3.0)` | a quarter and three quarters — **whatever each holds** |
+| `.flex(0.0)` | as big as its content, no part of the rest (CSS `flex: none`) |
+| nothing | its own size — the parent gives it no part |
 
-- **`grow(w)`** — the weight. Alone it distributes only *positive free space*, so a column of
-  `grow(1.0)` children collapses to its content instead of splitting the box.
-- **`basis(0.0)`** — start from nothing. With the default `auto` basis each item starts from its own
-  content and only the leftover is divided, so two items holding different amounts never come out in
-  their stated ratio: asked for 2:1 in a 900px box, they land at 606/294.
-- **`shrink(1.0)`** — permission to give way when the line is too small.
+**It runs along the parent's direction**: height in a column, width in a row. One number either way.
 
-⚠️ `.basis(0.0)` is **not** `.height(0.0)`. A zero height says the box *is* zero; a zero basis says
-"start from nothing, then take your weight". They agree in simple cases and diverge as soon as
-anything measures the container's content.
+**It belongs to the child, not the parent.** The parent writes no size per child and never counts
+them, so a child added later — a plugin's dock appended to a sidebar — brings its own part and the
+others keep theirs. A parent-side list of sizes (a template of `"1fr 3fr 1fr"`) is written for a
+fixed number of children and is wrong the moment one more arrives.
 
-⚠️ **`grow` alone always fills its container** — that is what flex-grow means. "A share of the widest
-sibling" is a **percentage** against a denominator chosen once at the top, not a grow weight.
+**A child holding more than its part keeps its part.** It does not grow past it or push its
+neighbours out; a scroll area inside it scrolls, anything else clips.
+
+**In a `Grid` it does nothing**, as in CSS. The grid's own tracks size its cells, and a grid child is
+placed with `.row` / `.column` / `.row_span` / `.column_span` / `.area` — see [Grid](#grid). None of
+those size a child either: they choose which tracks it covers, and the template decides how big the
+tracks are.
+
+Declarative, the same word as a property:
+
+```rust
+use heca_view::build::*;
+VStack::new().child(Label::new("docker")).flex(1.0)      // → { "flex": 1.0 }
+```
+
+### Why not `grow`?
+
+`.grow(n)` is CSS `flex-grow` **alone**, and alone it does something else: it divides only the space
+left over after every child took its content. Two children asked for 2:1 but holding different
+amounts land at 606/294 in a 900px box, not 600/300, and a column of `grow(1.0)` children collapses to
+its content instead of splitting the box.
+
+`.flex(n)` is the three parts that make "n parts" true, applied for you against the real parent:
+
+- **grow by `n`** — the weight;
+- **start from zero** (`flex-basis: 0`) — so the ratio is of the whole box, not of the leftover;
+- **allowed to shrink**, with its minimum size along the parent's direction at zero — so content
+  larger than the part cannot hold it open.
+
+Reach for `grow` only when you mean the leftover — a spacer that pushes its siblings to the ends.
+
+⚠️ **Do not write the three by hand** (`.grow(n).basis(0.0).shrink(1.0)`). In a grid cell a zero
+base size is a *definite zero height*, so a hand-written trio drew each dock as its title row and
+nothing else. `.flex` knows which parent it is in; the trio does not.
+
+⚠️ **"A share of the widest sibling" is not a flex part** — parts always fill their parent. That is a
+**percentage** against a denominator chosen once at the top.
+
+## Order
+
+**A child that must sit somewhere other than where it was added says so with `.order(..)`** — CSS
+`order`, said on the child.
+
+```rust
+Flex::column()
+    .child(notes)                  // 0 — as added
+    .child(docker.order(-1))       // before everything that said nothing
+    .child(git.order([0, 5]))      // after every plain 0, before any 1
+```
+
+| written | means |
+|---|---|
+| nothing | `0` — laid out in the order it was added |
+| `.order(-1)` / `.order(3)` | lower first; ties keep the order they were added |
+| `.order([0, 5])` | compared a place at a time: after `0`, before `1` |
+
+**Why a list.** Two siblings you do not own at `0` and `1` leave no whole number between them.
+`[0, 5]` fits there without renumbering anyone. A missing place counts as `0`, so `1` and `[1, 0]` are
+the same. Up to four places.
+
+**One parser**, like sizes and spaces: `3`, `[0, 5]`, `"0 5"`, `"0, 5"` all read the same, in Rust, in
+a plugin's description (`{"order": [0, 5]}`) and in config. An unreadable spelling is `0`, never a
+panic.
+
+**Visual only**, as in CSS. It moves where the child is laid out, not where it sits in the tree: paint
+order, Tab order and the order the letter picker hands out letters stay the order children were
+added.
+
+**In a `Grid`** it orders what the grid places itself. A child that said where it goes (`.row`,
+`.column`, `.area`) stays there.
+
+**Menus use the same order.** A context-menu entry says where it sits with
+`DropdownItem::order(..)` — the same number-or-list, compared the same way — and a whole block of
+entries with `ContextMenuContribution::order`. (It was called `weight`; a description still using
+that name reads.)
+
+⚠️ **There is no index anywhere.** Nothing takes "put this at position 2": a sibling inserted before
+it would silently move it. The ends (`append` / `prepend` on a region) and `.order` are stable.
 
 ---
 

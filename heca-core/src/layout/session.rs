@@ -200,14 +200,10 @@ impl Session {
 
     /// Add a pane to the active workspace.
     pub fn add_pane(&mut self, pane: Pane, column_idx: Option<usize>, activate: bool) {
-        let width = self
-            .options
-            .default_column_width
-            .unwrap_or(ColumnWidth::Proportion(0.85));
         // Allocated here, before the workspace is borrowed, and spent only if a column is created.
         let new_column_id = ColumnId(self.next_id());
         if let Some(ws) = self.active_workspace_mut() {
-            ws.add_pane(pane, column_idx, activate, width, new_column_id);
+            ws.add_pane(pane, column_idx, activate, new_column_id);
         }
     }
 

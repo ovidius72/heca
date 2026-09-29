@@ -1,6 +1,7 @@
 mod actions;
 mod app;
 mod app_state;
+mod args;
 mod chrome;
 mod components;
 mod handlers;
@@ -74,56 +75,44 @@ impl HecaApp {
     // Transitional: will be used by the RPC server / socket listener in Phase 5.
     #[expect(dead_code, reason = "Reserved for the Phase 5 RPC server path.")]
     pub fn execute_rpc_command(&mut self, cmd: &str) -> Result<(), rpc::RpcError> {
-        use crate::app::interaction::{
-            IntentOutcome, InteractionSource, dispatch_action, dispatch_view_intent,
-        };
+        use crate::app::interaction::{IntentOutcome, InteractionSource, dispatch_view_intent};
         let state = self.state.as_mut().ok_or(rpc::RpcError::NotInitialized)?;
-        match rpc::parse_rpc(cmd)? {
-            // A built-in keeps its own spelling and its `WmAction`; what changes is that it is now
-            // **routed** rather than executed directly.
-            rpc::RpcCommand::Builtin(action) => {
-                dispatch_action(state, &self.registry, InteractionSource::Rpc, &action);
-                Ok(())
-            }
-            rpc::RpcCommand::Intent { intent, dock } => {
-                // **Which placement, and does it need the keyboard?** (F003/P085/T358)
-                //
-                // `--dock` names the seating outright. Without it, an action a *component* declared
-                // still has to land somewhere, and `owning_mount` is the one rule that says where —
-                // the same answer a click inside the component and a palette entry get.
-                //
-                // Either way the call goes through focus-then-act, so a component's
-                // `ContainerFocused` verb ("act on the row my cursor is on") is reachable from a
-                // script without the script first faking a keypress: the container is focused, as
-                // the user would have done, and the action is then judged by the ordinary policy.
-                // A built-in has no owner and is dispatched straight, exactly as before.
-                let container = dock.or_else(|| {
-                    state
-                        .action_catalog
-                        .find(&intent.action)
-                        .and_then(|m| m.owner.as_ref())
-                        .and_then(|_| crate::providers::owning_mount(state, &intent.action))
-                });
-                let outcome = match container {
-                    Some(container) => crate::app::interaction::focus_container_then_action(
-                        state,
-                        &self.registry,
-                        InteractionSource::Rpc,
-                        &container,
-                        &intent,
-                    ),
-                    None => {
-                        dispatch_view_intent(state, &self.registry, InteractionSource::Rpc, &intent)
-                    }
-                };
-                match outcome {
-                    IntentOutcome::Ran => Ok(()),
-                    IntentOutcome::Unknown => Err(rpc::RpcError::UnknownCommand(intent.action)),
-                    IntentOutcome::Blocked => Err(rpc::RpcError::Blocked(intent.action)),
-                    IntentOutcome::NotRunnable => Err(rpc::RpcError::NotRunnable(intent.action)),
-                    IntentOutcome::MissingArgs => Err(rpc::RpcError::MissingArgs(intent.action)),
-                }
-            }
+        // One map: the name is looked up in the same catalog every other caller uses.
+        let (intent, dock) = rpc::parse_rpc(cmd)?.into_intent(&state.action_catalog)?;
+        // **Which placement, and does it need the keyboard?** (F003/P085/T358)
+        //
+        // `--dock` names the seating outright. Without it, an action a *component* declared
+        // still has to land somewhere, and `owning_mount` is the one rule that says where —
+        // the same answer a click inside the component and a palette entry get.
+        //
+        // Either way the call goes through focus-then-act, so a component's
+        // `ContainerFocused` verb ("act on the row my cursor is on") is reachable from a
+        // script without the script first faking a keypress: the container is focused, as
+        // the user would have done, and the action is then judged by the ordinary policy.
+        // A built-in has no owner and is dispatched straight, exactly as before.
+        let container = dock.or_else(|| {
+            state
+                .action_catalog
+                .find(&intent.action)
+                .and_then(|m| m.owner.as_ref())
+                .and_then(|_| crate::providers::owning_mount(state, &intent.action))
+        });
+        let outcome = match container {
+            Some(container) => crate::app::interaction::focus_container_then_action(
+                state,
+                &self.registry,
+                InteractionSource::Rpc,
+                &container,
+                &intent,
+            ),
+            None => dispatch_view_intent(state, &self.registry, InteractionSource::Rpc, &intent),
+        };
+        match outcome {
+            IntentOutcome::Ran => Ok(()),
+            IntentOutcome::Unknown => Err(rpc::RpcError::UnknownCommand(intent.action)),
+            IntentOutcome::Blocked => Err(rpc::RpcError::Blocked(intent.action)),
+            IntentOutcome::NotRunnable => Err(rpc::RpcError::NotRunnable(intent.action)),
+            IntentOutcome::MissingArgs => Err(rpc::RpcError::MissingArgs(intent.action)),
         }
     }
 
@@ -272,10 +261,7 @@ impl HecaApp {
                 self.app_config.config.settings.mouse_wheel_change_font_size;
             state.terminal_scroll_animations_enabled =
                 self.app_config.config.settings.terminal_scroll_animations;
-            state.show_left_sidebar = self.app_config.config.settings.show_left_sidebar;
-            state.show_right_sidebar = self.app_config.config.settings.show_right_sidebar;
-            state.show_top_bar = self.app_config.config.settings.show_top_bar;
-            state.show_bottom_bar = self.app_config.config.settings.show_bottom_bar;
+            state.shown = crate::chrome::shown_from_settings(&self.app_config.config.settings);
             state
                 .notifications
                 .set_auto_dismiss(std::time::Duration::from_millis(

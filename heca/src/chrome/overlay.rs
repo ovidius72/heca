@@ -82,7 +82,8 @@ pub struct ModalSpec {
     /// / list, not just text. [`ModalSpec::message`] wraps a single `Label`.
     pub body: ViewNode,
     pub actions: Vec<ModalAction>,
-    /// Tint the panel/primary action as destructive.
+    /// A destructive question: the dialog says its body in the theme's danger colour
+    /// ([`Dialog::danger`]). A button's own tint is its [`ModalAction::danger`].
     pub danger: bool,
     /// `false` = forced decision (Esc / scrim swallowed) — mirrors `Dialog::dismissible`.
     pub dismissible: bool,
@@ -105,7 +106,7 @@ impl ModalSpec {
         self.actions.push(action);
         self
     }
-    /// Mark destructive (tints the primary action).
+    /// Mark the question destructive — the dialog says its body in the danger colour.
     pub fn danger(mut self, on: bool) -> Self {
         self.danger = on;
         self
@@ -512,7 +513,9 @@ fn build_modal_root(
         super::identity::report_unkeyed_description("modal body", &spec.body);
         super::realize(&spec.body, theme, &view_emit, forms)
     };
-    let mut dialog = Dialog::new(spec.title.clone()).body(body);
+    let mut dialog = Dialog::new(spec.title.clone())
+        .body(body)
+        .danger(spec.danger);
     for action in &spec.actions {
         let variant = if action.danger {
             ButtonVariant::Destructive
@@ -520,7 +523,7 @@ fn build_modal_root(
             ButtonVariant::Secondary
         };
         let carrier = InteractionIntent::ActivateAction(WmAction::SubmitOverlay {
-            overlay: id,
+            overlay: Some(id),
             action: action.id.clone(),
         });
         let emit = emit.clone();
@@ -716,7 +719,7 @@ mod tests {
                 matches!(
                     &intent,
                     InteractionIntent::ActivateAction(WmAction::SubmitOverlay { overlay, action })
-                        if *overlay == id && action == action_id
+                        if *overlay == Some(id) && action == action_id
                 ),
                 "target {offset} should submit '{action_id}' to this overlay, got {intent:?}",
             );

@@ -603,6 +603,9 @@ impl TerminalEngine {
         }
 
         let cursor = self.terminal.cursor_pos();
+        // The cursor sits on the live screen. Scrolled back N rows, that screen is drawn N rows
+        // lower, so the cursor moves down with its prompt — and is out of view once the prompt is.
+        let cursor_row = (cursor.y.max(0) as usize) + viewport_offset;
         let snapshot = TerminalSnapshot {
             cols,
             rows,
@@ -613,8 +616,11 @@ impl TerminalEngine {
             cursor_color: to_rgba(palette.cursor_bg),
             cursor: TerminalCursor {
                 col: cursor.x.min(cols.saturating_sub(1)),
-                row: (cursor.y.max(0) as usize).min(rows.saturating_sub(1)),
-                visible: cols > 0 && rows > 0 && cursor.visibility == CursorVisibility::Visible,
+                row: cursor_row.min(rows.saturating_sub(1)),
+                visible: cols > 0
+                    && rows > 0
+                    && cursor_row < rows
+                    && cursor.visibility == CursorVisibility::Visible,
                 shape: map_cursor_shape(cursor.shape),
             },
             lines,
@@ -2269,6 +2275,39 @@ mod tests {
             "snapshot still reports exactly `rows` lines"
         );
         snapshot.debug_assert_valid();
+    }
+
+    /// **The cursor stays on the prompt when you scroll back** (Antonio, 2026-09-29: *"scroll brings
+    /// the cursor up and down and not at the prompt"*). It moves down with its text, and is hidden
+    /// once the prompt has scrolled out of view — never left behind on old output.
+    #[test]
+    fn the_cursor_moves_with_its_prompt_when_the_view_is_scrolled_back() {
+        let mut engine = viewport_engine(20, 4, 3500);
+        fill_scrollback(&mut engine, 20, 10);
+        let live = engine.snapshot((8.0, 14.0)).cursor;
+        assert!(live.visible);
+
+        engine.scroll_viewport(1);
+        let scrolled = engine.snapshot((8.0, 14.0)).cursor;
+        if live.row + 1 < 4 {
+            assert!(scrolled.visible);
+            assert_eq!(
+                scrolled.row,
+                live.row + 1,
+                "one row back, the prompt is one row lower"
+            );
+        } else {
+            assert!(
+                !scrolled.visible,
+                "the prompt left the view, so does the cursor"
+            );
+        }
+
+        engine.scroll_viewport(3);
+        assert!(
+            !engine.snapshot((8.0, 14.0)).cursor.visible,
+            "scrolled a whole view back, the prompt is off screen"
+        );
     }
 
     #[test]

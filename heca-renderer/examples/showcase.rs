@@ -28,9 +28,6 @@ use heca_view_realize::{FormBindings, IntentEmitter, realize};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
 
-/// Paired `(active, error)` state signals for a showcase pane-info card.
-type PaneTitleSignals = (Signal<bool>, Signal<bool>);
-
 /// A static swatch that paints a drag drop-indicator over its bounds so the
 /// catalog can *show* the visual without a live drag loop: `swap=false` → the
 /// **move** insertion line (`drop_indicator`, `After`); `swap=true` → the
@@ -1841,12 +1838,17 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 })
             };
 
-            // A pane "card" — the final Phase 7 pane-info shape: row 1 is a
-            // centered inline `status dot + icon + title`; row 2 is a flat git
-            // metadata line (`branch + optional counts`), hidden outside repos.
+            // A pane "card": a `Tile` — status pip, icon, title, then a git line under it — inside
+            // a `Row` that owns the selection, the click and the drag. **The same `Tile` the app's
+            // sidebar mounts**, so this demo cannot drift from the real row (F003/P082/T491). It
+            // used to be a ninety-line hand-built copy that kept two defects the app had fixed:
+            // two stacked title labels toggled by visibility, and the pip pinned in a 12px slot.
+            //
+            // Nothing here names a pixel or a colour for the text: the title takes the row's
+            // selected colour through the content colour `Row` publishes, and the git line is the
+            // `Small` size variant, which scales its font and icons together.
             let pane_sel = signal(0usize);
             let pane_states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
-            let pane_titles: Rc<RefCell<Vec<PaneTitleSignals>>> = Rc::new(RefCell::new(Vec::new()));
             let pane = move |icon: Glyph,
                              title: &str,
                              git_branch: Option<&str>,
@@ -1855,104 +1857,43 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                              git_deleted: Option<&str>,
                              status: DotStatus|
                   -> Row {
-                let git_row = Visibility::new(
+                // One count on the git line — an icon and a number in one tone — shown only when
+                // there is a count to show.
+                let count = |glyph: Glyph, tone: Color, text: Option<&str>| {
+                    Visibility::new(
+                        Flex::row()
+                            .align("center")
+                            .gap(Spacing::Xs)
+                            .child(Icon::new(glyph).color(tone))
+                            .child(Label::new(text.unwrap_or_default()).color(tone)),
+                        text.is_some(),
+                    )
+                };
+                // Attached always and hidden outside a repository, so it could appear later
+                // without a rebuild (see `Tile::line`).
+                let git_line = Visibility::new(
                     Flex::row()
                         .align("center")
-                        .gap(6.0)
-                        .child(Icon::new(Glyph::GitBranch).size(12.0).color(theme.colors.warning))
-                        .child(
-                            Label::new(git_branch.unwrap_or_default())
-                                .color(theme.colors.foreground)
-                                .font_scale(0.8),
-                        )
-                        .child(Visibility::new(
-                            Flex::row()
-                                .align("center")
-                                .gap(4.0)
-                                .child(Icon::new(Glyph::Plus).size(12.0).color(theme.colors.success))
-                                .child(
-                                    Label::new(git_added.unwrap_or_default())
-                                        .color(theme.colors.success)
-                                        .font_scale(0.8),
-                                ),
-                            git_added.is_some(),
-                        ))
-                        .child(Visibility::new(
-                            Flex::row()
-                                .align("center")
-                                .gap(4.0)
-                                .child(Icon::new(Glyph::Warning).size(12.0).color(theme.colors.warning))
-                                .child(
-                                    Label::new(git_modified.unwrap_or_default())
-                                        .color(theme.colors.warning)
-                                        .font_scale(0.8),
-                                ),
-                            git_modified.is_some(),
-                        ))
-                        .child(Visibility::new(
-                            Flex::row()
-                                .align("center")
-                                .gap(4.0)
-                                .child(Icon::new(Glyph::Minus).size(12.0).color(theme.colors.danger))
-                                .child(
-                                    Label::new(git_deleted.unwrap_or_default())
-                                        .color(theme.colors.danger)
-                                        .font_scale(0.8),
-                                ),
-                            git_deleted.is_some(),
-                        )),
+                        .gap(Spacing::Sm)
+                        .size(WidgetSize::Small)
+                        .child(Icon::new(Glyph::GitBranch).color(theme.colors.warning))
+                        .child(Label::new(git_branch.unwrap_or_default()))
+                        .child(count(Glyph::Plus, theme.colors.success, git_added))
+                        .child(count(Glyph::Warning, theme.colors.warning, git_modified))
+                        .child(count(Glyph::Minus, theme.colors.danger, git_deleted)),
                     git_branch.is_some(),
                 );
-                let row = Row::new()
-                    .background(theme.colors.foreground.with_alpha(5))
-                                        .radius(theme.colors.control_radius())
-                    .padding(10.0)
-                    .child({
-                        let active_title = Visibility::new(
-                            Label::new(title).color(theme.colors.accent).bold(true),
-                            false,
-                        );
-                        let active_title_signal = active_title.visible_signal();
-                        let inactive_title = Visibility::new(
-                            Label::new(title).color(theme.colors.foreground).bold(true),
-                            true,
-                        );
-                        let inactive_title_signal = inactive_title.visible_signal();
-                        pane_titles
-                            .borrow_mut()
-                            .push((active_title_signal, inactive_title_signal));
-                        Flex::column()
-                            .gap(4.0)
-                            .grow(1.0)
-                            .child(
-                                Flex::row()
-                                    .align("center")
-                                    .gap(8.0)
-                                    .child(
-                                        Flex::row()
-                                            .align("center")
-                                            .width(12.0)
-                                            .child(StatusDot::new(status)),
-                                    )
-                                    .child(
-                                        Flex::row().align("center").child(
-                                            Icon::new(icon).color(theme.colors.foreground).size(14.0),
-                                        ),
-                                    )
-                                    .child(Flex::row().align("center").child(
-                                        Flex::column().child(active_title).child(inactive_title),
-                                    )),
-                            )
-                            .child(
-                                Flex::row()
-                                    .child(Flex::row().width(2.0))
-                                    .child(git_row),
-                            )
-                    });
+                let row = Row::new().padding(Spacing::Sm).child(
+                    Tile::new()
+                        .status(StatusDot::new(status))
+                        .icon(Icon::new(icon))
+                        .title(Label::new(title).bold(true))
+                        .line(git_line)
+                        .grow(1.0),
+                );
                 let i = pane_states.borrow().len();
                 pane_states.borrow_mut().push(row.state());
                 let pane_states = pane_states.clone();
-                let pane_titles = pane_titles.clone();
                 // DnD framework (universal `ComponentExt`): each card is a drag source, and what
                 // it drags is the name it declares about itself. The app resolves a drop via
                 // `drag::source_at`/`resolve_at` over the laid-out tree and paints
@@ -1960,11 +1901,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 row.key(format!("pane:{i}")).draggable().on_activate(move || {
                     pane_sel.set(i);
                     for (j, s) in pane_states.borrow().iter().enumerate() {
-                        let selected = j == i;
-                        s.set(selected);
-                        let (active_title, inactive_title) = pane_titles.borrow()[j];
-                        active_title.set(selected);
-                        inactive_title.set(!selected);
+                        s.set(j == i);
                     }
                 })
             };

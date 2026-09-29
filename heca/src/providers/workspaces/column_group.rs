@@ -10,8 +10,9 @@
 use super::seams::{DockRegistries, DockSeams};
 use super::{ColumnEntry, MENU_COLUMN, column_key, column_row_items, pane_row::PaneRow, row_hint};
 use crate::chrome::{ChromeDragItem, RepaintWatch};
+use heca_grid_ui::Tone;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
-use heca_grid_ui::widgets::{HintPlacement, HintTone, MarkerGroup};
+use heca_grid_ui::widgets::{HintPlacement, MarkerGroup};
 
 /// A generic [`MarkerGroup`] (left marker bar + grip gutter) holding the column's stacked pane
 /// cards — no per-column header row, because columns are spatial groupings whose only user-facing
@@ -102,7 +103,7 @@ impl ColumnGroup<'_> {
             .hint_scope([crate::chrome::COLUMN_PICK_SCOPE])
             // The tone says what the target IS; the theme colours it, so this file names no
             // colour and a column still reads distinctly from a pane and a workspace.
-            .hint_tone(HintTone::Success)
+            .hint_tone(Tone::Success)
             .hint_placement(HintPlacement::CenterRight);
         let (watch, _repaint) = RepaintWatch::new(hinted);
         watch

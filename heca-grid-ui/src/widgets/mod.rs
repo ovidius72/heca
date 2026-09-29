@@ -48,6 +48,7 @@ mod status_dot;
 mod surface;
 mod tabs;
 mod tag;
+mod tile;
 mod toast;
 mod toggle;
 pub mod tooltip;
@@ -77,8 +78,8 @@ pub use input::Input;
 pub use item::{ActiveMarker, Item};
 pub use item_group::ItemGroup;
 pub use key_hint::{
-    HintPlacement, HintStyle, HintTone, KeyCap, KeyHint, KeycapVariant, keycap_size,
-    keycap_size_nf, paint_keycap, paint_keycap_nf,
+    HintPlacement, HintStyle, KeyCap, KeyHint, KeycapVariant, keycap_size, keycap_size_nf,
+    paint_keycap, paint_keycap_nf,
 };
 pub use key_hint_group::{DEFAULT_LETTERS, KeyHintGroup};
 pub use label::{Ellipsis, Label};
@@ -103,6 +104,7 @@ pub use status_dot::{DotStatus, StatusDot};
 pub use surface::Surface;
 pub use tabs::Tabs;
 pub use tag::Tag;
+pub use tile::Tile;
 pub use toast::{Toast, ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack};
 pub use toggle::Toggle;
 pub use tooltip::{Tip, Tooltip, TooltipSide};

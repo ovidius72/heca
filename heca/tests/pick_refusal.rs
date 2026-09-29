@@ -14,11 +14,7 @@
 //! `&mut AppState`, which needs a window, so there is no headless call to make. Same reason
 //! `by_id_actions.rs` is written this way.
 
-use std::path::{Path, PathBuf};
-
-fn handlers_rs() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("src/handlers.rs")
-}
+mod common;
 
 /// Every pick enters through the one door, so a refusal cannot be forgotten.
 ///
@@ -27,7 +23,7 @@ fn handlers_rs() -> PathBuf {
 /// `Prefix`, a custom mode) is a different act and stays a plain assignment.
 #[test]
 fn a_pick_mode_is_only_ever_entered_through_begin_pick() {
-    let src = std::fs::read_to_string(handlers_rs()).expect("read the handlers");
+    let src = common::module_source("handlers");
     let picks = [
         "PaneSelect",
         "PaneSwap",
@@ -55,7 +51,7 @@ fn a_pick_mode_is_only_ever_entered_through_begin_pick() {
 /// The door is still there, and still the thing that decides.
 #[test]
 fn the_one_door_still_reports_a_refused_pick() {
-    let src = std::fs::read_to_string(handlers_rs()).expect("read the handlers");
+    let src = common::module_source("handlers");
     assert!(
         src.contains("fn begin_pick("),
         "`begin_pick` is gone — if it moved, move this guard with it rather than deleting it",

@@ -45,6 +45,7 @@ pub mod keymap;
 pub mod layout;
 pub mod menu;
 pub mod nav;
+pub mod order;
 pub mod pointer;
 pub mod reactive;
 pub mod reconcile;
@@ -52,6 +53,7 @@ pub mod scene;
 pub mod search;
 pub mod style;
 pub mod theme;
+pub mod tone;
 pub mod widgets;
 
 /// Geometry primitives, re-exported from `heca-core` so consumers of the public
@@ -96,6 +98,7 @@ pub use style::{
     Align, Direction, GridCell, Justify, Layout, Length, Spacing, Style, Track, Visual, WidgetSize,
 };
 pub use theme::{FrameStyle, GlowLevel, Intensity, Theme};
+pub use tone::Tone;
 pub use widgets::{
     ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button, ButtonVariant,
     Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame,
@@ -103,9 +106,9 @@ pub use widgets::{
     Input, Item, ItemGroup, KeyCap, KeyHint, KeyHintGroup, KeycapVariant, Label, LabelSide,
     MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel, ProgressBar,
     RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion,
-    Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Toast, ToastAction, ToastPosition,
-    ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility, container,
-    keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
+    Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Tile, Toast, ToastAction,
+    ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
+    container, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
 };
 
 /// Common imports for building UIs.
@@ -131,6 +134,7 @@ pub mod prelude {
         Align, Direction, GridCell, Justify, Length, Spacing, Track, WidgetSize,
     };
     pub use crate::theme::{FrameStyle, GlowLevel, Intensity, Theme};
+    pub use crate::tone::Tone;
     pub use crate::widgets::{
         ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button, ButtonGroup,
         ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container,
@@ -138,7 +142,7 @@ pub mod prelude {
         HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, KeyHintGroup, Label,
         LabelSide, MarkerGroup, MenuEntry, MenuItem, NfGlyph, NfIcon, Orientation, Pane,
         ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo,
-        ScrollRegion, Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Toast,
+        ScrollRegion, Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Tile, Toast,
         ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip,
         TooltipSide, Visibility, container,
     };

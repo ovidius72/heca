@@ -47,6 +47,12 @@ fn say_once(message: String) {
     });
 }
 
+/// Everything said so far on this thread — so a test can check that a mistake was reported.
+#[cfg(test)]
+pub(crate) fn said() -> Vec<String> {
+    SAID.with(|said| said.borrow().iter().cloned().collect())
+}
+
 /// **Tell whoever is building the UI something is wrong, once.**
 ///
 /// The same channel the unkeyed-collection warning uses, for the same audience: an author writing

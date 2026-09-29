@@ -201,9 +201,8 @@ pub(crate) fn forward_mouse_button(
                 // Confirm the selection, then copy to clipboard via the
                 // action registry (no registry bypass). Shift+drag is a
                 // complete gesture: select → release → copy, like most
-                // terminal emulators. The copy handler also clears the
-                // selection and exits selection mode, so we don't set
-                // InputMode here.
+                // terminal emulators. It never entered selection mode, and
+                // copying clears the highlight — the same as `y` does.
                 state.selection.end();
                 dispatch_action(
                     state,
@@ -283,9 +282,9 @@ pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: 
     //   `terminal_mouse && grab`  → forward to terminal
     //   `!terminal_mouse`         → forward to terminal
     //
-    // Q3: scrolling up at the live bottom enters Selection mode so further
-    // scroll keys (u/d/Ctrl-u/Ctrl-d/g/G) work immediately without requiring
-    // a separate `prefix+q` or `esc` toggle.
+    // The wheel only scrolls: it never switches to selection mode (Antonio, 2026-09-29 — a user who
+    // drives heca without the prefix would be left in a mode they never asked for). Typing snaps
+    // the view back to the bottom; selection mode is entered with `enter_selection_mode`.
     let shift_held = state.modifiers.shift_key();
     let wants_mouse = state
         .backends
@@ -349,23 +348,7 @@ pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: 
     };
 
     if let Some(backend) = state.backends.get_mut(target.pane_id) {
-        let before_offset = backend
-            .terminal_snapshot()
-            .map(|snapshot| snapshot.viewport_offset)
-            .unwrap_or(0);
-        let was_at_bottom = before_offset == 0;
         backend.scroll_viewport(delta_i32);
-        let after_offset = backend
-            .terminal_snapshot()
-            .map(|snapshot| snapshot.viewport_offset)
-            .unwrap_or(before_offset);
-        let moved = after_offset != before_offset;
-        // Q3: scrolling up from the live bottom enters Selection mode, but only
-        // if the host viewport actually moved. Alt-screen/no-history cases like
-        // `less` would otherwise spuriously enter Selection mode on a no-op wheel.
-        if signed_notches > 0.0 && was_at_bottom && moved {
-            state.input_mode = InputMode::Selection;
-        }
     }
     state.needs_redraw = true;
     // Reset prefix timeout on scroll (like keyboard input).
@@ -667,7 +650,8 @@ fn begin_terminal_selection_at(
             focus_col: col,
         },
     );
-    state.input_mode = InputMode::Selection;
+    // A mouse selection is a gesture, not a mode (Antonio, 2026-09-29): Shift+drag highlights,
+    // release copies, and the keyboard stays where it was. Selection mode is the keyboard's.
     state.needs_redraw = true;
 }
 

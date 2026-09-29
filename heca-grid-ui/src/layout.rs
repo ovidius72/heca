@@ -220,25 +220,32 @@ impl LayoutEngine {
         // anything until you know the template. Resolving it in the layout pass is what lets a
         // child be built before its parent, and lets a template change re-place children without
         // rebuilding any of them. A child of something that is not a grid is left alone.
-        // **A share means "take the room this parent has to give", and the parent decides how.**
+        // **`flex: <n>` means "take n parts of the room this parent has to give", and the parent
+        // decides how.**
         //
-        // In a grid the track already sized the cell and the item stretches into it, so a share is
-        // nothing. In anything else it is CSS `flex: <n> 1 0` — grow alone distributes only free
-        // space, so a column of grown children collapses to its content instead of dividing itself.
+        // In a grid the track already sized the cell and the item stretches into it, so `flex` is
+        // nothing — as in CSS. In anything else it is CSS `flex: <n> 1 0` — grow alone distributes
+        // only free space, so a column of grown children collapses to its content instead of
+        // dividing itself.
+        //
+        // Only the minimum HEIGHT is zeroed here. The minimum width needs nothing: every child of a
+        // non-viewport container already gets `min_width: 0` (the two rules in `style.rs`), which is
+        // what lets a row of parts split evenly whatever each holds —
+        // `flex_parts_split_a_row_whatever_each_child_holds` holds it.
         //
         // Resolved here, against the parent, because a caller cannot know which kind of parent will
         // end up holding them — and writing the flex spelling by hand put a *definite zero height*
         // in a grid cell, which drew a whole container as its title row and nothing else.
         let in_a_grid = c.grid_template().is_some();
-        let child_count_for_share = c.base().children.len();
-        for i in 0..child_count_for_share {
+        let child_count = c.base().children.len();
+        for i in 0..child_count {
             let s = &mut c.base_mut().children[i].base_mut().style.layout;
-            let Some(share) = s.share else { continue };
+            let Some(parts) = s.flex else { continue };
             if in_a_grid {
                 continue;
             }
-            s.flex_grow = share;
-            if share > 0.0 {
+            s.flex_grow = parts;
+            if parts > 0.0 {
                 s.flex_basis = Some(crate::style::Length::Px(0.0));
                 s.min_height = s.min_height.or(Some(crate::style::Length::Px(0.0)));
                 s.flex_shrink = s.flex_shrink.or(Some(1.0));
@@ -307,6 +314,25 @@ impl LayoutEngine {
             // Children inherit this node's effective variant unless they chose their own.
             let child = &mut c.base_mut().children[i];
             child_nodes.push(self.build(child.as_mut(), size));
+        }
+        // **`order` moves where a child is laid out, not where it is in the tree** (CSS). Only the
+        // list handed to the engine is sorted — stable, so ties and children that said nothing keep
+        // the order they were added in. Paint, Tab and the picker keep walking the tree as it is.
+        if c.base()
+            .children
+            .iter()
+            .any(|k| k.base().style.layout.order.is_some())
+        {
+            let keys: Vec<crate::order::Order> = c
+                .base()
+                .children
+                .iter()
+                .map(|k| k.base().style.layout.order.unwrap_or_default())
+                .collect();
+            let mut by_order: Vec<(crate::order::Order, taffy::NodeId)> =
+                keys.into_iter().zip(child_nodes.iter().copied()).collect();
+            by_order.sort_by_key(|(order, _)| *order);
+            child_nodes = by_order.into_iter().map(|(_, n)| n).collect();
         }
         // A leaf that measures itself from the width it is offered gets taffy's node context; a
         // widget with children is laid out by its children and never measures its own text.

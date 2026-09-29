@@ -177,10 +177,10 @@ flowchart TD
     subgraph DISP["Dispatch (single door)"]
         dar["dispatch_action_ref / dispatch_action\n(app/interaction.rs)"]
         ri["route_interaction()\nActionPolicy + Domain → Allow | Block"]
-        reg["ActionRegistry::execute / execute_dynamic\n(actions.rs, keyed by discriminant / name)"]
+        reg["ActionRegistry::execute / execute_dynamic\n(actions/registry.rs, keyed by discriminant / name)"]
     end
 
-    hdl["Handlers (handlers.rs)\nbuilt by build_registry()\nWmAction → handle_*"]
+    hdl["Handlers (handlers/)\nbuilt by build_registry()\nWmAction → handle_*"]
     core["heca-core layout / heca state mutation"]
 
     kb --> fs
@@ -206,15 +206,15 @@ Key facts (from the code):
 - **`ActionRef` has two shapes**: `Builtin(WmAction)` (resolved at load via
   `build_action`/`action_from_name`) or `Dynamic(Intent)` (a name no built-in owns yet
   — e.g. a provider/plugin action resolved at press time). `register_dynamic`
-  (`actions.rs`) wires name-keyed handlers + metadata into the one `ActionCatalog`.
+  (`actions/registry.rs`) wires name-keyed handlers + metadata into the one `ActionCatalog`.
 - **Policy is separate from priority** (`app/interaction.rs`): `action_policy()`
   returns one of 7 `ActionPolicy` variants (Global / AlwaysAllowed / TiledOnly /
   FocusedPaneLocal / WorkspaceLevel / SourceDependent / ContainerFocused), checked
   against the computed `Domain` (Tiled / Floating / Container / Overlay). The match is
   exhaustive — adding a `WmAction` variant won't compile until it is classified.
-- **`build_registry` (`app/registry.rs`)** registers every variant → its `handle_*`
+- **`build_registry` (`app/registry/actions.rs`)** registers every variant → its `handle_*`
   handler. Parameterized variants share one handler (it destructures the action).
-- **Config is the single source of bindings**: `build_keymaps` (`app/registry.rs`)
+- **Config is the single source of bindings**: `build_keymaps` (`app/registry/mod.rs`, one file per config table beside it)
   merges `keybindings.default.toml` + user `keybindings.toml` (deep-merge, arrays
   replaced wholesale), tracks conflicts, builds the reverse `BindingIndex`, and
   re-asserts the `Escape` floor on `focus`/`layer` modes.
@@ -261,7 +261,9 @@ Composition rules (see `docs/surface-compositor.md`):
   mounted in, and get a `KeyHint` target automatically through `.on_hint` / the
   `ViewNode` `hint` event.
 - **Regions host providers, not panes of chrome.** Each `RegionId` holds an ordered
-  `Vec<MountedContribution>` (one per seated `Provider`), ordered by `default_order`.
+  `Vec<MountedContribution>` (one per seated `Provider`), in the order they were added with
+  `regions("sidebar.left").append(..)` / `.prepend(..)`. A dock that must sit elsewhere says
+  `.order(..)` on the body it builds; how big it is, `.flex(n)` on the same body.
   A provider's **DockView selector** (`active_dock_view`) shows exactly one provider
   at a time (mutually exclusive — a selector, not a stack). Within a provider the
   tree is built from `heca-grid-ui` widgets; overlays/modals it opens are compositor

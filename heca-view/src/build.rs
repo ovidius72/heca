@@ -220,7 +220,25 @@ pub trait Style: Sized {
         self.prop("justify_self", a)
     }
 
-    /// Share of leftover space this node takes.
+    /// **CSS `flex: <n>` — take `n` parts of the room the parent has to give**, whatever this node
+    /// holds. `1.0` beside `3.0` is a quarter and three quarters; `0.0` is as big as its content.
+    /// Nothing in a `Grid`, whose tracks size its cells. The same builder as native
+    /// `LayoutExt::flex`, written as the `flex` property.
+    ///
+    /// Prefer it to [`flex_grow`](Self::flex_grow), which divides only what is left after every
+    /// child took its content, so children holding different amounts never land in their ratio.
+    fn flex(self, parts: f32) -> Self {
+        self.prop("flex", parts)
+    }
+    /// **CSS `order` — where this node is laid out among its siblings.** Lower first; ties and
+    /// nodes that say nothing keep the order they were added. `3`, or `[0, 5]` to slot between two
+    /// siblings at `0` and `1`. Visual only: paint, Tab and the letter picker keep the tree's order.
+    /// The same builder as native `LayoutExt::order`, written as the `order` property.
+    fn order(self, order: impl Into<crate::ViewOrder>) -> Self {
+        self.prop("order", order.into())
+    }
+    /// Share of leftover space this node takes (CSS `flex-grow` alone). Usually you want
+    /// [`flex`](Self::flex).
     fn flex_grow(self, factor: f32) -> Self {
         self.prop("flex_grow", factor)
     }
@@ -726,6 +744,7 @@ impl Parent for Tabs {}
 impl Parent for Choice {}
 impl Parent for KeyHintGroup {}
 impl Parent for ButtonGroup {}
+impl Parent for Tile {}
 
 // ── Leaves ────────────────────────────────────────────────────────────────────────────────
 builder_text!(
@@ -803,6 +822,21 @@ builder!(
     /// **both** `text` and `icon`: the text is its menu row and its words on hover, the icon is what
     /// it shows once there is no room for words.
     ButtonGroup => ButtonGroup
+);
+builder!(
+    /// **A thing, said in a line or a few** — status pip, icon, title, suffix, and lines under it.
+    ///
+    /// ```ignore
+    /// Row::new().on_press(Intent::new("docker.open")).child(
+    ///     Tile::new()
+    ///         .child(StatusDot::new().prop("slot", "status"))
+    ///         .child(Icon::new().glyph(ViewGlyph::Terminal).prop("slot", "icon"))
+    ///         .child(Label::new("nginx").bold(true).prop("slot", "title"))
+    ///         .child(Label::new("(web)").prop("slot", "suffix"))
+    ///         .child(Label::new("up 3 days")),          // no slot: a line under the head
+    /// )
+    /// ```
+    Tile => Tile
 );
 builder!(
     /// A **keyboard glyph** from the embedded Nerd Font — ⇧ ⌃ ⌥ ⌘, Enter, Escape, the arrows.
@@ -888,6 +922,7 @@ with_event!(
     Card { on_hint => "hint" }
     Scroll { on_hint => "hint" }
     Panel { on_hint => "hint" }
+    Tile { on_hint => "hint" }
     Surface { on_hint => "hint" }
     Overlay { on_dismiss => "dismiss", on_hint => "hint" }
     KeyHintGroup { on_hint => "hint" }

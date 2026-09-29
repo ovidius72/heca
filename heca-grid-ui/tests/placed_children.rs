@@ -4,9 +4,10 @@
 //! Part A). Neither depends on that move having happened: they are about the mechanism it will use,
 //! so they hold today and break the moment it is done the wrong way.
 
+mod common;
+
 use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
-use heca_grid_ui::component::{PaintCx, paint_child};
-use heca_grid_ui::scene::{DrawCommand, Scene};
+use heca_grid_ui::scene::DrawCommand;
 use heca_grid_ui::theme::Theme;
 use heca_grid_ui::widgets::{Flex, Surface};
 use heca_grid_ui::{Color, Component, LayoutEngine, Size};
@@ -108,11 +109,7 @@ fn a_parents_walk_paints_each_child_exactly_once() {
     LayoutEngine::new().compute(parent.as_mut(), Size::new(400.0, 400.0));
 
     let theme = Theme::default();
-    let mut scene = Scene::new();
-    {
-        let mut cx = PaintCx::new(&mut scene, &theme);
-        paint_child(parent.as_ref(), &mut cx);
-    }
+    let scene = common::paint_via_child(parent.as_ref(), &theme);
 
     for (i, c) in colours.iter().enumerate() {
         let drawn = scene
