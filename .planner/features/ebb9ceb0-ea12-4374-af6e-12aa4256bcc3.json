@@ -44,8 +44,8 @@
   "dependsOn": [],
   "statusLog": [
     {
-      "id": "259a0ae2-7cf5-42b1-b70f-98abdbe617f0",
-      "date": "2026-09-21T17:46:37.267Z",
+      "id": "1b933f3d-6cba-4bea-b0e1-1f16669f1279",
+      "date": "2026-09-29T07:51:36.431Z",
       "fromStatus": "planned",
       "toStatus": "in-progress",
       "title": "planned → in-progress",
@@ -53,15 +53,6 @@
     }
   ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-09-25T10:32:44.685Z",
-  "sessionInfo": [
-    {
-      "sessionId": "mcp-process:5255b83f-9d99-4ee5-a3c0-b97db66f44b6",
-      "createdAt": "2026-09-28T08:23:04.889Z"
-    },
-    {
-      "sessionId": "mcp-process:0b06056b-4c79-4d0c-a97e-50700cf362f6",
-      "createdAt": "2026-09-24T16:02:56.739Z"
-    }
-  ]
+  "updatedAt": "2026-07-13T15:29:44.427Z",
+  "sessionInfo": []
 }

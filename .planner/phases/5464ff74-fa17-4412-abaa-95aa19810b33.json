@@ -10,8 +10,8 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "The layer registry ships with native content only. Its own comments say the ViewNode path (plugins) and paint/input wiring land later — this is that work.",
-  "description": "Transferred from docs/surface-compositor.md §9 on 2026-07-26, before that file was deleted. §§1–8 of it are IMPLEMENTED; §9 was marked DRAFT and is now built. **Updated 2026-08-12** — the original plugin-11 work has landed and the phase now carries the exposé that was built on it.\n\n═══ WHAT SHIPPED — the layer stack (the phase's original scope) ═══\n`heca/src/chrome/layers.rs` (1150 lines): `LayerBand` (semantic z bands, no magic numbers), `LayerKind::{Persistent, OnDemand}`, `ShowLayer`/`HideLayer`/`ToggleLayer`, and — the part §9 said would land later — **`LayerContent::{Native(Box<dyn Component>), View(ViewNode)}`** :208, realized through the one bridge (`chrome/realize.rs`). Layers paint in stack order and input routes to the active or modal layer (T336). `add_layer` returns a stable `LayerId` a plugin can hold.\n\nThe migration order from §9 is complete:\n1. ~~Introduce the stack, register the existing surfaces, hints read it~~ — DONE.\n2. ~~Convert the confirm dialog to a layer with hintable buttons~~ — DONE (T320), as an `OverlayHost::open_modal` with a ViewNode body and actions, not a bespoke modal.\n3. ~~`ShowLayer` on-demand layers → the first native exposé~~ — DONE (T327's first half; its **exit sequencing**, fade over shrink, is the open remainder and waits on a layer's lifetime following the whole exit).\n4. ~~The ViewNode content path → plugins add layers~~ — DONE (T339).\n\n⚠️ **The KeyHint half of §9 is obsolete as written.** It described `collect_hint_targets` finding subtrees carrying `.hint_target(...)`. That API is **deleted**: `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Base::hint_target` and `named_press` were removed by F004/P084/T399 under ⭐⭐ RULE ZERO, because a plugin could construct none of them. A pick is now **one line on the widget** — `KeyHint::new(w).on_peek(…)` — collected out of the laid-out tree by `heca_grid_ui::collect_peeks` and run by `fire_peek`. Nothing is registered, so nothing has to be un-registered when a tree rebuilds. Do not reintroduce any of the deleted names.\n\n═══ WHAT THE PHASE IS NOW — the exposé ═══\nThe first real layer is the **exposé** (`heca/src/chrome/expose.rs`, 2028 lines): a bird's-eye of every workspace, one row each, with a `CardGrid` cursor, surface-scoped delete keys (T416) and the open/close zoom effect. It is where the layer stack is proven, and where the remaining tasks are:\n\n- **T417** — the layer stack becomes the surface TREE: z is a path, not a band.\n- **T418** — the map's hover behaviour. The reveal now follows the **keyboard**, never the pointer (`CardGrid::reveal_state()` + `Row::reveal_when`), which Antonio confirmed. Two reported symptoms — the animation \"is strange\", a card is hard to click — are **still unconfirmed**, and may be consequences of the reveal loop that is now fixed. Check before changing anything.\n- **T419** — the fit: the zoom is computed from the session's extents, not configured. Shipped in `4eb3136` as `fit_zoom`, and **superseded by T420**, which deletes it: under shares there is no zoom to compute.\n- **T420** — split `map()` into components: `ExposeGrid` / `WorkspaceRow` / `ColumnCard` / `PaneCard`, **beside the surface** in `heca/src/chrome/expose/`, sized by **shares** (`Length::Pct` of one shared denominator, `grow` weights) with **no pixel scale anywhere**. This is the phase's centre of gravity — see its own description and the phase handoff.\n- **T421** — the map is laggy with many panes (26 across 3 workspaces), worst on open/close. Prime suspect, **unmeasured**: `layout_layers` (`chrome/mod.rs`) recomputes a full `LayoutEngine::compute` over every visible layer each frame with no dirty check. Second: the frosted backdrop's full-screen blur pass per animation frame. **Measure first.**\n\n═══ THE DECISIONS THAT GOVERN THE REMAINING WORK (Antonio, 2026-08-12) ═══\n- **Components, Flutter/SwiftUI style**: *\"reason in terms of Components that encapsulate their internal logic and are reusable. Like in React but write code Flutter/SwiftUI style.\"* A surface is components, never one function that draws a picture.\n- **They live beside their surface** (`heca/src/chrome/expose/`) and move up to `heca/src/components/` when a second surface needs them.\n- **Every size is a share; nothing is a pixel.** The exposé's `map()` computed a zoom and emitted `Length::Px(col.width * zoom)` — which is taking over the layout engine's job, and then owning every term (window, overlay margin, panel padding, card gaps, row count, row heights, scroll centring). Seven attempts, six wrong, each missing a different term.\n- **The zoom EFFECT stays.** `effects::Zoom` + `LayerRegistry::set_zoom` (with `PaintCx::with_scale` underneath) is the open/close animation and is already generic for any layer including a plugin's. Only `overview_zoom` / `overview_scale` — the *fit* scale — goes.\n- **Measure before fixing.** Six wrong guesses in one day; instrumenting named the cause in one round, every time.\n\n═══ THE INVARIANTS THAT MUST SURVIVE (§6 of the deleted file) ═══\n- NO hardcoded z or levels anywhere. z is tree position; occluders come from real layout geometry.\n- Buttons NEVER declare a layer. A button inherits its layer from the surface it is mounted in.\n- The active context is moved ONLY by context surfaces (exposé, modal) — never by zoom, scroll or provider selection.\n- Occlusion is decided by draw order plus geometry, not by the coarse level.\n- Overlays and modals are children of their opener, and exclusive when modal.\n- ONE rule for visibility. If you are special-casing a surface's hints, the surface is mis-modelled — fix the model, do not add a filter.\n\n═══ BUILD ON, DO NOT DUPLICATE ═══\n`OverlayHost` is NOT a second stack — it is built ON this one. `open_modal` realizes the ViewNode body plus its action buttons into a native tree, pushes it as a Modal-band layer, and resolves the returned result when a button's intent fires. Its overlays ARE layers here.\n\n═══ VERIFICATION ═══\nLayering, paint order, hint visibility and the map are all **visible** behaviour. Green tests are not verification: Antonio drives every visual check, and green tests found none of the exposé's seven failures.",
-  "descriptionUpdatedAt": "2026-07-26T11:28:31.721Z",
+  "description": "Transferred from docs/surface-compositor.md §9 on 2026-07-26, before that file was deleted. §§1–8 of it are IMPLEMENTED; §9 was marked DRAFT and is now built. **Updated 2026-08-12** — the original plugin-11 work has landed and the phase now carries the exposé that was built on it.\n\n═══ WHAT SHIPPED — the layer stack (the phase's original scope) ═══\n`heca/src/chrome/layers.rs` (1150 lines): `LayerBand` (semantic z bands, no magic numbers), `LayerKind::{Persistent, OnDemand}`, `ShowLayer`/`HideLayer`/`ToggleLayer`, and — the part §9 said would land later — **`LayerContent::{Native(Box<dyn Component>), View(ViewNode)}`** :208, realized through the one bridge (`chrome/realize.rs`). Layers paint in stack order and input routes to the active or modal layer (T336). `add_layer` returns a stable `LayerId` a plugin can hold.\n\nThe migration order from §9 is complete:\n1. ~~Introduce the stack, register the existing surfaces, hints read it~~ — DONE.\n2. ~~Convert the confirm dialog to a layer with hintable buttons~~ — DONE (T320), as an `OverlayHost::open_modal` with a ViewNode body and actions, not a bespoke modal.\n3. ~~`ShowLayer` on-demand layers → the first native exposé~~ — DONE (T327's first half; its **exit sequencing**, fade over shrink, is the open remainder and waits on a layer's lifetime following the whole exit).\n4. ~~The ViewNode content path → plugins add layers~~ — DONE (T339).\n\n⚠️ **The KeyHint half of §9 is obsolete as written.** It described `collect_hint_targets` finding subtrees carrying `.hint_target(...)`. That API is **deleted**: `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Base::hint_target` and `named_press` were removed by F004/P084/T399 under ⭐⭐ RULE ZERO, because a plugin could construct none of them. A pick is now **one line on the widget** — `KeyHint::new(w).on_peek(…)` — collected out of the laid-out tree by `heca_grid_ui::collect_peeks` and run by `fire_peek`. Nothing is registered, so nothing has to be un-registered when a tree rebuilds. Do not reintroduce any of the deleted names.\n\n═══ WHAT THE PHASE IS NOW — the exposé ═══\nThe first real layer is the **exposé** (`heca/src/chrome/expose.rs`, 2028 lines): a bird's-eye of every workspace, one row each, with a `CardGrid` cursor, surface-scoped delete keys (T416) and the open/close zoom effect. It is where the layer stack is proven, and where the remaining tasks are:\n\n- **T417** — the layer stack becomes the surface TREE: z is a path, not a band.\n- **T418** — the map's hover behaviour. The reveal now follows the **keyboard**, never the pointer (`CardGrid::reveal_state()` + `Row::reveal_when`), which Antonio confirmed. Two reported symptoms — the animation \"is strange\", a card is hard to click — are **still unconfirmed**, and may be consequences of the reveal loop that is now fixed. Check before changing anything.\n- **T419** — the fit: the zoom is computed from the session's extents, not configured. Shipped in `4eb3136` as `fit_zoom`, and **superseded by T420**, which deletes it: under shares there is no zoom to compute.\n- **T420** — split `map()` into components: `ExposeGrid` / `WorkspaceRow` / `ColumnCard` / `PaneCard`, **beside the surface** in `heca/src/chrome/expose/`, sized by **shares** (`Length::Pct` of one shared denominator, `grow` weights) with **no pixel scale anywhere**. This is the phase's centre of gravity — see its own description and the phase handoff.\n- **T421** — the map is laggy with many panes (26 across 3 workspaces), worst on open/close. Prime suspect, **unmeasured**: `layout_layers` (`chrome/mod.rs`) recomputes a full `LayoutEngine::compute` over every visible layer each frame with no dirty check. Second: the frosted backdrop's full-screen blur pass per animation frame. **Measure first.**\n\n═══ THE DECISIONS THAT GOVERN THE REMAINING WORK (Antonio, 2026-08-12) ═══\n- **Components, Flutter/SwiftUI style**: *\"reason in terms of Components that encapsulate their internal logic and are reusable. Like in React but write code Flutter/SwiftUI style.\"* A surface is components, never one function that draws a picture.\n- **They live beside their surface** (`heca/src/chrome/expose/`) and move up to `heca/src/components/` when a second surface needs them.\n- **Every size is a share; nothing is a pixel.** The exposé's `map()` computed a zoom and emitted `Length::Px(col.width * zoom)` — which is taking over the layout engine's job, and then owning every term (window, overlay margin, panel padding, card gaps, row count, row heights, scroll centring). Seven attempts, six wrong, each missing a different term.\n- **The zoom EFFECT stays.** `effects::Zoom` + `LayerRegistry::set_zoom` (with `PaintCx::with_scale` underneath) is the open/close animation and is already generic for any layer including a plugin's. Only `overview_zoom` / `overview_scale` — the *fit* scale — goes.\n- **Measure before fixing.** Six wrong guesses in one day; instrumenting named the cause in one round, every time.\n\n═══ THE INVARIANTS THAT MUST SURVIVE (§6 of the deleted file) ═══\n- NO hardcoded z or levels anywhere. z is tree position; occluders come from real layout geometry.\n- Buttons NEVER declare a layer. A button inherits its layer from the surface it is mounted in.\n- The active context is moved ONLY by context surfaces (exposé, modal) — never by zoom, scroll or provider selection.\n- Occlusion is decided by draw order plus geometry, not by the coarse level.\n- Overlays and modals are children of their opener, and exclusive when modal.\n- ONE rule for visibility. If you are special-casing a surface's hints, the surface is mis-modelled — fix the model, do not add a filter.\n\n═══ BUILD ON, DO NOT DUPLICATE ═══\n`OverlayHost` is NOT a second stack — it is built ON this one. `open_modal` realizes the ViewNode body plus its action buttons into a native tree, pushes it as a Modal-band layer, and resolves the returned result when a button's intent fires. Its overlays ARE layers here.\n\n═══ VERIFICATION ═══\nLayering, paint order, hint visibility and the map are all **visible** behaviour. Green tests are not verification: Antonio drives every visual check, and green tests found none of the exposé's seven failures.\n\n═══ FILE SPLITS IN THIS PHASE ARE REVIEWS, NOT JUST MOVES (Antonio, 2026-09-28) ═══\nEvery split task here (T466, T468, T470, T471, T472, T509–T514) MUST also check the moved code against the project's rules and rewrite what breaks them, the proper way — a pure move that carries bad code into new files is not done. Check, per file:\n- **Fix at the library, never at the call site.** A rule a caller has to remember (call this after that, pass this width, set this flag) belongs in the widget, component or heca-core type that owns it. The test: will any other developer or agent ever have to know this exists?\n- **Nothing hardcoded.** A size, step, colour or label written at the place it is used belongs in the setting, theme token or catalog entry that already owns it — or in a new one there.\n- **Our API, composed.** UI is widgets composed DOM-like, Flutter/SwiftUI style, through the typed builders (`heca_view::build`, grid-ui widgets); CSS-like layout (Flex, Grid, Surface). No raw string-keyed nodes where a typed builder exists; a missing capability is one builder on the widget, not a flag on a host struct.\n- **SOLID and DRY.** One job per file and per function; repeated code becomes one owner, never two paths.\n- **AGENTS.md § 0 pre-flight** before any UI change: name the existing widget (docs/widgets.md, heca/src/components/, chrome/<surface>/) or the planner task, else it is a proposal.\nOrder inside a task: move first (test count equal, gates green), then the review fixes, each tracked as a checklist item on the split task itself, each with a test that was seen red before green. Report what was found even when not asked.",
+  "descriptionUpdatedAt": "2026-09-28T09:33:07.751Z",
   "notes": "**Handoff context update:**\nT481 closed 2026-08-27 on Antonio's showcase verification. T491 filed. Three framework rules centralised and pushed as ed6edd5: mark_needs_layout + needs_layout(root) so a widget can say its TREE changed rather than its pixels; set_hidden as the only way to show or hide anything (13 sites converted, guarded by a build-failing test); and focused_by_keyboard so pointing at something never scrolls it. All three came out of Antonio driving the showcase; none was reachable by tests.\n\n**Remaining work:**\nThe agreed order minus T481: T479, T477, T475, T478, T458 (must precede T474), T474, then the file splits T471/T468/T466/T472/T470. Plus T482 (the dock naming, four failed attempts recorded) and T491 (the showcase's hand-rolled row). Two things need Antonio's agreement before filing: the host-side content builder on ToastStack for rich notifications (approved in principle, orphaned when P096 closed), and the row extraction behind T491.\n\n---\n**Handoff context update:**\n37 of 48 tasks done, 1 canceled. The phase's framework work is finished: T479 and T481 both closed on Antonio's visual verification. What remains is five open bugs (T474, T475, T477, T478, T491) and five file splits (T466, T468, T470, T471, T472) that are deliberately deferred.\n\n**Remaining work:**\nFive bugs: T474 (a column does not own its identity), T475 (a pick with no candidates dies silently), T477 (a sidebar pane row that had no cwd can never show one — READ THE TASK, my notes on it carry two wrong diagnoses), T478 (a zero-width pane still gets a letter, drawn outside itself), T491 (the showcase teaches hand-rolling a row the app has as a component). Five deferred splits: T466, T468, T470, T471, T472 — they carve up files P097(F003) is still rewriting and must not be interleaved with it.\n\n---\n**Handoff context update:**\n42 of 51 tasks done. This session closed T477 and T475 and added and closed T515 and T516, all driven by Antonio and committed at 60965b6 (16 ahead of main, unpushed). P097(F003) is DONE, which unblocks the eleven file splits this phase had deferred.\n\n**Remaining work:**\nThree bugs: T478 (zero-width pane still lettered — the starter), T474 (column identity; waits on T458 and needs Antonio's decisions), T491 (the showcase hand-rolls a row the app has as a component). Eleven now-unblocked splits: T466, T468, T470, T471, T472, T509–T514. 71 files exceed 600 lines and heca-view-realize/src/lib.rs at 5215 has no task covering it.\n\n---\n**Handoff context update:**\nT474's authoring-API half is 5 of 7 and committed; T461 (scoped hints, from P095) landed alongside it and is verified on screen. 44 commits ahead of main, not pushed.\n\n**Remaining work:**\nT474: C5's SDK half, the 282-site Length sweep, its docs — then the column parent move, unstarted, with four traps unguarded by tests.\n\n---\n**Handoff context update:**\nT474's authoring-API half is complete (checklist 8/8) and four library capabilities landed with it, three of them found by Antonio driving the app. The work is uncommitted: 69 files, 1825 tests green. Trap 4 of the column parent move no longer exists.\n\n**Remaining work:**\nThe column parent move (T474's other half, three traps). Six KeyHint wrappers to remove. Per-widget pickable defaults to decide. The single dock letter under prefix+Shift+e. The layer record's second visible flag.",
   "goals": [],
   "nonGoals": [],
@@ -2410,9 +2410,9 @@
       "priority": 50,
       "shortName": "split-heca-src-handlers-rs-343",
       "title": "Split heca/src/handlers.rs (3430) — every action's handler in one file",
-      "status": "deferred",
-      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. AGENTS § 0 rule 4: above 600 lines stop and agree a split. This is the largest non-test source file in the app.\n\nCURRENT STATE. `heca/src/handlers.rs` is 3430 lines of `pub fn handle_*(state: &mut AppState, action: &WmAction)` — one per action, flat, in no particular order. `handle_focus_left` at :33, `handle_split_horizontal` at :170, `handle_resize` at :599, and so on for every action heca has. There is no second job hiding in it: it is one job repeated a hundred times, which is the rarer case where the line count alone is the problem — nobody can hold it, and finding a handler means grepping.\n\nDESIRED STATE. `heca/src/handlers/` — one file per action CATEGORY, and the categories already exist: `ActionCategory` in `heca/src/actions.rs:19` (Navigation, Layout, Pane, Workspace, System, …). Splitting by that makes the file layout and the action catalog agree, so \"where does this handler live\" is answered by the same word that already classifies the action for the command palette.\n\n  handlers/\n  ├── mod.rs          re-exports, so `crate::handlers::handle_x` still resolves for `build_registry`\n  ├── navigation.rs   focus_*, next/prev pane, workspace next/prev, focus toggles\n  ├── layout.rs       split_*, resize*, move_*, swap_*, zoom\n  ├── pane.rs         close, float, rename, take, per-pane font zoom\n  ├── workspace.rs    create/rename/delete workspace, move column to workspace\n  └── system.rs       reload_config, command_palette, spawn, selection, scrollback\n\nSTEPS. (1) Read `ActionCategory` and `ActionRegistry::ALL` in `actions.rs` — the descriptor for each action already names its category, so the mapping is data, not judgement. (2) Move each handler into the file its own descriptor names. (3) `mod.rs` re-exports everything so `heca/src/app/registry.rs`'s `build_registry` needs no edit. (4) Shared helpers used by more than one category (`after_layout_change`, `switch_workspace_tracked`, `find_pane_location`, `move_pane_to_column`) get one owner — put each with the category that defines it, `pub(super)`, never a grab-bag in `mod.rs`.\n\nEDGE CASES. A handler whose action spans categories (`handle_focus_pane` is Navigation but is called by Layout handlers) — the caller crosses a module boundary, which is fine and is exactly the seam the split exposes. Watch for a doc comment left at the end of a segment documenting the NEXT file's first item; that trap was hit twice while splitting the two hint files (see T468).\n\nRULES. A move, never a rewrite: no behaviour change in the same commit, and the test count must match before and after. Agree the shape with Antonio first. Gates `cargo test -p heca` then `./scripts/lint-changed.sh`, never `--workspace`.\n\n⚠️ MUST NOT be interleaved with P097(F003) or P094(F011) — same reason T468 is deferred.",
-      "descriptionUpdatedAt": "2026-09-04T14:01:39.920Z",
+      "status": "done",
+      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. AGENTS § 0 rule 4: above 600 lines stop and agree a split. This is the largest non-test source file in the app.\n\nCURRENT STATE. `heca/src/handlers.rs` is 3430 lines of `pub fn handle_*(state: &mut AppState, action: &WmAction)` — one per action, flat, in no particular order. `handle_focus_left` at :33, `handle_split_horizontal` at :170, `handle_resize` at :599, and so on for every action heca has. There is no second job hiding in it: it is one job repeated a hundred times, which is the rarer case where the line count alone is the problem — nobody can hold it, and finding a handler means grepping.\n\nDESIRED STATE. `heca/src/handlers/` — one file per action CATEGORY, and the categories already exist: `ActionCategory` in `heca/src/actions.rs:19` (Navigation, Layout, Pane, Workspace, System, …). Splitting by that makes the file layout and the action catalog agree, so \"where does this handler live\" is answered by the same word that already classifies the action for the command palette.\n\n  handlers/\n  ├── mod.rs          re-exports, so `crate::handlers::handle_x` still resolves for `build_registry`\n  ├── navigation.rs   focus_*, next/prev pane, workspace next/prev, focus toggles\n  ├── layout.rs       split_*, resize*, move_*, swap_*, zoom\n  ├── pane.rs         close, float, rename, take, per-pane font zoom\n  ├── workspace.rs    create/rename/delete workspace, move column to workspace\n  └── system.rs       reload_config, command_palette, spawn, selection, scrollback\n\nSTEPS. (1) Read `ActionCategory` and `ActionRegistry::ALL` in `actions.rs` — the descriptor for each action already names its category, so the mapping is data, not judgement. (2) Move each handler into the file its own descriptor names. (3) `mod.rs` re-exports everything so `heca/src/app/registry.rs`'s `build_registry` needs no edit. (4) Shared helpers used by more than one category (`after_layout_change`, `switch_workspace_tracked`, `find_pane_location`, `move_pane_to_column`) get one owner — put each with the category that defines it, `pub(super)`, never a grab-bag in `mod.rs`.\n\nEDGE CASES. A handler whose action spans categories (`handle_focus_pane` is Navigation but is called by Layout handlers) — the caller crosses a module boundary, which is fine and is exactly the seam the split exposes. Watch for a doc comment left at the end of a segment documenting the NEXT file's first item; that trap was hit twice while splitting the two hint files (see T468).\n\nRULES. A move, never a rewrite: no behaviour change in the same commit, and the test count must match before and after. Agree the shape with Antonio first. Gates `cargo test -p heca` then `./scripts/lint-changed.sh`, never `--workspace`.\n\n⚠️ MUST NOT be interleaved with P097(F003) or P094(F011) — same reason T468 is deferred.\n\n---\n**Completion summary:**\nSplit heca/src/handlers.rs (3657 lines, 140 handlers) into heca/src/handlers/ — a move, no behaviour change. Layout per task decision (agreed 2026-09-28): mod.rs 36 (re-exports only; `pub(crate) use confirm::*` because confirm has no pub items) + navigation 133, split_resize 248, move_swap 352, take 159, pick 308 (+ pick/{act_refusal_tests, pick_refusal_tests, letter_memory_tests}.rs), pane 216, rename 274, workspace 301, confirm 330, docks 373 (+ docks/dock_focus_tests.rs), selection 256, scroll 324, links 138, system 288. 12 helpers used across files became pub(super); nothing outside the folder changed (build_registry still uses crate::handlers::*).\n\nFound while moving: two integration lints (heca/tests/by_id_actions.rs, pick_refusal.rs) read src/handlers.rs by path and would have failed to find it. Fixed for the whole class: heca/tests/common/mod.rs `module_source(module)` reads `<module>.rs` plus every .rs under `<module>/`, so a lint survives its module being split. Proven live: appending `input_mode = InputMode::PaneSelect` to handlers/pane.rs turned a_pick_mode_is_only_ever_entered_through_begin_pick red; restored → green.\n\nAlso fixed stale references: app_state.rs linked a non-existent handlers::begin_confirm_delete → handlers::request_destructive; notification_layer.rs, AGENTS.md (tree + \"create handler in\"), README (write the handler), docs/widgets.md (open_confirm), docs/architecture.md diagram now name handlers/.\n\nVerification: #[test] count in handlers 20 before, 20 after; lint-changed clippy (-D warnings, all targets) clean; lint-changed test all green (42 result lines ok); fmt clean. Not driven in the GPU app — nothing visible changed.\n\nRemaining: documented_actions.rs still reads heca/src/actions.rs by path — move it onto module_source in T510. Not committed (not asked).\n\n---\n**Completion summary:**\nSplit heca/src/handlers.rs (3657 lines, 140 handlers) into heca/src/handlers/ (14 files + place.rs, all under 400 lines, split by what each acts on — decision 2253208c), then reviewed the moved code against the project rules and fixed what broke them (phase rule added to P082 2026-09-28). Antonio drove the app afterwards: works correctly.\n\nFixes (checklist C2–C9, each with a test seen red before green):\n1. Follow-up in one place: ActionRegistry::execute / execute_dynamic run mutations::after_action after every handler — focus re-sync + redraw always, rebuild of visible layers when heca-core Session::shape() changed (new heca-core/src/layout/shape.rs). 87 manual redraw/after_* calls removed; after_focus_change deleted. Lint heca/tests/handler_follow_up.rs.\n2. Floating owned by heca-core: heca-core/src/layout/floating.rs (default_float_rect from LayoutOptions.float_size, add_floating_pane, float_tiled_pane, unfloat_pane); ScrollingSpace::pane_indices replaces the app's find_pane_indices_in_workspace; pane_is_floating deleted.\n3. Column width: the 85% had no recorded reason. LayoutOptions.default_column_width (non-Option) is the only source; ScrollingSpace::new_column builds every new column at it; chrome::default_column_width / DEFAULT_COLUMN_PROPORTION and width params on add_pane / unfloat_pane / extract_pane_to_new_column / insert_pane_at_position removed.\n4. Rename dialog: typed heca_view::build::Input; title from the catalog label via RenameTarget::action_name (\"Rename Pane\").\n5. Destructive dialog: grid-ui Tone (general, replaces HintTone; heca-grid-ui/src/tone.rs), Visual.content_tone + ComponentExt::content_tone (CSS inherited color, published in paint_child beside accent), Dialog::danger(bool) tones its body. Modal host now passes ModalSpec.danger (was never read); confirm handler's colour patch removed. Stray body_boxed doc/attribute removed from dialog.rs. Tests heca-grid-ui/tests/content_tone.rs.\n6. keymap::WrittenKey / split_leader / LEADER_LAYER / DIRECT_LAYER: one reader of prefix+ (10 hand copies gone); registry binding::bind_flat; format_shortcut_styled reads the leader from the key. Lint heca/tests/written_key.rs.\n7. Mouse drops post their action through the dispatcher (mouse::dispatch_drop): swap, or the new place_pane action (WmAction::PlacePane, catalogued, heca-core Workspace::take_pane / place_pane in placement.rs, handler handlers/place.rs). Drops compute indices on a copy without the pane. Only a cancelled drag's restore keeps its own follow-up. Lint: nothing outside the registry calls a handler.\n8. RPC one map: rpc.rs (1644→287 lines) — a line is the catalog name + args (positional in declared order or key=value, --dock) → Intent → dispatch; 94 hand-written commands, RPC-only spellings and the `action` verb dropped (decision 286cb23e). README step 8 / AGENTS step 9 updated.\n\nAlso: stale doc links fixed (app_state begin_confirm_delete, input.rs build_mode_keymaps), docs (AGENTS, README, architecture, widgets) point at the new files and APIs; integration lints read modules via heca/tests/common/mod.rs module_source.\n\nVerification: ./scripts/lint-changed.sh (clippy -D warnings, all targets) clean; lint-changed test all green; fmt clean; handler test count 20→20 for the move. Not committed (Antonio: no commit).",
+      "descriptionUpdatedAt": "2026-09-28T14:23:33.369Z",
       "notes": "",
       "statusLog": [
         {
@@ -2422,20 +2422,137 @@
           "toStatus": "deferred",
           "title": "Parked on creation (2026-09-04), for the same reason T466/T468/T470/T471/T472 are: these splits carve up the exact files P097(F003) and P094(F011) are reshaping. `handlers.rs` holds every action handler, and P097's work has been adding to and changing them all session. Split first and P097 immediately re-carves freshly split files — the work is done twice and the second diff is unreviewable. Split after and it is a pure move over settled code, which is what AGENTS § 0 rule 4 asks for. Resume once P097 lands. Nothing here is a defect; no user-visible behaviour waits on it.",
           "description": "Parked on creation (2026-09-04), for the same reason T466/T468/T470/T471/T472 are: these splits carve up the exact files P097(F003) and P094(F011) are reshaping. `handlers.rs` holds every action handler, and P097's work has been adding to and changing them all session. Split first and P097 immediately re-carves freshly split files — the work is done twice and the second diff is unreviewable. Split after and it is a pure move over settled code, which is what AGENTS § 0 rule 4 asks for. Resume once P097 lands. Nothing here is a defect; no user-visible behaviour waits on it."
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-002-deferred-planned",
+          "date": "2026-09-28T08:50:22.391Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Un-parked with Antonio's OK, 2026-09-28. It waited only for P097(F003) to land; P097 is done (8 done, 1 canceled). Layout to agree with Antonio before moving code, as for T466.",
+          "description": "Un-parked with Antonio's OK, 2026-09-28. It waited only for P097(F003) to land; P097 is done (8 done, 1 canceled). Layout to agree with Antonio before moving code, as for T466."
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-003-planned-in-progress",
+          "date": "2026-09-28T08:50:32.637Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-004-in-progress-done",
+          "date": "2026-09-28T08:57:13.834Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Split heca/src/handlers.rs (3657 lines, 140 handlers) into heca/src/handlers/ — a move, no behaviour change. Layout per task decision (agreed 2026-09-28): mod.rs 36 (re-exports only; `pub(crate) use confirm::*` because confirm has no pub items) + navigation 133, split_resize 248, move_swap 352, take 159, pick 308 (+ pick/{act_refusal_tests, pick_refusal_tests, letter_memory_tests}.rs), pane 216, rename 274, workspace 301, confirm 330, docks 373 (+ docks/dock_focus_tests.rs), selection 256, scroll 324, links 138, system 288. 12 helpers used across files became pub(super); nothing outside the folder changed (build_registry still uses crate::handlers::*).\n\nFound while moving: two integration lints (heca/tests/by_id_actions.rs, pick_refusal.rs) read src/handlers.rs by path and would have failed to find it. Fixed for the whole class: heca/tests/common/mod.rs `module_source(module)` reads `<module>.rs` plus every .rs under `<module>/`, so a lint survives its module being split. Proven live: appending `input_mode = InputMode::PaneSelect` to handlers/pane.rs turned a_pick_mode_is_only_ever_entered_through_begin_pick red; restored → green.\n\nAlso fixed stale references: app_state.rs linked a non-existent handlers::begin_confirm_delete → handlers::request_destructive; notification_layer.rs, AGENTS.md (tree + \"create handler in\"), README (write the handler), docs/widgets.md (open_confirm), docs/architecture.md diagram now name handlers/.\n\nVerification: #[test] count in handlers 20 before, 20 after; lint-changed clippy (-D warnings, all targets) clean; lint-changed test all green (42 result lines ok); fmt clean. Not driven in the GPU app — nothing visible changed.\n\nRemaining: documented_actions.rs still reads heca/src/actions.rs by path — move it onto module_source in T510. Not committed (not asked)."
+        },
+        {
+          "id": "c7b67c30-4de1-433c-9978-d73042039e44",
+          "date": "2026-09-28T09:13:14.502Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "done → in-progress (reopened)",
+          "description": "Reopened through the confirmed lifecycle operation; prior completion evidence is retained."
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-006-in-progress-done",
+          "date": "2026-09-28T14:23:33.364Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Split heca/src/handlers.rs (3657 lines, 140 handlers) into heca/src/handlers/ (14 files + place.rs, all under 400 lines, split by what each acts on — decision 2253208c), then reviewed the moved code against the project rules and fixed what broke them (phase rule added to P082 2026-09-28). Antonio drove the app afterwards: works correctly.\n\nFixes (checklist C2–C9, each with a test seen red before green):\n1. Follow-up in one place: ActionRegistry::execute / execute_dynamic run mutations::after_action after every handler — focus re-sync + redraw always, rebuild of visible layers when heca-core Session::shape() changed (new heca-core/src/layout/shape.rs). 87 manual redraw/after_* calls removed; after_focus_change deleted. Lint heca/tests/handler_follow_up.rs.\n2. Floating owned by heca-core: heca-core/src/layout/floating.rs (default_float_rect from LayoutOptions.float_size, add_floating_pane, float_tiled_pane, unfloat_pane); ScrollingSpace::pane_indices replaces the app's find_pane_indices_in_workspace; pane_is_floating deleted.\n3. Column width: the 85% had no recorded reason. LayoutOptions.default_column_width (non-Option) is the only source; ScrollingSpace::new_column builds every new column at it; chrome::default_column_width / DEFAULT_COLUMN_PROPORTION and width params on add_pane / unfloat_pane / extract_pane_to_new_column / insert_pane_at_position removed.\n4. Rename dialog: typed heca_view::build::Input; title from the catalog label via RenameTarget::action_name (\"Rename Pane\").\n5. Destructive dialog: grid-ui Tone (general, replaces HintTone; heca-grid-ui/src/tone.rs), Visual.content_tone + ComponentExt::content_tone (CSS inherited color, published in paint_child beside accent), Dialog::danger(bool) tones its body. Modal host now passes ModalSpec.danger (was never read); confirm handler's colour patch removed. Stray body_boxed doc/attribute removed from dialog.rs. Tests heca-grid-ui/tests/content_tone.rs.\n6. keymap::WrittenKey / split_leader / LEADER_LAYER / DIRECT_LAYER: one reader of prefix+ (10 hand copies gone); registry binding::bind_flat; format_shortcut_styled reads the leader from the key. Lint heca/tests/written_key.rs.\n7. Mouse drops post their action through the dispatcher (mouse::dispatch_drop): swap, or the new place_pane action (WmAction::PlacePane, catalogued, heca-core Workspace::take_pane / place_pane in placement.rs, handler handlers/place.rs). Drops compute indices on a copy without the pane. Only a cancelled drag's restore keeps its own follow-up. Lint: nothing outside the registry calls a handler.\n8. RPC one map: rpc.rs (1644→287 lines) — a line is the catalog name + args (positional in declared order or key=value, --dock) → Intent → dispatch; 94 hand-written commands, RPC-only spellings and the `action` verb dropped (decision 286cb23e). README step 8 / AGENTS step 9 updated.\n\nAlso: stale doc links fixed (app_state begin_confirm_delete, input.rs build_mode_keymaps), docs (AGENTS, README, architecture, widgets) point at the new files and APIs; integration lints read modules via heca/tests/common/mod.rs module_source.\n\nVerification: ./scripts/lint-changed.sh (clippy -D warnings, all targets) clean; lint-changed test all green; fmt clean; handler test count 20→20 for the move. Not committed (Antonio: no commit)."
         }
       ],
       "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
+      "acceptedDecisions": [
+        {
+          "id": "2253208c-2211-4325-8370-1b86f3f0efd1",
+          "title": "handlers/ is split by what each piece acts on, not by ActionCategory",
+          "decision": "heca/src/handlers/ = mod.rs (re-exports only) + navigation, split_resize, move_swap, take, pick, pane, rename, workspace, confirm, docks, selection, scroll, links, system. Each shared helper lives in the file whose job it is. A file whose tests would pass 400 lines keeps each test module in <file>/<name>.rs.",
+          "rationale": "Agreed with Antonio 2026-09-28. The task's ActionCategory layout gave Layout and Pane ~880 lines each, and ~700 lines are not handlers of any category: the destructive-confirm gate, the pick letters and the rename dialog are shared jobs.",
+          "implementationNotes": "Lints that read source must ask for a module, not a file: heca/tests/common/mod.rs module_source(\"handlers\") reads handlers.rs or every file under handlers/. by_id_actions.rs and pick_refusal.rs use it. documented_actions.rs still reads heca/src/actions.rs by path — move it onto module_source in T510, which splits that file.",
+          "acceptedAt": "2026-09-28T08:57:13.675Z"
+        },
+        {
+          "id": "286cb23e-8deb-4fd0-8df6-d4429d48e185",
+          "title": "The RPC reads the ActionCatalog only — catalog names, no RPC spellings",
+          "decision": "An RPC line is `name [--dock <id>] [value …] [key=value …]`; the name is looked up in the runtime ActionCatalog (the one map every caller uses), positional values take the action's declared argument names in order, and the line becomes an Intent dispatched through dispatch_view_intent. The 94 hand-written commands, their RPC-only spellings (split-h, close-pane-id, direct-scroll-*, …) and the separate `action` verb are gone; no aliases.",
+          "rationale": "Antonio, 2026-09-28: \"why not just have a map for RPC and ActionCatalog?\" — two maps drift; the RPC is not in use yet, so the old spellings were dropped rather than kept as aliases (which would be a second map in disguise). A new action is reachable over RPC the moment it is described.",
+          "implementationNotes": "heca/src/rpc.rs: RpcCall + parse_rpc + RpcCall::into_intent(&ActionCatalog); main.rs execute_rpc_command uses it. Test every_catalogued_action_is_reachable_by_its_name guards it. README step 8 / AGENTS step 9 say there is nothing to add in rpc.rs.",
+          "acceptedAt": "2026-09-28T14:20:13.832Z"
+        }
+      ],
+      "checklist": [
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-001-c1-split-handlers-rs-into-handlers-the-move-done-2026-09-28",
+          "number": 1,
+          "title": "C1 Split handlers.rs into handlers/ (the move) — done 2026-09-28",
+          "checked": true
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-002-fix-1-the-dispatcher-actionregistry-execute-runs-the-follow-up-once-after-every-action-focus-re-sync-and-redraw-always-rebuild-of-what-lists-the-session-when-heca-core-s-session-shape-changed-handlers-say-nothing-87-manual-calls-removed-lint-handler-follow-up-rs",
+          "number": 2,
+          "title": "Fix 1: the dispatcher (ActionRegistry::execute) runs the follow-up once after every action — focus re-sync and redraw always, rebuild of what lists the session when heca-core's Session::shape() changed; handlers say nothing (87 manual calls removed; lint handler_follow_up.rs)",
+          "checked": true
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-003-fix-2-heca-core-workspace-owns-float-this-pane-default-size-centring-pane-rs-float-and-system-rs-spawn-floating-call-it",
+          "number": 3,
+          "title": "Fix 2: heca-core workspace owns 'float this pane' (default size + centring); pane.rs float and system.rs spawn-floating call it",
+          "checked": true
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-004-fix-3-find-why-take-rs-and-the-mouse-paths-use-85-for-a-new-column-while-everything-else-uses-50-if-no-reason-the-layout-settings-become-the-only-source",
+          "number": 4,
+          "title": "Fix 3: find why take.rs and the mouse paths use 85% for a new column while everything else uses 50%; if no reason, the layout settings become the only source",
+          "checked": true
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-005-fix-4-rename-dialog-uses-the-typed-input-builder-and-its-titles-come-from-the-action-labels-in-the-catalog",
+          "number": 5,
+          "title": "Fix 4: rename dialog uses the typed Input builder, and its titles come from the action labels in the catalog",
+          "checked": true
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-006-fix-5-a-destructive-modal-colours-its-warning-itself-the-confirm-handler-stops-patching-the-body-s-colour-by-string",
+          "number": 6,
+          "title": "Fix 5: a destructive modal colours its warning itself; the confirm handler stops patching the body's colour by string",
+          "checked": true
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-007-fix-6-one-parsed-key-type-in-keymap-rs-splits-prefix-x-once-10-hand-copies-in-5-files-constants-for-the-normal-and-global-layer-names-32-literals",
+          "number": 7,
+          "title": "Fix 6: one parsed key type in keymap.rs splits 'prefix+X' once (10 hand copies in 5 files); constants for the 'normal' and 'global' layer names (32 literals)",
+          "checked": true
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-008-fix-7-every-mouse-drop-posts-its-action-swap-or-the-new-place-pane-through-the-dispatcher-instead-of-calling-handlers-and-the-follow-up-itself-the-one-follow-up-left-is-a-cancelled-drag-restoring-the-pane-it-lifted-out-of-the-session-which-no-action-can-name",
+          "number": 8,
+          "title": "Fix 7: every mouse drop posts its action (swap, or the new place_pane) through the dispatcher instead of calling handlers and the follow-up itself; the one follow-up left is a cancelled drag restoring the pane it lifted out of the session, which no action can name",
+          "checked": true
+        },
+        {
+          "id": "3957fb66-0ab0-45ff-b76f-0ad3111d8d1b-check-009-fix-8-the-rpc-has-one-map-a-line-is-an-action-s-catalog-name-plus-args-positional-in-declared-order-or-key-value-looked-up-in-the-actioncatalog-and-dispatched-as-an-intent-the-94-hand-written-commands-their-rpc-only-spellings-and-the-separate-action-verb-are-dropped-no-aliases-guarded-by-every-catalogued-action-is-reachable-by-its-name",
+          "number": 9,
+          "title": "Fix 8: the RPC has one map — a line is an action's catalog name plus args (positional in declared order, or key=value) looked up in the ActionCatalog and dispatched as an Intent; the 94 hand-written commands, their RPC-only spellings and the separate `action` verb are dropped (no aliases); guarded by every_catalogued_action_is_reachable_by_its_name",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-28T08:50:32.637Z",
+      "completedAt": "2026-09-28T14:23:33.364Z",
       "createdAt": "2026-09-04T14:01:39.862Z",
-      "updatedAt": "2026-09-04T14:28:59.808Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-28T14:23:33.364Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:5255b83f-9d99-4ee5-a3c0-b97db66f44b6",
+          "createdAt": "2026-09-28T08:50:31.585Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -2446,9 +2563,9 @@
       "priority": 51,
       "shortName": "split-heca-src-actions-rs-3282",
       "title": "Split heca/src/actions.rs (3282) — the registry, the catalog and the argument model are three things",
-      "status": "deferred",
-      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. Unlike `handlers.rs`, this file genuinely holds several jobs — which AGENTS § 0 calls the real defect, the line count being only the smoke alarm.\n\nCURRENT STATE, and the three jobs in it (line numbers 2026-09-04):\n\n1. **The argument model** — `ArgKind` :74, `ArgDescriptor` :99, `ArgSpec` :147, `ArgProblem` :199 and its `Display` :209, `check_args` :236, `nearest_name` :281. This is \"how does anything in heca declare and check its arguments\". It is no longer action-specific: `heca/src/app/cli.rs` now declares the command line's own arguments with the same `ArgDescriptor` and checks them with the same `check_args`, which is what makes `heca --describe-action` and a bad keybinding produce the same sentence. A thing two unrelated callers share is a module, not an appendix.\n2. **The catalog** — `ActionCategory` :19, `ActionDescriptor` :312, `ActionRegistry::ALL` (the static table of every built-in), `ActionCatalog`, `describe`/`describe_all`, `ActionInfo`. This is \"what actions exist and what do they say about themselves\" — read by the command palette, RPC introspection, the CLI, and every surface that renders an action's icon or label.\n3. **The registry and its dispatch** — `ActionRegistry` :347, `Dispatch` :363, `DuplicateAction` :388, `register`, `register_dynamic`, `execute`. This is \"what runs when an action fires\".\n\nDESIRED STATE. `heca/src/actions/` — `args.rs` (1), `catalog.rs` (2), `registry.rs` (3), `mod.rs` re-exporting so no caller changes. Consider whether `args.rs` belongs beside actions at all or one level up, since the CLI is now a peer consumer; that is the one judgement call in this split and it is Antonio's.\n\nSTEPS. (1) Move the argument model first — it is self-contained and has its own tests (`check_args_names_what_is_wrong`, `a_problem_reads_as_a_sentence`, `every_declared_argument_is_read_by_the_action`). (2) Then the catalog, which depends on the argument model but not on the registry. (3) The registry last. (4) `mod.rs` re-exports everything currently `pub`, so `heca/src/app/registry.rs`, `heca/src/rpc.rs`, `heca/src/app/cli.rs` and the chrome need no edit.\n\nEDGE CASES. `ActionRegistry::ALL` is a `const` slice referencing `ArgDescriptor::required*` constructors — those must stay `const fn`. The `every_declared_argument_is_read_by_the_action` test crosses all three jobs (it reads the catalog and calls into `build_action` in `input.rs`); it belongs with the catalog.\n\nRULES. A move, never a rewrite; the test count must match before and after. Agree the shape first — particularly where the argument model lands. Gates `cargo test -p heca` then `./scripts/lint-changed.sh`.\n\n⚠️ MUST NOT be interleaved with P097(F003).",
-      "descriptionUpdatedAt": "2026-09-04T14:01:58.445Z",
+      "status": "done",
+      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. Unlike `handlers.rs`, this file genuinely holds several jobs — which AGENTS § 0 calls the real defect, the line count being only the smoke alarm.\n\nCURRENT STATE, and the three jobs in it (line numbers 2026-09-04):\n\n1. **The argument model** — `ArgKind` :74, `ArgDescriptor` :99, `ArgSpec` :147, `ArgProblem` :199 and its `Display` :209, `check_args` :236, `nearest_name` :281. This is \"how does anything in heca declare and check its arguments\". It is no longer action-specific: `heca/src/app/cli.rs` now declares the command line's own arguments with the same `ArgDescriptor` and checks them with the same `check_args`, which is what makes `heca --describe-action` and a bad keybinding produce the same sentence. A thing two unrelated callers share is a module, not an appendix.\n2. **The catalog** — `ActionCategory` :19, `ActionDescriptor` :312, `ActionRegistry::ALL` (the static table of every built-in), `ActionCatalog`, `describe`/`describe_all`, `ActionInfo`. This is \"what actions exist and what do they say about themselves\" — read by the command palette, RPC introspection, the CLI, and every surface that renders an action's icon or label.\n3. **The registry and its dispatch** — `ActionRegistry` :347, `Dispatch` :363, `DuplicateAction` :388, `register`, `register_dynamic`, `execute`. This is \"what runs when an action fires\".\n\nDESIRED STATE. `heca/src/actions/` — `args.rs` (1), `catalog.rs` (2), `registry.rs` (3), `mod.rs` re-exporting so no caller changes. Consider whether `args.rs` belongs beside actions at all or one level up, since the CLI is now a peer consumer; that is the one judgement call in this split and it is Antonio's.\n\nSTEPS. (1) Move the argument model first — it is self-contained and has its own tests (`check_args_names_what_is_wrong`, `a_problem_reads_as_a_sentence`, `every_declared_argument_is_read_by_the_action`). (2) Then the catalog, which depends on the argument model but not on the registry. (3) The registry last. (4) `mod.rs` re-exports everything currently `pub`, so `heca/src/app/registry.rs`, `heca/src/rpc.rs`, `heca/src/app/cli.rs` and the chrome need no edit.\n\nEDGE CASES. `ActionRegistry::ALL` is a `const` slice referencing `ArgDescriptor::required*` constructors — those must stay `const fn`. The `every_declared_argument_is_read_by_the_action` test crosses all three jobs (it reads the catalog and calls into `build_action` in `input.rs`); it belongs with the catalog.\n\nRULES. A move, never a rewrite; the test count must match before and after. Agree the shape first — particularly where the argument model lands. Gates `cargo test -p heca` then `./scripts/lint-changed.sh`.\n\n⚠️ MUST NOT be interleaved with P097(F003).\n\n---\n**Completion summary:**\nDONE 2026-09-29 (uncommitted — Antonio said no commit). heca/src/actions.rs (3633 lines) is gone.\n\nSHIPPED\n- heca/src/args.rs — the argument model (ArgKind, ArgDescriptor, ArgSpec, ArgProblem, check_args, nearest_name, edit_distance, sample_args); actions and the CLI (app/cli.rs) both import it from crate::args.\n- heca/src/actions/: mod.rs (re-exports; ActionInfo test-only), registry.rs (+ registry/tests.rs), catalog.rs (+ catalog/tests.rs), confirm.rs, testing.rs (dyn_meta fixture), builtins/mod.rs (ActionDescriptor, BY_CATEGORY, builtins_by_category(), builtins()) + builtins/{navigation,layout,pane,workspace,chrome,system}.rs.\n- ActionRegistry::ALL replaced by actions::builtins(); palette / list-actions order is now category by category (accepted by Antonio).\n- Review fixes: category comes only from the file (field removed); ActionPolicy carries its snake_case wire name via serde, ActionInfo.policy is the enum; deleted register+ActionSpec, Dispatch+dispatch_of, ActionCatalog::by_category+count, ActionCategory::Session; has_handler/has_dynamic_handler test-only; ActionCatalog::insert private; one run_then_follow_up step shared by execute and execute_dynamic.\n- Lints: heca/tests/documented_actions.rs reads module_source(\"actions\"); new heca/tests/handler_follow_up.rs::both_ways_to_run_an_action_share_one_follow_up.\n- Docs: README step 6, AGENTS (steps 8, name-keyed note, § ActionRegistry path, project tree), docs/architecture.md, docs/widgets.md (register(ActionSpec) section removed, list-actions fields corrected).\n\nVERIFICATION: ./scripts/lint-changed.sh fmt, clippy and test all green. actions/args tests: 30 moved as-is; 28 after review (removed: register_native_wires_handler_and_meta_together with the deleted register, test_session_category_exists with the deleted Session). Each changed/new test was broken on purpose and seen red, then the file restored from a copy: documented_actions, builtin_metadata (category from file), rpc introspection (policy wire name), registry tests (has_dynamic_handler), both_ways_to_run_an_action_share_one_follow_up. Not run in the GPU app — the palette order change is visible and unverified by eye.\n\nMOVED OUT: action labels/descriptions and confirm-prompt words to a data file (was C3/C7) → P045(F006)/T519, the app-wide text system for translation.\n\nNOTE: heca/src/actions.rs deletion is staged in git (like handlers.rs); nothing else staged.",
+      "descriptionUpdatedAt": "2026-09-29T07:34:53.645Z",
       "notes": "",
       "statusLog": [
         {
@@ -2458,20 +2575,132 @@
           "toStatus": "deferred",
           "title": "Parked on creation (2026-09-04), same reason as T466/T468 and its five siblings: `actions.rs` is one of the files P097(F003) is actively changing — the `edge` argument and its descriptor landed there this session, and the argument model it holds is now shared with the new command line. Split first and P097 re-carves freshly split files; split after and it is a pure move over settled code (AGENTS § 0 rule 4). Resume once P097 lands.",
           "description": "Parked on creation (2026-09-04), same reason as T466/T468 and its five siblings: `actions.rs` is one of the files P097(F003) is actively changing — the `edge` argument and its descriptor landed there this session, and the argument model it holds is now shared with the new command line. Split first and P097 re-carves freshly split files; split after and it is a pure move over settled code (AGENTS § 0 rule 4). Resume once P097 lands."
+        },
+        {
+          "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1-check-002-deferred-planned",
+          "date": "2026-09-28T08:50:22.607Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Un-parked with Antonio's OK, 2026-09-28. It waited only for P097(F003) to land; P097 is done (8 done, 1 canceled). Layout to agree with Antonio before moving code, as for T466.",
+          "description": "Un-parked with Antonio's OK, 2026-09-28. It waited only for P097(F003) to land; P097 is done (8 done, 1 canceled). Layout to agree with Antonio before moving code, as for T466."
+        },
+        {
+          "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1-check-003-planned-in-progress",
+          "date": "2026-09-28T14:28:42.887Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "b5118259-97e3-4e21-8fde-de96eaf9a3f7",
+          "date": "2026-09-28T14:37:49.020Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Handing over to a fresh session (heca-84): this session's context is nearly full, and T510 is a large move that must not be left half-done.\nWhat was being done: Layout agreed with Antonio (task decision 75e942ef) and the checklist written (C1 move, C2 built-ins by category, C3 labels/descriptions to a data file, C4 review fixes). No code changed yet for T510 — the tree is clean and green. Mapped heca/src/actions.rs (3633 lines): 1–66 + 357–391 catalog types (ActionCategory, ActionDescriptor, GENERIC_ACTION_ICON); 67–356 argument model (ArgKind, ArgDescriptor, ArgSpec, ArgProblem, check_args, nearest_name, edit_distance); 392–620 registry (ActionRegistry, Dispatch, DynHandler, DuplicateAction, ActionHandle, register_dynamic, ActionSpec, register, unregister_dynamic, execute/execute_dynamic — which now run mutations::after_action, keep that); 621–2380 `impl ActionRegistry { pub const ALL: &[ActionDescriptor] }` (~1,760 lines, categories interleaved in 33 runs); 2381–2775 catalog (ActionMeta, ActionCatalog, ActionInfo, builtin_policy, sample_args, builtin_args); 2776–2913 confirm model (ConfirmCallback, ButtonRole, Outcome, ResponseButton, ConfirmSpec, builtin_confirm_specs) — a fourth job the task text missed; 2914–3633 tests.\nResume location: heca/src/actions.rs, before any edit. First step: C1.\nHow to resume: 1) C1 move: heca/src/args.rs (argument model, one level up — the CLI heca/src/app/cli.rs uses it too) and heca/src/actions/{mod.rs re-exports only, registry.rs, catalog.rs, confirm.rs}; tests beside their code; a file whose tests pass 400 lines keeps them in <file>/<name>.rs; no caller outside changes (mod.rs re-exports); #[test] count equal before/after; gates ./scripts/lint-changed.sh, test, fmt. 2) C2: split ALL into actions/builtins/<category>.rs; ALL becomes a catalog function (e.g. builtins()) walking them in ActionCategory order — Antonio ACCEPTED that this changes the palette/list-actions order; update the 5 users of ActionRegistry::ALL outside actions.rs (grep). ArgDescriptor::required*/optional must stay const fn. 3) C3: labels + descriptions into a data file loaded by the catalog (propose the format to Antonio before coding). 4) C4: review the moved code against the P082 phase rule (call-site fixes, hardcoded values, second paths); each finding its own checklist item with a test seen red before green. Never commit unasked; Antonio said no commit for now."
+        },
+        {
+          "id": "3ac24b3e-6f3d-48ce-9056-8d7c0a1df7b6",
+          "date": "2026-09-28T14:38:41.371Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from heca/src/actions.rs, before any edit. First step: C1.. 1) C1 move: heca/src/args.rs (argument model, one level up — the CLI heca/src/app/cli.rs uses it too) and heca/src/actions/{mod.rs re-exports only, registry.rs, catalog.rs, confirm.rs}; tests beside their code; a file whose tests pass 400 lines keeps them in <file>/<name>.rs; no caller outside changes (mod.rs re-exports); #[test] count equal before/after; gates ./scripts/lint-changed.sh, test, fmt. 2) C2: split ALL into actions/builtins/<category>.rs; ALL becomes a catalog function (e.g. builtins()) walking them in ActionCategory order — Antonio ACCEPTED that this changes the palette/list-actions order; update the 5 users of ActionRegistry::ALL outside actions.rs (grep). ArgDescriptor::required*/optional must stay const fn. 3) C3: labels + descriptions into a data file loaded by the catalog (propose the format to Antonio before coding). 4) C4: review the moved code against the P082 phase rule (call-site fixes, hardcoded values, second paths); each finding its own checklist item with a test seen red before green. Never commit unasked; Antonio said no commit for now."
+        },
+        {
+          "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1-check-006-in-progress-done",
+          "date": "2026-09-29T07:34:53.640Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE 2026-09-29 (uncommitted — Antonio said no commit). heca/src/actions.rs (3633 lines) is gone.\n\nSHIPPED\n- heca/src/args.rs — the argument model (ArgKind, ArgDescriptor, ArgSpec, ArgProblem, check_args, nearest_name, edit_distance, sample_args); actions and the CLI (app/cli.rs) both import it from crate::args.\n- heca/src/actions/: mod.rs (re-exports; ActionInfo test-only), registry.rs (+ registry/tests.rs), catalog.rs (+ catalog/tests.rs), confirm.rs, testing.rs (dyn_meta fixture), builtins/mod.rs (ActionDescriptor, BY_CATEGORY, builtins_by_category(), builtins()) + builtins/{navigation,layout,pane,workspace,chrome,system}.rs.\n- ActionRegistry::ALL replaced by actions::builtins(); palette / list-actions order is now category by category (accepted by Antonio).\n- Review fixes: category comes only from the file (field removed); ActionPolicy carries its snake_case wire name via serde, ActionInfo.policy is the enum; deleted register+ActionSpec, Dispatch+dispatch_of, ActionCatalog::by_category+count, ActionCategory::Session; has_handler/has_dynamic_handler test-only; ActionCatalog::insert private; one run_then_follow_up step shared by execute and execute_dynamic.\n- Lints: heca/tests/documented_actions.rs reads module_source(\"actions\"); new heca/tests/handler_follow_up.rs::both_ways_to_run_an_action_share_one_follow_up.\n- Docs: README step 6, AGENTS (steps 8, name-keyed note, § ActionRegistry path, project tree), docs/architecture.md, docs/widgets.md (register(ActionSpec) section removed, list-actions fields corrected).\n\nVERIFICATION: ./scripts/lint-changed.sh fmt, clippy and test all green. actions/args tests: 30 moved as-is; 28 after review (removed: register_native_wires_handler_and_meta_together with the deleted register, test_session_category_exists with the deleted Session). Each changed/new test was broken on purpose and seen red, then the file restored from a copy: documented_actions, builtin_metadata (category from file), rpc introspection (policy wire name), registry tests (has_dynamic_handler), both_ways_to_run_an_action_share_one_follow_up. Not run in the GPU app — the palette order change is visible and unverified by eye.\n\nMOVED OUT: action labels/descriptions and confirm-prompt words to a data file (was C3/C7) → P045(F006)/T519, the app-wide text system for translation.\n\nNOTE: heca/src/actions.rs deletion is staged in git (like handlers.rs); nothing else staged."
         }
       ],
       "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
+      "acceptedDecisions": [
+        {
+          "id": "75e942ef-2f11-45e9-a906-9ca57e25edc0",
+          "title": "actions/ layout: args.rs one level up, built-ins split by category, labels become data",
+          "decision": "heca/src/args.rs holds the argument model (the CLI and actions both use it). heca/src/actions/ = mod.rs (re-exports), registry.rs (register/dispatch/execute), catalog.rs (ActionMeta/ActionCatalog/ActionInfo), confirm.rs (confirm model + built-in specs), builtins/ one file per ActionCategory. ActionRegistry::ALL becomes a catalog function walking the per-category lists. Action labels and descriptions move to a data file (separate checklist item).",
+          "rationale": "Agreed with Antonio 2026-09-28. The argument model is shared by the CLI, not action-specific; the 1,760-line built-in table is catalog data wrongly attached to the registry; UI copy written in Rust breaks \"do not hardcode\".",
+          "implementationNotes": "",
+          "acceptedAt": "2026-09-28T14:32:25.597Z"
+        }
+      ],
+      "checklist": [
+        {
+          "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1-check-001-move-heca-src-args-rs-argument-model-sample-args-heca-src-actions-mod-registry-catalog-confirm-builtins-testing-rs-tests-beside-their-code-catalog-tests-rs-registry-tests-rs-callers-of-the-argument-model-import-crate-args-documented-actions-lint-on-module-source-actions-30-tests-before-and-after",
+          "number": 1,
+          "title": "Move: heca/src/args.rs (argument model + sample_args) + heca/src/actions/{mod,registry,catalog,confirm,builtins,testing}.rs, tests beside their code (catalog/tests.rs, registry/tests.rs), callers of the argument model import crate::args, documented_actions lint on module_source(\"actions\"), 30 tests before and after",
+          "checked": true
+        },
+        {
+          "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1-check-002-built-ins-actionregistry-all-split-into-actions-builtins-navigation-layout-pane-workspace-chrome-system-rs-all-replaced-by-actions-builtins-walking-them-in-actioncategory-order-every-caller-and-the-readme-agents-architecture-docs-use-it-new-test-every-builtin-sits-in-the-file-of-its-category-seen-red",
+          "number": 2,
+          "title": "Built-ins: ActionRegistry::ALL split into actions/builtins/{navigation,layout,pane,workspace,chrome,system}.rs; ALL replaced by actions::builtins() walking them in ActionCategory order; every caller and the README/AGENTS/architecture docs use it; new test every_builtin_sits_in_the_file_of_its_category (seen red)",
+          "checked": true
+        },
+        {
+          "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1-check-004-review-the-moved-code-against-the-rules-call-site-fixes-hardcoded-values-second-paths-and-fix-what-is-found-each-as-its-own-checklist-item",
+          "number": 3,
+          "title": "Review the moved code against the rules (call-site fixes, hardcoded values, second paths) and fix what is found, each as its own checklist item",
+          "checked": true
+        },
+        {
+          "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1-check-005-review-category-was-written-twice-file-field-field-removed-builtins-by-category-gives-each-built-in-the-category-of-its-file-readme-example-fixed-the-file-vs-field-test-from-c2-removed-with-the-field-builtin-metadata-test-checks-it-seen-red",
+          "number": 4,
+          "title": "Review: category was written twice (file + field). Field removed; builtins_by_category() gives each built-in the category of its file; README example fixed; the file-vs-field test from C2 removed with the field. builtin_metadata test checks it (seen red)",
+          "checked": true
+        },
+        {
+          "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1-check-006-review-rpc-introspection-spelled-every-policy-name-by-hand-actionpolicy-now-carries-its-snake-case-wire-name-serde-actioninfo-policy-is-the-enum-rpc-introspection-test-checks-the-wire-form-seen-red",
+          "number": 5,
+          "title": "Review: RPC introspection spelled every policy name by hand. ActionPolicy now carries its snake_case wire name (serde); ActionInfo.policy is the enum. rpc introspection test checks the wire form (seen red)",
+          "checked": true
+        },
+        {
+          "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1-check-008-review-deleted-register-actionspec-unused-second-way-to-register-docs-widgets-md-and-agents-updated-dispatch-dispatch-of-tests-only-actioncatalog-by-category-count-actioncategory-session-and-its-test-has-handler-and-new-has-dynamic-handler-are-test-only-actioncatalog-insert-is-private-actionregistry-s-repeated-doc-line-removed-rewritten-registry-tests-seen-red",
+          "number": 6,
+          "title": "Review: deleted register + ActionSpec (unused second way to register; docs/widgets.md and AGENTS updated), Dispatch + dispatch_of (tests only), ActionCatalog::by_category + count, ActionCategory::Session and its test; has_handler and new has_dynamic_handler are test-only; ActionCatalog::insert is private; ActionRegistry's repeated doc line removed. Rewritten registry tests seen red",
+          "checked": true
+        },
+        {
+          "id": "7e82071b-f110-4e9e-9ec0-884e79a401c1-check-009-review-both-run-paths-carried-their-own-copy-of-run-then-the-follow-up-one-run-then-follow-up-step-now-lint-both-ways-to-run-an-action-share-one-follow-up-seen-red",
+          "number": 7,
+          "title": "Review: both run paths carried their own copy of \"run, then the follow-up\" — one run_then_follow_up step now; lint both_ways_to_run_an_action_share_one_follow_up (seen red)",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
-      "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseHistory": [
+        {
+          "id": "01b5be6e-f548-4807-bb38-be4c92c3fced",
+          "reason": "Handing over to a fresh session (heca-84): this session's context is nearly full, and T510 is a large move that must not be left half-done.",
+          "whatWasBeingDone": "Layout agreed with Antonio (task decision 75e942ef) and the checklist written (C1 move, C2 built-ins by category, C3 labels/descriptions to a data file, C4 review fixes). No code changed yet for T510 — the tree is clean and green. Mapped heca/src/actions.rs (3633 lines): 1–66 + 357–391 catalog types (ActionCategory, ActionDescriptor, GENERIC_ACTION_ICON); 67–356 argument model (ArgKind, ArgDescriptor, ArgSpec, ArgProblem, check_args, nearest_name, edit_distance); 392–620 registry (ActionRegistry, Dispatch, DynHandler, DuplicateAction, ActionHandle, register_dynamic, ActionSpec, register, unregister_dynamic, execute/execute_dynamic — which now run mutations::after_action, keep that); 621–2380 `impl ActionRegistry { pub const ALL: &[ActionDescriptor] }` (~1,760 lines, categories interleaved in 33 runs); 2381–2775 catalog (ActionMeta, ActionCatalog, ActionInfo, builtin_policy, sample_args, builtin_args); 2776–2913 confirm model (ConfirmCallback, ButtonRole, Outcome, ResponseButton, ConfirmSpec, builtin_confirm_specs) — a fourth job the task text missed; 2914–3633 tests.",
+          "resumeLocation": "heca/src/actions.rs, before any edit. First step: C1.",
+          "howToResume": "1) C1 move: heca/src/args.rs (argument model, one level up — the CLI heca/src/app/cli.rs uses it too) and heca/src/actions/{mod.rs re-exports only, registry.rs, catalog.rs, confirm.rs}; tests beside their code; a file whose tests pass 400 lines keeps them in <file>/<name>.rs; no caller outside changes (mod.rs re-exports); #[test] count equal before/after; gates ./scripts/lint-changed.sh, test, fmt. 2) C2: split ALL into actions/builtins/<category>.rs; ALL becomes a catalog function (e.g. builtins()) walking them in ActionCategory order — Antonio ACCEPTED that this changes the palette/list-actions order; update the 5 users of ActionRegistry::ALL outside actions.rs (grep). ArgDescriptor::required*/optional must stay const fn. 3) C3: labels + descriptions into a data file loaded by the catalog (propose the format to Antonio before coding). 4) C4: review the moved code against the P082 phase rule (call-site fixes, hardcoded values, second paths); each finding its own checklist item with a test seen red before green. Never commit unasked; Antonio said no commit for now.",
+          "relatedTaskId": "",
+          "pausedAt": "2026-09-28T14:37:49.020Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-09-28T14:28:42.887Z",
+      "completedAt": "2026-09-29T07:34:53.640Z",
       "createdAt": "2026-09-04T14:01:58.389Z",
-      "updatedAt": "2026-09-04T14:29:05.056Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-29T07:34:53.640Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:382bb24b-8941-4f86-bf51-d81827c11e9f",
+          "createdAt": "2026-09-28T14:38:41.126Z"
+        },
+        {
+          "sessionId": "mcp-process:9ae98be2-2960-4fd5-8897-357dff59f893",
+          "createdAt": "2026-09-28T14:28:42.765Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -2482,9 +2711,9 @@
       "priority": 52,
       "shortName": "split-heca-src-input-rs-2126-t",
       "title": "Split heca/src/input.rs (2126) — the vocabulary, the action and the parsers",
-      "status": "deferred",
-      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request.\n\nCURRENT STATE, and the jobs in it (line numbers 2026-09-04):\n\n1. **The small argument vocabularies and their parsers** — `EnumArg` :11, then a repeating trio per type: `ResizeTarget` :18 + its `EnumArg` + its `FromStr`; `ResizeEdge` :58; `FontZoomStep` :97; `SpawnKind` :124; and more below. Each is an enum, its `VALUES` list, and its `FromStr` — the pattern AGENTS § 0.4 calls a family, which is a folder with one file per member.\n2. **`WmAction`** :155 — the action enum itself, ~100 variants with their doc comments. This is the app's vocabulary and is read far more often than it is changed.\n3. **The builders and classifiers** — `action_from_name`, `build_action` (the one constructor a config binding, a menu entry, a plugin and RPC all reach), `action_priority`, and the `get_*` argument helpers.\n\nDESIRED STATE. `heca/src/input/` — `action.rs` (the `WmAction` enum alone), `build.rs` (`action_from_name`, `build_action`, `action_priority`, the `get_*` helpers), `args/` or `vocabulary.rs` (the enums with their `EnumArg` and `FromStr`), `mod.rs` re-exporting. A reader wanting \"what actions exist\" then opens a file that is only that.\n\nSTEPS. (1) Move the vocabularies first — each is three items with no dependency on anything else in the file, and the `enum_arg_values_match_their_parser` style tests move with them. (2) `WmAction` next, alone. (3) The builders last, since they depend on both. (4) `mod.rs` re-exports; `heca/src/keymap.rs`, `handlers.rs`, `rpc.rs`, `actions.rs`, `app/registry.rs` and the chrome all import from `crate::input::` and must keep working untouched.\n\nEDGE CASES. `action_priority()` must stay exhaustive with no `_ =>` catch-all (AGENTS: adding a variant without classifying it should be a compile error) — verify that property survives the move. `build_action` and the `ArgDescriptor` declarations in `actions.rs` are checked against each other by `every_declared_argument_is_read_by_the_action`; that test spans both files either way.\n\nRULES. A move, never a rewrite; test count matches before and after. Agree the shape first. Gates `cargo test -p heca` then `./scripts/lint-changed.sh`.\n\n⚠️ MUST NOT be interleaved with P097(F003) — `input.rs` carries the action vocabulary that phase is changing.",
-      "descriptionUpdatedAt": "2026-09-04T14:02:14.871Z",
+      "status": "done",
+      "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request.\n\nCURRENT STATE, and the jobs in it (line numbers 2026-09-04):\n\n1. **The small argument vocabularies and their parsers** — `EnumArg` :11, then a repeating trio per type: `ResizeTarget` :18 + its `EnumArg` + its `FromStr`; `ResizeEdge` :58; `FontZoomStep` :97; `SpawnKind` :124; and more below. Each is an enum, its `VALUES` list, and its `FromStr` — the pattern AGENTS § 0.4 calls a family, which is a folder with one file per member.\n2. **`WmAction`** :155 — the action enum itself, ~100 variants with their doc comments. This is the app's vocabulary and is read far more often than it is changed.\n3. **The builders and classifiers** — `action_from_name`, `build_action` (the one constructor a config binding, a menu entry, a plugin and RPC all reach), `action_priority`, and the `get_*` argument helpers.\n\nDESIRED STATE. `heca/src/input/` — `action.rs` (the `WmAction` enum alone), `build.rs` (`action_from_name`, `build_action`, `action_priority`, the `get_*` helpers), `args/` or `vocabulary.rs` (the enums with their `EnumArg` and `FromStr`), `mod.rs` re-exporting. A reader wanting \"what actions exist\" then opens a file that is only that.\n\nSTEPS. (1) Move the vocabularies first — each is three items with no dependency on anything else in the file, and the `enum_arg_values_match_their_parser` style tests move with them. (2) `WmAction` next, alone. (3) The builders last, since they depend on both. (4) `mod.rs` re-exports; `heca/src/keymap.rs`, `handlers.rs`, `rpc.rs`, `actions.rs`, `app/registry.rs` and the chrome all import from `crate::input::` and must keep working untouched.\n\nEDGE CASES. `action_priority()` must stay exhaustive with no `_ =>` catch-all (AGENTS: adding a variant without classifying it should be a compile error) — verify that property survives the move. `build_action` and the `ArgDescriptor` declarations in `actions.rs` are checked against each other by `every_declared_argument_is_read_by_the_action`; that test spans both files either way.\n\nRULES. A move, never a rewrite; test count matches before and after. Agree the shape first. Gates `cargo test -p heca` then `./scripts/lint-changed.sh`.\n\n⚠️ MUST NOT be interleaved with P097(F003) — `input.rs` carries the action vocabulary that phase is changing.\n\nADDED 2026-09-29 (Antonio: \"make this in this task\"): keys inside a mode. Found while checking why there seemed to be no paste in selection mode (prefix+s, v, y). Paste exists (`paste_clipboard`: Super+v, Ctrl+Shift+v, prefix+Shift+p), but a mode throws away every key it does not bind, so Cmd+V never reaches it in selection mode — and the same in every custom mode. Selection mode (`handle_selection_mode`) and custom modes (`handle_custom_mode`) in `heca/src/app/input.rs` are also two separate handlers that already disagree (prefix and Enter behave differently). Fix: a mode handles only the keys it binds and everything else falls through to the normal bindings (keys bubble, AGENTS § 0c); one handler for every mode.\n\n---\n**Completion summary:**\nDONE 2026-09-29 (uncommitted — never commit unasked). Antonio checked everything in the app: works fine.\n\nSHIPPED\n- heca/src/input.rs → heca/src/input/: mod.rs (re-exports + resolve_action), action.rs (WmAction + derived WmActionKind, is_overlay_control), names.rs (action_from_name, private), build.rs (build_action, private; resolve_action = the one public door), vocabulary.rs (argument word lists + RegionVisibility), tests.rs. EnumArg moved to heca/src/args.rs.\n- strum (0.26, derive) added to heca: WmAction derives WmActionKind; the registry keys handlers by kind and build_registry registers by kind (no placeholder values, 485 → 190 lines).\n- Deleted: action_priority, parse_key, each_variant, action_discriminant, EnterMode, close_overlay's stray handler, ChromeHost region visible flag, 12 Show/Hide/Toggle region actions, interaction.rs's hand-written variant list, mode_combo.\n- Added: catalog entries hint_pick, delete_current_column, submit_overlay {action}; set_region_visible {region, visible}; palette offers one row per word for a word-list argument; palette lists itself.\n- Keys: one mode handler (selection + custom) via pure mode_key; unbound mode keys fall through to normal bindings; modes and the key after prefix read the key exactly as pressed (Cmd/Alt kept — also fixes prefix+Alt+n). Selection mode p = paste (keys = [\"p\", \"Super+v\", \"Ctrl+Shift+v\"]); 17 repeated mode entries merged into key lists.\n- Mouse/terminal: Shift+drag and the wheel no longer enter selection mode; copying clears the highlight for y and Shift+drag alike; heca-core snapshot moves the cursor with its prompt when scrolled back and hides it out of view.\n- Docs: docs/keybindings.md (Changed actions table for the region change; mode key order), keybindings.default.toml (region warning, mode key order, selection keys), README (wheel/Shift+drag, input paths), AGENTS.md (input/ layout, Adding New Actions renumbered, register by kind).\n\nVERIFICATION: ./scripts/lint-changed.sh fmt, clippy, test all green (heca 721 + heca-core and others). Every new or changed test seen red by sabotage then restored from a copy. Mouse/wheel behaviour (no headless AppState) verified by Antonio in the app.\n\nBREAKING for users: the 12 region actions (show_/hide_/toggle_ × left_sidebar, right_sidebar, top_bar, bottom_bar) → set_region_visible; documented. Antonio's own config does not use them.",
+      "descriptionUpdatedAt": "2026-09-29T13:02:09.201Z",
       "notes": "",
       "statusLog": [
         {
@@ -2494,20 +2723,152 @@
           "toStatus": "deferred",
           "title": "Parked on creation (2026-09-04), same reason as T466/T468 and its siblings: `input.rs` carries the `WmAction` vocabulary P097(F003) is changing — `ResizeEdge` was added and `ResizeAxis` deleted from it this session. Split first and P097 re-carves freshly split files; split after and it is a pure move over settled code (AGENTS § 0 rule 4). Resume once P097 lands.",
           "description": "Parked on creation (2026-09-04), same reason as T466/T468 and its siblings: `input.rs` carries the `WmAction` vocabulary P097(F003) is changing — `ResizeEdge` was added and `ResizeAxis` deleted from it this session. Split first and P097 re-carves freshly split files; split after and it is a pure move over settled code (AGENTS § 0 rule 4). Resume once P097 lands."
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-002-deferred-planned",
+          "date": "2026-09-28T08:50:22.825Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Un-parked with Antonio's OK, 2026-09-28. It waited only for P097(F003) to land; P097 is done (8 done, 1 canceled). Layout to agree with Antonio before moving code, as for T466.",
+          "description": "Un-parked with Antonio's OK, 2026-09-28. It waited only for P097(F003) to land; P097 is done (8 done, 1 canceled). Layout to agree with Antonio before moving code, as for T466."
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-003-planned-in-progress",
+          "date": "2026-09-29T07:37:22.207Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-004-in-progress-done",
+          "date": "2026-09-29T13:02:09.192Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE 2026-09-29 (uncommitted — never commit unasked). Antonio checked everything in the app: works fine.\n\nSHIPPED\n- heca/src/input.rs → heca/src/input/: mod.rs (re-exports + resolve_action), action.rs (WmAction + derived WmActionKind, is_overlay_control), names.rs (action_from_name, private), build.rs (build_action, private; resolve_action = the one public door), vocabulary.rs (argument word lists + RegionVisibility), tests.rs. EnumArg moved to heca/src/args.rs.\n- strum (0.26, derive) added to heca: WmAction derives WmActionKind; the registry keys handlers by kind and build_registry registers by kind (no placeholder values, 485 → 190 lines).\n- Deleted: action_priority, parse_key, each_variant, action_discriminant, EnterMode, close_overlay's stray handler, ChromeHost region visible flag, 12 Show/Hide/Toggle region actions, interaction.rs's hand-written variant list, mode_combo.\n- Added: catalog entries hint_pick, delete_current_column, submit_overlay {action}; set_region_visible {region, visible}; palette offers one row per word for a word-list argument; palette lists itself.\n- Keys: one mode handler (selection + custom) via pure mode_key; unbound mode keys fall through to normal bindings; modes and the key after prefix read the key exactly as pressed (Cmd/Alt kept — also fixes prefix+Alt+n). Selection mode p = paste (keys = [\"p\", \"Super+v\", \"Ctrl+Shift+v\"]); 17 repeated mode entries merged into key lists.\n- Mouse/terminal: Shift+drag and the wheel no longer enter selection mode; copying clears the highlight for y and Shift+drag alike; heca-core snapshot moves the cursor with its prompt when scrolled back and hides it out of view.\n- Docs: docs/keybindings.md (Changed actions table for the region change; mode key order), keybindings.default.toml (region warning, mode key order, selection keys), README (wheel/Shift+drag, input paths), AGENTS.md (input/ layout, Adding New Actions renumbered, register by kind).\n\nVERIFICATION: ./scripts/lint-changed.sh fmt, clippy, test all green (heca 721 + heca-core and others). Every new or changed test seen red by sabotage then restored from a copy. Mouse/wheel behaviour (no headless AppState) verified by Antonio in the app.\n\nBREAKING for users: the 12 region actions (show_/hide_/toggle_ × left_sidebar, right_sidebar, top_bar, bottom_bar) → set_region_visible; documented. Antonio's own config does not use them."
         }
       ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-001-move-heca-src-input-mod-action-vocabulary-names-build-tests-rs-enumarg-moved-to-crate-args-its-6-users-import-it-from-there-tests-beside-their-code-21-tests-before-and-after",
+          "number": 1,
+          "title": "Move: heca/src/input/{mod,action,vocabulary,names,build,tests}.rs; EnumArg moved to crate::args (its 6 users import it from there); tests beside their code; 21 tests before and after",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-002-review-deleted-action-priority-test-only-since-2026-06-01-when-keys-became-one-key-one-action-conflicts-are-reported-by-app-conflicts-rs-its-2-tests-and-the-agents-lines-its-no-catch-all-match-was-what-kept-the-hand-written-each-variant-list-complete-so-wmaction-now-derives-wmactionkind-strum-enumdiscriminants-enumiter-each-variant-200-lines-and-action-discriminant-are-gone-the-registry-keys-handlers-by-kind-and-the-reachability-test-walks-every-kind",
+          "number": 2,
+          "title": "Review: deleted action_priority (test-only since 2026-06-01, when keys became one key → one action; conflicts are reported by app/conflicts.rs), its 2 tests and the AGENTS lines. Its no-catch-all match was what kept the hand-written each_variant list complete, so WmAction now derives WmActionKind (strum EnumDiscriminants + EnumIter): each_variant (200 lines) and action_discriminant are gone, the registry keys handlers by kind, and the reachability test walks every kind",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-003-review-deleted-parse-key-a-test-only-copy-of-key-parsing-its-one-check-the-real-parser-lacked-alt-super-moved-onto-keycombo-parse-s-test-seen-red",
+          "number": 3,
+          "title": "Review: deleted parse_key, a test-only copy of key parsing; its one check the real parser lacked (Alt+Super) moved onto KeyCombo::parse's test (seen red)",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-004-review-name-arguments-action-was-hand-combined-in-5-places-in-different-orders-the-catalog-read-the-bare-name-first-now-one-crate-input-resolve-action-arguments-first-bare-name-as-fallback-build-action-and-action-from-name-are-private-to-input-every-caller-uses-it-focus-dock-test-through-the-door-seen-red-with-the-order-swapped",
+          "number": 4,
+          "title": "Review: name + arguments → action was hand-combined in 5 places in different orders (the catalog read the bare name first). Now one crate::input::resolve_action (arguments first, bare name as fallback); build_action and action_from_name are private to input; every caller uses it (focus_dock test through the door, seen red with the order swapped)",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-005-found-by-the-derived-kind-check-hint-pick-and-delete-current-column-are-bound-by-default-but-had-no-catalog-entry-entries-added-hint-pick-in-navigation-delete-current-column-in-layout",
+          "number": 5,
+          "title": "Found by the derived kind check: hint_pick and delete_current_column are bound by default but had no catalog entry — entries added (hint_pick in Navigation, delete_current_column in Layout)",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-006-found-by-the-derived-kind-check-submitoverlay-had-no-catalog-entry-or-name-builder-now-submit-overlay-action-acting-on-the-front-most-overlay-like-close-overlay-submitoverlay-overlay-is-option-both-resolve-through-one-resolve-overlay-control-target-overlay-wmaction-is-overlay-control-is-the-one-definition-close-overlay-s-stray-registry-handler-hid-the-layer-without-delivering-its-result-deleted",
+          "number": 6,
+          "title": "Found by the derived kind check: SubmitOverlay had no catalog entry or name builder. Now submit_overlay {action}, acting on the front-most overlay like close_overlay (SubmitOverlay.overlay is Option). Both resolve through one resolve_overlay_control + target_overlay; WmAction::is_overlay_control is the one definition; close_overlay's stray registry handler (hid the layer without delivering its result) deleted",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-007-found-by-the-derived-kind-check-setregionvisible-was-created-by-nobody-while-12-show-hide-toggle-actions-did-the-job-another-way-now-one-set-region-visible-region-visible-show-hide-toggle-default-toggle-on-appstate-shown-the-12-variants-names-entries-and-the-chrome-host-s-unused-visible-flag-deleted-keybindings-default-toml-example-updated-the-breaking-change-is-documented-in-docs-keybindings-md-changed-actions-and-keybindings-default-toml-build-test-seen-red",
+          "number": 7,
+          "title": "Found by the derived kind check: SetRegionVisible was created by nobody while 12 Show/Hide/Toggle actions did the job another way. Now one set_region_visible {region, visible = show|hide|toggle (default toggle)} on AppState.shown; the 12 variants, names, entries and the chrome host's unused visible flag deleted; keybindings.default.toml example updated; the breaking change is documented in docs/keybindings.md (Changed actions) and keybindings.default.toml (build test seen red)",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-008-palette-an-action-whose-only-required-argument-is-a-word-list-gets-one-row-per-distinct-word-aliases-dropped-by-building-each-word-s-action-set-region-visible-shows-once-per-region-test-seen-red",
+          "number": 8,
+          "title": "Palette: an action whose only required argument is a word list gets one row per distinct word (aliases dropped by building each word's action); set_region_visible shows once per region (test seen red)",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-009-palette-removed-the-hardcoded-command-palette-name-check-the-palette-lists-itself-like-any-other-action",
+          "number": 9,
+          "title": "Palette: removed the hardcoded \"command_palette\" name check — the palette lists itself like any other action",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-010-review-build-registry-registered-each-handler-with-a-made-up-sample-value-now-registered-by-wmactionkind-no-placeholder-values-485-190-lines-dropping-a-registration-seen-red",
+          "number": 10,
+          "title": "Review: build_registry registered each handler with a made-up sample value — now registered by WmActionKind, no placeholder values (485 → 190 lines; dropping a registration seen red)",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-011-found-once-registration-stopped-using-sample-values-entermode-was-never-created-a-mode-is-entered-directly-by-the-key-code-so-the-action-its-handler-and-its-policy-arm-are-deleted-along-with-the-reachability-test-s-exception-for-it-interaction-rs-s-190-line-hand-list-of-every-variant-deleted-the-policy-match-has-no-catch-all-so-the-compiler-already-enforces-it-its-spot-checks-kept",
+          "number": 11,
+          "title": "Found once registration stopped using sample values: EnterMode was never created (a mode is entered directly by the key code), so the action, its handler and its policy arm are deleted, along with the reachability test's exception for it; interaction.rs's 190-line hand list of \"every variant\" deleted (the policy match has no catch-all, so the compiler already enforces it) — its spot checks kept",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-012-modes-a-key-a-mode-does-not-bind-falls-through-to-the-normal-bindings-instead-of-being-thrown-away-a-normal-key-works-in-any-mode-test-seen-red",
+          "number": 12,
+          "title": "Modes: a key a mode does not bind falls through to the normal bindings instead of being thrown away — a normal key works in any mode (test seen red)",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-013-modes-selection-mode-and-custom-modes-share-one-handler-esc-enter-the-prefix-key-and-sticky-behave-the-same-way-everywhere",
+          "number": 13,
+          "title": "Modes: selection mode and custom modes share one handler (Esc, Enter, the prefix key and sticky behave the same way everywhere)",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-014-selection-mode-p-pastes-beside-y-copies-as-one-entry-keys-p-super-v-ctrl-shift-v-the-defaults-file-s-17-repeated-mode-entries-merged-into-key-lists-its-customizing-example-no-longer-uses-p-now-test-seen-red",
+          "number": 14,
+          "title": "Selection mode: p pastes, beside y copies, as one entry keys = [\"p\", \"Super+v\", \"Ctrl+Shift+v\"]; the defaults file's 17 repeated mode entries merged into key lists; its customizing example no longer uses p (now \"?\") (test seen red)",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-015-mouse-shift-drag-no-longer-enters-selection-mode-and-the-wheel-no-longer-enters-selection-mode-after-copying-the-highlight-is-cleared-for-both-y-and-a-shift-drag-release-readme-keybindings-default-toml-updated-not-covered-by-a-test-a-terminal-needs-a-window-verify-in-the-app",
+          "number": 15,
+          "title": "Mouse: Shift+drag no longer enters selection mode and the wheel no longer enters selection mode; after copying, the highlight is cleared for both y and a Shift+drag release. README + keybindings.default.toml updated. NOT covered by a test — a terminal needs a window; verify in the app",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-016-found-after-the-wheel-stopped-entering-selection-mode-scrolled-back-the-terminal-cursor-stayed-on-the-live-screen-row-and-sat-on-old-output-heca-core-s-snapshot-now-moves-the-cursor-with-its-prompt-and-hides-it-once-the-prompt-is-out-of-view-test-seen-red",
+          "number": 16,
+          "title": "Found after the wheel stopped entering selection mode: scrolled back, the terminal cursor stayed on the live screen row and sat on old output. heca-core's snapshot now moves the cursor with its prompt and hides it once the prompt is out of view (test seen red)",
+          "checked": true
+        },
+        {
+          "id": "f876a3d9-098f-44b5-8fcc-4cc5ae335e3b-check-017-keys-modes-and-the-key-after-the-prefix-used-their-own-copy-of-the-key-press-that-dropped-cmd-and-alt-cmd-v-in-selection-mode-arrived-as-v-begin-selection-prefix-alt-n-arrived-as-prefix-n-the-picker-copy-mode-combo-deleted-both-use-the-key-exactly-as-pressed-test-builds-cmd-v-the-way-the-app-does-seen-red-beginselection",
+          "number": 17,
+          "title": "Keys: modes and the key after the prefix used their own copy of the key press that dropped Cmd and Alt (Cmd+V in selection mode arrived as v = begin selection; prefix+Alt+n arrived as prefix+n = the picker). Copy (mode_combo) deleted — both use the key exactly as pressed. Test builds Cmd+V the way the app does (seen red: BeginSelection)",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-29T07:37:22.207Z",
+      "completedAt": "2026-09-29T13:02:09.192Z",
       "createdAt": "2026-09-04T14:02:14.825Z",
-      "updatedAt": "2026-09-04T14:29:09.866Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-29T13:02:09.192Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:bee00513-2e67-451f-a208-f0656ce26711",
+          "createdAt": "2026-09-29T07:37:21.953Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -2590,7 +2951,7 @@
       "priority": 55,
       "shortName": "split-heca-grid-ui-tests-phase",
       "title": "Split heca-grid-ui/tests/phase_a.rs (6654) — the library's whole behaviour in one file",
-      "status": "deferred",
+      "status": "planned",
       "description": "Filed 2026-09-04 from the census in `.planner/docs/oversized-files-2026-09-04.md`, at Antonio's request. The largest file in the workspace by a wide margin, and a test file — which is why it has escaped notice.\n\nCURRENT STATE. 6654 lines, **432 test functions**, named `phase_a` after a development phase that ended long ago. Its own section comments show it has grown by accretion, each era appending rather than filing:\n\n  :642  `// ── Phase C: surface components ──`\n  :1745 `// ── Phase C: display widgets ──`\n  :2566 `// ── Item (generic list row) ──`\n  :5873 `// ── Button: content is composed from children (viewnode-all-widgets) ──`\n  :6015 `// ── Choice: the value-carrying, content-composable option primitive ──`\n\nThe cost is real, not cosmetic. A test for a widget is not where anyone would look for it — `heca-grid-ui/tests/button_group.rs` exists beside it holding only `ButtonGroup`, which is the shape the rest should have. And a file this size is the one most likely to collect a duplicate of a test already in it.\n\nDESIRED STATE. `heca-grid-ui/tests/` — one file per subject, following the existing `button_group.rs` and `pointer_routing.rs` / `pointer_delivery.rs` precedent:\n\n  reactive.rs · layout.rs · paint.rs (the `Scene`/`DrawCommand` assertions) ·\n  focus.rs · widgets_input.rs · widgets_button.rs · widgets_item.rs ·\n  widgets_select.rs · widgets_overlay.rs · tooltip.rs · …\n\nplus a shared `common/mod.rs` for the helpers every file needs (`fixed_box`, `click_at`, `type_text`, the focus helper) — Rust's integration-test convention, so the helpers are not copied five ways.\n\nSTEPS. (1) Read the section comments and the test names; the grouping is already visible. (2) Move helpers to `tests/common/mod.rs` FIRST, so each subsequent move is a straight cut. (3) One subject per commit, checking the total test count each time. (4) The name `phase_a` retires with the last test in it.\n\nEDGE CASES. ⚠️ The count is the guard here and it must be exact: 432 today. An integration test file gets its own crate, so a helper that was private and shared becomes `pub` in `common` — do not let that quietly widen anything else. ⚠️ `#[cfg(test)]` does NOT enable in the library from an integration test, so a probe guarded that way silently never compiles; anything relying on it must use `cfg(debug_assertions)` (recorded under P097).\n\nRULES. A move, never a rewrite: no test's body changes in the same commit as its move. Agree the grouping first. Gates `cargo test -p heca-grid-ui` then `./scripts/lint-changed.sh`.\n\n⚠️ MUST NOT be interleaved with P097(F003) — that phase is actively adding to this file.",
       "descriptionUpdatedAt": "2026-09-04T14:03:05.237Z",
       "notes": "",
@@ -2602,6 +2963,14 @@
           "toStatus": "deferred",
           "title": "Parked on creation (2026-09-04), same reason as its siblings: P097(F003) is actively adding tests to `phase_a.rs` — two landed this session and two existing ones were changed. The only guard on this split is that the total test count matches before and after, and that count cannot be a fixed target while a phase is still writing into the file. Resume once P097 lands. Nothing here is a defect.",
           "description": "Parked on creation (2026-09-04), same reason as its siblings: P097(F003) is actively adding tests to `phase_a.rs` — two landed this session and two existing ones were changed. The only guard on this split is that the total test count matches before and after, and that count cannot be a fixed target while a phase is still writing into the file. Resume once P097 lands. Nothing here is a defect."
+        },
+        {
+          "id": "92358ff7-5c34-441b-aed0-fa803f0d9486-check-002-deferred-planned",
+          "date": "2026-09-28T08:50:23.038Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Un-parked with Antonio's OK, 2026-09-28. It waited only for P097(F003) to stop adding tests to phase_a.rs; P097 is done (8 done, 1 canceled), so the test count is now a fixed target. Layout to agree with Antonio before moving code, as for T466.",
+          "description": "Un-parked with Antonio's OK, 2026-09-28. It waited only for P097(F003) to stop adding tests to phase_a.rs; P097 is done (8 done, 1 canceled), so the test count is now a fixed target. Layout to agree with Antonio before moving code, as for T466."
         }
       ],
       "decisions": [],
@@ -2614,7 +2983,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-09-04T14:03:05.191Z",
-      "updatedAt": "2026-09-04T14:29:26.834Z",
+      "updatedAt": "2026-09-28T08:50:23.038Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -2864,7 +3233,7 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-09-28T08:30:51.638Z",
+  "updatedAt": "2026-09-29T13:02:09.192Z",
   "handoff": "# T518 and T491 are done and pushed — next is T466 (split registry.rs), layout agreed\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-25T10:32:44.685Z\nReason: Antonio answered the two open questions (T466 layout, T470 note) and asked for them to be in the handoff for the next session, then committed.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Next task: **P082(F003)/T466 — Split app/registry.rs by job** (planned, priority 9 — the lowest open in the phase). Un-parked 2026-09-24 with Antonio's OK.\n- Exact resume point: nothing started. **The layout is AGREED** (Antonio, 2026-09-24) and recorded as T466 checklist C1. It follows AGENTS.md §0b-bis — split by what each piece OWNS, tests beside the code they test, shared fixtures in `testing.rs` (NOT one big `tests.rs`):\n\n```\nheca/src/app/registry/\n├── mod.rs        the entry the app calls (build_keymaps) — wiring only\n├── config.rs     [keys] / [[keys.bind]] / [[keys.surface]] / [[keys.mode]] → bindings\n├── conflicts.rs  who wrote which binding, one report per clash\n├── floors.rs     the keys that are always there (Escape) and cannot be unbound\n├── actions.rs    registers every action's handler\n└── testing.rs    #[cfg(test)] shared fixtures\n```\n| file | owns | owns nothing about |\n|---|---|---|\n| config.rs | config tables → bindings | clashes, what an action does |\n| conflicts.rs | who wrote a key, reporting a clash once | reading config, floors |\n| floors.rs | keys that can't be removed | config, handlers |\n| actions.rs | action → handler | keys |\n\nEach file keeps its own tests, under 400 lines; outside call sites unchanged (re-export from mod.rs). A move, no behaviour change.\n\n## Current and partial state\n- Branch `feat/t518-a-region-holds-a-list`, pushed. Commits on top of `c15eacab`: `020229af` (code), `45b707b7` (planner), then the planner commit carrying this handoff. No PR opened (not asked).\n- **T518 done** (Antonio confirmed on screen, except `.order` reversing two docks — skipped by his choice): `regions(\"sidebar.left\").append/prepend/remove/retain/gap` (`heca/src/chrome/regions.rs`); `.share` → `.flex`; `.order(..)` (`heca-grid-ui/src/order.rs`); region is a Flex list (region `template_row`, provider `grow()`/`default_order` deleted); `PlaceDock` (`.flex/.order` on a dock as it is added, adder wins); context-menu `weight` → `Order` (wire still reads \"weight\"); dotted region names, `as_str()` prints dotted.\n- Fixed while testing, confirmed: `RegionMap<T>` (show/hide + ChromeHost); prefix+q no longer letters a pane tile behind the sidebar (`column::offer_to_columns` + `column_view_seen`).\n- **T491 done** (confirmed): grid-ui `Tile` widget, `WidgetKind::Tile`, SDK builder; app `PaneRow` and showcase PANES mount it.\n- **T470 note added** (Antonio): the showcase is behind the app and is better REWRITTEN once widgets are stable, not just split. T470 stays deferred.\n- T472/T468/T471 stay deferred (P094 still reshapes their files).\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first; fix in the library; compose; hardcode nothing; CSS-shaped layout; propose before coding when a design is open; follow AGENTS.md patterns (read them before proposing a structure); never commit unasked; commit AFTER writing a handoff (it changes planner files); never create planner entries without agreeing.\n- A region never holds sizes or indexes. Do not reintroduce region `template_row` or a provider `grow()`. `retain` not `filter`; `.span` rejected.\n- Every new test: break the code on purpose and see it red.\n- T466 behaviours that must survive (each has a test): mode bindings accept one combo / comma string / list; Escape never global, nor `close_overlay`; floors cannot be unbound; `[[keys.surface]]` before global; a conflict reported once with its layer.\n\n## Supporting documents\n- None needed. T466's own description + checklist C1 hold the agreed shape.\n\n## Blockers and risks\n- None for T466.\n- Flagged, not agreed: 12 show/hide/toggle region actions → 3 taking a region name; `heca/src/chrome/mod.rs` ~2500 lines doing several jobs.\n- CPU >100% reported once after long running; not reproduced (idle 0–3%). If it returns: measure first, do not guess.\n\n## How to resume\n1. `planner-task-show P082(F003)/T466 full=true`, then `planner-task-start`.\n2. Read `heca/src/app/registry.rs` and map every item to one owner in the table above.\n3. Move code into `heca/src/app/registry/` per the layout; tests go with the code they test; shared fixtures to `testing.rs`; re-export from `mod.rs`.\n4. Verify: `./scripts/lint-changed.sh`, `… test`, `… fmt` all clean; each file under 400 lines.\n5. Report, then commit only when asked. Then back to the planner recommendation.",
   "handoffUpdatedAt": "2026-09-25T10:32:44.685Z",
   "handoffAudit": {
@@ -3144,12 +3513,32 @@
       "toStatus": "deferred",
       "title": "in-progress → deferred",
       "description": ""
+    },
+    {
+      "id": "97c7792c-871e-4ff5-bb81-b505fd69bfed",
+      "date": "2026-09-28T08:50:22.431Z",
+      "fromStatus": "deferred",
+      "toStatus": "in-progress",
+      "title": "deferred → in-progress",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
+      "sessionId": "mcp-process:bee00513-2e67-451f-a208-f0656ce26711",
+      "createdAt": "2026-09-29T07:37:21.953Z"
+    },
+    {
+      "sessionId": "mcp-process:382bb24b-8941-4f86-bf51-d81827c11e9f",
+      "createdAt": "2026-09-28T14:38:41.126Z"
+    },
+    {
+      "sessionId": "mcp-process:9ae98be2-2960-4fd5-8897-357dff59f893",
+      "createdAt": "2026-09-28T14:28:42.765Z"
+    },
+    {
       "sessionId": "mcp-process:5255b83f-9d99-4ee5-a3c0-b97db66f44b6",
-      "createdAt": "2026-09-28T08:23:04.889Z"
+      "createdAt": "2026-09-28T08:50:31.585Z"
     },
     {
       "sessionId": "mcp-process:0b06056b-4c79-4d0c-a97e-50700cf362f6",
