@@ -153,7 +153,7 @@ mod tests {
             "edit_select_all",
         ] {
             assert!(
-                crate::input::action_from_name(name).is_none(),
+                crate::input::resolve_action(name, &std::collections::HashMap::new()).is_none(),
                 "{name} must not be a WmAction (widget-keys-config is a separate map)",
             );
         }

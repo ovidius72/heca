@@ -3,11 +3,11 @@
 //! Also owns [`merge_by`], the rule for how a user's keyed array layers over the defaults, which
 //! the surface tables reuse. Owns nothing about surfaces, modes or floors.
 
-use super::binding::{Written, bind_with_conflict_tracking, unbind_and_deindex};
+use super::binding::{Written, bind_flat, unbind_and_deindex};
 use super::names::action_ref_from_config;
 use crate::app::conflicts::Conflicts;
 use crate::input::{SpawnKind, WmAction};
-use crate::keymap::{ActionRef, BindingIndex, KeyCombo, KeymapRegistry};
+use crate::keymap::{ActionRef, BindingIndex, KeymapRegistry, WrittenKey};
 use heca_core::runtime::PaneClosePolicy;
 use std::collections::{BTreeMap, HashMap};
 
@@ -43,27 +43,7 @@ pub fn build_keymap(
                 layer: "[keys]",
                 key: trimmed,
             };
-            if let Some(rest) = trimmed.strip_prefix("prefix+") {
-                bind_with_conflict_tracking(
-                    &mut keymap,
-                    "normal",
-                    KeyCombo::parse(rest.trim()),
-                    action.clone(),
-                    written,
-                    conflicts,
-                    index,
-                );
-            } else {
-                bind_with_conflict_tracking(
-                    &mut keymap,
-                    "global",
-                    KeyCombo::parse(trimmed),
-                    action.clone(),
-                    written,
-                    conflicts,
-                    index,
-                );
-            }
+            bind_flat(&mut keymap, action.clone(), written, conflicts, index);
         }
     }
 
@@ -78,30 +58,13 @@ pub fn build_keymap(
                 layer: "[[keys.bind]]",
                 key: key_str,
             };
-            let (mode, combo) = match key_str.strip_prefix("prefix+") {
-                Some(rest) => ("normal", KeyCombo::parse(rest.trim())),
-                None => ("global", KeyCombo::parse(key_str)),
-            };
-            bind_with_conflict_tracking(
-                &mut keymap,
-                mode,
-                combo,
-                action.clone(),
-                written,
-                conflicts,
-                index,
-            );
+            bind_flat(&mut keymap, action.clone(), written, conflicts, index);
         }
     }
 
     for combo_str in config.keys.unbind.keys() {
-        let trimmed = combo_str.trim();
-        let mode = if trimmed.starts_with("prefix+") {
-            "normal"
-        } else {
-            "global"
-        };
-        unbind_and_deindex(&mut keymap, mode, "[keys]", trimmed, index);
+        let layer = WrittenKey::parse(combo_str).layer();
+        unbind_and_deindex(&mut keymap, layer, "[keys]", combo_str.trim(), index);
     }
 
     // `[[keys.command]]` — a program on a key. It had no merge at all, so defining one replaced
@@ -128,27 +91,7 @@ pub fn build_keymap(
             layer: "[[keys.command]]",
             key: trimmed,
         };
-        if let Some(rest) = trimmed.strip_prefix("prefix+") {
-            bind_with_conflict_tracking(
-                &mut keymap,
-                "normal",
-                KeyCombo::parse(rest.trim()),
-                action,
-                written,
-                conflicts,
-                index,
-            );
-        } else {
-            bind_with_conflict_tracking(
-                &mut keymap,
-                "global",
-                KeyCombo::parse(trimmed),
-                action,
-                written,
-                conflicts,
-                index,
-            );
-        }
+        bind_flat(&mut keymap, action, written, conflicts, index);
     }
 
     keymap

@@ -92,10 +92,7 @@ fn key_glyph(token: &str) -> Option<NfGlyph> {
 /// The prefix leads as its own cap, and stays **text** (`λ`): it is not a physical key with a
 /// picture, and the UI face has the letter.
 pub(crate) fn chord_caps(binding: &str) -> Vec<KeyCap> {
-    let (prefixed, keys) = match binding.strip_prefix("prefix+") {
-        Some(rest) => (true, rest),
-        None => (false, binding),
-    };
+    let (prefixed, keys) = crate::keymap::split_leader(binding);
     let mut caps = Vec::new();
     if prefixed {
         caps.push(KeyCap::Text(PREFIX_SYMBOL.to_string()));
@@ -114,23 +111,21 @@ pub(crate) fn chord_caps(binding: &str) -> Vec<KeyCap> {
 /// Format a keybinding for display as **text** — a tooltip, a menu row, a terminal line. A surface
 /// that draws keycaps takes [`chord_caps`] instead.
 ///
-/// `keys` is the key portion — either bare (`"f"`, `"Shift+c"`, `"$"`) or the full config form
-/// (`"prefix+f"`); a leading `prefix+` is stripped so callers can pass the raw binding straight from
-/// the keymap. When `with_prefix` is `true` (most heca commands go through the prefix) the
-/// [`PREFIX_SYMBOL`] is prepended.
+/// `written` is the binding as config writes it (`"prefix+f"`, `"Ctrl+H"`) — straight from the
+/// keymap. A key after the leader gets the [`PREFIX_SYMBOL`] in front; which one it is, is read from
+/// the binding itself ([`split_leader`](crate::keymap::split_leader)), never passed alongside it.
 ///
 /// `KeyStyle::Compact` substitutes the four arrows only: `"prefix+ArrowLeft"` → `"λ ←"`. Every other
 /// key keeps its word, because the UI face cannot draw the rest (verified in
 /// `heca-renderer/tests/font_coverage.rs`) and a tooltip has nowhere else to go.
 ///
 /// ```ignore
-/// format_shortcut_styled("f", true, KeyStyle::Plain)          // "λ f"
-/// format_shortcut_styled("prefix+f", true, KeyStyle::Plain)   // "λ f"   (config form accepted)
-/// format_shortcut_styled("Ctrl+H", false, KeyStyle::Plain)    // "Ctrl+H" (global, no prefix)
-/// format_shortcut_styled("prefix+ArrowLeft", true, KeyStyle::Compact) // "λ ←"
+/// format_shortcut_styled("prefix+f", KeyStyle::Plain)          // "λ f"
+/// format_shortcut_styled("Ctrl+H", KeyStyle::Plain)            // "Ctrl+H" (direct, no leader)
+/// format_shortcut_styled("prefix+ArrowLeft", KeyStyle::Compact) // "λ ←"
 /// ```
-pub(crate) fn format_shortcut_styled(keys: &str, with_prefix: bool, style: KeyStyle) -> String {
-    let keys = keys.strip_prefix("prefix+").unwrap_or(keys);
+pub(crate) fn format_shortcut_styled(written: &str, style: KeyStyle) -> String {
+    let (with_prefix, keys) = crate::keymap::split_leader(written);
     let keys = match style {
         KeyStyle::Plain => keys.to_string(),
         KeyStyle::Compact => keys
@@ -157,25 +152,19 @@ pub(crate) fn format_shortcut_styled(keys: &str, with_prefix: bool, style: KeySt
 mod tests {
     use super::*;
 
-    fn plain(keys: &str, with_prefix: bool) -> String {
-        format_shortcut_styled(keys, with_prefix, KeyStyle::Plain)
+    fn plain(written: &str) -> String {
+        format_shortcut_styled(written, KeyStyle::Plain)
     }
 
     #[test]
-    fn prepends_prefix_symbol() {
-        assert_eq!(plain("f", true), format!("{PREFIX_SYMBOL} f"));
-        assert_eq!(plain("Shift+c", true), format!("{PREFIX_SYMBOL} Shift+c"));
+    fn a_key_after_the_leader_gets_the_prefix_symbol() {
+        assert_eq!(plain("prefix+f"), format!("{PREFIX_SYMBOL} f"));
+        assert_eq!(plain("prefix+Shift+c"), format!("{PREFIX_SYMBOL} Shift+c"));
     }
 
     #[test]
-    fn accepts_config_form() {
-        // A raw keymap binding ("prefix+f") renders the same as the bare key.
-        assert_eq!(plain("prefix+f", true), plain("f", true));
-    }
-
-    #[test]
-    fn global_binding_has_no_prefix() {
-        assert_eq!(plain("Ctrl+H", false), "Ctrl+H");
+    fn a_direct_binding_has_no_prefix() {
+        assert_eq!(plain("Ctrl+H"), "Ctrl+H");
     }
 
     /// A **text** surface gets the arrows and keeps every other word — the six symbols the UI face
@@ -183,11 +172,11 @@ mod tests {
     #[test]
     fn compact_substitutes_the_arrows_and_nothing_else() {
         assert_eq!(
-            format_shortcut_styled("prefix+ArrowLeft", true, KeyStyle::Compact),
+            format_shortcut_styled("prefix+ArrowLeft", KeyStyle::Compact),
             format!("{PREFIX_SYMBOL} ←"),
         );
         assert_eq!(
-            format_shortcut_styled("Ctrl+Shift+Escape", false, KeyStyle::Compact),
+            format_shortcut_styled("Ctrl+Shift+Escape", KeyStyle::Compact),
             "Ctrl+Shift+Escape",
             "no ⌃ ⇧ ⎋ in a line of text — the UI font has none of them",
         );

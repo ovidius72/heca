@@ -186,17 +186,14 @@ impl Workspace {
         pane: super::column::Pane,
         column_idx: Option<usize>,
         activate: bool,
-        width: ColumnWidth,
         new_column_id: ColumnId,
     ) {
-        use super::column::Column;
-
         if let Some(idx) = column_idx {
             // Add to existing column.
             self.scrolling.add_pane_to_column(idx, None, pane, activate);
         } else {
             // Create new column.
-            let col = Column::new(new_column_id, pane, width);
+            let col = self.scrolling.new_column(new_column_id, pane);
             self.scrolling.add_column(None, col, activate);
         }
     }
@@ -325,13 +322,7 @@ mod tests {
             LayoutOptions::default(),
         );
         let pane = Pane::new(PaneId(pane_id), format!("pane{}", pane_id));
-        ws.add_pane(
-            pane,
-            None,
-            true,
-            ColumnWidth::Proportion(0.5),
-            ColumnId(pane_id),
-        );
+        ws.add_pane(pane, None, true, ColumnId(pane_id));
         ws
     }
 

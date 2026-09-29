@@ -37,6 +37,18 @@ pub enum RenameTarget {
     Pane(PaneId),
 }
 
+impl RenameTarget {
+    /// The catalogued action that renames this kind of thing — whose label titles the rename
+    /// dialog, so the dialog says what the menu entry and the palette already say.
+    pub fn action_name(self) -> &'static str {
+        match self {
+            RenameTarget::Pane(_) => "rename_pane",
+            RenameTarget::Column { .. } => "rename_column",
+            RenameTarget::Workspace(_) => "rename_workspace",
+        }
+    }
+}
+
 /// **Where a picked pane goes** — a column that exists, or one that does not yet.
 ///
 /// A new column is a destination like any other, so it is named here rather than signalled by a
@@ -97,7 +109,7 @@ pub enum InputMode {
     Selection,
     /// Status-bar marker while a destructive-confirm modal is up. The prompt itself is a
     /// host-owned overlay [`Dialog`](heca_grid_ui::Dialog) layer (see
-    /// [`handlers::begin_confirm_delete`](crate::handlers::begin_confirm_delete)) which owns
+    /// [`handlers::request_destructive`](crate::handlers::request_destructive)) which owns
     /// input and carries the action/resume in its completion — this variant just drives the
     /// "CONFIRM" status word.
     ConfirmDelete,

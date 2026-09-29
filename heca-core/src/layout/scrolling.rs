@@ -326,18 +326,8 @@ impl ScrollingSpace {
     /// `new_id` is passed in rather than derived: an id taken from the pane could name a column
     /// that already exists, and two columns with one id are two rows the cursor, the hint letters
     /// and a right-click cannot tell apart (F003/P082/T458).
-    pub fn extract_pane_to_new_column(
-        &mut self,
-        pane_id: PaneId,
-        new_id: ColumnId,
-        width: ColumnWidth,
-    ) -> bool {
-        let Some((src_col, pane_idx)) = self.columns.iter().enumerate().find_map(|(c, col)| {
-            col.panes
-                .iter()
-                .position(|p| p.id == pane_id)
-                .map(|p| (c, p))
-        }) else {
+    pub fn extract_pane_to_new_column(&mut self, pane_id: PaneId, new_id: ColumnId) -> bool {
+        let Some((src_col, pane_idx)) = self.pane_indices(pane_id) else {
             return false;
         };
         if self.columns[src_col].panes.len() <= 1 {
@@ -346,7 +336,8 @@ impl ScrollingSpace {
         let Some(pane) = self.remove_pane(src_col, pane_idx) else {
             return false;
         };
-        self.add_column(Some(src_col + 1), Column::new(new_id, pane, width), true);
+        let column = self.new_column(new_id, pane);
+        self.add_column(Some(src_col + 1), column, true);
         true
     }
 
@@ -439,6 +430,22 @@ impl ScrollingSpace {
     }
 
     /// Remove a pane from a column.
+    /// A new column holding `pane`, at the layout's
+    /// [`default_column_width`](LayoutOptions::default_column_width).
+    pub fn new_column(&self, id: ColumnId, pane: Pane) -> Column {
+        Column::new(id, pane, self.options.default_column_width)
+    }
+
+    /// Where pane `pane_id` sits: its column index and its row within that column.
+    pub fn pane_indices(&self, pane_id: PaneId) -> Option<(usize, usize)> {
+        self.columns.iter().enumerate().find_map(|(ci, col)| {
+            col.panes
+                .iter()
+                .position(|p| p.id == pane_id)
+                .map(|pi| (ci, pi))
+        })
+    }
+
     pub fn remove_pane(&mut self, col_idx: usize, pane_idx: usize) -> Option<Pane> {
         if col_idx >= self.columns.len() {
             return None;
@@ -1409,17 +1416,28 @@ mod tests {
     /// **A pane leaves its column and gets one of its own, immediately to the right**
     /// (F003/P082/T474 part B; Antonio, 2026-09-10 — right of the current one, not the end of the
     /// strip, so you keep your place).
+    /// **A new column's width is the layout's to say.** It used to be chosen by each caller: most
+    /// said 50%, but taking a pane into an empty workspace said 85% and two fallbacks did too, so
+    /// the same act gave a different column depending on how it was reached (F003/P082/T509).
+    #[test]
+    fn a_new_column_takes_the_layouts_default_width() {
+        let options = LayoutOptions {
+            default_column_width: ColumnWidth::Proportion(0.7),
+            ..Default::default()
+        };
+        let area = Rectangle::from_size(Size::new(1000.0, 800.0));
+        let space = ScrollingSpace::new(area, 1.0, options);
+        let column = space.new_column(ColumnId(1), Pane::new(PaneId(1), "p"));
+        assert_eq!(column.width, ColumnWidth::Proportion(0.7));
+    }
+
     #[test]
     fn a_pane_is_extracted_into_a_new_column_beside_its_own() {
         let mut space = space_with_columns(2);
         space.add_pane_to_column(0, None, Pane::new(PaneId(99), "second"), false);
         assert_eq!(space.columns[0].panes.len(), 2);
 
-        assert!(space.extract_pane_to_new_column(
-            PaneId(99),
-            ColumnId(500),
-            ColumnWidth::Proportion(0.5)
-        ));
+        assert!(space.extract_pane_to_new_column(PaneId(99), ColumnId(500)));
 
         assert_eq!(space.columns.len(), 3, "a column was created");
         assert_eq!(space.columns[0].panes.len(), 1, "it left the one it was in");
@@ -1442,11 +1460,7 @@ mod tests {
         let mut space = space_with_columns(2);
         let before = space.columns.len();
 
-        assert!(!space.extract_pane_to_new_column(
-            PaneId(1),
-            ColumnId(500),
-            ColumnWidth::Proportion(0.5)
-        ));
+        assert!(!space.extract_pane_to_new_column(PaneId(1), ColumnId(500)));
         assert_eq!(space.columns.len(), before);
     }
 

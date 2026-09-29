@@ -7,8 +7,7 @@
 use crate::app::backend_factory::{create_terminal_backend_for_state, terminal_grid_for_workspace};
 use crate::app::focus::sync_focus;
 use crate::app_state::AppState;
-use crate::chrome;
-use heca_core::layout::{Column, ColumnId, FocusDomain, Pane, PaneId};
+use heca_core::layout::{ColumnId, FocusDomain, Pane, PaneId, SessionShape};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MutationKind {
@@ -62,12 +61,24 @@ fn refresh_visible_layers(state: &mut AppState) {
     }
 }
 
-pub fn after_layout_change(state: &mut AppState) {
-    after_mutation_change_inner(state, MutationKind::Layout);
+/// **What every action is followed by**, run once by the dispatcher
+/// ([`ActionRegistry::execute`](crate::actions::ActionRegistry::execute)) after any handler.
+///
+/// Focus is re-synced and a frame is asked for, always. What lists the session — a layer that is
+/// up, such as the exposé — is rebuilt only when the session's [`SessionShape`] changed: a pane,
+/// column or workspace appeared, went or moved. Judged by comparing, not by the handler saying so,
+/// because a handler that forgot to say so left the redraw or the map stale and nothing noticed.
+pub(crate) fn after_action(state: &mut AppState, before: &SessionShape) {
+    let kind = if state.session.shape() == *before {
+        MutationKind::Focus
+    } else {
+        MutationKind::Layout
+    };
+    after_mutation_change_inner(state, kind);
 }
 
-pub fn after_focus_change(state: &mut AppState) {
-    after_mutation_change_inner(state, MutationKind::Focus);
+pub fn after_layout_change(state: &mut AppState) {
+    after_mutation_change_inner(state, MutationKind::Layout);
 }
 
 pub fn after_config_change(state: &mut AppState) {
@@ -151,7 +162,8 @@ pub(crate) fn move_pane_to_workspace_column(
             Some(ws) => ws,
             None => return,
         };
-        crate::app::pane_ops::find_pane_indices_in_workspace(ws, pane_id)
+        ws.scrolling
+            .pane_indices(pane_id)
             .and_then(|(ci, pi)| ws.scrolling.remove_pane(ci, pi))
     };
 
@@ -180,7 +192,7 @@ pub(crate) fn move_pane_to_workspace_column(
                 let insert_pos = target_col.min(ws.scrolling.columns.len());
                 ws.scrolling.add_column(
                     Some(insert_pos),
-                    Column::new(new_col_id, pane, chrome::default_column_width()),
+                    ws.scrolling.new_column(new_col_id, pane),
                     true,
                 );
                 state.focused_pane = Some(pane_id);
@@ -211,15 +223,11 @@ pub(crate) fn move_pane_to_new_column(state: &mut AppState, pane_id: PaneId) -> 
     }
     // Allocated before the mutable borrow, and spent only if the move happens.
     let new_col_id = ColumnId(state.session.next_id());
-    let width = chrome::default_column_width();
     let moved = state
         .session
         .workspaces
         .get_mut(ws_idx)
-        .map(|ws| {
-            ws.scrolling
-                .extract_pane_to_new_column(pane_id, new_col_id, width)
-        })
+        .map(|ws| ws.scrolling.extract_pane_to_new_column(pane_id, new_col_id))
         .unwrap_or(false);
     if moved {
         state.focused_pane = Some(pane_id);
@@ -310,7 +318,7 @@ pub(crate) fn move_pane_to_column(
                 // Create a new column at target_pos (append if equal to current len)
                 ws.scrolling.add_column(
                     Some(target_pos),
-                    Column::new(new_col_id, pane, chrome::default_column_width()),
+                    ws.scrolling.new_column(new_col_id, pane),
                     true,
                 );
             }
@@ -372,12 +380,11 @@ pub(crate) fn move_column_to_workspace(
     } else if source_empty {
         let next_id = state.session.next_id();
         let placeholder_pane = Pane::new(PaneId(next_id), format!("pane{}", next_id));
-        let placeholder_col = Column::new(
-            ColumnId(state.session.next_id()),
-            placeholder_pane,
-            chrome::default_column_width(),
-        );
+        let placeholder_col_id = ColumnId(state.session.next_id());
         if let Some(ws) = state.session.workspaces.get_mut(current_ws) {
+            let placeholder_col = ws
+                .scrolling
+                .new_column(placeholder_col_id, placeholder_pane);
             ws.scrolling.add_column(None, placeholder_col, true);
         }
         let (cols, rows) = terminal_grid_for_workspace(state, current_ws);

@@ -174,16 +174,19 @@ toggle_current_workspace_collapsed = "prefix+<"
 toggle_current_column_collapsed    = "prefix+("
 
 # ── Chrome region show/hide (mounted-gate, sidebar-fu-6) ──
+# ⚠ CHANGED 2026-09-29 — the twelve actions show_/hide_/toggle_ × left_sidebar, right_sidebar,
+# top_bar, bottom_bar were removed. A binding that still names one of them does nothing; rewrite it
+# as below (the full old → new table is in docs/keybindings.md, "Changed actions").
+#
 # A DISTINCT axis from `sidebar_left`/`sidebar_right` above (which expand/collapse to
 # the rail): these fully MOUNT/UNMOUNT a region (zero width/height), the runtime twin
-# of `[settings] show_left_sidebar/…`. Unbound by default — uncomment to bind. Each
-# region has a show / hide / toggle action:
-#   show_left_sidebar    hide_left_sidebar    toggle_left_sidebar
-#   show_right_sidebar   hide_right_sidebar   toggle_right_sidebar
-#   show_top_bar         hide_top_bar         toggle_top_bar
-#   show_bottom_bar      hide_bottom_bar      toggle_bottom_bar
-# Example:
-# toggle_bottom_bar = "prefix+Ctrl+b"
+# of `[settings] show_left_sidebar/…`. Unbound by default — uncomment to bind. One action,
+# `set_region_visible`, takes the region (sidebar.left | sidebar.right | bar.top | bar.bottom)
+# and `visible` (show | hide | toggle; omitted, it toggles). Example:
+# [[keys.bind]]
+# keys   = "prefix+Ctrl+b"
+# action = "set_region_visible"
+# args   = { region = "bar.bottom" }
 
 # ── Workspace navigation ──
 workspace_prev = ["prefix+u", "prefix+Ctrl+p"]
@@ -247,13 +250,13 @@ paste_clipboard      = ["Super+v", "Ctrl+Shift+v", "prefix+Shift+p"]
 #   Ctrl+u/d      full page up/down
 #   g / Shift+g   top / bottom
 #   y             copy selection
+#   p             paste (Cmd+V / Ctrl+Shift+V work here too)
 #   v / Space     begin selection
 #   o             flip selection endpoint
 #   Shift+o       open the link under the caret
 #   /             search the scrollback (type query; Enter keeps, Esc cancels)
 #   n / Shift+n   jump to next / previous search match
 #   Esc           exit
-# (Wheel-up at a non-grabbed prompt also enters Selection mode — Q3.)
 
 # Direct (non-prefix) bindings for users who don't use prefix mode
 # for scrollback navigation. These scroll immediately and do NOT enter
@@ -492,8 +495,11 @@ edit_select_all           = ["Ctrl+a", "Super+a"]    # Input: select the whole f
 # ─────────────────────────────────────────────────────────────────────────────
 # Custom modes — [[keys.mode]]
 # ─────────────────────────────────────────────────────────────────────────────
-# A mode is a sub-keymap: while it is active, its own bindings apply instead of the
-# normal ones. Each mode takes three fields plus its bindings.
+# A mode is a sub-keymap: while it is active, its own bindings come first. A key the mode
+# does not bind falls through to the normal bindings (Cmd+V still pastes while selecting); a
+# key nobody binds is dropped, never typed into the pane. In every mode Esc leaves, Enter
+# confirms and leaves, and the prefix key starts a prefix. Each mode takes three fields plus
+# its bindings.
 #
 #   name     The mode's name. The built-ins are `resize`, `selection`, `layer` and `focus` — all
 #            four are defined below. (`sidebar` is gone: a container is driven because it has
@@ -511,7 +517,7 @@ edit_select_all           = ["Ctrl+a", "Super+a"]    # Input: select the whole f
 # ⚠️ REDEFINING A BUILT-IN MODE — `bindings` are added, `trigger` and `sticky` are replaced. See
 # the header's customizing note; this is the one table that does not merge like the rest.
 #
-# Adding `p` as a second "previous search match" key, keeping everything else:
+# Adding `?` as a second "previous search match" key, keeping everything else:
 #
 #   [[keys.mode]]
 #   name = "selection"
@@ -520,7 +526,7 @@ edit_select_all           = ["Ctrl+a", "Super+a"]    # Input: select the whole f
 #
 #   [[keys.mode.bindings]]
 #   action = "search_prev_match"
-#   keys = "p"
+#   keys = "?"
 #
 # These blocks also work in `config.toml`: both files are merged into one config
 # before they are read, so `[keys]` is honoured in either.
@@ -580,28 +586,16 @@ args = { target = "pane", amount = "-40", edge = "top" }
 # the ordinary focus action bound inside the mode — nothing special about it.
 [[keys.mode.bindings]]
 action = "focus_left"
-keys = "Ctrl+h"
+keys = ["Ctrl+h", "Ctrl+Left"]
 [[keys.mode.bindings]]
 action = "focus_right"
-keys = "Ctrl+l"
+keys = ["Ctrl+l", "Ctrl+Right"]
 [[keys.mode.bindings]]
 action = "focus_up"
-keys = "Ctrl+k"
+keys = ["Ctrl+k", "Ctrl+Up"]
 [[keys.mode.bindings]]
 action = "focus_down"
-keys = "Ctrl+j"
-[[keys.mode.bindings]]
-action = "focus_left"
-keys = "Ctrl+Left"
-[[keys.mode.bindings]]
-action = "focus_right"
-keys = "Ctrl+Right"
-[[keys.mode.bindings]]
-action = "focus_up"
-keys = "Ctrl+Up"
-[[keys.mode.bindings]]
-action = "focus_down"
-keys = "Ctrl+Down"
+keys = ["Ctrl+j", "Ctrl+Down"]
 [[keys.mode.bindings]]
 action = "resize"
 keys = "Left"
@@ -696,43 +690,31 @@ trigger = ""
 sticky = true
 [[keys.mode.bindings]]
 action = "selection_left"
-keys = "h"
+keys = ["h", "ArrowLeft"]
 [[keys.mode.bindings]]
 action = "selection_right"
-keys = "l"
+keys = ["l", "ArrowRight"]
 [[keys.mode.bindings]]
 action = "selection_up"
-keys = "k"
+keys = ["k", "ArrowUp"]
 [[keys.mode.bindings]]
 action = "selection_down"
-keys = "j"
-[[keys.mode.bindings]]
-action = "selection_left"
-keys = "ArrowLeft"
-[[keys.mode.bindings]]
-action = "selection_right"
-keys = "ArrowRight"
-[[keys.mode.bindings]]
-action = "selection_up"
-keys = "ArrowUp"
-[[keys.mode.bindings]]
-action = "selection_down"
-keys = "ArrowDown"
+keys = ["j", "ArrowDown"]
 [[keys.mode.bindings]]
 action = "scrollback_page_up"
-keys = "PageUp"
+keys = ["PageUp", "Ctrl+u"]
 [[keys.mode.bindings]]
 action = "scrollback_page_down"
-keys = "PageDown"
+keys = ["PageDown", "Ctrl+d"]
 [[keys.mode.bindings]]
 action = "copy_selection"
 keys = "y"
 [[keys.mode.bindings]]
-action = "begin_selection"
-keys = "v"
+action = "paste_clipboard"
+keys = ["p", "Super+v", "Ctrl+Shift+v"]
 [[keys.mode.bindings]]
 action = "begin_selection"
-keys = "Space"
+keys = ["v", "Space"]
 [[keys.mode.bindings]]
 action = "toggle_selection_endpoint"
 keys = "o"
@@ -760,23 +742,11 @@ action = "scrollback_line_down"
 keys = "d"
 args = { amount = "12" }
 [[keys.mode.bindings]]
-action = "scrollback_page_up"
-keys = "Ctrl+u"
-[[keys.mode.bindings]]
-action = "scrollback_page_down"
-keys = "Ctrl+d"
-[[keys.mode.bindings]]
 action = "scrollback_to_top"
-keys = "g"
-[[keys.mode.bindings]]
-action = "scrollback_to_top"
-keys = "Home"
+keys = ["g", "Home"]
 [[keys.mode.bindings]]
 action = "scrollback_to_bottom"
-keys = "Shift+g"
-[[keys.mode.bindings]]
-action = "scrollback_to_bottom"
-keys = "End"
+keys = ["Shift+g", "End"]
 [[keys.mode.bindings]]
 action = "exit_scrollback"
 keys = "Escape"
@@ -793,16 +763,10 @@ trigger = "prefix+!"   # prefix then Shift+1
 sticky = true
 [[keys.mode.bindings]]
 action = "app_font_increase"
-keys = "k"
-[[keys.mode.bindings]]
-action = "app_font_increase"
-keys = "ArrowUp"
+keys = ["k", "ArrowUp"]
 [[keys.mode.bindings]]
 action = "app_font_decrease"
-keys = "j"
-[[keys.mode.bindings]]
-action = "app_font_decrease"
-keys = "ArrowDown"
+keys = ["j", "ArrowDown"]
 [[keys.mode.bindings]]
 action = "app_font_reset"
 keys = "0"
@@ -813,16 +777,10 @@ trigger = "prefix+@"   # prefix then Shift+2
 sticky = true
 [[keys.mode.bindings]]
 action = "pane_terminal_font_increase"
-keys = "k"
-[[keys.mode.bindings]]
-action = "pane_terminal_font_increase"
-keys = "ArrowUp"
+keys = ["k", "ArrowUp"]
 [[keys.mode.bindings]]
 action = "pane_terminal_font_decrease"
-keys = "j"
-[[keys.mode.bindings]]
-action = "pane_terminal_font_decrease"
-keys = "ArrowDown"
+keys = ["j", "ArrowDown"]
 [[keys.mode.bindings]]
 action = "pane_terminal_font_reset"
 keys = "0"

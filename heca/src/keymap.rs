@@ -6,6 +6,53 @@
 use crate::input::WmAction;
 use std::collections::HashMap;
 
+/// The flat map's layer for what the **leader** key (`prefix`) leads to — `prefix+w`.
+pub const LEADER_LAYER: &str = "normal";
+/// The flat map's layer for what is bound **directly**, with no leader first — `Ctrl+q`.
+pub const DIRECT_LAYER: &str = "global";
+
+/// **A key as a binding writes it**: `prefix+w` (after the leader) or `Ctrl+q` (direct).
+///
+/// The one reader of the `prefix+` spelling. Config tables, a mode's trigger, an unbind and the
+/// index all split it here; it used to be split by hand in ten places across five files.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WrittenKey {
+    /// Whether it follows the leader key.
+    pub after_leader: bool,
+    /// The keys themselves, without the leader.
+    pub combo: KeyCombo,
+}
+
+impl WrittenKey {
+    /// Read a key as written, `prefix+` and all.
+    pub fn parse(written: &str) -> Self {
+        let (after_leader, keys) = split_leader(written);
+        Self {
+            after_leader,
+            combo: KeyCombo::parse(keys),
+        }
+    }
+
+    /// The flat layer this key binds in: [`LEADER_LAYER`] after the leader, else [`DIRECT_LAYER`].
+    pub fn layer(&self) -> &'static str {
+        if self.after_leader {
+            LEADER_LAYER
+        } else {
+            DIRECT_LAYER
+        }
+    }
+}
+
+/// A written key split into whether it follows the leader and the keys themselves, as text — for a
+/// surface that shows a binding rather than binds it. [`WrittenKey::parse`] is built on this.
+pub fn split_leader(written: &str) -> (bool, &str) {
+    let written = written.trim();
+    match written.strip_prefix("prefix+") {
+        Some(rest) => (true, rest.trim()),
+        None => (false, written),
+    }
+}
+
 /// Normalized representation of a key press.
 /// Equality and hashing are case-insensitive on the `key` field so that
 /// "Enter" and "enter" match the same binding.
@@ -261,6 +308,27 @@ impl KeymapRegistry {
 mod tests {
     use super::*;
 
+    /// A written key knows which flat layer it binds in, and the leader never reaches the combo.
+    #[test]
+    fn a_written_key_names_its_layer() {
+        let led = WrittenKey::parse(" prefix+ Shift+w ");
+        assert!(led.after_leader);
+        assert_eq!(led.layer(), LEADER_LAYER);
+        assert_eq!(led.combo, KeyCombo::parse("Shift+w"));
+
+        let direct = WrittenKey::parse("Ctrl+q");
+        assert!(!direct.after_leader);
+        assert_eq!(direct.layer(), DIRECT_LAYER);
+        assert_eq!(direct.combo, KeyCombo::parse("Ctrl+q"));
+    }
+
+    /// Two spellings of one key are one key — what an unbind matches on.
+    #[test]
+    fn a_written_key_is_the_same_key_however_it_is_cased() {
+        assert_eq!(WrittenKey::parse("prefix+W"), WrittenKey::parse("prefix+w"));
+        assert_ne!(WrittenKey::parse("prefix+w"), WrittenKey::parse("w"));
+    }
+
     #[test]
     fn test_key_combo_parse() {
         let c = KeyCombo::parse("h");
@@ -273,6 +341,13 @@ mod tests {
         assert!(c.ctrl);
         assert!(c.shift);
         assert!(!c.alt);
+
+        let c = KeyCombo::parse("Alt+Super+x");
+        assert_eq!(c.key, "x");
+        assert!(c.alt);
+        assert!(c.super_);
+        assert!(!c.ctrl);
+        assert!(!c.shift);
     }
 
     #[test]
@@ -280,8 +355,12 @@ mod tests {
         let mut reg = KeymapRegistry::new();
         let combo = KeyCombo::parse("h");
         let action = WmAction::FocusLeft;
-        reg.bind("normal", combo.clone(), ActionRef::Builtin(action.clone()));
-        assert_eq!(reg.resolve_builtin("normal", &combo), Some(&action));
+        reg.bind(
+            LEADER_LAYER,
+            combo.clone(),
+            ActionRef::Builtin(action.clone()),
+        );
+        assert_eq!(reg.resolve_builtin(LEADER_LAYER, &combo), Some(&action));
         assert_eq!(reg.resolve_builtin("sidebar", &combo), None);
     }
 
@@ -290,13 +369,13 @@ mod tests {
         let mut reg = KeymapRegistry::new();
         let combo = KeyCombo::parse("x");
         reg.bind(
-            "normal",
+            LEADER_LAYER,
             combo.clone(),
             ActionRef::Builtin(WmAction::ClosePane),
         );
-        assert!(reg.resolve_builtin("normal", &combo).is_some());
-        reg.unbind("normal", &combo);
-        assert!(reg.resolve_builtin("normal", &combo).is_none());
+        assert!(reg.resolve_builtin(LEADER_LAYER, &combo).is_some());
+        reg.unbind(LEADER_LAYER, &combo);
+        assert!(reg.resolve_builtin(LEADER_LAYER, &combo).is_none());
     }
 
     #[test]
@@ -305,14 +384,14 @@ mod tests {
         let old = KeyCombo::parse("h");
         let new = KeyCombo::parse("Left");
         reg.bind(
-            "normal",
+            LEADER_LAYER,
             old.clone(),
             ActionRef::Builtin(WmAction::FocusLeft),
         );
-        reg.rebind("normal", &old, new.clone());
-        assert!(reg.resolve_builtin("normal", &old).is_none());
+        reg.rebind(LEADER_LAYER, &old, new.clone());
+        assert!(reg.resolve_builtin(LEADER_LAYER, &old).is_none());
         assert_eq!(
-            reg.resolve_builtin("normal", &new),
+            reg.resolve_builtin(LEADER_LAYER, &new),
             Some(&WmAction::FocusLeft)
         );
     }
@@ -322,7 +401,7 @@ mod tests {
         let mut reg = KeymapRegistry::new();
         let combo = KeyCombo::parse("j");
         reg.bind(
-            "normal",
+            LEADER_LAYER,
             combo.clone(),
             ActionRef::Builtin(WmAction::FocusDown),
         );
@@ -332,7 +411,7 @@ mod tests {
             ActionRef::Builtin(WmAction::FocusUp),
         );
         assert_eq!(
-            reg.resolve_builtin("normal", &combo),
+            reg.resolve_builtin(LEADER_LAYER, &combo),
             Some(&WmAction::FocusDown)
         );
         assert_eq!(
@@ -354,12 +433,12 @@ mod tests {
             super_: false,
         };
         reg.bind(
-            "normal",
+            LEADER_LAYER,
             config_combo,
             ActionRef::Builtin(WmAction::SplitHorizontal),
         );
         assert_eq!(
-            reg.resolve_builtin("normal", &event_combo),
+            reg.resolve_builtin(LEADER_LAYER, &event_combo),
             Some(&WmAction::SplitHorizontal)
         );
     }
@@ -377,12 +456,12 @@ mod tests {
             super_: false,
         };
         reg.bind(
-            "normal",
+            LEADER_LAYER,
             config_combo,
             ActionRef::Builtin(WmAction::SwapPane),
         );
         assert_eq!(
-            reg.resolve_builtin("normal", &event_combo),
+            reg.resolve_builtin(LEADER_LAYER, &event_combo),
             Some(&WmAction::SwapPane)
         );
     }

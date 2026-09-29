@@ -53,6 +53,7 @@ pub mod scene;
 pub mod search;
 pub mod style;
 pub mod theme;
+pub mod tone;
 pub mod widgets;
 
 /// Geometry primitives, re-exported from `heca-core` so consumers of the public
@@ -97,6 +98,7 @@ pub use style::{
     Align, Direction, GridCell, Justify, Layout, Length, Spacing, Style, Track, Visual, WidgetSize,
 };
 pub use theme::{FrameStyle, GlowLevel, Intensity, Theme};
+pub use tone::Tone;
 pub use widgets::{
     ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button, ButtonVariant,
     Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame,
@@ -132,6 +134,7 @@ pub mod prelude {
         Align, Direction, GridCell, Justify, Length, Spacing, Track, WidgetSize,
     };
     pub use crate::theme::{FrameStyle, GlowLevel, Intensity, Theme};
+    pub use crate::tone::Tone;
     pub use crate::widgets::{
         ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button, ButtonGroup,
         ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container,

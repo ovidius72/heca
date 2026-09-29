@@ -23,6 +23,18 @@ use crate::chrome::ChromeConfig;
 use crate::input::WmAction;
 use heca_core::layout::PaneId;
 
+/// **A drop's action goes through the dispatcher**, like a click's.
+///
+/// Posted to the event loop, which runs it through the interaction policy and the follow-up every
+/// action gets (focus re-sync, redraw, refreshing what lists the session). A drop used to call the
+/// handler itself and then the follow-up by hand — the one place left that ran an action without
+/// the dispatcher, so it had to remember what the dispatcher does (F003/P082/T509).
+pub(crate) fn dispatch_drop(state: &AppState, source: InteractionSource, action: WmAction) {
+    crate::chrome::ChromeIntentEmitter::new(&state.event_proxy, source).fire(
+        crate::app::interaction::InteractionIntent::ActivateAction(action),
+    );
+}
+
 /// Handle cursor movement. Returns a `WmAction` if one should be dispatched
 /// (e.g. focus-follows-mouse triggered), or `None` for internal state updates.
 pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {

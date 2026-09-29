@@ -23,8 +23,9 @@ mod model_tests;
 #[cfg(test)]
 mod testing;
 
-use crate::actions::{ActionCategory, ActionMeta, ArgKind, ArgSpec};
+use crate::actions::{ActionCategory, ActionMeta};
 use crate::app::interaction::ActionPolicy;
+use crate::args::{ArgKind, ArgSpec};
 use crate::chrome::{
     BuildCx, ChromeDragItem, ContainerContribution, Contribution, RegionId, RegionSet, WidgetModel,
 };

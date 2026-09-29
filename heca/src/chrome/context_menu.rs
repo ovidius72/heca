@@ -287,7 +287,7 @@ pub(crate) fn item(id: &str, label: &str) -> DropdownItem {
 }
 
 /// An entry whose visual identity (`id` → icon/label) differs from what it runs. The `action` is
-/// the name [`build_action`](crate::input::build_action) resolves, and `args` are its arguments —
+/// the name [`resolve_action`](crate::input::resolve_action) resolves, and `args` are its arguments —
 /// the same pair a `config.toml` binding or an RPC command would supply.
 pub(crate) fn item_running(
     id: &str,
@@ -761,8 +761,7 @@ mod tests {
                     (k.clone(), s)
                 })
                 .collect();
-            let resolved = crate::input::build_action(&i.intent.action, &args).is_some()
-                || crate::input::action_from_name(&i.intent.action).is_some();
+            let resolved = crate::input::resolve_action(&i.intent.action, &args).is_some();
             assert!(
                 resolved,
                 "menu entry {:?} dispatches {:?}, which resolves to no action",
@@ -829,7 +828,8 @@ mod tests {
         assert_eq!(entry.id, "docker.restart");
         assert_eq!(entry.intent.action, "plugin.docker.restart");
         assert!(
-            crate::input::action_from_name(&entry.intent.action).is_none(),
+            crate::input::resolve_action(&entry.intent.action, &std::collections::HashMap::new())
+                .is_none(),
             "the plugin's action has no WmAction variant — which is exactly why an \
              Intent (a name) is what a menu entry carries"
         );

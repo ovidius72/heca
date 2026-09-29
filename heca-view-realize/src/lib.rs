@@ -570,8 +570,8 @@ fn prop_enum_name<T: serde::Serialize>(value: &T) -> Option<String> {
 /// A hint placement by the name serde gives [`ViewHintPlacement`] — `"top_center"`, `"center"`,
 /// `"center_right"`, `"top_right"`, `"top_left"`. An unknown name keeps the default.
 /// A keycap tone by the name serde gives [`ViewHintTone`].
-fn hint_tone(name: &str) -> Option<heca_grid_ui::widgets::HintTone> {
-    use heca_grid_ui::widgets::HintTone as T;
+fn hint_tone(name: &str) -> Option<heca_grid_ui::Tone> {
+    use heca_grid_ui::Tone as T;
     Some(match name {
         "accent" => T::Accent,
         "muted" => T::Muted,

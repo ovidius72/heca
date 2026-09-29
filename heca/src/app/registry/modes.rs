@@ -6,7 +6,7 @@ use super::binding::{Written, bind_with_conflict_tracking};
 use super::floors::assert_escape_floor;
 use super::names::action_ref_from_config;
 use crate::app::conflicts::Conflicts;
-use crate::keymap::{BindingIndex, KeyCombo, KeymapRegistry};
+use crate::keymap::{BindingIndex, KeyCombo, KeymapRegistry, WrittenKey};
 use std::collections::{BTreeMap, HashMap};
 
 /// The built-in mode keymaps that are **entered by focus rather than by a key**, so they never take
@@ -80,13 +80,7 @@ pub fn build_modes(
         // mode that looks entered and does nothing. So a trigger is refused even when a user
         // config supplies one.
         if !UNTRIGGERED_MODES.contains(&mode_cfg.name.as_str()) {
-            let trigger_trimmed = mode_cfg.trigger.trim();
-            let trigger_combo = if trigger_trimmed.starts_with("prefix+") {
-                let rest = trigger_trimmed.strip_prefix("prefix+").unwrap().trim();
-                KeyCombo::parse(rest)
-            } else {
-                KeyCombo::parse(trigger_trimmed)
-            };
+            let trigger_combo = WrittenKey::parse(&mode_cfg.trigger).combo;
             mode_triggers.insert(mode_cfg.name.clone(), (trigger_combo, mode_cfg.sticky));
         }
     }

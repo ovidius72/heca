@@ -248,10 +248,10 @@ impl DockFrame {
     /// existed. heca passes `Muted`: a fold is a structural control, not somewhere to navigate to.
     ///
     /// ```ignore
-    /// DockFrame::new("Docker").fold_hint_tone(HintTone::Muted)
+    /// DockFrame::new("Docker").fold_hint_tone(Tone::Muted)
     /// ```
     #[heca_grid_ui_macros::prop]
-    pub fn fold_hint_tone(mut self, tone: crate::widgets::HintTone) -> Self {
+    pub fn fold_hint_tone(mut self, tone: crate::Tone) -> Self {
         crate::component::area_slot(&mut self.base, TOGGLE_AREA)
             .expect("the title row always holds its toggle")
             .base_mut()

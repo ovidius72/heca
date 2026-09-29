@@ -54,7 +54,7 @@ impl RegionId {
 /// (`move-container-to-region workspaces right-sidebar`), config binding args
 /// (`args = { region = "right-sidebar" }`), and plugin intents. A short alias (`right`) is accepted
 /// everywhere the long form is, so the two surfaces can never drift apart into different spellings.
-impl crate::input::EnumArg for RegionId {
+impl crate::args::EnumArg for RegionId {
     const VALUES: &'static [&'static str] = &[
         "sidebar.left",
         "left-sidebar",

@@ -130,7 +130,7 @@ fn global_focus_goes_to_the_global_map_not_the_containers_own_layer() {
     let mut flat = KeymapRegistry::new();
     bind_global_focus(&mut flat, &global, &mut Conflicts::default(), &mut index);
     assert_eq!(
-        flat.resolve_builtin("normal", &KeyCombo::parse("d")),
+        flat.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("d")),
         // **`ToggleDock`, not `FocusDock`** — `global_focus` is press-again-to-leave, and that
         // toggle belongs to the binding rather than to the verb (F003/P082/T444). `FocusDock`
         // only focuses, so a click, an RPC call and the palette cannot release a dock by asking
@@ -171,14 +171,14 @@ fn an_id_aims_global_focus_at_one_placement() {
     );
 
     assert_eq!(
-        flat.resolve_builtin("normal", &KeyCombo::parse("Shift+d")),
+        flat.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Shift+d")),
         Some(&WmAction::ToggleDock {
             dock: Some("docker.right".to_string())
         }),
         "the narrowed entry names its placement",
     );
     assert_eq!(
-        flat.resolve_builtin("normal", &KeyCombo::parse("d")),
+        flat.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("d")),
         Some(&WmAction::ToggleDock {
             dock: Some("docker".to_string())
         }),

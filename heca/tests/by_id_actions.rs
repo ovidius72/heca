@@ -16,11 +16,7 @@
 //! `&mut AppState`, which needs a window, so there is no headless call to make. It reads the source
 //! the way `pointer_funnel.rs` reads the event loop.
 
-use std::path::{Path, PathBuf};
-
-fn handlers_rs() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("src/handlers.rs")
-}
+mod common;
 
 /// The body of `fn <name>(`, up to the closing brace at column 0.
 fn fn_body(src: &str, name: &str) -> Option<String> {
@@ -32,7 +28,7 @@ fn fn_body(src: &str, name: &str) -> Option<String> {
 
 #[test]
 fn closing_a_pane_by_id_searches_every_workspace() {
-    let src = std::fs::read_to_string(handlers_rs()).expect("read the handlers");
+    let src = common::module_source("handlers");
     let body = fn_body(&src, "handle_close_pane_by_id").expect("the handler is still there");
 
     assert!(
@@ -56,7 +52,7 @@ fn closing_a_pane_by_id_searches_every_workspace() {
 /// (searched the active workspace). The user-facing one was the poorer, and nothing failed.
 #[test]
 fn there_is_one_implementation_of_closing_a_pane_by_id() {
-    let src = std::fs::read_to_string(handlers_rs()).expect("read the handlers");
+    let src = common::module_source("handlers");
     let body = fn_body(&src, "handle_close_pane_by_id").expect("the handler is still there");
 
     assert!(

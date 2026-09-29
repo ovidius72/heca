@@ -1212,6 +1212,7 @@ dependencies = [
  "raw-window-handle",
  "serde",
  "serde_json",
+ "strum",
  "wgpu",
  "window-vibrancy",
  "winit",

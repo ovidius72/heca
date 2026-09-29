@@ -13,6 +13,8 @@
 //! A **lint**, because there is nothing to unit-test: the defect is a string in a Markdown file.
 //! Same shape as `by_id_actions.rs` and `pick_refusal.rs`.
 
+mod common;
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -25,7 +27,7 @@ fn repo(rel: &str) -> PathBuf {
 
 /// Every action name the registry declares.
 fn known_actions() -> HashSet<String> {
-    let src = std::fs::read_to_string(repo("heca/src/actions.rs")).expect("read the catalog");
+    let src = common::module_source("actions");
     src.lines()
         .filter_map(|l| l.trim().strip_prefix("name: \""))
         .filter_map(|l| l.split('"').next())

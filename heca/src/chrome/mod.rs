@@ -127,7 +127,6 @@ pub use contribution::{
 #[allow(unused_imports)]
 pub use host::{MountedContribution, MoveError, RegionHost};
 
-use heca_core::layout::ColumnWidth;
 use heca_core::layout::types::{Point, Rectangle, Size};
 use std::time::Duration;
 
@@ -148,15 +147,6 @@ pub fn prefix_timeout(state: &crate::app_state::AppState) -> Duration {
 }
 /// Target frame interval (~60 FPS).
 pub const FRAME_INTERVAL: Duration = Duration::from_millis(16);
-
-// ── Layout defaults ──
-
-/// Default width proportion for newly created columns.
-pub(crate) const DEFAULT_COLUMN_PROPORTION: f64 = 0.5;
-/// Helper to get the default ColumnWidth for new columns.
-pub const fn default_column_width() -> ColumnWidth {
-    ColumnWidth::Proportion(DEFAULT_COLUMN_PROPORTION)
-}
 
 // ── Pane name overlay ──
 
@@ -2021,7 +2011,6 @@ mod tests {
                 heca_core::layout::Pane::new(PaneId(10), "editor"),
                 None,
                 true,
-                ColumnWidth::Proportion(0.5),
                 heca_core::layout::ColumnId(10),
             );
             ws.floating_panes
@@ -2103,7 +2092,6 @@ mod tests {
                 heca_core::layout::Pane::new(PaneId(10), "editor"),
                 None,
                 true,
-                ColumnWidth::Proportion(0.5),
                 heca_core::layout::ColumnId(10),
             );
         }

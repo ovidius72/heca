@@ -727,9 +727,26 @@ of the theme* with the accent swapped. That forces a separate paint call per sub
 stopped any container from painting its own children — the reason a column could not own the panes
 inside it. Inherited instead, painting is one walk for everything.
 
-Not to be confused with `.hint_tone(HintTone)`, which declares what a **keycap means**
+Not to be confused with `.hint_tone(Tone)`, which declares what a **keycap means**
 (`accent`/`muted`/`warning`/`success`/`danger`) and lets the theme pick its colour, or
 `.hint_color(Color)`, which sets a keycap's colour outright.
+
+<a id="content-tone"></a>
+#### The colour of the text inside — `content_tone`
+
+`.content_tone(Tone)` — on **any** widget, from `ComponentExt`. CSS's inherited `color`, named by
+meaning (`Tone::Accent`/`Muted`/`Warning`/`Success`/`Danger`) because a widget has no theme until
+paint:
+
+```rust
+Flex::column().content_tone(Tone::Danger)
+    .child(Label::new("This cannot be undone."))   // …danger-coloured, without being told
+```
+
+Every text or glyph inside without a colour of its own (`Label`, `Icon`) follows it; one with its
+own `.color(..)` keeps it, and a control that colours its own content (a `Button`, a selected
+`Choice`) keeps its own. Applied to the subtree by `paint_child`, beside the accent, so nothing
+opts in. `Dialog::danger(true)` is built on it.
 
 <a id="componentext--what-every-widget-gets"></a>
 **`ComponentExt`** — **everything every component gets**: handlers (what happens to it), `key`
@@ -843,7 +860,7 @@ its letter**, and the keycap is drawn whole rather than cut, so you can still re
 | `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays). On **every** widget — it was a `KeyHint` builder before |
 | `.hintable(false)` | never gets a letter, however actionable it is — **from any picker** |
 | `.hint_scope(["close"])` | gets a letter only from a picker that asked for `"close"`, and **drops out of the ordinary one**. See [Two verbs over one tree](#two-verbs-over-one-tree) |
-| `.hint_tone(HintTone::Muted)` | **what the letter means**, coloured by the theme. A fold or a close is `Muted`; a place to go is `Accent`. Use this, not `hint_color`, inside a widget — it has no theme at build time |
+| `.hint_tone(Tone::Muted)` | **what the letter means**, coloured by the theme. A fold or a close is `Muted`; a place to go is `Accent`. Use this, not `hint_color`, inside a widget — it has no theme at build time |
 
 > **Every picker asks this same question** — the global `prefix+/` and a surface's own
 > [`KeyHintGroup`](#keyhintgroup) alike. They had drifted twice. First about *what a target is*: the
@@ -5373,7 +5390,7 @@ the dialog) and `Activate` commits its row.
 
 - **Construct**: `Dialog::new(title)`, then `.body(impl Component)` and `.action(impl Component)`
   (a wired `Button`), in that order. Buttons sit in a right-aligned row in call order.
-- **Builders**: `.dismissible(bool)` (default `true`; `false` = forced-decision — `Dismiss`/scrim
+- **Builders**: `.danger(bool)` (a destructive question — the body's text takes the theme's danger colour; title and buttons keep theirs), `.dismissible(bool)` (default `true`; `false` = forced-decision — `Dismiss`/scrim
   swallowed without dismissing), `.on_dismiss(impl Fn())` (fired on `WidgetIntent::Dismiss` / scrim),
   `.open(bool)`
   (focuses the first focusable — a text field body if present, so the user types immediately;
@@ -5885,9 +5902,10 @@ This reaches a **widget's own colour builders** too, not only the style halves: 
 The host resolves a token to hex before the value crosses into the library, so `heca-grid-ui` still
 knows nothing about themes and `Color::from_str` still only knows hex.
 
-**The first override in heca** is the destructive confirm prompt: its message ("This action cannot
-be undone.") is written with `color: "danger"` — the token, not a literal — so it follows the active
-theme. See `open_confirm` in `heca/src/handlers.rs`.
+A colour that follows from what a widget *is* is not an override at the call site: a destructive
+`Dialog` says its message in the danger colour because of `Dialog::danger(true)`, which puts
+`content_tone(Tone::Danger)` on its body — CSS's inherited `color`, by meaning. The confirm prompt
+just asks for a destructive dialog (`ModalSpec::danger`).
 
 Values read the way you would write them:
 
@@ -6304,7 +6322,7 @@ let handle = register_dynamic(
             return;
         };
         restart_container(state, container);
-        state.needs_redraw = true;
+        // No redraw here: the dispatcher asks for one after every action.
     })),
 );
 
@@ -6395,28 +6413,13 @@ false` disables the pane-close prompt.
 > rendered opaquely, never dropped. Prefer `Dispatch` (portable, testable); reach for `Callback`
 > only when the logic genuinely cannot be a named action.
 
-#### `register(ActionSpec)` — the native one-call form
-
-For a native action that *has* a `WmAction` variant (in-tree work, not a plugin), `register` wires the
-handler and the metadata together in one call — the counterpart to `register_dynamic`:
-
-```rust
-use crate::actions::{register, ActionSpec};
-
-register(registry, catalog, ActionSpec {
-    action: WmAction::MyThing,     // dispatched by discriminant (parameterized variants share one)
-    handler: handle_my_thing,      // fn(&mut AppState, &WmAction)
-    meta: my_meta,                 // label / icon / policy / confirm — the same ActionMeta
-});
-```
-
 #### Discovering actions at runtime — introspection
 
 The catalog is queryable, so a tool can ask a *running* heca (with whatever plugins are mounted) what
 it can do. Two RPC commands, both returning JSON:
 
 ```
-list-actions              → [ {name,label,description,category,default_binding,policy,args,confirm}, … ]
+list-actions              → [ {name,label,description,category,policy,owner,args,confirm}, … ]
 describe-action <name>    → one such object, or an error if the name is unknown
 ```
 

@@ -452,7 +452,7 @@ are already 16 and they are being deleted.
 
 ### 2. Behavior/keys → register through the registries. NEVER hardcode
 
-- **Every action goes through `ActionRegistry`** (`heca/src/actions.rs`): `registry.register(...)` +
+- **Every action goes through `ActionRegistry`** (`heca/src/actions/registry.rs`): `registry.register(...)` +
   `registry.execute(...)`. **Registry bypasses are bugs.** No direct state mutation from input code.
 - **Every keybinding goes through `KeymapRegistry`** (`heca/src/keymap.rs`) and is **configurable in
   `config.toml`** — never hardcode a key→behavior mapping in handlers. heca is tmux-like: bindings
@@ -633,20 +633,20 @@ Keyboard Input → KeyCombo → KeymapRegistry → WmAction → ActionRegistry �
          └── NamedKey mapping (Enter, Tab, ArrowLeft, ...)
 ```
 
-### ActionRegistry (`heca/src/actions.rs`)
+### ActionRegistry (`heca/src/actions/registry.rs`)
 
 The central dispatch for all WM actions:
 
 ```rust
 pub struct ActionRegistry {
-    handlers: HashMap<Discriminant<WmAction>, ActionHandler>,
+    handlers: HashMap<WmActionKind, ActionHandler>,
 }
 
 type ActionHandler = fn(&mut AppState, &WmAction);
 ```
 
-- **Register** a handler: `registry.register(&WmAction::FocusPane { pane_id: 0 }, handle_focus_pane)`
-- **Execute** an action: `registry.execute(&action, state)` — routes to the correct handler by discriminant
+- **Register** a handler by the action's kind — no sample value: `registry.register(WmActionKind::FocusPane, handle_focus_pane)`. `WmActionKind` is derived from `WmAction` (one per variant, fields dropped).
+- **Execute** an action: `registry.execute(&action, state)` — routes to the correct handler by `action.kind()`
 - **Parameterized variants** share one handler — the handler destructures the action to get arguments
 
 **Registry bypasses are bugs.** All WM state changes must go through `registry.execute()`. Direct calls like `focus_pane_by_id(state, id)` are only allowed inside handlers (as part of their implementation).
@@ -665,7 +665,7 @@ pub struct KeymapRegistry {
 - **Resolve**: `keymap.resolve("normal", &combo)` → `Option<&WmAction>`
 - **Modes**: `"normal"` (prefix bindings), `"global"` (direct bindings), `"sidebar"` (sidebar nav), custom mode names
 
-### WmAction Enum (`heca/src/input.rs`)
+### WmAction Enum (`heca/src/input/action.rs`)
 
 ```rust
 pub enum WmAction {
@@ -688,7 +688,6 @@ pub enum WmAction {
     ClosePaneById { pane_id: u64 },
     RenameTarget { pane_id: u64, name: String },
     SpawnCommand { command: String },
-    EnterMode { name: String },
 }
 ```
 
@@ -769,7 +768,7 @@ in.
 | Policy | Tiled | Floating | Examples |
 | -------- | ------- | ---------- | ---------- |
 | `Global` | Allow | **Allow** | `ReloadConfig` — true app-level, no layout impact, must work even when floating |
-| `AlwaysAllowed` | Allow | **Block** (current sources) | `CommandPalette`, `SpawnCommand`, `EnterMode` — app-level but layout-affecting |
+| `AlwaysAllowed` | Allow | **Block** (current sources) | `CommandPalette`, `SpawnCommand` — app-level but layout-affecting |
 | `TiledOnly` | Allow | Block | `Focus*`, `Split*`, `ZoomColumn`, `Resize*`, `Swap*`, `Move*`, `Sidebar*`, `PaneSelect/Swap/Take`, `FloatAt`, `RenameColumn`, `DeleteColumn`, collapse/expand workspace+column |
 | `FocusedPaneLocal` | Allow | **Allow** | `Float`, `ClosePane`, `ClosePaneById`, `RenamePane`, `RenameTarget`, `Selection*` (`EnterSelectionMode`, `Selection*`, `ClearSelection`, `CopySelection`, `PasteClipboard`, `BeginSelection`, `ToggleSelectionEndpoint`) — operate on the focused pane in either domain |
 | `WorkspaceLevel` | Allow | Block | `WorkspaceNext/Prev`, `FocusWorkspace`, `CreateWorkspace`, `RenameWorkspace`, `DeleteWorkspace` |
@@ -788,7 +787,6 @@ in.
 2. If you introduce a **new `ActionPolicy` variant**, handle it in the exhaustive `match policy` in `route_action()`.
 3. Add a spot-check assertion (`assert_eq!(action_policy(&WmAction::X), ActionPolicy::Y)`) and routing tests (tiled allows it, floating blocks/allows it as appropriate).
 
-**Do NOT** conflate `ActionPolicy` (interaction.rs — Allow/Block per focus domain) with `action_priority()` (input.rs — keybinding resolution priority). They are unrelated systems.
 
 See `.planning/interaction-policy-plan.md` for the intent-routing roadmap (Phase B/C).
 
@@ -1510,10 +1508,11 @@ myvim/
 │   ├── src/
 │   │   ├── main.rs        ← HecaApp, ApplicationHandler, render(), registry setup
 │   │   ├── app_state.rs   ← AppState, InputMode, DragState, SidebarState
-│   │   ├── input.rs       ← WmAction enum, action_from_name(), action_priority()
+│   │   ├── input/         ← action.rs (WmAction + its derived WmActionKind), names.rs (action_from_name), build.rs (build_action), vocabulary.rs (argument word lists)
 │   │   ├── keymap.rs      ← KeymapRegistry, KeyCombo, event_combo_matches()
-│   │   ├── actions.rs     ← ActionRegistry, ActionDescriptor, ActionCategory
-│   │   ├── handlers.rs    ← All action handlers (handle_focus_pane, handle_swap, etc.)
+│   │   ├── args.rs        ← The argument model (ArgDescriptor, ArgSpec, check_args) — actions and the CLI share it
+│   │   ├── actions/       ← registry.rs (what runs), catalog.rs (what exists), confirm.rs, builtins/ (one file per category)
+│   │   ├── handlers/      ← All action handlers, one file per thing they act on (navigation, move_swap, docks, …)
 │   │   ├── sidebar.rs     ← Current workspace-tree container façade (`model`, `hit_test`, `render`, `tests`); future built-in `WorkspacesContainer`
 │   │   └── chrome.rs      ← Current chrome config; future pluggable chrome host will generalize left/right/top/bottom regions
 │   └── Cargo.toml
@@ -1652,7 +1651,6 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 
 - `WmAction` enum: one variant per action. Add new variants as needed.
 - `action_from_name()`: maps config string names to actions. Keep in sync.
-- `action_priority()`: **do NOT use `_ =>` catch-all** — explicitly match every variant.
 - `resolve()`: case-insensitive key matching, modifier-exact. Physical key fallback for macOS.
 - **All WM state changes go through `registry.execute()`** — no direct `focus_pane_by_id()` calls outside handlers.
 - **No hardcoded feature keys in input handlers.** Any user-triggerable keyboard behavior must go through:
@@ -1672,32 +1670,31 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 
 ### Adding New Actions
 
-1. Add variant to `WmAction` in `heca/src/input.rs`
-2. Add string mapping in `action_from_name()` — **only if the bare name says everything.** An action
+1. Add variant to `WmAction` in `heca/src/input/action.rs`
+2. Add string mapping in `action_from_name()` (`heca/src/input/names.rs`) — **only if the bare name says everything.** An action
    that needs a target does *not* belong there: it is built from its arguments in `build_action()`.
    Putting it in `action_from_name()` with placeholder fields means the name silently resolves to
    index 0, which is how a bare `delete_workspace` used to delete workspace 0.
-3. Add builder support in `build_action()` when the action is parameterized
-4. Add priority in `action_priority()`
-5. Create handler in `heca/src/handlers.rs`
-6. Register in `build_registry()` in `heca/src/app/registry/actions.rs`
-7. Add default binding in `keybindings.default.toml` (the embedded default keymap). An action with a
+3. Add builder support in `build_action()` (`heca/src/input/build.rs`) when the action is parameterized
+4. Create handler in the matching file under `heca/src/handlers/` (the folder's `mod.rs` re-exports it)
+5. Register in `build_registry()` in `heca/src/app/registry/actions.rs`
+6. Add default binding in `keybindings.default.toml` (the embedded default keymap). An action with a
    **required argument gets none** — a key cannot supply a pane id.
-8. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
-8b. **Declare its arguments** in that descriptor's `args` — name, kind, required, and for a
+7. Add its descriptor to the file for its category under `heca/src/actions/builtins/` (the list order is the palette order)
+7b. **Declare its arguments** in that descriptor's `args` — name, kind, required, and for a
    vocabulary argument the list from `EnumArg::VALUES` beside its own parser, never a copy. The field
    has no default, so you cannot skip the question; `args: &[]` means it genuinely takes none.
    This is what lets heca say *which* argument a caller got wrong instead of the call vanishing —
    and the tests `every_declared_argument_is_read_by_the_action`,
    `every_required_argument_is_actually_required` and `every_optional_argument_is_actually_optional`
    fail if the declaration and the `build_action()` arm disagree.
-9. Add RPC parser support in `heca/src/rpc.rs`
-9b. **Classify the interaction policy** in `action_policy()` (`heca/src/app/interaction.rs`) — the match is exhaustive, so a new variant **won't compile** until you do. (`Global` = always allowed incl. floating; `AlwaysAllowed` is a misnomer — blocked when floating. See § Interaction Policy.)
-9c. **If it's destructive, declare a confirm** as data on its `ActionMeta.confirm` (a `ConfirmSpec`), not at the call site — the central gate then confirms it on *every* surface. The toggle key is `ConfirmSpec.config_name` — a separate field, because one spec can govern several `WmAction` variants, though every built-in uses its own action name; users toggle it under `[confirm]`.
-10. Make sure the capability is not trapped behind one surface: route it through the action model so it can be reached from mouse/UI, keyboard/action dispatch, and RPC whenever appropriate. Metadata is discoverable via RPC introspection (`list-actions` / `describe-action <name>`, `ActionCatalog::describe_all/describe`).
-11. Document examples in `README.md` and `keybindings.default.toml`
+8. Nothing to add for RPC: `heca/src/rpc.rs` looks the name up in the `ActionCatalog`, so a described action is reachable by its name the moment it exists. Never add a per-command arm there.
+8b. **Classify the interaction policy** in `action_policy()` (`heca/src/app/interaction.rs`) — the match is exhaustive, so a new variant **won't compile** until you do. (`Global` = always allowed incl. floating; `AlwaysAllowed` is a misnomer — blocked when floating. See § Interaction Policy.)
+8c. **If it's destructive, declare a confirm** as data on its `ActionMeta.confirm` (a `ConfirmSpec`), not at the call site — the central gate then confirms it on *every* surface. The toggle key is `ConfirmSpec.config_name` — a separate field, because one spec can govern several `WmAction` variants, though every built-in uses its own action name; users toggle it under `[confirm]`.
+9. Make sure the capability is not trapped behind one surface: route it through the action model so it can be reached from mouse/UI, keyboard/action dispatch, and RPC whenever appropriate. Metadata is discoverable via RPC introspection (`list-actions` / `describe-action <name>`, `ActionCatalog::describe_all/describe`).
+10. Document examples in `README.md` and `keybindings.default.toml`
 
-> A **name-keyed** action (contributed by a provider/plugin, no `WmAction` variant) skips steps 1–4/8: register it at runtime with `register_dynamic(registry, catalog, meta, handler)`; a native built-in can use `register(ActionSpec { action, handler, meta })` to wire handler + metadata in one call. Full guide with examples: `docs/widgets.md` → "Registering a custom (name-keyed) action".
+> A **name-keyed** action (contributed by a provider/plugin, no `WmAction` variant) skips steps 1–3 and 7: register it at runtime with `register_dynamic(registry, catalog, meta, handler)`. Full guide with examples: `docs/widgets.md` → "Registering a custom (name-keyed) action".
 
 For planned richer actions like `zoom_column`, `float_active_at`, and `spawn_pane`, prefer domain-friendly arguments over ad hoc strings. Example target shape:
 
@@ -1855,7 +1852,7 @@ See `niri-compatibility-review.md` for full details. Key issues:
 
 1. Read `.planning/research/ARCHITECTURE.md` and `.planning/PROJECT.md` for context first.
 2. Read `.agents/skills/niri/SKILL.md` when working on layout features.
-3. Check `heca/src/input.rs` and `heca-config/src/theme.rs` for keybinding concerns.
+3. Check `heca/src/input/` and `heca-config/src/theme.rs` for keybinding concerns.
 4. Check `heca/src/main.rs` for registry setup and bypasses.
 5. Run `cargo check` before and after changes — the project must compile.
 
@@ -1864,7 +1861,7 @@ See `niri-compatibility-review.md` for full details. Key issues:
 1. Use the NIRI layout engine, not BSP (`pane.rs` is dead reference code).
 2. Always use `Rectangle` from `layout/types.rs`, not `Rect` from `types.rs`.
 3. **Every WM action goes through `registry.execute()`** — no direct function calls in event handlers.
-4. Add new keybindings to both `keybindings.default.toml` (defaults) and `heca/src/input.rs` (action enum + parser + priority); every keybinding and theme variable must be configurable from `config.toml`/`keybindings.toml`.
+4. Add new keybindings to both `keybindings.default.toml` (defaults) and `heca/src/input/` (the action enum and its name / argument builders); every keybinding and theme variable must be configurable from `config.toml`/`keybindings.toml`.
 5. Test prefix mode: verify both plain key and Ctrl-modified key bindings work.
 6. Do NOT remove or refactor layout code without consulting the NIRI skill.
 7. **NEVER add `#[allow(dead_code)]` without a clear reason.** Remove dead code instead. If a lint must be suppressed, add a `//` comment explaining why right above the attribute.

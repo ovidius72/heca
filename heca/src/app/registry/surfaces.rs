@@ -3,7 +3,7 @@
 //!
 //! Owns nothing about the global map, modes or floors.
 
-use super::binding::{Written, bind_with_conflict_tracking, unbind_and_deindex};
+use super::binding::{Written, bind_flat, bind_with_conflict_tracking, unbind_and_deindex};
 use super::global::merge_by;
 use super::names::{action_ref_from_config, component_action};
 use crate::app::conflicts::Conflicts;
@@ -73,11 +73,7 @@ pub(super) fn bind_global_focus(
             layer: &entry.source,
             key: &entry.key,
         };
-        let (mode, combo) = match entry.key.strip_prefix("prefix+") {
-            Some(rest) => ("normal", KeyCombo::parse(rest.trim())),
-            None => ("global", KeyCombo::parse(&entry.key)),
-        };
-        bind_with_conflict_tracking(flat, mode, combo, action, written, conflicts, index);
+        bind_flat(flat, action, written, conflicts, index);
     }
 }
 

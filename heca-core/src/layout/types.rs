@@ -143,6 +143,16 @@ impl Rectangle {
         Self::new(Point::default(), size)
     }
 
+    /// This rectangle scaled to `fraction` of each side, keeping the same centre.
+    pub fn centred_fraction(&self, fraction: f64) -> Self {
+        let size = Size::new(self.size.w * fraction, self.size.h * fraction);
+        let loc = Point::new(
+            self.loc.x + (self.size.w - size.w) / 2.0,
+            self.loc.y + (self.size.h - size.h) / 2.0,
+        );
+        Self::new(loc, size)
+    }
+
     pub fn contains(&self, point: Point) -> bool {
         self.loc.x <= point.x
             && point.x < self.loc.x + self.size.w
@@ -173,8 +183,13 @@ pub struct LayoutOptions {
     pub center_focused_column: CenterFocusedColumn,
     /// Center single column even if it fits.
     pub always_center_single_column: bool,
-    /// Default width for new columns.
-    pub default_column_width: Option<ColumnWidth>,
+    /// The width every new column gets — the one place it is decided. heca-core builds new
+    /// columns at it ([`ScrollingSpace::new_column`](super::scrolling::ScrollingSpace::new_column)),
+    /// so no caller chooses a width of its own.
+    pub default_column_width: ColumnWidth,
+    /// How much of the working area a pane takes when it floats with nowhere given — a fraction of
+    /// each side, centred. `0.95` leaves a margin that shows it is floating, not tiled.
+    pub float_size: f64,
     /// The scale the exposé **opens from**, relative to its own map size — it animates out of this
     /// and back into it on the way out. `1.0` means no animation.
     ///
@@ -196,7 +211,8 @@ impl Default for LayoutOptions {
             gaps: 8.0,
             center_focused_column: CenterFocusedColumn::Never,
             always_center_single_column: false,
-            default_column_width: Some(ColumnWidth::Proportion(0.5)),
+            default_column_width: ColumnWidth::Proportion(0.5),
+            float_size: 0.95,
             // niri's defaults: zoom 0.5, gap a tenth of a screen.
             overview_zoom_from: 0.8,
             overview_gap: 0.1,

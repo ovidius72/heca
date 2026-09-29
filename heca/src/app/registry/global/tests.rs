@@ -60,7 +60,7 @@ fn a_users_command_binding_does_not_delete_the_default_ones() {
 fn every_default_binding_still_resolves_to_a_builtin_at_load() {
     let config = heca_config::theme::Config::default();
     let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
-    for mode in ["normal", "global"] {
+    for mode in [crate::keymap::LEADER_LAYER, crate::keymap::DIRECT_LAYER] {
         let Some(bindings) = keymap.bindings_in_mode(mode) else {
             continue;
         };
@@ -81,19 +81,25 @@ fn default_ctrl_k_binding_stays_swap_up() {
     let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+k")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Ctrl+k")),
         Some(&WmAction::SwapUp)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+j")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Ctrl+j")),
         Some(&WmAction::SwapDown)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+k")),
+        keymap.resolve_builtin(
+            crate::keymap::LEADER_LAYER,
+            &KeyCombo::parse("Ctrl+Shift+k")
+        ),
         Some(&WmAction::MoveColumnUp)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+j")),
+        keymap.resolve_builtin(
+            crate::keymap::LEADER_LAYER,
+            &KeyCombo::parse("Ctrl+Shift+j")
+        ),
         Some(&WmAction::MoveColumnDown)
     );
 }
@@ -106,19 +112,19 @@ fn default_font_zoom_bindings_resolve_without_collision() {
 
     // Global (app-wide) branch: prefix+Ctrl+= / - / 0.
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+=")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Ctrl+=")),
         Some(&WmAction::AppFontZoom {
             step: FontZoomStep::In
         })
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+-")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Ctrl+-")),
         Some(&WmAction::AppFontZoom {
             step: FontZoomStep::Out
         })
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+0")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Ctrl+0")),
         Some(&WmAction::AppFontZoom {
             step: FontZoomStep::Reset
         })
@@ -128,21 +134,30 @@ fn default_font_zoom_bindings_resolve_without_collision() {
     // dispatch). Ctrl+Shift is used instead of Alt because macOS rewrites the
     // character under the Option key, so Alt+= would never match.
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+=")),
+        keymap.resolve_builtin(
+            crate::keymap::LEADER_LAYER,
+            &KeyCombo::parse("Ctrl+Shift+=")
+        ),
         Some(&WmAction::PaneTerminalFontZoom {
             pane_id: None,
             step: FontZoomStep::In
         })
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+-")),
+        keymap.resolve_builtin(
+            crate::keymap::LEADER_LAYER,
+            &KeyCombo::parse("Ctrl+Shift+-")
+        ),
         Some(&WmAction::PaneTerminalFontZoom {
             pane_id: None,
             step: FontZoomStep::Out
         })
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+0")),
+        keymap.resolve_builtin(
+            crate::keymap::LEADER_LAYER,
+            &KeyCombo::parse("Ctrl+Shift+0")
+        ),
         Some(&WmAction::PaneTerminalFontZoom {
             pane_id: None,
             step: FontZoomStep::Reset
@@ -152,20 +167,23 @@ fn default_font_zoom_bindings_resolve_without_collision() {
     // No collision: the bare `=`/`-` (resize) and Shift+`=` (pane height) keys
     // keep their original actions — the Ctrl / Ctrl+Shift variants are distinct.
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("=")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("=")),
         Some(&WmAction::ResizeIncrease)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("-")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("-")),
         Some(&WmAction::ResizeDecrease)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Shift+=")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Shift+=")),
         Some(&WmAction::PaneHeightIncrease)
     );
     // The other Ctrl+Shift bindings (move column up/down) keep their actions.
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+k")),
+        keymap.resolve_builtin(
+            crate::keymap::LEADER_LAYER,
+            &KeyCombo::parse("Ctrl+Shift+k")
+        ),
         Some(&WmAction::MoveColumnUp)
     );
 }
@@ -176,19 +194,19 @@ fn default_workspace_aliases_include_ctrl_p_and_ctrl_n() {
     let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("u")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("u")),
         Some(&WmAction::WorkspacePrev)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("d")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("d")),
         Some(&WmAction::WorkspaceNext)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+p")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Ctrl+p")),
         Some(&WmAction::WorkspacePrev)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+n")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Ctrl+n")),
         Some(&WmAction::WorkspaceNext)
     );
 }
@@ -199,11 +217,11 @@ fn default_sidebar_global_collapse_bindings_exist() {
     let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("(")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("(")),
         Some(&WmAction::ToggleCurrentColumnCollapsed)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("<")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("<")),
         Some(&WmAction::ToggleCurrentWorkspaceCollapsed)
     );
 }
@@ -214,15 +232,15 @@ fn default_pane_navigation_and_palette_bindings_are_separate() {
     let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("[")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("[")),
         Some(&WmAction::PrevPane)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("]")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("]")),
         Some(&WmAction::NextPane)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("p")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("p")),
         Some(&WmAction::CommandPalette {
             mode: None,
             query: None
@@ -236,21 +254,21 @@ fn default_selection_bindings_resolve() {
     let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("s")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("s")),
         Some(&WmAction::EnterSelectionMode)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("Shift+s")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Shift+s")),
         Some(&WmAction::ClearSelection)
     );
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("y")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("y")),
         Some(&WmAction::CopySelection)
     );
     // paste_clipboard is intentionally not given a default flat binding
     // to avoid colliding with established keys; users bind it in config.
     assert_eq!(
-        keymap.resolve_builtin("normal", &KeyCombo::parse("p")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("p")),
         Some(&WmAction::CommandPalette {
             mode: None,
             query: None

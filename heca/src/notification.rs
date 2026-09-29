@@ -336,7 +336,7 @@ impl NotificationSeverity {
     }
 }
 
-impl crate::input::EnumArg for NotificationSeverity {
+impl crate::args::EnumArg for NotificationSeverity {
     const VALUES: &'static [&'static str] = &["info", "success", "warning", "danger", "error"];
 }
 
@@ -1815,8 +1815,9 @@ pub fn register_notify_action(
     registry: &mut crate::actions::ActionRegistry,
     catalog: &mut crate::actions::ActionCatalog,
 ) -> Result<crate::actions::ActionHandle, crate::actions::DuplicateAction> {
-    use crate::actions::{ActionMeta, ArgKind, ArgSpec};
-    use crate::input::EnumArg;
+    use crate::actions::ActionMeta;
+    use crate::args::EnumArg;
+    use crate::args::{ArgKind, ArgSpec};
 
     crate::actions::register_dynamic(
         registry,

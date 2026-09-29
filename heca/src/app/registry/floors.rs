@@ -167,7 +167,9 @@ mod tests {
         );
 
         assert_eq!(
-            keymaps.flat.resolve("global", &KeyCombo::parse("Escape")),
+            keymaps
+                .flat
+                .resolve(crate::keymap::DIRECT_LAYER, &KeyCombo::parse("Escape")),
             None,
             "Escape belongs to the surface that holds the keyboard, never to the whole app",
         );
@@ -181,7 +183,7 @@ mod tests {
             assert_eq!(
                 keymaps
                     .flat
-                    .resolve_builtin("global", &KeyCombo::parse(key)),
+                    .resolve_builtin(crate::keymap::DIRECT_LAYER, &KeyCombo::parse(key)),
                 None,
                 "{key} belongs to the program in the pane, not to the whole app",
             );

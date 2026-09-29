@@ -3,7 +3,7 @@
 //! Owns resolving a binding's action name (and its `args`) at load, qualifying a surface's short
 //! names, and reporting a binding's argument mistakes. Owns nothing about keys, layers or clashes.
 
-use crate::input::{action_from_name, build_action};
+use crate::input::resolve_action;
 use crate::keymap::ActionRef;
 use std::collections::HashMap;
 
@@ -26,11 +26,8 @@ use std::collections::HashMap;
 /// without a word in a release build.
 pub(super) fn action_ref_from_config(name: &str, args: &HashMap<String, String>) -> ActionRef {
     log_arg_problems(name, args);
-    if let Some(built) = build_action(name, args) {
+    if let Some(built) = resolve_action(name, args) {
         return ActionRef::Builtin(built);
-    }
-    if let Some(unit) = action_from_name(name) {
-        return ActionRef::Builtin(unit);
     }
     let mut intent = crate::chrome::Intent::new(name);
     for (k, v) in args {
@@ -94,7 +91,7 @@ pub(crate) fn surface_action_id(
 /// arguments the map's own cards supply (Antonio, driving, 2026-08-12). A warning about a name the
 /// loader rejected is worse than no warning, because it sends the user to fix a line that is right.
 pub(super) fn resolves_as_builtin(name: &str, args: &HashMap<String, String>) -> bool {
-    build_action(name, args).is_some() || action_from_name(name).is_some()
+    resolve_action(name, args).is_some()
 }
 
 /// What is wrong with a binding's `args` table, judged against what the action declares it takes.
@@ -104,9 +101,9 @@ pub(super) fn resolves_as_builtin(name: &str, args: &HashMap<String, String>) ->
 pub(crate) fn binding_arg_problems(
     name: &str,
     args: &HashMap<String, String>,
-) -> Vec<crate::actions::ArgProblem> {
+) -> Vec<crate::args::ArgProblem> {
     match crate::actions::builtin_args(name) {
-        Some(specs) => crate::actions::check_args(&specs, args),
+        Some(specs) => crate::args::check_args(&specs, args),
         None => Vec::new(),
     }
 }
@@ -124,7 +121,7 @@ pub(super) fn log_arg_problems(name: &str, args: &HashMap<String, String>) {
     }
     if problems
         .iter()
-        .any(|p| matches!(p, crate::actions::ArgProblem::Missing { .. }))
+        .any(|p| matches!(p, crate::args::ArgProblem::Missing { .. }))
     {
         eprintln!("[heca] binding '{name}' cannot be built and will do nothing when pressed");
     }
@@ -202,7 +199,7 @@ mod tests {
     /// of being left for the user to discover by pressing a key that does nothing.
     #[test]
     fn a_bindings_argument_mistakes_are_reported_at_load() {
-        use crate::actions::ArgProblem;
+        use crate::args::ArgProblem;
 
         // A well-formed binding says nothing.
         let mut good = HashMap::new();
@@ -238,13 +235,21 @@ mod tests {
         let mut keymap = KeymapRegistry::new();
         let combo = KeyCombo::parse("g");
         keymap.bind(
-            "normal",
+            crate::keymap::LEADER_LAYER,
             combo.clone(),
             action_ref_from_config("plugin.docker.restart", &HashMap::new()),
         );
-        assert!(keymap.resolve("normal", &combo).is_some());
-        assert!(keymap.unbind("normal", &combo).is_some());
-        assert!(keymap.resolve("normal", &combo).is_none());
+        assert!(
+            keymap
+                .resolve(crate::keymap::LEADER_LAYER, &combo)
+                .is_some()
+        );
+        assert!(keymap.unbind(crate::keymap::LEADER_LAYER, &combo).is_some());
+        assert!(
+            keymap
+                .resolve(crate::keymap::LEADER_LAYER, &combo)
+                .is_none()
+        );
     }
 
     /// Each placement id builds the `WmAction` it names, from its args — the same construction a
@@ -313,48 +318,13 @@ mod tests {
         );
     }
 
-    /// Surface parity (rule P2): the same capability is reachable from a config binding / plugin
-    /// intent (by dotted name) AND from RPC (by kebab command), and both land on the same action.
-    #[test]
-    fn placement_actions_have_rpc_parity_with_their_dotted_ids() {
-        use crate::chrome::RegionId;
-        let mut args = HashMap::new();
-        args.insert("container_id".to_string(), "workspaces".to_string());
-        args.insert("region".to_string(), "right-sidebar".to_string());
-
-        let from_name = action_ref_from_config("chrome.container.move_to_region", &args);
-        let from_rpc =
-            crate::rpc::parse_rpc_command("move-container-to-region workspaces right-sidebar")
-                .unwrap();
-        assert_eq!(from_name, ActionRef::Builtin(from_rpc));
-
-        let mut after = HashMap::new();
-        after.insert("container_id".to_string(), "workspaces".to_string());
-        after.insert("after_id".to_string(), "agents".to_string());
-        assert_eq!(
-            action_ref_from_config("chrome.container.reorder_after", &after),
-            ActionRef::Builtin(
-                crate::rpc::parse_rpc_command("reorder-container-after workspaces agents").unwrap()
-            )
-        );
-        // The region spellings come from ONE parser (RegionId's FromStr), so config and RPC can
-        // never drift apart: the short alias works on both surfaces.
-        assert_eq!("right".parse::<RegionId>(), Ok(RegionId::RightSidebar));
-        assert_eq!(
-            "right-sidebar".parse::<RegionId>(),
-            Ok(RegionId::RightSidebar)
-        );
-        assert!("nowhere".parse::<RegionId>().is_err());
-    }
-
     /// The dotted ids are the ONLY built-ins with a dotted name — no snake_case alias was quietly
     /// added for them, and no existing snake_case built-in was quietly renamed to a dotted id.
     /// (Renaming the existing ~115 is a migration nobody has decided on.)
     #[test]
     fn only_the_chrome_placement_builtins_carry_dotted_names() {
         let catalog = crate::actions::ActionCatalog::with_builtins();
-        let dotted: Vec<&str> = crate::actions::ActionRegistry::ALL
-            .iter()
+        let dotted: Vec<&str> = crate::actions::builtins()
             .map(|d| d.name)
             .filter(|n| n.contains('.'))
             .collect();

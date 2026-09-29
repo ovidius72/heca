@@ -1037,6 +1037,13 @@ pub struct Visual {
     /// The alternative it replaces is painting the subtree under a **swapped theme**, which needs a
     /// separate paint call per subtree and is what stops a container from painting its own children.
     pub accent: Option<Color>,
+    /// **The colour of the text inside this widget, by meaning** — CSS's inherited `color`.
+    ///
+    /// Everything inside that paints text or a glyph without a colour of its own — a `Label`, an
+    /// `Icon` — uses it; a control that colours its own content (a `Button`, a selected `Choice`)
+    /// keeps its own. Named as a [`Tone`](crate::Tone) rather than a colour because a widget has no
+    /// theme until paint. Applied to the subtree by `paint_child`, so nothing inside opts in.
+    pub content_tone: Option<crate::Tone>,
     pub radius: f32,
     /// Explicit font size in logical px. `0.0` = inherit the theme base font.
     pub font_size: f32,
@@ -1056,6 +1063,7 @@ impl Default for Visual {
             border: None,
             glow: None,
             accent: None,
+            content_tone: None,
             radius: 0.0,
             // 0.0 = inherit the theme's `font_size`; a widget's `.font_size(x)`
             // (x > 0) overrides it. Resolved centrally during layout.

@@ -79,6 +79,11 @@ pub struct Dialog {
     on_dismiss: Option<Box<dyn Fn()>>,
     /// Whether an action row exists yet (created lazily on the first [`action`](Dialog::action)).
     has_actions: bool,
+    /// Where [`body`](Dialog::body) put the body in the panel — remembered when it is placed, so
+    /// nothing has to work out which child it is afterwards.
+    body_at: Option<usize>,
+    /// Set by [`danger`](Dialog::danger).
+    danger: bool,
 }
 
 #[heca_grid_ui_macros::props]
@@ -120,6 +125,8 @@ impl Dialog {
             dismissible: true,
             on_dismiss: None,
             has_actions: false,
+            body_at: None,
+            danger: false,
         }
     }
 
@@ -154,15 +161,40 @@ impl Dialog {
     /// inserted between the title and the action row. Call before [`action`](Dialog::action).
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn body(mut self, body: impl crate::builders::IntoComponent) -> Self {
+        self.body_at = Some(self.panel_mut().children.len());
         self.panel_mut().children.push(body.into_component());
         self.fit_body();
+        self.tone_body();
         self
     }
 
-    /// Like [`body`](Dialog::body) but takes an already-boxed component — for a body produced
-    /// by a mapper that returns `Box<dyn Component>` (e.g. `heca`'s `realize(ViewNode)`), which
-    /// can't be passed to `body` because `Box<dyn Component>` is not itself `Component`.
-    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
+    /// **A destructive question**: the body says its consequence in the theme's danger colour.
+    ///
+    /// The dialog's own rule, so no caller colours a message by hand: the body gets
+    /// [`content_tone(Tone::Danger)`](crate::builders::LayoutExt::content_tone), and every text
+    /// inside it without a colour of its own follows. The title and the buttons keep theirs — a
+    /// destructive button already says so through its own variant.
+    ///
+    /// Order-free with [`body`](Dialog::body): whichever comes second applies it.
+    #[heca_grid_ui_macros::prop]
+    pub fn danger(mut self, on: bool) -> Self {
+        self.danger = on;
+        self.tone_body();
+        self
+    }
+
+    /// Put the danger tone on the body, when there is one and the dialog is destructive. Never
+    /// clears a tone: a body that set its own keeps it when the dialog is not destructive.
+    fn tone_body(&mut self) {
+        if let (true, Some(at)) = (self.danger, self.body_at) {
+            self.panel_mut().children[at]
+                .base_mut()
+                .style
+                .visual
+                .content_tone = Some(crate::Tone::Danger);
+        }
+    }
+
     /// Make the body behave the way a dialog body always should, so no caller has
     /// to remember it: **fill the panel's width** (instead of hugging its content
     /// and sitting to the left) and **take the space left between the title and the

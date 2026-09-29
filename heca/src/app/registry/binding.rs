@@ -6,7 +6,7 @@
 //! from.
 
 use crate::app::conflicts::{BindingConflict, Conflicts};
-use crate::keymap::{ActionRef, BindingIndex, KeyCombo, KeymapRegistry, index_binding};
+use crate::keymap::{ActionRef, BindingIndex, KeyCombo, KeymapRegistry, WrittenKey, index_binding};
 
 /// What a binding was written as: which action, in which layer, under which key.
 ///
@@ -46,6 +46,27 @@ pub(super) fn bind_with_conflict_tracking(
     index_binding(index, written.action, written.layer, written.key);
 }
 
+/// **Bind a key into the flat map, in the layer it names** — after the leader or direct — through
+/// [`bind_with_conflict_tracking`]. What every flat binding table does with each key it lists.
+pub(super) fn bind_flat(
+    keymap: &mut KeymapRegistry,
+    action: ActionRef,
+    written: Written<'_>,
+    conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
+) {
+    let key = WrittenKey::parse(written.key);
+    bind_with_conflict_tracking(
+        keymap,
+        key.layer(),
+        key.combo,
+        action,
+        written,
+        conflicts,
+        index,
+    );
+}
+
 /// Retire a combo from a layer, and from the index with it (F003/P086/T366).
 ///
 /// An `unbind` that left the index alone would have `--keys-show` and every tooltip reporting a key
@@ -58,17 +79,10 @@ pub(super) fn unbind_and_deindex(
     key: &str,
     index: &mut BindingIndex,
 ) {
-    let split = |s: &str| {
-        let s = s.trim();
-        match s.strip_prefix("prefix+") {
-            Some(rest) => (true, KeyCombo::parse(rest.trim())),
-            None => (false, KeyCombo::parse(s)),
-        }
-    };
-    let target = split(key);
-    keymap.unbind(mode, &target.1);
+    let target = WrittenKey::parse(key);
+    keymap.unbind(mode, &target.combo);
     for bound in index.values_mut() {
-        bound.retain(|b| b.layer != layer || split(&b.key) != target);
+        bound.retain(|b| b.layer != layer || WrittenKey::parse(&b.key) != target);
     }
     index.retain(|_, bound| !bound.is_empty());
 }

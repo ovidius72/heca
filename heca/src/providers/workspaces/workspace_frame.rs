@@ -14,8 +14,9 @@ use super::{
     ChromeDragItem, MENU_WORKSPACE, WorkspaceEntry, column_group::ColumnGroup, pane_row::PaneRow,
     row_hint, workspace_key, workspace_row_items,
 };
+use heca_grid_ui::Tone;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
-use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, HintTone};
+use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement};
 
 /// A `.frameless(true)` [`DockFrame`] whose header carries the workspace's total pane count, and
 /// whose body is the workspace's columns followed by its floating panes.
@@ -61,7 +62,7 @@ impl WorkspaceFrame<'_> {
             // accent, a column's is `success`. Folding is a structural control rather than
             // somewhere to navigate, so it reads `muted`. The widget places the letter (only it
             // knows where its chevron is) and says nothing about what it means.
-            .fold_hint_tone(HintTone::Muted)
+            .fold_hint_tone(Tone::Muted)
             .frameless(true)
             .gap(4.0) // tighten the workspace header → body spacing
             .expanded(!seams.ws_state.is_ws_collapsed(ws_idx))
@@ -156,7 +157,7 @@ impl WorkspaceFrame<'_> {
         // down onto the title row so it lines up with the name.
         dock.child(cols)
             .on_hint(seams.picks(row_hint(workspace_key(ws_id))))
-            .hint_tone(HintTone::Warning)
+            .hint_tone(Tone::Warning)
             .hint_placement(HintPlacement::TopRight)
             .hint_offset_y((theme.font_size * 0.45) as f64)
     }

@@ -37,7 +37,7 @@ use crate::app_state::AppState;
 /// **The stack's identity** — its key in the window root, and what its intents are stamped with.
 ///
 /// One constant, because the surface and whatever needs to speak *as* it (the action relay in
-/// `handlers.rs`) must derive the same [`SurfaceKey`]; two spellings would be two surfaces as far
+/// `handlers/system.rs`) must derive the same [`SurfaceKey`]; two spellings would be two surfaces as far
 /// as the interaction policy is concerned.
 pub(crate) const SURFACE: &str = "notifications";
 

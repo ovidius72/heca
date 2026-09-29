@@ -776,6 +776,19 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
+    /// **The colour of the text inside, by meaning** — CSS `color`, inherited.
+    ///
+    /// ```ignore
+    /// Flex::column().content_tone(Tone::Danger).child(Label::new("This cannot be undone."))
+    /// ```
+    ///
+    /// Every text or glyph inside without a colour of its own follows it; a control that colours
+    /// its own content keeps it. See [`Visual::content_tone`](crate::style::Visual::content_tone).
+    fn content_tone(mut self, tone: crate::Tone) -> Self {
+        self.base_mut().style.visual.content_tone = Some(tone);
+        self
+    }
+
     /// **This widget can be dragged**, and what gets dragged is the identity it already declares
     /// with [`key`](ComponentExt::key) — the same one the keyboard cursor and the right-click
     /// target read.
@@ -1410,7 +1423,7 @@ pub trait ComponentExt: Component + Sized {
     /// widget composing itself has no theme to take a literal from — which is why a meaning is the
     /// thing it can say.
     #[heca_grid_ui_macros::prop]
-    fn hint_tone(mut self, tone: crate::widgets::HintTone) -> Self {
+    fn hint_tone(mut self, tone: crate::Tone) -> Self {
         self.base_mut().hint_style.tone = Some(tone);
         self
     }

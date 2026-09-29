@@ -100,19 +100,16 @@ impl MountedContribution {
     }
 }
 
-/// One region's ordered list of mounted containers plus its host-level
-/// visibility. (This is placement/ordering state — the *shell* mode/size still
-/// lives on `SharedChromeState`'s `left`/`right` until top/bottom bars exist.)
+/// One region's ordered list of mounted containers. (This is placement/ordering state — whether the
+/// region is shown is `AppState.shown`, and its shell mode/size lives on `SharedChromeState`.)
 pub struct RegionHost {
     contributions: Vec<MountedContribution>,
-    visible: bool,
 }
 
 impl RegionHost {
     fn new() -> Self {
         Self {
             contributions: Vec::new(),
-            visible: true,
         }
     }
 
@@ -436,22 +433,6 @@ impl ChromeHost {
             .iter()
             .flat_map(|r| r.contributions.iter())
             .map(|m| m.provider())
-    }
-
-    /// Set a region's host-level visibility.
-    ///
-    /// **plugin-02 caveat:** this flag has no visual effect yet. Region *shell*
-    /// mode/size still lives on `SharedChromeState`'s `left`/`right` (see
-    /// [`RegionHost`]); the render path that reads this host-level flag — and
-    /// reconciles it with the shell state — arrives with the chrome render
-    /// migration in plugin-03.
-    pub fn set_region_visible(&mut self, region: RegionId, visible: bool) {
-        self.regions[region].visible = visible;
-    }
-
-    /// Is a region host-level visible?
-    pub fn is_region_visible(&self, region: RegionId) -> bool {
-        self.regions[region].visible
     }
 }
 
@@ -838,13 +819,5 @@ mod tests {
         // A missing target errors and leaves the order untouched.
         assert_eq!(h.reorder_after("a", "zzz"), Err(MoveError::TargetNotFound));
         assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "c", "b"]);
-    }
-
-    #[test]
-    fn region_visibility_toggles() {
-        let mut h = host();
-        assert!(h.is_region_visible(RegionId::TopBar));
-        h.set_region_visible(RegionId::TopBar, false);
-        assert!(!h.is_region_visible(RegionId::TopBar));
     }
 }

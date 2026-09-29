@@ -4,7 +4,7 @@ use super::*;
 
 use crate::input::WmAction;
 
-/// **Every catalogued action can actually run.** Metadata lives in `ActionRegistry::ALL` and
+/// **Every catalogued action can actually run.** Metadata lives in `actions::builtins()` and
 /// handlers in `build_registry()`, two places that could drift; this closes the direction that
 /// matters — a descriptor whose action has no handler is an entry the whole UI advertises
 /// (icon, label, command palette, `list-actions`) and that panics in debug when pressed.
@@ -15,24 +15,24 @@ use crate::input::WmAction;
 /// property F003/P010/T005 exists to guarantee.
 #[test]
 fn every_catalogued_action_has_a_handler() {
-    use crate::actions::{ActionRegistry, ArgSpec, sample_args};
-    use crate::input::{action_from_name, build_action};
+    use crate::actions::builtins;
+    use crate::args::{ArgSpec, sample_args};
+    use crate::input::resolve_action;
 
     let registry = build_registry();
     let mut missing = Vec::new();
-    for descriptor in ActionRegistry::ALL {
+    for descriptor in builtins() {
         let args: Vec<ArgSpec> = descriptor
             .args
             .iter()
             .map(ArgSpec::from_descriptor)
             .collect();
-        let Some(action) = action_from_name(descriptor.name)
-            .or_else(|| build_action(descriptor.name, &sample_args(&args)))
-        else {
+        let Some(action) = resolve_action(descriptor.name, &sample_args(&args)) else {
             // Not this test's business: `every_wm_action_variant_is_reachable_by_name` owns it.
             continue;
         };
-        if !registry.has_handler(&action) {
+        // Overlay control is resolved by the dispatcher, never by a registered handler.
+        if !action.is_overlay_control() && !registry.has_handler(&action) {
             missing.push(descriptor.name);
         }
     }
@@ -69,10 +69,10 @@ fn a_placement_id_is_a_builtin_not_a_dynamic_action() {
             crate::app::interaction::ActionPolicy::Global,
             "{name} must stay reachable while a floating pane owns the domain",
         );
-        assert_eq!(
-            registry.dispatch_of(&catalog, name),
-            Some(crate::actions::Dispatch::Native),
-            "{name} has a WmAction + native handler",
+        assert!(catalog.is_builtin(name), "{name} is a built-in");
+        assert!(
+            !registry.has_dynamic_handler(name),
+            "{name} runs through its WmAction, not by name",
         );
     }
 }
@@ -96,6 +96,6 @@ fn chrome_container_placement_actions_have_handlers() {
     }));
     assert!(registry.has_handler(&WmAction::SetRegionVisible {
         region: crate::chrome::RegionId::LeftSidebar,
-        visible: true,
+        visible: crate::input::RegionVisibility::Show,
     }));
 }

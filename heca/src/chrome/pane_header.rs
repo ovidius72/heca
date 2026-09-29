@@ -458,9 +458,7 @@ impl ActionShortcuts {
         let keys = self.by_action.get(action_name)?;
         let line = keys
             .iter()
-            .map(|k| {
-                crate::shortcut::format_shortcut_styled(k, k.starts_with("prefix+"), self.style)
-            })
+            .map(|k| crate::shortcut::format_shortcut_styled(k, self.style))
             .collect::<Vec<_>>()
             .join(" / ");
         (!line.is_empty()).then_some(line)

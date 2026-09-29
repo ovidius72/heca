@@ -238,11 +238,11 @@ same idea aimed at navigation: it focuses the dock that has keyboard navigation 
 whichever region that dock is seated in, and enters nav mode. With no navigable dock mounted it does
 nothing (it will not expand an empty sidebar to show you a blank frame).
 
-The dock can also be named, which skips the pick: `focus-dock workspaces` over RPC, or a mode binding
+The dock can also be named, which skips the pick: `focus_dock workspaces` over RPC, or a mode binding
 carrying `args = { dock = "workspaces" }` (no flat binding form takes args yet). It is one action
 either way — the pick is only how a keyboard supplies an argument it cannot type. Aiming it at the
 dock that already has focus is the way back out, so one key both takes the keyboard and gives it
-back; `unfocus-dock` (RPC) and `Esc` do the same thing explicitly.
+back; `unfocus_dock` (RPC) and `Esc` do the same thing explicitly.
 
 **Focus is the mode.** While a dock holds chrome focus the keyboard is *redirected to it* — there is
 no separate mode to enter, because focus already answers where the keys go. Concretely:
@@ -410,7 +410,7 @@ The bare keys are free here precisely because nothing is being forwarded to a ba
 scroll bindings under "Direct (non-prefix) keybindings" are unchanged and, while a dock is focused,
 aim at the dock too — one binding, one meaning: *scroll whatever has the keyboard*. Horizontal
 scrolling exists only here (`scroll_page_left`, `scroll_page_right`, `scroll_to_left_edge`,
-`scroll_to_right_edge`, also reachable over RPC as `direct-scroll-page-left` and friends), because a
+`scroll_to_right_edge`, also reachable over RPC by the same names), because a
 terminal viewport has a single axis.
 
 ### Navigating the workspaces dock
@@ -470,7 +470,10 @@ Inside Selection mode:
 - Over a mouse-grabbed TUI (vim, htop, less, etc.) → forwarded to the terminal
   as mouse events.
 - **Shift+wheel** → always scrolls host viewport, bypassing any mouse grab.
-- Scrolling up from the live bottom automatically enters Selection mode.
+- The wheel only scrolls — it never switches to Selection mode. Typing snaps the view back to the
+  bottom; `prefix+s` enters Selection mode.
+- **Shift+drag** selects with the mouse and copies on release, then clears the highlight — the same
+  as `y` in Selection mode. It does not enter Selection mode.
 - **Alternate-screen TUIs** (`nvim`, `less`, …): while a program owns the
   alternate screen, the host has no exposed scrollback history to scroll into.
   Plain wheel is forwarded to the program in that case (so `less` can still
@@ -1240,7 +1243,7 @@ door — so a menu item, a keybinding and an RPC call all reach either one ident
 
 Say you want `my_custom_action`.
 
-**1. Add the variant** — `heca/src/input.rs`:
+**1. Add the variant** — `heca/src/input/action.rs`:
 
 ```rust
 pub enum WmAction {
@@ -1273,22 +1276,22 @@ WmAction::MyCustomAction => ActionPolicy::TiledOnly,
 > `Global` is the only policy that is truly always allowed. See
 > [Interaction Policy](#interaction-policy) below.
 
-**4. Write the handler** — `heca/src/handlers.rs`:
+**4. Write the handler** — in the file under `heca/src/handlers/` for what it acts on:
 
 ```rust
 pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
-    // Your logic here.
-    state.needs_redraw = true;
+    // Your logic here — only the action. The dispatcher asks for the frame, re-syncs focus and
+    // refreshes what lists the session afterwards, for every action.
 }
 ```
 
 **5. Register the handler** in `build_registry()` — `heca/src/app/registry/actions.rs`:
 
 ```rust
-registry.register(&WmAction::MyCustomAction, handle_my_custom_action);
+registry.register(WmActionKind::MyCustomAction, handle_my_custom_action);
 ```
 
-**6. Describe it** in `ActionRegistry::ALL` — `heca/src/actions.rs`. This is what gives the action its
+**6. Describe it** in the file for its category under `heca/src/actions/builtins/` (`pane.rs`, `layout.rs`, …) — the file is its category. This is what gives the action its
 label, icon and category everywhere it is shown (context menu, tooltip, command palette), **and what
 says which arguments it takes**:
 
@@ -1297,8 +1300,6 @@ ActionDescriptor {
     name: "my_custom_action",
     label: "My Custom Action",
     description: "What it does, in one line.",
-    category: ActionCategory::Pane,
-    default_binding: "y",
     icon: Some(Glyph::Gear),   // any Glyph; None if it has no icon yet
     args: &[],                 // takes none — see below if it does
 },
@@ -1347,12 +1348,9 @@ users:
 my_custom_action = "prefix+y"
 ```
 
-**8. Give it RPC parity** — `heca/src/rpc.rs`. A capability must not be trapped behind one surface: it
-should be reachable from **mouse/UI, keyboard, and RPC** whenever each is meaningful.
-
-```rust
-"my-custom-action" => Ok(WmAction::MyCustomAction),
-```
+**8. RPC parity is automatic.** The RPC looks every name up in the same catalog (step 6), so
+`my_custom_action` — with its arguments positionally in declared order, or as `key=value` — works over
+RPC the moment it is described. There is nothing to add in `heca/src/rpc.rs`.
 
 **9. Optional — make it confirm first.** Destructive actions declare a `ConfirmSpec`, and *every*
 surface that triggers them confirms identically, because the guard lives on the **action**, not the
@@ -1395,7 +1393,7 @@ let handle = register_dynamic(
             return;
         };
         restart_container(state, container);
-        state.needs_redraw = true;
+        // No redraw here: the dispatcher asks for one after every action.
     })),
 );
 

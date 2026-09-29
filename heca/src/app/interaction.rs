@@ -339,7 +339,10 @@ pub(crate) fn session_domain(session: &heca_core::layout::Session) -> Domain {
 /// only because a component **declares** one on every action it registers
 /// (`ActionMeta::policy`), and a plugin outside this crate must be able to name what it is
 /// required to declare (F003/P086/T371 step 6; the plugin-facing crate itself is F003/P017/T9).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Its wire name (RPC introspection) is the variant in `snake_case` — `TiledOnly` is `tiled_only`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ActionPolicy {
     /// True global app action — always allowed in EVERY focus domain, including
     /// Floating. Reserved for actions with no tiled/floating layout impact
@@ -401,6 +404,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::Move { .. }
         | WmAction::MovePaneToWorkspace { .. }
         | WmAction::MovePaneToColumn { .. }
+        | WmAction::PlacePane { .. }
         | WmAction::MoveColumnToWorkspace { .. }
         | WmAction::MoveColumn { .. }
         | WmAction::SwapColumns { .. }
@@ -512,7 +516,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // ── Always-allowed: work regardless of domain (but blocked when Floating) ──
         WmAction::CommandPalette { .. }
         | WmAction::SpawnCommand { .. }
-        | WmAction::EnterMode { .. } => ActionPolicy::AlwaysAllowed,
+        => ActionPolicy::AlwaysAllowed,
 
         // ── Global: true app-level action, allowed even when Floating ──
         // ReloadConfig reloads config from disk — no tiled/floating layout impact,
@@ -599,20 +603,6 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ShowLayer { .. }
         | WmAction::HideLayer { .. }
         | WmAction::ToggleLayer { .. } => ActionPolicy::Global,
-        // Chrome shell region show/hide (sidebar-fu-6): acts on chrome geometry,
-        // independent of the pane tiled/floating domain — reachable from any focus.
-        WmAction::ShowLeftSidebar
-        | WmAction::HideLeftSidebar
-        | WmAction::ToggleLeftSidebar
-        | WmAction::ShowRightSidebar
-        | WmAction::HideRightSidebar
-        | WmAction::ToggleRightSidebar
-        | WmAction::ShowTopBar
-        | WmAction::HideTopBar
-        | WmAction::ToggleTopBar
-        | WmAction::ShowBottomBar
-        | WmAction::HideBottomBar
-        | WmAction::ToggleBottomBar => ActionPolicy::Global,
 
         // ── Source-dependent: may be allowed from some sources ──
         WmAction::FocusPane { .. } => ActionPolicy::SourceDependent,
@@ -771,7 +761,7 @@ fn policy_allows(
         // Floating. They have no tiled/floating layout impact, so blocking them when floating only
         // breaks hot-reload.
         ActionPolicy::Global => true,
-        // AlwaysAllowed (CommandPalette, SpawnCommand, EnterMode) is a misnomer: it is blocked when
+        // AlwaysAllowed (CommandPalette, SpawnCommand) is a misnomer: it is blocked when
         // floating from the current sources. Future chrome sources (MouseTopMenu, MouseStatusBar)
         // may allow these even while floating.
         ActionPolicy::AlwaysAllowed => !floating,
@@ -900,17 +890,6 @@ pub(crate) fn can_focus_pane(
     }
 }
 
-/// Checks whether `pane_id` belongs to the floating panes in the active workspace.
-///
-/// Used by `handle_float` and `handle_close_pane_by_id` to decide
-/// whether to process the pane as floating or tiled.
-pub(crate) fn pane_is_floating(session: &heca_core::layout::Session, pane_id: PaneId) -> bool {
-    session
-        .active_workspace()
-        .map(|ws| ws.floating_panes.iter().any(|f| f.pane.id == pane_id))
-        .unwrap_or(false)
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // Dispatch action
 // ═══════════════════════════════════════════════════════════════════════════
@@ -923,6 +902,45 @@ pub(crate) fn pane_is_floating(session: &heca_core::layout::Session, pane_id: Pa
 /// Handler-to-handler calls should use `registry.execute()` directly —
 /// they bypass the router because they're inside an already-allowed
 /// interaction.
+/// The overlay an overlay-control action acts on: the one it names, or — bare, as from a bound key
+/// or an RPC line, which cannot name a runtime id — the front-most visible modal layer. `None` when
+/// nothing is open.
+fn target_overlay(
+    state: &AppState,
+    named: Option<crate::chrome::OverlayId>,
+) -> Option<crate::chrome::OverlayId> {
+    named.or_else(|| {
+        state
+            .layers
+            .top_modal_id(&state.window_root)
+            .map(crate::chrome::OverlayId)
+    })
+}
+
+/// Resolve an overlay-control action ([`WmAction::is_overlay_control`]) — the only place they run.
+fn resolve_overlay_control(state: &mut AppState, registry: &ActionRegistry, action: &WmAction) {
+    let (named, result) = match action {
+        WmAction::SubmitOverlay { overlay, action } => (*overlay, Some(action.clone())),
+        WmAction::CloseOverlay { overlay } => (*overlay, None),
+        _ => return,
+    };
+    let Some(overlay) = target_overlay(state, named) else {
+        return;
+    };
+    let result = match result {
+        // Marshal the modal body's named value fields (input/toggle/checkbox) into the result
+        // `data` before the overlay is popped (plugin-task-ui-4).
+        Some(id) => crate::chrome::ModalResult::Action {
+            id,
+            data: crate::chrome::collect_overlay_form(state, overlay),
+        },
+        // A named host layer (the exposé) has no completion to resolve, so it is simply hidden; an
+        // overlay with one is resolved as a dismissal, which is what pops it and runs its completion.
+        None => crate::chrome::ModalResult::Dismissed,
+    };
+    crate::chrome::resolve_overlay(state, registry, overlay, result);
+}
+
 pub(crate) fn dispatch_intent(
     state: &mut AppState,
     registry: &ActionRegistry,
@@ -934,38 +952,10 @@ pub(crate) fn dispatch_intent(
     // registry to dispatch a follow-up action (a handler gets no registry). Intercepted before
     // routing, like the `FocusPaneThenAction` composite below. Always allowed (overlay control
     // has no focus-domain policy; the follow-up action it dispatches is routed on its own).
-    if let InteractionIntent::ActivateAction(WmAction::SubmitOverlay { overlay, action }) = &intent
+    if let InteractionIntent::ActivateAction(action) = &intent
+        && action.is_overlay_control()
     {
-        let (overlay, action) = (*overlay, action.clone());
-        // Marshal the modal body's named value fields (input/toggle/checkbox) into the result
-        // `data` before the overlay is popped (plugin-task-ui-4).
-        let data = crate::chrome::collect_overlay_form(state, overlay);
-        crate::chrome::resolve_overlay(
-            state,
-            registry,
-            overlay,
-            crate::chrome::ModalResult::Action { id: action, data },
-        );
-        return;
-    }
-    if let InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay }) = &intent {
-        let overlay = *overlay;
-        // Bare — a bound key — means the front-most visible modal layer. A named host layer (the
-        // exposé) has no completion to resolve, so it is simply hidden; an overlay with one is
-        // resolved as a dismissal, which is what pops it and runs its completion.
-        let overlay = match overlay {
-            Some(id) => id,
-            None => match state.layers.top_modal_id(&state.window_root) {
-                Some(id) => crate::chrome::OverlayId(id),
-                None => return,
-            },
-        };
-        crate::chrome::resolve_overlay(
-            state,
-            registry,
-            overlay,
-            crate::chrome::ModalResult::Dismissed,
-        );
+        resolve_overlay_control(state, registry, action);
         return;
     }
 
@@ -1133,7 +1123,7 @@ pub(crate) fn dispatch_action_ref(
 /// **This is the one front door** (`pluggable-chrome-plugin-plan.md` §2.7.2: "No parallel dispatch
 /// path"). A name resolves down one of two back ends, and both are policy-routed:
 ///
-/// 1. **Built-in** — [`action_from_name`](crate::input::action_from_name) maps it to a [`WmAction`],
+/// 1. **Built-in** — [`resolve_action`](crate::input::resolve_action) maps it to a [`WmAction`],
 ///    which goes through [`dispatch_action`] exactly like a keypress. Policy comes from
 ///    [`action_policy`]'s exhaustive match.
 /// 2. **Name-keyed** (plugin-04) — an action registered at runtime by a provider/plugin, which has
@@ -1146,7 +1136,7 @@ pub(crate) fn dispatch_action_ref(
 ///
 /// **Args are carried on both paths.** A name-keyed handler reads them off the `Intent` itself. A
 /// built-in **parameterized** variant is constructed from them via
-/// [`build_action`](crate::input::build_action) — so `{"action":"resize","args":{…}}` produces the
+/// [`resolve_action`](crate::input::resolve_action) — so `{"action":"resize","args":{…}}` produces the
 /// very same `WmAction` a config binding would. Unit built-ins ignore args, as they always did.
 pub(crate) fn dispatch_view_intent(
     state: &mut AppState,
@@ -1238,7 +1228,7 @@ pub(crate) fn dispatch_view_intent(
         return IntentOutcome::Blocked;
     }
     if !registry.execute_dynamic(&intent.action, state, intent) {
-        // Declared but host-unrunnable (`Dispatch::Declarative`): its owner lives across the plugin
+        // Declared but host-unrunnable (registered with no handler): its owner lives across the plugin
         // boundary and forwarding lands with the WASM bridge (plugin-08). Never a crash.
         #[cfg(debug_assertions)]
         eprintln!(
@@ -1257,7 +1247,7 @@ pub(crate) fn dispatch_view_intent(
 /// this line would be two answers to "what does this name mean", and the one nobody exercises is
 /// the one that drifts.
 fn builtin_of(name: &str, args: &std::collections::HashMap<String, String>) -> Option<WmAction> {
-    crate::input::build_action(name, args).or_else(|| crate::input::action_from_name(name))
+    crate::input::resolve_action(name, args)
 }
 
 /// **Would this intent be allowed to run right now?** — asked *before* a picker spends a letter on
@@ -1345,13 +1335,13 @@ fn report_arg_problems(
     let Some(meta) = catalog.find(name) else {
         return;
     };
-    for problem in crate::actions::check_args(&meta.args, args) {
+    for problem in crate::args::check_args(&meta.args, args) {
         eprintln!("[heca] action '{name}': {problem}");
     }
 }
 
 /// Flatten an [`Intent`](crate::chrome::Intent)'s typed args into the `name -> string` map
-/// [`build_action`](crate::input::build_action) parses, so a declarative intent and a `config.toml`
+/// [`resolve_action`](crate::input::resolve_action) parses, so a declarative intent and a `config.toml`
 /// binding construct a parameterized built-in through **one** code path.
 fn intent_args_as_strings(intent: &ViewIntent) -> std::collections::HashMap<String, String> {
     use crate::chrome::PropValue;
@@ -1825,197 +1815,10 @@ mod tests {
         }
     }
 
-    /// Action policy classifications are exhaustive — every variant is matched.
+    /// What these actions are allowed to do. Every variant being classified is the compiler's job:
+    /// `action_policy`'s match has no catch-all arm, so an unclassified variant does not build.
     #[test]
-    fn action_policy_covers_all_variants() {
-        let unit_actions: Vec<WmAction> = vec![
-            WmAction::FocusLeft,
-            WmAction::FocusRight,
-            WmAction::FocusUp,
-            WmAction::FocusDown,
-            WmAction::NextPane,
-            WmAction::PrevPane,
-            WmAction::FocusToggleLocal,
-            WmAction::FocusToggleGlobal,
-            WmAction::SplitHorizontal,
-            WmAction::SplitVertical,
-            WmAction::ZoomColumn,
-            WmAction::ResizeIncrease,
-            WmAction::ResizeDecrease,
-            WmAction::PaneHeightIncrease,
-            WmAction::PaneHeightDecrease,
-            WmAction::SwapLeft,
-            WmAction::SwapRight,
-            WmAction::SwapUp,
-            WmAction::SwapDown,
-            WmAction::MovePaneLeft { pane_id: None },
-            WmAction::MovePaneRight { pane_id: None },
-            WmAction::MoveColumnUp,
-            WmAction::MoveColumnDown,
-            WmAction::PaneSelect,
-            WmAction::SwapPane,
-            WmAction::SwapAndFocusPane,
-            WmAction::PaneTake,
-            WmAction::PaneTakeAndFocus,
-            WmAction::Float,
-            WmAction::ClosePane,
-            WmAction::RenamePane,
-            WmAction::RenameColumn,
-            WmAction::SidebarLeft,
-            WmAction::SidebarRight,
-            WmAction::CollapseCurrentWorkspace,
-            WmAction::ExpandCurrentWorkspace,
-            WmAction::ToggleCurrentWorkspaceCollapsed,
-            WmAction::CollapseCurrentColumn,
-            WmAction::ExpandCurrentColumn,
-            WmAction::ToggleCurrentColumnCollapsed,
-            WmAction::WorkspaceNext,
-            WmAction::WorkspacePrev,
-            WmAction::CreateWorkspace,
-            WmAction::RenameWorkspace,
-            WmAction::CommandPalette {
-                mode: None,
-                query: None,
-            },
-            WmAction::ReloadConfig,
-            WmAction::NotificationDismissAll,
-            WmAction::NotificationDismissLast,
-            WmAction::NotificationPick,
-            // Scrollback
-            WmAction::ScrollbackPageUp,
-            WmAction::ScrollbackPageDown,
-            WmAction::ScrollbackLineUp { amount: 3 },
-            WmAction::ScrollbackLineDown { amount: 3 },
-            WmAction::ScrollbackToTop,
-            WmAction::ScrollbackToBottom,
-            WmAction::ExitScrollback,
-            // Direct scroll
-            WmAction::ScrollLineUp,
-            WmAction::ScrollLineDown,
-            WmAction::ScrollPageUp,
-            WmAction::ScrollPageDown,
-            WmAction::ScrollToTop,
-            WmAction::ScrollToBottom,
-            // Selection (host capability, Task 02).
-            WmAction::EnterSelectionMode,
-            WmAction::ClearSelection,
-            WmAction::SelectionLeft,
-            WmAction::SelectionRight,
-            WmAction::SelectionUp,
-            WmAction::SelectionDown,
-            WmAction::CopySelection,
-            WmAction::PasteClipboard,
-            WmAction::BeginSelection,
-            WmAction::ToggleSelectionEndpoint,
-            WmAction::AppFontZoom {
-                step: crate::input::FontZoomStep::In,
-            },
-            WmAction::PaneTerminalFontZoom {
-                pane_id: None,
-                step: crate::input::FontZoomStep::In,
-            },
-        ];
-        for action in &unit_actions {
-            let _policy = action_policy(action);
-        }
-
-        let param_actions = [
-            WmAction::NotificationDismissOne { notification_id: 0 },
-            WmAction::NotificationActionRelay {
-                notification_id: 0,
-                key: String::new(),
-            },
-            WmAction::FocusPane { pane_id: PaneId(0) },
-            WmAction::FocusWorkspace { ws_idx: 0 },
-            WmAction::Swap {
-                a_id: PaneId(0),
-                b_id: PaneId(0),
-            },
-            WmAction::Move {
-                pane_id: PaneId(0),
-                target_col: 0,
-            },
-            WmAction::MovePaneToWorkspace {
-                pane_id: PaneId(0),
-                ws_idx: 0,
-            },
-            WmAction::MovePaneToColumn {
-                pane_id: PaneId(0),
-                ws_idx: 0,
-                col_idx: 0,
-            },
-            WmAction::MoveColumnToWorkspace {
-                col_idx: 0,
-                ws_idx: 0,
-                focus: false,
-            },
-            WmAction::Resize {
-                target: crate::input::ResizeTarget::Column,
-                amount: 0.0,
-                edge: crate::input::ResizeEdge::Auto,
-            },
-            WmAction::ResizeColumnBy {
-                col_idx: 0,
-                delta: 0.0,
-            },
-            WmAction::ResizePaneHeightBy {
-                col_idx: 0,
-                pane_idx: 0,
-                delta: 0.0,
-            },
-            WmAction::ResizeTo {
-                target: crate::input::ResizeTarget::Column,
-                width: 0.0,
-                height: 0.0,
-            },
-            WmAction::FloatAt {
-                pane_id: PaneId(0),
-                x: 0.0,
-                y: 0.0,
-                width: 0.0,
-                height: 0.0,
-            },
-            WmAction::ClosePaneById { pane_id: PaneId(0) },
-            WmAction::RenameTarget {
-                pane_id: PaneId(0),
-                name: String::new(),
-            },
-            WmAction::RenameColumnByIdx {
-                ws_idx: 0,
-                col_idx: 0,
-            },
-            WmAction::ResetPaneNameById { pane_id: PaneId(0) },
-            WmAction::ResetWorkspaceNameByIdx { ws_idx: 0 },
-            WmAction::SpawnCommand {
-                command: String::new(),
-                kind: crate::input::SpawnKind::Terminal,
-                float: false,
-                close_policy: heca_core::runtime::PaneClosePolicy::default(),
-            },
-            WmAction::EnterMode {
-                name: String::new(),
-            },
-            WmAction::AddPaneToColumn {
-                ws_idx: 0,
-                col_idx: 0,
-            },
-            WmAction::DeleteColumn {
-                ws_idx: 0,
-                col_idx: 0,
-            },
-            WmAction::DeleteWorkspace { ws_idx: 0 },
-            WmAction::TakePane {
-                pane_id: PaneId(0),
-                focus_after: false,
-            },
-            WmAction::OpenLink {
-                url: "https://example.com".into(),
-            },
-        ];
-        for action in &param_actions {
-            let _policy = action_policy(action);
-        }
-
+    fn action_policy_classifies_these_as_documented() {
         // Spot-check specific classifications
         assert_eq!(action_policy(&WmAction::FocusLeft), ActionPolicy::TiledOnly);
         // Column rename (active or by-idx) is a tiled-layout op → TiledOnly, like RenameColumn.
@@ -2204,11 +2007,11 @@ mod tests {
         intent.args.insert("rows".to_string(), PropValue::Int(12));
 
         let from_intent =
-            crate::input::build_action("scroll_to_offset", &intent_args_as_strings(&intent));
+            crate::input::resolve_action("scroll_to_offset", &intent_args_as_strings(&intent));
 
         let mut config_args = std::collections::HashMap::new();
         config_args.insert("rows".to_string(), "12".to_string());
-        let from_config = crate::input::build_action("scroll_to_offset", &config_args);
+        let from_config = crate::input::resolve_action("scroll_to_offset", &config_args);
 
         assert_eq!(from_intent, from_config);
         assert_eq!(from_intent, Some(WmAction::ScrollToOffset { rows: 12 }));
@@ -2222,9 +2025,8 @@ mod tests {
         let intent = Intent::new("reload_config");
         let args = intent_args_as_strings(&intent);
         assert!(args.is_empty());
-        assert!(crate::input::build_action("reload_config", &args).is_none());
         assert_eq!(
-            crate::input::action_from_name("reload_config"),
+            crate::input::resolve_action("reload_config", &args),
             Some(WmAction::ReloadConfig)
         );
     }
@@ -2301,21 +2103,6 @@ mod tests {
         let mut session = test_session();
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
         assert_eq!(active_focus_domain(&session), FocusDomain::Floating);
-    }
-
-    /// `pane_is_floating` returns false for a pane that is in the scrolling columns.
-    #[test]
-    fn pane_is_floating_returns_false_for_tiled_pane() {
-        let session = test_session();
-        // Default session has pane ID 1 in scrolling columns, not floating.
-        assert!(!pane_is_floating(&session, PaneId(1)));
-    }
-
-    /// `pane_is_floating` returns false for non-existent pane.
-    #[test]
-    fn pane_is_floating_returns_false_for_nonexistent() {
-        let session = test_session();
-        assert!(!pane_is_floating(&session, PaneId(9999)));
     }
 
     /// `can_focus_pane` allows any pane when in tiled domain.
