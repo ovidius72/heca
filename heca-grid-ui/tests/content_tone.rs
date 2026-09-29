@@ -1,10 +1,12 @@
 //! **The colour of the text inside a container, by meaning** — CSS's inherited `color`
 //! (`content_tone`), and the dialog that uses it to say a destructive consequence.
 
+mod common;
+
 use heca_core::layout::Size;
 use heca_grid_ui::widgets::{Button, Dialog, Flex, Label};
 use heca_grid_ui::{
-    Color, Component, ComponentExt, DrawCommand, LayoutEngine, PaintCx, Parent, Scene, Theme, Tone,
+    Color, Component, ComponentExt, DrawCommand, LayoutEngine, Parent, Theme, Tone,
 };
 
 /// Lay `w` out in a 600×400 viewport, paint it through `paint_child` — the one path every widget is
@@ -12,11 +14,7 @@ use heca_grid_ui::{
 fn text_colours(w: &mut dyn Component) -> Vec<(String, Color)> {
     LayoutEngine::new().compute(w, Size::new(600.0, 400.0));
     let theme = Theme::default();
-    let mut scene = Scene::new();
-    {
-        let mut cx = PaintCx::new(&mut scene, &theme);
-        heca_grid_ui::paint_child(w, &mut cx);
-    }
+    let scene = common::paint_via_child(w, &theme);
     scene
         .iter()
         .filter_map(|c| match c {
