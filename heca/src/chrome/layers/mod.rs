@@ -88,6 +88,9 @@ pub(crate) struct LayerRegistry {
     current: Option<LayerId>,
     /// The contexts to fall back through as each one closes, most recent last.
     context_stack: Vec<Option<LayerId>>,
+    /// **The visible layers the pointer was last checked against**, so a change can be noticed —
+    /// see [`visible_set_changed`](Self::visible_set_changed).
+    pointer_seen: Vec<u64>,
 }
 
 impl LayerRegistry {
@@ -269,6 +272,25 @@ impl LayerRegistry {
             self.layers.insert(at.min(self.layers.len()), layer);
         }
         id
+    }
+
+    /// **Has the set of visible layers changed since this was last asked?** — a layer appeared or went.
+    ///
+    /// What lets the host re-check the pointer when a surface opens under one that is not moving:
+    /// hover is worked out on a move, so without a prompt nothing behind the surface would ever hear
+    /// it now covers them (F004/P084/T529). Asking is what records the answer, so call it once per
+    /// frame.
+    pub(crate) fn visible_set_changed(&mut self) -> bool {
+        let now: Vec<u64> = self
+            .visible_front_to_back()
+            .iter()
+            .map(|l| l.id.raw())
+            .collect();
+        if now == self.pointer_seen {
+            return false;
+        }
+        self.pointer_seen = now;
+        true
     }
 
     /// Is any layer participating this frame?
