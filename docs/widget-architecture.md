@@ -23,7 +23,7 @@ heca's UI is a declarative tree over a retained widget tree — the same shape S
 use (`Widget` → `Element`/`RenderObject`).
 
 ```
-   build::VStack / build::Button …   the TYPED SDK   (heca-view/src/build.rs)
+   build::VStack / build::Button …   the TYPED SDK   (heca-view/src/build/)
    SwiftUI-shaped builders that lower to a ViewNode  — `Label::new(..).title(..)` will not compile
         │
         ▼
@@ -207,8 +207,8 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 
 | Concern | File |
 |---|---|
-| `ViewNode` / `WidgetKind` / `PropValue` / `Intent` | `heca-view/src/lib.rs` |
-| The typed SDK a plugin author writes | `heca-view/src/build.rs` |
+| `ViewNode` / `WidgetKind` / `PropValue` / `Intent` | `heca-view/src/` (`kind.rs`, `node.rs`, `value.rs`, `scalars/`) |
+| The typed SDK a plugin author writes | `heca-view/src/build/` |
 | `realize(&ViewNode, theme, emit, forms) -> Box<dyn Component>` | `heca-view-realize/src/lib.rs` |
 | Overlay: `ModalSpec` → `Dialog` (a realized subtree entering a slot) | `heca/src/chrome/overlay.rs` |
 | The widgets | `heca-grid-ui/src/widgets/` |
@@ -228,7 +228,7 @@ These are *not* settled, and are the live design work — everything above is.
 ~~Where the plugin-facing types live~~ — **done** (F003/P017/T009). `heca-view` is its own crate,
 depending on serde and nothing else, so a plugin can name the vocabulary without compiling the
 renderer.
-~~Typed builder SDK~~ — **done.** `heca-view/src/build.rs`; a drift guard in `heca-view-realize`
+~~Typed builder SDK~~ — **done.** `heca-view/src/build/`; a drift guard in `heca-view-realize`
 fails the build when a widget grows a property the SDK cannot set.
 
 - **Generated type definitions** for plugins in *other* languages, from the same widget list —

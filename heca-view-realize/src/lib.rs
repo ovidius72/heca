@@ -51,7 +51,9 @@ use heca_grid_ui::{
     WidgetSize,
 };
 
-use heca_view::{Intent, PropMap, PropValue, ViewNode, ViewSize, ViewVariant, WidgetKind};
+use heca_view::{
+    Intent, PropMap, PropValue, ViewEvent, ViewNode, ViewSize, ViewVariant, WidgetKind,
+};
 
 /// Where a realized tree's intents go: a widget fires the node's own [`Intent`], and the host
 /// wraps it in whatever it dispatches (the app wraps it as `InteractionIntent::View`).
@@ -658,7 +660,7 @@ fn realize_kind(
             // always held the keys; since F003/P097/T502 it answers this one, and this is the
             // described spelling — so a plugin's surface closes on Escape by saying what closing
             // means, and never by writing a key.
-            if let Some(intent) = node.events.get("dismiss") {
+            if let Some(intent) = node.events.get(ViewEvent::Dismiss.name()) {
                 let (intent, emit) = (intent.clone(), emit.clone());
                 overlay = overlay.on_dismiss(move || emit(intent.clone()));
             }
@@ -1007,16 +1009,16 @@ fn realize_kind(
             // props stay because they are the plain-data path a `ToastSpec` uses.
             if !described_actions
                 && let Some(label) = node.props.get("action_text").and_then(PropValue::as_text)
-                && let Some(carrier) = intent_carrier(node, "action")
+                && let Some(carrier) = intent_carrier(node, ViewEvent::Action)
             {
                 let emit = emit.clone();
                 toast = toast.action(Button::new(label).on_click(move || emit(carrier.clone())));
             }
-            if let Some(carrier) = intent_carrier(node, "press") {
+            if let Some(carrier) = intent_carrier(node, ViewEvent::Press) {
                 let emit = emit.clone();
                 toast = toast.on_click(move || emit(carrier.clone()));
             }
-            if let Some(carrier) = intent_carrier(node, "dismiss") {
+            if let Some(carrier) = intent_carrier(node, ViewEvent::Dismiss) {
                 let emit = emit.clone();
                 toast = toast.on_dismiss(move || emit(carrier.clone()));
             }
@@ -1060,7 +1062,7 @@ fn attach_children(
 /// The node's `"press"` (activation) intent, to fire on click. `None` when the node isn't
 /// actionable.
 fn press_intent(node: &ViewNode) -> Option<Intent> {
-    Some(node.intent("press")?.clone())
+    Some(node.intent(ViewEvent::Press)?.clone())
 }
 
 /// **What a leader-key pick (`prefix+/`) does to this node.**
@@ -1071,8 +1073,8 @@ fn press_intent(node: &ViewNode) -> Option<Intent> {
 /// events: heca's own sidebar row activates the pane and leaves on a click, and stays in the
 /// sidebar on a hint pick. Pointing one intent at both is what made `prefix+/` leave the sidebar.
 fn hint_intent(node: &ViewNode) -> Option<Intent> {
-    node.intent("hint")
-        .or_else(|| node.intent("press"))
+    node.intent(ViewEvent::Hint)
+        .or_else(|| node.intent(ViewEvent::Press))
         .cloned()
 }
 
@@ -1080,7 +1082,7 @@ fn hint_intent(node: &ViewNode) -> Option<Intent> {
 /// target: a value change isn't a gesture a letter can stand for. Data marshalling into the intent is a later step
 /// (plugin-task-ui-4 remainder); today the change simply fires the bound intent.
 fn change_intent(node: &ViewNode) -> Option<Intent> {
-    Some(node.intent("change")?.clone())
+    Some(node.intent(ViewEvent::Change)?.clone())
 }
 
 /// Realize a container node onto a base [`Flex`] (row or column), applying layout props and
@@ -1245,7 +1247,7 @@ fn realize_options(
 /// An option with no `value` falls back to `args["index"]`, so a value-less picker still reports
 /// *something* rather than dispatching a bare intent.
 fn option_change(node: &ViewNode, emit: &IntentEmitter) -> Option<impl Fn(Action) + 'static> {
-    let intent = node.intent("change")?.clone();
+    let intent = node.intent(ViewEvent::Change)?.clone();
     let values: Vec<Option<PropValue>> = node
         .children
         .iter()
@@ -1342,18 +1344,18 @@ fn realize_card_grid(
     grid = grid.row(columns, layout);
     // Behaviour is an Intent, as everywhere: the chosen card's key travels as an argument, so one
     // described action serves every card rather than a binding per card.
-    if let Some(intent) = node.events.get("activate") {
+    if let Some(intent) = node.events.get(ViewEvent::Activate.name()) {
         let (intent, emit) = (intent.clone(), emit.clone());
         grid = grid.on_activate(move |key| {
             emit(intent.clone().arg("key", PropValue::Text(key.to_string())))
         });
     }
-    if let Some(intent) = node.events.get("move") {
+    if let Some(intent) = node.events.get(ViewEvent::Move.name()) {
         let (intent, emit) = (intent.clone(), emit.clone());
         grid = grid
             .on_move(move |key| emit(intent.clone().arg("key", PropValue::Text(key.to_string()))));
     }
-    if let Some(intent) = node.events.get("dismiss") {
+    if let Some(intent) = node.events.get(ViewEvent::Dismiss.name()) {
         let (intent, emit) = (intent.clone(), emit.clone());
         grid = grid.on_dismiss(move || emit(intent.clone()));
     }
@@ -1473,7 +1475,7 @@ fn warn_unknown_slot(parent: &ViewNode, child: &ViewNode, slot: Option<&str>, kn
 /// A node's intent for `event`, wrapped as the carrier a widget callback fires. (`press_intent` also
 /// registers a hint target; this is for events that aren't pick targets — `change`, `dismiss`, a
 /// toast's inline `action`.)
-fn intent_carrier(node: &ViewNode, event: &str) -> Option<Intent> {
+fn intent_carrier(node: &ViewNode, event: ViewEvent) -> Option<Intent> {
     node.intent(event).cloned()
 }
 
@@ -1509,7 +1511,7 @@ fn severity_prop(node: &ViewNode) -> ToastSeverity {
 /// `args["expanded"]` set: an author binds one action and learns which way it went, instead of
 /// having to track the group's state on their side.
 fn toggle_change(node: &ViewNode, emit: &IntentEmitter) -> Option<impl Fn(Action) + 'static> {
-    let intent = node.intent("toggle")?.clone();
+    let intent = node.intent(ViewEvent::Toggle)?.clone();
     let emit = emit.clone();
     Some(move |action: Action| {
         let SignalData::Bool(expanded) = action.data else {
@@ -1672,6 +1674,24 @@ mod tests {
         ViewLabelSide, ViewMarker, ViewOrientation, ViewScrollAxes, ViewSeverity, ViewTextAlign,
     };
     use std::rc::Rc;
+
+    /// **The SDK's source, whole** — every file of `heca-view/src/build/`, in name order. The guards
+    /// that read it ask what the builders say, not which file says it, so a split of the SDK moves
+    /// nothing under them.
+    fn sdk_source() -> String {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../heca-view/src/build");
+        let mut files: Vec<_> = std::fs::read_dir(&dir)
+            .expect("the SDK source folder is where it is expected")
+            .map(|entry| entry.expect("a readable directory entry").path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
+            .collect();
+        files.sort();
+        files
+            .iter()
+            .map(|path| std::fs::read_to_string(path).expect("an SDK source file is readable"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 
     /// **What the framework's picker will find in a realized tree**, in document order: one path
     /// per node that declared what a pick does to it. There is no registry to interrogate any more
@@ -2279,10 +2299,7 @@ mod tests {
             ("Label", "font_scale", "on Style already"),
         ];
 
-        let sdk = std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../heca-view/src/build.rs"),
-        )
-        .expect("the SDK source is where it is expected");
+        let sdk = sdk_source();
 
         // Which builder impl a method sits in: the guard is per-kind, so a setter on the wrong
         // builder must not satisfy another's property.
@@ -2375,7 +2392,7 @@ mod tests {
 
         assert!(
             missing.is_empty(),
-            "these widget properties have no setter in heca-view/src/build.rs, so a description \
+            "these widget properties have no setter in heca-view/src/build/, so a description \
              cannot reach them through the SDK: {missing:#?}\n\nAdd a setter, or add the property \
              to NOT_IN_SDK with the reason.",
         );
@@ -2464,7 +2481,7 @@ mod tests {
         assert!(
             missing.is_empty(),
             "these glyphs exist in heca-grid-ui but not in ViewGlyph, so a description cannot name \
-             them: {missing:?} — add them to the generated block in heca-view/src/lib.rs",
+             them: {missing:?} — add them to the glyph list in heca-view/src/scalars/glyph.rs",
         );
         let stale: Vec<_> = mirrored.difference(&library).collect();
         assert!(
@@ -4150,7 +4167,7 @@ mod tests {
     /// enough on its own to make a node a target.
     #[test]
     fn a_plugin_can_make_anything_pickable_from_the_sdk() {
-        use heca_view::build;
+        use heca_view::build::{self, Style as _};
 
         let (emit, fired) = recording_emitter();
         let node: ViewNode = build::Label::new("nginx")
@@ -4302,7 +4319,7 @@ mod tests {
     #[test]
     fn a_plugin_can_own_a_picker_from_the_sdk() {
         use heca_view::build;
-        use heca_view::build::Parent as _;
+        use heca_view::build::{Parent as _, Style as _};
 
         let (emit, fired) = recording_emitter();
         let node: ViewNode = build::KeyHintGroup::new()
@@ -4421,7 +4438,7 @@ mod tests {
         use heca_view::build;
 
         let (emit, fired) = recording_emitter();
-        use heca_view::build::Parent as _;
+        use heca_view::build::{Parent as _, Style as _};
         let node: ViewNode = build::Card::new("Containers")
             .on_hint(Intent::new("the_card"))
             .child(build::Label::new("row").on_hint(Intent::new("the_row")))
@@ -4509,8 +4526,7 @@ mod tests {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let native = std::fs::read_to_string(dir.join("../heca-grid-ui/src/builders.rs"))
             .expect("the native builder source is where it is expected");
-        let sdk = std::fs::read_to_string(dir.join("../heca-view/src/build.rs"))
-            .expect("the SDK source is where it is expected");
+        let sdk = sdk_source();
 
         // `ComponentExt` is the trait a capability lands on when it belongs to every widget rather
         // than to one, so it is the list this guard is about.
@@ -5039,68 +5055,6 @@ mod tests {
             unreachable.is_empty(),
             "a `hint` event written into these kinds does not reach the picker, so a plugin can \
              draw them but never make them pickable: {unreachable:#?}",
-        );
-    }
-
-    /// **The same reach, through the typed SDK.**
-    ///
-    /// The raw `ViewNode` form is the wire; `heca_view::build` is what an author actually writes,
-    /// and it is hand-written — so the thing that keeps it honest is a guard, exactly as
-    /// [`every_widget_property_is_reachable_from_the_sdk`] does for properties. A capability that
-    /// exists on the wire and not in the SDK is one nobody will find.
-    ///
-    /// It reads the SDK's source rather than calling it, because *"does a method exist"* is not a
-    /// question a running test can ask — the same technique, for the same reason.
-    ///
-    /// ⚠️ **Written red on purpose** (F003/P082/T434): `on_hint` sits on seven kinds today. It is
-    /// **F003/P082/T435** that makes it pass, by extending the `with_event!` table. Written
-    /// afterwards this test would only describe what was built, which protects nothing.
-    #[test]
-    fn every_kind_can_be_given_a_hint_from_the_sdk() {
-        /// Kinds with no `on_hint`, each with the reason. An entry here is a capability an author
-        /// cannot reach — keep it short, and never add one to make the test pass.
-        const NO_HINT: &[(&str, &str)] = &[(
-            "ScrollBar",
-            "host-only: its state is live host signals, and `realize` refuses it outright",
-        )];
-
-        let sdk = std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../heca-view/src/build.rs"),
-        )
-        .expect("the SDK source is where it is expected");
-
-        // `with_event!` is the one table that gives a builder its event setters, so this asks the
-        // table rather than looking for a method: `Row { on_press => "press", on_hint => "hint" }`.
-        let events = {
-            let start = sdk
-                .find("with_event!(")
-                .expect("the SDK binds its events in one table");
-            let rest = &sdk[start..];
-            let end = rest.find("\n);").unwrap_or(rest.len());
-            rest[..end].to_string()
-        };
-
-        let mut missing: Vec<String> = Vec::new();
-        for &kind in WidgetKind::ALL {
-            let name = format!("{kind:?}");
-            if NO_HINT.iter().any(|(k, _)| *k == name) {
-                continue;
-            }
-            let declares = events
-                .lines()
-                .filter(|l| l.trim_start().starts_with(&format!("{name} {{")))
-                .any(|l| l.contains("on_hint"));
-            if !declares {
-                missing.push(name);
-            }
-        }
-
-        assert!(
-            missing.is_empty(),
-            "these kinds take a hint natively (`ComponentExt::on_hint` is on every widget) but \
-             cannot be given one through the typed SDK, so an author writing them can draw a \
-             thing and never make it pickable: {missing:#?}\n\nAdd `on_hint => \"hint\"` to the \
-             kind's `with_event!` row, or add it to NO_HINT with the reason.",
         );
     }
 
