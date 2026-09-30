@@ -30,6 +30,44 @@ fn give(node: &dyn Component, label: &Option<String>, clip: Option<Rectangle>) -
     true
 }
 
+/// What a visit to a node decides about the walk below it.
+enum Step<C> {
+    /// This node answered for its whole subtree — do not go below it.
+    Stop(bool),
+    /// Carry on into the children, handing them `ctx`; `hit` is whether this node took the write.
+    Into { ctx: C, hit: bool },
+}
+
+/// **The one walk down a tree to the nodes a key names** — what [`offer_hint_by_key`],
+/// [`set_text_by_key`] and [`set_selected_by_key`] all are, each with its own idea of what to do at
+/// a node.
+///
+/// It owns the two rules every such walk must follow, so they are written once: a subtree that is
+/// [`skip`]ped (hidden, or laid out at nothing) is not visited, and **every** match is visited, not
+/// the first — one thing may be shown in more than one place, and `||` or `.any()` would stop at
+/// the first and leave the other dark (the sidebar pane listed on both sides, 2026-08-17). Whatever
+/// a caller needs carried down from its ancestors (the nearest declaration, the clip) travels as
+/// `ctx`.
+fn walk<'a, C: Clone>(
+    node: &'a dyn Component,
+    ctx: C,
+    visit: &mut dyn FnMut(&'a dyn Component, &C) -> Step<C>,
+) -> bool {
+    if skip(node) {
+        return false;
+    }
+    match visit(node, &ctx) {
+        Step::Stop(hit) => hit,
+        Step::Into { ctx, hit } => {
+            let mut found = hit;
+            for child in &node.base().children {
+                found |= walk(child.as_ref(), ctx.clone(), visit);
+            }
+            found
+        }
+    }
+}
+
 /// **Offer the letter `label` to the hint target at `path`.** `None` withdraws it.
 ///
 /// The host's half of the picker is *this* and nothing more: assign the letters and hand each one
@@ -90,35 +128,50 @@ pub fn offer_hint(root: &dyn Component, path: &[usize], label: Option<String>) -
 /// nearest one **enclosing** it. Searching one direction only is why every sidebar row stayed dark
 /// under `prefix+q` while the docks lit correctly (Antonio, driving, 2026-08-14).
 pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>) -> bool {
-    fn walk(
-        node: &dyn Component,
-        key: &str,
-        label: &Option<String>,
-        enclosing: Option<&dyn Component>,
-        declaring: Option<&dyn Component>,
+    /// What a walk carries down: the nearest target above, the nearest declaration above, and the
+    /// clip the ancestors impose.
+    #[derive(Clone, Copy)]
+    struct Above<'a> {
+        enclosing: Option<&'a dyn Component>,
+        declaring: Option<&'a dyn Component>,
         clip: Option<Rectangle>,
-    ) -> bool {
-        if skip(node) {
-            return false;
-        }
-        // The nearest hint *above* the target, remembered on the way down so it is there if the
-        // named node turns out to be inside a wrapper that declared one.
-        let enclosing = if is_addressable(node) {
-            Some(node)
-        } else {
-            enclosing
-        };
-        // …and separately, the nearest **declaring** ancestor. `enclosing` takes anything that
-        // counts as a target, which includes the named node itself once it is merely actionable —
-        // so by the time we arrive at a keyed row it has overwritten the wrapper we were looking
-        // for. Two questions, two variables.
-        let declaring = if node.base().hint.is_some() {
-            Some(node)
-        } else {
-            declaring
-        };
-        let names_itself = node.base().answers_to(key);
-        if names_itself {
+    }
+
+    walk(
+        root,
+        Above {
+            enclosing: None,
+            declaring: None,
+            clip: None,
+        },
+        &mut |node, above| {
+            // The nearest hint *above* the target, remembered on the way down so it is there if the
+            // named node turns out to be inside a wrapper that declared one.
+            let enclosing = if is_addressable(node) {
+                Some(node)
+            } else {
+                above.enclosing
+            };
+            // …and separately, the nearest **declaring** ancestor. `enclosing` takes anything that
+            // counts as a target, which includes the named node itself once it is merely
+            // actionable — so by the time we arrive at a keyed row it has overwritten the wrapper we
+            // were looking for. Two questions, two variables.
+            let declaring = if node.base().hint.is_some() {
+                Some(node)
+            } else {
+                above.declaring
+            };
+            if !node.base().answers_to(key) {
+                return Step::Into {
+                    ctx: Above {
+                        enclosing,
+                        declaring,
+                        clip: narrowed(above.clip, node),
+                    },
+                    hit: false,
+                };
+            }
+            let clip = above.clip;
             // **Nothing here can show it.** Asked before the search below, not inside it: the four
             // steps exist to find *which widget draws this row's letter*, and one of them is the
             // nearest target ENCLOSING the row — so a row past the sidebar's fold would otherwise
@@ -126,7 +179,7 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
             // letter. The named thing is not visible in this tree, so this tree is not one of the
             // places that can show it (F003/P082/T438).
             if label.is_some() && unseen(node, clip) {
-                return false;
+                return Step::Stop(false);
             }
             // A declaration inside wins first (a dock names itself on the outside and declares the
             // pick within), then a declaration *enclosing* it, and only then anything merely
@@ -134,46 +187,31 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
             // does owns the letter — and the placement it drew with.
             if label_nearest_matching(
                 node,
-                label,
+                &label,
                 clip,
                 &|c: &dyn Component| c.base().hint.is_some(),
                 Some(key),
             ) {
-                return true;
+                return Step::Stop(true);
             }
             if let Some(outer) = declaring
-                && give(outer, label, clip)
+                && give(outer, &label, clip)
             {
-                return true;
+                return Step::Stop(true);
             }
-            if label_nearest_matching(node, label, clip, &|_: &dyn Component| true, Some(key)) {
-                return true;
+            if label_nearest_matching(node, &label, clip, &|_: &dyn Component| true, Some(key)) {
+                return Step::Stop(true);
             }
             if let Some(outer) = enclosing
-                && give(outer, label, clip)
+                && give(outer, &label, clip)
             {
-                return true;
+                return Step::Stop(true);
             }
             // Named, but nothing anywhere around it says what a pick would do — so there is nothing
             // a letter could run, and lettering it would put up a keycap that does nothing.
-            return false;
-        }
-        // **Every node naming `key`, not the first one.** `.any()` here stopped the walk at the
-        // first match, so a pane listed in the left sidebar *and* the right one was lettered only
-        // on the left — the same target, one of its two places silently dark (Antonio, driving,
-        // 2026-08-17; the trace read `nodes naming it: chrome=2` while one letter was handed out).
-        //
-        // `||` cannot be used to fold this either: it short-circuits the same way.
-        let mut found = false;
-        let clip = narrowed(clip, node);
-        for child in &node.base().children {
-            if walk(child.as_ref(), key, label, enclosing, declaring, clip) {
-                found = true;
-            }
-        }
-        found
-    }
-    walk(root, key, &label, None, None, None)
+            Step::Stop(false)
+        },
+    )
 }
 
 /// Whether this subtree **is somebody else** — it holds an identity that is not `owner`'s.
@@ -279,10 +317,7 @@ pub fn clear_hints(root: &dyn Component) {
 /// Answers `true` if anything took it. Every matching node is written, because one thing may be
 /// shown in more than one place.
 pub fn set_text_by_key(root: &dyn Component, key: &str, text: &str) -> bool {
-    fn walk(node: &dyn Component, key: &str, text: &str) -> bool {
-        if skip(node) {
-            return false;
-        }
+    walk(root, (), &mut |node, ()| {
         let mut wrote = false;
         if node.base().key.as_deref() == Some(key) {
             wrote |= node.set_text(text.to_string());
@@ -292,17 +327,16 @@ pub fn set_text_by_key(root: &dyn Component, key: &str, text: &str) -> bool {
             if !wrote {
                 for child in node.base().children.iter() {
                     if child.set_text(text.to_string()) {
-                        return true;
+                        return Step::Stop(true);
                     }
                 }
             }
         }
-        for child in node.base().children.iter() {
-            wrote |= walk(child.as_ref(), key, text);
+        Step::Into {
+            ctx: (),
+            hit: wrote,
         }
-        wrote
-    }
-    walk(root, key, text)
+    })
 }
 
 /// **Light the named node, and darken every other one it knows about** (F003/P097/T501).
@@ -320,20 +354,13 @@ pub fn set_text_by_key(root: &dyn Component, key: &str, text: &str) -> bool {
 /// `keys` is every key the container owns, so exactly one ends lit and the rest are cleared in the
 /// same walk — a cursor is single-valued, and clearing separately is how two claims survive at once.
 pub fn set_selected_by_key(root: &dyn Component, keys: &[String], lit: Option<&str>) -> bool {
-    fn walk(node: &dyn Component, keys: &[String], lit: Option<&str>, any: &mut bool) {
-        if skip(node) {
-            return;
-        }
+    walk(root, (), &mut |node, ()| {
+        let mut hit = false;
         if let Some(k) = node.base().key.as_deref()
             && keys.iter().any(|owned| owned == k)
         {
-            *any |= node.set_selected(Some(k) == lit);
+            hit = node.set_selected(Some(k) == lit);
         }
-        for child in node.base().children.iter() {
-            walk(child.as_ref(), keys, lit, any);
-        }
-    }
-    let mut any = false;
-    walk(root, keys, lit, &mut any);
-    any
+        Step::Into { ctx: (), hit }
+    })
 }
