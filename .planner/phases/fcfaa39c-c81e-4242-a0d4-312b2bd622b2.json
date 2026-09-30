@@ -1,0 +1,174 @@
+{
+  "id": "fcfaa39c-c81e-4242-a0d4-312b2bd622b2",
+  "featureId": "1be8af21-337e-4636-93d9-6bea87368492",
+  "number": 100,
+  "shortId": "DWTTH",
+  "priority": 4,
+  "slug": "ready-03-sessions-palette-mode-cli-plain-heca-attaches-to-the-last-one",
+  "title": "ready-03: sessions — palette `#` mode, CLI, plain `heca` attaches to the last one",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "The server holds many sessions; switch in the same window from the palette's `#` mode; CLI to list, attach, create, close.",
+  "description": "Third step of the server/client model. Depends on P099 (the connection). F012 accepted decision \"Sessions: palette # mode, CLI flags, plain heca attaches to the last session, saved as JSON\". Replaces the earlier plan of one process per instance with OS window switching.\n\n## Goal\n- The server holds many sessions, each with a name and a project folder (heca-pro stores its linked feature on it).\n- **Palette `#` mode** beside `:` commands, `@` panes, `$` workspaces: one row per session (name, folder, windows attached, agents running); picking one switches this window; searchable and remembered.\n- **First, fix the palette's mode table** (its own task): today it is written twice in `heca/src/chrome/palette.rs` — `sigil_for` (~370) and the `.mode(...)` calls in `open_command_palette` (~414) — kept equal by hand. One table both read, so the sessions mode (and any plugin's mode) is declared once.\n- Actions: new, rename, close, detach, switch — in the palette, bindable, callable by RPC.\n- CLI (cli.rs flag style): `heca --sessions [--json]`, `--attach <name>`, `--new <name> [folder]`, `--kill <name>`, `--standalone`. Plain `heca`: server running → attach to the last session; none → start the server in the background, restore sessions, attach to the last. `--standalone` = today's behaviour.\n\n## Preserve\n- Text from wherever the app keeps user-facing text; nothing hard-coded. Not blocked by any other feature.\n\n## Done when\n- Two sessions; `#` in the palette lists both and switches in the same window; the CLI lists and attaches; plain `heca` reattaches to the last one.",
+  "descriptionUpdatedAt": "2026-09-29T21:32:23.375Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "79db766a-7f02-474e-b7dc-2f4c0675a030",
+    "05d2b3e6-f798-47a9-ad4d-bd501e37b266"
+  ],
+  "tasks": [
+    {
+      "id": "79db766a-7f02-474e-b7dc-2f4c0675a030",
+      "phaseId": "fcfaa39c-c81e-4242-a0d4-312b2bd622b2",
+      "number": 522,
+      "shortId": "E79CB",
+      "priority": 1,
+      "shortName": "register-running-instances-and",
+      "title": "Sessions in the server: palette `#` mode, session actions, CLI, plain `heca` attaches to the last",
+      "status": "planned",
+      "description": "Execution task for P100 — read the phase and F012's decision \"Sessions: palette # mode…\" first. Depends on P099 (connection) and on the mode-table task in this phase (do that first). Replaces the old OS window-switching plan: no per-OS focus hand-over is needed any more.\n\nEdge cases: two sessions with the same name; closing the session a window is showing (switch that window to another, or ask); the last session closed; `--attach` to a name that does not exist (clear message, offer `--new`).",
+      "descriptionUpdatedAt": "2026-09-29T21:32:46.854Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-001-server-holds-many-sessions-name-project-folder-free-label-for-heca-pro",
+          "number": 1,
+          "title": "Server holds many sessions (name, project folder, free label for heca-pro)",
+          "checked": false
+        },
+        {
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-002-palette-mode-name-folder-windows-attached-agents-running-pick-switch-this-window",
+          "number": 2,
+          "title": "Palette `#` mode: name, folder, windows attached, agents running; pick = switch this window",
+          "checked": false
+        },
+        {
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-003-actions-new-rename-close-detach-switch-palette-key-rpc",
+          "number": 3,
+          "title": "Actions: new, rename, close, detach, switch (palette, key, RPC)",
+          "checked": false
+        },
+        {
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-004-cli-sessions-json-attach-new-kill-standalone",
+          "number": 4,
+          "title": "CLI: --sessions [--json], --attach, --new, --kill, --standalone",
+          "checked": false
+        },
+        {
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-005-plain-heca-attach-to-last-start-the-server-and-restore-if-none-runs",
+          "number": 5,
+          "title": "Plain `heca`: attach to last; start the server and restore if none runs",
+          "checked": false
+        },
+        {
+          "id": "79db766a-7f02-474e-b7dc-2f4c0675a030-check-006-docs",
+          "number": 6,
+          "title": "Docs",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "69a168bf-276e-401a-a337-597ef29221b3",
+        "05d2b3e6-f798-47a9-ad4d-bd501e37b266"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-29T19:22:07.683Z",
+      "updatedAt": "2026-09-29T21:33:08.617Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "05d2b3e6-f798-47a9-ad4d-bd501e37b266",
+      "phaseId": "fcfaa39c-c81e-4242-a0d4-312b2bd622b2",
+      "number": 526,
+      "shortId": "YQTC3",
+      "priority": 2,
+      "shortName": "the-palette-s-modes-are-declar",
+      "title": "The palette's modes are declared once — one table read by both the sigil lookup and the palette",
+      "status": "planned",
+      "description": "Found 2026-09-29 while adding the sessions mode. The mode table is written twice in `heca/src/chrome/palette.rs`: `sigil_for` (~370: pane '@', workspace '$', command ':') and the `.mode(...)` calls in `open_command_palette` (~414-416). The comment there admits they are kept equal by hand, so a new mode must be added in two places and a missed one silently misbehaves (an unknown mode falls back to the default list).\n\nFix: one table of modes (sigil, name, where its rows come from) that both `sigil_for` and `open_command_palette` read, so adding a mode — the sessions `#` mode, or later a plugin's — is one declaration. Write it as the line a plugin author would type. Do this before the sessions mode.\n\nEdge cases: the `mode=` argument of the open-palette action and RPC keeps working; search memory scopes (`MODE_PANE`, `MODE_WORKSPACE` in search history) keep their names so saved history still matches.",
+      "descriptionUpdatedAt": "2026-09-29T21:32:38.563Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "05d2b3e6-f798-47a9-ad4d-bd501e37b266-check-001-one-mode-table-sigil-name-rows-source",
+          "number": 1,
+          "title": "One mode table: sigil, name, rows source",
+          "checked": false
+        },
+        {
+          "id": "05d2b3e6-f798-47a9-ad4d-bd501e37b266-check-002-sigil-for-and-open-command-palette-both-read-it-no-second-list",
+          "number": 2,
+          "title": "sigil_for and open_command_palette both read it; no second list",
+          "checked": false
+        },
+        {
+          "id": "05d2b3e6-f798-47a9-ad4d-bd501e37b266-check-003-open-palette-action-rpc-mode-unchanged-search-memory-scope-names-unchanged",
+          "number": 3,
+          "title": "Open-palette action / RPC `mode=` unchanged; search-memory scope names unchanged",
+          "checked": false
+        },
+        {
+          "id": "05d2b3e6-f798-47a9-ad4d-bd501e37b266-check-004-test-a-mode-added-in-one-place-appears-in-both-lookups",
+          "number": 4,
+          "title": "Test: a mode added in one place appears in both lookups",
+          "checked": false
+        },
+        {
+          "id": "05d2b3e6-f798-47a9-ad4d-bd501e37b266-check-005-docs-how-to-add-a-palette-mode",
+          "number": 5,
+          "title": "Docs: how to add a palette mode",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-29T21:32:38.517Z",
+      "updatedAt": "2026-09-29T21:32:38.517Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-29T19:21:28.041Z",
+  "updatedAt": "2026-09-29T21:33:23.573Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "b34adea2-f855-4950-b7c4-93b867cf65c9",
+      "date": "2026-09-29T21:32:46.879Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

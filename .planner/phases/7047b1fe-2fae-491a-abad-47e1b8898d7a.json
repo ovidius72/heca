@@ -1,0 +1,389 @@
+{
+  "id": "7047b1fe-2fae-491a-abad-47e1b8898d7a",
+  "featureId": "1be8af21-337e-4636-93d9-6bea87368492",
+  "number": 102,
+  "shortId": "SLT4C",
+  "priority": 7,
+  "slug": "ready-05-agent-contract-agent-status-in-the-pane-row-and-sounds",
+  "title": "ready-05: agent contract, agent status in the pane row, and sounds",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "One contract for agent programs (Claude Code, Codex, pi built in; plugins add more); status from their hooks shown in the pane row; sounds on changes.",
+  "description": "Decisions 13, 19, 20 in `~/projects/heca-pro/docs/decisions.md`. Replaces the status-and-sounds part of F008 (`agent-integration/agent-integration-plan.md`, P048 tasks T173 \"Agent status display\" and T175 \"Transition sounds\", both deferred) — reuse its research on hooks, rewrite the design against today's code. Rooms, orchestration and agent-comms are heca-pro, not here.\n\n## Current state\n- `heca-core/src/backend/terminal/osc.rs:4` — the escape-code reader knows only prompt start, command start, pre-exec, program, command finished, cwd.\n- `heca-core/src/runtime.rs:72` — `PaneRuntime` has no agent state. Process status and pane rows: `heca/src/app/process_monitor.rs`, `heca/src/providers/workspaces/pane_row.rs`.\n\n## Goal\n- **One agent contract** any agent program implements: recognise it (by program), start it (with whatever it needs to report status), read its status. Claude Code, Codex and pi are built-in implementations of the same contract a plugin would write — code never branches on a program's name.\n- Status set: working, waiting for input, waiting for permission, finished, error, compacting, subagent running — open to more.\n- Status sources: Claude Code hooks printing a notification escape code (added through `--settings`, the user's own settings untouched), Codex's own notification codes, a small pi extension writing to a side channel. The reader learns notification codes (OSC 9 / 99 / 777).\n- Agent line in the pane row: name, status, current task — composed from existing widgets, theme-driven.\n- Sounds on status changes, configurable per status (and per project).\n- Status changes are events (DOM-shaped event system) and appear on the socket's event stream.\n\n## Preserve\n- Non-agent panes unchanged; process status stays separate from agent status.\n- AGENTS.md § 0; nothing hard-coded.\n\n## Done when\n- Claude Code in a pane shows working → waiting → finished in its pane row and plays the configured sound; the same for Codex and pi; a test agent added through the contract (as a plugin would) works the same.",
+  "descriptionUpdatedAt": "2026-09-29T19:21:40.927Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "e276308e-38f6-45be-a3fb-e8c4bec9a6c9",
+    "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6",
+    "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13",
+    "a52865e6-5a18-4c67-8634-2e3127307000"
+  ],
+  "tasks": [
+    {
+      "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9",
+      "phaseId": "7047b1fe-2fae-491a-abad-47e1b8898d7a",
+      "number": 171,
+      "shortId": "HJYP5",
+      "priority": 1,
+      "shortName": "agentdriver-registry",
+      "title": "The agent contract — one set of rules every agent program implements (built-ins and plugins alike)",
+      "status": "planned",
+      "description": "Read P102's description first, and `~/projects/heca-pro/docs/decisions.md` 13, 19, 20. Old research (hooks per program): heca `agent-integration/agent-integration-plan.md` §2 — reuse the facts, not the design (its names are out of date).\n\nGoal: one contract any agent program implements — recognise it (from the program running in the pane), start it (with what it needs to report status), read its status. Claude Code, Codex and pi (T174) implement exactly the contract a plugin would. Code never branches on a program's name. Write the line a plugin author would type; no registry ids.\n\nStatus set: working, waiting for input, waiting for permission, finished, error, compacting, subagent running — open to more. Agent state lives beside, never merged with, the existing process status (`heca-core/src/runtime.rs:72` `PaneRuntime`).\n\nStatus changes are events in the DOM-shaped event system and appear on the socket's event stream (P099).",
+      "descriptionUpdatedAt": "2026-09-29T19:27:26.622Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "6538cfa1-e264-4d1d-8149-bfb19a3ecb9d",
+          "date": "2026-09-29T19:26:53.122Z",
+          "fromStatus": "deferred",
+          "toStatus": "deferred",
+          "title": "moved P048(F008)/T171 → P102(F012)/T171",
+          "description": "Moved from P048(F008)/T171 to P102(F012)/T171; status unchanged."
+        },
+        {
+          "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-002-deferred-planned",
+          "date": "2026-09-29T19:27:26.620Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design.",
+          "description": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-001-pre-flight-what-exists-process-monitor-paneruntime-providers-and-where-the-contract-lives-open-heca-plugin-reachable",
+          "number": 1,
+          "title": "Pre-flight: what exists (process monitor, PaneRuntime, providers) and where the contract lives (open heca, plugin-reachable)",
+          "checked": false
+        },
+        {
+          "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-002-propose-the-contract-the-lines-a-plugin-writes-and-agree-it",
+          "number": 2,
+          "title": "Propose the contract (the lines a plugin writes) and agree it",
+          "checked": false
+        },
+        {
+          "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-003-agent-state-beside-process-status-change-events",
+          "number": 3,
+          "title": "Agent state beside process status; change events",
+          "checked": false
+        },
+        {
+          "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-004-notification-escape-codes-osc-9-99-777-read-by-the-terminal-code-heca-core-src-backend-terminal-osc-rs-4",
+          "number": 4,
+          "title": "Notification escape codes (OSC 9/99/777) read by the terminal code (heca-core/src/backend/terminal/osc.rs:4)",
+          "checked": false
+        },
+        {
+          "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-005-side-channel-for-programs-that-report-outside-the-terminal-pi",
+          "number": 5,
+          "title": "Side channel for programs that report outside the terminal (pi)",
+          "checked": false
+        },
+        {
+          "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-006-a-test-agent-added-through-the-contract-as-a-plugin-would",
+          "number": 6,
+          "title": "A test agent added through the contract as a plugin would",
+          "checked": false
+        },
+        {
+          "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9-check-007-docs",
+          "number": 7,
+          "title": "Docs",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "9ec31d60-7dfa-4dcc-9797-b265a4d30562",
+        "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
+        "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
+        "88b87a32-ff00-4044-9a32-c575e3ed5401",
+        "74abdac5-8a35-4e5f-a82f-3abb9bb0b738"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:15:25.598Z",
+      "updatedAt": "2026-09-29T19:27:26.620Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6",
+      "phaseId": "7047b1fe-2fae-491a-abad-47e1b8898d7a",
+      "number": 173,
+      "shortId": "MRPRS",
+      "priority": 2,
+      "shortName": "agent-status-display",
+      "title": "Agent line in the pane row — name, status, current task",
+      "status": "planned",
+      "description": "Depends on T171. Component 1 in `~/projects/heca-pro/docs/components.md`.\n\nShow the agent's name, status and current task in the pane row (`heca/src/providers/workspaces/pane_row.rs`) and wherever pane info is shown. Composed from existing widgets (pre-flight: name them — StatusDot, Badge, Item, Label …), colours and icons from the theme, text from wherever the app keeps user-facing text. Non-agent panes unchanged. Placement follows the existing pane-row segments config, never a fixed spot.",
+      "descriptionUpdatedAt": "2026-09-29T19:27:35.840Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "e0ee7d5c-05f2-45b0-b6df-b66615c0444b",
+          "date": "2026-09-29T19:26:53.122Z",
+          "fromStatus": "deferred",
+          "toStatus": "deferred",
+          "title": "moved P048(F008)/T173 → P102(F012)/T173",
+          "description": "Moved from P048(F008)/T173 to P102(F012)/T173; status unchanged."
+        },
+        {
+          "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6-check-002-deferred-planned",
+          "date": "2026-09-29T19:27:35.838Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design.",
+          "description": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6-check-001-pre-flight-existing-widgets-and-pane-row-segments",
+          "number": 1,
+          "title": "Pre-flight: existing widgets and pane-row segments",
+          "checked": false
+        },
+        {
+          "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6-check-002-agent-segment-in-the-pane-row-theme-driven",
+          "number": 2,
+          "title": "Agent segment in the pane row, theme-driven",
+          "checked": false
+        },
+        {
+          "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6-check-003-status-colours-icons-as-theme-tokens",
+          "number": 3,
+          "title": "Status colours/icons as theme tokens",
+          "checked": false
+        },
+        {
+          "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6-check-004-driven-in-the-gpu-app-with-claude-codex-pi",
+          "number": 4,
+          "title": "Driven in the GPU app with Claude, Codex, pi",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "9ec31d60-7dfa-4dcc-9797-b265a4d30562",
+        "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
+        "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
+        "88b87a32-ff00-4044-9a32-c575e3ed5401",
+        "74abdac5-8a35-4e5f-a82f-3abb9bb0b738"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:15:25.608Z",
+      "updatedAt": "2026-09-29T19:27:35.838Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13",
+      "phaseId": "7047b1fe-2fae-491a-abad-47e1b8898d7a",
+      "number": 174,
+      "shortId": "QD7QU",
+      "priority": 3,
+      "shortName": "builtin-agent-drivers",
+      "title": "Claude Code, Codex and pi through the agent contract",
+      "status": "planned",
+      "description": "Depends on T171 (the contract). Read P102's description; hook facts in heca `agent-integration/agent-integration-plan.md` §2.\n\n- **Claude Code:** hooks that print a notification escape code, added with `claude --settings <temp file>` so the user's own settings still load (hook lists add up across settings files). Map hook events to the status set.\n- **Codex:** reads the notification codes Codex already prints (turn complete, permission) — no setup needed for the basic states.\n- **pi:** a small extension heca ships, writing status to the side channel; installed once, never overwriting a user-changed copy.\nEach is a built-in implementation of the same contract a plugin uses; nothing special-cased.",
+      "descriptionUpdatedAt": "2026-09-29T19:27:31.823Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "4174a3e3-e23c-40e2-88bf-b95d4c56fd30",
+          "date": "2026-09-29T19:26:53.122Z",
+          "fromStatus": "deferred",
+          "toStatus": "deferred",
+          "title": "moved P048(F008)/T174 → P102(F012)/T174",
+          "description": "Moved from P048(F008)/T174 to P102(F012)/T174; status unchanged."
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-002-deferred-planned",
+          "date": "2026-09-29T19:27:31.822Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design.",
+          "description": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-001-claude-code-temp-settings-hooks-user-settings-untouched-temp-file-cleaned-on-pane-close",
+          "number": 1,
+          "title": "Claude Code: temp --settings hooks, user settings untouched, temp file cleaned on pane close",
+          "checked": false
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-002-codex-native-notification-codes-mapped",
+          "number": 2,
+          "title": "Codex: native notification codes mapped",
+          "checked": false
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-003-pi-shipped-extension-side-channel-safe-install",
+          "number": 3,
+          "title": "pi: shipped extension + side channel, safe install",
+          "checked": false
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-004-each-driven-end-to-end-in-the-app-working-waiting-finished",
+          "number": 4,
+          "title": "Each driven end to end in the app (working → waiting → finished)",
+          "checked": false
+        },
+        {
+          "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13-check-005-docs-limits-e-g-org-managed-claude-settings-that-block-hooks",
+          "number": 5,
+          "title": "Docs: limits (e.g. org-managed Claude settings that block hooks)",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "9ec31d60-7dfa-4dcc-9797-b265a4d30562",
+        "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
+        "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
+        "88b87a32-ff00-4044-9a32-c575e3ed5401",
+        "74abdac5-8a35-4e5f-a82f-3abb9bb0b738"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:15:25.609Z",
+      "updatedAt": "2026-09-29T19:27:31.822Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "a52865e6-5a18-4c67-8634-2e3127307000",
+      "phaseId": "7047b1fe-2fae-491a-abad-47e1b8898d7a",
+      "number": 175,
+      "shortId": "9XLLS",
+      "priority": 4,
+      "shortName": "agent-transition-sounds",
+      "title": "Sounds when an agent's status changes",
+      "status": "planned",
+      "description": "Depends on T171. Decision 19 in `~/projects/heca-pro/docs/decisions.md`.\n\nPlay a sound when an agent's status changes (not on every event). The audio runs on its own thread so the render loop never waits (`rodio` was the earlier choice — re-check). Configured in config.toml per status (enabled, volume, sound file), overridable per project (P101), off by default. Default sounds shipped. Sound is one channel of the notification settings per event (heca-pro decision 37) — build it so it fits that table, not as a separate system.",
+      "descriptionUpdatedAt": "2026-09-29T19:27:39.694Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "a8e1106d-90a3-44e5-8886-f47c61832561",
+          "date": "2026-09-29T19:26:53.122Z",
+          "fromStatus": "deferred",
+          "toStatus": "deferred",
+          "title": "moved P048(F008)/T175 → P102(F012)/T175",
+          "description": "Moved from P048(F008)/T175 to P102(F012)/T175; status unchanged."
+        },
+        {
+          "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-002-deferred-planned",
+          "date": "2026-09-29T19:27:39.693Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design.",
+          "description": "F008 was replaced by F012 (heca-pro readiness) on 2026-09-29; this task moved here from F008/P048 and is now planned work, rewritten to the new design."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-001-audio-player-on-its-own-thread-never-blocks-rendering",
+          "number": 1,
+          "title": "Audio player on its own thread; never blocks rendering",
+          "checked": false
+        },
+        {
+          "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-002-config-per-status-enabled-volume-file-off-by-default-project-override",
+          "number": 2,
+          "title": "Config per status (enabled, volume, file); off by default; project override",
+          "checked": false
+        },
+        {
+          "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-003-plays-on-status-changes-only",
+          "number": 3,
+          "title": "Plays on status changes only",
+          "checked": false
+        },
+        {
+          "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-004-default-sounds-shipped",
+          "number": 4,
+          "title": "Default sounds shipped",
+          "checked": false
+        },
+        {
+          "id": "a52865e6-5a18-4c67-8634-2e3127307000-check-005-heard-in-the-app-with-a-real-agent",
+          "number": 5,
+          "title": "Heard in the app with a real agent",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "9ec31d60-7dfa-4dcc-9797-b265a4d30562",
+        "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
+        "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
+        "88b87a32-ff00-4044-9a32-c575e3ed5401",
+        "74abdac5-8a35-4e5f-a82f-3abb9bb0b738"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:15:25.609Z",
+      "updatedAt": "2026-09-29T19:27:39.693Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-29T19:21:40.860Z",
+  "updatedAt": "2026-09-29T21:33:25.234Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "f47f5ea7-9f0b-4aae-bd52-407afb3ca99f",
+      "date": "2026-09-29T19:26:53.325Z",
+      "fromStatus": "draft",
+      "toStatus": "deferred",
+      "title": "draft → deferred",
+      "description": ""
+    },
+    {
+      "id": "bc46ed80-1caa-43f0-8b05-c2c30a00eec6",
+      "date": "2026-09-29T19:27:39.725Z",
+      "fromStatus": "deferred",
+      "toStatus": "planned",
+      "title": "deferred → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

@@ -1778,7 +1778,7 @@ Future agent integration may notify:
 
 #### Dependencies
 
-- `agents-communication-plan.md` implementation.
+- `~/projects/heca-pro/docs/history/agents-communication-plan.md` (moved to heca-pro; superseded by heca-pro's docs/decisions.md).
 - agent-comms sidecar/control plane.
 
 #### Avoid

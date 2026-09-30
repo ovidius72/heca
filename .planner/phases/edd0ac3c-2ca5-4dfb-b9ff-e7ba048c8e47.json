@@ -1,0 +1,109 @@
+{
+  "id": "edd0ac3c-2ca5-4dfb-b9ff-e7ba048c8e47",
+  "featureId": "1be8af21-337e-4636-93d9-6bea87368492",
+  "number": 98,
+  "shortId": "MXZD6",
+  "priority": 1,
+  "slug": "ready-01-heca-as-a-library-with-an-entry-point-for-adding-things",
+  "title": "ready-01: heca as a library, with an entry point for adding things",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "The heca crate becomes library + small main.rs; another crate can add actions, docks, pane decorations and overlays at startup.",
+  "description": "heca-pro uses heca's crates as Cargo git dependencies (decision 1 in `~/projects/heca-pro/docs/decisions.md`). For that, the `heca` crate must also be a library.\n\n## Current state\n- `heca/Cargo.toml:2` — program only, no `[lib]`.\n- `HecaApp` (private) in `heca/src/main.rs:50`; `fn main` at :475; app setup in `heca/src/app/startup.rs`.\n- Actions are registered in the ActionCatalog (`heca/src/actions/`); docks come from providers (`heca/src/providers/`, e.g. the workspaces dock); overlays/layers from `heca/src/chrome/`.\n\n## Goal\n- `heca/src/lib.rs` exposes the app; `main.rs` shrinks to a few lines calling it. **The `heca` program builds and runs exactly as today.**\n- One public entry point (a builder on the app) where another crate adds, before the app starts: actions, docks (providers), pane decorations, overlays. Write it as the line a plugin author would type — no registry ids, no crate-private types. It is the same opening the plugin system needs; reuse the provider/ActionCatalog paths, never a second one.\n- heca-pro can then depend on heca pinned to a tag/commit, with a local path override for working on both.\n\n## Preserve\n- Every current behaviour of the `heca` binary; all tests green.\n- AGENTS.md § 0/0b/0d; no hard-coded placement — a heca-pro dock is placed by the user like any dock.\n\n## Done when\n- A tiny example crate (or test) builds an app through the entry point, adds one action and one dock, and both work (action reachable by key, menu and RPC; dock placeable in either sidebar).",
+  "descriptionUpdatedAt": "2026-09-29T19:21:15.097Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "47245745-7545-4dde-876d-03169ba2ba1a"
+  ],
+  "tasks": [
+    {
+      "id": "47245745-7545-4dde-876d-03169ba2ba1a",
+      "phaseId": "edd0ac3c-2ca5-4dfb-b9ff-e7ba048c8e47",
+      "number": 520,
+      "shortId": "2DC5P",
+      "priority": 1,
+      "shortName": "split-heca-into-library-progra",
+      "title": "Split heca into library + program, and add the entry point another crate uses to add actions, docks, pane decorations and overlays",
+      "status": "planned",
+      "description": "Execution task for P098. Read the phase description first, and `~/projects/heca-pro/docs/architecture.md` (\"Two editions, one code base underneath\").\n\nCurrent: `heca/Cargo.toml:2` program only; `HecaApp` private at `heca/src/main.rs:50`; `fn main` at :475; startup in `heca/src/app/startup.rs`; actions in the ActionCatalog (`heca/src/actions/`); docks from providers (`heca/src/providers/`).\n\nSteps are in the checklist. Design the entry point first and agree it with Antonio before writing it (it is a public API a plugin author will also read) — write the line a plugin author would type. Edge cases: the binary must not change behaviour; tests that reach private items keep working; nothing heca-pro adds may need a registry id.",
+      "descriptionUpdatedAt": "2026-09-29T19:21:59.921Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-001-propose-the-entry-point-the-lines-another-crate-writes-and-agree-it-with-antonio",
+          "number": 1,
+          "title": "Propose the entry point (the lines another crate writes) and agree it with Antonio",
+          "checked": false
+        },
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-002-add-heca-src-lib-rs-main-rs-becomes-a-few-lines-calling-it-binary-unchanged",
+          "number": 2,
+          "title": "Add heca/src/lib.rs; main.rs becomes a few lines calling it; binary unchanged",
+          "checked": false
+        },
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-003-entry-point-add-actions-reachable-by-key-menu-rpc",
+          "number": 3,
+          "title": "Entry point: add actions (reachable by key, menu, RPC)",
+          "checked": false
+        },
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-004-entry-point-add-docks-placeable-in-either-sidebar-by-the-user",
+          "number": 4,
+          "title": "Entry point: add docks (placeable in either sidebar by the user)",
+          "checked": false
+        },
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-005-entry-point-add-pane-decorations-and-overlays",
+          "number": 5,
+          "title": "Entry point: add pane decorations and overlays",
+          "checked": false
+        },
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-006-example-crate-or-test-that-uses-every-part-of-the-entry-point",
+          "number": 6,
+          "title": "Example crate or test that uses every part of the entry point",
+          "checked": false
+        },
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-007-docs-how-an-outside-crate-builds-on-heca",
+          "number": 7,
+          "title": "Docs: how an outside crate builds on heca",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-29T19:21:59.865Z",
+      "updatedAt": "2026-09-29T19:21:59.865Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-29T19:21:15.018Z",
+  "updatedAt": "2026-09-29T19:21:59.865Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
+}

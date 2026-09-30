@@ -1,0 +1,112 @@
+{
+  "id": "7b6d2ef8-3c8e-4376-9dd1-15c6dc454f85",
+  "featureId": "1be8af21-337e-4636-93d9-6bea87368492",
+  "number": 101,
+  "shortId": "J7Q6N",
+  "priority": 6,
+  "slug": "ready-04-per-project-settings-heca-config-toml",
+  "title": "ready-04: per-project settings (.heca/config.toml)",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "A settings file in the project root, merged over the user's config key by key.",
+  "description": "Decision 12 in `~/projects/heca-pro/docs/decisions.md`. heca-pro stores the planner opt-in, the merge setting and notification overrides here; any heca user can use it for anything config.toml holds.\n\n## Current state\n- One config file: `heca-config/src/loader.rs:222` reads `config_dir()/config.toml` (`load` at :180). Reload: `heca/src/main.rs:157`.\n\n## Goal\n- `.heca/config.toml` in the project root (the folder heca was started in, or the nearest parent that has `.heca/`), merged over the user config **key by key** — any key it sets wins, tables merge, nothing else is replaced.\n- Reload picks up changes to either file.\n- `heca --show-config` (or the existing config introspection) says which value came from which file.\n- Unknown keys reported the same way as in config.toml.\n\n## Independence\nNot blocked by any other feature. The language files (P045/T519, F006) will need the same key-by-key merge: whichever lands first writes it as one shared function and the other reuses it — never two merges. Check before starting whether T519 already did.\n\n## Preserve\n- No project file → behaviour identical to today.\n\n## Done when\n- A project file that sets one theme colour and one key binding changes only those two, in that project only, and survives a reload.",
+  "descriptionUpdatedAt": "2026-09-29T19:22:36.012Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f"
+  ],
+  "tasks": [
+    {
+      "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f",
+      "phaseId": "7b6d2ef8-3c8e-4376-9dd1-15c6dc454f85",
+      "number": 523,
+      "shortId": "5C5RN",
+      "priority": 1,
+      "shortName": "read-heca-config-toml-from-the",
+      "title": "Read .heca/config.toml from the project and merge it over the user config key by key",
+      "status": "planned",
+      "description": "Execution task for P101. Read the phase description first.\n\nCurrent: `heca-config/src/loader.rs` (`load` :180, path at :222); reload `heca/src/main.rs:157`. One merge rule: if P045/T519 (language files) has already written a key-by-key merge, reuse it; if not, write it here as a shared function T519 will reuse. Not blocked by T519 either way. Edge cases: no project file; project file with an error (report, keep the user config); nested `.heca/` folders (nearest parent wins); reload while a project value is removed.",
+      "descriptionUpdatedAt": "2026-09-29T19:22:38.839Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-001-find-the-project-root-start-folder-or-nearest-parent-with-heca",
+          "number": 1,
+          "title": "Find the project root (start folder, or nearest parent with .heca/)",
+          "checked": false
+        },
+        {
+          "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-002-key-by-key-merge-as-one-shared-function-reuse-t519-s-if-it-exists",
+          "number": 2,
+          "title": "Key-by-key merge as one shared function (reuse T519's if it exists)",
+          "checked": false
+        },
+        {
+          "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-003-reload-watches-both-files",
+          "number": 3,
+          "title": "Reload watches both files",
+          "checked": false
+        },
+        {
+          "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-004-show-which-file-each-value-came-from",
+          "number": 4,
+          "title": "Show which file each value came from",
+          "checked": false
+        },
+        {
+          "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-005-tests-override-one-colour-and-one-binding-error-in-project-file",
+          "number": 5,
+          "title": "Tests: override one colour and one binding; error in project file",
+          "checked": false
+        },
+        {
+          "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-006-docs-readme-config-default-toml-note",
+          "number": 6,
+          "title": "Docs: README + config.default.toml note",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-29T19:22:11.256Z",
+      "updatedAt": "2026-09-29T19:22:38.837Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-29T19:21:32.912Z",
+  "updatedAt": "2026-09-29T21:33:24.684Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "9c055131-564f-4121-9d57-c36635eb4580",
+      "date": "2026-09-29T19:22:38.865Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

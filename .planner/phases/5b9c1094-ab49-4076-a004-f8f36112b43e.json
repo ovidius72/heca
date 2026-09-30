@@ -1,0 +1,105 @@
+{
+  "id": "5b9c1094-ab49-4076-a004-f8f36112b43e",
+  "featureId": "1be8af21-337e-4636-93d9-6bea87368492",
+  "number": 105,
+  "shortId": "XP6KT",
+  "priority": 5,
+  "slug": "ready-03b-save-and-restore-sessions-as-json",
+  "title": "ready-03b: save and restore sessions as JSON",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "The server writes each session's layout and panes to JSON and rebuilds them on start.",
+  "description": "F012 accepted decision \"Sessions: palette # mode, CLI flags, … saved as JSON\". Depends on P100 (sessions).\n\n## Current state\n- Nothing about layout is saved today; the layout types (`heca-core/src/layout/session.rs`, `workspace.rs`, `column.rs`) cannot be written to a file.\n- The pattern to reuse: `heca/src/search_state.rs` (T386) — JSON in `dirs::data_dir()/heca/`, a `version` field, atomic write (temp file + rename), `load` never fails (missing / corrupt / future version → empty), saves by itself when a revision counter moves (`persist_if_changed`). Use it, don't write a second one.\n\n## Goal\n- Per session: name, project folder, workspaces, columns, panes (sizes as shares), each pane's program and folder, names, focus.\n- Saved when something changes (revision), and on exit.\n- On server start: rebuild sessions, restart shells in their folders. Running programs cannot be frozen; a hook lets heca-pro resume agents by id.\n- A setting to turn it off; a bad file never stops the server.\n\n## Done when\n- Quit the server with two sessions of several workspaces and panes; start it again: both sessions come back with the same layout and folders.",
+  "descriptionUpdatedAt": "2026-09-29T21:32:11.238Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "c5682041-5154-4fc4-99ec-d544ea0d52d3"
+  ],
+  "tasks": [
+    {
+      "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3",
+      "phaseId": "5b9c1094-ab49-4076-a004-f8f36112b43e",
+      "number": 527,
+      "shortId": "2PDFF",
+      "priority": 1,
+      "shortName": "save-each-session-to-json-and",
+      "title": "Save each session to JSON and rebuild it when the server starts",
+      "status": "planned",
+      "description": "Execution task for P105 — read the phase first. Reuse `heca/src/search_state.rs` (T386): data_dir, `version`, atomic write, `load` never fails, save when a revision counter moves. Make the layout types writable (heca-core/src/layout/session.rs, workspace.rs, column.rs) without pulling UI into heca-core. Edge cases: a pane whose folder no longer exists (restart in home, tell the user); a future file version (ignore, keep running); two sessions with the same name; a restore hook for heca-pro to resume agents by id.",
+      "descriptionUpdatedAt": "2026-09-29T21:32:42.996Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-001-layout-types-writable-to-json-heca-core-stays-ui-free",
+          "number": 1,
+          "title": "Layout types writable to JSON (heca-core stays UI-free)",
+          "checked": false
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-002-session-file-per-the-search-state-pattern-saved-on-change-and-on-exit",
+          "number": 2,
+          "title": "Session file per the search_state pattern; saved on change and on exit",
+          "checked": false
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-003-restore-on-server-start-layout-names-focus-shells-restarted-in-their-folders",
+          "number": 3,
+          "title": "Restore on server start: layout, names, focus, shells restarted in their folders",
+          "checked": false
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-004-hook-so-heca-pro-can-resume-agents-on-restore",
+          "number": 4,
+          "title": "Hook so heca-pro can resume agents on restore",
+          "checked": false
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-005-setting-to-turn-it-off-bad-file-never-stops-the-server",
+          "number": 5,
+          "title": "Setting to turn it off; bad file never stops the server",
+          "checked": false
+        },
+        {
+          "id": "c5682041-5154-4fc4-99ec-d544ea0d52d3-check-006-test-round-trip-two-sessions-corrupt-and-future-version-files",
+          "number": 6,
+          "title": "Test: round-trip two sessions; corrupt and future-version files",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "79db766a-7f02-474e-b7dc-2f4c0675a030"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-29T21:32:42.950Z",
+      "updatedAt": "2026-09-29T21:33:09.025Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-29T21:32:11.171Z",
+  "updatedAt": "2026-09-29T21:33:24.131Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
+}

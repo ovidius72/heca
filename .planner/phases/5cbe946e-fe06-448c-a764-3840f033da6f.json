@@ -1,0 +1,120 @@
+{
+  "id": "5cbe946e-fe06-448c-a764-3840f033da6f",
+  "featureId": "1be8af21-337e-4636-93d9-6bea87368492",
+  "number": 99,
+  "shortId": "QTC56",
+  "priority": 3,
+  "slug": "ready-02-the-connection-clients-attach-to-the-server-over-a-local-socket-rpc-events-detach-attach",
+  "title": "ready-02: the connection — clients attach to the server over a local socket; RPC, events, detach/attach",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "The local socket carries client-server traffic and scripts' RPC lines; windows detach and attach; several windows per session.",
+  "description": "Second step of the server/client model. Depends on the server/client split phase (ready-01b). F012 accepted decisions \"heca runs standalone or as a server…\" and \"Two windows on one session…\".\n\n## Current state\n- RPC language: `heca/src/rpc.rs` (`parse_rpc` :132, `introspect` :86) — one line runs any action in the ActionCatalog; entry points `HecaApp::execute_rpc_command` (`heca/src/main.rs:77`) and `query_rpc_command` (:125), waiting for a listener that was never built. CLI table: `heca/src/app/cli.rs`.\n\n## Goal\n- The server listens on a **local-only** socket (Unix socket; named pipe on Windows), owner-only, in a runtime folder.\n- Clients (windows) attach over it: they receive state changes and terminal snapshots + changed rows, and send actions and input. Closing a window detaches; the session keeps running.\n- Several windows on one session: shared content, each with its own view; a \"follow\" option to mirror another window; terminal size per pane decided by the setting `smallest` | `latest` | `largest` (default `latest`).\n- Scripts use the same socket: `heca rpc <line>` runs an action and gets an answer; `heca rpc --events` streams events. One way in — every registered action is reachable.\n- Never on the network for now (remote clients need login and encryption: later).\n\n## Done when\n- Close the window while a long command runs; `heca` again attaches and it is still running with its scrollback. Two windows on one session move independently; typing in one resizes a shared pane per the setting. `heca rpc split_horizontal` works from a shell.",
+  "descriptionUpdatedAt": "2026-09-29T21:32:17.633Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "69a168bf-276e-401a-a337-597ef29221b3"
+  ],
+  "tasks": [
+    {
+      "id": "69a168bf-276e-401a-a337-597ef29221b3",
+      "phaseId": "5cbe946e-fe06-448c-a764-3840f033da6f",
+      "number": 521,
+      "shortId": "6HNTZ",
+      "priority": 1,
+      "shortName": "local-socket-running-rpc-lines",
+      "title": "Clients attach over the local socket; detach/attach, several windows per session, `heca rpc` for scripts",
+      "status": "planned",
+      "description": "Execution task for P099 — read the phase and F012's decisions first. Depends on P104 (the server/client interface exists in one process); this task carries that interface over a local socket. Current: `heca/src/rpc.rs` (`parse_rpc` :132, `introspect` :86); `HecaApp::execute_rpc_command` `heca/src/main.rs:77`; CLI table `heca/src/app/cli.rs`. Edge cases: a stale socket from a crashed server; a slow client must never block the server; Windows named pipes; owner-only permissions; two windows of different sizes on one pane (size setting).",
+      "descriptionUpdatedAt": "2026-09-29T21:32:50.793Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-001-local-only-socket-per-server-in-a-runtime-folder-owner-only-stale-sockets-cleaned",
+          "number": 1,
+          "title": "Local-only socket per server in a runtime folder; owner-only; stale sockets cleaned",
+          "checked": false
+        },
+        {
+          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-002-client-protocol-state-changes-terminal-snapshots-changed-rows-out-actions-input-in",
+          "number": 2,
+          "title": "Client protocol: state changes + terminal snapshots/changed rows out; actions + input in",
+          "checked": false
+        },
+        {
+          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-003-detach-on-window-close-attach-again-with-scrollback-intact",
+          "number": 3,
+          "title": "Detach on window close; attach again with scrollback intact",
+          "checked": false
+        },
+        {
+          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-004-several-windows-per-session-own-view-each-follow-option-pane-size-setting-smallest-latest-largest-default-latest",
+          "number": 4,
+          "title": "Several windows per session: own view each, `follow` option, pane size setting smallest|latest|largest (default latest)",
+          "checked": false
+        },
+        {
+          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-005-heca-rpc-line-and-heca-rpc-events-for-scripts-same-one-way-in",
+          "number": 5,
+          "title": "`heca rpc <line>` and `heca rpc --events` for scripts, same one way in",
+          "checked": false
+        },
+        {
+          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-006-windows-named-pipe-path",
+          "number": 6,
+          "title": "Windows named pipe path",
+          "checked": false
+        },
+        {
+          "id": "69a168bf-276e-401a-a337-597ef29221b3-check-007-docs",
+          "number": 7,
+          "title": "Docs",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "cf787705-41cb-49d6-8668-da5c975d8ee4"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-29T19:22:04.075Z",
+      "updatedAt": "2026-09-29T21:33:07.321Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-29T19:21:22.414Z",
+  "updatedAt": "2026-09-29T21:33:23.091Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "a66c60c9-6f07-4595-9085-3b22cfe990e6",
+      "date": "2026-09-29T21:32:50.818Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

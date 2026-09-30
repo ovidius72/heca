@@ -1,0 +1,111 @@
+{
+  "id": "4dbb325a-65bd-4f08-af1f-d104e235042d",
+  "featureId": "1be8af21-337e-4636-93d9-6bea87368492",
+  "number": 104,
+  "shortId": "XHS4T",
+  "priority": 2,
+  "slug": "ready-01b-split-heca-into-server-and-client-still-in-one-process",
+  "title": "ready-01b: split heca into server and client, still in one process",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "AppState splits into server state (sessions, terminals, agents) and client state (window, drawing, docks, overlays); standalone keeps working unchanged.",
+  "description": "First step of the server/client model (F012 accepted decisions \"heca runs standalone or as a server…\" and \"Two windows on one session…\"). Depends on P098 (library). Nothing changes for the user: standalone is the server part and one client part inside one process, talking through one clear interface.\n\n## Current state\n- `heca/src/app_state.rs` (1326 lines) holds, side by side: the window and GPU renderers (heca_renderer Grid/Text/Primitive/Image/Blur/Compositor), retained chrome trees (`chrome_tree` ~816, `panes` ~826, `terminal_layers` ~707), and the state: `session: Session` (~722), `backends: BackendStore` (~724), `chrome_state: SharedChromeState` (~866). 81 files use AppState; ~65 places touch the window.\n- Terminal data is already separate from drawing: `heca-core/src/backend/snapshot.rs` — TerminalSnapshot (:194, screen as data) and TerminalDamage (:40, which rows changed). The snapshot carries pixel cell sizes (cell_w/cell_h), which belong to the client.\n- `SharedChromeState` already mirrors the state the sidebars read — the natural start for what the server sends.\n\n## Goal\n- Server part: sessions (a list, even if only one for now), workspaces/columns/panes, terminal backends, runtime/agent state, notifications store.\n- Client part: window, renderers, retained chrome, docks, overlays, per-window view (shown workspace, focused pane, scroll, open overlays).\n- One interface between them: the client sends actions and input; the server sends state changes and terminal snapshots + changed rows. The client builds all UI from that data — the server never sends interface.\n- Every action sorted: changes state → server; window only (open palette, scroll the view, show a dock) → client.\n- Pixel cell sizes move to the client; rows x cols come from the client.\n\n## Preserve\n- Standalone behaves exactly as today; all tests green; AGENTS.md § 0 (DOM-shaped events, a component owns its input, no fixes at the call site).\n\n## Done when\n- The app runs through the interface with server and client in one process; a test drives the server part with no window at all.",
+  "descriptionUpdatedAt": "2026-09-29T21:32:06.549Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "cf787705-41cb-49d6-8668-da5c975d8ee4"
+  ],
+  "tasks": [
+    {
+      "id": "cf787705-41cb-49d6-8668-da5c975d8ee4",
+      "phaseId": "4dbb325a-65bd-4f08-af1f-d104e235042d",
+      "number": 525,
+      "shortId": "9WCGP",
+      "priority": 1,
+      "shortName": "split-appstate-into-a-server-p",
+      "title": "Split AppState into a server part and a client part behind one interface, in one process",
+      "status": "planned",
+      "description": "Execution task for P104 — read the phase and F012's accepted decisions first. Current: `heca/src/app_state.rs` mixes renderers/window/retained chrome with `session`, `backends`, `chrome_state`; 81 files use AppState. `heca-core/src/backend/snapshot.rs` already gives terminal data (TerminalSnapshot) and changed rows (TerminalDamage). Propose the interface (what the client sends, what the server sends) and agree it with Antonio before moving code. Edge cases: actions that touch both sides; per-window state now implicit in AppState (focus, scroll, open layers); tests that build AppState (it needs a window today — the server part must not).",
+      "descriptionUpdatedAt": "2026-09-29T21:32:32.901Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-001-map-every-appstate-field-to-server-or-client-agree-the-interface",
+          "number": 1,
+          "title": "Map every AppState field to server or client; agree the interface",
+          "checked": false
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-002-server-part-sessions-list-layout-backends-runtime-agent-state-notifications",
+          "number": 2,
+          "title": "Server part: sessions list, layout, backends, runtime/agent state, notifications",
+          "checked": false
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-003-client-part-window-renderers-retained-chrome-docks-overlays-per-window-view",
+          "number": 3,
+          "title": "Client part: window, renderers, retained chrome, docks, overlays, per-window view",
+          "checked": false
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-004-sort-every-action-server-changes-state-or-client-window-only",
+          "number": 4,
+          "title": "Sort every action: server (changes state) or client (window only)",
+          "checked": false
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-005-terminal-snapshot-changed-rows-through-the-interface-pixel-cell-sizes-client-side-rows-x-cols-from-the-client",
+          "number": 5,
+          "title": "Terminal: snapshot + changed rows through the interface; pixel cell sizes client-side, rows x cols from the client",
+          "checked": false
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-006-standalone-runs-through-the-interface-unchanged-a-windowless-test-drives-the-server-part",
+          "number": 6,
+          "title": "Standalone runs through the interface unchanged; a windowless test drives the server part",
+          "checked": false
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-007-docs-architecture-section-for-server-client",
+          "number": 7,
+          "title": "Docs: architecture section for server/client",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "47245745-7545-4dde-876d-03169ba2ba1a"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-29T21:32:32.856Z",
+      "updatedAt": "2026-09-29T21:33:06.715Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-29T21:32:06.456Z",
+  "updatedAt": "2026-09-29T21:33:22.545Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
+}

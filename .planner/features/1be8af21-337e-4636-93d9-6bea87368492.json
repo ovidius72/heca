@@ -1,0 +1,74 @@
+{
+  "id": "1be8af21-337e-4636-93d9-6bea87368492",
+  "number": 12,
+  "shortId": "3K8DP",
+  "priority": 2,
+  "name": "🧰 Ready for heca-pro — the pieces heca-pro builds on",
+  "description": "What open heca must provide so heca-pro (the commercial edition, private repo `~/projects/heca-pro`) can be built on top of it. Everything here helps any heca user too, which is why it lives in open heca and not in heca-pro. Agreed with Antonio on 2026-09-29; heca-pro's design is in `~/projects/heca-pro/docs/` (`decisions.md`, `open-heca-work.md`). **This feature's own accepted decisions (server/client model, several windows per session, sessions) override heca-pro decisions 6-7.**\n\nheca keeps working on its own remaining features; this feature runs alongside and depends on no other feature.\n\n## The model (see the accepted decisions)\nheca runs standalone or as a server. The server holds every session (instance): workspaces, panes, running terminals and agents. A window is a client attached to one session; it can switch sessions in the same window, and draws everything (terminals, sidebars, docks, overlays) from data the server sends. Closing a window leaves the session running. Standalone = server + one client in one process. Sessions are saved as JSON and restored.\n\n## Current state\n- `heca` is a program only (`heca/Cargo.toml:2`); `HecaApp` private (`heca/src/main.rs:50`).\n- `heca/src/app_state.rs` mixes window/renderers/retained chrome with session and backends.\n- Terminal data is already separate from drawing (`heca-core/src/backend/snapshot.rs`: TerminalSnapshot, TerminalDamage).\n- RPC language exists (`heca/src/rpc.rs`); nothing listens.\n- One config file (`heca-config/src/loader.rs`); no project settings.\n- No agent status (`heca-core/src/backend/terminal/osc.rs:4`, `heca-core/src/runtime.rs:72`).\n- The drawing layer has no lines (`heca-grid-ui/src/scene.rs:304`).\n- The palette's mode table is written twice (`heca/src/chrome/palette.rs` ~370 and ~414).\n- Save pattern to reuse: `heca/src/search_state.rs` (T386).\n\n## Phases, in order\n1. P098 — heca as a library with an entry point for adding things.\n2. P104 — split into server and client, still in one process.\n3. P099 — the connection: clients attach over a local socket; detach/attach; several windows per session; `heca rpc` for scripts.\n4. P100 — sessions: palette `#` mode (after making the mode table one list, T526), session actions, CLI, plain `heca` attaches to the last.\n5. P105 — save and restore sessions as JSON.\n6. P101 — per-project settings (`.heca/config.toml`).\n7. P102 — agent contract, agent status in the pane row, sounds (tasks moved from the old F008).\n8. P103 — widgets: lines/arrows, tree layout, multi-line input, message list.\nP101, P102 and P103 do not depend on the server work and can be done in any order.\n\n## Rules for every phase\n- AGENTS.md § 0 in full: pre-flight per type, widget vs component, DOM-shaped events, Rule Zero.\n- Nothing hard-coded; never fix at the call site; a component owns its input and works wherever it is placed; placement is a dock the user places.\n- One way in: the socket is the single door for outside commands, reading the ActionCatalog.\n- Agent programs and roles are never a fixed list.",
+  "descriptionUpdatedAt": "2026-09-29T21:33:38.764Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [
+    {
+      "id": "463ccd07-fc34-4051-bbd3-693e02796c1a",
+      "title": "Two windows on one session share the content but move independently; terminal size is decided per pane (setting, default latest)",
+      "decision": "Shared (server): workspaces, columns, panes, terminals, agents, status, rooms, messages, notifications — a split made in one window appears in the other. Per window (client): which workspace is shown, focused pane, view scroll, open overlays/menus/palette, which docks are shown and where. Typing goes to the pane that window has focused; two windows typing into one pane both reach it. A \"follow\" option makes one window mirror another. A running terminal has one size: when several windows show the same pane at once, a setting decides — `smallest` | `latest` (window last typed in) | `largest`, default `latest`. A pane shown by only one window takes that window's size.",
+      "rationale": "Agreed with Antonio 2026-09-29. Watch agents on one screen while working elsewhere; the window you type in gets the full size; a setting, not hard-coded.",
+      "implementationNotes": "heca-core already separates terminal data from drawing: heca-core/src/backend/snapshot.rs TerminalSnapshot (:194) + TerminalDamage (:40, which rows changed). Over the connection send snapshot + changed rows; pixel cell sizes are the client's (font), rows x cols come from the attached windows.",
+      "acceptedAt": "2026-09-29T21:31:28.218Z"
+    },
+    {
+      "id": "f8ccde05-c130-4010-8c0d-a56638d479d2",
+      "title": "Sessions: palette `#` mode, CLI flags, plain `heca` attaches to the last session, saved as JSON",
+      "decision": "Command palette gets a sessions mode with sigil `#` (beside `:` commands, `@` panes, `$` workspaces): one row per session (name, project folder, windows attached, agents running); picking one switches this window; searchable and remembered like the other modes. Create / rename / close / detach are actions (palette, key, RPC). CLI, in the cli.rs flag style: `heca --sessions [--json]`, `heca --attach <name>`, `heca --new <name> [folder]`, `heca --kill <name>`, `heca --standalone`. Plain `heca`: if a server runs, attach to the last session used; if none, start the server in the background, restore saved sessions, attach to the last. `--standalone` = today's behaviour, everything ends with the window. Sessions are saved and restored as JSON, reusing the search-history persistence pattern (`heca/src/search_state.rs`, T386: data_dir, version, atomic write, never fails on a bad file, saves when a revision changes). Restore rebuilds workspaces and panes and restarts shells in their folders; running programs cannot be frozen (heca-pro resumes agents by id).",
+      "rationale": "Agreed with Antonio 2026-09-29. The palette is where users already switch panes and workspaces; one persistence pattern, not a second.",
+      "implementationNotes": "The palette's mode table is written twice today: sigil_for (heca/src/chrome/palette.rs ~370) and the .mode(...) calls in open_command_palette (~414). Make it one table both read, so a new mode (sessions, or a plugin's) is declared once; do it with the sessions mode.",
+      "acceptedAt": "2026-09-29T21:31:33.766Z"
+    },
+    {
+      "id": "d108b88c-8dff-4a00-9592-c255a696f4f4",
+      "title": "heca runs standalone or as a server; the server holds every session, a window is a client",
+      "decision": "heca can run as a server holding all state: every session (instance) with its workspaces, columns, panes, running terminals and agents. A window is a client attached to one session; it can switch to another session in the same window. The client draws everything - terminals, sidebars, docks, overlays - from data the server sends; the server sends state and changes, never interface. Closing a window leaves its session and programs running (detach / attach, like tmux). Standalone = server and one client inside one process, so there is one code path. This replaces the earlier plan of one heca process per instance with OS-level window switching (heca-pro decisions 6-7).",
+      "rationale": "Agreed with Antonio 2026-09-29. Agents keep running when the window closes; switching sessions in one window; one place for all state (one agent-comms member, one planner server for heca-pro); several windows on one session; attaching from another computer later. Cost accepted: splitting AppState and one crash affecting all sessions.",
+      "implementationNotes": "Order inside F012: library (P098) -> split server/client in one process (P104) -> connection over the socket with detach/attach and several windows (P099) -> sessions (P100) -> save/restore (P105). Split AppState once: today heca/src/app_state.rs holds renderers, window and retained chrome beside session and backends (81 files use AppState). SharedChromeState is the natural start for what the server sends. Actions are sorted into server (change state) and client (window only). The socket stays local only for now; clients from other computers need login and encryption and are later work.",
+      "acceptedAt": "2026-09-29T21:31:52.775Z"
+    }
+  ],
+  "phaseIds": [
+    "edd0ac3c-2ca5-4dfb-b9ff-e7ba048c8e47",
+    "5cbe946e-fe06-448c-a764-3840f033da6f",
+    "fcfaa39c-c81e-4242-a0d4-312b2bd622b2",
+    "7b6d2ef8-3c8e-4376-9dd1-15c6dc454f85",
+    "7047b1fe-2fae-491a-abad-47e1b8898d7a",
+    "3cea3f42-8900-4a73-a255-8f450eda5135",
+    "4dbb325a-65bd-4f08-af1f-d104e235042d",
+    "5b9c1094-ab49-4076-a004-f8f36112b43e"
+  ],
+  "dependsOn": [],
+  "statusLog": [
+    {
+      "id": "86ce733f-2c0b-4f94-99d9-09e5372a92d1",
+      "date": "2026-09-29T19:26:53.437Z",
+      "fromStatus": "planned",
+      "toStatus": "deferred",
+      "title": "planned → deferred",
+      "description": ""
+    },
+    {
+      "id": "abb0af69-e633-4436-a78c-2bb3fdf5adf8",
+      "date": "2026-09-29T19:27:39.801Z",
+      "fromStatus": "deferred",
+      "toStatus": "planned",
+      "title": "deferred → planned",
+      "description": ""
+    }
+  ],
+  "createdAt": "2026-09-29T19:21:05.026Z",
+  "updatedAt": "2026-09-29T21:33:38.765Z",
+  "sessionInfo": []
+}
