@@ -11,7 +11,7 @@ mod registry;
 mod testing;
 
 pub use builtins::builtins;
-pub use catalog::{ActionCatalog, ActionCategory, ActionMeta, builtin_args};
+pub use catalog::{ActionCatalog, ActionCategory, ActionMeta, GENERIC_ACTION_ICON, builtin_args};
 pub use confirm::{ButtonRole, ConfirmSpec, Outcome, ResponseButton};
 pub use registry::{
     ActionHandle, ActionRegistry, DuplicateAction, register_dynamic, unregister_dynamic,

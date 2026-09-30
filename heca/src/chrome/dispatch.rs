@@ -42,14 +42,52 @@ pub(crate) fn dispatch_surface_pointer(state: &mut crate::app_state::AppState, e
         matches!(ev, Event::Raw(_)),
         "dispatch_surface_pointer is the pointer path; keys go through the keymap",
     );
+    // The trees the window walk does not reach: each pane's own tree (its frame and header) and the
+    // pane's viewport widgets. They are separate roots, so they hear nothing that goes to the window.
+    let mut behind: Vec<&mut dyn Component> = Vec::new();
+    for pane in state.panes.values_mut() {
+        behind.push(&mut pane.root);
+    }
+    for column in state.columns.values_mut() {
+        behind.push(&mut column.root);
+    }
+    for widgets in state.pane_viewport_widgets.values_mut() {
+        behind.push(&mut widgets.badge);
+        behind.push(&mut widgets.scrollbar);
+    }
+    if !surface_owns_pointer(&mut state.window_root, behind, ev) {
+        return false;
+    }
+    state.mark_full_redraw();
+    true
+}
+
+/// **A surface that covers the pointer owns it — and everything behind it is told the pointer is
+/// not on it.** Returns whether a surface owned the point.
+///
+/// Hover is worked out by the walk that routes a move, and each retained tree keeps its own. The
+/// window root's walk reaches every surface *and* the chrome (they are all nodes in it), so a
+/// covered dock row loses its hover by itself. A pane's header is a separate root: it hears a move
+/// only from the host, and the host stopped feeding it once a surface owned the point — so a header
+/// button the pointer was on when a blocking overlay opened kept its hover, and with it the
+/// tooltip, for as long as the overlay stayed up. A widget cannot fix that for itself; it has no way
+/// to know what is above it. So the one place that decides "a surface owns this" also clears hover
+/// in every tree the surface does not reach (F004/P084/T529).
+pub(crate) fn surface_owns_pointer(
+    window: &mut dyn Component,
+    behind: Vec<&mut dyn Component>,
+    ev: &Event,
+) -> bool {
     let Some(pos) = ev.position() else {
         return false;
     };
-    if !heca_grid_ui::overlay_occluded_at(&state.window_root, pos) {
+    if !heca_grid_ui::overlay_occluded_at(window, pos) {
         return false;
     }
-    let _ = heca_grid_ui::dispatch(&mut state.window_root, ev);
-    state.mark_full_redraw();
+    let _ = heca_grid_ui::dispatch(window, ev);
+    for root in behind {
+        heca_grid_ui::clear_hover(root);
+    }
     true
 }
 
@@ -250,4 +288,86 @@ pub(crate) fn cancel_every_tree(state: &mut crate::app_state::AppState, ev: &Eve
     let _ = deliver(state, ev);
     let _ = deliver_to_panes(state, ev);
     let _ = deliver_to_pane_viewports(state, ev);
+}
+
+#[cfg(test)]
+mod surface_pointer_tests {
+    use super::*;
+    use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
+    use heca_grid_ui::widgets::{Button, Flex, Label, Overlay};
+    use heca_grid_ui::{LayoutEngine, RawPointer, RawPointerKind, Size};
+
+    fn moved(x: f64, y: f64) -> Event {
+        Event::Raw(RawPointer::new(RawPointerKind::Moved, Point::new(x, y)))
+    }
+
+    /// A pane's own tree: one button with a tooltip, filling the box.
+    fn header() -> Box<dyn Component> {
+        let button = Button::new("Close").tooltip("Close the pane");
+        let mut root: Box<dyn Component> =
+            Box::new(Flex::row().width(heca_grid_ui::Length::FULL).child(button));
+        LayoutEngine::new().compute(root.as_mut(), Size::new(400.0, 300.0));
+        root
+    }
+
+    fn hovered(root: &dyn Component) -> bool {
+        fn any(c: &dyn Component) -> bool {
+            c.base().pointer.hovered_for().is_some()
+                || c.base().children.iter().any(|k| any(k.as_ref()))
+        }
+        any(root)
+    }
+
+    /// **A blocking layer appears under a pointer that has not moved: what is below it stops being
+    /// hovered, and so stops showing its tooltip.**
+    ///
+    /// The pane's tree is a separate root the window's walk does not reach, so it used to keep the
+    /// hover it had when the overlay opened, and the tooltip with it, for as long as the overlay
+    /// stayed up (Antonio, driving, 2026-09-30).
+    #[test]
+    fn a_blocking_surface_over_a_still_pointer_clears_hover_behind_it() {
+        let mut pane = header();
+        // The pointer rests on the button: the pane's own tree hovers it and starts the tooltip clock.
+        let _ = heca_grid_ui::dispatch(pane.as_mut(), &moved(10.0, 10.0));
+        assert!(
+            hovered(pane.as_ref()),
+            "precondition: the pointer is on the button"
+        );
+
+        // A blocking overlay opens in the window root — it owns every point in the viewport.
+        let mut window = crate::chrome::new_window_root();
+        crate::chrome::place_surface(
+            &mut window,
+            "surface:1",
+            Box::new(
+                Overlay::new()
+                    .panel(Label::new("A note"))
+                    .default_open(true),
+            ),
+        );
+        LayoutEngine::new().compute(&mut window, Size::new(400.0, 300.0));
+
+        // The pointer has not moved: the host re-routes a move at the same place.
+        let owned = surface_owns_pointer(&mut window, vec![pane.as_mut()], &moved(10.0, 10.0));
+
+        assert!(owned, "a blocking surface owns the point");
+        assert!(
+            !hovered(pane.as_ref()),
+            "the button under the overlay must lose hover, or its tooltip stays up"
+        );
+    }
+
+    /// **With nothing over the pointer, nothing behind is disturbed** — the page keeps its hover.
+    #[test]
+    fn with_no_surface_over_the_pointer_the_page_keeps_its_hover() {
+        let mut pane = header();
+        let _ = heca_grid_ui::dispatch(pane.as_mut(), &moved(10.0, 10.0));
+        let mut window = crate::chrome::new_window_root();
+        LayoutEngine::new().compute(&mut window, Size::new(400.0, 300.0));
+
+        let owned = surface_owns_pointer(&mut window, vec![pane.as_mut()], &moved(10.0, 10.0));
+
+        assert!(!owned);
+        assert!(hovered(pane.as_ref()));
+    }
 }

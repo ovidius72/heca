@@ -26,8 +26,9 @@ const KNOWN_REGISTRY_SURFACES: &[&str] = &[
     "chrome/palette.rs",
     // OverlayHost: open_modal and open_dropdown
     "chrome/overlay.rs",
-    // the exposé
-    "chrome/expose/mod.rs",
+    // `register_named_layer`: the one door a *named* layer is registered through — the exposé, and
+    // every layer another crate adds with an extension's `.layer(..)`. It used to be written inside the exposé.
+    "chrome/layers_glue.rs",
 ];
 
 /// How a surface gets registered instead of placed.

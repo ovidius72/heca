@@ -94,3 +94,56 @@ fn in_a_space_between_row_the_group_sits_at_the_far_end() {
         first.base().bounds.loc.x
     );
 }
+
+/// **The buttons of a group do not touch: the container's own `gap` puts a hairline between them.**
+///
+/// A destructive button's outline sat against its neighbour (Antonio, driving, 2026-09-30). The
+/// air is the group's `gap` — a step of the theme's rhythm, so it scales with the font — and not a
+/// pixel count written into the pane header or any other caller.
+#[test]
+fn the_buttons_of_a_group_are_a_hairline_apart() {
+    let g = ButtonGroup::new()
+        .display(Display::IconOnly)
+        .size(WidgetSize::Small)
+        .child(Button::new("Split").icon(Glyph::Plus))
+        .child(Button::new("Zoom").icon(Glyph::FrameCorners))
+        .child(Button::new("Close").icon(Glyph::Minus));
+    let parent = lay(g, 900.0);
+
+    let shown: Vec<_> = row(&parent)
+        .base()
+        .children
+        .iter()
+        .filter(|c| !c.base().style.layout.hidden)
+        .map(|c| c.base().bounds)
+        .collect();
+    assert_eq!(shown.len(), 3);
+    for pair in shown.windows(2) {
+        let air = pair[1].loc.x - (pair[0].loc.x + pair[0].size.w);
+        assert!(
+            (0.9..=1.5).contains(&air),
+            "buttons a hairline apart at a 13px font, got {air}"
+        );
+    }
+}
+
+/// **A caller changes it the way it changes any gap.** No special case in the group.
+#[test]
+fn a_group_takes_its_gap_like_any_row() {
+    let g = ButtonGroup::new()
+        .display(Display::IconOnly)
+        .size(WidgetSize::Small)
+        .gap(8.0)
+        .child(Button::new("Zoom").icon(Glyph::FrameCorners))
+        .child(Button::new("Close").icon(Glyph::Minus));
+    let parent = lay(g, 900.0);
+    let kids: Vec<_> = row(&parent)
+        .base()
+        .children
+        .iter()
+        .filter(|c| !c.base().style.layout.hidden)
+        .map(|c| c.base().bounds)
+        .collect();
+    let air = kids[1].loc.x - (kids[0].loc.x + kids[0].size.w);
+    assert!((air - 8.0).abs() < 0.5, "an explicit gap wins, got {air}");
+}

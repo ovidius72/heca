@@ -13,10 +13,12 @@ mod column_group;
 mod dock_view;
 mod model;
 mod pane_row;
+mod row_lines;
 mod seams;
 mod workspace_frame;
 
 pub(crate) use model::{ColumnEntry, PaneEntry, WorkspaceEntry, WorkspaceRow, WorkspaceTree};
+pub(crate) use row_lines::{builtin_row_lines, text_line};
 
 #[cfg(test)]
 mod model_tests;

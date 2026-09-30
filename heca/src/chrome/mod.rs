@@ -21,7 +21,10 @@ pub(crate) use pane_header::{
     truncate_path_left,
 };
 pub(crate) mod drag;
+pub(crate) mod pane_items;
 pub(crate) use drag::{ChromeDragItem, DragItemRegistry};
+pub(crate) use expose::expose_show_cwd;
+pub(crate) use pane_items::{PaneButtons, PaneChips, PaneFacts, PaneRowLines};
 pub(crate) mod hint;
 // The hint half of the chrome — declarations, the visibility rule, and who is lettering what.
 // Re-exported so call sites keep naming `crate::chrome::…` while the code lives where it belongs.
@@ -55,7 +58,7 @@ pub(crate) use scene::{
     build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints, paint_search,
 };
 mod layers_glue;
-pub(crate) use layers_glue::rebuild_named_layer;
+pub(crate) use layers_glue::{rebuild_named_layer, register_named_layer};
 mod notification_layer;
 pub(crate) use notification_layer::{
     mount_notification_stack, surface_key as notification_surface_key,
@@ -63,6 +66,7 @@ pub(crate) use notification_layer::{
 mod host;
 /// The identity rule's reporting half (F003/P082/T444) — see the module docs.
 mod identity;
+pub(crate) use identity::warn_author;
 mod layers;
 mod overlay;
 mod palette;
@@ -71,7 +75,7 @@ mod state;
 // confirm dialog as a layer, plugins) — some names not yet referenced in-binary.
 #[allow(unused_imports)]
 pub(crate) use expose::record_expose_cursor;
-pub(crate) use layers::{LayerId, LayerKind, LayerRegistry, surface_key_of};
+pub(crate) use layers::{HOST_OWNER, LayerId, LayerKind, LayerRegistry, surface_key_of};
 // Declarative UI model (plugin-task-ui-1); consumed by `realize` (ui-3) + Modal body (ui-4).
 // It lives in the `heca-view` crate since F003/P017/T009 — a plugin depends on that crate, and it
 // cannot depend on this binary. Re-exported here so the app keeps one path to the vocabulary.
@@ -330,7 +334,7 @@ pub(crate) fn truncate_sidebar_git_branch(branch: &str) -> String {
 /// state mutation. Handed to container providers through
 /// [`ChromeCtx::emit_intent`](crate::providers::ChromeCtx::emit_intent).
 #[derive(Clone)]
-pub(crate) struct ChromeIntentEmitter {
+pub struct ChromeIntentEmitter {
     source: crate::app::interaction::InteractionSource,
     sink: Rc<
         dyn Fn(
@@ -788,11 +792,7 @@ mod naming_tests {
 /// `prefix+/` pick. Those are different gestures — a click on a sidebar row means *go there and
 /// leave*, a pick means *look at that one* — and serving both from one declaration is what made
 /// `prefix+/` walk out of the sidebar (F004/P084/T399).
-pub(crate) fn fires(
-    mount: &str,
-    intent: Intent,
-    emit: &ChromeIntentEmitter,
-) -> impl Fn() + 'static {
+pub fn fires(mount: &str, intent: Intent, emit: &ChromeIntentEmitter) -> impl Fn() + 'static {
     let seated = seated(mount, intent);
     let emit = emit.clone();
     move || {
@@ -812,7 +812,7 @@ pub(crate) fn fires(
 ///
 /// Reach for it wherever a pick has a name. A pick that genuinely has none is still a plain closure
 /// — it simply cannot be judged, and is offered as it always was.
-pub(crate) fn picks(mount: &str, intent: Intent, emit: &ChromeIntentEmitter) -> heca_grid_ui::Hint {
+pub fn picks(mount: &str, intent: Intent, emit: &ChromeIntentEmitter) -> heca_grid_ui::Hint {
     let seated = seated(mount, intent);
     let run = seated.clone();
     let emit = emit.clone();
@@ -915,6 +915,14 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
         (c.r, c.g, c.b, c.a).hash(&mut hsh);
     }
     state.theme.border_radius.to_bits().hash(&mut hsh);
+    // Which lines show under a pane's name is baked into each row when it is built.
+    for name in state
+        .pane_lines
+        .shown(&state.appearance.sidebar.pane_lines)
+        .names()
+    {
+        name.hash(&mut hsh);
+    }
     state.appearance.chrome_opacity().to_bits().hash(&mut hsh);
     state.appearance.opacity().to_bits().hash(&mut hsh);
     // The sidebar frame STYLE is a build-time structural choice (it picks the Pane
@@ -2184,124 +2192,18 @@ mod tests {
     }
 
     #[test]
-    fn pane_name_segment_renders_the_panes_own_name() {
-        use heca_config::appearance::PaneSegment;
-        let programs = ProgramsConfig::default();
-        let theme = GuiTheme::default();
-        let runtime = PaneRuntime {
-            program: Some("v".into()),
-            status: ProcessStatus::Running,
-            ..PaneRuntime::default()
-        };
-
-        // Renamed pane → the `pane_name` segment produces a bar (the custom name wins over
-        // the program name, unlike `app_name` which always tracks the process).
-        let bar = pane_header::build_pane_info_bar(
-            &programs,
-            "shell",
-            Some("Editor"),
-            Some(&runtime),
-            &[PaneSegment::PaneName],
-            &theme,
-            400.0,
-            13.0,
-        );
-        assert!(bar.is_some());
-
-        // Un-renamed pane → still produces a bar (falls back to the program name, never empty).
-        let bar = pane_header::build_pane_info_bar(
-            &programs,
-            "shell",
-            None,
-            Some(&runtime),
-            &[PaneSegment::PaneName],
-            &theme,
-            400.0,
-            13.0,
-        );
-        assert!(bar.is_some());
-    }
-
-    #[test]
-    fn pane_action_spec_maps_kinds_to_actions() {
-        use crate::input::WmAction;
-        use heca_config::appearance::PaneAction;
-        let pid = PaneId(7);
-        let catalog = crate::actions::ActionCatalog::with_builtins();
-
-        // Pane-parameterized actions carry the pane/column and don't need focus. Icons
-        // resolve from the action catalog (close = FolderSimpleMinus; add-pane = the
-        // add_pane_to_column identity → FolderSimplePlus).
-        let (g, a, _, focus) =
-            super::pane_header::pane_action_spec(&catalog, PaneAction::Close, pid, 2, 3);
-        assert_eq!(g, Glyph::FolderSimpleMinus);
-        assert_eq!(a, WmAction::ClosePaneById { pane_id: pid });
-        assert!(!focus);
-
-        let (g, a, _, focus) =
-            super::pane_header::pane_action_spec(&catalog, PaneAction::Split, pid, 2, 3);
-        assert_eq!(g, Glyph::FolderSimplePlus);
-        assert_eq!(
-            a,
-            WmAction::AddPaneToColumn {
-                ws_idx: 2,
-                col_idx: 3
-            }
-        );
-        assert!(!focus);
-
-        // Active-targeted actions use the requested icons + need focus-first.
-        let (g, a, _, focus) =
-            super::pane_header::pane_action_spec(&catalog, PaneAction::Zoom, pid, 0, 0);
-        assert_eq!(g, Glyph::FrameCorners);
-        assert_eq!(a, WmAction::ZoomColumn);
-        assert!(focus);
-
-        let (g, a, _, focus) =
-            super::pane_header::pane_action_spec(&catalog, PaneAction::Float, pid, 0, 0);
-        assert_eq!(g, Glyph::Cards);
-        assert_eq!(a, WmAction::Float);
-        assert!(focus);
-    }
-
-    #[test]
-    fn floating_pane_keeps_only_float_and_close() {
-        use heca_config::appearance::PaneAction;
-        let catalog = crate::actions::ActionCatalog::with_builtins();
-        // Driven by the action policy: float/close are focused-pane-local (kept),
-        // split/zoom/move are tiled-only (hidden when floating).
-        assert!(super::pane_header::pane_action_visible_when_floating(
-            &catalog,
-            PaneAction::Float
-        ));
-        assert!(super::pane_header::pane_action_visible_when_floating(
-            &catalog,
-            PaneAction::Close
-        ));
-        assert!(!super::pane_header::pane_action_visible_when_floating(
-            &catalog,
-            PaneAction::Split
-        ));
-        assert!(!super::pane_header::pane_action_visible_when_floating(
-            &catalog,
-            PaneAction::Zoom
-        ));
-        assert!(!super::pane_header::pane_action_visible_when_floating(
-            &catalog,
-            PaneAction::MoveLeft
-        ));
-        assert!(!super::pane_header::pane_action_visible_when_floating(
-            &catalog,
-            PaneAction::MoveRight
-        ));
-    }
-
-    #[test]
     fn pane_header_key_tracks_its_shape_never_its_words_or_width() {
-        use heca_config::appearance::{PaneAction, PaneSegment};
         let programs = ProgramsConfig::default();
-        let segments = [PaneSegment::AppName, PaneSegment::GitBranch];
-        let actions = [PaneAction::Split, PaneAction::Close];
+        let chips = super::PaneChips::default();
+        let segments: Vec<&super::pane_items::PaneChipDef> = ["app_name", "git_branch"]
+            .iter()
+            .map(|n| chips.get(n).expect("shipped"))
+            .collect();
+        let buttons = super::PaneButtons::default();
+        let actions: Vec<&super::pane_items::PaneButtonDef> = ["split", "close"]
+            .iter()
+            .map(|n| buttons.get(n).expect("shipped"))
+            .collect();
         let runtime = PaneRuntime {
             program: Some("zsh".into()),
             status: ProcessStatus::Idle,
@@ -2313,22 +2215,23 @@ mod tests {
         };
         let hints = ActionShortcuts::default();
         let catalog = crate::actions::ActionCatalog::with_builtins();
+        let facts_of = |rt: &PaneRuntime| {
+            super::pane_items::PaneFacts::of(PaneId(1), &programs, "shell", None, Some(rt))
+        };
         #[allow(clippy::too_many_arguments)]
         fn content<'a>(
-            programs: &'a ProgramsConfig,
-            segments: &'a [heca_config::appearance::PaneSegment],
-            actions: &'a [heca_config::appearance::PaneAction],
-            rt: &'a PaneRuntime,
+            chips: &'a super::PaneChips,
+            segments: &'a [&'a super::pane_items::PaneChipDef],
+            actions: &'a [&'a super::pane_items::PaneButtonDef],
+            facts: &'a super::pane_items::PaneFacts,
             hints: &'a ActionShortcuts,
             catalog: &'a crate::actions::ActionCatalog,
             col_idx: usize,
         ) -> super::pane_header::PaneHeaderContent<'a> {
             super::pane_header::PaneHeaderContent {
-                programs,
-                fallback_name: "shell",
-                custom_name: None,
-                runtime: Some(rt),
+                facts,
                 segments,
+                chips,
                 actions,
                 ws_idx: 0,
                 col_idx,
@@ -2340,7 +2243,13 @@ mod tests {
         }
         let base = super::pane_header::pane_header_key(
             &content(
-                &programs, &segments, &actions, &runtime, &hints, &catalog, 0,
+                &chips,
+                &segments,
+                &actions,
+                &facts_of(&runtime),
+                &hints,
+                &catalog,
+                0,
             ),
             15.0,
             300.0,
@@ -2350,7 +2259,13 @@ mod tests {
             base,
             super::pane_header::pane_header_key(
                 &content(
-                    &programs, &segments, &actions, &runtime, &hints, &catalog, 0
+                    &chips,
+                    &segments,
+                    &actions,
+                    &facts_of(&runtime),
+                    &hints,
+                    &catalog,
+                    0
                 ),
                 15.0,
                 300.0
@@ -2361,7 +2276,13 @@ mod tests {
             base,
             super::pane_header::pane_header_key(
                 &content(
-                    &programs, &segments, &actions, &runtime, &hints, &catalog, 1
+                    &chips,
+                    &segments,
+                    &actions,
+                    &facts_of(&runtime),
+                    &hints,
+                    &catalog,
+                    1
                 ),
                 15.0,
                 300.0
@@ -2381,7 +2302,15 @@ mod tests {
         assert_eq!(
             base,
             super::pane_header::pane_header_key(
-                &content(&programs, &segments, &actions, &other, &hints, &catalog, 0),
+                &content(
+                    &chips,
+                    &segments,
+                    &actions,
+                    &facts_of(&other),
+                    &hints,
+                    &catalog,
+                    0
+                ),
                 15.0,
                 300.0
             ),
@@ -2397,7 +2326,13 @@ mod tests {
             base,
             super::pane_header::pane_header_key(
                 &content(
-                    &programs, &segments, &actions, &no_branch, &hints, &catalog, 0
+                    &chips,
+                    &segments,
+                    &actions,
+                    &facts_of(&no_branch),
+                    &hints,
+                    &catalog,
+                    0
                 ),
                 15.0,
                 300.0
@@ -2414,7 +2349,13 @@ mod tests {
             base,
             super::pane_header::pane_header_key(
                 &content(
-                    &programs, &segments, &actions, &running, &hints, &catalog, 0
+                    &chips,
+                    &segments,
+                    &actions,
+                    &facts_of(&running),
+                    &hints,
+                    &catalog,
+                    0
                 ),
                 15.0,
                 300.0
@@ -2432,7 +2373,13 @@ mod tests {
                 base,
                 super::pane_header::pane_header_key(
                     &content(
-                        &programs, &segments, &actions, &runtime, &hints, &catalog, 0
+                        &chips,
+                        &segments,
+                        &actions,
+                        &facts_of(&runtime),
+                        &hints,
+                        &catalog,
+                        0
                     ),
                     15.0,
                     w

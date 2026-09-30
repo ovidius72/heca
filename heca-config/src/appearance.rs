@@ -36,49 +36,6 @@ pub enum Vibrancy {
     WindowBackground,
 }
 
-/// A segment shown in the pane info bar (left side), in config order. Serialised
-/// `snake_case` in TOML (e.g. `pane_title_segments = ["location", "app_name"]`).
-/// A segment with no data for a pane (e.g. git outside a repo) is skipped.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PaneSegment {
-    /// Working directory (home-relative path).
-    Location,
-    /// Resolved program/app name (process catalog). Always the running program's
-    /// name, never a user rename — so the info bar keeps showing what runs in the pane.
-    AppName,
-    /// The pane's own name: the user's custom rename when set, else the program name
-    /// (`custom`-wins). Opt-in — not in the default segments. Contrast with [`AppName`],
-    /// which always shows the program name regardless of any rename.
-    ///
-    /// [`AppName`]: PaneSegment::AppName
-    PaneName,
-    /// Git branch (hidden outside a repo).
-    GitBranch,
-    /// Git change counts `+A ~M -D` (hidden when clean / outside a repo).
-    GitStatus,
-}
-
-/// An action button shown in the pane info bar (right side), in config order.
-/// Serialised `snake_case` (e.g. `pane_title_actions = ["split", "close"]`). Each
-/// maps to an existing window-manager action.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PaneAction {
-    /// Split the pane.
-    Split,
-    /// Move the pane left.
-    MoveLeft,
-    /// Move the pane right.
-    MoveRight,
-    /// Close the pane.
-    Close,
-    /// Toggle zoom (maximise) for the pane's column.
-    Zoom,
-    /// Toggle floating for the pane.
-    Float,
-}
-
 /// Frame decoration style for a container surface (panes, sidebar). Maps onto the
 /// grid-ui `PaneFrame` in the app layer. Serialised `snake_case` in TOML (e.g.
 /// `pane_border_style = "bracketed"`).
@@ -194,15 +151,27 @@ fn default_background_transparency() -> u8 {
     0
 }
 
-fn default_pane_title_segments() -> Vec<PaneSegment> {
-    vec![PaneSegment::Location, PaneSegment::AppName]
+/// The chips the pane info bar shows until the user says otherwise: `location` and `app_name`.
+///
+/// A chip is **named**, not typed: this list holds names, and which names exist is answered in the
+/// app, where a program built on heca can add its own. The names heca ships are `location` (working
+/// directory, home-relative), `app_name` (the running program — never a rename), `pane_name` (the
+/// pane's own name: a rename wins, else the program), `git_branch` and `git_status` (`+A ~M -D`).
+/// A chip with nothing to say for a pane is skipped.
+pub fn default_pane_title_segments() -> Vec<String> {
+    vec!["location".to_string(), "app_name".to_string()]
 }
 
-fn default_pane_title_actions() -> Vec<PaneAction> {
-    // Move-left/right are intentionally omitted from the default bar — panes are
-    // already movable with the mouse (drag). `MoveLeft`/`MoveRight` remain valid
-    // config values for users who want them. Default = split + close.
-    vec![PaneAction::Split, PaneAction::Close]
+/// The action buttons the pane info bar shows until the user says otherwise: `split` and `close`.
+///
+/// Move-left/right are intentionally omitted — panes are already movable with the mouse (drag).
+/// `move_left` / `move_right` remain valid names for users who want them.
+///
+/// A button is **named**, not typed: this list holds names, and which names exist is answered in the
+/// app, where a program built on heca can add its own (`pro.show_notes`). The same spellings the
+/// closed list used, so every existing config keeps working.
+pub fn default_pane_title_actions() -> Vec<String> {
+    vec!["split".to_string(), "close".to_string()]
 }
 
 /// Maximum in-app blur radius in logical px, at `blur = 100`.
@@ -367,12 +336,15 @@ pub struct PaneAppearance {
     /// `pane_padding`. Clamped `[0, 20]`.
     #[serde(default)]
     pub padding: Option<f32>,
-    /// Info-bar segments (left), in order. Empty hides the left side. See [`PaneSegment`].
+    /// Info-bar chips (left), by **name**, in order. Empty hides the left side. See
+    /// [`default_pane_title_segments`]. A name nothing provides is reported and skipped.
     #[serde(default = "default_pane_title_segments")]
-    pub title_segments: Vec<PaneSegment>,
-    /// Info-bar action buttons (right), in order. Empty hides the right side. See [`PaneAction`].
+    pub title_segments: Vec<String>,
+    /// Info-bar action buttons (right), by **name**, in order. Empty hides the right side. The names
+    /// heca ships are `split`, `move_left`, `move_right`, `close`, `zoom` and `float`; a program
+    /// built on heca adds its own (`pro.show_notes`). A name nothing provides is reported and skipped.
     #[serde(default = "default_pane_title_actions")]
-    pub title_actions: Vec<PaneAction>,
+    pub title_actions: Vec<String>,
 }
 
 impl Default for PaneAppearance {
@@ -394,7 +366,7 @@ impl Default for PaneAppearance {
 
 /// Sidebar shell appearance (`[appearance.sidebar]`). Border fields unset →
 /// global `[appearance]` default → theme. (Surface → global → theme.)
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SidebarAppearance {
     /// Frame style. `None` → [`BorderStyle::Bracketed`]. `none | bordered | bracketed`.
     #[serde(default)]
@@ -418,6 +390,35 @@ pub struct SidebarAppearance {
     /// Sidebar width (logical px). `None` → 300; clamped to `[MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH]`.
     #[serde(default)]
     pub width: Option<f32>,
+    /// The lines under a pane's name in the sidebar, by **name**, in order. Empty shows the name
+    /// alone. See [`default_sidebar_pane_lines`]. A name nothing provides is reported and skipped.
+    #[serde(default = "default_sidebar_pane_lines")]
+    pub pane_lines: Vec<String>,
+}
+
+impl Default for SidebarAppearance {
+    fn default() -> Self {
+        Self {
+            border_style: None,
+            border_width: None,
+            border_color: None,
+            border_radius: None,
+            background_color: None,
+            gap: None,
+            width: None,
+            pane_lines: default_sidebar_pane_lines(),
+        }
+    }
+}
+
+/// The lines the sidebar's pane row shows under the name until the user says otherwise: `cwd` (the
+/// working directory) and `git` (branch
+/// and change counts, only inside a repository).
+///
+/// A line is **named**, not typed: which names exist is answered in the app, where a program built
+/// on heca can add its own (`pro.status`).
+pub fn default_sidebar_pane_lines() -> Vec<String> {
+    vec!["cwd".to_string(), "git".to_string()]
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -563,6 +564,19 @@ pub struct AppearanceConfig {
     /// Sidebar shell appearance (`[appearance.sidebar]`).
     #[serde(default)]
     pub sidebar: SidebarAppearance,
+    /// The exposé (`[appearance.expose]`).
+    #[serde(default)]
+    pub expose: ExposeAppearance,
+}
+
+/// The exposé's own appearance (`[appearance.expose]`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ExposeAppearance {
+    /// Show each pane's working directory (folder icon + home-relative path) on its card in the
+    /// exposé. Off by default. It used to be `[settings] pane_show_cwd`, which is still read and
+    /// mapped onto this one.
+    #[serde(default)]
+    pub show_cwd: bool,
 }
 
 impl AppearanceConfig {
@@ -894,6 +908,7 @@ impl Default for AppearanceConfig {
             terminal: TerminalAppearance::default(),
             pane: PaneAppearance::default(),
             sidebar: SidebarAppearance::default(),
+            expose: ExposeAppearance::default(),
         }
     }
 }
@@ -938,15 +953,9 @@ mod tests {
     #[test]
     fn pane_info_bar_defaults_to_location_and_app_with_split_close() {
         let cfg = AppearanceConfig::default();
-        assert_eq!(
-            cfg.pane.title_segments,
-            vec![PaneSegment::Location, PaneSegment::AppName]
-        );
+        assert_eq!(cfg.pane.title_segments, vec!["location", "app_name"]);
         // Move-left/right are omitted by default (mouse drag already moves panes).
-        assert_eq!(
-            cfg.pane.title_actions,
-            vec![PaneAction::Split, PaneAction::Close]
-        );
+        assert_eq!(cfg.pane.title_actions, vec!["split", "close"]);
         assert!(cfg.pane_info_bar_visible());
     }
 
@@ -958,17 +967,25 @@ mod tests {
         .unwrap();
         assert_eq!(
             cfg.pane.title_segments,
-            vec![
-                PaneSegment::Location,
-                PaneSegment::AppName,
-                PaneSegment::GitBranch,
-                PaneSegment::GitStatus
-            ]
+            vec!["location", "app_name", "git_branch", "git_status"]
         );
-        assert_eq!(
-            cfg.pane.title_actions,
-            vec![PaneAction::Split, PaneAction::Close]
-        );
+        assert_eq!(cfg.pane.title_actions, vec!["split", "close"]);
+    }
+
+    /// **A button is a name, so a name heca does not ship still parses** — that is what lets a
+    /// program built on heca put its own button in the list.
+    #[test]
+    fn a_pane_button_can_be_any_name() {
+        let cfg: AppearanceConfig =
+            toml::from_str("[pane]\ntitle_actions = [\"split\", \"pro.show_notes\"]").unwrap();
+        assert_eq!(cfg.pane.title_actions, vec!["split", "pro.show_notes"]);
+    }
+
+    #[test]
+    fn the_expose_show_cwd_key_parses_and_defaults_off() {
+        assert!(!AppearanceConfig::default().expose.show_cwd);
+        let cfg: AppearanceConfig = toml::from_str("[expose]\nshow_cwd = true").unwrap();
+        assert!(cfg.expose.show_cwd);
     }
 
     #[test]

@@ -16,7 +16,44 @@ use super::*;
 pub(crate) fn rebuild_named_layer(state: &mut crate::app_state::AppState, name: &str) {
     if Some(name) == layers::layer_name(layers::HOST_OWNER, "expose").as_deref() {
         expose::register(state);
+    } else {
+        // A layer another crate added is rebuilt from the closure it gave, which the app keeps.
+        crate::entry::rebuild_added_layer(state, name);
     }
+}
+
+/// **Register (or re-register) the layer called `name`** — the one place a named layer is built,
+/// put in the stack, and given back what it was doing.
+///
+/// `build` gets the sink the layer's own widgets report to: stamped with this layer's id, which is
+/// how the router tells "the surface acted on itself" from "the user typed at the app behind it".
+/// The id is the same on every rebuild — the sink names it — so a rebuild replaces the layer in place
+/// and a widget in the new tree still names a layer that exists.
+///
+/// **A rebuild keeps its place in the stack and whether it is up**: the layer is re-shown if it was
+/// showing, and nothing replays. The exposé and a layer another crate added take this same path.
+pub(crate) fn register_named_layer(
+    state: &mut crate::app_state::AppState,
+    name: &str,
+    build: impl FnOnce(&ChromeIntentEmitter) -> Box<dyn heca_grid_ui::Component>,
+) -> LayerId {
+    let id = state.layers.slot_for_name(name);
+    let emit = layer_emitter(&state.event_proxy, surface_key_of(Some(name), id));
+    let was_visible = state.layers.is_visible_named(&state.window_root, name);
+    let root = build(&emit);
+    let id = state.layers.add_named(
+        id,
+        name.to_string(),
+        None,
+        LayerKind::OnDemand,
+        root,
+        &mut state.window_root,
+    );
+    if was_visible {
+        state.layers.show(&mut state.window_root, id);
+    }
+    state.needs_redraw = true;
+    id
 }
 
 // **There is no layout pass and no paint pass here any more.** A registered surface is a child of

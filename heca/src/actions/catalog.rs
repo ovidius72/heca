@@ -107,7 +107,84 @@ pub struct ActionMeta {
     /// be toggled under a name of its own — one spec can govern several `WmAction` variants
     /// (`ClosePane` + `ClosePaneById` confirm identically, §5.1). Every built-in nonetheless uses
     /// its own action name, so a user toggles `[confirm] <action> = false` and nothing else.
-    pub confirm: Option<ConfirmSpec>,
+    pub(crate) confirm: Option<ConfirmSpec>,
+}
+
+impl ActionMeta {
+    /// An action called `name` — the id a key binding, a menu, RPC and `Intent.action` all use.
+    ///
+    /// Everything else has a default, so an author says only what is true of theirs: a label, an
+    /// icon, that it takes an argument, that it cannot be undone. The defaults are the cautious
+    /// ones — see [`policy`](Self::policy).
+    pub fn new(name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            label: name.clone(),
+            name,
+            description: String::new(),
+            category: ActionCategory::System,
+            owner: None,
+            icon: None,
+            // Refused while a floating pane is active. An author who forgot to think about it
+            // gets an action blocked in one place they can see, not one allowed everywhere they
+            // did not.
+            policy: crate::app::interaction::ActionPolicy::AlwaysAllowed,
+            args: Vec::new(),
+            confirm: None,
+        }
+    }
+
+    /// The short name shown in menus and the palette. Defaults to the id.
+    ///
+    /// English text until the app-wide text system (T519) lands; then a plugin's strings come from
+    /// the language files under its own namespace, and this is what shows when one is missing.
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = label.into();
+        self
+    }
+
+    /// One sentence for `describe-action` and the palette. An English fallback, like the label.
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = description.into();
+        self
+    }
+
+    /// The icon every surface shows for it — menu, header button, palette. Without one it wears
+    /// [`GENERIC_ACTION_ICON`].
+    pub fn icon(mut self, icon: Glyph) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Where the palette files it. Defaults to [`ActionCategory::System`].
+    pub fn category(mut self, category: ActionCategory) -> Self {
+        self.category = category;
+        self
+    }
+
+    /// **When it may run** — see [`ActionPolicy`](crate::app::interaction::ActionPolicy). Defaults
+    /// to `AlwaysAllowed`, which is refused while a floating pane is active; say `Global` for an
+    /// app-level action with no effect on the layout that must stay reachable there.
+    pub fn policy(mut self, policy: crate::app::interaction::ActionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    /// One argument it takes. An action that declares none takes none, and a call that passes one
+    /// is told so.
+    pub fn arg(mut self, arg: ArgSpec) -> Self {
+        self.args.push(arg);
+        self
+    }
+
+    /// It cannot be undone: every surface asks first, and its buttons read in the danger hue. Say
+    /// it only when it is true. The button that goes ahead is worded with the action's label.
+    pub fn destructive(mut self) -> Self {
+        // The verb is filled in when the action is registered, from the label as it is *then* —
+        // so `.destructive().label("Delete")` and `.label("Delete").destructive()` agree.
+        self.confirm = Some(ConfirmSpec::destructive(self.name.clone(), ""));
+        self
+    }
 }
 
 // Manual because `ConfirmSpec` is intentionally not `Debug` — it can hold a native `Callback`
@@ -240,7 +317,7 @@ impl ActionCatalog {
 
     /// The declarative confirmation spec for an action, by its **action name** — the owner, e.g.
     /// `close`. `None` when the action needs no prompt.
-    pub fn confirm_spec(&self, action_name: &str) -> Option<&ConfirmSpec> {
+    pub(crate) fn confirm_spec(&self, action_name: &str) -> Option<&ConfirmSpec> {
         self.find(action_name).and_then(|m| m.confirm.as_ref())
     }
 

@@ -105,7 +105,13 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     state
         .chrome_state
         .workspaces
-        .set_pane_show_cwd(state.pane_show_cwd);
+        .set_expose_show_cwd(state.expose_show_cwd);
+    // Which lines show under a pane's name, by name — the user's list, plus what other crates added
+    // while it is still the default.
+    state
+        .chrome_state
+        .workspaces
+        .set_pane_lines(state.pane_lines.shown(&state.appearance.sidebar.pane_lines));
     // The program catalog is this component's, not the shared context's (F003/P086/T367). Mirrored
     // here like the display flags above, so `prefix+Shift+r` reaches it; guarded on `Rc` identity,
     // which is exactly what a reload replaces.

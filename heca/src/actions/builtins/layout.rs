@@ -25,7 +25,8 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         // Add-pane-to-a-specific-column (the pane-header "+" button and the sidebar
         // column "New Pane" entry, which target a column by index — distinct from
         // `split_vertical` which splits the active column). Menu/button-only, so no
-        // binding; the "+" button still shows the `v` hint via `pane_action_name`.
+        // binding; the "+" button (`split` in `chrome/pane_items/buttons.rs`) names
+        // `split_vertical` for its tooltip, so it still shows the `v` hint.
         name: "add_pane_to_column",
         label: "Add Pane to Column",
         description: "Add a new pane to this column.",

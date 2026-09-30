@@ -328,6 +328,46 @@ fn open_on(
         .map(|p| p.id)
 }
 
+/// **Whether the exposé shows each pane's folder** — `[appearance.expose] show_cwd`.
+///
+/// The old `[settings] pane_show_cwd` is still read and mapped onto it, so no config breaks, and a
+/// user who still has it is told **once** to move it (one input, one output). It once switched the
+/// sidebar's folder line too; that line is now decided by `[appearance.sidebar] pane_lines` alone.
+pub(crate) fn expose_show_cwd(config: &heca_config::loader::Config) -> bool {
+    if config.settings.pane_show_cwd && crate::announced::first_time("setting:pane_show_cwd") {
+        crate::chrome::warn_author(
+            "[heca] `[settings] pane_show_cwd` is now `[appearance.expose] show_cwd` (it only \
+             shows folders in the exposé; the sidebar's folder line is `[appearance.sidebar] \
+             pane_lines`) — it still works, please move it"
+                .to_string(),
+        );
+    }
+    show_cwd_setting(config)
+}
+
+/// The setting's value: the new key, or the old one mapped onto it. Pure — the notice is separate.
+fn show_cwd_setting(config: &heca_config::loader::Config) -> bool {
+    config.appearance.expose.show_cwd || config.settings.pane_show_cwd
+}
+
+#[cfg(test)]
+mod show_cwd_tests {
+    use super::show_cwd_setting;
+
+    /// **One input, one output**: `[appearance.expose] show_cwd` decides; the old
+    /// `[settings] pane_show_cwd` is still honoured so no config breaks; neither set means off.
+    #[test]
+    fn the_new_key_decides_and_the_old_one_still_works() {
+        let mut c = heca_config::loader::Config::default();
+        assert!(!show_cwd_setting(&c), "off by default, as before");
+        c.appearance.expose.show_cwd = true;
+        assert!(show_cwd_setting(&c));
+        c.appearance.expose.show_cwd = false;
+        c.settings.pane_show_cwd = true;
+        assert!(show_cwd_setting(&c), "the old key is mapped onto it");
+    }
+}
+
 /// Register (or re-register) the exposé as the named layer `heca.expose` — **host wiring only**.
 ///
 /// The composition itself is [`map`], which takes plain data; this is the part that needs
@@ -340,10 +380,10 @@ fn open_on(
 pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::LayerId> {
     let name = super::layers::layer_name(super::layers::HOST_OWNER, SURFACE)?;
     let programs = state.programs.clone();
-    // **Where each pane is, if the user asked for it** — `[settings] pane_show_cwd`, the same
+    // **Where each pane is, if the user asked for it** — `[appearance.expose] show_cwd`, no longer the
     // setting the sidebar's rows follow, read here because this is the file that may touch
     // `AppState`. Off ⇒ the model simply carries no folder, and nothing below has a flag to pass on.
-    let folders = state.chrome_state.workspaces.pane_show_cwd();
+    let folders = state.chrome_state.workspaces.expose_show_cwd();
     let rows = model(
         &state.session,
         |pane| {
@@ -359,13 +399,6 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
         folders,
     );
     let theme = super::chrome_gui_theme(state);
-    // **The map's own id, so its intents say the map made them.** Stamped `Keyboard` before, which
-    // was indistinguishable from `prefix+j` typed at the session behind the map — and once the
-    // active context started refusing the app's bindings, that sameness would have refused the
-    // map's own deletes with them (F003/P082/T416). A re-registration keeps the layer's id, so the
-    // one already registered under this name is the one to name.
-    let id = state.layers.slot_for_name(&name);
-    let emit = super::layer_emitter(&state.event_proxy, super::surface_key_of(Some(&name), id));
     let already_up = state.layers.is_visible_named(&state.window_root, &name);
     let here = open_on(
         &state.session,
@@ -398,42 +431,26 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
         .copied()
         .flatten()
         .filter(|id| crate::app::focus::find_pane_workspace(&state.session, *id).is_some());
-    let root = map(
-        &rows,
-        &theme,
-        emit,
-        here,
-        &state.session.options,
-        &keys,
-        previous,
-    );
-    let was_visible = state.layers.is_visible_named(&state.window_root, &name);
+    // **The map's own sink, so its intents say the map made them** — `register_named_layer` hands it
+    // over, stamped with this layer's id. Stamped `Keyboard` before, which was indistinguishable from
+    // `prefix+j` typed at the session behind the map, and once the active context started refusing
+    // the app's bindings that sameness would have refused the map's own deletes with them
+    // (F003/P082/T416).
+    //
     // **The map says what it is, on itself.** It takes the keyboard while it is up, and it does
     // **not** cover the content: `lock` is what refuses actions on panes the user cannot
     // see — and in the map you can see them; that is what it is. Declaring coverage made the
     // surface refuse every act on the pane it exists to let you choose (`FocusPane` blocked in
     // `Domain::Overlay`), however the intents were arranged. A dialog covers. A map does not.
-    let mut root = root;
-    root.base_mut().lock = false;
-    let id = state.layers.add_named(
-        id,
-        name.clone(),
-        None,
-        super::LayerKind::OnDemand,
-        root,
-        &mut state.window_root,
-    );
-    // **The frost is declared on the surface too, in `map`** — `.frosted(true)`, beside the
-    // animation, for the same reason.
     //
-    // **The animation is declared on the surface, in `map`** — one builder on the widget, exactly
-    // what a plugin writes. It used to be two `pub(crate)` calls on the registry here, holding a
-    // `LayerId` and knowing the sequencing rule; a plugin could reach none of it (F003/P082/T459).
-    if was_visible {
-        state.layers.show(&mut state.window_root, id);
-    }
-    state.needs_redraw = true;
-    Some(id)
+    // The frost and the animation are declared on the surface too, in `map` — one builder on the
+    // widget, exactly what a plugin writes (F003/P082/T459).
+    let options = state.session.options.clone();
+    Some(super::register_named_layer(state, &name, |emit| {
+        let mut root = map(&rows, &theme, emit.clone(), here, &options, &keys, previous);
+        root.base_mut().lock = false;
+        root
+    }))
 }
 
 #[cfg(test)]

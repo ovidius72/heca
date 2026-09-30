@@ -22,7 +22,7 @@ mod actions;
 pub(crate) mod workspaces;
 
 pub(crate) use actions::{
-    SEAT_ARG, bind_provider_keybindings, move_provider_cursor, owning_mount,
+    SEAT_ARG, bind_provider_keybindings, emit_queued, move_provider_cursor, owning_mount,
     register_provider_actions,
 };
 
@@ -400,7 +400,7 @@ impl<'a> ChromeCtx<'a> {
 
     /// A context for a **render pass**, carrying the frame's read-only inputs so a
     /// container's `build` closure can project them. Built by the chrome render path.
-    pub fn for_build(
+    pub(crate) fn for_build(
         app: App,
         theme: &'a GuiTheme,
         emit: &'a ChromeIntentEmitter,

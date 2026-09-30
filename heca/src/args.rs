@@ -264,13 +264,21 @@ fn describe_expected(spec: &ArgSpec) -> String {
 /// The declared name closest to `name`, when one is close enough to be worth suggesting. A
 /// misspelling is the common case, so guessing costs nothing and saves the reader the lookup.
 fn nearest_name(name: &str, specs: &[ArgSpec]) -> Option<String> {
+    nearest_of(name, specs.iter().map(|s| s.name.as_str())).map(str::to_string)
+}
+
+/// The one of `candidates` closest to `name`, when close enough to be worth suggesting — the
+/// "did you mean" every surface that takes a name from a fixed list gives, written once.
+pub(crate) fn nearest_of<'a>(
+    name: &str,
+    candidates: impl Iterator<Item = &'a str>,
+) -> Option<&'a str> {
     let limit = (name.len() / 3).max(1);
-    specs
-        .iter()
-        .map(|s| (edit_distance(name, &s.name), &s.name))
+    candidates
+        .map(|c| (edit_distance(name, c), c))
         .filter(|(d, _)| *d <= limit)
         .min_by_key(|(d, _)| *d)
-        .map(|(_, n)| n.clone())
+        .map(|(_, c)| c)
 }
 
 /// Levenshtein distance, two rows at a time. Only ever run on argument names (a handful of short

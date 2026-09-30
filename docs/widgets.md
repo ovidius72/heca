@@ -627,12 +627,16 @@ The builders, all of which take either kind:
 | written | means |
 |---|---|
 | `8` / `8.0` / `"8"` / `"8px"` | logical pixels, fixed whatever the font does |
-| `"sm"` / `Spacing::Sm` | a step of the theme's rhythm — `none` / `xs` / `sm` / `md` / `lg` |
+| `"sm"` / `Spacing::Sm` | a step of the theme's rhythm — `none` / `hairline` / `xs` / `sm` / `md` / `lg` |
 
 **Prefer the step.** It is a fraction of the inherited font, resolved when the tree is laid out, so
 it scales with the font, the size variant and UI zoom. A pixel gap is tuned for one font size and
 wrong at every other. Use a number when you can say why this space should *not* move with the font
 — a hairline rule, a scrollbar gutter, a value the window manager owns.
+
+`hairline` is about a pixel at the usual font (`0.08` of it, still rounded to a whole pixel) — the air
+between things that belong to **one control**: the buttons of a [`ButtonGroup`](#buttongroup), which is
+its default `gap`, so a destructive button's outline does not sit against its neighbour.
 
 Use the steps to **group**, which is what they are for: a tight `Xs` inside a label-and-control
 couple, a roomier `Md` between couples. That is a form layout with no arithmetic and no new widget.
@@ -1784,7 +1788,7 @@ a parent that counts its children to tell them apart.
   `Start`/`Center`/`End`/`Stretch` — the default `Stretch` makes an `Auto`-sized child fill the
   cross axis; `.align_self(Align)` overrides it for one child).
 - **Gap between children**: `.gap(..)` takes **either** — `.gap(8)` for pixels, `.gap(Spacing::Sm)`
-  or `.gap("sm")` for a **font-relative theme token** (`None`/`Xs`/`Sm`/`Md`/`Lg`), resolved from
+  or `.gap("sm")` for a **font-relative theme token** (`None`/`Hairline`/`Xs`/`Sm`/`Md`/`Lg`), resolved from
   the inherited font at layout so it scales with the font, size variant and UI zoom. **Prefer the
   token**; a raw px gap is tuned for one font size and wrong at every other. One builder, because
   two — `gap` and `gap_spacing` — meant the docs said *prefer the token* and the token was used 8
@@ -2813,7 +2817,7 @@ Nothing is ever squashed, and nothing is ever silently unreachable.
 ButtonGroup::new()
     .size(WidgetSize::Header)                       // one size for every button in the group
     .variant(ButtonVariant::Ghost)                  // …and one variant
-    .gap(Spacing::Xs)                       // a token, never a pixel count
+    .gap(Spacing::Xs)                       // a token, never a pixel count (default: `Hairline`)
     .child(Button::new("Split").icon(Glyph::Plus).on_click(split))
     .child(Button::new("Zoom").icon(Glyph::FrameCorners).on_click(zoom))
     .child(Button::new("Close").icon(Glyph::Minus).on_click(close))

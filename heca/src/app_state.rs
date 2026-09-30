@@ -835,6 +835,16 @@ pub struct AppState {
     /// trees; this holds runtime-added layers that join the same surface stack. See
     /// [`crate::chrome::LayerRegistry`] and `docs/surface-compositor.md` §9.
     pub layers: crate::chrome::LayerRegistry,
+    /// How to build each layer another crate added with an extension's `.layer(..)`, kept so it is built afresh
+    /// each time it is asked for. Client state: it is about what a window draws.
+    pub(crate) added_layers: crate::entry::AddedLayers,
+    /// Every pane header button there is, by name — heca's own and the ones other crates added.
+    /// Client state: it is about what a window draws.
+    pub(crate) pane_buttons: crate::chrome::PaneButtons,
+    /// Every pane header chip there is, by name. Client state, like the buttons.
+    pub(crate) pane_chips: crate::chrome::PaneChips,
+    /// Every sidebar pane-row line there is, by name. Client state, like the buttons and chips.
+    pub(crate) pane_lines: crate::chrome::PaneRowLines,
     /// Host-owned overlay stack: pending modal completions + action metadata keyed by
     /// [`OverlayId`](crate::chrome::OverlayId). The overlays' *visual* trees live in
     /// [`layers`](AppState::layers) (Modal band); this holds only the result callbacks the
@@ -969,9 +979,9 @@ pub struct AppState {
     /// it each frame and a reload rebuilds the headers.
     pub pane_renamed_add_process_name: bool,
     /// Show each pane's working directory as its own row in the sidebar pane card
-    /// (`[settings] pane_show_cwd`). Projected into the chrome store each sync so the card
+    /// (`[appearance.expose] show_cwd`). Projected into the chrome store each sync so the card
     /// reads it via `ws_state`; a reload updates it live.
-    pub pane_show_cwd: bool,
+    pub expose_show_cwd: bool,
     /// Host terminal scrollback capacity (rows) threaded from
     /// `SettingsConfig::terminal_scrollback_lines`; used when spawning terminal
     /// backends so the engine retains the configured amount of history.

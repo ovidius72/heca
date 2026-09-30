@@ -492,6 +492,20 @@ fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
     Event::Raw(raw)
 }
 
+/// **Re-check the pointer where it last was**, as if it had moved there — for when the layers
+/// change under a pointer that is not moving (F004/P084/T529).
+///
+/// Only the case that is unambiguous: a surface now covers the point, so every tree behind it is told
+/// the pointer is not on it (a tooltip under an overlay goes away). When a surface *closes* nothing is
+/// re-lit here — the host does not know whether the pointer is still in the window, and lighting a
+/// widget under a pointer that has left is worse than waiting for the next move.
+pub(crate) fn recheck_pointer_under_surfaces(state: &mut AppState) {
+    let moved = raw_pointer(state, RawPointerKind::Moved, PointerButton::Left);
+    if crate::chrome::dispatch_surface_pointer(state, &moved) {
+        state.mark_full_redraw();
+    }
+}
+
 /// A raw pointer event at the current cursor, carrying the button and the live modifiers.
 ///
 /// **One kind of pointer event leaves the host.** What it means — which widget it is for, whether
