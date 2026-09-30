@@ -102,6 +102,12 @@ impl WidgetSize {
 #[serde(rename_all = "snake_case")]
 pub enum Spacing {
     None,
+    /// **A hairline of air** — about a pixel at the usual font, and it still scales with it. The gap
+    /// between things that belong to one control (the buttons of a [`ButtonGroup`], segments of one
+    /// strip), where `Xs` reads as separate things.
+    ///
+    /// [`ButtonGroup`]: crate::widgets::ButtonGroup
+    Hairline,
     Xs,
     Sm,
     Md,
@@ -170,6 +176,7 @@ impl std::str::FromStr for Space {
         let t = t.trim();
         match t.to_ascii_lowercase().as_str() {
             "none" => return Ok(Space::Step(Spacing::None)),
+            "hairline" => return Ok(Space::Step(Spacing::Hairline)),
             "xs" => return Ok(Space::Step(Spacing::Xs)),
             "sm" => return Ok(Space::Step(Spacing::Sm)),
             "md" => return Ok(Space::Step(Spacing::Md)),
@@ -276,6 +283,7 @@ impl Spacing {
     pub fn scale(self) -> f32 {
         match self {
             Spacing::None => 0.0,
+            Spacing::Hairline => 0.08,
             Spacing::Xs => 0.25,
             Spacing::Sm => 0.5,
             Spacing::Md => 0.85,
