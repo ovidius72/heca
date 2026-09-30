@@ -1677,9 +1677,9 @@
       "priority": 10,
       "shortName": "split-heca-view-src-lib-rs-142",
       "title": "Split heca-view/src/lib.rs (1423) — the vocabulary, the node and the values are three things",
-      "status": "deferred",
-      "description": "Found while adding WidgetKind::KeyHintGroup and ViewNode::actions (F003/P082/T436) and the layout sweeps (T438), 2026-08-24. Reported to Antonio, who asked for it to be filed. AGENTS § 0 rule 4: aim under 400, above 600 agree a split. This is the list and the proposal, NOT a licence.\n\nCURRENT: heca-view/src/lib.rs, 1423 lines (its sibling build.rs is ~1200 and is a separate matter — it is the SDK, already one job).\n\nWHY IT MATTERS: this is the crate a PLUGIN depends on. It is deliberately serde-only with no dependencies, so it is the smallest surface a third party has to read to author UI — and it is the one file where the closed vocabulary, the node shape and every scalar type are stacked together.\n\nTHE JOBS IN IT\n- `WidgetKind` (:36) — the closed vocabulary, plus `ALL` (:113) and `ordinal` (:162), the pair that keeps the coverage guards honest.\n- `ViewNode` (:891) — kind/props/events/actions/children, its builders (`prop`, `text`, `key`, `on`, `on_press`, `on_hint`, `on_action`) and its accessors (`declared_key`, `intent`).\n- The value types: `PropValue`, `PropMap` (:695), `Intent` (:700), `Events` (:732).\n- The scalar enums that cross by name: `ViewSize`, `ViewVariant`, `ViewAlign`, `ViewOrientation`, `ViewScrollAxes`, `ViewAnimation`, `ViewRevealAlign`.\n- The long \"Props & events by kind\" reader's table, which documents the whole vocabulary and sits in the middle of the type definitions.\n- `unkeyed_collection_items` and the identity-rule reporting half.\n\nPROPOSED SPLIT:\n  heca-view/src/\n  ├── lib.rs      crate docs + the reader's table + re-exports (the published surface stays identical)\n  ├── kind.rs     WidgetKind, ALL, ordinal\n  ├── node.rs     ViewNode, its builders and accessors\n  ├── value.rs    PropValue, PropMap, Intent, Events\n  ├── scalars.rs  ViewSize / ViewVariant / ViewAlign / ViewOrientation / ViewScrollAxes / ViewAnimation / ViewRevealAlign\n  └── build.rs    (unchanged — the typed SDK)\n\nEDGE CASES\n- **Every name must stay re-exported from the crate root.** Plugins and heca-view-realize import `heca_view::{WidgetKind, ViewNode, Intent, PropValue, …}`; a split that moves a path breaks the published boundary. Assert by compiling heca-view-realize and heca unchanged.\n- `ordinal` is `#[allow(dead_code)]` on purpose and must stay compiled in every build: an uncompiled exhaustive match cannot be the compile error it exists to be.\n- A move, never a rewrite. Gate: `cargo test -p heca-view -p heca-view-realize` + `./scripts/lint-changed.sh`.",
-      "descriptionUpdatedAt": "2026-08-24T13:58:21.100Z",
+      "status": "done",
+      "description": "Found while adding WidgetKind::KeyHintGroup and ViewNode::actions (F003/P082/T436) and the layout sweeps (T438), 2026-08-24. Reported to Antonio, who asked for it to be filed. AGENTS § 0 rule 4: aim under 400, above 600 agree a split. This is the list and the proposal, NOT a licence.\n\nCURRENT: heca-view/src/lib.rs, 1423 lines (its sibling build.rs is ~1200 and is a separate matter — it is the SDK, already one job).\n\nWHY IT MATTERS: this is the crate a PLUGIN depends on. It is deliberately serde-only with no dependencies, so it is the smallest surface a third party has to read to author UI — and it is the one file where the closed vocabulary, the node shape and every scalar type are stacked together.\n\nTHE JOBS IN IT\n- `WidgetKind` (:36) — the closed vocabulary, plus `ALL` (:113) and `ordinal` (:162), the pair that keeps the coverage guards honest.\n- `ViewNode` (:891) — kind/props/events/actions/children, its builders (`prop`, `text`, `key`, `on`, `on_press`, `on_hint`, `on_action`) and its accessors (`declared_key`, `intent`).\n- The value types: `PropValue`, `PropMap` (:695), `Intent` (:700), `Events` (:732).\n- The scalar enums that cross by name: `ViewSize`, `ViewVariant`, `ViewAlign`, `ViewOrientation`, `ViewScrollAxes`, `ViewAnimation`, `ViewRevealAlign`.\n- The long \"Props & events by kind\" reader's table, which documents the whole vocabulary and sits in the middle of the type definitions.\n- `unkeyed_collection_items` and the identity-rule reporting half.\n\nPROPOSED SPLIT:\n  heca-view/src/\n  ├── lib.rs      crate docs + the reader's table + re-exports (the published surface stays identical)\n  ├── kind.rs     WidgetKind, ALL, ordinal\n  ├── node.rs     ViewNode, its builders and accessors\n  ├── value.rs    PropValue, PropMap, Intent, Events\n  ├── scalars.rs  ViewSize / ViewVariant / ViewAlign / ViewOrientation / ViewScrollAxes / ViewAnimation / ViewRevealAlign\n  └── build.rs    (unchanged — the typed SDK)\n\nEDGE CASES\n- **Every name must stay re-exported from the crate root.** Plugins and heca-view-realize import `heca_view::{WidgetKind, ViewNode, Intent, PropValue, …}`; a split that moves a path breaks the published boundary. Assert by compiling heca-view-realize and heca unchanged.\n- `ordinal` is `#[allow(dead_code)]` on purpose and must stay compiled in every build: an uncompiled exhaustive match cannot be the compile error it exists to be.\n- A move, never a rewrite. Gate: `cargo test -p heca-view -p heca-view-realize` + `./scripts/lint-changed.sh`.\n\n---\n**Completion summary:**\nDONE. heca-view/src/lib.rs (2044 lines) and build.rs (1622) split by job. lib.rs = crate docs + re-exports; kind.rs (WidgetKind), node.rs (ViewNode, IntoNodes, identity rule), value.rs (PropValue, PropMap, Intent, Events), dropdown.rs (DropdownItem, had no home in the decision), scalars/{layout,text,look,glyph,event}.rs, build/{mod,style,macros,events,containers,controls,display,tests}.rs. Every name still heca_view::X; no public item removed (reviewer diffed every pub item). MOVE verified: 143 tests before/after, 118 unit names identical, 25 doctests same set (path/line only differ), bodies identical modulo whitespace and one rustfmt trailing comma; heca and heca-view-realize compile unchanged. Forced by the move: ordinal pub(crate), builder inner node pub(super), three heca-view-realize guard tests now read every file of build/ through one sdk_source() helper, 7 doc path lines updated. REVIEW fixes R1-R8, each with a test seen red (compile failure or deliberate break, restored from a copy): R1 ViewEvent = one closed event-name list (press, hint, change, toggle, dismiss, action, activate, move) read by node, builders and realize; R2 on_hint is one method on Style (was 37 table rows; API note: callers need build::Style in scope); R3 ViewSpace reads step names from ViewSpacing::ALL; R4 unreadable spacing stays 0 px like grid-ui Space (doc fixed) and ViewSpace gains FromStr to be told; R5 builder!/builder_text! share builder_impls!; R6 DropdownItem::new builds through with_intent; R7 named_set!/value_set!/widget_kinds! define each enum, its names and ALL from one list (ordinal is now self as usize); R8 CardGrid gains on_activate/on_move/on_dismiss. Reviewer fix: every_kind_has_a_builder_that_can_be_given_a_hint uses an exhaustive match over WidgetKind (ScrollBar the one reasoned exemption), break-checked. Tests: heca-view 30 (was 23), heca-view-realize 94 (was 95: the hint-table text guard is gone with the table). Gates: clippy, fmt, whole-workspace tests green (60 suites, 0 failed) before the final R8/reviewer edits; after them heca-view, heca-view-realize, clippy and fmt re-run green, workspace tests not re-run. Files over 400 lines: build/style.rs 504 (one trait, kept whole), node.rs 467. Commit 113bd792 on feat/t472-split-heca-view. Unverified: nothing visual (no rendering change).",
+      "descriptionUpdatedAt": "2026-09-30T15:02:16.657Z",
       "notes": "",
       "statusLog": [
         {
@@ -1689,20 +1689,125 @@
           "toStatus": "deferred",
           "title": "Parked 2026-08-28 with the other file splits (see T468). `heca-view/src/lib.rs` holds the widget vocabulary, which P097/T501 extends with declarative arms for the widgets a plugin overlay needs — so the file gains members before it is carved up. Splitting it first means splitting it twice. Resume after. No user-visible behaviour waits on it.",
           "description": "Parked 2026-08-28 with the other file splits (see T468). `heca-view/src/lib.rs` holds the widget vocabulary, which P097/T501 extends with declarative arms for the widgets a plugin overlay needs — so the file gains members before it is carved up. Splitting it first means splitting it twice. Resume after. No user-visible behaviour waits on it."
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-002-deferred-planned",
+          "date": "2026-09-30T08:02:22.244Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Un-parked 2026-09-30 with Antonio's OK. It waited only for P097(F003)/T501 to add its widget vocabulary to heca-view; P097 is done, so the file is settled and this is a single split.",
+          "description": "Un-parked 2026-09-30 with Antonio's OK. It waited only for P097(F003)/T501 to add its widget vocabulary to heca-view; P097 is done, so the file is settled and this is a single split."
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-003-planned-in-progress",
+          "date": "2026-09-30T08:12:59.040Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-004-in-progress-done",
+          "date": "2026-09-30T15:02:16.652Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE. heca-view/src/lib.rs (2044 lines) and build.rs (1622) split by job. lib.rs = crate docs + re-exports; kind.rs (WidgetKind), node.rs (ViewNode, IntoNodes, identity rule), value.rs (PropValue, PropMap, Intent, Events), dropdown.rs (DropdownItem, had no home in the decision), scalars/{layout,text,look,glyph,event}.rs, build/{mod,style,macros,events,containers,controls,display,tests}.rs. Every name still heca_view::X; no public item removed (reviewer diffed every pub item). MOVE verified: 143 tests before/after, 118 unit names identical, 25 doctests same set (path/line only differ), bodies identical modulo whitespace and one rustfmt trailing comma; heca and heca-view-realize compile unchanged. Forced by the move: ordinal pub(crate), builder inner node pub(super), three heca-view-realize guard tests now read every file of build/ through one sdk_source() helper, 7 doc path lines updated. REVIEW fixes R1-R8, each with a test seen red (compile failure or deliberate break, restored from a copy): R1 ViewEvent = one closed event-name list (press, hint, change, toggle, dismiss, action, activate, move) read by node, builders and realize; R2 on_hint is one method on Style (was 37 table rows; API note: callers need build::Style in scope); R3 ViewSpace reads step names from ViewSpacing::ALL; R4 unreadable spacing stays 0 px like grid-ui Space (doc fixed) and ViewSpace gains FromStr to be told; R5 builder!/builder_text! share builder_impls!; R6 DropdownItem::new builds through with_intent; R7 named_set!/value_set!/widget_kinds! define each enum, its names and ALL from one list (ordinal is now self as usize); R8 CardGrid gains on_activate/on_move/on_dismiss. Reviewer fix: every_kind_has_a_builder_that_can_be_given_a_hint uses an exhaustive match over WidgetKind (ScrollBar the one reasoned exemption), break-checked. Tests: heca-view 30 (was 23), heca-view-realize 94 (was 95: the hint-table text guard is gone with the table). Gates: clippy, fmt, whole-workspace tests green (60 suites, 0 failed) before the final R8/reviewer edits; after them heca-view, heca-view-realize, clippy and fmt re-run green, workspace tests not re-run. Files over 400 lines: build/style.rs 504 (one trait, kept whole), node.rs 467. Commit 113bd792 on feat/t472-split-heca-view. Unverified: nothing visual (no rendering change)."
         }
       ],
       "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
+      "acceptedDecisions": [
+        {
+          "id": "6da8944c-4ce7-4824-863c-abd35066f104",
+          "title": "heca-view split: kind, node, value, scalars/ by family, build/ by widget family",
+          "decision": "heca-view/src/ = lib.rs (crate docs + re-exports only; every name still heca_view::X), kind.rs (WidgetKind, ALL, ordinal), node.rs (ViewNode + builders/accessors, IntoNodes, the identity rule/UnkeyedItem, and the \"props & events by kind\" reader's guide), value.rs (PropValue + its From conversions, PropMap, Intent, Events), scalars/ (layout.rs: Align, Orientation, Justify, Spacing/Space, Order, Display, ScrollAxes, RevealAlign; text.rs: TextAlign, Ellipsis, LabelSide; look.rs: Size, Variant, Severity, Marker, Animation, HintTone, HintPlacement, TooltipSide; glyph.rs: ViewGlyph, ViewNfGlyph), and build/ — the 1622-line builder kit split by widget family, mapped before moving. Both files are in this task.",
+          "rationale": "Agreed with Antonio 2026-09-30. lib.rs had grown to 2044 lines (the task text says 1423) and build.rs to 1622; both are over the 600-line limit, and a family of small types is a folder per AGENTS § 0.",
+          "implementationNotes": "Move first: same test count, identical test bodies, heca-view-realize and heca compile unchanged, ordinal stays compiled. Then review against the rules, findings as checklist items, each fix with a test seen red. Done by session heca-82; verified independently before ticking.",
+          "acceptedAt": "2026-09-30T08:12:35.859Z"
+        }
+      ],
+      "checklist": [
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-001-map-build-rs-by-widget-family-and-agree-the-build-file-list-report-it-before-moving",
+          "number": 1,
+          "title": "Map build.rs by widget family and agree the build/ file list (report it before moving)",
+          "checked": true
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-002-move-lib-rs-into-lib-rs-re-exports-kind-rs-node-rs-value-rs-scalars-layout-text-look-glyph-rs-and-build-rs-into-build-per-decision-every-name-still-importable-as-heca-view-x-heca-view-realize-and-heca-compile-unchanged-same-test-count-identical-test-bodies",
+          "number": 2,
+          "title": "Move lib.rs into lib.rs (re-exports) + kind.rs + node.rs + value.rs + scalars/{layout,text,look,glyph}.rs and build.rs into build/ per decision; every name still importable as heca_view::X; heca-view-realize and heca compile unchanged; same test count, identical test bodies",
+          "checked": true
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-003-review-the-moved-code-against-the-rules-and-fix-what-is-found-each-as-its-own-checklist-item-each-fix-with-a-test-seen-red",
+          "number": 3,
+          "title": "Review the moved code against the rules and fix what is found, each as its own checklist item (each fix with a test seen red)",
+          "checked": true
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-004-r1-event-names-are-string-literals-written-in-three-crates-press-in-node-rs-and-in-heca-view-realize-17-times-hint-37-times-in-build-events-rs-one-closed-event-vocabulary-in-heca-view-that-all-read",
+          "number": 4,
+          "title": "R1 — Event names are string literals written in three crates (\"press\" in node.rs and in heca-view-realize 17 times, \"hint\" 37 times in build/events.rs): one closed event vocabulary in heca-view that all read",
+          "checked": true
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-005-r2-on-hint-is-on-every-kind-yet-is-listed-37-times-in-build-events-rs-a-new-kind-that-forgets-it-is-the-drift-a-guard-test-exists-for-make-it-one-method-on-style-like-tooltip",
+          "number": 5,
+          "title": "R2 — on_hint is on every kind, yet is listed 37 times in build/events.rs (a new kind that forgets it is the drift a guard test exists for): make it one method on Style, like tooltip",
+          "checked": true
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-006-r3-viewspace-from-str-writes-the-five-step-names-again-xs-sm-beside-viewspacing-name-read-the-one-list",
+          "number": 6,
+          "title": "R3 — ViewSpace::from(&str) writes the five step names again (\"xs\", \"sm\"…) beside ViewSpacing::name(): read the one list",
+          "checked": true
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-007-r4-viewspace-from-str-turns-an-unreadable-value-into-0-px-silently-while-its-doc-says-it-is-passed-through-as-text-decide-behaviour-make-doc-and-code-agree",
+          "number": 7,
+          "title": "R4 — ViewSpace::from(&str) turns an unreadable value into 0 px silently, while its doc says it is passed through as text: decide behaviour, make doc and code agree",
+          "checked": true
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-008-r5-builder-and-builder-text-repeat-the-same-style-and-from-impls-one-shared-inner-macro",
+          "number": 8,
+          "title": "R5 — builder! and builder_text! repeat the same Style and From impls: one shared inner macro",
+          "checked": true
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-009-r6-dropdownitem-new-repeats-with-intent-s-body-new-calls-with-intent",
+          "number": 9,
+          "title": "R6 — DropdownItem::new repeats with_intent's body: new calls with_intent",
+          "checked": true
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-010-r7-every-variant-of-every-value-set-and-widgetkind-40-variants-in-three-lists-is-written-twice-or-three-times-enum-then-name-table-then-all-ordinal-proposal-only-one-macro-that-defines-the-enum-and-its-names-together",
+          "number": 10,
+          "title": "R7 — Every variant of every value set (and WidgetKind, 40 variants in three lists) is written twice or three times: enum, then name table, then ALL/ordinal. Proposal only: one macro that defines the enum and its names together",
+          "checked": true
+        },
+        {
+          "id": "6265e66c-6caf-400e-8e75-20dbe93dae09-check-011-r8-found-under-r1-realize-reads-the-events-activate-and-move-on-a-cardgrid-but-the-sdk-s-cardgrid-has-no-on-activate-on-move-on-dismiss-an-author-using-the-typed-sdk-cannot-bind-them-only-raw-on-works-add-the-setters-to-the-with-event-table-guard-test-to-follow",
+          "number": 11,
+          "title": "R8 — Found under R1: realize reads the events \"activate\" and \"move\" on a CardGrid, but the SDK's CardGrid has no on_activate / on_move / on_dismiss — an author using the typed SDK cannot bind them (only raw .on works). Add the setters to the with_event table (guard test to follow)",
+          "checked": true
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-30T08:12:59.040Z",
+      "completedAt": "2026-09-30T15:02:16.652Z",
       "createdAt": "2026-08-24T13:58:21.061Z",
-      "updatedAt": "2026-08-28T08:23:07.454Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-30T15:02:16.652Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",
+          "createdAt": "2026-09-30T08:12:58.919Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -3303,9 +3408,9 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-09-29T14:42:31.206Z",
-  "handoff": "# T518 and T491 are done and pushed — next is T466 (split registry.rs), layout agreed\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-25T10:32:44.685Z\nReason: Antonio answered the two open questions (T466 layout, T470 note) and asked for them to be in the handoff for the next session, then committed.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Next task: **P082(F003)/T466 — Split app/registry.rs by job** (planned, priority 9 — the lowest open in the phase). Un-parked 2026-09-24 with Antonio's OK.\n- Exact resume point: nothing started. **The layout is AGREED** (Antonio, 2026-09-24) and recorded as T466 checklist C1. It follows AGENTS.md §0b-bis — split by what each piece OWNS, tests beside the code they test, shared fixtures in `testing.rs` (NOT one big `tests.rs`):\n\n```\nheca/src/app/registry/\n├── mod.rs        the entry the app calls (build_keymaps) — wiring only\n├── config.rs     [keys] / [[keys.bind]] / [[keys.surface]] / [[keys.mode]] → bindings\n├── conflicts.rs  who wrote which binding, one report per clash\n├── floors.rs     the keys that are always there (Escape) and cannot be unbound\n├── actions.rs    registers every action's handler\n└── testing.rs    #[cfg(test)] shared fixtures\n```\n| file | owns | owns nothing about |\n|---|---|---|\n| config.rs | config tables → bindings | clashes, what an action does |\n| conflicts.rs | who wrote a key, reporting a clash once | reading config, floors |\n| floors.rs | keys that can't be removed | config, handlers |\n| actions.rs | action → handler | keys |\n\nEach file keeps its own tests, under 400 lines; outside call sites unchanged (re-export from mod.rs). A move, no behaviour change.\n\n## Current and partial state\n- Branch `feat/t518-a-region-holds-a-list`, pushed. Commits on top of `c15eacab`: `020229af` (code), `45b707b7` (planner), then the planner commit carrying this handoff. No PR opened (not asked).\n- **T518 done** (Antonio confirmed on screen, except `.order` reversing two docks — skipped by his choice): `regions(\"sidebar.left\").append/prepend/remove/retain/gap` (`heca/src/chrome/regions.rs`); `.share` → `.flex`; `.order(..)` (`heca-grid-ui/src/order.rs`); region is a Flex list (region `template_row`, provider `grow()`/`default_order` deleted); `PlaceDock` (`.flex/.order` on a dock as it is added, adder wins); context-menu `weight` → `Order` (wire still reads \"weight\"); dotted region names, `as_str()` prints dotted.\n- Fixed while testing, confirmed: `RegionMap<T>` (show/hide + ChromeHost); prefix+q no longer letters a pane tile behind the sidebar (`column::offer_to_columns` + `column_view_seen`).\n- **T491 done** (confirmed): grid-ui `Tile` widget, `WidgetKind::Tile`, SDK builder; app `PaneRow` and showcase PANES mount it.\n- **T470 note added** (Antonio): the showcase is behind the app and is better REWRITTEN once widgets are stable, not just split. T470 stays deferred.\n- T472/T468/T471 stay deferred (P094 still reshapes their files).\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first; fix in the library; compose; hardcode nothing; CSS-shaped layout; propose before coding when a design is open; follow AGENTS.md patterns (read them before proposing a structure); never commit unasked; commit AFTER writing a handoff (it changes planner files); never create planner entries without agreeing.\n- A region never holds sizes or indexes. Do not reintroduce region `template_row` or a provider `grow()`. `retain` not `filter`; `.span` rejected.\n- Every new test: break the code on purpose and see it red.\n- T466 behaviours that must survive (each has a test): mode bindings accept one combo / comma string / list; Escape never global, nor `close_overlay`; floors cannot be unbound; `[[keys.surface]]` before global; a conflict reported once with its layer.\n\n## Supporting documents\n- None needed. T466's own description + checklist C1 hold the agreed shape.\n\n## Blockers and risks\n- None for T466.\n- Flagged, not agreed: 12 show/hide/toggle region actions → 3 taking a region name; `heca/src/chrome/mod.rs` ~2500 lines doing several jobs.\n- CPU >100% reported once after long running; not reproduced (idle 0–3%). If it returns: measure first, do not guess.\n\n## How to resume\n1. `planner-task-show P082(F003)/T466 full=true`, then `planner-task-start`.\n2. Read `heca/src/app/registry.rs` and map every item to one owner in the table above.\n3. Move code into `heca/src/app/registry/` per the layout; tests go with the code they test; shared fixtures to `testing.rs`; re-export from `mod.rs`.\n4. Verify: `./scripts/lint-changed.sh`, `… test`, `… fmt` all clean; each file under 400 lines.\n5. Report, then commit only when asked. Then back to the planner recommendation.",
-  "handoffUpdatedAt": "2026-09-25T10:32:44.685Z",
+  "updatedAt": "2026-09-30T15:02:16.652Z",
+  "handoff": "# T466, T509–T511 and T514 are done, pushed, PR #265 open — every open P082 task is deferred\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-29T18:17:53.766Z\nReason: Antonio asked for a handoff after T514 was committed, pushed and the PR opened. The phase has no ready task left, so the next session needs to know what shipped, what was changed for users, and what the remaining deferred splits wait on.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Task: none in progress. T466, T509, T510, T511 and T514 are done. Every open task in the phase is deferred (T468, T470, T471, T472, T512, T513).\n- Exact resume point: PR #265 (https://github.com/ovidius72/heca/pull/265, branch `feat/t518-a-region-holds-a-list` → main) is open and waiting for Antonio. Ask him what is next; do not pick a deferred split on your own.\n\n## Current and partial state\n- Branch pushed; last commits: `de39045a` (handlers/actions/input split + behaviour), `d38a8eba` (planner), `52949929` (grid-ui tests split), `1a261841` (planner, T514 done). The PR also carries T518 and T466.\n- Shipped, all checked by Antonio in the app:\n  - `heca/src/handlers/`, `heca/src/actions/` (registry, catalog, confirm, `builtins/` per category), `heca/src/args.rs`, `heca/src/input/` (action, names, build, vocabulary). `WmAction` derives `WmActionKind` (strum); handlers registered by kind; one `crate::input::resolve_action` for name + arguments.\n  - Breaking: 12 region actions → `set_region_visible {region, visible}`; documented in `docs/keybindings.md` (\"Changed actions\") and `keybindings.default.toml`.\n  - Modes: one handler (`mode_key` in `heca/src/app/input.rs`); unbound keys fall through to normal bindings; keys read as pressed (Cmd/Alt kept); selection mode `p` = paste.\n  - Mouse: Shift+drag and the wheel do not enter selection mode; copy clears the highlight; scrolled-back cursor stays on its prompt (heca-core snapshot).\n  - `heca-grid-ui/tests/`: `phase_a.rs` gone; one file per subject; files over 600 lines are folder targets; `tests/common` has click and paint helpers. 797 grid-ui tests.\n- T519 filed in P045(F006): app-wide text system (`heca-text` crate, per-language files, user overrides merged by key) — decision 8c9081d1 on T519; two design questions still open there.\n- Left uncommitted on purpose (not this phase's work, from another session): `docs/agents-communication-plan.md`, a one-line change in `notification-system-plane.md`, and `.DS_Store`.\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first. Answer a question and WAIT — never start coding on a question (\"is it like this?\" is not a go). Fix in the library; nothing hardcoded; one path per rule. Never commit unasked; write the handoff before committing planner files.\n- Every split here is also a review: move first (same test count, same bodies), then fixes, each a checklist item with a test seen red.\n- Delegation that worked for T514: a cheaper model does the batch, this session verifies independently (count, names, bodies, assertion count, gates) before ticking.\n\n## Supporting documents\n- None needed: each task's completion note in the planner holds its files, checks and decisions.\n\n## Blockers and risks\n- No ready task in P082. The deferred splits wait on P094(F011)/T449 and T457, which still reshape their files (T513 also: `heca-core/src/backend/terminal/engine.rs` is 2374 lines).\n- Some test files are between 400 and 600 lines (label, input, display, pointer_delivery) — under the split limit, noted only.\n\n## How to resume\n1. Ask Antonio: merge PR #265? what next — the planner recommendation, T519's open questions, or a P094 task?\n2. For any new task: `planner-task-show … full=true`, then `planner-task-start`, then agree the shape before code.\n3. Gates: `./scripts/lint-changed.sh`, `… test`, `… fmt` (scoped, one cargo run at a time).",
+  "handoffUpdatedAt": "2026-09-29T18:17:53.766Z",
   "handoffAudit": {
     "version": 1,
     "entries": [
@@ -3512,10 +3617,10 @@
       ]
     },
     "supportingDocuments": [],
-    "contentHash": "151cee63d36e163a4fc12ab8088eee75b9b9ba05a6ebc42e8467454b2aee185c",
-    "contentLength": 4728,
-    "verifiedAt": "2026-09-25T10:32:44.685Z",
-    "resumeReadyAt": "2026-09-25T11:16:43.474Z",
+    "contentHash": "b866790847781c9ee587e34c58b63301253002468c20333d728bb8acf1aea8d2",
+    "contentLength": 3877,
+    "verifiedAt": "2026-09-29T18:17:53.766Z",
+    "resumeReadyAt": "2026-09-29T18:17:58.302Z",
     "readBackSourceReviews": [
       {
         "source": "conversation",
@@ -3539,7 +3644,7 @@
       }
     ]
   },
-  "handoffReadAt": "2026-09-25T11:16:43.474Z",
+  "handoffReadAt": "2026-09-29T18:17:58.302Z",
   "handoffHistory": [
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-09-23T08-58-18-900Z.md",
@@ -3599,9 +3704,29 @@
       "toStatus": "deferred",
       "title": "in-progress → deferred",
       "description": ""
+    },
+    {
+      "id": "1655a85d-a1d3-4552-bf2c-3afeaf9238ae",
+      "date": "2026-09-30T08:02:22.296Z",
+      "fromStatus": "deferred",
+      "toStatus": "in-progress",
+      "title": "deferred → in-progress",
+      "description": ""
+    },
+    {
+      "id": "0f6a361c-f682-4e43-86d7-0ea4d4637c69",
+      "date": "2026-09-30T15:02:16.700Z",
+      "fromStatus": "in-progress",
+      "toStatus": "deferred",
+      "title": "in-progress → deferred",
+      "description": ""
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",
+      "createdAt": "2026-09-30T08:12:58.919Z"
+    },
     {
       "sessionId": "mcp-process:bee00513-2e67-451f-a208-f0656ce26711",
       "createdAt": "2026-09-29T13:03:08.673Z"

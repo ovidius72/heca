@@ -1,0 +1,103 @@
+{
+  "id": "3cea3f42-8900-4a73-a255-8f450eda5135",
+  "featureId": "1be8af21-337e-4636-93d9-6bea87368492",
+  "number": 103,
+  "shortId": "MBDSQ",
+  "priority": 8,
+  "slug": "ready-06-widgets-heca-pro-needs-lines-tree-layout-multi-line-input-message-list",
+  "title": "ready-06: widgets heca-pro needs — lines, tree layout, multi-line input, message list",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Four library widgets/capabilities missing for the agent diagram and chat.",
+  "description": "Found while designing heca-pro's components (`~/projects/heca-pro/docs/components.md`, \"Widgets the library is missing\"). They go into heca's widget library (`heca-grid-ui`) so plugins get them too.\n\n## Current state\n- `heca-grid-ui/src/scene.rs:304` — `DrawCommand` has Rect, Brackets, Text, Scanline, PushClip/PopClip, Host. No line or path.\n- Catalog: `docs/widgets.md` — Flex, Grid, Card, Panel, Overlay, Input (single line), ScrollRegion, Toast, …\n\n## Goal\n1. **Lines and arrows** — a drawing command for lines (with arrow heads), painted by the renderer (`heca-renderer`), theme-driven width/colour.\n2. **Tree layout** — a container that places a parent above its children and draws the connections, composed from Flex/Grid plus the line command; sizes as shares, never computed pixels.\n3. **Multi-line text input** — grows with its content up to a limit, then scrolls; same keymap/intent model as Input.\n4. **Message list** — wrapped text entries, grows as entries arrive, keeps the bottom in view while you are at the bottom (also helps F009/P055/T508, notification text cut short).\nEach gets a showcase entry and a `docs/widgets.md` section.\n\n## Preserve\n- AGENTS.md § 0b (if it can be built in heca-grid-ui it belongs there), DOM-shaped events, a widget never hit-tests by hand; docs/layout.md for sizes.\n\n## Done when\n- Each widget is in the showcase, driven in the GPU app by Antonio, and documented.",
+  "descriptionUpdatedAt": "2026-09-29T19:21:47.068Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48"
+  ],
+  "tasks": [
+    {
+      "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48",
+      "phaseId": "3cea3f42-8900-4a73-a255-8f450eda5135",
+      "number": 524,
+      "shortId": "LT3A9",
+      "priority": 1,
+      "shortName": "add-lines-arrows-a-tree-layout",
+      "title": "Add lines/arrows, a tree layout, a multi-line input and a message list to heca-grid-ui",
+      "status": "planned",
+      "description": "Execution task for P103. Read the phase description first. Run the pre-flight for each of the four types separately (AGENTS.md § 0): which existing widget, which task, or a proposal.\n\nCurrent: `heca-grid-ui/src/scene.rs:304` `DrawCommand` has no line; the renderer is `heca-renderer`. Input is single-line (`heca-grid-ui/src/widgets/input.rs`). Edge cases: lines crossing clips; tree with one child / many children / nested; multi-line input with IME and selection; message list keeping the bottom in view only while the user is at the bottom.",
+      "descriptionUpdatedAt": "2026-09-29T19:22:15.412Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-001-line-arrow-drawing-command-renderer-support-theme-driven",
+          "number": 1,
+          "title": "Line / arrow drawing command + renderer support, theme-driven",
+          "checked": false
+        },
+        {
+          "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-002-tree-layout-container-using-the-line-command-shares-no-computed-pixels",
+          "number": 2,
+          "title": "Tree layout container using the line command (shares, no computed pixels)",
+          "checked": false
+        },
+        {
+          "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-003-multi-line-input-grows-to-a-limit-then-scrolls-same-intent-model-as-input",
+          "number": 3,
+          "title": "Multi-line input (grows to a limit, then scrolls; same intent model as Input)",
+          "checked": false
+        },
+        {
+          "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-004-message-list-with-wrapped-entries-and-stick-to-bottom",
+          "number": 4,
+          "title": "Message list with wrapped entries and stick-to-bottom",
+          "checked": false
+        },
+        {
+          "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-005-showcase-entries-for-all-four-driven-by-antonio-in-the-gpu-app",
+          "number": 5,
+          "title": "Showcase entries for all four, driven by Antonio in the GPU app",
+          "checked": false
+        },
+        {
+          "id": "ee627c9d-e4ff-40ed-a4e3-88fec1c06f48-check-006-docs-widgets-md-sections",
+          "number": 6,
+          "title": "docs/widgets.md sections",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-29T19:22:15.360Z",
+      "updatedAt": "2026-09-29T19:22:15.360Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-29T19:21:46.992Z",
+  "updatedAt": "2026-09-29T21:33:25.558Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
+}

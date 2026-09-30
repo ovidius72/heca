@@ -97,7 +97,7 @@ Only *attaching* was ever missing. Everything after it already works, and the ex
 
 ```
 heca-view the MODEL — serde and nothing else. A plugin depends on this alone.
-heca-view/src/build.rs the TYPED SDK — one Rust type per kind, so the compiler refuses what the
+heca-view/src/build/ the TYPED SDK — one Rust type per kind, so the compiler refuses what the
                         widget cannot do. This is what an author writes.
 heca-view-realize the ONE bridge — realize(&ViewNode, theme, emit, forms), below `heca`.
 ```
@@ -203,7 +203,7 @@ library) and **`heca-view-realize`** (the bridge — it owns the `heca-grid-ui` 
 can therefore name the vocabulary without compiling the renderer, and `heca-renderer`'s showcase —
 which is below the app — renders a described tree beside its hand-built twin.
 
-**And there is a typed SDK on top of the model** (`heca-view/src/build.rs`): one
+**And there is a typed SDK on top of the model** (`heca-view/src/build/`): one
 Rust type per widget kind, so an author writes `VStack::new().gap(8).child(Button::new("Restart"))`
 and the compiler refuses what the widget cannot do. It lowers to a `ViewNode` and adds no
 capability. **That is the surface a plugin author is meant to use** — see §0 below.
@@ -598,7 +598,7 @@ untrusted input and is treated that way.
 - **A registry instead of the fixed widget list** (R5). Allowed by the rules; not built.
 - ~~**Where the plugin-facing types live.**~~ **Done.** The model is
   `heca-view` and the bridge is `heca-view-realize`, both below the app; a Rust plugin author
-  depends on `heca-view` alone. The typed SDK on top of it (`heca-view/src/build.rs`,
+  depends on `heca-view` alone. The typed SDK on top of it (`heca-view/src/build/`,
   ) is what gives the editor help this row was asking for.
 - **Generated type definitions** for plugins in other languages, from the same widget list. **This is the gap between "a Rust plugin can do this" and "anyone
   can write a plugin"** — the Rust author is served, a JS or Python author is not.
