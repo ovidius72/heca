@@ -37,6 +37,14 @@
       "rationale": "Agreed with Antonio 2026-09-29. Agents keep running when the window closes; switching sessions in one window; one place for all state (one agent-comms member, one planner server for heca-pro); several windows on one session; attaching from another computer later. Cost accepted: splitting AppState and one crash affecting all sessions.",
       "implementationNotes": "Order inside F012: library (P098) -> split server/client in one process (P104) -> connection over the socket with detach/attach and several windows (P099) -> sessions (P100) -> save/restore (P105). Split AppState once: today heca/src/app_state.rs holds renderers, window and retained chrome beside session and backends (81 files use AppState). SharedChromeState is the natural start for what the server sends. Actions are sorted into server (change state) and client (window only). The socket stays local only for now; clients from other computers need login and encryption and are later work.",
       "acceptedAt": "2026-09-29T21:31:52.775Z"
+    },
+    {
+      "id": "fe666e72-f9a1-4486-9725-95639f0c041f",
+      "title": "Another crate declares one extension name; its actions and layers are named under it",
+      "decision": "A program built on heca declares its identity once: `let pro = heca::extension(\"pro\")`. Actions and layers hang off that handle and are named `<name>.<short>` (`pro.action(\"start_worker\")` is `pro.start_worker`; `pro.layer(\"planner\")` is `pro.planner`). The owner half is never written per item. `heca` is reserved for the app's own names and is refused. A short name that contains a dot is refused. A second extension with the same name is refused and reported. Docks keep their own `kind()` as their owner, unchanged. A future WASM plugin gets its name from its manifest, through the same handle. The extension name can be `pro` or `heca_pro` (Antonio, 2026-09-30).",
+      "rationale": "Agreed with Antonio 2026-09-30. It keeps the existing rule that the owner half of a layer or action name is never an author's free string (heca/src/chrome/layers/layer.rs `layer_name`), so two extensions cannot claim each other's names and nothing can claim `heca.*`. One declaration per program instead of a prefix repeated on every item; pane decoration by name (T520 step 3) and later plugins use the same handle.",
+      "implementationNotes": "Replaces the first free-string doors `heca::action(\"id\")` and `heca::layer(\"owner.short\")` in heca/src/entry/ (built earlier in T520). Registration goes through the same queues and the same ActionCatalog / register_named_layer paths; only how the name is formed changes. Server side: actions. Client side: layers and pane decoration. Test: two extensions with one name, a dotted short name, and the reserved name are each refused and reported.",
+      "acceptedAt": "2026-09-30T09:14:44.075Z"
     }
   ],
   "phaseIds": [
@@ -66,9 +74,54 @@
       "toStatus": "planned",
       "title": "deferred → planned",
       "description": ""
+    },
+    {
+      "id": "9b076868-53ff-4b14-8675-9053914da307",
+      "date": "2026-09-30T08:21:51.849Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "8663cb71-3323-47ef-a899-6073a110e7ac",
+      "date": "2026-09-30T14:31:50.248Z",
+      "fromStatus": "in-progress",
+      "toStatus": "planned",
+      "title": "in-progress → planned",
+      "description": ""
+    },
+    {
+      "id": "5f6c7eb6-b8e9-4966-9432-482212a81761",
+      "date": "2026-09-30T14:33:44.383Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "4c739702-edb3-4d1c-ba34-027b20b8fda0",
+      "date": "2026-09-30T14:55:35.885Z",
+      "fromStatus": "in-progress",
+      "toStatus": "planned",
+      "title": "in-progress → planned",
+      "description": ""
+    },
+    {
+      "id": "86117a05-66a9-4af2-b87a-7cfc1759dbcf",
+      "date": "2026-09-30T14:55:43.332Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:05.026Z",
-  "updatedAt": "2026-09-29T21:33:38.765Z",
-  "sessionInfo": []
+  "updatedAt": "2026-09-30T09:14:44.075Z",
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
+      "createdAt": "2026-09-30T14:55:43.121Z"
+    }
+  ]
 }

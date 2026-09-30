@@ -34,11 +34,52 @@
       "priority": 1,
       "shortName": "split-heca-into-library-progra",
       "title": "Split heca into library + program, and add the entry point another crate uses to add actions, docks, pane decorations and overlays",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Execution task for P098. Read the phase description first, and `~/projects/heca-pro/docs/architecture.md` (\"Two editions, one code base underneath\").\n\nCurrent: `heca/Cargo.toml:2` program only; `HecaApp` private at `heca/src/main.rs:50`; `fn main` at :475; startup in `heca/src/app/startup.rs`; actions in the ActionCatalog (`heca/src/actions/`); docks from providers (`heca/src/providers/`).\n\nSteps are in the checklist. Design the entry point first and agree it with Antonio before writing it (it is a public API a plugin author will also read) — write the line a plugin author would type. Edge cases: the binary must not change behaviour; tests that reach private items keep working; nothing heca-pro adds may need a registry id.",
       "descriptionUpdatedAt": "2026-09-29T19:21:59.921Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-001-planned-in-progress",
+          "date": "2026-09-30T08:21:51.739Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "7b89ec87-0077-4019-82c0-30ab135d3704",
+          "date": "2026-09-30T14:31:50.117Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Antonio decided to fix the lingering tooltip under a blocking overlay now, as its own task, before 3b/3c. Not part of T520.\nWhat was being done: T520 stage 3a is built (pane header buttons by name) and Antonio checked it in the app; he found the tooltip staying under an overlay and buttons touching. Stages 3b (chips) and 3c (row lines) are held until he is happy.\nResume location: ~/projects/heca-f012 (branch feat/f012-heca-library, uncommitted). Next: finish the ButtonGroup gap (theme token) in heca-grid-ui, then 3b then 3c. Checklist C9/C10 of T520.\nHow to resume: Resume T520 with planner-task-start after T529 is done; read the T520 checklist. 3a code is in heca/src/chrome/pane_items/, config title_actions are names, extension handle is heca/src/entry/extension.rs. Both fixes Antonio asked for (hover under overlay = T529; ButtonGroup gap) come first."
+        },
+        {
+          "id": "58681cac-5ac9-4e46-8c1d-9d2d78f286de",
+          "date": "2026-09-30T14:33:44.284Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from ~/projects/heca-f012 (branch feat/f012-heca-library, uncommitted). Next: finish the ButtonGroup gap (theme token) in heca-grid-ui, then 3b then 3c. Checklist C9/C10 of T520.. Resume T520 with planner-task-start after T529 is done; read the T520 checklist. 3a code is in heca/src/chrome/pane_items/, config title_actions are names, extension handle is heca/src/entry/extension.rs. Both fixes Antonio asked for (hover under overlay = T529; ButtonGroup gap) come first."
+        },
+        {
+          "id": "6851a114-4267-45fe-8198-0193613e762f",
+          "date": "2026-09-30T14:55:35.756Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Antonio verified T529 by eye; a paused task must be resumed before it can be completed.\nWhat was being done: T520 stage 3a done and verified; about to start 3b (chips by name).\nResume location: Checklist C9 of T520 (3b), worktree ~/projects/heca-f012.\nHow to resume: planner-task-start P098(F012)/T520, then begin 3b: title_segments by name, same registry rules as 3a."
+        },
+        {
+          "id": "1c54d8b7-dc6f-47ae-ab0c-82c9783cb35c",
+          "date": "2026-09-30T14:55:43.228Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from Checklist C9 of T520 (3b), worktree ~/projects/heca-f012.. planner-task-start P098(F012)/T520, then begin 3b: title_segments by name, same registry rules as 3a."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -46,25 +87,25 @@
           "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-001-propose-the-entry-point-the-lines-another-crate-writes-and-agree-it-with-antonio",
           "number": 1,
           "title": "Propose the entry point (the lines another crate writes) and agree it with Antonio",
-          "checked": false
+          "checked": true
         },
         {
           "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-002-add-heca-src-lib-rs-main-rs-becomes-a-few-lines-calling-it-binary-unchanged",
           "number": 2,
           "title": "Add heca/src/lib.rs; main.rs becomes a few lines calling it; binary unchanged",
-          "checked": false
+          "checked": true
         },
         {
           "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-003-entry-point-add-actions-reachable-by-key-menu-rpc",
           "number": 3,
           "title": "Entry point: add actions (reachable by key, menu, RPC)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-004-entry-point-add-docks-placeable-in-either-sidebar-by-the-user",
           "number": 4,
           "title": "Entry point: add docks (placeable in either sidebar by the user)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-005-entry-point-add-pane-decorations-and-overlays",
@@ -83,27 +124,117 @@
           "number": 7,
           "title": "Docs: how an outside crate builds on heca",
           "checked": false
+        },
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-008-3a-pane-header-buttons-by-name-one-registry-config-lists-names-extension-buttons-antonio-checks-by-eye",
+          "number": 8,
+          "title": "3a — Pane header buttons by name: one registry, config lists names, extension buttons (Antonio checks by eye)",
+          "checked": true
+        },
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-009-3b-pane-header-chips-by-name-pane-facts-value-that-can-grow-retained-header-keyed-by-name-antonio-checks-by-eye",
+          "number": 9,
+          "title": "3b — Pane header chips by name (pane-facts value that can grow; retained header keyed by name) (Antonio checks by eye)",
+          "checked": false
+        },
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-010-3c-sidebar-pane-row-lines-by-name-a-slot-in-the-pane-row-cwd-git-lines-move-onto-it-antonio-checks-by-eye",
+          "number": 10,
+          "title": "3c — Sidebar pane-row lines by name: a slot in the pane row, cwd/git lines move onto it (Antonio checks by eye)",
+          "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
-      "pauseHistory": [],
-      "startedAt": "",
+      "pauseHistory": [
+        {
+          "id": "756e6e07-00ad-4c9a-a8f3-3b222a01a183",
+          "reason": "Antonio decided to fix the lingering tooltip under a blocking overlay now, as its own task, before 3b/3c. Not part of T520.",
+          "whatWasBeingDone": "T520 stage 3a is built (pane header buttons by name) and Antonio checked it in the app; he found the tooltip staying under an overlay and buttons touching. Stages 3b (chips) and 3c (row lines) are held until he is happy.",
+          "resumeLocation": "~/projects/heca-f012 (branch feat/f012-heca-library, uncommitted). Next: finish the ButtonGroup gap (theme token) in heca-grid-ui, then 3b then 3c. Checklist C9/C10 of T520.",
+          "howToResume": "Resume T520 with planner-task-start after T529 is done; read the T520 checklist. 3a code is in heca/src/chrome/pane_items/, config title_actions are names, extension handle is heca/src/entry/extension.rs. Both fixes Antonio asked for (hover under overlay = T529; ButtonGroup gap) come first.",
+          "relatedTaskId": "54359125-a657-4e6f-b7b5-362d9211f544",
+          "pausedAt": "2026-09-30T14:31:50.117Z",
+          "pausedBy": ""
+        },
+        {
+          "id": "de7072f3-e43a-4b54-b30a-da5bc4c6423e",
+          "reason": "Antonio verified T529 by eye; a paused task must be resumed before it can be completed.",
+          "whatWasBeingDone": "T520 stage 3a done and verified; about to start 3b (chips by name).",
+          "resumeLocation": "Checklist C9 of T520 (3b), worktree ~/projects/heca-f012.",
+          "howToResume": "planner-task-start P098(F012)/T520, then begin 3b: title_segments by name, same registry rules as 3a.",
+          "relatedTaskId": "54359125-a657-4e6f-b7b5-362d9211f544",
+          "pausedAt": "2026-09-30T14:55:35.756Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-09-30T08:21:51.739Z",
       "completedAt": "",
       "createdAt": "2026-09-29T19:21:59.865Z",
-      "updatedAt": "2026-09-29T19:21:59.865Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-09-30T15:00:27.608Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
+          "createdAt": "2026-09-30T14:55:43.121Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1"
     }
   ],
   "createdAt": "2026-09-29T19:21:15.018Z",
-  "updatedAt": "2026-09-29T19:21:59.865Z",
+  "updatedAt": "2026-09-30T15:00:27.608Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": [],
-  "sessionInfo": []
+  "statusLog": [
+    {
+      "id": "e08152e0-62f6-43ce-8a56-161c256aaab0",
+      "date": "2026-09-30T08:21:51.767Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "73ccb655-428d-4b0a-91b5-1ae5ad39772f",
+      "date": "2026-09-30T14:31:50.172Z",
+      "fromStatus": "in-progress",
+      "toStatus": "planned",
+      "title": "in-progress → planned",
+      "description": ""
+    },
+    {
+      "id": "977ded16-64d5-421d-b3f4-140d8176987b",
+      "date": "2026-09-30T14:33:44.310Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "04c5ac75-da7b-438f-8e6b-abd11e0bdc43",
+      "date": "2026-09-30T14:55:35.808Z",
+      "fromStatus": "in-progress",
+      "toStatus": "planned",
+      "title": "in-progress → planned",
+      "description": ""
+    },
+    {
+      "id": "8ea4078c-dd4f-45b9-b0ff-6d633168936f",
+      "date": "2026-09-30T14:55:43.254Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
+      "createdAt": "2026-09-30T14:55:43.121Z"
+    }
+  ]
 }

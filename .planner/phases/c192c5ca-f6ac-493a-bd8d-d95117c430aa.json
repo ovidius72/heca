@@ -29,7 +29,8 @@
     "4676e673-bde6-4d6c-9ec6-56bdf362e77e",
     "e3bbfb84-499b-4e9f-b00f-26685378c24d",
     "56193253-82c2-4a4e-9f0c-91c902660e9b",
-    "e995dbdc-c15b-4d59-87c5-a16f9a3e77f3"
+    "e995dbdc-c15b-4d59-87c5-a16f9a3e77f3",
+    "9d54e52e-d5e6-45d7-b388-6ed3d826f541"
   ],
   "tasks": [
     {
@@ -272,10 +273,74 @@
       "updatedAt": "2026-09-29T07:51:15.706Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541",
+      "phaseId": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
+      "number": 528,
+      "shortId": "NRWXF",
+      "priority": 8,
+      "shortName": "a-dock-can-be-moved-between-si",
+      "title": "A dock can be moved between sidebars by mouse, and where it sits is saved across runs",
+      "status": "planned",
+      "description": "Asked for by Antonio, 2026-09-30, after trying the outside-program example (F012/T520, heca/examples/heca_plus.rs): the added \"Notes\" dock could not be moved to the other sidebar by dragging, and a move would not survive a restart anyway.\n\n## What is true today\n- A dock is seated where the code says. `regions(\"sidebar.left\").append(dock)` (heca/src/chrome/regions.rs) is queued and applied once at startup by `ChromeHost::mount_pending` (heca/src/chrome/host.rs ~259). Placement is kept in memory only: `ChromeHost::placement` (host.rs ~300) and `move_container` (~309). docs/chrome-and-ui.md:786 already lists \"Container placement persistence [ ]  # plugin-07 (in-memory today)\".\n- A move exists as an action, `chrome.container.move_to_region` (heca/src/actions/builtins/chrome.rs:128; handler in heca/src/handlers/docks.rs), so it is reachable by key and RPC. It is NOT reachable by mouse: the drag identities are a closed set — pane, column, workspace (heca/src/chrome/drag.rs `ChromeDragItem`) — and a dock has no drag handle or drop target.\n- The only config that touches placement is `[settings] show_left_sidebar` / `show_right_sidebar` (hide a whole side).\n- A test already states the in-memory rule: `a_dock_the_user_moved_stays_where_they_put_it` (heca/src/chrome/host.rs, region_list_tests).\n\n## Wanted\n1. **Mouse move.** Dragging a dock's title row to the other sidebar (and to a position among that sidebar's docks) moves it. It must dispatch the existing `chrome.container.move_to_region` / reorder action through the registry, not mutate the host — one door for mouse, key and RPC (AGENTS § 2). A dock added by another crate (heca::regions) must be draggable with nothing written by its author (Rule Zero, AGENTS § 0d: a component owns its own input).\n2. **Save the user's placement.** Which region each dock is in, and its order, survives a restart. The user's saved placement wins over the code's default from `regions(..).append/prepend`. Reuse the search-history persistence pattern (heca/src/search_state.rs, T386): data_dir path, schema version, atomic write, saves when a revision changes, never fails on a missing or bad file (a first run and a broken file behave the same).\n3. **Keyed by the dock's mount id** (the name `regions(..)` seats it under, e.g. \"workspaces.right\", \"notes\"). Edge cases: a saved dock no longer added by any code is ignored, not resurrected; a dock added for the first time uses its code default; a saved region the dock no longer supports falls back to the default; two placements of one dock keep separate entries.\n4. **Reset.** The user can put everything back to the code defaults (action / config), so a wrong move is never permanent.\n\n## Later fit\nAfter F012/P104 (server/client split) placement is a per-window client setting (which docks are shown and where is per window, F012 decision \"Two windows on one session…\"); keep the saved file's shape ready for that (do not store it inside session state).\n\n## Not in this task\nAdding docks from another crate (F012/T520 — done there); pane header buttons (F012/T520 step 3).",
+      "descriptionUpdatedAt": "2026-09-30T09:14:17.272Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-001-drag-a-dock-s-title-row-to-the-other-sidebar-a-position-dispatches-the-existing-move-action-works-for-a-dock-another-crate-added",
+          "number": 1,
+          "title": "Drag a dock's title row to the other sidebar / a position; dispatches the existing move action; works for a dock another crate added",
+          "checked": false
+        },
+        {
+          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-002-save-placement-region-order-per-mount-id-to-the-data-dir-reusing-the-search-state-rs-pattern",
+          "number": 2,
+          "title": "Save placement (region + order per mount id) to the data dir, reusing the search_state.rs pattern",
+          "checked": false
+        },
+        {
+          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-003-saved-placement-wins-over-regions-defaults-unknown-unsupported-and-new-docks-handled",
+          "number": 3,
+          "title": "Saved placement wins over regions(..) defaults; unknown, unsupported and new docks handled",
+          "checked": false
+        },
+        {
+          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-004-reset-to-the-code-defaults-action-rpc",
+          "number": 4,
+          "title": "Reset to the code defaults (action + RPC)",
+          "checked": false
+        },
+        {
+          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-005-test-move-restart-equivalent-reload-default-wins-only-when-nothing-is-saved",
+          "number": 5,
+          "title": "Test: move, restart-equivalent reload, default wins only when nothing is saved",
+          "checked": false
+        },
+        {
+          "id": "9d54e52e-d5e6-45d7-b388-6ed3d826f541-check-006-drive-it-in-the-gpu-app-and-confirm-with-antonio",
+          "number": 6,
+          "title": "Drive it in the GPU app and confirm with Antonio",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-30T09:14:17.217Z",
+      "updatedAt": "2026-09-30T09:14:17.217Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-09-29T07:51:15.706Z",
+  "updatedAt": "2026-09-30T09:14:17.217Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-07-27T13:37:24.584Z",
   "handoffAudit": null,
