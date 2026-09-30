@@ -64,7 +64,7 @@ const VERSION: u32 = 2;
 /// platform has no answer, in which case the session simply remembers nothing — in memory only,
 /// never a panic.
 pub fn default_path() -> Option<PathBuf> {
-    dirs::data_dir().map(|d| d.join("heca").join("search-history.json"))
+    crate::state_file::data_path("search-history.json")
 }
 
 fn now() -> u64 {
@@ -265,13 +265,7 @@ pub fn save(path: &Path, store: &SearchStore, baseline: &Baseline) -> std::io::R
 /// Write `file` at `path`, atomically: a sibling temp file then a rename, so an interrupted write
 /// leaves the previous file intact rather than a half-parsed one.
 fn write_file(path: &Path, file: &Persisted) -> std::io::Result<()> {
-    let text = serde_json::to_string_pretty(file)?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, path)
+    crate::state_file::write_json(path, file)
 }
 
 /// Which half of a scope's memory to forget.

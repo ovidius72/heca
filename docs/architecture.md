@@ -269,8 +269,8 @@ Composition rules (see `docs/surface-compositor.md`):
   tree is built from `heca-grid-ui` widgets; overlays/modals it opens are compositor
   children of the region.
 - **Within-pane chrome** is composed, not painted: `pane_header` (config-driven
-  `title_segments` + `title_actions` → `PaneAction` buttons, each tied to a
-  `WmAction` with an auto-derived tooltip + `prefix+/` hint) and the `expose` tree
+  `title_segments` + `title_actions` → buttons named in the `PaneButtons` registry, each tied to
+  an action with an auto-derived tooltip + `prefix+/` hint) and the `expose` tree
   (`expose_grid → workspace_row → column_card → pane_card`) — all built from
   `heca-grid-ui` widgets, never hand-drawn in `paint`.
 - **Overlays/modals** are realized either from native `heca-grid-ui` trees or from a

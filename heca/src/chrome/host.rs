@@ -480,6 +480,33 @@ mod region_list_tests {
         assert_eq!(host.placement("x"), Some(RegionId::RightSidebar));
     }
 
+    /// **What the code adds is a default; where the user puts it is where it stays.**
+    ///
+    /// A dock another crate adds to `sidebar.right` starts there. When the user moves it, the move
+    /// is what the host answers from — nothing about the line that added it pulls it back, whether
+    /// the host is asked once or many times. (Placement is in memory only today: it is not saved
+    /// across runs, so "the user's choice" lasts as long as the session.)
+    #[test]
+    fn a_dock_the_user_moved_stays_where_they_put_it() {
+        let mut host = fresh();
+        regions("sidebar.right").append(ws("notes"));
+        host.mount_pending();
+        assert_eq!(
+            host.placement("notes"),
+            Some(RegionId::RightSidebar),
+            "the default"
+        );
+
+        host.move_container("notes", RegionId::LeftSidebar).unwrap();
+
+        assert_eq!(host.placement("notes"), Some(RegionId::LeftSidebar));
+        assert_eq!(ids(&host, RegionId::LeftSidebar), ["notes"]);
+        assert!(ids(&host, RegionId::RightSidebar).is_empty());
+        // Nothing re-applies the code's default: a second look gives the same answer.
+        host.mount_pending();
+        assert_eq!(host.placement("notes"), Some(RegionId::LeftSidebar));
+    }
+
     /// **Remove and retain act by name**, on what is there when they run — so a plugin can take out
     /// a built-in the app added before it.
     #[test]

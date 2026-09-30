@@ -114,9 +114,7 @@ fn default_pane_renamed_add_process_name() -> bool {
     true
 }
 
-/// Default for showing a pane's working directory as its own row in the sidebar card.
-/// Off by default — it is opt-in extra detail (the cwd is also available as the info-bar
-/// `location` segment).
+/// Default for the deprecated `pane_show_cwd`: off. See `[appearance.expose] show_cwd`.
 fn default_pane_show_cwd() -> bool {
     false
 }
@@ -360,9 +358,9 @@ pub struct SettingsConfig {
         alias = "pane-renamed-add-process-name"
     )]
     pub pane_renamed_add_process_name: bool,
-    /// Show each pane's working directory as its own row (folder icon + home-relative path)
-    /// in the sidebar pane card, between the name row and the git-status row. Off by default;
-    /// the cwd is also available as the info-bar `location` segment.
+    /// **Deprecated: `[appearance.expose] show_cwd`.** Still read and mapped onto it, with a one-time
+    /// notice to move it. It once switched the sidebar's folder line too; that line is now decided by
+    /// `[appearance.sidebar] pane_lines` alone.
     #[serde(default = "default_pane_show_cwd", alias = "pane-show-cwd")]
     pub pane_show_cwd: bool,
     /// Host terminal scrollback capacity in rows.

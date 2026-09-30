@@ -124,6 +124,26 @@ pub struct ConfirmSpec {
     pub default_enabled: bool,
 }
 
+impl ConfirmSpec {
+    /// The prompt for an act that cannot be undone: a forced `[Cancel] [<verb>]` choice, on by
+    /// default, toggled by the user as `[confirm] <config_name> = false`.
+    ///
+    /// The one spelling of it — the built-ins below and any action that says it is destructive
+    /// (an extension's `.action(..).destructive()`) get the same prompt, so they cannot drift.
+    pub fn destructive(config_name: impl Into<String>, verb: &str) -> Self {
+        Self {
+            message: "This action cannot be undone.".to_string(),
+            buttons: vec![
+                ResponseButton::cancel("cancel", "Cancel"),
+                ResponseButton::proceed("confirm", verb, true),
+            ],
+            dismissible: false,
+            config_name: config_name.into(),
+            default_enabled: true,
+        }
+    }
+}
+
 /// The built-in confirmation specs, each paired with the **owner action name** it attaches to. The
 /// three destructive actions — close pane / delete column / delete workspace — each get a
 /// `[Cancel] [<verb>]` forced prompt.
@@ -137,16 +157,7 @@ pub struct ConfirmSpec {
 /// use, and the "cannot be undone" line already carries the weight. Delete is kept for the two
 /// containers below, which are a different kind of thing.
 pub(super) fn builtin_confirm_specs() -> Vec<(&'static str, ConfirmSpec)> {
-    let mk = |config_name: &'static str, verb: &str| ConfirmSpec {
-        message: "This action cannot be undone.".to_string(),
-        buttons: vec![
-            ResponseButton::cancel("cancel", "Cancel"),
-            ResponseButton::proceed("confirm", verb, true),
-        ],
-        dismissible: false,
-        config_name: config_name.to_string(),
-        default_enabled: true,
-    };
+    let mk = |config_name: &'static str, verb: &str| ConfirmSpec::destructive(config_name, verb);
     vec![
         ("close", mk("close", "Close")),
         ("delete_column", mk("delete_column", "Delete")),

@@ -866,28 +866,37 @@ pane is") and **action buttons** (right). Both are driven by config lists under
 both empty ⇒ no bar and no reserved space. User-facing list of supported values
 lives in `README.md` ("Pane Info Bar"); keep it in sync when you change the enums.
 
-Both are typed enums in `heca-config/src/appearance.rs`, `#[serde(rename_all = "snake_case")]`:
+Both are **named, not typed**: `title_segments` (chips) and `title_actions` (buttons) are lists of
+names, and which names exist is a registry in `heca/src/chrome/pane_items/` (F012/T520) — heca's own
+and any a program built on heca adds (`pro.pane_button("show_notes")`, `pro.pane_chip("status", ..)`).
+An addition is a default: it shows while the list is still heca's own, and once the user writes
+their own list only their list counts (an omitted one is said once). The rules for turning a list of
+names into items are written once, in `pane_items/listing.rs`.
 
-- `PaneSegment` — `Location`, `AppName`, `GitBranch`, `GitStatus`.
-- `PaneAction` — `Split`, `MoveLeft`, `MoveRight`, `Close`.
+How another crate adds any of this: [`docs/extending-heca.md`](docs/extending-heca.md).
 
-**To add a new segment kind:**
+The sidebar's pane row is the third kind: `[appearance.sidebar] pane_lines` (`cwd`, `git`, and any
+`pro.pane_line(..)` adds). A line is a self-contained widget that subscribes to its pane's facts and
+rewrites itself in place (`heca/src/providers/workspaces/row_lines.rs`); registering one is the same
+`PaneLineDef` heca's own two use.
 
-1. Add the variant to `PaneSegment` (`heca-config/src/appearance.rs`); document the doc-comment.
-2. Render it in the segment match in `heca/src/chrome/mod.rs` (around the
-   `PaneSegment::Location =>` arm) — pull from the pane's `PaneRuntime` projection;
-   a segment with no data must be **skipped** (no empty pill).
-3. Update `README.md` (supported-segments table) + `config.default.toml`.
+**To add a new chip:** register it in `builtin_chips()` (`heca/src/chrome/pane_items/chips.rs`) — a
+name, and a function of `PaneFacts` (plain data about the pane; add a named field there if it needs
+one) returning a `PaneChip` or `None`. A chip with no data for a pane must return `None` (no empty
+pill). A chip whose text is a path says `Fit::PathLeft` so it is what gives way when the bar is
+narrow. Then update `README.md` (supported-chips table) + `config.default.toml`.
 
-**To add a new action kind:**
+**To add a new button:**
 
-1. Add the variant to `PaneAction` (`heca-config/src/appearance.rs`).
-2. Map it in `pane_action_spec()` (`heca/src/chrome/mod.rs`) → `(Glyph icon,
-   WmAction, label, needs_focus)`, and give it a config **name** in
-   `pane_action_name()` (same file). Reuse an **existing** `WmAction` (e.g. `Float`
-   → `WmAction::Float`, `zoom` → `WmAction::ZoomColumn`); do not invent a parallel
-   code path. The tooltip (and its keybind) is then automatic — see **§ Chrome
-   buttons** below. No new keymap entry needed if the action already has a binding.
+1. Register it in `builtin_buttons()` (`heca/src/chrome/pane_items/buttons.rs`) → a name, the
+   action name its tooltip/danger read, its words, the catalog action its icon comes from, and what a
+   click sends. Reuse an **existing** `WmAction` (e.g. `Float` → `WmAction::Float`, `zoom` →
+   `WmAction::ZoomColumn`); do not invent a parallel code path. The tooltip (and its keybind) is then
+   automatic — see **§ Chrome buttons** below. No new keymap entry needed if the action already has
+   a binding. (A button for an action a program built on heca declared needs none of this: it is
+   `pro.pane_button("short")`, and the action says everything else.)
+2. Steps 3–4 below.
+
 3. Per the action checklist, the action must already be reachable from keyboard +
    RPC; the button just adds the mouse/UI path.
 4. Update the showcase pane-header demo + `docs/widgets.md` (grid-ui rule),

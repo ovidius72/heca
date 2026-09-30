@@ -915,7 +915,7 @@ auto_scroll_edge = true       # Auto-scroll near edges
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
 pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`
-pane_show_cwd = false         # Show each pane's cwd as a row in the sidebar card (folder icon + path)
+# pane_show_cwd is now [appearance.expose] show_cwd (still read; see below)
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
@@ -1161,6 +1161,11 @@ With `border_style = "bordered"`, the frame is drawn at `border_width` in
 
 Default: `["location", "app_name"]`.
 
+A program built on heca can add its own chips, named `<extension>.<short>` (for example
+`pro.status`); they follow the same rule as the buttons below — shown after the defaults while this
+list is still the default, only if you list them once you write your own, and reported once when one
+you have not listed is available. A name nothing provides is reported and skipped.
+
 **Supported actions** (`[appearance.pane] title_actions`):
 
 | Value        | Button does                          |
@@ -1175,6 +1180,21 @@ Default: `["location", "app_name"]`.
 Default: `["split", "close"]` (move actions are omitted by default since panes are
 already movable by mouse-dragging, but they remain valid config values). Each
 button's tooltip shows the **real configured keybinding** for that action.
+
+A program built on heca can add its own buttons, named `<extension>.<short>` (for example
+`pro.show_notes`). They show after the defaults while this list is still the default; once you write
+your own list, only the names you list show, and heca tells you once when a button you have not
+listed is available. A name nothing provides is reported and skipped, with the nearest real one.
+
+**Lines under a pane's name in the sidebar** (`[appearance.sidebar] pane_lines`, default
+`["cwd", "git"]`): `cwd` is the working directory and `git` is the branch with change counts, shown
+only inside a repository. **A fresh install shows the folder line under each pane's name in the
+sidebar.** Which lines show is decided by this list alone. A program built
+on heca can add its own, named `<extension>.<short>`; the same rules apply as for buttons and chips.
+
+**The exposé's folders** are `[appearance.expose] show_cwd = true` (off by default). It replaces
+`[settings] pane_show_cwd`, which is still read and mapped onto it, with a one-time notice to move
+it; it no longer affects the sidebar.
 
 ---
 

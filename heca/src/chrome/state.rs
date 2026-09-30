@@ -190,10 +190,10 @@ pub struct WorkspacesContainerState {
     /// Carried here (rather than threaded through every card signature) so the flag
     /// reaches the card via the `ws_state` it already receives.
     pub(crate) pane_renamed_add_process_name: Signal<bool>,
-    /// Whether the sidebar pane card shows a working-directory row. Mirrors
-    /// `[settings] pane_show_cwd`; projected in `sync_chrome_state`, read by `pane_card`.
-    /// Carried here for the same reason as `pane_renamed_add_process_name`.
-    pub(crate) pane_show_cwd: Signal<bool>,
+    /// Whether the exposé shows each pane's folder. Mirrors `[appearance.expose] show_cwd`;
+    /// projected in `sync_chrome_state`, read by the exposé. (The sidebar's folder line is decided by
+    /// `[appearance.sidebar] pane_lines` alone.)
+    pub(crate) expose_show_cwd: Signal<bool>,
     /// The program catalog (`[program]`) — icons and display names for running processes.
     ///
     /// **This component's, not every component's** (F003/P086/T367). It used to ride on
@@ -204,9 +204,27 @@ pub struct WorkspacesContainerState {
     /// An `Rc` because a `Signal` read clones, and this is a whole parsed config; mirrored from
     /// `AppState` in `sync_chrome_state`, so a `prefix+Shift+r` reload reaches it.
     pub(crate) programs: Signal<std::rc::Rc<heca_config::programs::ProgramsConfig>>,
+    /// The lines shown under a pane's name, in order — `[appearance.sidebar] pane_lines` resolved by
+    /// name; mirrored in `sync_chrome_state`, read when a row is built. A change rebuilds the rows
+    /// (`chrome_signature` hashes the names), so it is not a per-frame signal.
+    pub(crate) pane_lines: Signal<crate::chrome::pane_items::PaneLineSet>,
 }
 
 impl WorkspacesContainerState {
+    /// The lines to build under each pane's name. See [`pane_lines`](Self::pane_lines) field.
+    pub(crate) fn pane_lines(&self) -> crate::chrome::pane_items::PaneLineSet {
+        use heca_grid_ui::reactive::SignalGet as _;
+        self.pane_lines.get_untracked()
+    }
+
+    /// Mirror the lines that show. Written only when they differ, so an unchanged reload costs nothing.
+    pub(crate) fn set_pane_lines(&self, lines: crate::chrome::pane_items::PaneLineSet) {
+        use heca_grid_ui::reactive::{SignalGet as _, SignalUpdate as _};
+        if self.pane_lines.get_untracked() != lines {
+            self.pane_lines.set(lines);
+        }
+    }
+
     /// Read the component's model — its rows, cursor and collapse state.
     ///
     /// Keep the borrow short: it is a `RefCell`, so holding one across a call that reaches back
@@ -234,12 +252,17 @@ impl WorkspacesContainerState {
             // Matches the `[settings] pane_renamed_add_process_name` default (`true`);
             // `sync_chrome_state` sets the real value each sync.
             pane_renamed_add_process_name: signal(true),
-            // Matches the `[settings] pane_show_cwd` default (`false`).
-            pane_show_cwd: signal(false),
+            // Matches the `[appearance.expose] show_cwd` default (`false`).
+            expose_show_cwd: signal(false),
             // The embedded defaults until `sync_chrome_state` mirrors the loaded config.
             programs: signal(std::rc::Rc::new(
                 heca_config::programs::ProgramsConfig::default(),
             )),
+            // heca's own lines until `sync_chrome_state` mirrors what the user's list resolves to.
+            pane_lines: signal(
+                crate::chrome::PaneRowLines::default()
+                    .shown(&heca_config::appearance::default_sidebar_pane_lines()),
+            ),
         }
     }
 
@@ -278,15 +301,8 @@ impl WorkspacesContainerState {
     pub fn pane_renamed_add_process_name(&self) -> bool {
         self.pane_renamed_add_process_name.get_untracked()
     }
-    /// **The two display settings as signals**, for a row that follows them rather than reading
-    /// them once while its tree is built. The untracked accessors above stay for the build-time
-    /// initial value; these are what a subscription depends on, so a setting reload reaches every
-    /// row without a rebuild.
-    pub(crate) fn pane_show_cwd_signal(&self) -> Signal<bool> {
-        self.pane_show_cwd
-    }
-
-    /// See [`pane_show_cwd_signal`](Self::pane_show_cwd_signal).
+    /// The setting as a signal, for a row that follows it rather than reading it once while its tree
+    /// is built — so a reload reaches every row without a rebuild.
     pub(crate) fn pane_renamed_add_process_name_signal(&self) -> Signal<bool> {
         self.pane_renamed_add_process_name
     }
@@ -296,10 +312,10 @@ impl WorkspacesContainerState {
     pub fn programs(&self) -> std::rc::Rc<heca_config::programs::ProgramsConfig> {
         self.programs.get_untracked()
     }
-    /// Whether the sidebar pane card shows a cwd row. Read untracked — consumed by
-    /// `pane_card` at tree-build time.
-    pub fn pane_show_cwd(&self) -> bool {
-        self.pane_show_cwd.get_untracked()
+    /// Whether the exposé shows each pane's folder. Read untracked — consumed by the exposé while it
+    /// is built.
+    pub fn expose_show_cwd(&self) -> bool {
+        self.expose_show_cwd.get_untracked()
     }
     /// Is workspace `ws_idx` collapsed? (Borrows — no clone.)
     pub fn is_ws_collapsed(&self, ws_idx: usize) -> bool {
@@ -408,14 +424,14 @@ impl WorkspacesContainerState {
         }
         self.pane_renamed_add_process_name.set(on);
     }
-    /// Project the `[settings] pane_show_cwd` flag into the store. Idempotent; emits no
+    /// Project the `[appearance.expose] show_cwd` flag into the store. Idempotent; emits no
     /// `ChromeEvent` (pure display-config flag read at card build — a reload rebuilds the
     /// sidebar anyway).
-    pub fn set_pane_show_cwd(&self, on: bool) {
-        if self.pane_show_cwd.get_untracked() == on {
+    pub fn set_expose_show_cwd(&self, on: bool) {
+        if self.expose_show_cwd.get_untracked() == on {
             return;
         }
-        self.pane_show_cwd.set(on);
+        self.expose_show_cwd.set(on);
     }
     /// Mirror the program catalog into the store. Called from `sync_chrome_state`, so a config
     /// reload reaches the component; guarded on the `Rc` identity, which is what changes when a
@@ -932,10 +948,6 @@ impl SharedChromeState {
     }
 
     // ── Region (shell) reads/writes — RegionMode/f32 are Copy → `.get()` is cheap ──
-    #[expect(
-        dead_code,
-        reason = "region mode accessors are part of the shell state API; only visibility is consumed today"
-    )]
     pub fn left_mode(&self) -> RegionMode {
         self.left.mode.get()
     }
@@ -945,10 +957,6 @@ impl SharedChromeState {
     pub fn left_visible(&self) -> bool {
         !matches!(self.left.mode.get(), RegionMode::Hidden)
     }
-    #[expect(
-        dead_code,
-        reason = "region mode accessors are part of the shell state API; only visibility is consumed today"
-    )]
     pub fn right_mode(&self) -> RegionMode {
         self.right.mode.get()
     }
@@ -1068,14 +1076,14 @@ mod tests {
     }
 
     #[test]
-    fn pane_show_cwd_defaults_off_then_projects() {
+    fn expose_show_cwd_defaults_off_then_projects() {
         let s = state();
         // Defaults to the `[settings]` default (`false`).
-        assert!(!s.workspaces.pane_show_cwd());
-        s.workspaces.set_pane_show_cwd(true);
-        assert!(s.workspaces.pane_show_cwd());
-        s.workspaces.set_pane_show_cwd(true);
-        assert!(s.workspaces.pane_show_cwd());
+        assert!(!s.workspaces.expose_show_cwd());
+        s.workspaces.set_expose_show_cwd(true);
+        assert!(s.workspaces.expose_show_cwd());
+        s.workspaces.set_expose_show_cwd(true);
+        assert!(s.workspaces.expose_show_cwd());
     }
 
     #[test]

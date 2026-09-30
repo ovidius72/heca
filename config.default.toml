@@ -95,10 +95,10 @@ shell_integration = true
 # rename. Set false to show just the custom name.
 pane_renamed_add_process_name = true
 
-# Show each pane's working directory as its own row (folder icon + home-relative
-# path) in the sidebar pane card, between the name row and the git-status row.
-# Off by default; the cwd is also available as the info-bar `location` segment.
-pane_show_cwd = false
+# DEPRECATED — now `[appearance.expose] show_cwd`. Still read and mapped onto it, with a
+# one-time notice to move it. It no longer affects the sidebar: the sidebar's folder line
+# is `[appearance.sidebar] pane_lines`.
+# pane_show_cwd = false
 
 # Host terminal scrollback capacity in rows (history retained above the
 # visible viewport). The host scrollback viewport scrolls within this range.
@@ -365,12 +365,18 @@ bell_audible = false
 # Info bar (segmented pill inside the pane top + action buttons on the right):
 # title_segments : left side, in order. [] hides it.
 #                  "location" | "app_name" | "pane_name" | "git_branch" | "git_status"
+#                  or a chip added by a program built on heca, e.g. "pro.status" (shows by
+#                  default while this list is the default; once you write your own list,
+#                  only what you list shows).
 #                  (a segment with no data for a pane — e.g. git outside a repo —
 #                   is skipped). "app_name" is always the running program; "pane_name"
 #                   is the pane's own name (custom rename wins, else the program name).
 #                   Default ["location", "app_name"].
 # title_actions  : right side, in order. [] hides it.
 #                  "split" | "close" | "zoom" | "float" | "move_left" | "move_right"
+#                  or a button added by a program built on heca, e.g. "pro.show_notes"
+#                  (it shows by default while this list is the default; once you write your
+#                  own list, only what you list shows).
 #                  Default ["split", "close"] (panes are already movable by drag).
 #                  Each button's tooltip shows its real configured keybinding.
 # Both empty ⇒ no bar and no reserved top padding.
@@ -393,6 +399,13 @@ bell_audible = false
 #                   applies on top.
 # gap             : gap between the sidebar and the content area, px (default 12.0).
 # width           : sidebar width, px. Clamped [160, 560] (default 300).
+# pane_lines      : the lines under a pane's name in the sidebar, by name, in order.
+#                   "cwd" (working directory) | "git" (branch and change counts, only
+#                   inside a repository), or a line added by a program built on heca,
+#                   e.g. "pro.status" (shown by default while this list is the default;
+#                   once you write your own list, only what you list shows). [] shows
+#                   the name alone. Default ["cwd", "git"] — so a fresh install shows
+#                   the folder line under each pane's name in the sidebar.
 # border_style     = "bracketed"
 # border_width     = 1.0
 # border_color     = "#40e0ff"
@@ -400,6 +413,15 @@ bell_audible = false
 # background_color = "#0b0f14"
 # gap              = 12.0
 # width            = 300
+# pane_lines       = ["cwd", "git"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+[appearance.expose]
+# ─────────────────────────────────────────────────────────────────────────────
+# The exposé (prefix+q map of every pane).
+# show_cwd: show each pane's working directory (folder icon + path) on its card.
+#           Off by default. Replaces `[settings] pane_show_cwd`, which still works.
+# show_cwd = false
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Program catalog — [program.<id>]

@@ -19,17 +19,17 @@
 
 use super::seams::{DockRegistries, DockSeams};
 use super::{MENU_PANE, PaneEntry, pane_key, pane_row_items, pane_row_press, row_hint};
+use crate::chrome::pane_items::LineCx;
 use crate::chrome::{
-    CARD_META_FONT_SCALE, ChromeDragItem, RepaintWatch, alpha_u8, home_relative_path,
-    pane_info_view, runtime_snapshot, truncate_sidebar_git_branch,
+    CARD_META_FONT_SCALE, ChromeDragItem, PaneFacts, RepaintWatch, alpha_u8, pane_info_view,
+    runtime_snapshot,
 };
 use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect, signal};
+use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect};
 use heca_grid_ui::style::Spacing;
-use heca_grid_ui::widgets::{
-    Flex, Glyph, HintPlacement, Icon, Label, Row, StatusDot, Tile, Tooltip, TooltipSide, Visibility,
-};
+use heca_grid_ui::widgets::{Glyph, HintPlacement, Icon, Label, Row, StatusDot, Tile, Visibility};
+use std::rc::Rc;
 
 /// **How far a metadata line sits in from the name above it.** One token, read by every line under
 /// the name, so a third line steps in with the others instead of picking its own number.
@@ -37,7 +37,7 @@ use heca_grid_ui::widgets::{
 /// It is applied by each line to *itself*, inside its own visibility — never as a wrapper the card
 /// puts around it. A wrapper does not disappear when the line hides, so a card with nothing to say
 /// about its directory would keep an empty row and the gap above it.
-const META_INDENT: Spacing = Spacing::Xs;
+pub(super) const META_INDENT: Spacing = Spacing::Xs;
 
 /// A single pane **card**: a state-tinted background + radius, a leading program icon, the display
 /// name, an optional exceptional-state indicator, and cwd/git metadata when present.
@@ -118,85 +118,6 @@ impl PaneRow<'_> {
         // (F003/P096/T483).
         let status_dot = StatusDot::new(dot_status(info.status));
         let status_signal = status_dot.status_signal();
-        let branch_label_widget = Label::new(truncate_sidebar_git_branch(
-            info.git_branch.as_deref().unwrap_or_default(),
-        ))
-        .color(theme.colors.foreground)
-        .font_scale(0.8);
-        let branch_display_signal = branch_label_widget.text_signal();
-        let branch_signal = signal(info.git_branch.clone().unwrap_or_default());
-        let add_label_widget = Label::new(info.git_added.clone().unwrap_or_default())
-            .color(theme.colors.success)
-            .font_scale(0.8);
-        let add_label = add_label_widget.text_signal();
-        let add_segment = Visibility::new(
-            Flex::row()
-                .align("center")
-                .gap(4.0)
-                .child(
-                    Icon::new(Glyph::Plus)
-                        .size(12.0)
-                        .color(theme.colors.success),
-                )
-                .child(add_label_widget),
-            info.git_added.is_some(),
-        );
-        let add_text_visible_signal = add_segment.visible_signal();
-        let modified_label_widget = Label::new(info.git_modified.clone().unwrap_or_default())
-            .color(theme.colors.warning)
-            .font_scale(0.8);
-        let modified_label = modified_label_widget.text_signal();
-        let modified_segment = Visibility::new(
-            Flex::row()
-                .align("center")
-                .gap(4.0)
-                .child(
-                    Icon::new(Glyph::Warning)
-                        .size(12.0)
-                        .color(theme.colors.warning),
-                )
-                .child(modified_label_widget),
-            info.git_modified.is_some(),
-        );
-        let modified_text_visible_signal = modified_segment.visible_signal();
-        let deleted_label_widget = Label::new(info.git_deleted.clone().unwrap_or_default())
-            .color(theme.colors.danger)
-            .font_scale(0.8);
-        let deleted_label = deleted_label_widget.text_signal();
-        let deleted_segment = Visibility::new(
-            Flex::row()
-                .align("center")
-                .gap(4.0)
-                .child(
-                    Icon::new(Glyph::Minus)
-                        .size(12.0)
-                        .color(theme.colors.danger),
-                )
-                .child(deleted_label_widget),
-            info.git_deleted.is_some(),
-        );
-        let deleted_text_visible_signal = deleted_segment.visible_signal();
-        let git_row = Visibility::new(
-            Flex::row()
-                .align("center")
-                .gap(6.0)
-                .padding_x(META_INDENT)
-                .child(
-                    Icon::new(Glyph::GitBranch)
-                        .size(12.0)
-                        .color(theme.colors.warning),
-                )
-                .child(
-                    Tooltip::new_signal(branch_label_widget, branch_signal)
-                        .side(TooltipSide::Bottom)
-                        .delay(0.25),
-                )
-                .child(add_segment)
-                .child(modified_segment)
-                .child(deleted_segment),
-            info.git_branch.is_some(),
-        );
-        let git_visible_signal = git_row.visible_signal();
         // A renamed pane surfaces its running program as a dimmed `(process)` suffix after
         // the name (config-gated). Appended to the shared title area so it renders the same
         // in both the git and no-git card layouts. Like the title, it is **signal-driven**
@@ -220,24 +141,27 @@ impl PaneRow<'_> {
         let process_hint_signal = process_hint_label.text_signal();
         let process_hint = Visibility::new(process_hint_label, info.process_hint.is_some());
         let process_hint_visible = process_hint.visible_signal();
-        // Optional cwd row (folder icon + home-relative path), stacked between the name and
-        // git rows. Signal-driven like the git branch: the path updates live on `cd`, and the
-        // row's visibility follows `[settings] pane_show_cwd` and whether the pane has a cwd.
-        // **One shape, shared with the exposé's card** (`components::FolderLine`): the map and the
-        // dock must not describe the same pane two different ways. The signals come back because a
-        // cwd changes without a rebuild — a `cd` updates the path in place, and
-        // `[settings] pane_show_cwd` turns the line on and off the same way.
-        let cwd_path = runtime.as_ref().and_then(|rt| rt.cwd.clone());
-        let cwd_text = cwd_path.as_deref().map(home_relative_path);
-        let cwd = crate::components::FolderLine {
-            path: cwd_text.as_deref(),
-            show: ws_state.pane_show_cwd(),
-            font_scale: CARD_META_FONT_SCALE,
-            indent: META_INDENT,
-            theme,
-        }
-        .build();
-        let (cwd_row, cwd_signal, cwd_visible_signal) = (cwd.widget, cwd.text, cwd.visible);
+        // **What is true of this pane, as a function** — read inside each line's own subscription, so
+        // reading it is what makes a line follow the pane. The lines under the name (`cwd`, `git`, and
+        // any a program built on heca adds) are named items built from it; the user's
+        // `[appearance.sidebar] pane_lines` decides which show and in what order.
+        let facts: Rc<dyn Fn() -> PaneFacts> = {
+            let runtime_signals = ws_state.pane_runtime_signals(pane_id);
+            let programs = seams.programs.clone();
+            let fallback_name = pane.name.clone();
+            Rc::new(move || {
+                let runtime = runtime_signals.snapshot();
+                let custom = runtime_signals.custom_name.get();
+                PaneFacts::of(
+                    pane_id,
+                    &programs,
+                    &fallback_name,
+                    custom.as_deref(),
+                    Some(&runtime),
+                )
+            })
+        };
+        let line_cx = LineCx { theme, facts };
         // **The card's arrangement is the library's `Tile`** — pip, icon, the name with its dimmed
         // `(program)` suffix, then the folder and git lines under it. This file keeps only what a
         // pane row *means*: its signals, its click, its menu, its drag, its pick. The showcase
@@ -246,14 +170,15 @@ impl PaneRow<'_> {
         // **Every line is attached, always** — each is a `Visibility` that decides for itself, so a
         // directory the shell reports after the row is on screen can still appear: the sidebar tree
         // is not rebuilt when it does.
-        let content = Tile::new()
+        let mut content = Tile::new()
             .status(status_dot)
             .icon(icon_widget)
             .title(title_label)
-            .suffix(process_hint)
-            .line(cwd_row)
-            .line(git_row)
-            .grow(1.0);
+            .suffix(process_hint);
+        for def in ws_state.pane_lines().iter() {
+            content = content.line((def.build)(&line_cx));
+        }
+        let content = content.grow(1.0);
         let card = Row::new()
             .background(
                 theme
@@ -353,38 +278,22 @@ impl PaneRow<'_> {
             title: title_signal,
             process_hint: process_hint_signal,
             process_hint_visible,
-            cwd: cwd_signal,
-            cwd_visible: cwd_visible_signal,
             status: status_signal,
-            git_visible: git_visible_signal,
-            git_branch: branch_signal,
-            git_branch_display: branch_display_signal,
-            git_added_visible: add_text_visible_signal,
-            git_added: add_label,
-            git_modified_visible: modified_text_visible_signal,
-            git_modified: modified_label,
-            git_deleted_visible: deleted_text_visible_signal,
-            git_deleted: deleted_label,
         };
         let runtime_signals = ws_state.pane_runtime_signals(pane_id);
         let programs = seams.programs.clone();
         let fallback_name = pane.name.clone();
-        let show_cwd = ws_state.pane_show_cwd_signal();
         let add_process_name = ws_state.pane_renamed_add_process_name_signal();
         create_effect(move |_| {
             let runtime = runtime_signals.snapshot();
             let custom = runtime_signals.custom_name.get();
-            face.show(
-                &pane_info_view(
-                    &programs,
-                    &fallback_name,
-                    custom.as_deref(),
-                    Some(&runtime),
-                    add_process_name.get(),
-                ),
-                runtime.cwd.as_deref(),
-                show_cwd.get(),
-            );
+            face.show(&pane_info_view(
+                &programs,
+                &fallback_name,
+                custom.as_deref(),
+                Some(&runtime),
+                add_process_name.get(),
+            ));
         });
         let (watch, _repaint) = RepaintWatch::new(
             // **The card says it about itself** — no `KeyHint` wrapper, which is for a region that
@@ -416,22 +325,9 @@ pub(crate) struct PaneFace {
     /// The dimmed `(process)` suffix beside a renamed pane's name, or empty when hidden.
     pub(crate) process_hint: Signal<String>,
     pub(crate) process_hint_visible: Signal<bool>,
-    /// The working-directory line: the home-relative path, and whether it shows at all
-    /// (`[settings] pane_show_cwd` and the pane having a directory).
-    pub(crate) cwd: Signal<String>,
-    pub(crate) cwd_visible: Signal<bool>,
     /// What the status pip shows. **One pip that changes what it says**, not one pip per state
     /// with four booleans revealing one.
     pub(crate) status: Signal<heca_grid_ui::DotStatus>,
-    pub(crate) git_visible: Signal<bool>,
-    pub(crate) git_branch: Signal<String>,
-    pub(crate) git_branch_display: Signal<String>,
-    pub(crate) git_added_visible: Signal<bool>,
-    pub(crate) git_added: Signal<String>,
-    pub(crate) git_modified_visible: Signal<bool>,
-    pub(crate) git_modified: Signal<String>,
-    pub(crate) git_deleted_visible: Signal<bool>,
-    pub(crate) git_deleted: Signal<String>,
 }
 
 impl PaneFace {
@@ -439,12 +335,7 @@ impl PaneFace {
     ///
     /// Every write is change-guarded: a signal set to what it already holds would mark the tree
     /// dirty and cost a repaint for nothing, every time anything about any pane moved.
-    fn show(
-        &self,
-        view: &crate::chrome::pane_header::PaneInfoView,
-        cwd: Option<&std::path::Path>,
-        show_cwd: bool,
-    ) {
+    fn show(&self, view: &crate::chrome::pane_header::PaneInfoView) {
         set_if_changed(self.icon, view.icon);
         set_if_changed(self.title, view.title.clone());
         set_if_changed(
@@ -455,38 +346,7 @@ impl PaneFace {
                 .unwrap_or_default(),
         );
         set_if_changed(self.process_hint_visible, view.process_hint.is_some());
-        // The path is cut to a home-relative form here, at the binding, rather than by whoever
-        // happens to write the signal — so there is one spelling of "where this pane is".
-        set_if_changed(
-            self.cwd,
-            cwd.map(crate::chrome::home_relative_path)
-                .unwrap_or_default(),
-        );
-        set_if_changed(self.cwd_visible, show_cwd && cwd.is_some());
         set_if_changed(self.status, dot_status(view.status.clone()));
-        set_if_changed(self.git_visible, view.git_branch.is_some());
-        let branch = view.git_branch.clone().unwrap_or_default();
-        set_if_changed(
-            self.git_branch_display,
-            crate::chrome::truncate_sidebar_git_branch(&branch),
-        );
-        set_if_changed(self.git_branch, branch);
-        for (visible, label, value) in [
-            (self.git_added_visible, self.git_added, &view.git_added),
-            (
-                self.git_modified_visible,
-                self.git_modified,
-                &view.git_modified,
-            ),
-            (
-                self.git_deleted_visible,
-                self.git_deleted,
-                &view.git_deleted,
-            ),
-        ] {
-            set_if_changed(visible, value.is_some());
-            set_if_changed(label, value.clone().unwrap_or_default());
-        }
     }
 }
 
@@ -495,7 +355,7 @@ impl PaneFace {
 /// Stated once rather than at each of the sixteen writes above: setting a signal to what it already
 /// holds marks the tree dirty, and a card that rewrote itself unchanged would cost a repaint every
 /// time anything about any pane moved.
-fn set_if_changed<T: Clone + PartialEq + 'static>(signal: Signal<T>, value: T) {
+pub(super) fn set_if_changed<T: Clone + PartialEq + 'static>(signal: Signal<T>, value: T) {
     if signal.get_untracked() != value {
         signal.set(value);
     }
@@ -518,6 +378,7 @@ mod tests {
     use super::super::testing::{self, Fixture};
     use super::*;
     use heca_core::layout::PaneId;
+    use heca_grid_ui::widgets::Flex;
 
     /// **The bug class this whole split exists for** (F003/P082/T426, three rounds).
     ///
@@ -575,7 +436,6 @@ mod tests {
     #[test]
     fn a_directory_that_arrives_after_the_row_was_built_still_shows() {
         let mut fx = Fixture::default();
-        fx.store.workspaces.set_pane_show_cwd(true);
         // The shell has not reported a directory yet — the state that decided, wrongly, whether
         // the line existed at all.
         fx.store.workspaces.set_pane_runtime(

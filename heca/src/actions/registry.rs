@@ -84,6 +84,15 @@ pub fn register_dynamic(
     handler: Option<DynHandler>,
 ) -> Result<ActionHandle, DuplicateAction> {
     let id = meta.name.clone();
+    let mut meta = meta;
+    // A destructive action's "go ahead" button is worded with its label, as it stands now.
+    if let Some(confirm) = &mut meta.confirm {
+        for button in &mut confirm.buttons {
+            if button.label.is_empty() {
+                button.label = meta.label.clone();
+            }
+        }
+    }
     // A rejected id must not get a handler either, or the key would run something whose metadata
     // says it is a different action.
     if let Err(dup @ DuplicateAction::ShadowsBuiltin) = catalog.insert_dynamic(meta) {

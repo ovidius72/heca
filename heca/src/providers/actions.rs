@@ -163,6 +163,13 @@ pub(crate) fn move_provider_cursor(state: &mut AppState, mount: &str, key: &str)
     mirror_cursor_to_siblings(state, mount);
     // Same door as `route_to_owner`'s: whatever the component asks for on the way is policy-routed
     // and confirm-gated identically.
+    emit_queued(state, queued);
+}
+
+/// Send what a component asked for out the door a click or a key uses — policy-routed and
+/// confirm-gated. The one place a [`ProviderCx`]'s queue is applied, whether the call came through
+/// a mounted component ([`route_to_owner`]) or a free action (an extension's `.action(..)`).
+pub(crate) fn emit_queued(state: &AppState, queued: Vec<Intent>) {
     for queued_intent in queued {
         let _ = state
             .event_proxy

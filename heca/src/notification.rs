@@ -112,7 +112,9 @@ impl NotificationSourceKind {
 ///
 /// # Examples
 ///
-/// ```
+/// Not run as a test: the `notification` module is private, so this cannot compile from outside.
+///
+/// ```ignore
 /// use heca::notification::{NotificationSource, NotificationSourceKind};
 ///
 /// let plugin = NotificationSource::new(NotificationSourceKind::Plugin, "git-watch");
