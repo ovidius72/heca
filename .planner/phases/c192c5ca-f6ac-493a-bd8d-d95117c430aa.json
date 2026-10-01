@@ -30,7 +30,9 @@
     "e3bbfb84-499b-4e9f-b00f-26685378c24d",
     "56193253-82c2-4a4e-9f0c-91c902660e9b",
     "e995dbdc-c15b-4d59-87c5-a16f9a3e77f3",
-    "9d54e52e-d5e6-45d7-b388-6ed3d826f541"
+    "9d54e52e-d5e6-45d7-b388-6ed3d826f541",
+    "250975ab-4f70-411e-91f4-ae13749a51b5",
+    "22954d40-be08-40c9-bcad-a49dc8a84c4f"
   ],
   "tasks": [
     {
@@ -337,10 +339,142 @@
       "updatedAt": "2026-09-30T09:14:17.217Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "250975ab-4f70-411e-91f4-ae13749a51b5",
+      "phaseId": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
+      "number": 530,
+      "shortId": "JJ82G",
+      "priority": 9,
+      "shortName": "appearance-sidebar-border-colo",
+      "title": "[appearance.sidebar] border_color is honoured — for every border style, bracketed included",
+      "status": "planned",
+      "description": "Found 2026-10-01 while checking T523 (per-project settings): `[appearance.sidebar] border_color` is documented and loaded but read by nothing. `AppearanceConfig::effective_sidebar_border_color` (heca-config/src/appearance.rs:856) has zero callers; the sidebar shell (`build_sidebar_shell`, heca/src/chrome/scene.rs ~226) passes style, width, radius and background to a `Pane`, and `Pane` (heca-grid-ui/src/widgets/pane.rs) has no border-colour builder: it paints from the inherited theme (accent for `bracketed`, `colors.border` for `bordered`). The only colour test (chrome/mod.rs ~1775) sets `theme.colors.border` directly, so it never caught this. History: global border_color came in 27f1c9c6, the nested key in bb9c4fa2; the reader was lost along the way.\n\nAntonio's decision: it is a bug, and `bracketed` uses the colour too.\n\nFix at the source: `Pane::border_color(Color)` in heca-grid-ui (showcase entry + docs/widgets.md), used by every border style including the bracketed reticle; default unchanged (theme) when unset. `build_sidebar_shell` reads `effective_sidebar_border_color`; include it in the chrome rebuild signature so a reload applies it. Check whether `[appearance.pane] border_color` / global `border_color` have the same gap and fix them in the same place. Test: a configured colour reaches the painted frame for bordered and bracketed (break-checked); reload changes it.\n\nWaits on P094(F011)/T449 (Terminal as a component), which reshapes the pane widget/shell — start after it merges.",
+      "descriptionUpdatedAt": "2026-10-01T08:15:17.839Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-001-pane-border-color-color-for-every-style-incl-bracketed-showcase-docs",
+          "number": 1,
+          "title": "Pane::border_color(Color) for every style incl. bracketed; showcase + docs",
+          "checked": false
+        },
+        {
+          "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-002-sidebar-shell-reads-effective-sidebar-border-color-in-the-rebuild-signature",
+          "number": 2,
+          "title": "Sidebar shell reads effective_sidebar_border_color; in the rebuild signature",
+          "checked": false
+        },
+        {
+          "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-003-same-gap-for-appearance-pane-global-border-color-fix-in-the-same-place",
+          "number": 3,
+          "title": "Same gap for [appearance.pane] / global border_color? fix in the same place",
+          "checked": false
+        },
+        {
+          "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-004-tests-colour-reaches-the-frame-bordered-bracketed-reload-applies-it-break-checked",
+          "number": 4,
+          "title": "Tests: colour reaches the frame (bordered + bracketed), reload applies it; break-checked",
+          "checked": false
+        },
+        {
+          "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-005-antonio-checks-by-eye",
+          "number": 5,
+          "title": "Antonio checks by eye",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "545733d2-c9e5-4cdb-a95d-e7c7e1a07c7d"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-01T08:15:17.777Z",
+      "updatedAt": "2026-10-01T08:15:23.105Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f",
+      "phaseId": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
+      "number": 532,
+      "shortId": "R5TCM",
+      "priority": 10,
+      "shortName": "a-sidebar-s-visibility-is-one",
+      "title": "A sidebar's visibility is one state: config sets where it starts, the toggle flips it, reload resets it",
+      "status": "in-progress",
+      "description": "BUG found by Antonio 2026-10-01 (via a project file, but pre-existing): with `[settings] show_left_sidebar = false`, \"Show left sidebar\" (prefix+b) does not bring it back. Antonio: the setting should be the initial state; the action must make it visible.\n\nCause (heca-f3, from reading): two independent axes. `[settings] show_left_sidebar/show_right_sidebar` is a \"mounted\" gate (`AppState.shown[region]`, applied at render via `left_sidebar_width`; startup `shown_from_settings`; reload re-derives it in lib.rs `reload_config`). prefix+b (`sidebar_left`) toggles the OTHER axis, RegionMode Expanded/Hidden (handlers/docks.rs `handle_set_region_visible`; AGENTS.md calls it \"a DISTINCT axis from the expand/rail toggles\"). With the setting false, the region is unmounted whatever the toggle does — same with the setting in the user's own config.toml.\n\nFix at the source: one visible/hidden state per region. The config value is only its starting state; the sidebar_left/right actions flip that same state; reload resets it to the config. Remove the second axis rather than syncing two. Files: handlers/docks.rs, the sidebar_left/right actions, app_state `shown`, lib.rs reload_config, AGENTS.md wording. Tests: setting false → starts hidden → toggle shows it → reload hides it again; break-checked. Antonio checks by eye.",
+      "descriptionUpdatedAt": "2026-10-01T08:16:16.826Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-001-planned-in-progress",
+          "date": "2026-10-01T08:25:57.710Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-001-one-visibility-state-per-region-remove-the-second-axis",
+          "number": 1,
+          "title": "One visibility state per region; remove the second axis",
+          "checked": false
+        },
+        {
+          "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-002-config-initial-state-toggle-flips-it-reload-resets-to-config",
+          "number": 2,
+          "title": "Config = initial state; toggle flips it; reload resets to config",
+          "checked": false
+        },
+        {
+          "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-003-tests-break-checked",
+          "number": 3,
+          "title": "Tests (break-checked)",
+          "checked": false
+        },
+        {
+          "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-004-agents-md-docs-wording",
+          "number": 4,
+          "title": "AGENTS.md / docs wording",
+          "checked": false
+        },
+        {
+          "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-005-antonio-checks-by-eye",
+          "number": 5,
+          "title": "Antonio checks by eye",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-01T08:25:57.710Z",
+      "completedAt": "",
+      "createdAt": "2026-10-01T08:16:16.778Z",
+      "updatedAt": "2026-10-01T08:25:57.710Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
+          "createdAt": "2026-10-01T08:25:57.600Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-09-30T09:14:17.217Z",
+  "updatedAt": "2026-10-01T08:25:57.710Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-07-27T13:37:24.584Z",
   "handoffAudit": null,
@@ -356,5 +490,10 @@
       "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
+      "createdAt": "2026-10-01T08:25:57.600Z"
+    }
+  ]
 }

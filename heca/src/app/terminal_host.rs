@@ -20,7 +20,7 @@ use heca_core::backend::{
     BackendModifiers, BackendMouseButton, BackendMouseEvent, BackendMouseEventKind, PaneBackend,
     TerminalDamage, TerminalSnapshot,
 };
-use heca_core::layout::{PaneId, Point, Rectangle, Size};
+use heca_core::layout::{PaneId, Rectangle};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 
 #[derive(Clone)]
@@ -1155,75 +1155,11 @@ pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32,
     frames
 }
 
+/// **The box a pane's terminal fills**, as the last frame drew it — the one the pointer is mapped
+/// against, so what is clicked is what was drawn.
 fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle> {
-    let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
-    let ws_offset = state
-        .session
-        .workspace_geometries()
-        .first()
-        .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
-        .unwrap_or((0.0, 0.0));
-    if let Some(ws) = state.session.active_workspace() {
-        for float in &ws.floating_panes {
-            if float.pane.id != pane_id {
-                continue;
-            }
-            let x = pane_area.loc.x as f32 + ws_offset.0 + float.position.x as f32;
-            let y = pane_area.loc.y as f32 + ws_offset.1 + float.position.y as f32;
-            let w = float.size.w as f32;
-            let h = float.size.h as f32;
-            let inset = pane_content_inset(state);
-            let extra_top = crate::app::terminal_render::pane_title_top_inset(state, pane_id);
-            return inset_content_rect(x, y, w, h, inset, extra_top);
-        }
-    }
-
-    for (candidate, rect) in state
-        .session
-        .active_workspace()
-        .map(|ws| ws.scrolling.panes_with_positions())
-        .unwrap_or_default()
-    {
-        if candidate != pane_id {
-            continue;
-        }
-        let x = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
-        let y = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
-        let w = rect.size.w as f32;
-        let h = rect.size.h as f32;
-        let inset = pane_content_inset(state);
-        let extra_top = crate::app::terminal_render::pane_title_top_inset(state, pane_id);
-        return inset_content_rect(x, y, w, h, inset, extra_top);
-    }
-
-    None
-}
-
-fn inset_content_rect(
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    border_width: f32,
-    extra_top: f32,
-) -> Option<Rectangle> {
-    let inset = border_width.max(1.0);
-    let content_w = (w - inset * 2.0).max(0.0);
-    let content_h = (h - inset * 2.0 - extra_top).max(0.0);
-    if content_w <= 0.0 || content_h <= 0.0 {
-        return None;
-    }
-
-    Some(Rectangle::new(
-        Point::new((x + inset) as f64, (y + inset + extra_top) as f64),
-        Size::new(content_w as f64, content_h as f64),
-    ))
-}
-
-fn pane_content_inset(state: &AppState) -> f32 {
-    let border = state.appearance.effective_pane_border_width(&state.theme);
-    let padding = state.appearance.effective_pane_padding(&state.theme);
-    padding.max(border + 1.0)
+    let (rect, drawn) = crate::chrome::terminal::content_box(state, pane_id);
+    rect.filter(|_| drawn)
 }
 
 #[cfg(test)]

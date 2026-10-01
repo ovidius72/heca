@@ -31,6 +31,9 @@ pub(crate) struct PaneRenderState {
     pub(crate) w: f32,
     pub(crate) h: f32,
     pub(crate) content_rect: Option<Rectangle>,
+    /// Whether the terminal was on screen last frame. One that was not is still sized and kept up
+    /// to date, but is not blitted: its box has no position to blit it at.
+    pub(crate) drawn: bool,
     pub(crate) mount: Option<TerminalMount>,
 }
 
@@ -604,49 +607,6 @@ pub(crate) struct TerminalPaneShell {
 // border, its glow, and the hue it publishes to everything it contains — so passing it to the
 // paint call was handing over a fact the widget already owned.
 
-/// Extra **top** content padding (logical px) taken by the pane's header, so terminal content
-/// starts below it. Zero when the pane has no header. Shared by the render path and the mouse→cell
-/// mapping so the rendered grid and pointer hit-testing use identical geometry.
-///
-/// **Measured, never computed.** It used to be arithmetic — an approximation of `Tag`'s internal
-/// padding, plus a copy of the library's line-height ratio, plus a margin — which meant anything
-/// else put in a pane's header slot had to add up to the same three numbers or sit wrong.
-pub(crate) fn pane_title_top_inset(state: &AppState, pane_id: heca_core::layout::PaneId) -> f32 {
-    crate::chrome::pane_header_height(state, pane_id)
-}
-
-pub(crate) fn stable_tiled_content_rect(
-    px: f32,
-    py: f32,
-    pw: f32,
-    ph: f32,
-    content_inset: f32,
-    extra_top: f32,
-) -> Option<Rectangle> {
-    pane_content_rect(px, py, pw, ph, content_inset, extra_top).map(|(x, y, w, h)| {
-        Rectangle::new(
-            Point::new(x as f64, y as f64),
-            Size::new(w as f64, h as f64),
-        )
-    })
-}
-
-pub(crate) fn stable_floating_content_rect(
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    content_inset: f32,
-    extra_top: f32,
-) -> Option<Rectangle> {
-    pane_content_rect(x, y, w, h, content_inset, extra_top).map(|(cx, cy, cw, ch)| {
-        Rectangle::new(
-            Point::new(cx as f64, cy as f64),
-            Size::new(cw as f64, ch as f64),
-        )
-    })
-}
-
 pub(crate) fn pane_scissor_rect(
     x: f32,
     y: f32,
@@ -679,7 +639,30 @@ pub(crate) fn pane_scissor_rect(
     Some((clipped_left, clipped_top, clipped_width, clipped_height))
 }
 
-pub(crate) fn paint_terminal_pane_shell(
+/// **A floating pane's frame** — its retained shell, painted into `scene`.
+///
+/// The frame is the pane's **retained** shell (`chrome::sync_panes`), not a tree built here and
+/// thrown away: the picker writes a letter into it when it opens and reads it back a keystroke
+/// later, so a tree that does not outlive the frame cannot carry one (F011/P094/T451).
+///
+/// **Painted through `paint_child`, never `paint`** — `paint_child` is what draws a widget's hint
+/// letter after painting it. A direct `.paint(cx)` is exactly why a pane could never show its own
+/// letter.
+///
+/// The info bar is **not painted separately.** It is a child of the pane shell, so `paint_child`
+/// on that tree draws it — clipped, letters and all — with everything else the pane carries.
+/// So is the terminal, which paints the one surface request that says where it is.
+pub(crate) fn paint_pane_frame(state: &AppState, scene: &mut GuiScene, pane_id: PaneId) {
+    let theme = terminal_pane_gui_theme(state);
+    if let Some(retained) = state.panes.get(&pane_id) {
+        let mut cx = PaintCx::new(scene, &theme);
+        heca_grid_ui::paint_child(&retained.root, &mut cx);
+    }
+}
+
+/// A pane's "N lines above" chip and scrollbar, painted over its frame and clipped to it. They
+/// scroll the terminal's scrollback.
+pub(crate) fn paint_pane_viewport(
     state: &AppState,
     scene: &mut GuiScene,
     shell: TerminalPaneShell,
@@ -691,40 +674,7 @@ pub(crate) fn paint_terminal_pane_shell(
         w,
         h,
     } = shell;
-    let theme = terminal_pane_gui_theme(state);
-    // The frame is the pane's **retained** shell (`chrome::sync_panes`), not a tree built here and
-    // thrown away: the picker writes a letter into it when it opens and reads it back a keystroke
-    // later, so a tree that does not outlive the frame cannot carry one. That is why the pane
-    // letters used to be stamped by a host paint pass in `render.rs` (F011/P094/T451).
-    let retained_pane = state.panes.get(&pane_id);
-
     let bar_theme = crate::chrome::chrome_gui_theme(state);
-
-    {
-        let mut cx = PaintCx::new(scene, &theme);
-        // Distinguishable header band behind the title, drawn *before* the frame so
-        // the rounded border traces over it. Theme-driven from the dedicated
-        // `top_bottom_pane_background` token rather than the generic sidebar/card
-        // surface.
-        // **The info bar paints its own band.** It used to be drawn here, sized by arithmetic
-        // that guessed the bar's height — an approximation of `Tag`'s internal padding, plus a
-        // copy of the library's line-height ratio, plus a margin. Three numbers reconstructing
-        // what the layout already knew, and anything else put in a pane's header slot would have
-        // had to add up to them (Antonio, driving, 2026-09-02). The bar carries its own fill now,
-        // so the band is exactly as tall as whatever is in it, whoever put it there.
-
-        // **Painted through `paint_child`, never `paint`** — `paint_child` is what draws a
-        // widget's hint letter after painting it. A direct `.paint(cx)` here is exactly why a pane
-        // could never show its own letter.
-        if let Some(retained) = retained_pane {
-            heca_grid_ui::paint_child(&retained.root, &mut cx);
-        }
-    }
-
-    // The pane's info bar is **not painted here.** It is a child of the pane shell above, so
-    // `paint_child` on that tree draws it — clipped, letters and all — with everything else the
-    // pane carries (F003/P097/T497).
-
     if let Some(viewport) = state.pane_viewport_widgets.get(&pane_id) {
         let clip = GuiRectangle::new(
             GuiPoint::new(x as f64, y as f64),
@@ -823,22 +773,6 @@ pub(crate) fn selection_overlay_for_pane(
     snapshot: &TerminalSnapshot,
 ) -> Option<SelectionOverlay> {
     build_selection_overlay(&state.selection, pane_id, snapshot, &state.theme.accent)
-}
-
-fn pane_content_rect(
-    px: f32,
-    py: f32,
-    pw: f32,
-    ph: f32,
-    inset: f32,
-    extra_top: f32,
-) -> Option<(f32, f32, f32, f32)> {
-    let content_w = (pw - inset * 2.0).max(0.0);
-    let content_h = (ph - inset * 2.0 - extra_top).max(0.0);
-    if content_w <= 0.0 || content_h <= 0.0 {
-        return None;
-    }
-    Some((px + inset, py + inset + extra_top, content_w, content_h))
 }
 
 fn to_gui_color(color: [f32; 4]) -> GuiColor {

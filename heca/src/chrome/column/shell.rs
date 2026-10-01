@@ -44,6 +44,9 @@ pub(crate) struct ColumnShell<'a> {
     /// **What each pane wants along its top**, by pane. The column knows no more about a header
     /// than the pane does — it carries them down and the pane decides what to do with one.
     pub(crate) headers: HashMap<PaneId, Box<dyn Component>>,
+    /// **What each pane runs**, by pane — the terminal today, anything else tomorrow. Carried down
+    /// exactly as the headers are: the column does not know what it is.
+    pub(crate) contents: HashMap<PaneId, Box<dyn Component>>,
 }
 
 /// How wide the new-column offer is, as a share of the column it sits beside. A slot, not a
@@ -88,12 +91,13 @@ pub(crate) fn pane_child(
     column: &ColumnShellModel,
     cb: &PaneCallbacks,
     header: Option<Box<dyn Component>>,
+    content: Option<Box<dyn Component>>,
 ) -> Box<dyn Component> {
     let shell = PaneShell {
         model,
         cb,
         header,
-        content: None,
+        content,
     }
     .build();
     Box::new(shell.at_rect(model.x - column.x, model.y - column.y, model.w, model.h))
@@ -135,7 +139,8 @@ impl ColumnShell<'_> {
         let mut column = column;
         for pane in &self.model.panes {
             let header = self.headers.remove(&pane.pane_id);
-            column = column.child(pane_child(pane, self.model, self.pane_cb, header));
+            let content = self.contents.remove(&pane.pane_id);
+            column = column.child(pane_child(pane, self.model, self.pane_cb, header, content));
         }
         // Declared last so it draws over the gap rather than under the panes.
         if self.model.new_column_slot {

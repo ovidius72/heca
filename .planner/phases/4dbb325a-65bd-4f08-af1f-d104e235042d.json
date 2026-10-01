@@ -100,11 +100,243 @@
     }
   ],
   "createdAt": "2026-09-29T21:32:06.456Z",
-  "updatedAt": "2026-09-29T21:33:22.545Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
-  "handoffAudit": null,
-  "handoffReadAt": "",
+  "updatedAt": "2026-10-01T08:16:53.848Z",
+  "handoff": "# Server/client split — where T520 and T523 left things, and what waits on T449\n\nCreated at: 2026-10-01T08:16:53.848Z\nUpdated at: 2026-10-01T08:16:53.848Z\nReason: The stream-2 session that built T520/T523 is at its context limit; a fresh session starts P104 (the AppState split) from this once heca-82's T449 slice 4 is merged.\n\n## Current focus\n- Feature: F012. Phase: P104 (split heca into server and client, still in one process). Task: P104(F012)/T525 (not started).\n- **Do not start T525 until heca-82 (the stream-1 session) says T449 slice 4 is merged.** T525 is the AppState split and sits right over T449's work (`heca/src/app_state.rs`, `chrome/pane*`, `chrome/terminal/`, `app/terminal_render.rs`, `app/render.rs`, `app/terminal_host.rs`, `mouse/`, one line in `app/startup.rs`). The orchestrator session (`heca-pro-commercial-agents`) tells you when. Start from a fresh `origin/main`.\n- Read first: F012's three accepted decisions (server/client model; two windows share content, move independently; sessions), AGENTS.md § 0, `docs/extending-heca.md`.\n\n## Current and partial state\n- **T520 is merged (PR #267).** heca is a library plus a one-line `main.rs` (`heca::run()`). Another crate adds through doors in `heca/src/entry/`: `heca::extension(\"pro\")`, then `pro.action` (**server side**), `pro.layer`, `pro.pane_button`, `pro.pane_chip`, `pro.pane_line` (**client side**); docks use `heca::regions(..).append(..)` (client). Each door **queues into a thread-local** (`entry/action.rs`, `entry/layer.rs`, `chrome/pane_items/{buttons,chips,lines}.rs`, `chrome/regions.rs`); the app takes each queue once at startup. P104 has to route these by side: actions run where the state is; layers, docks and pane items live in a window. The registries live on `AppState` as client state today: `added_layers`, `pane_buttons`, `pane_chips`, `pane_lines`.\n- Pane items are listed by name in config (`title_actions`, `title_segments`, `[appearance.sidebar] pane_lines`); the rules are in `chrome/pane_items/listing.rs`. Their facts (`PaneFacts`) are plain data and are what the server should send.\n- **T523 is done, PR #268 open** (project settings, trust, one confirm gate). `heca_config::loader::config_sources()` and `read_project()` are the entry points; `heca --show-config` / `--trust` / `--untrust` are in `app/cli.rs`.\n- **T449's terminal-store design (heca-82)**, which P104 moves behind the server: terminals live in a store on `AppState` (`terminals`), keyed by `TerminalId`; run and kill are **actions**; a terminal's size is **reported on change**; and there is **one `ensure` door** that creates a terminal when a pane needs one. Read its code and `.planner` task P094/T449 before splitting; do not redesign it.\n\n## Preservation constraints\n- Standalone heca must behave exactly as today: server and one client in one process, one code path (F012 decision). No second path for anything.\n- The doors and their naming rules (owner half comes from the extension handle, never per item) must keep working; extension items are defaults, the user's lists win.\n- The confirm gate is one function (`handlers/confirm.rs raise_confirm`); a test fails if a declared confirm has no gate. Keep it so on both sides of the split.\n- `trust_project` must stay confirm-gated and un-switch-off-able: a script or agent must not trust a repository's file.\n- Never commit anything under `.planner/` from a worktree; the real planner is `~/projects/heca/.planner`.\n\n## Supporting documents\n- None needed: the design lives in F012's accepted decisions, `docs/extending-heca.md` and AGENTS.md.\n\n## Blockers and risks\n- **Blocked on heca-82's T449 slice 4.** Starting earlier makes a merge conflict across the same files.\n- **Project settings and trust must follow each session's folder, not the server's current directory.** `read_project()` takes the folder from `std::env::current_dir()` at load; with one server holding many sessions each session has its own project folder, so the loader needs the folder passed in (`read_project_in` already takes one) and trust is per folder already. **`heca --show-config` must then say which session it reports on.**\n- Window-specific state that is tied to the process today: `[settings] show_*_sidebar` and the sidebar toggle are two separate settings; the config reload path is in `heca/src/lib.rs`. Known open bugs, filed by the orchestrator: see tasks T530 (sidebar border colour is read by nothing) and the two bugs it filed after Antonio's checks of T523 (pane header path on start; project `show_left_sidebar = false` blocks the toggle). They are not part of P104.\n\n## How to resume\n1. Ask the orchestrator whether T449 slice 4 is merged. If not, wait.\n2. `git fetch origin`, new branch from `origin/main`, read F012's decisions and `heca/src/app_state.rs`; list which `AppState` fields are server state (session, backends, terminals, agents, status) and which are window state (renderers, retained chrome trees, view scroll, overlays, docks).\n3. Propose the split to the orchestrator before writing code (the doors' sides above are the starting map; SharedChromeState is the natural start for what the server sends).",
+  "handoffUpdatedAt": "2026-10-01T08:16:53.848Z",
+  "handoffAudit": {
+    "version": 1,
+    "entries": [
+      {
+        "category": "exact-focus-resume-point",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "first-resume-action",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "partial-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "remaining-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "decisions-rationale",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "rejected-alternatives",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "files-symbols",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "branch-worktree",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "commands-tools",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "pending-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "runtime-limitations-workarounds",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "blockers-risks",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "user-visible-behavior",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "operator-actions",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "project-operating-notes",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "conversation-only-facts",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      }
+    ],
+    "coldStartInventory": {
+      "version": 1,
+      "sourceReviews": [
+        {
+          "source": "conversation",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "planner-entities",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "working-tree",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "verification-runtime",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "peer-agent-output",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        }
+      ],
+      "entries": [
+        {
+          "category": "files",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "symbols",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "working-tree-ownership",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "negative-state",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "commands-tools",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "runtime-wiring",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "preservation-constraints",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "verification-evidence",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "related-planned-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "user-visible-behavior",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "operator-actions",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "blockers-risks",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "remaining-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "ordered-resume-steps",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        }
+      ]
+    },
+    "supportingDocuments": [],
+    "contentHash": "f19b32d1f1e54e1929f38b7fc4c791035d8081b6194c56560cb39be3644b535f",
+    "contentLength": 5154,
+    "verifiedAt": "2026-10-01T08:16:53.848Z",
+    "resumeReadyAt": "2026-10-01T08:16:57.197Z",
+    "readBackSourceReviews": [
+      {
+        "source": "conversation",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "planner-entities",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "working-tree",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "verification-runtime",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "peer-agent-output",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      }
+    ]
+  },
+  "handoffReadAt": "2026-10-01T08:16:57.197Z",
   "handoffHistory": [],
   "statusLog": [],
   "sessionInfo": []

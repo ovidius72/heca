@@ -34,11 +34,28 @@
       "priority": 1,
       "shortName": "read-heca-config-toml-from-the",
       "title": "Read .heca/config.toml from the project and merge it over the user config key by key",
-      "status": "planned",
-      "description": "Execution task for P101. Read the phase description first.\n\nCurrent: `heca-config/src/loader.rs` (`load` :180, path at :222); reload `heca/src/main.rs:157`. One merge rule: if P045/T519 (language files) has already written a key-by-key merge, reuse it; if not, write it here as a shared function T519 will reuse. Not blocked by T519 either way. Edge cases: no project file; project file with an error (report, keep the user config); nested `.heca/` folders (nearest parent wins); reload while a project value is removed.",
-      "descriptionUpdatedAt": "2026-09-29T19:22:38.839Z",
+      "status": "done",
+      "description": "Execution task for P101. Read the phase description first.\n\nCurrent: `heca-config/src/loader.rs` (`load` :180, path at :222); reload `heca/src/main.rs:157`. One merge rule: if P045/T519 (language files) has already written a key-by-key merge, reuse it; if not, write it here as a shared function T519 will reuse. Not blocked by T519 either way. Edge cases: no project file; project file with an error (report, keep the user config); nested `.heca/` folders (nearest parent wins); reload while a project value is removed.\n\n---\n**Completion summary:**\nDONE 2026-10-01, PR #268 (branch feat/t523-project-settings, one commit, code and docs only). SHIPPED: .heca/config.toml (nearest parent with .heca/) merged over the user config key by key through the one deep_merge (now public); a bad project file (TOML or shape) is reported and left out; heca --show-config prints key = value # file (later layer wins; untrusted file shown as not trusted, ignored); reload (Ctrl+B Shift+R) goes through AppConfig::try_load so it picks the project layer up. TRUST: a project file is ignored until trusted; per folder + SHA-256 of the content in project-trust.json (version 2; old FNV entries untrusted) through state_file.rs, moved into heca-config (heca re-exports); heca --trust/--untrust [folder]; one notification with a Trust button per (folder, hash) via announced.json; action trust_project (palette/RPC) trusts only if the file still has the notice's hash, is confirm-gated with a forced prompt naming <folder>/.heca/config.toml that no [confirm] key switches off. CONFIRM-GATE FINDING: the confirm prompt was only enforced for the three built-in WmActions (close, delete_column, delete_workspace). A named action's ActionMeta.confirm (components', plugins', extensions' .destructive() from T520, and trust_project as first built) was declared but never asked at dispatch. Now ONE function raises every prompt (handlers/confirm.rs raise_confirm; maybe_confirm_destructive and maybe_confirm_dynamic are thin resolvers), ConfirmSpec gained describe (message from the call's args) and forced; test every_declared_confirm_is_enforced_by_a_gate fails when a declared confirm has no gate. VERIFICATION: heca 758 tests, heca-config 97, clippy 0; unit tests for the merge, nearest .heca, bad file kept out, trust per folder/content, broken state file trusts nothing, SHA-256 vector, show-config sources, hash match, confirm coverage; full review by heca-pro-commercial-agents. BY EYE (Antonio): untrusted file ignored with a notice; Trust -> confirm dialog -> applied (left sidebar hid with show_left_sidebar=false in the project file); changed file asked again; no notice after restart. NOT verified by eye: the confirm dialog for built-in close/delete after the unification (expected unchanged). KNOWN, filed separately: T530 (sidebar border_color read by nothing); with show_left_sidebar=false the toggle cannot restore the sidebar (two independent settings; same on main); a pane-header path bug seen on start (investigation filed by the orchestrator). Files: heca-config/{Cargo.toml,src/lib.rs,src/loader.rs,src/trust.rs,src/state_file.rs}; heca/src/{state_file.rs,project_trust.rs,lib.rs,app/cli.rs,app/interaction.rs,handlers/confirm.rs,actions/confirm.rs,actions/catalog.rs}; README.md, config.default.toml.",
+      "descriptionUpdatedAt": "2026-10-01T08:16:34.985Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-001-planned-in-progress",
+          "date": "2026-09-30T21:46:47.046Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-002-in-progress-done",
+          "date": "2026-10-01T08:16:34.983Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE 2026-10-01, PR #268 (branch feat/t523-project-settings, one commit, code and docs only). SHIPPED: .heca/config.toml (nearest parent with .heca/) merged over the user config key by key through the one deep_merge (now public); a bad project file (TOML or shape) is reported and left out; heca --show-config prints key = value # file (later layer wins; untrusted file shown as not trusted, ignored); reload (Ctrl+B Shift+R) goes through AppConfig::try_load so it picks the project layer up. TRUST: a project file is ignored until trusted; per folder + SHA-256 of the content in project-trust.json (version 2; old FNV entries untrusted) through state_file.rs, moved into heca-config (heca re-exports); heca --trust/--untrust [folder]; one notification with a Trust button per (folder, hash) via announced.json; action trust_project (palette/RPC) trusts only if the file still has the notice's hash, is confirm-gated with a forced prompt naming <folder>/.heca/config.toml that no [confirm] key switches off. CONFIRM-GATE FINDING: the confirm prompt was only enforced for the three built-in WmActions (close, delete_column, delete_workspace). A named action's ActionMeta.confirm (components', plugins', extensions' .destructive() from T520, and trust_project as first built) was declared but never asked at dispatch. Now ONE function raises every prompt (handlers/confirm.rs raise_confirm; maybe_confirm_destructive and maybe_confirm_dynamic are thin resolvers), ConfirmSpec gained describe (message from the call's args) and forced; test every_declared_confirm_is_enforced_by_a_gate fails when a declared confirm has no gate. VERIFICATION: heca 758 tests, heca-config 97, clippy 0; unit tests for the merge, nearest .heca, bad file kept out, trust per folder/content, broken state file trusts nothing, SHA-256 vector, show-config sources, hash match, confirm coverage; full review by heca-pro-commercial-agents. BY EYE (Antonio): untrusted file ignored with a notice; Trust -> confirm dialog -> applied (left sidebar hid with show_left_sidebar=false in the project file); changed file asked again; no notice after restart. NOT verified by eye: the confirm dialog for built-in close/delete after the unification (expected unchanged). KNOWN, filed separately: T530 (sidebar border_color read by nothing); with show_left_sidebar=false the toggle cannot restore the sidebar (two independent settings; same on main); a pane-header path bug seen on start (investigation filed by the orchestrator). Files: heca-config/{Cargo.toml,src/lib.rs,src/loader.rs,src/trust.rs,src/state_file.rs}; heca/src/{state_file.rs,project_trust.rs,lib.rs,app/cli.rs,app/interaction.rs,handlers/confirm.rs,actions/confirm.rs,actions/catalog.rs}; README.md, config.default.toml."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -46,53 +63,64 @@
           "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-001-find-the-project-root-start-folder-or-nearest-parent-with-heca",
           "number": 1,
           "title": "Find the project root (start folder, or nearest parent with .heca/)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-002-key-by-key-merge-as-one-shared-function-reuse-t519-s-if-it-exists",
           "number": 2,
           "title": "Key-by-key merge as one shared function (reuse T519's if it exists)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-003-reload-watches-both-files",
           "number": 3,
           "title": "Reload watches both files",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-004-show-which-file-each-value-came-from",
           "number": 4,
           "title": "Show which file each value came from",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-005-tests-override-one-colour-and-one-binding-error-in-project-file",
           "number": 5,
           "title": "Tests: override one colour and one binding; error in project file",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-006-docs-readme-config-default-toml-note",
           "number": 6,
           "title": "Docs: README + config.default.toml note",
-          "checked": false
+          "checked": true
+        },
+        {
+          "id": "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f-check-007-trust-a-project-file-is-ignored-until-trusted-per-folder-content-hash-state-file-heca-trust-untrust-notice-with-a-trust-action-show-config-marks-it-tests-readme",
+          "number": 7,
+          "title": "Trust: a project file is ignored until trusted (per folder + content hash, state file); heca --trust / --untrust; notice with a trust action; show-config marks it; tests; README",
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-30T21:46:47.046Z",
+      "completedAt": "2026-10-01T08:16:34.983Z",
       "createdAt": "2026-09-29T19:22:11.256Z",
-      "updatedAt": "2026-09-29T19:22:38.837Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-10-01T08:16:34.983Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
+          "createdAt": "2026-09-30T21:46:46.937Z"
+        }
+      ],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:32.912Z",
-  "updatedAt": "2026-09-29T21:33:24.684Z",
+  "updatedAt": "2026-10-01T08:16:34.983Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -106,7 +134,28 @@
       "toStatus": "planned",
       "title": "draft → planned",
       "description": ""
+    },
+    {
+      "id": "63fcc3f6-c649-4759-b5a6-73ce4bdb5e24",
+      "date": "2026-09-30T21:46:47.078Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "5f276dc6-d4da-438a-8806-f6610a931b59",
+      "date": "2026-10-01T08:16:35.017Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
+      "createdAt": "2026-09-30T21:46:46.937Z"
+    }
+  ]
 }

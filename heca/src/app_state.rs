@@ -830,6 +830,9 @@ pub struct AppState {
     /// The column is what OWNS `col:<id>`; the workspaces dock shows a view of it. Built and placed
     /// each frame by `chrome::sync_columns` (F003/P082/T474).
     pub columns: HashMap<heca_core::layout::ColumnId, crate::chrome::RetainedColumn>,
+    /// The terminal each pane shows, by pane — the client's view of a running terminal process:
+    /// what a window draws, and how much room it was given. Client state, like the retained trees.
+    pub(crate) terminals: HashMap<heca_core::layout::PaneId, crate::chrome::terminal::Terminal>,
     /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
     /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
     /// trees; this holds runtime-added layers that join the same surface stack. See

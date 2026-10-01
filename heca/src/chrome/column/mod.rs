@@ -131,6 +131,18 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
     // and the panes in it can never disagree about where anything is.
     let pane_models = crate::chrome::pane::pane_models(state);
     let mut headers = crate::chrome::build_pane_headers(state);
+    // What each pane runs: the terminal the app keeps for it, placed in the pane's content slot.
+    let mut contents: std::collections::HashMap<PaneId, Box<dyn heca_grid_ui::Component>> =
+        pane_models
+            .iter()
+            .map(|m| {
+                (
+                    m.pane_id,
+                    Box::new(crate::chrome::terminal::view_of(state, m.pane_id))
+                        as Box<dyn heca_grid_ui::Component>,
+                )
+            })
+            .collect();
     // The words a pane shows change constantly; they are written onto the retained child every
     // frame rather than rebuilt for (F003/P097/T500).
     let header_keys: std::collections::HashMap<PaneId, String> = headers
@@ -185,6 +197,11 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
                         })
                     })
                     .collect(),
+                contents: model
+                    .panes
+                    .iter()
+                    .filter_map(|p| contents.remove(&p.pane_id).map(|c| (p.pane_id, c)))
+                    .collect(),
             }
             .build();
             state.columns.insert(
@@ -221,7 +238,8 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
                     let header = headers
                         .remove(&pane.pane_id)
                         .map(|(tree, _, _)| Box::new(tree) as Box<dyn heca_grid_ui::Component>);
-                    shell::pane_child(pane, &model, &pane_cb, header)
+                    let content = contents.remove(&pane.pane_id);
+                    shell::pane_child(pane, &model, &pane_cb, header, content)
                 },
             );
             // Each pane sits where the layout engine put it, and says so itself — the rect is a
@@ -380,6 +398,7 @@ mod tests {
             cb: &cb,
             pane_cb: &pane_cb(),
             headers: Default::default(),
+            contents: Default::default(),
         }
         .build()
     }
@@ -549,6 +568,7 @@ mod tests {
             cb: &cb,
             pane_cb: &pane_cb(),
             headers: Default::default(),
+            contents: Default::default(),
         }
         .build();
 
