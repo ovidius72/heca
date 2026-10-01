@@ -9,6 +9,7 @@ use crate::app::backend_store::{Ensured, Program, SpawnError, TerminalSpec};
 use crate::app_state::AppState;
 use crate::notification::Notification;
 use heca_core::layout::PaneId;
+use std::path::{Path, PathBuf};
 
 impl TerminalSpec {
     /// The user's shell, sized for workspace `ws_idx`.
@@ -56,16 +57,17 @@ impl AppState {
         pane: PaneId,
         mut spec: TerminalSpec,
     ) -> Result<Ensured, SpawnError> {
-        if matches!(spec.program, Program::Shell)
-            && let Some(dir) = spec.cwd.as_ref().filter(|dir| !dir.is_dir())
-        {
-            Notification::warning(format!(
-                "Folder {} doesn't exist, starting in your home folder",
-                dir.display()
-            ))
-            .dedup_key(format!("terminal.cwd:{}", dir.display()))
-            .send();
-            spec.cwd = dirs::home_dir();
+        if matches!(spec.program, Program::Shell) {
+            let (cwd, missing) = shell_start_dir(spec.cwd.take(), |d| d.is_dir(), dirs::home_dir());
+            spec.cwd = cwd;
+            if let Some(dir) = missing {
+                Notification::warning(format!(
+                    "Folder {} doesn't exist, starting in your home folder",
+                    dir.display()
+                ))
+                .dedup_key(format!("terminal.cwd:{}", dir.display()))
+                .send();
+            }
         }
         let settings = LaunchSettings::of(self);
         let ensured = ensure_with(&mut self.backends, pane, spec, &settings)?;
@@ -79,6 +81,21 @@ impl AppState {
     }
 }
 
+/// **Where a shell starts**, given the folder asked for. A folder that is not there is not worth a
+/// dead pane: the shell starts in the home folder instead, and the folder that was missing is handed
+/// back so the user can be told once. A command does not get this — it fails instead, because
+/// running a program in the wrong folder is worse than not running it.
+fn shell_start_dir(
+    requested: Option<PathBuf>,
+    is_dir: impl Fn(&Path) -> bool,
+    home: Option<PathBuf>,
+) -> (Option<PathBuf>, Option<PathBuf>) {
+    match requested {
+        Some(dir) if !is_dir(&dir) => (home, Some(dir)),
+        other => (other, None),
+    }
+}
+
 /// The store's door, with the app's launch settings behind it.
 fn ensure_with(
     backends: &mut crate::app::backend_store::BackendStore,
@@ -87,4 +104,25 @@ fn ensure_with(
     settings: &LaunchSettings,
 ) -> Result<Ensured, SpawnError> {
     backends.ensure(pane, spec, |spec| launch(settings, spec))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_shell_in_a_missing_folder_starts_at_home_and_says_which_folder_was_missing() {
+        let home = Some(PathBuf::from("/home/me"));
+        let (cwd, missing) = shell_start_dir(Some("/no/such".into()), |_| false, home.clone());
+        assert_eq!(cwd, home);
+        assert_eq!(missing, Some(PathBuf::from("/no/such")));
+    }
+
+    #[test]
+    fn a_folder_that_is_there_is_kept_and_no_folder_means_the_shells_own() {
+        let home = Some(PathBuf::from("/home/me"));
+        let (cwd, missing) = shell_start_dir(Some("/work".into()), |_| true, home.clone());
+        assert_eq!((cwd, missing), (Some(PathBuf::from("/work")), None));
+        assert_eq!(shell_start_dir(None, |_| false, home), (None, None));
+    }
 }
