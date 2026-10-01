@@ -444,7 +444,7 @@ mod tests {
     fn test_ctx() -> ChromeCtx<'static> {
         // Leaked deliberately: a test-only store that must outlive the borrow in `App`.
         let store: &'static crate::chrome::SharedChromeState = Box::leak(Box::new(
-            crate::chrome::SharedChromeState::new(300.0, true, 300.0, false),
+            crate::chrome::SharedChromeState::new(300.0, 300.0),
         ));
         ChromeCtx::new(App::new(store))
     }

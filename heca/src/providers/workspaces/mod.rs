@@ -998,7 +998,7 @@ mod tests {
     }
 
     fn store() -> SharedChromeState {
-        let store = SharedChromeState::new(300.0, true, 300.0, false);
+        let store = SharedChromeState::new(300.0, 300.0);
         store.workspaces.set_active_pane(Some(PaneId(1)));
         store
     }

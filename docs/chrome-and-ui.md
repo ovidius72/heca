@@ -58,9 +58,9 @@ Instead:
 
 - the **Sidebar widget/shell** is only a visual/layout region shell
 - it may be bordered, toggleable, and capable of informing children about its current display mode
-  > **Display modes (decided 2026-07-11):** a region is **Expanded ⇄ Hidden**. The **collapsed icon
-  > rail is dropped** for now; the shell still informs children of the mode, but only `Expanded` and
-  > `Hidden` are used, and Expanded is resizable (width passed to the mounted Provider). The generic
+  > **Display modes (decided 2026-07-11):** a region is **shown ⇄ hidden** — one state per region,
+  > `SharedChromeState::is_visible` (T532). The **collapsed icon
+  > rail is dropped** for now, and a shown region is resizable (width passed to the mounted Provider). The generic
   > "Provider renders an icon rail when collapsed" model — where a Provider describes its content once
   > and the host renders it per mode (write once) — is a **future** item. Full design + rationale:
   > **the planner (F003/P020) — see the planner (F003/P020)**.
@@ -836,7 +836,7 @@ These may be implementations of one generic region host abstraction.
 
 **Decision — canonical region identity: `RegionId`.** Today the only region
 identifier in the app is the **event-payload** enum
-`chrome::events::ChromeRegion { Left, Right }` (used by `RegionModeChanged` /
+`chrome::events::ChromeRegion { Left, Right }` (used by `RegionVisibilityChanged` /
 `RegionSizeChanged`), and `SharedChromeState` exposes only `left_*` / `right_*`
 region reads/writes. The contract widens this to the four canonical regions:
 
@@ -1338,7 +1338,9 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 
 - **Oriented** shell: vertical (sidebars) or horizontal (top/bottom bars). One widget covers all four regions.
 - Toggle/collapse, **mode-aware**: informs children of the display mode via a signal. **In the app today
-  the modes used are `Expanded` and `Hidden`** (`RegionMode::CollapsedRail` stays in the enum, unused).
+  a region is shown or hidden** — that is ONE state per region (`SharedChromeState::is_visible`), not a
+  `RegionMode` the app keeps: `[settings] show_*` is where it starts, the toggles flip it, a reload sets it
+  back. (`RegionMode` is the `ChromeRegion` widget's own mode; the app no longer drives it.)
 - **[DEFERRED] Collapsed = icon rail** (thin rail of dock icons; click *or keyboard action* to expand/hint — P2). **Two rail flavors (locked 2026-06-10):** a *tool* dock **folds** to a single icon (`DockFrame::rail(mode_signal, Glyph)`); a *list* dock (workspaces/columns/panes) **enumerates** — one `RailCell` (square icon cell) **per item**. **Icons by default**, not letters. The move/swap/focus-select **pick letters** appear over the cells via the generic **`KeyHint`** overlay, driven by a host-owned `Signal<Option<String>>`. **Shipped (grid-ui side):** `RailCell` + `KeyHint` + showcase `p`-pick demo. **App-side mapping: dropped (see the update note above); revive as the generic render-per-mode path if a Provider needs a rail.**
 - Stacks `DockFrame`s, scrolls (§2.8), exposes **Dock-level drop targets**.
 - **No** workspace/tree/expand/drag *semantics* — those belong to the mounted Dock. Replaces the old "Sidebar = tree-nav".

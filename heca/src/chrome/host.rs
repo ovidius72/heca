@@ -101,7 +101,7 @@ impl MountedContribution {
 }
 
 /// One region's ordered list of mounted containers. (This is placement/ordering state — whether the
-/// region is shown is `AppState.shown`, and its shell mode/size lives on `SharedChromeState`.)
+/// region is shown, and a sidebar's size, live on `SharedChromeState`.)
 pub struct RegionHost {
     contributions: Vec<MountedContribution>,
 }

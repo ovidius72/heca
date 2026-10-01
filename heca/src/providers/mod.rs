@@ -580,7 +580,7 @@ mod tests {
     }
 
     fn store() -> SharedChromeState {
-        SharedChromeState::new(240.0, true, 240.0, true)
+        SharedChromeState::new(240.0, 240.0)
     }
 
     #[test]

@@ -38,9 +38,8 @@ use crate::app_state::PendingPick;
 use heca_core::layout::PaneId;
 use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, SignalWith, signal};
-use heca_grid_ui::widgets::RegionMode;
 
-use super::{ChromeEvent, ChromeEventBus, RegionId, SidebarSelection};
+use super::{ChromeEvent, ChromeEventBus, RegionId, RegionMap, SidebarSelection};
 
 /// Per-pane reactive mirror of canonical [`PaneRuntime`] fields.
 ///
@@ -108,20 +107,18 @@ impl PaneRuntimeSignals {
     }
 }
 
-/// A chrome region's display mode + size (vertical sidebars / horizontal bars).
-/// Container-agnostic shell state. Not `Copy` (aliasing signal handles).
+/// A sidebar's size. Container-agnostic shell state. Not `Copy` (aliasing signal handle).
+///
+/// Whether the region is shown is NOT here — that is [`SharedChromeState::is_visible`], one value
+/// per region for all four regions, so a sidebar has no second hidden/shown state to keep in step.
 #[derive(Clone, Debug)]
 pub(crate) struct RegionState {
-    pub(crate) mode: Signal<RegionMode>,
     pub(crate) size: Signal<f32>,
 }
 
 impl RegionState {
-    fn new(mode: RegionMode, size: f32) -> Self {
-        Self {
-            mode: signal(mode),
-            size: signal(size),
-        }
+    fn new(size: f32) -> Self {
+        Self { size: signal(size) }
     }
 }
 
@@ -763,6 +760,11 @@ pub struct SharedChromeState {
     events: ChromeEventBus,
     pub(crate) left: RegionState,
     pub(crate) right: RegionState,
+    /// **Is each region shown** — the one visible/hidden state a region has. `[settings] show_*`
+    /// sets where it starts, `set_region_visible` / `sidebar_left` / `sidebar_right` flip it, and a
+    /// config reload sets it back ([`apply_visibility`](Self::apply_visibility)). A hidden region
+    /// takes no space: a sidebar is zero wide, a bar zero tall.
+    visible: RegionMap<Signal<bool>>,
     /// The (currently sole) mounted container's state. Becomes a container-id-keyed
     /// registry when a second container (Docker/agents/…) is added.
     pub workspaces: WorkspacesContainerState,
@@ -918,22 +920,17 @@ impl SharedChromeState {
         sig.set(key);
     }
 
-    /// Construct the store with initial region modes + widths (mirroring the
-    /// `SidebarState` defaults during migration). Signals are created here — requires
-    /// the reactive runtime, available on the UI thread at `AppState` construction.
-    pub fn new(left_width: f32, left_visible: bool, right_width: f32, right_visible: bool) -> Self {
-        let mode = |visible: bool| {
-            if visible {
-                RegionMode::Expanded
-            } else {
-                RegionMode::Hidden
-            }
-        };
+    /// Construct the store with the sidebars' widths. Every region starts shown; the app then
+    /// applies `[settings] show_*` through [`apply_visibility`](Self::apply_visibility), the same
+    /// call a config reload makes. Signals are created here — requires the reactive runtime,
+    /// available on the UI thread at `AppState` construction.
+    pub fn new(left_width: f32, right_width: f32) -> Self {
         let events = ChromeEventBus::default();
         Self {
             events: events.clone(),
-            left: RegionState::new(mode(left_visible), left_width),
-            right: RegionState::new(mode(right_visible), right_width),
+            left: RegionState::new(left_width),
+            right: RegionState::new(right_width),
+            visible: RegionMap::from_fn(|_| signal(true)),
             workspaces: WorkspacesContainerState::new(events),
             container_scroll: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
             focused_container: signal(None),
@@ -947,36 +944,43 @@ impl SharedChromeState {
         self.events.clone()
     }
 
-    // ── Region (shell) reads/writes — RegionMode/f32 are Copy → `.get()` is cheap ──
-    pub fn left_mode(&self) -> RegionMode {
-        self.left.mode.get()
+    // ── Region (shell) reads/writes — bool/f32 are Copy → `.get()` is cheap ──
+
+    /// Is `region` shown? The one answer, for the layout, the toggle buttons and plugins alike.
+    pub fn is_visible(&self, region: RegionId) -> bool {
+        self.visible[region].get()
     }
+
+    /// Show or hide `region`. Returns whether anything changed — only a real change emits
+    /// `chrome.region.visibility.changed`, and the caller re-flows the layout on `true`.
+    pub fn set_visible(&self, region: RegionId, visible: bool) -> bool {
+        if self.visible[region].get_untracked() == visible {
+            return false;
+        }
+        self.visible[region].set(visible);
+        self.events
+            .emit(ChromeEvent::RegionVisibilityChanged { region, visible });
+        true
+    }
+
+    /// Set every region to `shown` (what `[settings] show_*` says). Startup and config reload both
+    /// come through here, so "the setting is the starting state" is one call. Returns whether any
+    /// region changed.
+    pub fn apply_visibility(&self, shown: &RegionMap<bool>) -> bool {
+        let mut changed = false;
+        for region in RegionId::ALL {
+            changed |= self.set_visible(region, shown[region]);
+        }
+        changed
+    }
+
     pub fn left_size(&self) -> f32 {
         self.left.size.get()
-    }
-    pub fn left_visible(&self) -> bool {
-        !matches!(self.left.mode.get(), RegionMode::Hidden)
-    }
-    pub fn right_mode(&self) -> RegionMode {
-        self.right.mode.get()
     }
     pub fn right_size(&self) -> f32 {
         self.right.size.get()
     }
-    pub fn right_visible(&self) -> bool {
-        !matches!(self.right.mode.get(), RegionMode::Hidden)
-    }
 
-    pub fn set_left_mode(&self, mode: RegionMode) {
-        if self.left.mode.get_untracked() == mode {
-            return;
-        }
-        self.left.mode.set(mode);
-        self.events.emit(ChromeEvent::RegionModeChanged {
-            region: RegionId::LeftSidebar,
-            mode,
-        });
-    }
     pub fn set_left_size(&self, size: f32) {
         if (self.left.size.get_untracked() - size).abs() <= f32::EPSILON {
             return;
@@ -985,16 +989,6 @@ impl SharedChromeState {
         self.events.emit(ChromeEvent::RegionSizeChanged {
             region: RegionId::LeftSidebar,
             size,
-        });
-    }
-    pub fn set_right_mode(&self, mode: RegionMode) {
-        if self.right.mode.get_untracked() == mode {
-            return;
-        }
-        self.right.mode.set(mode);
-        self.events.emit(ChromeEvent::RegionModeChanged {
-            region: RegionId::RightSidebar,
-            mode,
         });
     }
     pub fn set_right_size(&self, size: f32) {
@@ -1018,14 +1012,73 @@ mod tests {
     use std::rc::Rc;
 
     fn state() -> SharedChromeState {
-        SharedChromeState::new(280.0, true, 260.0, false)
+        SharedChromeState::new(280.0, 260.0)
     }
 
     #[test]
-    fn region_initial_modes_mirror_visibility() {
+    fn every_region_starts_shown() {
         let s = state();
-        assert!(s.left_visible());
-        assert!(!s.right_visible());
+        for region in RegionId::ALL {
+            assert!(s.is_visible(region), "{region:?}");
+        }
+    }
+
+    /// The bug: with `[settings] show_left_sidebar = false`, `prefix+b` could not bring the sidebar
+    /// back, because the setting and the toggle each kept their own state. Now there is one.
+    #[test]
+    fn config_sets_where_a_region_starts_the_toggle_flips_it_and_reload_resets_it() {
+        use crate::chrome::shown_from_settings;
+        use crate::input::RegionVisibility;
+        use heca_config::settings::SettingsConfig;
+
+        let s = state();
+        let hidden_by_config = SettingsConfig {
+            show_left_sidebar: false,
+            ..Default::default()
+        };
+        let config = shown_from_settings(&hidden_by_config);
+
+        // Startup: the setting is the starting state.
+        s.apply_visibility(&config);
+        assert!(!s.is_visible(RegionId::LeftSidebar), "starts hidden");
+        assert!(
+            s.is_visible(RegionId::RightSidebar),
+            "the others are untouched"
+        );
+
+        // The toggle (`sidebar_left`) flips that same state, so the sidebar comes back.
+        let region = RegionId::LeftSidebar;
+        s.set_visible(region, RegionVisibility::Toggle.apply(s.is_visible(region)));
+        assert!(s.is_visible(RegionId::LeftSidebar), "the toggle shows it");
+
+        // Reload: the setting puts it back to where it starts.
+        s.apply_visibility(&config);
+        assert!(
+            !s.is_visible(RegionId::LeftSidebar),
+            "reload hides it again"
+        );
+    }
+
+    #[test]
+    fn showing_or_hiding_a_region_says_so_once_and_only_when_it_changed() {
+        let s = state();
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let seen_events = seen.clone();
+        let _sub = s
+            .events()
+            .subscribe("chrome.region.visibility.changed", move |event| {
+                if let ChromeEvent::RegionVisibilityChanged { region, visible } = event {
+                    seen_events.borrow_mut().push((*region, *visible));
+                }
+            });
+
+        assert!(
+            !s.set_visible(RegionId::TopBar, true),
+            "already shown: no change"
+        );
+        assert!(s.set_visible(RegionId::TopBar, false));
+        assert!(!s.set_visible(RegionId::TopBar, false));
+        assert_eq!(seen.borrow().as_slice(), [(RegionId::TopBar, false)]);
     }
 
     #[test]
@@ -1306,15 +1359,15 @@ mod tests {
 
         s.workspaces.set_active_pane(Some(PaneId(7)));
         s.workspaces.set_active_pane(Some(PaneId(7)));
-        s.set_left_mode(RegionMode::CollapsedRail);
-        s.set_left_mode(RegionMode::CollapsedRail);
+        s.set_visible(RegionId::LeftSidebar, false);
+        s.set_visible(RegionId::LeftSidebar, false);
         // ⚠️ The pane **pick** used to be asserted here too, through `set_pick_candidates` and its
         // `pane.pick.changed` event. That mirror is gone (F003/P082/T427) — it fed the per-frame
         // keycap projections and the letters come straight from `InputMode` now — and the event
         // went with it. See the phase handoff: it was observable and nothing re-emits it.
         assert_eq!(
             seen.borrow().as_slice(),
-            ["pane.active.changed", "chrome.region.mode.changed"],
+            ["pane.active.changed", "chrome.region.visibility.changed"],
         );
     }
 

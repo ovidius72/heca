@@ -1242,7 +1242,7 @@ mod tests {
             }
         }
 
-        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let chrome = SharedChromeState::new(280.0, 260.0);
         let mut host = super::ChromeHost::new(chrome.events());
         host.register(Box::new(Sized("big", 3.0, None)));
         host.register(Box::new(Sized("small", 1.0, None)));
@@ -1719,7 +1719,7 @@ mod tests {
 
         let tree = one_pane_tree(1);
         let theme = GuiTheme::default();
-        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let chrome = SharedChromeState::new(280.0, 260.0);
         chrome
             .workspaces
             .set_active_pane(Some(heca_core::layout::PaneId(1)));
@@ -1787,7 +1787,7 @@ mod tests {
         theme.colors.border = Color::new(0x40, 0xe0, 0xff, 0xff);
         let border_w = 4.0_f32;
 
-        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let chrome = SharedChromeState::new(280.0, 260.0);
         let content = region_body(
             &tree,
             &theme,
@@ -1833,7 +1833,7 @@ mod tests {
 
         let tree = one_pane_tree(1);
         let theme = GuiTheme::default();
-        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let chrome = SharedChromeState::new(280.0, 260.0);
         let content = region_body(
             &tree,
             &theme,
@@ -1892,7 +1892,7 @@ mod tests {
     fn a_mounted_dock_is_not_a_target_of_the_ordinary_picker() {
         let tree = one_pane_tree(1);
         let theme = GuiTheme::default();
-        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let chrome = SharedChromeState::new(280.0, 260.0);
         let mut signals = super::ChromeSignals::default();
         let content = region_body(
             &tree,
@@ -1935,7 +1935,7 @@ mod tests {
 
         let tree = one_pane_tree(1);
         let theme = GuiTheme::default();
-        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let chrome = SharedChromeState::new(280.0, 260.0);
         let mut signals = super::ChromeSignals::default();
         let content = region_body(
             &tree,
@@ -1983,7 +1983,7 @@ mod tests {
     fn drag_registry_captures_pane_column_and_workspace() {
         let tree = one_pane_tree(7);
         let theme = GuiTheme::default();
-        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let chrome = SharedChromeState::new(280.0, 260.0);
         let mut drag = super::DragItemRegistry::default();
         // Drag items are registered while the region's mounted container builds its body,
         // so go through the host path and inspect what landed in the registry.
@@ -2005,7 +2005,7 @@ mod tests {
 
     #[test]
     fn sync_pane_runtime_state_projects_session_runtime_into_store() {
-        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let chrome = SharedChromeState::new(280.0, 260.0);
         let mut session = Session::new(
             SessionId(1),
             Size::new(1280.0, 800.0),
@@ -2086,7 +2086,7 @@ mod tests {
 
     #[test]
     fn sync_pane_runtime_state_prunes_removed_panes() {
-        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let chrome = SharedChromeState::new(280.0, 260.0);
         let mut session = Session::new(
             SessionId(1),
             Size::new(1280.0, 800.0),

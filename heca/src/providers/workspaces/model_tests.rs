@@ -11,7 +11,7 @@ use heca_core::layout::{
 // Workspace collapse is owned by chrome_state; these helpers drive it the way the
 // app does — mutate chrome_state, then project onto the tree via apply_ws_collapsed.
 fn test_chrome() -> crate::chrome::SharedChromeState {
-    crate::chrome::SharedChromeState::new(200.0, true, 200.0, true)
+    crate::chrome::SharedChromeState::new(200.0, 200.0)
 }
 fn toggle_ws(tree: &mut WorkspaceTree, chrome: &crate::chrome::SharedChromeState, ws_idx: usize) {
     chrome.workspaces.toggle_ws_collapsed(ws_idx);

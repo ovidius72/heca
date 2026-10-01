@@ -201,12 +201,12 @@ impl<'a> StateView<'a> {
 
     /// Is the left sidebar region visible (not hidden)?
     pub fn left_sidebar_visible(&self) -> bool {
-        self.state.left_visible()
+        self.state.is_visible(crate::chrome::RegionId::LeftSidebar)
     }
 
     /// Is the right sidebar region visible (not hidden)?
     pub fn right_sidebar_visible(&self) -> bool {
-        self.state.right_visible()
+        self.state.is_visible(crate::chrome::RegionId::RightSidebar)
     }
 }
 
@@ -218,7 +218,7 @@ mod tests {
     use std::rc::Rc;
 
     fn store() -> SharedChromeState {
-        SharedChromeState::new(300.0, true, 300.0, false)
+        SharedChromeState::new(300.0, 300.0)
     }
 
     #[test]

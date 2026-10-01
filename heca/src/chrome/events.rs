@@ -6,7 +6,6 @@ use std::rc::Rc;
 
 use heca_core::layout::PaneId;
 use heca_core::runtime::ProcessStatus;
-use heca_grid_ui::widgets::RegionMode;
 
 /// Canonical identity of a pluggable chrome region (contract §3.1.1). The
 /// vertical sidebars and horizontal bars are all addressed by this enum; the
@@ -174,9 +173,10 @@ pub enum ChromeEvent {
         container: String,
         offset: f32,
     },
-    RegionModeChanged {
+    /// A region was shown or hidden — the one visible/hidden state every region has.
+    RegionVisibilityChanged {
         region: RegionId,
-        mode: RegionMode,
+        visible: bool,
     },
     RegionSizeChanged {
         region: RegionId,
@@ -227,7 +227,7 @@ impl ChromeEvent {
             ChromeEvent::PaneExited { .. } => "pane.exited",
             ChromeEvent::WorkspaceCollapsedChanged { .. } => "workspace.collapsed.changed",
             ChromeEvent::ContainerScrollChanged { .. } => "container.scroll.changed",
-            ChromeEvent::RegionModeChanged { .. } => "chrome.region.mode.changed",
+            ChromeEvent::RegionVisibilityChanged { .. } => "chrome.region.visibility.changed",
             ChromeEvent::RegionSizeChanged { .. } => "chrome.region.size.changed",
             ChromeEvent::TerminalViewportChanged { .. } => "terminal.viewport.changed",
             ChromeEvent::ContainerFocusChanged { .. } => "chrome.container.focus.changed",

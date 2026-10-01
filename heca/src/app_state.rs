@@ -1005,11 +1005,6 @@ pub struct AppState {
     pub mouse_wheel_change_font_size: bool,
     /// Whether backend-side discrete terminal viewport animations are enabled.
     pub terminal_scroll_animations_enabled: bool,
-    /// **Which regions are mounted at all**, one per region — `shown[RegionId::TopBar]`. From the
-    /// `[settings] show_*` keys (read through [`crate::chrome::shown_from_settings`]) and changed by
-    /// the show / hide / toggle actions. A hidden region takes no space: a sidebar is zero wide, a
-    /// bar zero tall — a hard gate, distinct from a sidebar's own expand/hide toggle.
-    pub shown: crate::chrome::RegionMap<bool>,
     /// The `[confirm]` table — per-action confirmation toggles (keyed by confirm name:
     /// `delete_pane` / `delete_column` / `delete_workspace`, or any plugin action). Read by the central
     /// confirm gate via [`ConfirmConfig::enabled`](heca_config::confirm::ConfirmConfig::enabled),
@@ -1121,10 +1116,13 @@ impl AppState {
     }
 
     /// Effective tab-bar (top bar) height: the default when shown, `0.0` when
-    /// hidden via `[settings] show_top_bar`. Chrome layout/hit-testing read this
+    /// hidden (`[settings] show_top_bar` is where it starts). Chrome layout/hit-testing read this
     /// so a hidden bar reclaims its space everywhere consistently.
     pub fn tab_bar_height(&self) -> f32 {
-        if self.shown[crate::chrome::RegionId::TopBar] {
+        if self
+            .chrome_state
+            .is_visible(crate::chrome::RegionId::TopBar)
+        {
             crate::chrome::DEFAULT_TAB_BAR_HEIGHT
         } else {
             0.0
@@ -1134,33 +1132,38 @@ impl AppState {
     /// Effective status-bar (bottom bar) height: the default when shown, `0.0`
     /// when hidden via `[settings] show_bottom_bar`.
     pub fn status_bar_height(&self) -> f32 {
-        if self.shown[crate::chrome::RegionId::BottomBar] {
+        if self
+            .chrome_state
+            .is_visible(crate::chrome::RegionId::BottomBar)
+        {
             crate::chrome::DEFAULT_STATUS_BAR_HEIGHT
         } else {
             0.0
         }
     }
 
-    /// Effective left-sidebar width for layout/hit-testing. `0.0` when the region
-    /// is unmounted via `[settings] show_left_sidebar` **or** when it is
-    /// `Hidden` (the toggle collapses a sidebar to nothing — there is no icon rail;
-    /// see `docs/sidebar-provider-modes.md`); otherwise the (resizable) expanded width.
+    /// Effective left-sidebar width for layout/hit-testing: `0.0` while the region is hidden,
+    /// otherwise the (resizable) width. There is no icon rail — see `docs/sidebar-provider-modes.md`.
     pub fn left_sidebar_width(&self) -> f32 {
-        if !self.shown[crate::chrome::RegionId::LeftSidebar] || !self.chrome_state.left_visible() {
-            0.0
-        } else {
+        if self
+            .chrome_state
+            .is_visible(crate::chrome::RegionId::LeftSidebar)
+        {
             self.chrome_state.left_size()
+        } else {
+            0.0
         }
     }
 
-    /// Effective right-sidebar width for layout/hit-testing. `0.0` when unmounted via
-    /// `[settings] show_right_sidebar` or when the region is `Hidden`.
+    /// Effective right-sidebar width for layout/hit-testing: `0.0` while the region is hidden.
     pub fn right_sidebar_width(&self) -> f32 {
-        if !self.shown[crate::chrome::RegionId::RightSidebar] || !self.chrome_state.right_visible()
+        if self
+            .chrome_state
+            .is_visible(crate::chrome::RegionId::RightSidebar)
         {
-            0.0
-        } else {
             self.chrome_state.right_size()
+        } else {
+            0.0
         }
     }
 
