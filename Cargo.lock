@@ -1225,6 +1225,8 @@ dependencies = [
  "dirs",
  "heca-theme",
  "serde",
+ "serde_json",
+ "sha2",
  "toml",
 ]
 

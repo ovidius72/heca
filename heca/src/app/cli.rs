@@ -101,6 +101,38 @@ const COMMANDS: &[Command] = &[
         run: run_keys_show,
     },
     Command {
+        flag: "--trust",
+        short: None,
+        about: "Trust a project's .heca/config.toml as it is now, so it applies (default: this folder's project).",
+        args: &[ArgDescriptor::optional(
+            "folder",
+            ArgKind::Text,
+            "A folder inside the project; default the current one.",
+        )],
+        json: false,
+        run: |inv| run_trust(inv, true),
+    },
+    Command {
+        flag: "--untrust",
+        short: None,
+        about: "Stop trusting a project's .heca/config.toml (default: this folder's project).",
+        args: &[ArgDescriptor::optional(
+            "folder",
+            ArgKind::Text,
+            "A folder inside the project; default the current one.",
+        )],
+        json: false,
+        run: |inv| run_trust(inv, false),
+    },
+    Command {
+        flag: "--show-config",
+        short: None,
+        about: "Every setting your files and the project's .heca/config.toml set, and the file each came from.",
+        args: &[],
+        json: false,
+        run: |_| run_show_config(),
+    },
+    Command {
         flag: "--list-actions",
         short: Some("-a"),
         about: "Every action heca knows, with its category and whether it takes arguments.",
@@ -261,6 +293,55 @@ fn help() -> String {
         "\nEvery command answers before the window opens, so a script can ask without a display.\n",
     );
     out
+}
+
+/// `--trust` / `--untrust`: remember (or forget) the project file in the folder's project, as it
+/// stands now. The trust list is `heca_config::trust`; nothing here knows how it is kept.
+fn run_trust(inv: &Invocation, trust: bool) -> String {
+    let start = inv
+        .get("folder")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_default();
+    match heca_config::loader::read_project_in(&start) {
+        Ok(Some(project)) if trust => {
+            if heca_config::trust::trust(&project.dir, &project.hash) {
+                format!("Trusted {} as it is now.", project.path.display())
+            } else {
+                "Could not remember the trust (no data directory to write to).".into()
+            }
+        }
+        Ok(Some(project)) => {
+            heca_config::trust::untrust(&project.dir);
+            format!("No longer trusting {}.", project.path.display())
+        }
+        Ok(None) => "No .heca/config.toml found from there upward.".into(),
+        Err(e) => format!("config error: {e}"),
+    }
+}
+
+fn run_show_config() -> String {
+    match heca_config::loader::config_sources() {
+        Ok(found) => {
+            let mut lines: Vec<String> = found
+                .sources
+                .iter()
+                .map(|s| format!("{} = {}  # {}", s.key, s.value, s.file.display()))
+                .collect();
+            if let Some(path) = found.untrusted_project {
+                lines.push(format!(
+                    "# {} (not trusted, ignored) — run `heca --trust` in that folder to apply it",
+                    path.display()
+                ));
+            }
+            if lines.is_empty() {
+                "No settings file sets anything; heca's defaults apply.".into()
+            } else {
+                lines.join("\n")
+            }
+        }
+        Err(e) => format!("config error: {e}"),
+    }
 }
 
 fn run_keys_show(inv: &Invocation) -> String {

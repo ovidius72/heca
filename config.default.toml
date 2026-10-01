@@ -415,6 +415,11 @@ bell_audible = false
 # width            = 300
 # pane_lines       = ["cwd", "git"]
 
+# Per-project settings: a `.heca/config.toml` in the folder heca was started in (or the nearest
+# parent that has a `.heca/` folder) is merged over this file key by key — any key it sets wins, and
+# nothing else changes. Same keys as this file. A project file with an error is reported and left
+# out; your configuration stands. It applies only once you trust it (`heca --trust`). `prefix+Shift+r` reloads it with the rest.
+
 # ─────────────────────────────────────────────────────────────────────────────
 [appearance.expose]
 # ─────────────────────────────────────────────────────────────────────────────

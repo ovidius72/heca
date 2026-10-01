@@ -14,21 +14,57 @@ use crate::input::WmAction;
 /// button's [`Outcome`](crate::actions::Outcome). `resume_sidebar` picks the mode to return to;
 /// `InputMode::ConfirmDelete` is set purely as a status-bar marker (the modal layer owns input).
 fn open_confirm(state: &mut AppState, spec: crate::actions::ConfirmSpec, resolved: WmAction) {
-    use crate::actions::ButtonRole;
     let title = confirm_title(state, &resolved);
-    let danger_panel = spec.buttons.iter().any(|b| b.role == ButtonRole::Danger);
-    let mut modal = crate::chrome::ModalSpec::message(title, spec.message.clone())
+    let body = spec.message.clone();
+    raise_confirm(state, title, body, spec, Pending::Wm(resolved));
+}
+
+/// What the prompt, once confirmed, runs: a raw built-in action, or a named action's call.
+pub(crate) enum Pending {
+    Wm(WmAction),
+    Intent(crate::chrome::Intent),
+}
+
+/// **The one place a confirm prompt is raised**, whatever it guards. Both kinds of action — a
+/// built-in's raw [`WmAction`] and a named action's [`Intent`] — arrive here, so the prompt, its
+/// buttons and what *go ahead* does cannot differ between them (that difference is exactly how a
+/// named action's confirm once went unenforced).
+fn raise_confirm(
+    state: &mut AppState,
+    title: String,
+    body: String,
+    spec: crate::actions::ConfirmSpec,
+    pending: Pending,
+) {
+    use crate::actions::{ButtonRole, Outcome};
+    let mut modal = crate::chrome::ModalSpec::message(title, body)
         .dismissible(spec.dismissible)
-        .danger(danger_panel);
-    // A destructive prompt says its consequence in the danger colour — the dialog's own rule
-    // (`Dialog::danger`), reached through `.danger(..)` above; nothing is coloured here.
+        .danger(spec.buttons.iter().any(|b| b.role == ButtonRole::Danger));
     for b in &spec.buttons {
         modal = modal.action(
             crate::chrome::ModalAction::new(b.id.clone(), b.label.clone())
                 .danger(b.role == ButtonRole::Danger),
         );
     }
-    let buttons = spec.buttons;
+    // A raw action's go-ahead is `Outcome::Proceed` (run `resolved`); a named action's runs the call.
+    let (resolved, call) = match pending {
+        Pending::Wm(wm) => (wm, None),
+        Pending::Intent(intent) => (WmAction::ClosePane, Some(intent)),
+    };
+    let buttons: Vec<_> = spec
+        .buttons
+        .iter()
+        .cloned()
+        .map(|mut b| {
+            if let (Some(call), Outcome::Proceed) = (&call, &b.outcome) {
+                let call = call.clone();
+                b.outcome = Outcome::Callback(std::rc::Rc::new(move |state, registry| {
+                    registry.execute_dynamic(&call.action, state, &call);
+                }));
+            }
+            b
+        })
+        .collect();
     crate::chrome::open_modal(state, modal, move |state, registry, result| {
         // Back to Normal, always: chrome focus is not a mode and the container still has the
         // keyboard if it had it before (F003/P086/T365).
@@ -71,6 +107,59 @@ fn run_outcome(
         ),
         Some(Outcome::Callback(cb)) => cb(state, registry),
         Some(Outcome::Cancel) | None => {}
+    }
+}
+
+/// The body of the prompt for `spec` on this call: built from the call's arguments when the spec says
+/// how, else its fixed message.
+pub(crate) fn confirm_message(
+    spec: &crate::actions::ConfirmSpec,
+    intent: &crate::chrome::Intent,
+) -> String {
+    spec.describe
+        .map_or_else(|| spec.message.clone(), |describe| describe(intent))
+}
+
+/// Whether a prompt is raised: always when the spec is **forced**, else the user's `[confirm]` choice.
+pub(crate) fn prompt_needed(spec: &crate::actions::ConfirmSpec, user_enabled: bool) -> bool {
+    spec.forced || user_enabled
+}
+
+/// **The confirm gate for a name-keyed action** (a component's, a plugin's, an extension's, or
+/// `trust_project`): the same prompt as for a built-in, raised through [`raise_confirm`]. Returns
+/// `true` when it raised the prompt (the caller must not run the action); *go ahead* then runs the
+/// action itself, past this gate.
+pub(crate) fn maybe_confirm_dynamic(state: &mut AppState, intent: &crate::chrome::Intent) -> bool {
+    let Some(meta) = state.action_catalog.find(&intent.action) else {
+        return false;
+    };
+    let (Some(spec), title) = (meta.confirm.clone(), meta.label.clone()) else {
+        return false;
+    };
+    if !prompt_needed(
+        &spec,
+        confirm_enabled(state, &spec.config_name, spec.default_enabled),
+    ) {
+        return false;
+    }
+    let body = confirm_message(&spec, intent);
+    raise_confirm(state, title, body, spec, Pending::Intent(intent.clone()));
+    true
+}
+
+/// The built-in actions whose confirm [`maybe_confirm_destructive`] resolves from a raw
+/// [`WmAction`]. Every other action with a confirm is named and goes through
+/// [`maybe_confirm_dynamic`]; a confirm in neither list would never be asked.
+pub(crate) const BUILTIN_CONFIRMED: [&str; 3] = ["close", "delete_column", "delete_workspace"];
+
+/// Does a gate ask for this action's confirm? Used by the test that fails when a spec is declared
+/// somewhere nothing enforces it.
+#[cfg(test)]
+pub(crate) fn gate_covers(catalog: &crate::actions::ActionCatalog, name: &str) -> bool {
+    if catalog.is_builtin(name) {
+        BUILTIN_CONFIRMED.contains(&name)
+    } else {
+        true
     }
 }
 
@@ -206,6 +295,10 @@ pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction)
         _ => return false,
     };
     // `name` is the owner ACTION name; its meta's confirm spec carries the toggle key.
+    debug_assert!(
+        BUILTIN_CONFIRMED.contains(&name),
+        "'{name}' is resolved here but missing from BUILTIN_CONFIRMED"
+    );
     let Some(spec) = state.action_catalog.confirm_spec(name).cloned() else {
         return false;
     };
@@ -294,6 +387,65 @@ mod confirm_wording_tests {
             ),
             "Delete Column?",
             "a column has no name, so it reads as the type word — the same shape as an unnamed pane",
+        );
+    }
+}
+
+#[cfg(test)]
+mod gate_coverage_tests {
+    use super::*;
+    use crate::actions::ActionCatalog;
+
+    /// **A confirm declared where nothing asks it is a silent hole** — the one a named action's
+    /// confirm fell into: its metadata said "ask first" and dispatch never did. Every action in the
+    /// catalog that declares a confirm must be covered by a gate: a built-in by
+    /// [`maybe_confirm_destructive`] (its owner name is in [`BUILTIN_CONFIRMED`]), a named one by
+    /// [`maybe_confirm_dynamic`].
+    #[test]
+    fn every_declared_confirm_is_enforced_by_a_gate() {
+        let mut catalog = ActionCatalog::with_builtins();
+        // The named actions heca registers itself, and one an extension would add.
+        crate::project_trust::register_trust_action(
+            &mut crate::actions::ActionRegistry::new(),
+            &mut catalog,
+        );
+        let _ = crate::actions::register_dynamic(
+            &mut crate::actions::ActionRegistry::new(),
+            &mut catalog,
+            crate::actions::ActionMeta::new("pro.erase").destructive(),
+            None,
+        );
+        let confirmed: Vec<String> = catalog
+            .describe_all()
+            .iter()
+            .filter(|a| catalog.confirm_spec(&a.name).is_some())
+            .map(|a| a.name.clone())
+            .collect();
+        assert!(
+            confirmed.contains(&"close".to_string()),
+            "built-ins declare confirms"
+        );
+        assert!(confirmed.contains(&"trust_project".to_string()));
+        for name in &confirmed {
+            assert!(
+                gate_covers(&catalog, name),
+                "'{name}' declares a confirm no gate enforces"
+            );
+        }
+    }
+
+    /// A forced prompt is raised whatever the user's `[confirm]` says; an ordinary one follows it.
+    #[test]
+    fn a_forced_prompt_ignores_the_users_setting() {
+        let mut spec = crate::actions::ConfirmSpec::destructive("x", "Go");
+        assert!(
+            !prompt_needed(&spec, false),
+            "ordinary: the user may switch it off"
+        );
+        spec.forced = true;
+        assert!(
+            prompt_needed(&spec, false),
+            "forced: nothing switches it off"
         );
     }
 }

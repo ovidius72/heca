@@ -122,6 +122,12 @@ pub struct ConfirmSpec {
     /// Phase B2). Defaults to [`default_enabled`](ConfirmSpec::default_enabled) when unset.
     pub config_name: String,
     pub default_enabled: bool,
+    /// **Cannot be switched off.** Not listed under `[confirm]`, and no key turns it off — for a
+    /// check whose whole point is that nothing can skip it (trusting a project's settings file).
+    pub forced: bool,
+    /// Builds the body **from the call's arguments**, so a prompt can say *which* file or pane it is
+    /// about (`message` is the fallback). General: nothing here knows what the action is.
+    pub describe: Option<fn(&crate::chrome::Intent) -> String>,
 }
 
 impl ConfirmSpec {
@@ -140,6 +146,8 @@ impl ConfirmSpec {
             dismissible: false,
             config_name: config_name.into(),
             default_enabled: true,
+            forced: false,
+            describe: None,
         }
     }
 }
@@ -220,6 +228,8 @@ mod tests {
             dismissible: false,
             config_name: "plugin.docker.remove".to_string(),
             default_enabled: true,
+            forced: false,
+            describe: None,
         });
         let _ = register_dynamic(&mut registry, &mut catalog, meta, None);
 

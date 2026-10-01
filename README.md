@@ -582,6 +582,19 @@ versioned, embedded files (the single source of truth — copy and edit them):
 - `config.default.toml` — default `[settings]`, `[appearance]`, `[font]`, `[program]`
 - `keybindings.default.toml` — default `[keys]` (prefix, bindings, modes)
 
+### Per-project settings
+
+A `.heca/config.toml` in the folder heca was started in (or the nearest parent that has a `.heca/`
+folder) is merged over your config **key by key**: any key it sets wins, tables merge, and nothing
+else changes. It takes the same keys as `config.toml` — a theme colour, a key binding, anything. A
+project file with an error is reported and left out, and your configuration stands. `prefix+Shift+r`
+reloads it with the rest. With no `.heca/`, nothing changes.
+
+**A project file is ignored until you trust it** — it ships with the repository, so a cloned one could
+bind a key to a command. heca says so, and `heca --trust` (in the project, or `heca --trust <folder>`)
+trusts it as it is now; if the file changes, it is ignored and you are asked again. `heca --untrust`
+forgets it, and `heca --show-config` marks an untrusted file "(not trusted, ignored)".
+
 ### Minimal Config
 
 ```toml
