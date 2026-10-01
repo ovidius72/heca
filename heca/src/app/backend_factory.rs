@@ -199,6 +199,7 @@ fn terminal_backend_options(
         // The user's own `$SHELL` — this is a pane they opened, so their interactive rc is exactly
         // what they expect. Only tests pin a shell (see `TerminalBackendOptions::shell_override`).
         shell_override: None,
+        cwd: None,
     }
 }
 
