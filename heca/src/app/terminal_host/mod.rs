@@ -26,7 +26,7 @@ pub(crate) use selection::{
 
 use crate::app::backend_store::BackendStore;
 use crate::app_state::AppState;
-use heca_core::backend::{PaneBackend, TerminalDamage, TerminalSnapshot};
+use heca_core::backend::{TerminalDamage, TerminalSnapshot};
 use heca_core::layout::{PaneId, Rectangle};
 
 #[derive(Clone)]
@@ -44,11 +44,13 @@ pub(crate) fn prepare_terminal_mount(
     backends: &mut BackendStore,
     pane_id: PaneId,
     content_rect: Rectangle,
-    base_cell_size: (f32, f32),
     scale: f32,
 ) -> Option<TerminalMount> {
     let backend = backends.get_mut(pane_id)?;
-    sync_terminal_backend_size(backend, content_rect, base_cell_size, scale);
+    // Keep the device scale current so inline images report physical pixels (crisp on HiDPI).
+    // Cheap: the backend ignores an unchanged scale. The *grid* is not set here — the terminal asks
+    // for it when it changes (`TerminalInput::Resize`).
+    backend.set_scale_factor(scale);
     let snapshot = backend.terminal_snapshot()?;
     let damage = backend.take_terminal_damage();
 
@@ -57,41 +59,6 @@ pub(crate) fn prepare_terminal_mount(
         snapshot,
         damage,
     })
-}
-
-fn sync_terminal_backend_size(
-    backend: &mut dyn PaneBackend,
-    content_rect: Rectangle,
-    base_cell_size: (f32, f32),
-    scale: f32,
-) {
-    let (approx_cell_w, approx_cell_h) = base_cell_size;
-    if approx_cell_w <= 0.0 || approx_cell_h <= 0.0 {
-        return;
-    }
-
-    let cols = fitted_grid_units(content_rect.size.w as f32, approx_cell_w);
-    let rows = fitted_grid_units(content_rect.size.h as f32, approx_cell_h);
-    let fitted_cell_w = (content_rect.size.w as f32 / cols as f32).max(1.0);
-    let fitted_cell_h = (content_rect.size.h as f32 / rows as f32).max(1.0);
-
-    // Keep the device scale current so inline images report physical pixels
-    // (crisp on HiDPI). Cheap: the backend ignores an unchanged scale.
-    backend.set_scale_factor(scale);
-    backend.set_cell_size(fitted_cell_w, fitted_cell_h);
-    backend.set_size(cols, rows);
-}
-
-fn fitted_grid_units(extent: f32, approx_cell: f32) -> usize {
-    if extent <= 0.0 || approx_cell <= 0.0 {
-        return 1;
-    }
-
-    if !extent.is_finite() || !approx_cell.is_finite() {
-        return 1;
-    }
-
-    (extent / approx_cell).ceil().clamp(1.0, 16_384.0) as usize
 }
 
 pub(crate) fn notify_focus_changed(

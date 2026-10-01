@@ -135,6 +135,16 @@ fn on_release(
     }
 }
 
+/// **A terminal asked for a different grid.** Its process takes the cell size and the grid together,
+/// so the picture and the program agree on what a row is.
+fn on_resize(state: &mut AppState, pane_id: PaneId, grid: crate::chrome::terminal::Grid) {
+    if let Some(backend) = state.backends.get_mut(pane_id) {
+        backend.set_cell_size(grid.cell_w, grid.cell_h);
+        backend.set_size(grid.cols, grid.rows);
+        state.needs_redraw = true;
+    }
+}
+
 /// **The pointer moved over a terminal.**
 fn on_move(
     state: &mut AppState,
@@ -251,6 +261,7 @@ pub(crate) fn on_terminal_input(
             modifiers,
         } => on_release(state, pane_id, button, cell, modifiers),
         TerminalInput::Move { cell, modifiers } => on_move(state, pane_id, cell, modifiers),
+        TerminalInput::Resize(grid) => on_resize(state, pane_id, grid),
     }
 }
 

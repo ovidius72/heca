@@ -6,7 +6,7 @@ use std::rc::Rc;
 use heca_core::layout::Rectangle;
 use heca_grid_ui::{Point, Size};
 
-use super::input::{Cell as GridCell, Seams, TerminalCommand, TerminalInput};
+use super::input::{Cell as GridCell, Grid, Seams, TerminalCommand, TerminalInput};
 use super::model::TerminalId;
 use super::viewport::{Controls, IntentSlot, Placed, Viewport};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt};
@@ -32,6 +32,10 @@ struct Shared {
     cell: Cell<(f32, f32)>,
     /// The box the terminal was last painted in — what its cells are counted from.
     bounds: Cell<Rectangle>,
+    /// The font's own cell size — what the grid is fitted from.
+    nominal: Cell<(f32, f32)>,
+    /// The grid last asked of the process. A new one is asked only when this changes.
+    reported: Cell<Option<Grid>>,
     /// The scrollback controls of every node placed for this terminal.
     controls: RefCell<Placed>,
 }
@@ -61,6 +65,8 @@ impl Terminal {
             intents: IntentSlot::default(),
             cell: Cell::new((0.0, 0.0)),
             bounds: Cell::new(Rectangle::new(Point::new(0.0, 0.0), Size::new(0.0, 0.0))),
+            nominal: Cell::new((0.0, 0.0)),
+            reported: Cell::new(None),
             controls: RefCell::default(),
         }))
     }
@@ -136,6 +142,7 @@ impl Terminal {
     /// anything the user can see changed, so the caller can ask for a frame.
     pub(crate) fn show(&self, viewport: &Viewport) -> bool {
         self.shared.cell.set(viewport.cell);
+        self.shared.nominal.set(viewport.nominal_cell);
         self.shared.controls.borrow_mut().show(viewport)
     }
 
@@ -241,6 +248,24 @@ impl Shared {
         }
     }
 
+    /// **Ask for the grid this box and font call for — once per change.** What it asked for last is
+    /// kept, so a frame that changes nothing says nothing; a bound owner is told, an unbound one is
+    /// not (and the grid stays unasked for, so it is said as soon as someone listens).
+    fn report_grid(&self) {
+        let Some(room) = self.size.get() else {
+            return;
+        };
+        let Some(grid) = Grid::fit(room, self.nominal.get()) else {
+            return;
+        };
+        if self.reported.get() == Some(grid) {
+            return;
+        }
+        if self.emit(TerminalInput::Resize(grid)) {
+            self.reported.set(Some(grid));
+        }
+    }
+
     /// The grid cell the pointer is on, if it is on the grid.
     fn cell_at(&self, p: &heca_grid_ui::PointerEvent) -> Option<GridCell> {
         let (cell_w, cell_h) = self.cell.get();
@@ -320,6 +345,7 @@ impl Component for Terminal {
     /// The box is known: say how big it is.
     fn on_layout(&mut self) {
         self.shared.size.set(Some(self.base.bounds.size));
+        self.shared.report_grid();
     }
 }
 
@@ -460,6 +486,7 @@ mod tests {
             scrollbar: ScrollbarVisibility::WhenNeeded,
             badge: true,
             cell: (10.0, 20.0),
+            nominal_cell: (10.0, 20.0),
         }
     }
 
@@ -629,7 +656,7 @@ mod tests {
             heca_grid_ui::dispatch(root.as_mut(), &Event::Raw(pad)),
             Handled::Yes
         );
-        let said = said.borrow();
+        let said = pointer_input(&said);
         let [
             TerminalInput::Wheel { x, y, cell, .. },
             TerminalInput::Wheel { pixels, .. },
@@ -668,7 +695,7 @@ mod tests {
         ] {
             assert_eq!(heca_grid_ui::dispatch(root.as_mut(), &ev), Handled::No);
         }
-        let said = said.borrow();
+        let said = pointer_input(&said);
         let want = Some(GridCell {
             row: 3,
             col: 4,
@@ -711,7 +738,8 @@ mod tests {
         ] {
             let _ = heca_grid_ui::dispatch(root.as_mut(), &ev);
         }
-        assert!(said.borrow().is_empty(), "{:?}", said.borrow());
+        let heard = pointer_input(&said);
+        assert!(heard.is_empty(), "{heard:?}");
     }
     /// The terminal answers "which cell is here" and "where is that cell" for everyone who asks,
     /// from the box it was drawn in — and says nothing when it was not drawn.
@@ -771,5 +799,78 @@ mod tests {
                 (5, TerminalCommand::Kill),
             ]
         );
+    }
+    /// What the pointer said, without the grid the terminal also asks for on its first layout.
+    fn pointer_input(said: &Rc<RefCell<Vec<TerminalInput>>>) -> Vec<TerminalInput> {
+        said.borrow()
+            .iter()
+            .filter(|i| !matches!(i, TerminalInput::Resize(_)))
+            .cloned()
+            .collect()
+    }
+
+    fn grids(said: &Rc<RefCell<Vec<TerminalInput>>>) -> Vec<Grid> {
+        said.borrow()
+            .iter()
+            .filter_map(|i| match i {
+                TerminalInput::Resize(g) => Some(*g),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A terminal asks for the grid its box and font call for, and asks again only when that
+    /// changes — a frame that changes nothing says nothing.
+    #[test]
+    fn a_terminal_reports_its_grid_only_when_it_changes() {
+        let (seams, said) = recording();
+        let t = Terminal::new();
+        t.bind(seams);
+        t.show(&scrolled(0)); // cells are 10 x 20
+        let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+        let first = grids(&said);
+        assert_eq!(first.len(), 1, "{first:?}");
+        assert_eq!((first[0].cols, first[0].rows), (30, 10));
+
+        for _ in 0..3 {
+            heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 200.0));
+        }
+        assert_eq!(grids(&said).len(), 1, "the same box says nothing again");
+
+        heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), Size::new(400.0, 200.0));
+        let after_resize = grids(&said);
+        assert_eq!(after_resize.len(), 2);
+        assert_eq!(after_resize[1].cols, 40);
+
+        // A bigger font in the same box is a different grid too.
+        let mut zoomed = scrolled(0);
+        zoomed.nominal_cell = (20.0, 40.0);
+        t.show(&zoomed);
+        heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), Size::new(400.0, 200.0));
+        let after_zoom = grids(&said);
+        assert_eq!(after_zoom.len(), 3);
+        assert_eq!((after_zoom[2].cols, after_zoom[2].rows), (20, 5));
+    }
+
+    /// Nobody listening, nothing is lost: the grid is said as soon as someone binds.
+    #[test]
+    fn a_grid_nobody_heard_is_said_when_someone_listens() {
+        let t = Terminal::new();
+        t.show(&scrolled(0));
+        let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+        let (seams, said) = recording();
+        t.bind(seams);
+        heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 200.0));
+        assert_eq!(grids(&said).len(), 1);
+    }
+
+    /// Before the font is measured there is no grid to ask for.
+    #[test]
+    fn no_grid_is_asked_for_before_the_cell_size_is_known() {
+        let (seams, said) = recording();
+        let t = Terminal::new();
+        t.bind(seams);
+        let _root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+        assert!(grids(&said).is_empty());
     }
 }

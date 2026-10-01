@@ -16,7 +16,7 @@ mod viewport;
 
 pub(crate) use component::Terminal;
 use input::TerminalCommand;
-pub(crate) use input::{Cell, TerminalInput};
+pub(crate) use input::{Cell, Grid, TerminalInput};
 pub(crate) use model::TerminalId;
 pub(crate) use viewport::Viewport;
 
@@ -184,6 +184,7 @@ pub(crate) fn show_viewports<'a>(
             scrollbar: appearance.show_scrollbar,
             badge: appearance.show_scrolled_up_badge,
             cell: (snapshot.cell_w, snapshot.cell_h),
+            nominal_cell: state.pane_base_cell_size(pane_id),
         });
     }
     changed

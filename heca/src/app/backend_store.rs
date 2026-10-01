@@ -156,16 +156,6 @@ impl BackendStore {
         self.processes.values_mut().map(|p| &mut p.backend)
     }
 
-    /// Iterate over all backends mutably together with their pane IDs, so
-    /// callers can resolve per-pane state (e.g. per-pane font zoom cell sizes).
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (PaneId, &mut Box<dyn PaneBackend>)> {
-        let by_pane = &self.by_pane;
-        let owner: HashMap<TerminalId, PaneId> = by_pane.iter().map(|(p, t)| (*t, *p)).collect();
-        self.processes
-            .iter_mut()
-            .filter_map(move |(id, p)| owner.get(id).map(|pane| (*pane, &mut p.backend)))
-    }
-
     /// Collect pane IDs whose backends have exited and should be closed.
     pub fn pane_ids_to_close(&self) -> Vec<PaneId> {
         self.by_pane
@@ -274,16 +264,5 @@ mod tests {
         let id = store.ensure(pane, spec(Program::Shell), fake).unwrap().id();
         assert_eq!(store.pane_of(id), Some(pane));
         assert!(store.get_mut(pane).is_some());
-    }
-
-    #[test]
-    fn iteration_names_each_backend_by_its_pane() {
-        let mut store = BackendStore::new();
-        for n in 1..=3 {
-            store.ensure(PaneId(n), spec(Program::Shell), fake).unwrap();
-        }
-        let mut panes: Vec<u64> = store.iter_mut().map(|(p, _)| p.0).collect();
-        panes.sort_unstable();
-        assert_eq!(panes, vec![1, 2, 3]);
     }
 }

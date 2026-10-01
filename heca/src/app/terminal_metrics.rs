@@ -64,13 +64,12 @@ pub(crate) fn refresh_terminal_cell_size(state: &mut AppState) {
         refresh_pane_cell_override(state, pane_id);
     }
 
-    let global_cell = state.terminal_cell_size;
+    // The grid and cell size each process has are not set here. A terminal asks for them when its
+    // box or its font changes (`TerminalInput::Resize`), and the font it reads is the one just
+    // measured above — so there is one place a size is decided.
     let scale = state.scale_factor as f32;
-    let overrides = &state.pane_cell_override;
-    for (pane_id, backend) in state.backends.iter_mut() {
+    for backend in state.backends.values_mut() {
         backend.set_scale_factor(scale);
-        let (cell_w, cell_h) = overrides.get(&pane_id).copied().unwrap_or(global_cell);
-        backend.set_cell_size(cell_w, cell_h);
     }
 }
 
