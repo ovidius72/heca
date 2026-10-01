@@ -26,16 +26,7 @@
     "949d48a4-6001-42b2-a12c-25ba69a95c24"
   ],
   "dependsOn": [],
-  "statusLog": [
-    {
-      "id": "7170324e-3561-4136-98eb-cf3e99ee0cd7",
-      "date": "2026-10-01T13:28:17.146Z",
-      "fromStatus": "planned",
-      "toStatus": "in-progress",
-      "title": "planned → in-progress",
-      "description": ""
-    }
-  ],
+  "statusLog": [],
   "createdAt": "2026-07-03T22:49:39.780Z",
   "updatedAt": "2026-07-03T22:50:20.126Z",
   "sessionInfo": []

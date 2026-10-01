@@ -299,7 +299,14 @@
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "d302653b-b6c1-4c78-b2d5-a75ebfaccda4-check-001-pane-outer-frames-users-that-belong-to-the-terminal-s-composition-chrome-pane-header-rs-sync-pane-headers-reads-width-from-it-and-chrome-scene-rs-paint-search-bar-finds-the-pane-rect-by-hand-the-header-and-search-bar-lay-out-inside-the-terminal-s-own-box-no-pane-rect-lookup",
+          "number": 1,
+          "title": "pane_outer_frames users that belong to the terminal's composition: chrome/pane_header.rs sync_pane_headers (reads width from it) and chrome/scene.rs paint_search_bar (finds the pane rect by hand) — the header and search bar lay out inside the Terminal's own box, no pane rect lookup",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
@@ -307,7 +314,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-18T14:17:05.685Z",
-      "updatedAt": "2026-09-16T14:25:05.101Z",
+      "updatedAt": "2026-10-01T19:59:11.924Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -380,7 +387,14 @@
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "89939913-c7bb-4e78-9ae7-f2092fbcda30-check-001-last-pane-outer-frames-user-chrome-pane-mod-rs-sync-panes-takes-tiled-floating-pane-rects-from-it-tiled-and-floating-panes-share-one-source-of-bounds-then-delete-pane-outer-frames-and-terminal-host-frames-rs-s-duplicate-geometry-once-t450-t455-have-removed-their-uses",
+          "number": 1,
+          "title": "Last pane_outer_frames user: chrome/pane/mod.rs sync_panes takes tiled+floating pane rects from it — tiled and floating panes share one source of bounds; then delete pane_outer_frames and terminal_host/frames.rs's duplicate geometry once T450/T455 have removed their uses",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
@@ -388,7 +402,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-18T14:18:01.461Z",
-      "updatedAt": "2026-08-18T14:46:35.684Z",
+      "updatedAt": "2026-10-01T19:59:13.024Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -434,7 +448,14 @@
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "992e7c43-e182-4a7c-9068-a99b0d17a456-check-001-pane-outer-frames-users-in-mouse-resize-rs-pane-boxes-and-chrome-hint-targets-rs-pane-occluders-front-to-back-decide-each-on-evidence-resize-is-genuinely-geometric-keep-but-read-layout-rects-not-a-hand-held-list-the-hint-occluder-asks-the-tree-for-each-pane-s-bounds",
+          "number": 1,
+          "title": "pane_outer_frames users in mouse/resize.rs (pane_boxes) and chrome/hint/targets.rs (pane occluders, front-to-back): decide each on evidence — resize is genuinely geometric (keep, but read layout rects, not a hand-held list); the hint occluder asks the tree for each pane's bounds",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
@@ -442,7 +463,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-18T14:21:10.158Z",
-      "updatedAt": "2026-08-18T14:46:34.358Z",
+      "updatedAt": "2026-10-01T19:59:10.709Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -502,11 +523,243 @@
     }
   ],
   "createdAt": "2026-08-18T14:16:10.152Z",
-  "updatedAt": "2026-10-01T14:03:41.125Z",
-  "handoff": "# P094 — the scene seam is DONE; T449 (Terminal as a component) is next\n\nCreated at: 2026-08-28\nUpdated at: 2026-08-31\nReason: **The previous handoff is stale and would have cost a session.** It said T448's third slice\nwas NOT STARTED and told a resuming agent to go and write it. That slice shipped, T448 is closed, and\nthe dependency this phase was waiting on (`P097(F003)`) has landed too. Rewritten to say what is\nactually true.\n\n## Current focus\n\n**Nothing is in progress in this phase.** `T448` is **DONE**. `T451` (the pane shell and its letter,\n`8a540c8`) was already done. **`T449` is next and NOT started.**\n\n`T448`'s three slices, all shipped:\n\n| slice | state |\n|---|---|\n| the widget asks — `cx.surface(rect, id)`, `cx.backdrop_blur(rect, radius, alpha)` | **DONE** `fd4a0b2`, 5 tests |\n| the host reads — `host_requests(scene)`, each request's clip resolved | **DONE** `4d8d1bd`, 2 tests |\n| the host **performs** — the frost switched to the seam | **DONE** `f5f2262`, driven by Antonio |\n\n⚠️ **The terminal half was deliberately NOT done in T448 — it moved to T449** (agreed with Antonio,\n2026-08-31). `HostDraw::Surface` requests are a documented no-op in the `render.rs` host loop until\nT449 emits them.\n\n## What was being done\n\n**The seam is one mechanism serving two acts:** a widget records a request and the host performs the\nGPU work. `cx.surface(..)` places content something else rasterised — a terminal, an image, a video,\na plugin's canvas. `cx.backdrop_blur(..)` blurs what is already drawn behind it.\n\nThree properties, each with a test, and each a real trap:\n\n- **Recorded in scene order with the clip resolved.** A surface inside a `ScrollRegion` clips like\n  any other widget instead of drawing over the panel's edge, and a backdrop blurs exactly what came\n  before it and nothing after.\n- **Carries the paint context's opacity.** A surface inside a fading overlay fades with it.\n- **A blur radius is a distance so it scales with a zooming subtree; an id and an alpha are not.**\n\n**One thing was built the wrong way first and is worth not repeating.** The collection started inside\n`enqueue_scene`, returning the requests. Wrong twice: it forced a signature change on every caller for\nsomething none of them wanted, and it made the collection untestable, because no test can construct a\nrenderer without a GPU. **Collecting placements is a pure read of the display list** — it touches\nneither renderer — so it is `host_requests(scene)` standing alone.\n\n**How the frost half actually landed.** Not as a host pass reading the registry, but as\n**`Overlay::frosted(true)`** — a property on the widget. Strength comes from the theme's\n`overlay_frost_radius`; it blurs exactly what it occludes (viewport when `blocking`, panel when not);\nit takes the animation's **opacity but not its scale**; and it is recorded in the scene's **BASE\nband**, never the deferred overlay band, because the host flushes base → performs host requests →\nflushes overlay bands, and that gap is \"after everything beneath me, before me\". `LayerBackdrop`,\n`set_backdrop`, `wants_frost` and `frost_opacity` were deleted with it.\n\n**Why that mattered so much:** `P097(F003)/T494` collapsed chrome and layers into one scene. The\nmoment where the frost could be taken existed *by accident* in the two-scene arrangement, and would\nhave vanished. Making the surface ask for its own blur is what let the one-tree migration land\nwithout breaking it. Antonio verified the exposé frost unchanged on screen before that migration ran.\n\n## THE RULE THIS PHASE EXISTS FOR\n\nAntonio, 2026-08-28, named as the project's FIRST RULE: *\"A DOM like structure one can place\neverywhere. NO worry for other developers to handle clicks, surface, mouse move and so on. They MUST\nbe internal logic abstracted.\"* Every widget and component, present and future — the terminal is only\nthe example that exposed it. Written into AGENTS.md § 0d.\n\nThe test: `Terminal::new(\"shell\")` dropped into a dock, an overlay or a plugin panel still selects\ntext, reports mouse to its PTY, scrolls its scrollback and answers `prefix+/`. **If placing a\ncomponent requires the host to teach it anything, the component is not finished.**\n\n**That test is now reachable**, which it was not before: `P097(F003)/T494` made every surface a node\nin one retained tree, so a placed component receives pointer input from the single walk.\n\n## WHERE THE TERMINAL LIVES — the widget/component split\n\n- **`heca-grid-ui`** — the reusable half: a widget hosting a rasterised surface, owning its scroll\n  region, its selection gestures and its hit-testing. It binds no app concept, so by AGENTS § 0b it\n  belongs in the library.\n- **`heca/src/components/terminal/`** — `Terminal` itself, binding the PTY and the backend session.\n  `mod.rs` the only file that may touch `AppState`, `model.rs` the session as plain data,\n  `testing.rs` for fixtures. Straight into `components/`, not beside a surface — the point is that it\n  is tied to none.\n\n**PRESERVE EXACTLY:** retained terminal textures, damage tracking, the row-range merge, and that\nterminal cell glyphs carry no glow. Cell glyphs are the hottest path in the app; drawing them as\nordinary scene commands is **REJECTED** and must not be attempted. PTY forwarding, selection and\nmouse reporting move **verbatim** into the component's own handlers.\n\n⚠️ Ordering must survive: the terminal is drawn **under** the pane chrome today (the shell paints\nafter it so the border is not swallowed). A recorded placement has to preserve that.\n\n## How to resume\n\n1. **Gates:** `./scripts/lint-changed.sh test`, then `./scripts/lint-changed.sh`. **Never\n   `--workspace`** (disk-bound; a second cargo run blocks on the `target/` lock). Two clippy warnings\n   are expected: the pre-existing `heca-grid-ui/src/widgets/toast/stack.rs:80` callback type, counted\n   for lib and lib-test.\n2. **Run it:** the app is `cargo run -p heca`; the living widget reference is\n   `cargo run -p heca-renderer --example showcase` (AGENTS § 1 — look at it before hand-rolling any\n   UI).\n3. Read **`docs/surface-compositor.md` § 0**, then **AGENTS.md in full** (1795 lines — § 0b, § 0b-bis,\n   § 0c, § 0d and ⭐⭐ RULE ZERO are the ones this phase turns on), then F011, this phase, then the\n   task.\n4. **Do `P097(F003)/T495` first** — modal as a node that swallows. It is the last hand-written\n   dispatch standing between a placed component and owning its own input, and P094 depends on P097.\n   Read **P097's handoff**, which is current as of 2026-08-31.\n5. Then **T449**: `Terminal` as a component that emits `cx.surface(content_rect, texture_id)`, taking\n   its rect from the layout engine instead of the hand-computed `stable_tiled_content_rect` /\n   `stable_floating_content_rect` / `pane_content_rect`. **Reuse `blit_retained_terminal_layer`\n   (`heca/src/app/terminal_render.rs:292`); do not rewrite it.**\n6. Then T450 · T452 · T453 · T454 · T455 · T456 · T457.\n7. **Antonio drives every visual check. Green tests are not verification.**\n\n## Files touched\n\n- `fd4a0b2` — `heca-grid-ui/src/scene.rs` (`DrawCommand::Host`, `HostCmd`, `HostDraw`),\n  `heca-grid-ui/src/component.rs` (`cx.surface`, `cx.backdrop_blur`, and the scale/fade arms),\n  `heca-grid-ui/tests/host_draw.rs` (new), `docs/widgets.md`.\n- `4d8d1bd` — `heca-renderer/src/scene.rs` (`HostRequest`, `host_requests`, plus the ignored arm in\n  `enqueue_scene`).\n- `f5f2262` — the frost on the seam: `heca-grid-ui/src/widgets/overlay/{mod,tests}.rs`\n  (`Overlay::frosted`), `heca-view/src/build.rs` + `heca-view-realize/src/lib.rs` (the declarative\n  half — the SDK drift guard refused the build until a described overlay could ask for it),\n  `heca/src/chrome/expose/mod.rs`, `heca/src/chrome/layers/*`, `heca/src/app/render.rs`,\n  `docs/widgets.md`.\n- `8a540c8` — T451, the pane shell owning its own letter.\n\nWhere T449 lands: `heca/src/components/terminal/` (new), `heca/src/app/terminal_render.rs`,\n`heca/src/app/render.rs`, `heca/src/chrome/pane_header.rs`.\n\n## Blockers\n\n**None technical.** T448 is closed and the seam is ready for its second consumer.\n\n⚠️ **Sequencing, not a blocker:** do `P097(F003)/T495` before T449. A component cannot own its own\ninput while the modal path is still hand-written, and T449's whole point is the FIRST RULE.\n\n⚠️ **Antonio drives, and T449 is where it matters most:** a terminal must look and behave identically\n— same text, same selection, same scrollback, no new lag — *and* render correctly mounted somewhere\nthat is not a pane.\n\n## Next steps\n\n1. **`P097(F003)/T495`** — modal as a node that swallows (not this phase, but first).\n2. **T449** — `Terminal` as a component, placeable anywhere; emits `cx.surface`.\n3. T450 · T452 · T453 · T454 · T455 · T456 · T457.\n\n## Recent decisions\n\n- **T448's terminal half was RELOCATED to T449** (Antonio, 2026-08-31). There is no pane-content\n  widget tree to emit `cx.surface` from until the `Terminal` component exists, and bolting it onto\n  the current direct-paint path would be a throwaway T449 removes — the \"no for-now fixes\" rule\n  (AGENTS § 3). T449's own description already says the component \"paints ONE command — the\n  externally-rendered surface from step 1 — and nothing else\".\n- **The seam is: the widget records, the host performs.** Rejected handing the drawing pass an\n  encoder and target — it gives a function that describes *what* to draw a second job, owning GPU\n  pass lifetime, and forces every caller to supply one including the showcase, which has none.\n- **The seam is generic**, not a terminal feature — it serves the terminal's texture and the frost's\n  blur alike. Two unrelated features needing one mechanism is why it is the right shape.\n- **Collecting requests is a pure read**, so it is `host_requests(scene)`, not part of\n  `enqueue_scene`. The other way forced a caller-wide signature change and made it untestable.\n- **The frost landed as a surface property (`Overlay::frosted`), not a host pass** — which is what\n  let `P097/T494` collapse the two scenes without breaking it.\n- **T458 is DONE** (verified on screen) — the positional `ws:`/`col:` ancestor keys this phase\n  exposed. A sidebar row keeps its letter, cursor, right-click target and drag identity across a\n  split, and `ColumnId` became a real allocated id rather than a number derived from the column count.\n- **T457** still needs `F003/P082/T436` (a plugin can own a picker) and `T432` for its plugin half.",
-  "handoffUpdatedAt": "2026-08-31T15:57:28.592Z",
-  "handoffAudit": null,
-  "handoffReadAt": "",
+  "updatedAt": "2026-10-01T19:59:13.024Z",
+  "handoff": "# T449: slices 1-4 and the terminal process are shipped; first a small refactor PR, then slice 2b\n\nCreated at: 2026-08-28\nUpdated at: 2026-10-01T19:56:10.022Z\nReason: Stream 1 context is high. The orchestrator asked for an audit of this stream's merged work against the standing rules; the exact list is the first step for the fresh session, ahead of 2b.\n\n## Current focus\n- Feature F011, phase P094, task **P094(F011)/T449 — Terminal becomes a component** (in progress). Repo ~/projects/heca, currently on `feat/t449-terminal-scene-order` (cut from #274's branch; holds only planner commits, no 2b code). Orchestrator = session `heca-pro-commercial-agents` (carries Antonio's authority for order, reviews, commits, PRs). `stream2` = P104 (server/client split); it stays out of backend_store.rs until #274 merges.\n- **FIRST STEP: the refactor PR below. SECOND: slice 2b** (start in `heca-grid-ui/src/scene.rs`).\n\n## Current and partial state\n**Merged:** #270 (slices 1+2), #272 (slices 3+4: chip + scrollbar are Terminal children; the terminal's own typed input — wheel, press, release, move; `cell_at`/`cell_origin`; `app/terminal_host/` folder: input, selection, hyperlinks, search, frames).\n**Open, approved, eye-checked: #274** (branch `feat/t449-terminal-process`): BackendStore is the one owner (store-issued TerminalId, `ensure` the one door, `kill_for_pane`/`kill_all`), `start_shell_in`/`start_terminal` (`app/terminal_process.rs`), `terminal_run`/`terminal_kill` actions, `spawn_command` cwd, heca-core `cwd`, `TerminalInput::Resize`. Ask the orchestrator whether it merged before rebasing.\n\n## Refactor PR (first step, from origin/main, small, separate from 2b)\nAntonio's standing rules, checked on every review: no fix at the call site (fix the widget/component), CSS-like layout (Flex/Grid/Surface), composition and reuse, NOTHING hard-coded, old badly written code you touch is refactored in the same work. Audit of stream 1's work found (do these, then report the list to the orchestrator):\n1. `app/terminal_host/input.rs:22` `DEFAULT_CELL_H = 14.0` is a hard-coded fallback for the trackpad pixel-to-notch conversion. Use the backend's cell height, else `state.terminal_cell_size` (already on AppState); delete the constant.\n2. The cell-grid fitting rule is written twice: `chrome/terminal/input.rs` `Grid::fit` (+ `MAX_UNITS 16_384`) and `app/backend_factory.rs` `estimate_terminal_grid`/`estimate_terminal_units` (+ `MAX_TERMINAL_UNITS`). One rule: make `estimate_terminal_grid` call `Grid::fit` (keep the 80x24 fallback only as the \"no cell size yet\" answer) and delete the second constant.\n3. `app/terminal_host/input.rs` (~580 lines) holds three jobs (button/move policy + HeardPresses, wheel policy, wheel math). Split the wheel into `wheel.rs`; keep each file under ~400 lines.\n4. `app/terminal_host/hyperlinks.rs` `collect_link_hints` still places by `pane_outer_frames` (hand-held pane rects) with literal visibility tests; ask each Terminal for its drawn state (`placed()`/`cell_origin`) instead, and drop `pane_outer_frames` from that use.\n5. `should_intercept_selection_gesture` (terminal_host/input.rs) hit-tests panes by hand (`mouse::hit_test_pane`) to answer \"is a shift-press on a terminal grid\"; the Terminal already knows (it reports the press). Move the question to the Terminal / its message so the host does not hit-test.\n6. Not yet audited (do a pass): `chrome/column/stale.rs`, the `render.rs` changes, `chrome/terminal/mod.rs`, `terminal_process.rs`, `backend_store.rs`. Look for literal numbers in layout code, host-side fixes of component behaviour, duplicated rules.\n7. Test-only literals (e.g. `pad.delta_y = 0.7` in `chrome/terminal/component.rs`) are fine; production code is what counts.\n8. `on_left_release` comment: in #274 it names P084(F004)/T536 (the pointer-capture task's current number). Check it still does after the rebase; the orchestrator's note said T534, which was the old number.\nRules for the PR: from origin/main; fmt/clippy/tests green (`./scripts/lint-changed.sh fmt|clippy|test`, one cargo at a time, never --workspace); break-check any new test; planner commit last and separate.\n\n## Slice 2b design (approved)\nGoal: a Terminal inside an overlay/dock works because terminals draw in scene order. Today terminals are blitted in `render.rs` Pass 2 and a per-float step BEFORE the scene holding their pane tree is flushed.\n1. New band in `Scene`, scoped to its own flush (NOT the global overlay segments): `PaintCx::outline` / `after_children`. `Scene` gets an `outline` vec and tracks open base clips; begin replays them into the band, end pops, so segments are self-contained; `base_layer()` returns base then outline. Inside an overlay or another outline it paints inline. Clip-stack scene test incl. nested panes; document in docs/widgets.md.\n2. `heca-grid-ui/src/widgets/pane.rs` `paint`: fill first, children, then border + glow via the outline band (split today's single `cx.rect(fill, border, glow)` into a fill-only rect and a transparent-fill border+glow rect).\n3. Host flush splits only at `HostDraw::Surface`: flush base so far, blit that terminal (reuse `blit_retained_terminal_layer`, `queue_terminal_dynamic_overlays`; stencil/scissor of the holding scene: tiled mask, float mask, none for dock/overlay), flush its cursor/selection overlays, continue. Scenes with no surfaces stay one pass. The two hand loops in render.rs go. Surface id -> pane via `state.terminals`/`Terminal::id()`.\n4. Debug-only env var (off by default, documented) logging `render_frame` CPU time averaged over 120 frames plus pass count; numbers at 1/4/8 panes (+1 floating) before and after; say GPU time is unmeasured.\n5. API gap: `Terminal::new(\"name\")` reachable from an outside crate, command seam from BuildCx (like T520's doors). Needs a name-keyed process in the store and a pending-request path (BuildCx has no AppState; drain like `drain_pending_menus`). `heca/examples/extend_heca.rs` adds a dock/layer holding a Terminal; Antonio checks 2b by running `cargo run -p heca --example extend_heca`. NO temporary debug action.\nEye check for 2b: active border/glow over terminals, neighbours, float over tiled, frost, transparency, rounded corners, exposé, then the example dock.\n\n## Preservation constraints\n- Do not change what Antonio sees; retained textures, damage tracking, row-range merge, no glow on cell glyphs; cell glyphs are never scene commands. Antonio checks by eye; green tests are not verification; break-check every new test.\n- Never call a terminal process a \"session\". `on_left_release` stays a window-level rule until P084(F004)/T536.\n- **.planner is shared live state written by all streams.** Before ANY git command that switches branches, rebases, stashes, cherry-picks or resets, commit `.planner` as its own `chore(planner)` commit; never stash or check out `.planner` files; on conflict take the snapshot (live) side; if a step would discard planner changes, stop and tell the orchestrator. `.planning/STATE.md` belongs to an old tool: leave it modified (use `git rebase --autostash`), never commit it.\n- PR rules: fetch, rebase onto origin/main, re-run gates, planner commit last and separate; report each slice to the orchestrator with exact eye-check steps (Antonio has no RPC client: use palette entries or `[[keys.bind]]` lines).\n\n## Supporting documents\n- None beyond AGENTS.md § 0-0d, docs/layout.md, docs/widgets.md.\n\n## Blockers and risks\n- #274 must merge before the 2b branch is rebased. 2b is the highest visual risk of the task (Pane paint and flush order). Non-pane terminals need a store path.\n\n## How to resume\n1. `git status`; commit `.planner` if dirty; `planner-task-start P094(F011)/T449`; ask the orchestrator if #274 merged.\n2. Branch from origin/main for the refactor PR (list above); report; then rebase/continue the 2b branch and build 2b in the order above.",
+  "handoffUpdatedAt": "2026-10-01T19:56:10.022Z",
+  "handoffAudit": {
+    "version": 1,
+    "entries": [
+      {
+        "category": "exact-focus-resume-point",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "first-resume-action",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "partial-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "remaining-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "decisions-rationale",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "rejected-alternatives",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "files-symbols",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "branch-worktree",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "commands-tools",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "pending-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "runtime-limitations-workarounds",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "blockers-risks",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "user-visible-behavior",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "operator-actions",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "project-operating-notes",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "conversation-only-facts",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      }
+    ],
+    "coldStartInventory": {
+      "version": 1,
+      "sourceReviews": [
+        {
+          "source": "conversation",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "planner-entities",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "working-tree",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "verification-runtime",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "peer-agent-output",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        }
+      ],
+      "entries": [
+        {
+          "category": "files",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "symbols",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "working-tree-ownership",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "negative-state",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "commands-tools",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "runtime-wiring",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "preservation-constraints",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "verification-evidence",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "related-planned-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "user-visible-behavior",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "operator-actions",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "blockers-risks",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "remaining-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "ordered-resume-steps",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        }
+      ]
+    },
+    "supportingDocuments": [],
+    "contentHash": "1b1618fc25170794822f42ae19e6b56e8890f159fc02f51988c826d97c083457",
+    "contentLength": 7869,
+    "verifiedAt": "2026-10-01T19:56:10.022Z",
+    "resumeReadyAt": "2026-10-01T19:56:11.865Z",
+    "readBackSourceReviews": [
+      {
+        "source": "conversation",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "planner-entities",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "working-tree",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "verification-runtime",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "peer-agent-output",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      }
+    ]
+  },
+  "handoffReadAt": "2026-10-01T19:56:11.865Z",
   "handoffHistory": [],
   "statusLog": [
     {

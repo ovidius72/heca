@@ -32,7 +32,8 @@
     "e995dbdc-c15b-4d59-87c5-a16f9a3e77f3",
     "9d54e52e-d5e6-45d7-b388-6ed3d826f541",
     "250975ab-4f70-411e-91f4-ae13749a51b5",
-    "22954d40-be08-40c9-bcad-a49dc8a84c4f"
+    "22954d40-be08-40c9-bcad-a49dc8a84c4f",
+    "ddbbcbb1-e15d-4716-b56d-6e0faff941b3"
   ],
   "tasks": [
     {
@@ -479,10 +480,51 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "ddbbcbb1-e15d-4716-b56d-6e0faff941b3",
+      "phaseId": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
+      "number": 537,
+      "shortId": "FHXFG",
+      "priority": 11,
+      "shortName": "no-literal-sizes-in-app-ui-cod",
+      "title": "No literal sizes in app UI code: spacing steps, theme tokens for small text and tooltip delay, app look constants moved to theme/config",
+      "status": "in-progress",
+      "description": "Found by the orchestrator 2026-10-01 while checking merged work against the project rules (nothing hard-coded, fix at the source, compose from the library's vocabulary).\n\nLiterals in UI code: providers/workspaces/row_lines.rs (gap 4 at :78, gap 6 at :93 and :166, Icon size 12 at :79/:97/:160, font_scale 0.8 at :67/:73, Tooltip delay 0.25 at :103), workspace_frame.rs (gap 4 :67, gap 8 :136, spacer Flex::row().width(6.0) :78), dock_view.rs:36 gap 6, column_group.rs:48 gap 3, pane_row.rs (padding 6 :190, Icon size 14 :95), components/folder_line.rs (GAP 6, ICON 12), chrome/expose/pane_card.rs:199 gap 2, chrome/scene.rs (padding 10 + gap 8 :246-247, radius 0.0 :407, padding_xy 8.0 :~410, LINK_HINT_FONT 13). Named app constants that are look values: chrome/mod.rs DEFAULT_TAB_BAR_HEIGHT 32, DEFAULT_STATUS_BAR_HEIGHT 24, DEFAULT_SIDEBAR_WIDTH 240, PANE_NAME_SIZE_FACTOR/MIN/MAX, CHROME_TEXT_SIZE 14, EDGE_SCROLL_TRIGGER 80; chrome/pane/mod.rs ACTIVE_GLOW_RADIUS 10 / STRENGTH 0.55; chrome/column/shell.rs NEW_COLUMN_SHARE 0.18; chrome/pane_header.rs CARD_META_FONT_SCALE 0.8.\n\nVocabulary (approved by the orchestrator): every gap/padding is a Spacing step (the 6px spacer becomes a gap on its parent); ONE theme token for the supporting-text scale plus Label::small() / Icon::small() (replaces the three 0.8s and the 12s; pane_row's 14 inherits the font); Tooltip::quick() with its time as a theme/interaction token beside the default 0.5; the Surface square variant (check first, add .square() only if missing). A grep-test fails when a file under providers/, chrome/ or components/ passes a numeric literal to a gap/padding/size/scale/delay builder, and its message names the vocabulary to use. Second commit: the app look constants move to theme/config with today's values as defaults, each read where it is used.\n\nSizes may shift by up to ~2px at today's font because of step rounding; Antonio judges by eye. Branch fix/no-literal-sizes-in-providers from origin/main. Then P104 step 1 resumes from its stash.",
+      "descriptionUpdatedAt": "2026-10-01T19:54:42.060Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ddbbcbb1-e15d-4716-b56d-6e0faff941b3-check-001-planned-in-progress",
+          "date": "2026-10-01T19:55:22.842Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-01T19:55:22.842Z",
+      "completedAt": "",
+      "createdAt": "2026-10-01T19:54:42.001Z",
+      "updatedAt": "2026-10-01T19:55:22.842Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
+          "createdAt": "2026-10-01T19:55:22.732Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-10-01T13:14:27.975Z",
+  "updatedAt": "2026-10-01T19:55:22.842Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-07-27T13:37:24.584Z",
   "handoffAudit": null,
@@ -501,7 +543,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
-      "createdAt": "2026-10-01T08:25:57.600Z"
+      "createdAt": "2026-10-01T19:55:22.732Z"
     }
   ]
 }
