@@ -12,13 +12,23 @@ use heca_core::layout::PaneId;
 use std::path::{Path, PathBuf};
 
 impl TerminalSpec {
-    /// The user's shell, sized for workspace `ws_idx`.
-    pub(crate) fn shell_in_workspace(state: &AppState, ws_idx: usize) -> Self {
+    /// `program` in `cwd`, sized for workspace `ws_idx`: the one place a spec's grid is chosen.
+    fn in_workspace(
+        state: &AppState,
+        ws_idx: usize,
+        program: Program,
+        cwd: Option<PathBuf>,
+    ) -> Self {
         Self {
-            program: Program::Shell,
-            cwd: None,
+            program,
+            cwd,
             grid: terminal_grid_for_workspace(state, ws_idx),
         }
+    }
+
+    /// The user's shell, sized for workspace `ws_idx`.
+    pub(crate) fn shell_in_workspace(state: &AppState, ws_idx: usize) -> Self {
+        Self::in_workspace(state, ws_idx, Program::Shell, None)
     }
 
     /// A command, sized for workspace `ws_idx`.
@@ -28,11 +38,12 @@ impl TerminalSpec {
         command: &str,
         cwd: Option<&str>,
     ) -> Self {
-        Self {
-            program: Program::Command(command.to_string()),
-            cwd: cwd.map(std::path::PathBuf::from),
-            grid: terminal_grid_for_workspace(state, ws_idx),
-        }
+        Self::in_workspace(
+            state,
+            ws_idx,
+            Program::Command(command.to_string()),
+            cwd.map(PathBuf::from),
+        )
     }
 }
 

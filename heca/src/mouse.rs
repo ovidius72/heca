@@ -17,7 +17,6 @@ pub(crate) mod resize;
 pub(crate) mod surface_left;
 
 use crate::app::interaction::InteractionSource;
-use crate::app::terminal_host::should_intercept_selection_gesture;
 use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::chrome::ChromeConfig;
 use crate::input::WmAction;
@@ -158,8 +157,7 @@ pub fn on_mouse_input(
             }
 
             // Meta+click on content pane → start drag from content.
-            if !should_intercept_selection_gesture(state, pos, ev)
-                && interactive_move_modifier_held(state)
+            if interactive_move_modifier_held(state)
                 && let Some(pane_id) = hit_test_pane(state, pos)
             {
                 interactive::start_interactive_move(state, pane_id, pos);

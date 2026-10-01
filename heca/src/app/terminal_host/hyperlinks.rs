@@ -2,7 +2,7 @@
 //! screen. The geometry is the terminal's own (`Terminal::cell_at`, `cell_origin`); this adds what
 //! the backend's snapshot knows about its hyperlinks.
 
-use super::frames::pane_outer_frames;
+use super::frames::laid_out_pane_ids;
 use crate::app_state::AppState;
 use heca_core::layout::PaneId;
 
@@ -40,20 +40,21 @@ pub(crate) fn hyperlink_uri_at_position(
     hyperlink_at_cell(&snapshot.hyperlinks, row, col).map(str::to_owned)
 }
 
-/// Build the follow-link candidates across **all visible panes**: one labelled
-/// keycap per visible hyperlink span (OSC 8 + auto-detected, same pipeline),
-/// assigned letters sequentially (a–z A–Z, shared 52-letter cap) in visible-pane
-/// order. Each candidate carries its own `pane_id`. Panes fully off-screen and
-/// panes without a terminal backend are skipped. terminal-task-18.
+/// Build the follow-link candidates across **the panes whose terminal was drawn last frame**: one
+/// labelled keycap per visible hyperlink span (OSC 8 + auto-detected, same pipeline), assigned
+/// letters sequentially (a–z A–Z, shared 52-letter cap) in the order the panes are laid out. Each
+/// candidate carries its own `pane_id`. A pane the terminal says it was not drawn in — scrolled
+/// off, hidden — or without a terminal backend is skipped: ask the terminal, not the layout.
+/// terminal-task-18.
 pub(crate) fn collect_link_hints(state: &AppState) -> Vec<crate::app_state::LinkHint> {
-    let window = crate::chrome::ChromeConfig::of(state).window();
-    let (win_w, win_h) = (window.w as f32, window.h as f32);
     let mut hints = Vec::new();
     let mut idx = 0usize;
-    for (pane_id, x, y, w, h) in pane_outer_frames(state) {
-        // Skip panes scrolled fully off-screen — their keycaps would be culled and
-        // would only waste labels.
-        if x + w <= 0.0 || y + h <= 0.0 || x >= win_w || y >= win_h {
+    for pane_id in laid_out_pane_ids(state) {
+        let drawn = state
+            .terminals
+            .get(&pane_id)
+            .is_some_and(|terminal| terminal.placed().is_some());
+        if !drawn {
             continue;
         }
         let Some(snapshot) = state

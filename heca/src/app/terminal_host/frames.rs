@@ -3,11 +3,6 @@
 use crate::app_state::AppState;
 use heca_core::layout::PaneId;
 
-/// The **outer** screen rect (full pane, before content inset) of every visible
-/// pane — tiled then floating — in the active workspace. Same geometry the render
-/// loop derives per pane (`render.rs`); kept here so the pane-header sync step can
-/// position the in-pane info bar without a GPU borrow (render's `scene_view` holds
-/// `state.compositor`). Returns `(pane_id, x, y, w, h)` in logical px.
 /// **The columns of the active workspace, in screen coordinates**, with the panes inside each.
 ///
 /// The same geometry [`pane_outer_frames`] reports, grouped the way the tree is shaped. Built on
@@ -47,6 +42,11 @@ pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutC
         .collect()
 }
 
+/// The **outer** screen rect (full pane, before content inset) of every visible
+/// pane — tiled then floating — in the active workspace. Same geometry the render
+/// loop derives per pane (`render.rs`); kept here so the pane-header sync step can
+/// position the in-pane info bar without a GPU borrow (render's `scene_view` holds
+/// `state.compositor`). Returns `(pane_id, x, y, w, h)` in logical px.
 pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32, f32)> {
     let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
     let ws_offset = state
@@ -76,4 +76,18 @@ pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32,
         ));
     }
     frames
+}
+
+/// **The panes of the active workspace in layout order** — tiled, column by column, then floating —
+/// with no geometry: a caller that needs *where* a pane is asks its terminal what it drew.
+pub(crate) fn laid_out_pane_ids(state: &AppState) -> Vec<PaneId> {
+    let Some(ws) = state.session.active_workspace() else {
+        return Vec::new();
+    };
+    ws.scrolling
+        .columns
+        .iter()
+        .flat_map(|col| col.panes.iter().map(|pane| pane.id))
+        .chain(ws.floating_panes.iter().map(|float| float.pane.id))
+        .collect()
 }
