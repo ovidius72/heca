@@ -167,7 +167,9 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
                 .collect()
         })
         .unwrap_or_default();
-    let models: Vec<PaneShellModel> = pane_models(state)
+    let all = pane_models(state);
+    let shown: std::collections::HashSet<PaneId> = all.iter().map(|m| m.pane_id).collect();
+    let models: Vec<PaneShellModel> = all
         .into_iter()
         .filter(|m| !tiled.contains(&m.pane_id))
         .collect();
@@ -196,12 +198,14 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
             .unwrap_or(true);
         let header_texts = header.as_ref().map(|(_, _, texts)| texts.clone());
         if needs_build {
+            let content = Box::new(crate::chrome::terminal::view_of(state, model.pane_id))
+                as Box<dyn heca_grid_ui::Component>;
             let root = PaneShell {
                 model,
                 cb: &cb,
                 header: header
                     .map(|(tree, _, _)| Box::new(tree) as Box<dyn heca_grid_ui::Component>),
-                content: None,
+                content: Some(content),
             }
             .build();
             state
@@ -239,6 +243,8 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
     // The columns are placed in the same pass, from the same geometry — so a column and the panes
     // in it can never be one frame out of step.
     crate::chrome::sync_columns(state);
+    // A terminal is kept only for a pane that is shown.
+    crate::chrome::terminal::retain_only(state, &shown);
 }
 
 /// The app's edges, gathered once. A test calls this to get exactly the seams and nothing else

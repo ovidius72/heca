@@ -6,9 +6,8 @@
 use crate::app::terminal_host::prepare_terminal_mount;
 use crate::app::terminal_render::{
     PaneRenderState, TerminalPaneShell, TerminalRenderPassContext, blit_retained_terminal_layer,
-    paint_terminal_pane_shell, pane_scissor_rect, queue_terminal_dynamic_overlays,
-    render_terminal_mount, selection_overlay_for_pane, stable_floating_content_rect,
-    stable_tiled_content_rect, sync_retained_terminal_layers,
+    paint_pane_frame, paint_pane_viewport, pane_scissor_rect, queue_terminal_dynamic_overlays,
+    render_terminal_mount, selection_overlay_for_pane, sync_retained_terminal_layers,
 };
 use crate::app_state::{AppState, InputMode};
 use crate::chrome::ChromeConfig;
@@ -247,7 +246,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // onto its retained shell by `chrome::sync_panes`, which is also where it becomes the hue the
     // pane publishes to its contents. Reading them here meant the host decided how a widget looked.
     let pane_border_radius = state.appearance.effective_pane_border_radius(&state.theme);
-    let pane_content_inset = state.appearance.effective_pane_padding(&state.theme);
     let pane_positions = state
         .session
         .active_workspace()
@@ -269,17 +267,61 @@ pub(crate) fn render_frame(state: &mut AppState) {
         surface_physical_size,
     );
 
+    // **The columns are painted first**, before anything is measured against them. A terminal paints
+    // one surface request at its own box, so this scene is where every terminal's real position is
+    // — below its header, scrolled, clipped — and the host reads it from there instead of working
+    // it out from the pane's rect. The same scene is flushed in Pass 3; it is painted once.
+    let mut column_scene = GuiScene::new();
+    column_scene.push(heca_grid_ui::scene::DrawCommand::PushClip(
+        GuiRectangle::new(
+            GuiPoint::new(pane_area.loc.x, pane_area.loc.y),
+            GuiSize::new(pane_area.size.w, pane_area.size.h),
+        ),
+    ));
+    {
+        // **The columns' own letters ride in this scene too.** Through `paint_child`, never
+        // `paint`: `paint_child` is what draws a widget's hint letter after painting it.
+        let column_theme = crate::chrome::chrome_gui_theme(state);
+        let mut cx = heca_grid_ui::PaintCx::new(&mut column_scene, &column_theme);
+        for column in state.columns.values() {
+            heca_grid_ui::paint_child(&column.root, &mut cx);
+        }
+    }
+    column_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
+    // **A floating pane's frame is painted early for the same reason**: its terminal says where it
+    // is in the scene its own frame paints into. Each is flushed in its own pass below, between its
+    // backdrop and what goes over it.
+    let mut float_frames: std::collections::HashMap<heca_core::layout::PaneId, GuiScene> =
+        std::collections::HashMap::new();
+    if let Some(ws) = state.session.active_workspace() {
+        for float in &ws.floating_panes {
+            let mut frame = GuiScene::new();
+            frame.push(heca_grid_ui::scene::DrawCommand::PushClip(
+                GuiRectangle::new(
+                    GuiPoint::new(pane_area.loc.x, pane_area.loc.y),
+                    GuiSize::new(pane_area.size.w, pane_area.size.h),
+                ),
+            ));
+            paint_pane_frame(state, &mut frame, float.pane.id);
+            frame.push(heca_grid_ui::scene::DrawCommand::PopClip);
+            float_frames.insert(float.pane.id, frame);
+        }
+    }
+    let frames: Vec<&GuiScene> = std::iter::once(&column_scene)
+        .chain(float_frames.values())
+        .collect();
+    crate::chrome::terminal::place_from(state, &frames);
+
     let mut tiled_panes = Vec::with_capacity(pane_positions.len());
     for (pane_id, rect) in &pane_positions {
         let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
         let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         let pw = rect.size.w as f32;
         let ph = rect.size.h as f32;
-        // Measured per pane, from its own laid-out header — not one number for all of them.
-        let pane_title_top_inset =
-            crate::app::terminal_render::pane_title_top_inset(state, *pane_id);
-        let content_rect =
-            stable_tiled_content_rect(px, py, pw, ph, pane_content_inset, pane_title_top_inset);
+        // **The terminal's box is the terminal's own.** How much room it was given comes from the
+        // layout, for every pane whether or not it is on screen; where it was drawn comes from its
+        // surface request, and a terminal with none was not on screen.
+        let (content_rect, drawn) = crate::chrome::terminal::content_box(state, *pane_id);
         let base_cell = state.pane_base_cell_size(*pane_id);
         let mount = content_rect.and_then(|content_rect| {
             prepare_terminal_mount(
@@ -306,6 +348,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             w: pw,
             h: ph,
             content_rect,
+            drawn,
             mount,
         });
     }
@@ -321,14 +364,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             let fy = float.position.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
             let fw = float.size.w as f32;
             let fh = float.size.h as f32;
-            let content_rect = stable_floating_content_rect(
-                fx,
-                fy,
-                fw,
-                fh,
-                pane_content_inset,
-                crate::app::terminal_render::pane_title_top_inset(state, float.pane.id),
-            );
+            let (content_rect, drawn) = crate::chrome::terminal::content_box(state, float.pane.id);
             let base_cell = state.pane_base_cell_size(float.pane.id);
             let mount = content_rect.and_then(|content_rect| {
                 prepare_terminal_mount(
@@ -355,6 +391,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 w: fw,
                 h: fh,
                 content_rect,
+                drawn,
                 mount,
             });
         }
@@ -576,7 +613,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     // ── Pass 2: Terminal content ──
     for pane in &tiled_panes {
-        if pane.content_rect.is_some()
+        if pane.drawn
+            && pane.content_rect.is_some()
             && let Some(mount) = pane.mount.as_ref()
         {
             let pane_font_size = state.effective_terminal_font_size(pane.pane_id);
@@ -659,7 +697,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         for pane in &tiled_panes {
             // Which colour this pane's frame is, and what it re-tints inside itself, is the
             // retained shell's own business — written on it by `chrome::sync_panes`.
-            paint_terminal_pane_shell(
+            paint_pane_viewport(
                 state,
                 &mut pane_scene,
                 TerminalPaneShell {
@@ -672,23 +710,27 @@ pub(crate) fn render_frame(state: &mut AppState) {
             );
         }
 
-        // **The columns' own letters.** A column draws no chrome of its own — it is the box and
-        // the name — so this stamps only what it carries. **Through `paint_child`, never `paint`**:
-        // `paint_child` is what draws a widget's hint letter after painting it.
-        {
-            let column_theme = crate::chrome::chrome_gui_theme(state);
-            let mut cx = heca_grid_ui::PaintCx::new(&mut pane_scene, &column_theme);
-            for column in state.columns.values() {
-                heca_grid_ui::paint_child(&column.root, &mut cx);
-            }
-        }
-
         pane_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
         render_chrome(
             &mut state.grid_renderer,
             &mut state.text_renderer,
             &state.queue,
             &pane_scene,
+            ChromePassOpts {
+                damage: None,
+                glow_alpha_scale,
+            },
+            scene_view,
+            &mut encoder,
+            &mut overlay_sink,
+        );
+        // The columns, flushed after the viewport widgets exactly as they were painted after them
+        // when both shared one scene: the panes' frames and headers sit over the badge.
+        render_chrome(
+            &mut state.grid_renderer,
+            &mut state.text_renderer,
+            &state.queue,
+            &column_scene,
             ChromePassOpts {
                 damage: None,
                 glow_alpha_scale,
@@ -807,7 +849,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 );
             }
 
-            if let Some(mount) = pane.mount.as_ref() {
+            if pane.drawn
+                && let Some(mount) = pane.mount.as_ref()
+            {
                 let pane_font_size = state.effective_terminal_font_size(pane.pane_id);
                 let selection_overlay =
                     selection_overlay_for_pane(state, pane.pane_id, &mount.snapshot);
@@ -865,6 +909,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 }
             }
 
+            // The frame was painted early; the chip and scrollbar go over it.
             let mut float_scene = GuiScene::new();
             float_scene.push(heca_grid_ui::scene::DrawCommand::PushClip(
                 GuiRectangle::new(
@@ -872,7 +917,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     GuiSize::new(pane_area.size.w, pane_area.size.h),
                 ),
             ));
-            paint_terminal_pane_shell(
+            paint_pane_viewport(
                 state,
                 &mut float_scene,
                 TerminalPaneShell {
@@ -884,19 +929,25 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 },
             );
             float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
-            render_chrome(
-                &mut state.grid_renderer,
-                &mut state.text_renderer,
-                &state.queue,
-                &float_scene,
-                ChromePassOpts {
-                    damage: None,
-                    glow_alpha_scale,
-                },
-                scene_view,
-                &mut encoder,
-                &mut overlay_sink,
-            );
+            for scene in float_frames
+                .remove(&pane.pane_id)
+                .iter()
+                .chain(std::iter::once(&float_scene))
+            {
+                render_chrome(
+                    &mut state.grid_renderer,
+                    &mut state.text_renderer,
+                    &state.queue,
+                    scene,
+                    ChromePassOpts {
+                        damage: None,
+                        glow_alpha_scale,
+                    },
+                    scene_view,
+                    &mut encoder,
+                    &mut overlay_sink,
+                );
+            }
         }
     }
 

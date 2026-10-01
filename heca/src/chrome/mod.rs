@@ -15,6 +15,7 @@ pub(crate) use column::{RetainedColumn, clear_columns, offer_to_columns, sync_co
 pub(crate) mod pane;
 pub(crate) use pane::{RetainedPane, clear_panes, header_height as pane_header_height, sync_panes};
 pub(crate) mod pane_header;
+pub(crate) mod terminal;
 pub(crate) use pane_header::{
     ActionShortcuts, CARD_META_FONT_SCALE, RetainedPaneViewportWidgets, action_tooltip,
     build_pane_headers, home_relative_path, pane_info_view, sync_pane_viewport_widgets,
