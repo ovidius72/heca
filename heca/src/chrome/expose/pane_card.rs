@@ -639,6 +639,7 @@ mod tests {
                     modifiers: Default::default(),
                     delta_x: 0.0,
                     delta_y: 0.0,
+                    delta_pixels: None,
                 }),
             );
         }

@@ -285,6 +285,16 @@ pub struct PointerEvent {
     pub delta_x: f32,
     /// Wheel movement in lines along Y. See [`delta_x`](Self::delta_x).
     pub delta_y: f32,
+    /// **The device's own pixels, when it reports pixels** (a trackpad) — the DOM's `deltaMode`,
+    /// as a value: `Some` means the device counts pixels and this is the movement in the same
+    /// convention as [`delta_x`](Self::delta_x)/[`delta_y`](Self::delta_y); `None` means it counts
+    /// notches (a wheel) and the line deltas are the whole story.
+    ///
+    /// The line deltas are always filled in, from pixels by a fixed ratio when need be, so a
+    /// widget that only wants "how much" never reads this. One that scrolls by its own unit — a
+    /// terminal, by its cell height — reads it, because dividing a ratio back out of the lines
+    /// would mean knowing the host's constant.
+    pub delta_pixels: Option<(f32, f32)>,
     /// **The laid-out bounds of the widget this event is being delivered to**, stamped by the
     /// router at delivery.
     ///
@@ -305,6 +315,7 @@ impl PointerEvent {
             click_count: 0,
             delta_x: 0.0,
             delta_y: 0.0,
+            delta_pixels: None,
             target_bounds: None,
         }
     }
@@ -522,6 +533,8 @@ pub struct RawPointer {
     pub delta_x: f32,
     /// Wheel deltas in lines, for [`RawPointerKind::Wheel`].
     pub delta_y: f32,
+    /// The device's own pixels, when it reports pixels — see [`PointerEvent::delta_pixels`].
+    pub delta_pixels: Option<(f32, f32)>,
 }
 
 /// What the pointing device did — the four things a host can actually observe.
@@ -739,6 +752,7 @@ impl RawPointer {
             modifiers: Modifiers::default(),
             delta_x: 0.0,
             delta_y: 0.0,
+            delta_pixels: None,
         }
     }
 

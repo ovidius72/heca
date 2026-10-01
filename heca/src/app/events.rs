@@ -10,7 +10,7 @@ use crate::app::keyboard::{build_event_combo, is_prefix_match};
 use crate::app::mutations::{MutationKind, after_mutation_change};
 use crate::app::render::{render_frame, update_session_viewport};
 use crate::app::terminal_host::{
-    forward_mouse_button, forward_mouse_move, forward_mouse_wheel, notify_window_focus_changed,
+    forward_mouse_button, forward_mouse_move, notify_window_focus_changed,
 };
 use crate::app::terminal_metrics::refresh_terminal_cell_size;
 use crate::app_state::AppState;
@@ -35,6 +35,14 @@ pub enum AppEvent {
     /// and calling the crate-private `NotificationRuntime::push`.
     RaiseNotification {
         draft: crate::notification::NotificationDraft,
+    },
+    /// **A terminal said something about its input** — where the pointer was in its grid, what it
+    /// did. Sent by the terminal through the seam its owner gave it, and answered by the one handler
+    /// that holds the policy needing state (`terminal_host::on_terminal_input`). Not an action: a
+    /// wheel turn is not something a user means to do.
+    TerminalInput {
+        pane_id: heca_core::layout::PaneId,
+        input: crate::chrome::terminal::TerminalInput,
     },
 }
 
@@ -399,30 +407,23 @@ pub(crate) fn handle_window_event(
             state.mark_full_redraw();
         }
         WindowEvent::MouseWheel { delta, .. } => {
-            // Ctrl/Meta+wheel is a font-zoom gesture, resolved by what's under the
-            // pointer. It is intercepted at the WM level BEFORE terminal wheel
-            // forwarding so the modified wheel never reaches the TUI as a scroll.
-            if handle_wheel_font_zoom(state, registry, state.mouse.pos, delta) {
-                state.mark_full_redraw();
-                return;
-            }
             // An open modal owns the wheel: its body may be a scroll region, and the page
-            // behind must stay still either way. This branch did not exist, so a described
-            // scroll area inside a modal could not be scrolled at all.
+            // behind must stay still either way.
             let wheel = wheel_event(state, delta);
             if crate::chrome::dispatch_surface_pointer(state, &wheel) {
                 return;
             }
-            // The retained chrome tree next: a hovered scroll region in the sidebar takes it, and
-            // the terminal must not also scroll. A region gates on its own hover, so this is a
-            // no-op whenever the pointer is over a pane.
+            // The trees next. A hovered scroll region in the sidebar takes it; over a terminal, the
+            // terminal does — it reads the wheel itself and says what it meant (zoom, scrollback,
+            // or the program's own) to the one handler that knows the policy.
             if crate::chrome::deliver(state, &wheel)
                 || crate::chrome::deliver_to_panes(state, &wheel)
             {
                 state.mark_full_redraw();
                 return;
             }
-            forward_mouse_wheel(state, state.mouse.pos, delta);
+            // Nothing took it. Ctrl/Meta+wheel off any terminal still zooms the whole app.
+            handle_wheel_font_zoom(state, registry, delta);
             state.mark_full_redraw();
         }
         _ => {}
@@ -463,10 +464,14 @@ fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
         MouseScrollDelta::LineDelta(x, y) => (-x, -y),
         MouseScrollDelta::PixelDelta(p) => (-(p.x as f32) / 20.0, -(p.y as f32) / 20.0),
     };
-    let (delta_x, delta_y) = if state.modifiers.shift_key() && dx_raw == 0.0 {
-        (dy_raw, 0.0)
-    } else {
-        (dx_raw, dy_raw)
+    // Shift+wheel is the horizontal axis.
+    let on_x = state.modifiers.shift_key() && dx_raw == 0.0;
+    let remap = |x: f32, y: f32| if on_x { (y, 0.0) } else { (x, y) };
+    let (delta_x, delta_y) = remap(dx_raw, dy_raw);
+    // A device that counts pixels says so, in the same convention as the lines.
+    let delta_pixels = match delta {
+        MouseScrollDelta::PixelDelta(p) => Some(remap(-(p.x as f32), -(p.y as f32))),
+        MouseScrollDelta::LineDelta(..) => None,
     };
     // No modifiers attached: the framework fills in what is held down, from the
     // `ModifiersChanged` this same loop broadcasts. Attaching them here is the second source of
@@ -477,6 +482,7 @@ fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
     );
     raw.delta_x = delta_x;
     raw.delta_y = delta_y;
+    raw.delta_pixels = delta_pixels;
     Event::Raw(raw)
 }
 
@@ -532,41 +538,33 @@ fn grid_button(button: winit::event::MouseButton) -> PointerButton {
 fn handle_wheel_font_zoom(
     state: &mut AppState,
     registry: &ActionRegistry,
-    pos: (f32, f32),
     delta: MouseScrollDelta,
-) -> bool {
+) {
     if !state.mouse_wheel_change_font_size {
-        return false;
+        return;
     }
     let mods = state.modifiers;
     if !(mods.control_key() || mods.super_key()) {
-        return false;
+        return;
     }
-
-    // Consume the gesture regardless of direction so a modified wheel never leaks
-    // to the TUI; only dispatch when there is a usable vertical direction.
     let vertical = match delta {
         MouseScrollDelta::LineDelta(_, y) => y,
         MouseScrollDelta::PixelDelta(p) => p.y as f32,
     };
     if vertical == 0.0 {
-        return true;
+        return;
     }
     let step = if vertical > 0.0 {
         FontZoomStep::In
     } else {
         FontZoomStep::Out
     };
-
-    let action = match mouse::hit_test_pane(state, pos) {
-        Some(pane_id) => WmAction::PaneTerminalFontZoom {
-            pane_id: Some(pane_id),
-            step,
-        },
-        None => WmAction::AppFontZoom { step },
-    };
-    dispatch_action(state, registry, InteractionSource::MouseContent, &action);
-    true
+    dispatch_action(
+        state,
+        registry,
+        InteractionSource::MouseContent,
+        &WmAction::AppFontZoom { step },
+    );
 }
 
 /// The grid-ui [`Modifiers`](heca_grid_ui::Modifiers) mirror of the current winit modifier state

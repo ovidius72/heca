@@ -861,6 +861,7 @@ fn pointer_event(raw: &RawPointer, click_count: u32) -> PointerEvent {
         click_count,
         delta_x: raw.delta_x,
         delta_y: raw.delta_y,
+        delta_pixels: raw.delta_pixels,
         // Filled in by `deliver_targeted` on the way down — the router knows the target, the
         // constructor does not.
         target_bounds: None,

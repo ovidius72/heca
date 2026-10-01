@@ -8,6 +8,7 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
+use super::input::Seams;
 use heca_config::appearance::ScrollbarVisibility;
 use heca_grid_ui::builders::LayoutExt;
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
@@ -18,7 +19,7 @@ use heca_grid_ui::{Component, SignalData};
 /// **What a terminal's viewport looks like right now**, as plain data: how many rows it shows, how
 /// many the backend keeps, how far up it is scrolled — and which of the two controls the user
 /// asked to see.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Viewport {
     /// Rows on screen.
     pub rows: usize,
@@ -29,6 +30,8 @@ pub(crate) struct Viewport {
     pub scrollbar: ScrollbarVisibility,
     /// Whether the "N lines above" chip is wanted at all.
     pub badge: bool,
+    /// One cell's size in logical pixels — what turns a pointer position into a grid cell.
+    pub cell: (f32, f32),
 }
 
 impl Viewport {
@@ -70,7 +73,7 @@ pub(crate) struct ScrollIntents {
 }
 
 /// Where a terminal keeps what a click means, shared by every node placed for it.
-pub(super) type IntentSlot = Rc<RefCell<Option<ScrollIntents>>>;
+pub(super) type IntentSlot = Rc<RefCell<Option<Seams>>>;
 
 /// "1 line above" / "N lines above".
 pub(super) fn lines_above(lines: usize) -> String {
@@ -111,7 +114,7 @@ impl Controls {
         let to_bottom = intents.clone();
         let mut badge = BadgeButton::accent("0 lines above").on_click(move || {
             if let Some(i) = to_bottom.borrow().as_ref() {
-                (i.to_bottom)();
+                (i.scroll.to_bottom)();
             }
         });
         badge.base_mut().visible.set(false);
@@ -124,7 +127,7 @@ impl Controls {
             if let SignalData::Float(top) = action.data
                 && let Some(i) = to_offset.borrow().as_ref()
             {
-                (i.to_offset)(rows_above(
+                (i.scroll.to_offset)(rows_above(
                     content.get_untracked(),
                     viewport.get_untracked(),
                     top,
@@ -228,6 +231,7 @@ mod tests {
             offset,
             scrollbar: mode,
             badge: true,
+            cell: (8.0, 16.0),
         }
     }
 

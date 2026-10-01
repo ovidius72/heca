@@ -6,9 +6,10 @@ use std::rc::Rc;
 use heca_core::layout::Rectangle;
 use heca_grid_ui::Size;
 
+use super::input::{Cell as GridCell, Seams, TerminalInput};
 use super::model::TerminalId;
-use super::viewport::{Controls, IntentSlot, Placed, ScrollIntents, Viewport};
-use heca_grid_ui::builders::LayoutExt;
+use super::viewport::{Controls, IntentSlot, Placed, Viewport};
+use heca_grid_ui::builders::{ComponentExt, LayoutExt};
 use heca_grid_ui::component::{Base, Component, PaintCx};
 use heca_grid_ui::style::Length;
 
@@ -23,8 +24,11 @@ struct Shared {
     /// it was not drawn (scrolled out of view, or not in a tree). Said by whoever read the frame's
     /// surface requests.
     placed: Cell<Option<Rectangle>>,
-    /// What a click on the scrollback controls means, said once by whoever owns the terminal.
+    /// What a click on the scrollback controls means and where input goes, said once by whoever
+    /// owns the terminal.
     intents: IntentSlot,
+    /// One cell's size in logical pixels, as the last viewport said.
+    cell: Cell<(f32, f32)>,
     /// The scrollback controls of every node placed for this terminal.
     controls: RefCell<Placed>,
 }
@@ -52,6 +56,7 @@ impl Terminal {
             size: Cell::new(None),
             placed: Cell::new(None),
             intents: IntentSlot::default(),
+            cell: Cell::new((0.0, 0.0)),
             controls: RefCell::default(),
         }))
     }
@@ -73,21 +78,27 @@ impl Terminal {
         base.children.extend(layers);
         let controls = Rc::new(controls);
         shared.controls.borrow_mut().add(&controls);
+        let me = shared.clone();
+        // **The wheel is the terminal's own.** It works out where in the grid it turned and says so
+        // to whoever owns the process; whatever is beneath it is not offered the turn.
         Self {
             base,
             shared,
             _controls: controls,
         }
+        .on_scroll(move |cx| me.wheel(cx))
     }
 
-    /// Say what a click on the scrollback controls means. Said once, by whoever owns the terminal.
-    pub(super) fn bind(&self, intents: ScrollIntents) {
-        *self.shared.intents.borrow_mut() = Some(intents);
+    /// Say what the terminal's owner wants of it: what a click on the scrollback controls means,
+    /// and where its input goes. Said once, by whoever owns the terminal.
+    pub(super) fn bind(&self, seams: Seams) {
+        *self.shared.intents.borrow_mut() = Some(seams);
     }
 
     /// Show how the terminal's viewport looks: the chip and the scrollbar follow it. Returns whether
     /// anything the user can see changed, so the caller can ask for a frame.
     pub(crate) fn show(&self, viewport: &Viewport) -> bool {
+        self.shared.cell.set(viewport.cell);
         self.shared.controls.borrow_mut().show(viewport)
     }
 
@@ -120,6 +131,41 @@ impl Terminal {
     /// How much room the layout gave it the last time it was laid out.
     pub(crate) fn room(&self) -> Option<Size> {
         self.shared.size.get()
+    }
+}
+
+impl Shared {
+    /// Say `input` to the terminal's owner. `false` when nobody has said where it goes.
+    fn emit(&self, input: TerminalInput) -> bool {
+        match self.intents.borrow().as_ref() {
+            Some(seams) => {
+                (seams.input)(input);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The wheel turned over the terminal.
+    fn wheel(&self, cx: &mut heca_grid_ui::event::EventCx<'_>) {
+        let Some(p) = cx.pointer().copied() else {
+            return;
+        };
+        let (cell_w, cell_h) = self.cell.get();
+        let cell = self
+            .placed
+            .get()
+            .and_then(|r| GridCell::at((p.pos.x, p.pos.y), r, cell_w as f64, cell_h as f64));
+        let said = self.emit(TerminalInput::Wheel {
+            x: p.delta_x,
+            y: p.delta_y,
+            pixels: p.delta_pixels,
+            cell,
+            modifiers: p.modifiers,
+        });
+        if said {
+            cx.stop_propagation();
+        }
     }
 }
 
@@ -258,9 +304,32 @@ mod tests {
     }
     // ── the scrollback controls ──
 
+    use super::super::viewport::ScrollIntents;
     use heca_config::appearance::ScrollbarVisibility;
     use heca_grid_ui::component::{Event, Handled};
     use heca_grid_ui::event::PointerButton;
+
+    /// Seams that ignore input — for tests of the scrollback controls.
+    fn seams(scroll: ScrollIntents) -> Seams {
+        Seams {
+            scroll,
+            input: Box::new(|_| {}),
+        }
+    }
+
+    /// Seams that keep what the terminal said.
+    fn recording() -> (Seams, Rc<RefCell<Vec<TerminalInput>>>) {
+        let said = Rc::new(RefCell::new(Vec::new()));
+        let seen = said.clone();
+        let seams = Seams {
+            scroll: ScrollIntents {
+                to_bottom: Box::new(|| {}),
+                to_offset: Box::new(|_| {}),
+            },
+            input: Box::new(move |i| seen.borrow_mut().push(i)),
+        };
+        (seams, said)
+    }
 
     fn scrolled(offset: usize) -> Viewport {
         Viewport {
@@ -269,6 +338,7 @@ mod tests {
             offset,
             scrollbar: ScrollbarVisibility::WhenNeeded,
             badge: true,
+            cell: (10.0, 20.0),
         }
     }
 
@@ -339,10 +409,10 @@ mod tests {
         let to_bottom = Rc::new(Cell::new(0));
         let t = Terminal::new();
         let seen = to_bottom.clone();
-        t.bind(ScrollIntents {
+        t.bind(seams(ScrollIntents {
             to_bottom: Box::new(move || seen.set(seen.get() + 1)),
             to_offset: Box::new(|_| {}),
-        });
+        }));
         t.show(&scrolled(5));
         let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
         let rect = chip(&painted(root.as_ref())).expect("chip is shown");
@@ -365,10 +435,10 @@ mod tests {
         let asked = Rc::new(RefCell::new(Vec::new()));
         let t = Terminal::new();
         let seen = asked.clone();
-        t.bind(ScrollIntents {
+        t.bind(seams(ScrollIntents {
             to_bottom: Box::new(|| {}),
             to_offset: Box::new(move |rows| seen.borrow_mut().push(rows)),
-        });
+        }));
         t.show(&scrolled(50));
         let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
         // The bar is on the right edge, under the chip; press in its upper half, below the chip.
@@ -416,5 +486,50 @@ mod tests {
             heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), Size::new(300.0, 200.0));
             assert!(chip(&painted(root.as_ref())).is_some());
         }
+    }
+    /// The wheel over a terminal is the terminal's own: it says where in the grid it turned, and
+    /// nothing beneath it is offered the turn.
+    #[test]
+    fn the_wheel_says_which_cell_it_turned_over() {
+        let (seams, said) = recording();
+        let t = Terminal::new();
+        t.bind(seams);
+        t.show(&scrolled(0));
+        t.place(Some(Rectangle::new(
+            heca_grid_ui::Point::new(0.0, 0.0),
+            Size::new(300.0, 200.0),
+        )));
+        let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+        let at = heca_grid_ui::Point::new(45.0, 61.0);
+        let ev = Event::wheel(at, 0.0, 3.0);
+        assert_eq!(heca_grid_ui::dispatch(root.as_mut(), &ev), Handled::Yes);
+        // A trackpad's pixels ride along, so the owner can scroll by its own unit.
+        let mut pad = heca_grid_ui::RawPointer::new(heca_grid_ui::RawPointerKind::Wheel, at);
+        pad.delta_y = 0.7;
+        pad.delta_pixels = Some((0.0, 14.0));
+        assert_eq!(
+            heca_grid_ui::dispatch(root.as_mut(), &Event::Raw(pad)),
+            Handled::Yes
+        );
+        let said = said.borrow();
+        let [
+            TerminalInput::Wheel { x, y, cell, .. },
+            TerminalInput::Wheel { pixels, .. },
+        ] = said.as_slice()
+        else {
+            panic!("two wheel messages, got {said:?}");
+        };
+        assert_eq!(*pixels, Some((0.0, 14.0)));
+        assert_eq!((*x, *y), (0.0, 3.0));
+        let cell = cell.expect("on the grid");
+        assert_eq!((cell.row, cell.col), (3, 4));
+    }
+
+    /// A terminal nobody has bound lets the wheel carry on outward, rather than swallowing it.
+    #[test]
+    fn an_unbound_terminal_leaves_the_wheel_alone() {
+        let mut root = laid_out_in(Box::new(Terminal::new()), 300.0, 200.0);
+        let ev = Event::wheel(heca_grid_ui::Point::new(5.0, 5.0), 0.0, 1.0);
+        assert_eq!(heca_grid_ui::dispatch(root.as_mut(), &ev), Handled::No);
     }
 }

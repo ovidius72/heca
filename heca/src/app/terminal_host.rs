@@ -15,7 +15,8 @@ use heca_grid_ui::reactive::SignalUpdate as _;
 /// Default cell height in logical pixels for PixelDelta → line conversion
 /// fallback when the terminal backend cannot be queried for real cell metrics.
 const DEFAULT_CELL_H: f64 = 14.0;
-use crate::input::WmAction;
+use crate::chrome::terminal::Cell;
+use crate::input::{FontZoomStep, WmAction};
 use heca_core::backend::{
     BackendModifiers, BackendMouseButton, BackendMouseEvent, BackendMouseEventKind, PaneBackend,
     TerminalDamage, TerminalSnapshot,
@@ -262,14 +263,78 @@ pub(crate) fn forward_mouse_button(
     }
 }
 
-pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: MouseScrollDelta) {
+/// **A terminal said something about its input.** The terminal worked out where in its grid the
+/// pointer was; what to *do* about it needs state — the process, the mouse-grab, the settings — so
+/// it is decided here, in one place.
+pub(crate) fn on_terminal_input(
+    state: &mut AppState,
+    registry: &ActionRegistry,
+    pane_id: PaneId,
+    input: crate::chrome::terminal::TerminalInput,
+) {
+    use crate::chrome::terminal::TerminalInput;
+    match input {
+        TerminalInput::Wheel {
+            x,
+            y,
+            pixels,
+            cell,
+            modifiers,
+        } => on_wheel(state, registry, pane_id, ((x, y), pixels), cell, modifiers),
+    }
+}
+
+/// **The wheel as the device reported it**, which is what the scrollback policy is written in: a
+/// device that counts pixels (a trackpad) is scrolled by the cell height, one that counts notches by
+/// notches. The grid's deltas run the other way round from the device's, so both are negated back.
+fn device_delta((x, y): (f32, f32), pixels: Option<(f32, f32)>) -> MouseScrollDelta {
+    match pixels {
+        Some((px, py)) => MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(
+            -(px as f64),
+            -(py as f64),
+        )),
+        None => MouseScrollDelta::LineDelta(-x, -y),
+    }
+}
+
+fn on_wheel(
+    state: &mut AppState,
+    registry: &ActionRegistry,
+    pane_id: PaneId,
+    ((x, y), pixels): ((f32, f32), Option<(f32, f32)>),
+    cell: Option<Cell>,
+    modifiers: heca_grid_ui::Modifiers,
+) {
+    // **Ctrl/Meta+wheel is a font-zoom gesture**, resolved by the terminal it turned over. It is
+    // consumed whatever the direction, so a modified wheel never reaches the program as a scroll.
+    if state.mouse_wheel_change_font_size && (modifiers.ctrl || modifiers.meta) {
+        if y != 0.0 {
+            let step = if y < 0.0 {
+                FontZoomStep::In
+            } else {
+                FontZoomStep::Out
+            };
+            dispatch_action(
+                state,
+                registry,
+                InteractionSource::MouseContent,
+                &WmAction::PaneTerminalFontZoom {
+                    pane_id: Some(pane_id),
+                    step,
+                },
+            );
+        }
+        return;
+    }
     if state.mouse.interactive_move.is_some() || crate::chrome::drag_in_flight(state) {
         return;
     }
-
-    let Some(target) = terminal_target_at_position(state, pos) else {
-        return;
-    };
+    // The grid's lines run the other way round from the device's: positive `y` is content moving
+    // down, which is the wheel turned toward you.
+    //
+    // A device that counts pixels (a trackpad) is scrolled by the cell height, as it always was;
+    // one that counts notches, by notches.
+    let delta = device_delta((x, y), pixels);
 
     // ── Host scrollback routing ──
     //
@@ -285,16 +350,16 @@ pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: 
     // The wheel only scrolls: it never switches to selection mode (Antonio, 2026-09-29 — a user who
     // drives heca without the prefix would be left in a mode they never asked for). Typing snaps
     // the view back to the bottom; selection mode is entered with `enter_selection_mode`.
-    let shift_held = state.modifiers.shift_key();
+    let shift_held = modifiers.shift;
     let wants_mouse = state
         .backends
-        .get(target.pane_id)
+        .get(pane_id)
         .is_some_and(|b| b.is_mouse_grabbed());
     let do_host_scroll = shift_held || (state.terminal_mouse_enabled && !wants_mouse);
 
     if !do_host_scroll {
         // Forward wheel to the terminal backend.
-        forward_wheel_to_terminal(state, target, pos, delta);
+        forward_wheel_to_terminal(state, pane_id, cell, modifiers, delta);
         return;
     }
 
@@ -309,7 +374,7 @@ pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: 
     // alt-screen TUIs is an inherent limitation (see README).
     let host_can_scroll = state
         .backends
-        .get(target.pane_id)
+        .get(pane_id)
         .and_then(|b| b.terminal_snapshot())
         .is_some_and(|s| s.scrollback_rows > s.rows);
     if !host_can_scroll {
@@ -319,7 +384,7 @@ pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: 
             // history).
             return;
         }
-        forward_wheel_to_terminal(state, target, pos, delta);
+        forward_wheel_to_terminal(state, pane_id, cell, modifiers, delta);
         return;
     }
 
@@ -333,7 +398,7 @@ pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: 
         delta,
         state
             .backends
-            .get(target.pane_id)
+            .get(pane_id)
             .map(|b| b.cell_size().1 as f64)
             .unwrap_or(DEFAULT_CELL_H),
     );
@@ -347,7 +412,7 @@ pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: 
         -(total as i32)
     };
 
-    if let Some(backend) = state.backends.get_mut(target.pane_id) {
+    if let Some(backend) = state.backends.get_mut(pane_id) {
         backend.scroll_viewport(delta_i32);
     }
     state.needs_redraw = true;
@@ -602,27 +667,43 @@ fn build_mouse_event(
         .get(target.pane_id)
         .map(|backend| backend.cell_size())
         .unwrap_or(state.terminal_cell_size);
-    let (row, col) = cell_coords_in_rect(pos, target.content_rect, cell_w as f64, cell_h as f64)?;
+    let cell = Cell::at(
+        (pos.0 as f64, pos.1 as f64),
+        target.content_rect,
+        cell_w as f64,
+        cell_h as f64,
+    )?;
+    let modifiers = heca_grid_ui::Modifiers {
+        ctrl: state.modifiers.control_key(),
+        alt: state.modifiers.alt_key(),
+        shift: state.modifiers.shift_key(),
+        meta: state.modifiers.super_key(),
+    };
+    Some(backend_mouse_event(kind, button, cell, modifiers))
+}
 
-    let local_x = pos.0 as f64 - target.content_rect.loc.x;
-    let local_y = pos.1 as f64 - target.content_rect.loc.y;
-    let x_pixel_offset = (local_x - (col as f64 * cell_w as f64)).round() as isize;
-    let y_pixel_offset = (local_y - (row as f64 * cell_h as f64)).round() as isize;
-
-    Some(BackendMouseEvent {
+/// **The backend's mouse event for a pointer at `cell`.** Everything it needs is in the arguments:
+/// the terminal worked out the cell, and the modifiers rode in with the event.
+fn backend_mouse_event(
+    kind: BackendMouseEventKind,
+    button: BackendMouseButton,
+    cell: Cell,
+    modifiers: heca_grid_ui::Modifiers,
+) -> BackendMouseEvent {
+    BackendMouseEvent {
         kind,
-        col,
-        row,
-        x_pixel_offset,
-        y_pixel_offset,
+        col: cell.col,
+        row: cell.row,
+        x_pixel_offset: cell.x_offset,
+        y_pixel_offset: cell.y_offset,
         button,
         modifiers: BackendModifiers {
-            ctrl: state.modifiers.control_key(),
-            shift: state.modifiers.shift_key(),
-            alt: state.modifiers.alt_key(),
-            super_: state.modifiers.super_key(),
+            ctrl: modifiers.ctrl,
+            shift: modifiers.shift,
+            alt: modifiers.alt,
+            super_: modifiers.meta,
         },
-    })
+    }
 }
 
 fn begin_terminal_selection_at(
@@ -687,21 +768,7 @@ fn cell_coords_in_rect(
     cell_w: f64,
     cell_h: f64,
 ) -> Option<(usize, usize)> {
-    let local_x = pos.0 as f64 - content_rect.loc.x;
-    let local_y = pos.1 as f64 - content_rect.loc.y;
-    if local_x < 0.0
-        || local_y < 0.0
-        || local_x >= content_rect.size.w
-        || local_y >= content_rect.size.h
-    {
-        return None;
-    }
-    if cell_w <= 0.0 || cell_h <= 0.0 {
-        return None;
-    }
-    let col = (local_x / cell_w).floor().max(0.0) as usize;
-    let row = (local_y / cell_h).floor().max(0.0) as usize;
-    Some((row, col))
+    Cell::at((pos.0 as f64, pos.1 as f64), content_rect, cell_w, cell_h).map(|c| (c.row, c.col))
 }
 
 /// Convert a pointer position to terminal cell coordinates for a given pane.
@@ -1004,17 +1071,17 @@ fn wheel_buttons(delta: MouseScrollDelta) -> Vec<BackendMouseButton> {
 /// `terminal-task-01h`).
 fn forward_wheel_to_terminal(
     state: &mut AppState,
-    target: TerminalInputTarget,
-    pos: (f32, f32),
+    pane_id: PaneId,
+    cell: Option<Cell>,
+    modifiers: heca_grid_ui::Modifiers,
     delta: MouseScrollDelta,
 ) {
+    let Some(cell) = cell else {
+        return;
+    };
     for button in wheel_buttons(delta) {
-        let Some(event) =
-            build_mouse_event(state, target, pos, BackendMouseEventKind::Press, button)
-        else {
-            continue;
-        };
-        if let Some(backend) = state.backends.get_mut(target.pane_id) {
+        let event = backend_mouse_event(BackendMouseEventKind::Press, button, cell, modifiers);
+        if let Some(backend) = state.backends.get_mut(pane_id) {
             let _ = backend.process_mouse_event(&event);
         }
     }
@@ -1164,8 +1231,9 @@ fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle>
 
 #[cfg(test)]
 mod tests {
-    use super::hyperlink_at_cell;
+    use super::{device_delta, host_scroll_notches, hyperlink_at_cell};
     use heca_core::backend::HyperlinkSpan;
+    use winit::event::MouseScrollDelta;
 
     fn span(row: usize, start_col: usize, end_col: usize, uri: &str) -> HyperlinkSpan {
         HyperlinkSpan {
@@ -1214,5 +1282,23 @@ mod tests {
     #[test]
     fn hit_test_empty_list_is_none() {
         assert_eq!(hyperlink_at_cell(&[], 0, 0), None);
+    }
+
+    #[test]
+    fn a_trackpad_keeps_its_pixels_and_a_wheel_its_notches() {
+        // Content moving down (+y) is the device turned toward you (-y).
+        assert!(matches!(
+            device_delta((0.0, 3.0), None),
+            MouseScrollDelta::LineDelta(_, y) if y == -3.0
+        ));
+        assert!(matches!(
+            device_delta((0.0, 0.7), Some((0.0, 14.0))),
+            MouseScrollDelta::PixelDelta(p) if p.y == -14.0
+        ));
+        // And the pixels, not the lines, decide the unit: 14 px is one 14-px cell.
+        assert_eq!(
+            host_scroll_notches(device_delta((0.0, 0.7), Some((0.0, 14.0))), 14.0),
+            -1.0
+        );
     }
 }

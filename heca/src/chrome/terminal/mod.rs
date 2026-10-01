@@ -8,12 +8,14 @@
 //! everything below it takes plain data and is testable headless.
 
 mod component;
+mod input;
 mod model;
 #[cfg(test)]
 pub(crate) mod testing;
 mod viewport;
 
 pub(crate) use component::Terminal;
+pub(crate) use input::{Cell, TerminalInput};
 pub(crate) use model::TerminalId;
 pub(crate) use viewport::Viewport;
 
@@ -33,10 +35,26 @@ pub(crate) fn view_of(state: &mut AppState, pane_id: PaneId) -> Terminal {
         .or_insert_with(|| {
             let terminal = Terminal::new();
             terminal.attach(TerminalId(pane_id.0));
-            terminal.bind(scroll_intents(proxy, pane_id));
+            terminal.bind(seams(proxy, pane_id));
             terminal
         })
         .clone()
+}
+
+/// **Everything a pane's terminal says to its owner**: what its scrollback controls mean, and where
+/// its input goes — to the one host handler that holds the policy needing state.
+fn seams(
+    proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+    pane_id: PaneId,
+) -> input::Seams {
+    let input_proxy = proxy.clone();
+    input::Seams {
+        scroll: scroll_intents(proxy, pane_id),
+        input: Box::new(move |input| {
+            let _ = input_proxy
+                .send_event(crate::app::events::AppEvent::TerminalInput { pane_id, input });
+        }),
+    }
 }
 
 /// **What a click on a pane's scrollback controls means**: focus the pane, then scroll it. The
@@ -137,6 +155,7 @@ pub(crate) fn show_viewports<'a>(
             offset: snapshot.viewport_offset,
             scrollbar: appearance.show_scrollbar,
             badge: appearance.show_scrolled_up_badge,
+            cell: (snapshot.cell_w, snapshot.cell_h),
         });
     }
     changed
