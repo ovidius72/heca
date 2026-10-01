@@ -3,9 +3,11 @@
 //!
 //! A project's `.heca/config.toml` is ignored until trusted (`heca_config::trust`). Printing that to
 //! the terminal reaches nobody who launched heca from the Dock, so the app raises a **notification**
-//! with a *Trust* action, once per folder and file content (`announced`): a changed file is a new
-//! content, so it is asked about again. The action is the registered `trust_project`, so it is also in
-//! the palette and reachable from RPC, like any other.
+//! with a *Trust* action, **every time heca starts or reloads while the file is untrusted**. A file
+//! being ignored must always be visible, so nothing about the notice is remembered between runs; the
+//! notification's own dedup key only stops the same notice stacking up while it is still on screen.
+//! The action is the registered `trust_project`, so it is also in the palette and reachable from RPC,
+//! like any other.
 
 use std::rc::Rc;
 
@@ -26,19 +28,25 @@ const FOLDER_ARG: &str = "folder";
 /// palette, the command line) means "as it is now", which is fine: the person is acting right then.
 const HASH_ARG: &str = "hash";
 
-/// Raise one notification if the project file here is untrusted or has changed since it was.
-/// Called at startup and on every reload; says each (folder, content) once ever.
+/// Raise the notification if the project file here is untrusted. Called at startup and on every
+/// reload, so an ignored file is announced every time, not once ever.
 pub(crate) fn notify_if_untrusted() {
     let Ok(Some(project)) = heca_config::loader::read_project() else {
         return;
     };
+    if let Some(notice) = notice_for(&project) {
+        notice.send();
+    }
+}
+
+/// The notice for `project`: `None` when the file is trusted, otherwise the same warning every time
+/// it is asked — it consults no memory of earlier runs. Its dedup key (folder + content) keeps one
+/// live copy on screen; it is not a record of having told the user.
+fn notice_for(project: &heca_config::loader::ProjectFile) -> Option<Notification> {
     if project.trusted {
-        return;
+        return None;
     }
     let key = format!("project_trust:{}:{}", project.dir.display(), project.hash);
-    if !crate::announced::first_time(&key) {
-        return;
-    }
     let mut trust = Intent::new(TRUST_PROJECT);
     trust.args.insert(
         FOLDER_ARG.to_string(),
@@ -48,16 +56,17 @@ pub(crate) fn notify_if_untrusted() {
         HASH_ARG.to_string(),
         heca_view::PropValue::Text(project.hash.clone()),
     );
-    Notification::warning("Project settings not trusted")
-        .body(format!(
-            "{} is ignored until you trust it. A project file can bind keys to commands, so check \
-             it first.",
-            project.path.display()
-        ))
-        .dedup_key(key)
-        .action(NotificationAction::new("Trust", trust).dismiss_after(true))
-        .sticky()
-        .send();
+    Some(
+        Notification::warning("Project settings not trusted")
+            .body(format!(
+                "{} is ignored until you trust it. A project file can bind keys to commands, so \
+                 check it first.",
+                project.path.display()
+            ))
+            .dedup_key(key)
+            .action(NotificationAction::new("Trust", trust).dismiss_after(true))
+            .sticky(),
+    )
 }
 
 /// Register the `trust_project` action: trust the project file, then reload so it applies.
@@ -165,6 +174,30 @@ fn trust_confirm() -> crate::actions::ConfirmSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A real project file on disk, read the way startup reads it, with the trust question answered
+    /// by `trusted` — so no test touches the user's real trust list.
+    fn project(trusted: bool) -> heca_config::loader::ProjectFile {
+        let dir = std::env::temp_dir().join(format!("heca-trust-notice-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".heca")).expect("temp project");
+        std::fs::write(dir.join(".heca/config.toml"), "theme = \"mocha\"\n").expect("write");
+        heca_config::loader::read_project_with(&dir, |_, _| trusted)
+            .expect("reads")
+            .expect("finds the file")
+    }
+
+    /// **An ignored file is always announced.** The same untrusted content is announced every time
+    /// it is asked about — as it is on every start and reload — and nothing remembers having told
+    /// the user (it was once kept forever, so content seen earlier was ignored in silence). A
+    /// trusted file says nothing.
+    #[test]
+    fn an_untrusted_file_is_announced_every_time_and_a_trusted_one_never() {
+        let file = project(false);
+        for run in 1..=3 {
+            assert!(notice_for(&file).is_some(), "start/reload number {run}");
+        }
+        assert!(notice_for(&project(true)).is_none());
+    }
 
     /// **`trust_project` is a registered action**, so it is in the palette and reachable from RPC,
     /// takes an optional `folder`, and is allowed whatever owns the screen (a notification's button
