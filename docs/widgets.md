@@ -2278,6 +2278,12 @@ content shifted past the edge with no scrollbar to bring it back.
   `.scroll_to_child(index)` is the convenience for a flat list of direct children.
   The widget recovers natural positions via its baked shift, so the host never
   tracks the offset or does offset math. (Vertical axis.)
+- **Ctrl/Cmd + wheel is a zoom, not a scroll.** The region declines it and it carries on outward,
+  so the gesture means the same over a list as over a terminal (the browser's rule).
+- **A wheel carries its device's unit.** `PointerEvent::delta_pixels` is `Some` when the device
+  counts pixels (a trackpad) and `None` for a notched wheel — the DOM's `deltaMode`. The line deltas
+  are always filled in; read the pixels only if you scroll by a unit of your own (a terminal, by its
+  cell height).
 - **Wheel** (built-in): plain wheel scrolls **vertically**, **`Shift`+wheel
   horizontally**, and a trackpad's 2-D delta drives both — the host maps
   modifiers→axis (`Event::Scroll` carries `delta_x`/`delta_y`). ~10% of the

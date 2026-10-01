@@ -8,12 +8,16 @@
 //! everything below it takes plain data and is testable headless.
 
 mod component;
+mod input;
 mod model;
 #[cfg(test)]
 pub(crate) mod testing;
+mod viewport;
 
 pub(crate) use component::Terminal;
+pub(crate) use input::{Cell, TerminalInput};
 pub(crate) use model::TerminalId;
+pub(crate) use viewport::Viewport;
 
 use heca_core::layout::PaneId;
 
@@ -24,15 +28,62 @@ use crate::app_state::AppState;
 ///
 /// A pane's terminal takes its identity from the pane.
 pub(crate) fn view_of(state: &mut AppState, pane_id: PaneId) -> Terminal {
+    let proxy = state.event_proxy.clone();
     state
         .terminals
         .entry(pane_id)
         .or_insert_with(|| {
             let terminal = Terminal::new();
             terminal.attach(TerminalId(pane_id.0));
+            terminal.bind(seams(proxy, pane_id));
             terminal
         })
         .clone()
+}
+
+/// **Everything a pane's terminal says to its owner**: what its scrollback controls mean, and where
+/// its input goes — to the one host handler that holds the policy needing state.
+fn seams(
+    proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+    pane_id: PaneId,
+) -> input::Seams {
+    let input_proxy = proxy.clone();
+    input::Seams {
+        scroll: scroll_intents(proxy, pane_id),
+        input: Box::new(move |input| {
+            let _ = input_proxy
+                .send_event(crate::app::events::AppEvent::TerminalInput { pane_id, input });
+        }),
+    }
+}
+
+/// **What a click on a pane's scrollback controls means**: focus the pane, then scroll it. The
+/// same two actions the keyboard and RPC reach, sent the way every click on the chrome is.
+fn scroll_intents(
+    proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+    pane_id: PaneId,
+) -> viewport::ScrollIntents {
+    use crate::app::events::AppEvent;
+    use crate::app::interaction::{InteractionIntent, InteractionSource};
+    use crate::input::WmAction;
+    let send = move |action: WmAction| {
+        let _ = proxy.send_event(AppEvent::ChromeIntent {
+            source: InteractionSource::MouseContent,
+            intent: InteractionIntent::FocusPane { pane_id },
+        });
+        let _ = proxy.send_event(AppEvent::ChromeIntent {
+            source: InteractionSource::MouseContent,
+            intent: InteractionIntent::ActivateAction(action),
+        });
+    };
+    let to_offset = send.clone();
+    viewport::ScrollIntents {
+        to_bottom: Box::new({
+            let send = send.clone();
+            move || send(WmAction::ScrollToBottom)
+        }),
+        to_offset: Box::new(move |rows| to_offset(WmAction::ScrollToOffset { rows })),
+    }
 }
 
 /// Forget the terminals of panes that are no longer shown.
@@ -83,4 +134,29 @@ pub(crate) fn content_box(
         Some(heca_core::layout::Rectangle::new(origin, room)),
         placed.is_some(),
     )
+}
+
+/// **Show each terminal how its viewport looks**, from the snapshots this frame prepared. Returns
+/// whether any chip or scrollbar changed, so the caller can ask for a frame — they were painted
+/// before the snapshot was read, so a change shows one frame late unless one is asked for.
+pub(crate) fn show_viewports<'a>(
+    state: &AppState,
+    snapshots: impl Iterator<Item = (PaneId, &'a heca_core::backend::TerminalSnapshot)>,
+) -> bool {
+    let appearance = &state.appearance.terminal;
+    let mut changed = false;
+    for (pane_id, snapshot) in snapshots {
+        let Some(terminal) = state.terminals.get(&pane_id) else {
+            continue;
+        };
+        changed |= terminal.show(&Viewport {
+            rows: snapshot.rows,
+            scrollback_rows: snapshot.scrollback_rows,
+            offset: snapshot.viewport_offset,
+            scrollbar: appearance.show_scrollbar,
+            badge: appearance.show_scrolled_up_badge,
+            cell: (snapshot.cell_w, snapshot.cell_h),
+        });
+    }
+    changed
 }

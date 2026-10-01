@@ -507,6 +507,11 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 state.mark_full_redraw();
                 state.window.request_redraw();
             }
+            AppEvent::TerminalInput { pane_id, input } => {
+                crate::app::terminal_host::on_terminal_input(state, &self.registry, pane_id, input);
+                state.mark_full_redraw();
+                state.window.request_redraw();
+            }
             AppEvent::RaiseNotification { draft } => {
                 // `notification::raise` is the host's clock, on the event loop's own turn, never
                 // the caller's (F009/T493) — shared with the name-keyed `notify` action.

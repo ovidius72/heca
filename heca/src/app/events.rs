@@ -9,9 +9,7 @@ use crate::app::interaction::{InteractionIntent, InteractionSource, dispatch_act
 use crate::app::keyboard::{build_event_combo, is_prefix_match};
 use crate::app::mutations::{MutationKind, after_mutation_change};
 use crate::app::render::{render_frame, update_session_viewport};
-use crate::app::terminal_host::{
-    forward_mouse_button, forward_mouse_move, forward_mouse_wheel, notify_window_focus_changed,
-};
+use crate::app::terminal_host::notify_window_focus_changed;
 use crate::app::terminal_metrics::refresh_terminal_cell_size;
 use crate::app_state::AppState;
 use crate::input::{FontZoomStep, WmAction};
@@ -35,6 +33,14 @@ pub enum AppEvent {
     /// and calling the crate-private `NotificationRuntime::push`.
     RaiseNotification {
         draft: crate::notification::NotificationDraft,
+    },
+    /// **A terminal said something about its input** — where the pointer was in its grid, what it
+    /// did. Sent by the terminal through the seam its owner gave it, and answered by the one handler
+    /// that holds the policy needing state (`terminal_host::on_terminal_input`). Not an action: a
+    /// wheel turn is not something a user means to do.
+    TerminalInput {
+        pane_id: heca_core::layout::PaneId,
+        input: crate::chrome::terminal::TerminalInput,
     },
 }
 
@@ -268,20 +274,11 @@ pub(crate) fn handle_window_event(
             // The pane header and the pane viewport are their OWN retained trees, which a drag in
             // the window root does not reach — so they are still told to stay dark while something
             // is being carried, which is what keeps "nothing hovers under a drag" true for them.
-            let mut pane_viewport_over = false;
             if !crate::chrome::drag_in_flight(state) && !mouse::is_resizing(state) {
-                // Feed the move into the retained pane-info-bar headers so the action
-                // buttons' hover affordance lights up (repaint via mark_full_redraw below).
+                // Feed the move into the panes, so a header button's hover lights up and a
+                // terminal hears where the pointer is (it says so itself, and only for a move
+                // that landed on it, not on its chip or scrollbar).
                 crate::chrome::deliver_to_panes(state, &moved);
-                // Over one, or holding one: a thumb grabbed here keeps the pointer even when the
-                // cursor has left its bounds, and the terminal must not see the move either way.
-                pane_viewport_over = crate::chrome::deliver_to_pane_viewports(state, &moved)
-                    || crate::chrome::pane_viewport_at(state, pos);
-            }
-            // Don't forward moves to the terminal while resizing a divider or while a
-            // retained viewport widget (badge / scrollbar) owns the pointer.
-            if !mouse::is_resizing(state) && !pane_viewport_over {
-                forward_mouse_move(state, pos);
             }
             // Cursor affordance: Grab over a draggable, Grabbing while dragging.
             mouse::update_cursor(state, pos);
@@ -338,17 +335,6 @@ pub(crate) fn handle_window_event(
                 state.mark_full_redraw();
                 return;
             }
-            // Terminal viewport widgets (scrollbar / badge) intercept a plain
-            // left-press before divider resize/content forwarding.
-            if button == winit::event::MouseButton::Left
-                && button_state == ElementState::Pressed
-                && !mouse::interactive_move_modifier_held(state)
-                && crate::chrome::deliver_to_pane_viewports(state, &ev)
-            {
-                mouse::update_cursor(state, state.mouse.pos);
-                state.mark_full_redraw();
-                return;
-            }
             // Divider resize: a plain left-press on a column/pane divider starts a
             // resize-drag. Only an actual divider hit consumes — a miss falls
             // through to the normal content/drag paths. A modifier-held press
@@ -364,7 +350,7 @@ pub(crate) fn handle_window_event(
                 return;
             }
             // Read before the release block below ends any resize drag, so a release that ended
-            // one still counts as consumed and is not also forwarded to the terminal.
+            // one is not also taken for the end of a selection.
             let resize_before = mouse::is_resizing(state);
             if button == winit::event::MouseButton::Left && button_state == ElementState::Released {
                 // **The divider resize ends here, at the same level its press started it.** It used
@@ -382,28 +368,22 @@ pub(crate) fn handle_window_event(
                 // chrome tree is unconditional: it consumes nothing it did not start, and gating a
                 // release on position is precisely how a thumb ends up welded to the cursor.
                 crate::chrome::deliver(state, &ev);
-                crate::chrome::deliver_to_panes(state, &ev);
-                if crate::chrome::deliver_to_pane_viewports(state, &ev) {
+                if crate::chrome::deliver_to_panes(state, &ev) {
                     mouse::update_cursor(state, state.mouse.pos);
                     state.mark_full_redraw();
                     return;
                 }
             }
-            let interactive_before = state.mouse.interactive_move.is_some();
             if let Some((action, source)) = mouse::on_mouse_input(state, &ev) {
                 dispatch_action(state, registry, source, &action);
             }
-            let started_interactive_move =
-                !interactive_before && state.mouse.interactive_move.is_some();
-            // A button event that started, drove, or ended a divider resize (e.g.
-            // the right-button fallback press, or a release) must not also reach the
-            // terminal — the gesture consumed it.
-            let resize_consumed = resize_before || mouse::is_resizing(state);
-            // A right-press that just opened the context menu (now a host-owned overlay layer)
-            // must not also forward to the terminal (it would deliver a stray right-click to the TUI).
-            let opened_context_menu = crate::chrome::top_modal(state).is_some();
-            if !started_interactive_move && !resize_consumed && !opened_context_menu {
-                forward_mouse_button(state, state.mouse.pos, button, button_state, registry);
+            // A host selection drag ends where the button does, wherever the pointer is. (A release
+            // that ended a divider resize was that gesture's, and is not this one's.)
+            if button == winit::event::MouseButton::Left
+                && button_state == ElementState::Released
+                && !resize_before
+            {
+                crate::app::terminal_host::on_left_release(state, registry);
             }
             // Snap the cursor on press/release (drag start → Grabbing, drop → Grab/Default)
             // without waiting for the next move.
@@ -411,30 +391,23 @@ pub(crate) fn handle_window_event(
             state.mark_full_redraw();
         }
         WindowEvent::MouseWheel { delta, .. } => {
-            // Ctrl/Meta+wheel is a font-zoom gesture, resolved by what's under the
-            // pointer. It is intercepted at the WM level BEFORE terminal wheel
-            // forwarding so the modified wheel never reaches the TUI as a scroll.
-            if handle_wheel_font_zoom(state, registry, state.mouse.pos, delta) {
-                state.mark_full_redraw();
-                return;
-            }
             // An open modal owns the wheel: its body may be a scroll region, and the page
-            // behind must stay still either way. This branch did not exist, so a described
-            // scroll area inside a modal could not be scrolled at all.
+            // behind must stay still either way.
             let wheel = wheel_event(state, delta);
             if crate::chrome::dispatch_surface_pointer(state, &wheel) {
                 return;
             }
-            // The retained chrome tree next: a hovered scroll region in the sidebar takes it, and
-            // the terminal must not also scroll. A region gates on its own hover, so this is a
-            // no-op whenever the pointer is over a pane.
+            // The trees next. A hovered scroll region in the sidebar takes it; over a terminal, the
+            // terminal does — it reads the wheel itself and says what it meant (zoom, scrollback,
+            // or the program's own) to the one handler that knows the policy.
             if crate::chrome::deliver(state, &wheel)
                 || crate::chrome::deliver_to_panes(state, &wheel)
             {
                 state.mark_full_redraw();
                 return;
             }
-            forward_mouse_wheel(state, state.mouse.pos, delta);
+            // Nothing took it. Ctrl/Meta+wheel off any terminal still zooms the whole app.
+            handle_wheel_font_zoom(state, registry, delta);
             state.mark_full_redraw();
         }
         _ => {}
@@ -475,10 +448,14 @@ fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
         MouseScrollDelta::LineDelta(x, y) => (-x, -y),
         MouseScrollDelta::PixelDelta(p) => (-(p.x as f32) / 20.0, -(p.y as f32) / 20.0),
     };
-    let (delta_x, delta_y) = if state.modifiers.shift_key() && dx_raw == 0.0 {
-        (dy_raw, 0.0)
-    } else {
-        (dx_raw, dy_raw)
+    // Shift+wheel is the horizontal axis.
+    let on_x = state.modifiers.shift_key() && dx_raw == 0.0;
+    let remap = |x: f32, y: f32| if on_x { (y, 0.0) } else { (x, y) };
+    let (delta_x, delta_y) = remap(dx_raw, dy_raw);
+    // A device that counts pixels says so, in the same convention as the lines.
+    let delta_pixels = match delta {
+        MouseScrollDelta::PixelDelta(p) => Some(remap(-(p.x as f32), -(p.y as f32))),
+        MouseScrollDelta::LineDelta(..) => None,
     };
     // No modifiers attached: the framework fills in what is held down, from the
     // `ModifiersChanged` this same loop broadcasts. Attaching them here is the second source of
@@ -489,6 +466,7 @@ fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
     );
     raw.delta_x = delta_x;
     raw.delta_y = delta_y;
+    raw.delta_pixels = delta_pixels;
     Event::Raw(raw)
 }
 
@@ -544,41 +522,33 @@ fn grid_button(button: winit::event::MouseButton) -> PointerButton {
 fn handle_wheel_font_zoom(
     state: &mut AppState,
     registry: &ActionRegistry,
-    pos: (f32, f32),
     delta: MouseScrollDelta,
-) -> bool {
+) {
     if !state.mouse_wheel_change_font_size {
-        return false;
+        return;
     }
     let mods = state.modifiers;
     if !(mods.control_key() || mods.super_key()) {
-        return false;
+        return;
     }
-
-    // Consume the gesture regardless of direction so a modified wheel never leaks
-    // to the TUI; only dispatch when there is a usable vertical direction.
     let vertical = match delta {
         MouseScrollDelta::LineDelta(_, y) => y,
         MouseScrollDelta::PixelDelta(p) => p.y as f32,
     };
     if vertical == 0.0 {
-        return true;
+        return;
     }
     let step = if vertical > 0.0 {
         FontZoomStep::In
     } else {
         FontZoomStep::Out
     };
-
-    let action = match mouse::hit_test_pane(state, pos) {
-        Some(pane_id) => WmAction::PaneTerminalFontZoom {
-            pane_id: Some(pane_id),
-            step,
-        },
-        None => WmAction::AppFontZoom { step },
-    };
-    dispatch_action(state, registry, InteractionSource::MouseContent, &action);
-    true
+    dispatch_action(
+        state,
+        registry,
+        InteractionSource::MouseContent,
+        &WmAction::AppFontZoom { step },
+    );
 }
 
 /// The grid-ui [`Modifiers`](heca_grid_ui::Modifiers) mirror of the current winit modifier state

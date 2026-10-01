@@ -1402,6 +1402,12 @@ impl Component for ScrollRegion {
         let vp = self.base.bounds;
         match ev {
             Event::Scroll(p) => {
+                // **Ctrl or Cmd with the wheel is a zoom, not a scroll** — the browser's rule, and
+                // the reason the gesture means the same over a list as over a terminal. The region
+                // lets it carry on outward, to whatever zooms.
+                if p.modifiers.ctrl || p.modifiers.meta {
+                    return Handled::No;
+                }
                 // **The wheel carries a position now**, and the router only delivers it to what is
                 // under the cursor — so being here *is* the hover test this arm used to do by
                 // hand against a flag it maintained from moves. What is left is the honest
@@ -2085,6 +2091,38 @@ mod tests {
         // A follow-up sync_shift is a no-op (already in sync) — no double shift.
         r.sync_shift();
         assert!((r.base.children[0].base().bounds.loc.y - (-20.0)).abs() < f64::EPSILON);
+    }
+
+    /// **Ctrl or Cmd with the wheel is a zoom, not a scroll.** The region lets it carry on outward
+    /// to whatever zooms, and still scrolls for the plain wheel.
+    #[test]
+    fn a_zoom_wheel_is_not_a_scroll() {
+        let scroll = |modifiers: crate::event::Modifiers| {
+            let mut r = region_with_children(&[60.0, 60.0]);
+            let ev = Event::Scroll(crate::event::PointerEvent {
+                delta_y: 3.0,
+                modifiers,
+                ..crate::event::PointerEvent::at(Point::new(10.0, 10.0))
+            });
+            (r.on_event(&ev), r.scroll_offset.get_untracked())
+        };
+        let (plain, moved) = scroll(Default::default());
+        assert_eq!(plain, Handled::Yes);
+        assert!(moved > 0.0);
+        for held in [
+            crate::event::Modifiers {
+                ctrl: true,
+                ..Default::default()
+            },
+            crate::event::Modifiers {
+                meta: true,
+                ..Default::default()
+            },
+        ] {
+            let (handled, offset) = scroll(held);
+            assert_eq!(handled, Handled::No, "{held:?}");
+            assert_eq!(offset, 0.0, "{held:?}");
+        }
     }
 
     #[test]

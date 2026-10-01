@@ -11,10 +11,7 @@ use heca_config::theme::Color;
 use heca_core::backend::{TerminalDamage, TerminalRowRange, TerminalSnapshot};
 use heca_core::layout::{PaneId, Point, Rectangle, Size};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::{
-    Color as GuiColor, Component, PaintCx, Point as GuiPoint, Rectangle as GuiRectangle,
-    Scene as GuiScene, Size as GuiSize,
-};
+use heca_grid_ui::{Color as GuiColor, PaintCx, Scene as GuiScene};
 use heca_renderer::image::ImageLayer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::terminal::{
@@ -594,15 +591,6 @@ fn terminal_damage_copy_bands(
     }
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct TerminalPaneShell {
-    pub(crate) pane_id: PaneId,
-    pub(crate) x: f32,
-    pub(crate) y: f32,
-    pub(crate) w: f32,
-    pub(crate) h: f32,
-}
-
 // The pane's frame colour is **not** carried here any more. The retained shell holds it — as its
 // border, its glow, and the hue it publishes to everything it contains — so passing it to the
 // paint call was handing over a fact the widget already owned.
@@ -657,34 +645,6 @@ pub(crate) fn paint_pane_frame(state: &AppState, scene: &mut GuiScene, pane_id: 
     if let Some(retained) = state.panes.get(&pane_id) {
         let mut cx = PaintCx::new(scene, &theme);
         heca_grid_ui::paint_child(&retained.root, &mut cx);
-    }
-}
-
-/// A pane's "N lines above" chip and scrollbar, painted over its frame and clipped to it. They
-/// scroll the terminal's scrollback.
-pub(crate) fn paint_pane_viewport(
-    state: &AppState,
-    scene: &mut GuiScene,
-    shell: TerminalPaneShell,
-) {
-    let TerminalPaneShell {
-        pane_id,
-        x,
-        y,
-        w,
-        h,
-    } = shell;
-    let bar_theme = crate::chrome::chrome_gui_theme(state);
-    if let Some(viewport) = state.pane_viewport_widgets.get(&pane_id) {
-        let clip = GuiRectangle::new(
-            GuiPoint::new(x as f64, y as f64),
-            GuiSize::new(w as f64, h as f64),
-        );
-        let mut cx = PaintCx::new(scene, &bar_theme);
-        cx.with_clip(clip, |cx| {
-            viewport.badge.paint(cx);
-            viewport.scrollbar.paint(cx);
-        });
     }
 }
 

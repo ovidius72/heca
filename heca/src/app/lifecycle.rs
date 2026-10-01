@@ -189,10 +189,6 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     for root in crate::chrome::pane_roots_mut(state) {
         chrome_animating |= root.tick(dt);
     }
-    for widgets in state.pane_viewport_widgets.values_mut() {
-        chrome_animating |= widgets.badge.tick(dt);
-        chrome_animating |= widgets.scrollbar.tick(dt);
-    }
     // Every surface — an overlay dialog, a plugin panel, the exposé — advanced in the walk above,
     // because it is a child of that tree. All that is left is to **retire the ones whose exit just
     // finished**, which is the registry's bookkeeping and not an animation pass: a surface that was

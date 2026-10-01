@@ -42,7 +42,8 @@
     "791ea225-2796-42ae-a534-5235203a9f50",
     "d89b63d6-04f2-42f2-9acc-b947eed95306",
     "9a43878a-20c7-4ed6-9728-439ea5ea7896",
-    "54359125-a657-4e6f-b7b5-362d9211f544"
+    "54359125-a657-4e6f-b7b5-362d9211f544",
+    "d837176a-fec0-47f0-9e82-cd6d3399cee6"
   ],
   "tasks": [
     {
@@ -1009,10 +1010,68 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "d837176a-fec0-47f0-9e82-cd6d3399cee6",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 534,
+      "shortId": "Z7DN5",
+      "priority": 21,
+      "shortName": "pointer-capture-survives-the-p",
+      "title": "Pointer capture survives the pointer leaving the window — or the holder is told it lost it",
+      "status": "planned",
+      "description": "Found 2026-10-01 by stream1 during T449 slice 4b. heca-grid-ui clears every pointer capture when the cursor leaves the window (`cancel` on CursorLeft) and tells the capture holder nothing. But macOS still delivers the button-up outside the window to the app. So a drag that captured the pointer (the scrollbar thumb, a terminal selection) and is released outside the window reaches no widget, and the holder keeps thinking it's dragging. Today the terminal selection works around it with a window-level \"a left release anywhere ends a host selection\" rule in heca/src/app/events.rs (`on_left_release`).\n\nDOM shape to follow: capture holds while the button is down, also outside the window when the OS delivers the events; and when capture is lost for any reason the holder gets a `lostpointercapture`-style event. Fix it in the library: keep capture while a button is held and route the outside button-up to the holder; send a capture-lost event to the holder whenever capture ends without a release (window loses focus, cancel). Then the terminal selection can capture like the scrollbar does, and the window-level rule in events.rs goes. Tests: capture holder gets the release after the cursor left the window; gets capture-lost on cancel; break-checked. Antonio checks by eye: drag a selection or the scrollbar thumb out of the window and release, nothing stays stuck.",
+      "descriptionUpdatedAt": "2026-10-01T13:36:09.698Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d837176a-fec0-47f0-9e82-cd6d3399cee6-check-001-keep-capture-while-a-button-is-held-across-window-exit-route-the-outside-release-to-the-holder",
+          "number": 1,
+          "title": "Keep capture while a button is held across window exit; route the outside release to the holder",
+          "checked": false
+        },
+        {
+          "id": "d837176a-fec0-47f0-9e82-cd6d3399cee6-check-002-capture-lost-event-to-the-holder-when-capture-ends-without-a-release",
+          "number": 2,
+          "title": "Capture-lost event to the holder when capture ends without a release",
+          "checked": false
+        },
+        {
+          "id": "d837176a-fec0-47f0-9e82-cd6d3399cee6-check-003-terminal-selection-uses-capture-remove-the-window-level-rule-in-events-rs",
+          "number": 3,
+          "title": "Terminal selection uses capture; remove the window-level rule in events.rs",
+          "checked": false
+        },
+        {
+          "id": "d837176a-fec0-47f0-9e82-cd6d3399cee6-check-004-tests-break-checked",
+          "number": 4,
+          "title": "Tests, break-checked",
+          "checked": false
+        },
+        {
+          "id": "d837176a-fec0-47f0-9e82-cd6d3399cee6-check-005-antonio-checks-by-eye",
+          "number": 5,
+          "title": "Antonio checks by eye",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-01T13:36:09.629Z",
+      "updatedAt": "2026-10-01T13:36:09.629Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-26T16:49:11.138Z",
-  "updatedAt": "2026-09-30T14:55:39.511Z",
+  "updatedAt": "2026-10-01T13:36:09.629Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-08-11T14:05:35.021Z",
   "handoffAudit": null,

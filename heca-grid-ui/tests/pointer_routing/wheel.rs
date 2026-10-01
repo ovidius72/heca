@@ -41,3 +41,30 @@ fn an_unscrollable_inner_region_lets_the_wheel_reach_the_outer_one() {
         "the inner region had nothing to scroll, so the outer one did",
     );
 }
+
+/// **A wheel says whether its device counts pixels or notches** — the DOM's `deltaMode`. A trackpad
+/// swipe arrives with its pixels; a mouse wheel does not. Both always carry the line deltas.
+#[test]
+fn a_wheel_carries_the_unit_its_device_counts_in() {
+    type Pixels = Option<(f32, f32)>;
+    let seen: Rc<RefCell<Vec<Pixels>>> = Rc::default();
+    let record = seen.clone();
+    let mut root = Flex::column()
+        .width(Length::Px(100.0))
+        .height(Length::Px(100.0))
+        .on_scroll(move |cx| {
+            record
+                .borrow_mut()
+                .push(cx.pointer().expect("a pointer event").delta_pixels)
+        });
+    LayoutEngine::new().compute(&mut root, Size::new(100.0, 100.0));
+    let at = Point::new(10.0, 10.0);
+
+    let _ = heca_grid_ui::dispatch(&mut root, &Event::wheel(at, 0.0, 1.0));
+    let mut trackpad = heca_grid_ui::RawPointer::new(heca_grid_ui::RawPointerKind::Wheel, at);
+    trackpad.delta_y = 0.7;
+    trackpad.delta_pixels = Some((0.0, 14.0));
+    let _ = heca_grid_ui::dispatch(&mut root, &Event::Raw(trackpad));
+
+    assert_eq!(*seen.borrow(), vec![None, Some((0.0, 14.0))]);
+}

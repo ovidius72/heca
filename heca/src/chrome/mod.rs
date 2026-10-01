@@ -13,13 +13,12 @@ pub(crate) use signals::{ChromeSignals, sync_chrome_signals, sync_chrome_state};
 pub(crate) mod column;
 pub(crate) use column::{RetainedColumn, clear_columns, offer_to_columns, sync_columns};
 pub(crate) mod pane;
-pub(crate) use pane::{RetainedPane, clear_panes, header_height as pane_header_height, sync_panes};
+pub(crate) use pane::{RetainedPane, clear_panes, sync_panes};
 pub(crate) mod pane_header;
 pub(crate) mod terminal;
 pub(crate) use pane_header::{
-    ActionShortcuts, CARD_META_FONT_SCALE, RetainedPaneViewportWidgets, action_tooltip,
-    build_pane_headers, home_relative_path, pane_info_view, sync_pane_viewport_widgets,
-    truncate_path_left,
+    ActionShortcuts, CARD_META_FONT_SCALE, action_tooltip, build_pane_headers, home_relative_path,
+    pane_info_view, truncate_path_left,
 };
 pub(crate) mod drag;
 pub(crate) mod pane_items;
@@ -44,9 +43,9 @@ mod dispatch;
 mod focus;
 mod scene;
 pub(crate) use dispatch::{
-    cancel_every_tree, deliver, deliver_to_pane_viewports, deliver_to_panes,
-    dispatch_surface_pointer, drag_in_flight, drain_pending_drops, drain_pending_menus,
-    next_redraw_across_trees, open_declared_menu_for_focus, pane_viewport_at,
+    cancel_every_tree, deliver, deliver_to_panes, dispatch_surface_pointer, drag_in_flight,
+    drain_pending_drops, drain_pending_menus, next_redraw_across_trees,
+    open_declared_menu_for_focus,
 };
 #[cfg(test)]
 use scene::chrome_scene;
@@ -307,8 +306,8 @@ use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    BadgeButton, Flex, FocusScope, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label, Pane,
-    ScrollBar, Separator, Surface, Tag, TooltipSide,
+    Flex, FocusScope, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label, Pane, Separator,
+    Surface, Tag, TooltipSide,
 };
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::rc::Rc;

@@ -833,6 +833,9 @@ pub struct AppState {
     /// The terminal each pane shows, by pane — the client's view of a running terminal process:
     /// what a window draws, and how much room it was given. Client state, like the retained trees.
     pub(crate) terminals: HashMap<heca_core::layout::PaneId, crate::chrome::terminal::Terminal>,
+    /// The buttons whose press a terminal's program has heard and whose release it has not — so a
+    /// release is passed on only where its press was.
+    pub(crate) terminal_presses: crate::app::terminal_host::HeardPresses,
     /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
     /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
     /// trees; this holds runtime-added layers that join the same surface stack. See
@@ -854,10 +857,6 @@ pub struct AppState {
     /// overlay-control actions (`SubmitOverlay`/`CloseOverlay`) resolve. See `chrome::overlay`
     /// and `pluggable-chrome-plugin-plan.md` §2.7.1/§2.7.2.
     pub overlays: crate::chrome::OverlayHost,
-    /// Retained per-pane terminal viewport widgets (scrollbar + scrolled-up badge),
-    /// keyed by pane. Built once per visible pane, updated/repositioned each frame,
-    /// painted read-only in `terminal_render`, dispatched pointer events in `events`.
-    pub pane_viewport_widgets: HashMap<PaneId, crate::chrome::RetainedPaneViewportWidgets>,
     /// Display shortcuts for every bound action, keyed by config name, resolved from
     /// config at load/reload (so tooltips/hints show the user's real, rebindable
     /// keys — never the defaults when overridden). Any chrome button looks its own
