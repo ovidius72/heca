@@ -4,7 +4,7 @@ use crate::settings::SettingsConfig;
 use crate::theme::{self, Theme};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Embedded default config (single source of truth)
@@ -61,10 +61,13 @@ pub(crate) fn parse_default_program_entries() -> HashMap<String, ProgramMeta> {
     }
 }
 
-/// Deep-merge `over` onto `base`: tables merge per-key (recursively); scalars and
+/// **The one key-by-key merge**: `over` onto `base` — tables merge per-key (recursively); scalars and
 /// arrays are replaced by `over`. Arrays are intentionally NOT concatenated, so a
 /// user `[[keys.command]]`/`[[keys.mode]]` list replaces the default list wholesale.
-fn deep_merge(base: toml::Value, over: toml::Value) -> toml::Value {
+///
+/// Every layer of configuration goes through it — the embedded defaults, the user's files and the
+/// project's `.heca/config.toml` — so two layers can never disagree about what "merge" means.
+pub fn deep_merge(base: toml::Value, over: toml::Value) -> toml::Value {
     match (base, over) {
         (toml::Value::Table(mut b), toml::Value::Table(o)) => {
             for (k, ov) in o {
@@ -206,30 +209,223 @@ impl AppConfig {
         // file overrides only the values it sets and keeps every other default.
         let mut value = embedded_base();
         let mut found_user = false;
-        if let Some(user) = read_first_toml(&config_file_paths())? {
+        if let Some((_, user)) = read_first_toml(&config_file_paths())? {
             value = deep_merge(value, user);
             found_user = true;
         }
-        if let Some(user) = read_first_toml(&keybindings_file_paths())? {
+        if let Some((_, user)) = read_first_toml(&keybindings_file_paths())? {
             value = deep_merge(value, user);
             found_user = true;
         }
-        if !found_user {
+        // The project's own file goes on last, so any key it sets wins. A broken one is reported
+        // and left out: a project's typo must not take the user's whole configuration with it.
+        let project = match read_project() {
+            Ok(project) => project,
+            Err(e) => {
+                eprintln!("[heca] project settings ignored: {e}");
+                None
+            }
+        };
+        let applied = trusted_layer(project);
+        if !found_user && applied.is_none() {
             return Err(ConfigError::NotFound);
         }
-
-        let config: Config = value.try_into().map_err(|e| ConfigError::Invalid {
-            path: config_dir().join("config.toml"),
-            message: e.to_string(),
-        })?;
-        if let Err(message) = validate_config(&config) {
-            return Err(ConfigError::Invalid {
-                path: config_dir().join("config.toml"),
-                message,
-            });
-        }
-        Ok(config)
+        layered(value, applied)
     }
+}
+
+/// **A project file applies only once the user has trusted it** (see [`crate::trust`]). An untrusted
+/// one is said, with its folder and how to trust it, and left out.
+fn trusted_layer(project: Option<ProjectFile>) -> Option<(PathBuf, toml::Value)> {
+    let project = project?;
+    if project.trusted {
+        return Some((project.path, project.value));
+    }
+    eprintln!(
+        "[heca] {} is not trusted, so it is ignored — run `heca --trust` in {} to apply it",
+        project.path.display(),
+        project.dir.display()
+    );
+    None
+}
+
+/// Finish the configuration from the merged user layers and, if there is one, the project's file.
+///
+/// A project file that parses but does not fit the schema is reported and ignored — the user's
+/// configuration stands — so the two failure modes of a project file (bad TOML, wrong shape) end the
+/// same way.
+fn layered(
+    user: toml::Value,
+    project: Option<(PathBuf, toml::Value)>,
+) -> Result<Config, ConfigError> {
+    if let Some((path, over)) = project {
+        match finish(deep_merge(user.clone(), over), &path) {
+            Ok(config) => return Ok(config),
+            Err(e) => eprintln!("[heca] project settings ignored: {e}"),
+        }
+    }
+    finish(user, &config_dir().join("config.toml"))
+}
+
+/// Turn a merged value into a validated [`Config`]; `blame` names the file an error points at.
+fn finish(value: toml::Value, blame: &Path) -> Result<Config, ConfigError> {
+    let config: Config = value.try_into().map_err(|e| ConfigError::Invalid {
+        path: blame.to_path_buf(),
+        message: e.to_string(),
+    })?;
+    if let Err(message) = validate_config(&config) {
+        return Err(ConfigError::Invalid {
+            path: blame.to_path_buf(),
+            message,
+        });
+    }
+    Ok(config)
+}
+
+/// One setting a user's file or the project's file sets, and the file it came from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConfigSource {
+    /// Dotted key, `appearance.sidebar.border_color`. An array (a list of bindings) is one key.
+    pub key: String,
+    /// The value as TOML spells it.
+    pub value: String,
+    pub file: PathBuf,
+}
+
+/// **Which file each setting came from** — every key the user's files or the project's file set, with
+/// the later layer winning, exactly as the merge does. Defaults are not listed: they come from no
+/// file of the user's.
+///
+/// An **untrusted** project file is not listed as applied: it is returned in `untrusted_project`, for
+/// the caller to show as "(not trusted, ignored)".
+pub fn config_sources() -> Result<ConfigSources, ConfigError> {
+    let mut layers = Vec::new();
+    for paths in [config_file_paths(), keybindings_file_paths()] {
+        layers.extend(read_first_toml(&paths)?);
+    }
+    let mut untrusted_project = None;
+    if let Some(project) = read_project()? {
+        if project.trusted {
+            layers.push((project.path, project.value));
+        } else {
+            untrusted_project = Some(project.path);
+        }
+    }
+    Ok(ConfigSources {
+        sources: sources_of(layers),
+        untrusted_project,
+    })
+}
+
+/// What [`config_sources`] found.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConfigSources {
+    pub sources: Vec<ConfigSource>,
+    /// A project file that exists but is not trusted, so it applies to nothing.
+    pub untrusted_project: Option<PathBuf>,
+}
+
+/// The sources of `layers` (earliest first): each layer flattened to dotted keys, a later layer's
+/// key replacing an earlier one's. Sorted by key.
+fn sources_of(layers: Vec<(PathBuf, toml::Value)>) -> Vec<ConfigSource> {
+    fn flatten(prefix: &str, value: &toml::Value, file: &Path, out: &mut Vec<ConfigSource>) {
+        match value {
+            toml::Value::Table(table) => {
+                for (k, v) in table {
+                    let key = if prefix.is_empty() {
+                        k.clone()
+                    } else {
+                        format!("{prefix}.{k}")
+                    };
+                    flatten(&key, v, file, out);
+                }
+            }
+            leaf => out.push(ConfigSource {
+                key: prefix.to_string(),
+                value: leaf.to_string(),
+                file: file.to_path_buf(),
+            }),
+        }
+    }
+    let mut by_key = std::collections::BTreeMap::new();
+    for (file, value) in &layers {
+        let mut found = Vec::new();
+        flatten("", value, file, &mut found);
+        for source in found {
+            by_key.insert(source.key.clone(), source);
+        }
+    }
+    by_key.into_values().collect()
+}
+
+/// **The project's settings file**: `.heca/config.toml` in the nearest folder, starting at `start`
+/// and going up, that has a `.heca/` folder. Nested projects: the nearest wins.
+pub fn project_config_path(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .map(|dir| dir.join(".heca"))
+        .find(|dir| dir.is_dir())
+        .map(|dir| dir.join("config.toml"))
+}
+
+/// The project's settings file, read, with whether the user has trusted it as it stands.
+#[derive(Clone, Debug)]
+pub struct ProjectFile {
+    /// The `.heca/config.toml` itself.
+    pub path: PathBuf,
+    /// The folder that has the `.heca/` — what trust is remembered against.
+    pub dir: PathBuf,
+    /// Hash of its content — what trust is remembered against.
+    pub hash: String,
+    pub value: toml::Value,
+    pub trusted: bool,
+}
+
+/// Read the project's file for the folder heca was started in. `Ok(None)` when there is none.
+pub fn read_project() -> Result<Option<ProjectFile>, ConfigError> {
+    let Ok(cwd) = std::env::current_dir() else {
+        return Ok(None);
+    };
+    read_project_in(&cwd)
+}
+
+/// [`read_project`] for a chosen starting folder.
+pub fn read_project_in(start: &Path) -> Result<Option<ProjectFile>, ConfigError> {
+    read_project_with(start, crate::trust::is_trusted)
+}
+
+/// [`read_project_in`] with the trust question answered by `is_trusted(folder, content hash)` — what
+/// a test uses so it never reads or writes the user's real trust list.
+pub fn read_project_with(
+    start: &Path,
+    is_trusted: impl Fn(&Path, &str) -> bool,
+) -> Result<Option<ProjectFile>, ConfigError> {
+    let Some(path) = project_config_path(start) else {
+        return Ok(None);
+    };
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => return Err(ConfigError::Io { path, source }),
+    };
+    let value = toml::from_str::<toml::Value>(&text).map_err(|source| ConfigError::Parse {
+        path: path.clone(),
+        source,
+    })?;
+    let dir = path
+        .parent()
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    let hash = crate::trust::content_hash(&text);
+    let trusted = is_trusted(&dir, &hash);
+    Ok(Some(ProjectFile {
+        path,
+        dir,
+        hash,
+        value,
+        trusted,
+    }))
 }
 
 /// Candidate paths for the user's `config.toml`, in priority order.
@@ -250,8 +446,10 @@ fn keybindings_file_paths() -> [Option<PathBuf>; 2] {
 
 /// Read and TOML-parse the first existing file among `paths`. Missing files are
 /// skipped; a parse error or non-`NotFound` IO error is surfaced. Returns the
-/// parsed value, or `None` if no file exists.
-fn read_first_toml(paths: &[Option<PathBuf>]) -> Result<Option<toml::Value>, ConfigError> {
+/// parsed value and the path it came from, or `None` if no file exists.
+fn read_first_toml(
+    paths: &[Option<PathBuf>],
+) -> Result<Option<(PathBuf, toml::Value)>, ConfigError> {
     for path in paths.iter().flatten() {
         match std::fs::read_to_string(path) {
             Ok(content) => {
@@ -260,7 +458,7 @@ fn read_first_toml(paths: &[Option<PathBuf>]) -> Result<Option<toml::Value>, Con
                         path: path.clone(),
                         source: e,
                     })?;
-                return Ok(Some(value));
+                return Ok(Some((path.clone(), value)));
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
             Err(e) => {
@@ -640,5 +838,154 @@ kind = "terminl"
 "#;
         let cfg: Config = toml::from_str(toml).unwrap();
         assert!(validate_config(&cfg).is_err());
+    }
+
+    fn toml_value(text: &str) -> toml::Value {
+        toml::from_str(text).unwrap()
+    }
+
+    /// **A project file that sets one colour and one key changes only those two**, and everything
+    /// else stays the user's. (The two values are what the phase's "done when" names.)
+    #[test]
+    fn a_project_file_changes_only_the_keys_it_sets() {
+        let user = deep_merge(
+            embedded_base(),
+            toml_value("[settings]\nmouse = false\n[keys]\nfocus_left = \"prefix+a\""),
+        );
+        let without = layered(user.clone(), None).expect("user config");
+        let project = toml_value(
+            "[appearance.sidebar]\nborder_color = \"#ff8800\"\n[keys]\nfocus_right = \"prefix+r\"",
+        );
+        let with = layered(user, Some((PathBuf::from(".heca/config.toml"), project)))
+            .expect("user config with the project on top");
+
+        assert_ne!(
+            with.appearance.sidebar.border_color,
+            without.appearance.sidebar.border_color
+        );
+        assert_eq!(
+            with.settings.mouse, without.settings.mouse,
+            "the user's own value stays"
+        );
+        let mut expected = with.clone();
+        expected.appearance.sidebar.border_color = without.appearance.sidebar.border_color;
+        expected.keys = without.keys.clone();
+        assert_eq!(
+            expected, without,
+            "nothing else differs: only the colour and the binding"
+        );
+    }
+
+    /// **No project file: exactly today's behaviour.**
+    #[test]
+    fn without_a_project_file_nothing_changes() {
+        let user = embedded_base();
+        assert_eq!(
+            layered(user.clone(), None).unwrap(),
+            finish(user, &config_dir().join("config.toml")).unwrap()
+        );
+    }
+
+    /// **A project file the schema rejects is left out and the user's configuration stands.**
+    #[test]
+    fn a_project_file_with_a_wrong_shape_keeps_the_users_config() {
+        let user = embedded_base();
+        let broken = toml_value("[settings]\nmouse = \"not a bool\"");
+        let got = layered(
+            user.clone(),
+            Some((PathBuf::from(".heca/config.toml"), broken)),
+        )
+        .expect("the user's configuration stands");
+        assert_eq!(got, layered(user, None).unwrap());
+    }
+
+    /// **The nearest folder with a `.heca/` wins**, searching from where heca was started upward.
+    #[test]
+    fn the_nearest_project_folder_wins() {
+        let root = std::env::temp_dir().join(format!("heca-project-{}", std::process::id()));
+        let inner = root.join("a").join("b");
+        std::fs::create_dir_all(inner.join(".heca")).unwrap();
+        std::fs::create_dir_all(root.join(".heca")).unwrap();
+        let deep = inner.join("src");
+        std::fs::create_dir_all(&deep).unwrap();
+
+        assert_eq!(
+            project_config_path(&deep),
+            Some(inner.join(".heca").join("config.toml")),
+            "the nearest parent that has .heca/"
+        );
+        assert_eq!(
+            project_config_path(&root.join("a")),
+            Some(root.join(".heca").join("config.toml"))
+        );
+        assert_eq!(
+            project_config_path(&std::env::temp_dir().join("no-such-heca-folder")),
+            None
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// **Each setting says which file it came from**, and a project key wins over the user's.
+    #[test]
+    fn each_setting_names_the_file_it_came_from() {
+        let user = (
+            PathBuf::from("config.toml"),
+            toml_value("[settings]\nmouse = false\n[keys]\nfocus_left = \"prefix+a\""),
+        );
+        let project = (
+            PathBuf::from(".heca/config.toml"),
+            toml_value("[keys]\nfocus_left = \"prefix+p\""),
+        );
+        let got = sources_of(vec![user, project]);
+        let of = |key: &str| got.iter().find(|s| s.key == key).map(|s| s.file.clone());
+        assert_eq!(of("settings.mouse"), Some(PathBuf::from("config.toml")));
+        assert_eq!(
+            of("keys.focus_left"),
+            Some(PathBuf::from(".heca/config.toml")),
+            "the project wins"
+        );
+        assert_eq!(got.len(), 2, "one line per key");
+    }
+
+    fn project_folder(name: &str, content: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("heca-trust-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".heca")).unwrap();
+        std::fs::write(dir.join(".heca").join("config.toml"), content).unwrap();
+        dir
+    }
+
+    /// **An untrusted project file is ignored; a trusted one is applied; an edited one is untrusted
+    /// again.** The trust question is injected so the test never touches the user's real list.
+    #[test]
+    fn a_project_file_applies_only_while_it_is_trusted_as_it_stands() {
+        let dir = project_folder("gate", "[settings]\nmouse = false\n");
+        let canon = |p: &Path| p.canonicalize().unwrap();
+
+        let untrusted = read_project_with(&dir, |_, _| false).unwrap().unwrap();
+        assert!(!untrusted.trusted);
+        assert!(
+            trusted_layer(Some(untrusted)).is_none(),
+            "untrusted: ignored"
+        );
+
+        let hash_now = crate::trust::content_hash("[settings]\nmouse = false\n");
+        let trusted = read_project_with(&dir, |d, h| canon(d) == canon(&dir) && h == hash_now)
+            .unwrap()
+            .unwrap();
+        assert!(trusted.trusted);
+        assert!(trusted_layer(Some(trusted)).is_some(), "trusted: applied");
+
+        // The file is edited: the hash no longer matches what was trusted.
+        std::fs::write(
+            dir.join(".heca").join("config.toml"),
+            "[settings]\nmouse = true\n",
+        )
+        .unwrap();
+        let edited = read_project_with(&dir, |_, h| h == hash_now)
+            .unwrap()
+            .unwrap();
+        assert!(!edited.trusted, "edited: asked about again");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

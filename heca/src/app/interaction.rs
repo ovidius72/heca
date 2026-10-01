@@ -1227,6 +1227,10 @@ pub(crate) fn dispatch_view_intent(
         );
         return IntentOutcome::Blocked;
     }
+    // A name-keyed action that declares a confirm asks first, here, on every surface that dispatches it.
+    if crate::handlers::maybe_confirm_dynamic(state, intent) {
+        return IntentOutcome::Ran;
+    }
     if !registry.execute_dynamic(&intent.action, state, intent) {
         // Declared but host-unrunnable (registered with no handler): its owner lives across the plugin
         // boundary and forwarding lands with the WASM bridge (plugin-08). Never a crash.

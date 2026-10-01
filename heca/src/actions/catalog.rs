@@ -422,7 +422,12 @@ impl ActionInfo {
             policy: m.policy,
             owner: m.owner.clone(),
             args: m.args.clone(),
-            confirm: m.confirm.as_ref().map(|c| c.config_name.clone()),
+            // A forced prompt has no toggle key to report: nothing can turn it off.
+            confirm: m
+                .confirm
+                .as_ref()
+                .filter(|c| !c.forced)
+                .map(|c| c.config_name.clone()),
         }
     }
 }

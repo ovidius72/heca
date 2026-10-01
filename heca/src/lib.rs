@@ -12,6 +12,7 @@ mod input;
 mod keymap;
 mod mouse;
 mod notification;
+mod project_trust;
 mod providers;
 mod rpc;
 mod search_state;
@@ -221,6 +222,7 @@ impl HecaApp {
             // so would stack another container/effect view each reload. Changing
             // `vibrancy` (or toggling transparency on↔off) needs a restart.
             state.appearance = self.app_config.config.appearance.clone();
+            crate::project_trust::notify_if_untrusted();
             crate::chrome::pane_items::report_pane_items(state);
             // Re-read on reload like the rest: change the setting, press reload, the next palette
             // opens at the new size.
@@ -416,6 +418,11 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 &mut self.registry,
                 &mut state.action_catalog,
             );
+            crate::project_trust::register_trust_action(
+                &mut self.registry,
+                &mut state.action_catalog,
+            );
+            crate::project_trust::notify_if_untrusted();
             // What the pane headers are asked to show, now that every action a button names exists:
             // a name nothing provides, and an added item the user's own list leaves out.
             crate::chrome::pane_items::report_pane_items(&state);
