@@ -408,9 +408,9 @@
       "priority": 10,
       "shortName": "a-sidebar-s-visibility-is-one",
       "title": "A sidebar's visibility is one state: config sets where it starts, the toggle flips it, reload resets it",
-      "status": "in-progress",
-      "description": "BUG found by Antonio 2026-10-01 (via a project file, but pre-existing): with `[settings] show_left_sidebar = false`, \"Show left sidebar\" (prefix+b) does not bring it back. Antonio: the setting should be the initial state; the action must make it visible.\n\nCause (heca-f3, from reading): two independent axes. `[settings] show_left_sidebar/show_right_sidebar` is a \"mounted\" gate (`AppState.shown[region]`, applied at render via `left_sidebar_width`; startup `shown_from_settings`; reload re-derives it in lib.rs `reload_config`). prefix+b (`sidebar_left`) toggles the OTHER axis, RegionMode Expanded/Hidden (handlers/docks.rs `handle_set_region_visible`; AGENTS.md calls it \"a DISTINCT axis from the expand/rail toggles\"). With the setting false, the region is unmounted whatever the toggle does — same with the setting in the user's own config.toml.\n\nFix at the source: one visible/hidden state per region. The config value is only its starting state; the sidebar_left/right actions flip that same state; reload resets it to the config. Remove the second axis rather than syncing two. Files: handlers/docks.rs, the sidebar_left/right actions, app_state `shown`, lib.rs reload_config, AGENTS.md wording. Tests: setting false → starts hidden → toggle shows it → reload hides it again; break-checked. Antonio checks by eye.",
-      "descriptionUpdatedAt": "2026-10-01T08:16:16.826Z",
+      "status": "done",
+      "description": "BUG found by Antonio 2026-10-01 (via a project file, but pre-existing): with `[settings] show_left_sidebar = false`, \"Show left sidebar\" (prefix+b) does not bring it back. Antonio: the setting should be the initial state; the action must make it visible.\n\nCause (heca-f3, from reading): two independent axes. `[settings] show_left_sidebar/show_right_sidebar` is a \"mounted\" gate (`AppState.shown[region]`, applied at render via `left_sidebar_width`; startup `shown_from_settings`; reload re-derives it in lib.rs `reload_config`). prefix+b (`sidebar_left`) toggles the OTHER axis, RegionMode Expanded/Hidden (handlers/docks.rs `handle_set_region_visible`; AGENTS.md calls it \"a DISTINCT axis from the expand/rail toggles\"). With the setting false, the region is unmounted whatever the toggle does — same with the setting in the user's own config.toml.\n\nFix at the source: one visible/hidden state per region. The config value is only its starting state; the sidebar_left/right actions flip that same state; reload resets it to the config. Remove the second axis rather than syncing two. Files: handlers/docks.rs, the sidebar_left/right actions, app_state `shown`, lib.rs reload_config, AGENTS.md wording. Tests: setting false → starts hidden → toggle shows it → reload hides it again; break-checked. Antonio checks by eye.\n\n---\n**Completion summary:**\nShipped in PR #271 (branch fix/t532-sidebar-one-visibility-state, commit dd71bf7f, rebased on origin/main after #270). Each of the four regions now has ONE shown/hidden state in SharedChromeState (is_visible / set_visible / apply_visibility). AppState.shown and the sidebar RegionMode axis (signal, set_*_mode, left/right_visible, RegionModeChanged) are removed. [settings] show_* is the starting state, applied at startup and again on config reload through apply_visibility; sidebar_left, sidebar_right, set_region_visible and reveal_region all go through one function in heca/src/handlers/docks.rs (flip, reflow, chrome rebuild). New event chrome.region.visibility.changed {region, visible}, fired only on a real change (documented on ChromeEvent in chrome/events.rs). The top-bar sidebar toggle buttons (chrome/scene.rs) are now always drawn, with the arrow following the state, so a hidden sidebar can also be shown by mouse. SharedChromeState::new lost its two visibility args. Wording fixed in config.default.toml, keybindings.default.toml, heca-config settings.rs, input/action.rs, actions/builtins/chrome.rs, chrome/scene.rs, chrome/host.rs, docs/chrome-and-ui.md (AGENTS.md had no stale text). Verification: cargo test -p heca 768 passed; cargo clippy -p heca -p heca-config --all-targets clean; new tests (setting false -> starts hidden -> toggle shows it -> reload hides it again; one event per real change) break-checked red with the fix removed (reload ignoring config; setter not storing). Reviewed and approved by the orchestrator (heca-pro-commercial-agents); checked by eye by Antonio: the sidebar works. Not covered by a headless test: the handler-to-state hop, because handlers need a window (verified by Antonio's eye check). Nothing left unverified or open.",
+      "descriptionUpdatedAt": "2026-10-01T13:14:27.977Z",
       "notes": "",
       "statusLog": [
         {
@@ -420,6 +420,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-002-in-progress-done",
+          "date": "2026-10-01T13:14:27.975Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped in PR #271 (branch fix/t532-sidebar-one-visibility-state, commit dd71bf7f, rebased on origin/main after #270). Each of the four regions now has ONE shown/hidden state in SharedChromeState (is_visible / set_visible / apply_visibility). AppState.shown and the sidebar RegionMode axis (signal, set_*_mode, left/right_visible, RegionModeChanged) are removed. [settings] show_* is the starting state, applied at startup and again on config reload through apply_visibility; sidebar_left, sidebar_right, set_region_visible and reveal_region all go through one function in heca/src/handlers/docks.rs (flip, reflow, chrome rebuild). New event chrome.region.visibility.changed {region, visible}, fired only on a real change (documented on ChromeEvent in chrome/events.rs). The top-bar sidebar toggle buttons (chrome/scene.rs) are now always drawn, with the arrow following the state, so a hidden sidebar can also be shown by mouse. SharedChromeState::new lost its two visibility args. Wording fixed in config.default.toml, keybindings.default.toml, heca-config settings.rs, input/action.rs, actions/builtins/chrome.rs, chrome/scene.rs, chrome/host.rs, docs/chrome-and-ui.md (AGENTS.md had no stale text). Verification: cargo test -p heca 768 passed; cargo clippy -p heca -p heca-config --all-targets clean; new tests (setting false -> starts hidden -> toggle shows it -> reload hides it again; one event per real change) break-checked red with the fix removed (reload ignoring config; setter not storing). Reviewed and approved by the orchestrator (heca-pro-commercial-agents); checked by eye by Antonio: the sidebar works. Not covered by a headless test: the handler-to-state hop, because handlers need a window (verified by Antonio's eye check). Nothing left unverified or open."
         }
       ],
       "decisions": [],
@@ -429,31 +437,31 @@
           "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-001-one-visibility-state-per-region-remove-the-second-axis",
           "number": 1,
           "title": "One visibility state per region; remove the second axis",
-          "checked": false
+          "checked": true
         },
         {
           "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-002-config-initial-state-toggle-flips-it-reload-resets-to-config",
           "number": 2,
           "title": "Config = initial state; toggle flips it; reload resets to config",
-          "checked": false
+          "checked": true
         },
         {
           "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-003-tests-break-checked",
           "number": 3,
           "title": "Tests (break-checked)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-004-agents-md-docs-wording",
           "number": 4,
           "title": "AGENTS.md / docs wording",
-          "checked": false
+          "checked": true
         },
         {
           "id": "22954d40-be08-40c9-bcad-a49dc8a84c4f-check-005-antonio-checks-by-eye",
           "number": 5,
           "title": "Antonio checks by eye",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -461,20 +469,20 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-10-01T08:25:57.710Z",
-      "completedAt": "",
+      "completedAt": "2026-10-01T13:14:27.975Z",
       "createdAt": "2026-10-01T08:16:16.778Z",
-      "updatedAt": "2026-10-01T08:25:57.710Z",
+      "updatedAt": "2026-10-01T13:14:27.975Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
           "createdAt": "2026-10-01T08:25:57.600Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1"
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-10-01T08:25:57.710Z",
+  "updatedAt": "2026-10-01T13:14:27.975Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-07-27T13:37:24.584Z",
   "handoffAudit": null,

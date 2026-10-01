@@ -120,12 +120,12 @@
   "updatedAt": "2026-10-01T08:16:53.848Z",
   "sessionInfo": [
     {
-      "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",
-      "createdAt": "2026-10-01T08:25:28.507Z"
+      "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
+      "createdAt": "2026-10-01T13:27:50.261Z"
     },
     {
-      "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
-      "createdAt": "2026-09-30T21:46:46.937Z"
+      "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",
+      "createdAt": "2026-10-01T08:25:28.507Z"
     }
   ]
 }
