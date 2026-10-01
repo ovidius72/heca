@@ -23,7 +23,8 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "47245745-7545-4dde-876d-03169ba2ba1a"
+    "47245745-7545-4dde-876d-03169ba2ba1a",
+    "690e401a-12bd-4764-a95f-09c46c3adb98"
   ],
   "tasks": [
     {
@@ -34,9 +35,9 @@
       "priority": 1,
       "shortName": "split-heca-into-library-progra",
       "title": "Split heca into library + program, and add the entry point another crate uses to add actions, docks, pane decorations and overlays",
-      "status": "in-progress",
-      "description": "Execution task for P098. Read the phase description first, and `~/projects/heca-pro/docs/architecture.md` (\"Two editions, one code base underneath\").\n\nCurrent: `heca/Cargo.toml:2` program only; `HecaApp` private at `heca/src/main.rs:50`; `fn main` at :475; startup in `heca/src/app/startup.rs`; actions in the ActionCatalog (`heca/src/actions/`); docks from providers (`heca/src/providers/`).\n\nSteps are in the checklist. Design the entry point first and agree it with Antonio before writing it (it is a public API a plugin author will also read) — write the line a plugin author would type. Edge cases: the binary must not change behaviour; tests that reach private items keep working; nothing heca-pro adds may need a registry id.",
-      "descriptionUpdatedAt": "2026-09-29T19:21:59.921Z",
+      "status": "done",
+      "description": "Execution task for P098. Read the phase description first, and `~/projects/heca-pro/docs/architecture.md` (\"Two editions, one code base underneath\").\n\nCurrent: `heca/Cargo.toml:2` program only; `HecaApp` private at `heca/src/main.rs:50`; `fn main` at :475; startup in `heca/src/app/startup.rs`; actions in the ActionCatalog (`heca/src/actions/`); docks from providers (`heca/src/providers/`).\n\nSteps are in the checklist. Design the entry point first and agree it with Antonio before writing it (it is a public API a plugin author will also read) — write the line a plugin author would type. Edge cases: the binary must not change behaviour; tests that reach private items keep working; nothing heca-pro adds may need a registry id.\n\n---\n**Completion summary:**\nDONE 2026-09-30 (code and docs uncommitted in worktree ~/projects/heca-f012, branch feat/f012-heca-library on origin/main 6666fdc4; PR to follow). SHIPPED: (1) heca is a library + one-line main.rs: `heca::run()` (heca/src/lib.rs, main.rs). (2) The doors another crate uses, heca/src/entry/: `heca::extension(\"pro\")` (name declared once; `heca` reserved; dotted/empty/duplicate refused and reported) and, off the handle, `pro.action(..)` (server side; ActionMeta builders, handler gets ProviderCx), `pro.layer(..)` (client side; named layer opened with toggle_layer; built again each open), `pro.pane_button(..)`, `pro.pane_chip(..)`, `pro.pane_line(..)`; docks use the existing public `heca::regions(..).append(..)` with the Provider types made public. (3) Pane decoration by name: heca/src/chrome/pane_items/{buttons,chips,lines,listing}.rs; the closed PaneAction/PaneSegment enums are gone; `[appearance.pane] title_actions`, `title_segments` and new `[appearance.sidebar] pane_lines` list items by name with today's spellings; heca's own items (six buttons, five chips, cwd and git lines in providers/workspaces/row_lines.rs) are registered through the same defs an extension uses; the three listing rules (user's list is the list; extension items show only while the list is the default; an omitted added item is announced once via announced.json) are written once in listing.rs; PaneFacts/PaneChip/PaneLine are non_exhaustive; an added chip re-runs only when its pane's facts change. (4) Folder-line decision (Antonio): sidebar lines decided by pane_lines alone (default cwd+git); `[appearance.expose] show_cwd` replaces `[settings] pane_show_cwd`, which is still read and mapped, with a one-time notice. (5) New shared pieces: state_file.rs (atomic machine-state writes; search_state uses it), announced.rs, args::nearest_of, ConfirmSpec::destructive, register_named_layer (one door for named layers; surface_drift.rs list updated). (6) Example heca/examples/extend_heca.rs uses every door; docs/extending-heca.md + README, config.default.toml, AGENTS.md updated. SIDE WORK in the same branch: T529 (P084) blocking layer clears hover behind it (done, verified by Antonio); ButtonGroup default gap via new Spacing::Hairline in heca-grid-ui (verified by Antonio); F012 accepted decision on the extension naming; T528 filed (dock drag + saved placement). VERIFICATION: heca 752 tests, heca-config 88, heca-grid-ui green; clippy 0 warnings (heca, heca-config, heca-grid-ui, all targets + examples); several tests break-checked (red with the defect, green restored). Full review by heca-pro-commercial-agents (ran the tests and clippy himself; fixes applied: stale comments naming the removed free functions). BY EYE (Antonio, running extend_heca): stage 3a buttons, 3b chips, 3c sidebar lines checked OK; tooltip-under-overlay and button gap checked OK. NOT YET CHECKED BY EYE: the final folder-line change (expose show_cwd / pane_show_cwd mapping and its notice) — pure mapping is unit-tested only. FINDING (separate, not changed): the policy name `ActionPolicy::AlwaysAllowed` is misleading — it means allowed in the tiled domain but REFUSED while a floating pane is active (only `Global` is truly always allowed); the default for an added action is AlwaysAllowed on purpose. REMAINING: Antonio to commit and open the PR (code and docs only, nothing under .planner/); drag-to-move/saved placement is T528; P104 must wait for heca-82's T449 slice 4. Files: see the review list sent to heca-pro-commercial-agents (entry/, chrome/pane_items/, providers/workspaces/row_lines.rs, announced.rs, state_file.rs, examples/extend_heca.rs, docs/extending-heca.md, plus edits in actions/, app/, chrome/, providers/, heca-config/, heca-grid-ui/).",
+      "descriptionUpdatedAt": "2026-09-30T21:31:29.813Z",
       "notes": "",
       "statusLog": [
         {
@@ -78,6 +79,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress (resume checkpoint)",
           "description": "Resumed from Checklist C9 of T520 (3b), worktree ~/projects/heca-f012.. planner-task-start P098(F012)/T520, then begin 3b: title_segments by name, same registry rules as 3a."
+        },
+        {
+          "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-006-in-progress-done",
+          "date": "2026-09-30T21:31:29.810Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE 2026-09-30 (code and docs uncommitted in worktree ~/projects/heca-f012, branch feat/f012-heca-library on origin/main 6666fdc4; PR to follow). SHIPPED: (1) heca is a library + one-line main.rs: `heca::run()` (heca/src/lib.rs, main.rs). (2) The doors another crate uses, heca/src/entry/: `heca::extension(\"pro\")` (name declared once; `heca` reserved; dotted/empty/duplicate refused and reported) and, off the handle, `pro.action(..)` (server side; ActionMeta builders, handler gets ProviderCx), `pro.layer(..)` (client side; named layer opened with toggle_layer; built again each open), `pro.pane_button(..)`, `pro.pane_chip(..)`, `pro.pane_line(..)`; docks use the existing public `heca::regions(..).append(..)` with the Provider types made public. (3) Pane decoration by name: heca/src/chrome/pane_items/{buttons,chips,lines,listing}.rs; the closed PaneAction/PaneSegment enums are gone; `[appearance.pane] title_actions`, `title_segments` and new `[appearance.sidebar] pane_lines` list items by name with today's spellings; heca's own items (six buttons, five chips, cwd and git lines in providers/workspaces/row_lines.rs) are registered through the same defs an extension uses; the three listing rules (user's list is the list; extension items show only while the list is the default; an omitted added item is announced once via announced.json) are written once in listing.rs; PaneFacts/PaneChip/PaneLine are non_exhaustive; an added chip re-runs only when its pane's facts change. (4) Folder-line decision (Antonio): sidebar lines decided by pane_lines alone (default cwd+git); `[appearance.expose] show_cwd` replaces `[settings] pane_show_cwd`, which is still read and mapped, with a one-time notice. (5) New shared pieces: state_file.rs (atomic machine-state writes; search_state uses it), announced.rs, args::nearest_of, ConfirmSpec::destructive, register_named_layer (one door for named layers; surface_drift.rs list updated). (6) Example heca/examples/extend_heca.rs uses every door; docs/extending-heca.md + README, config.default.toml, AGENTS.md updated. SIDE WORK in the same branch: T529 (P084) blocking layer clears hover behind it (done, verified by Antonio); ButtonGroup default gap via new Spacing::Hairline in heca-grid-ui (verified by Antonio); F012 accepted decision on the extension naming; T528 filed (dock drag + saved placement). VERIFICATION: heca 752 tests, heca-config 88, heca-grid-ui green; clippy 0 warnings (heca, heca-config, heca-grid-ui, all targets + examples); several tests break-checked (red with the defect, green restored). Full review by heca-pro-commercial-agents (ran the tests and clippy himself; fixes applied: stale comments naming the removed free functions). BY EYE (Antonio, running extend_heca): stage 3a buttons, 3b chips, 3c sidebar lines checked OK; tooltip-under-overlay and button gap checked OK. NOT YET CHECKED BY EYE: the final folder-line change (expose show_cwd / pane_show_cwd mapping and its notice) — pure mapping is unit-tested only. FINDING (separate, not changed): the policy name `ActionPolicy::AlwaysAllowed` is misleading — it means allowed in the tiled domain but REFUSED while a floating pane is active (only `Global` is truly always allowed); the default for an added action is AlwaysAllowed on purpose. REMAINING: Antonio to commit and open the PR (code and docs only, nothing under .planner/); drag-to-move/saved placement is T528; P104 must wait for heca-82's T449 slice 4. Files: see the review list sent to heca-pro-commercial-agents (entry/, chrome/pane_items/, providers/workspaces/row_lines.rs, announced.rs, state_file.rs, examples/extend_heca.rs, docs/extending-heca.md, plus edits in actions/, app/, chrome/, providers/, heca-config/, heca-grid-ui/)."
         }
       ],
       "decisions": [],
@@ -111,19 +120,19 @@
           "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-005-entry-point-add-pane-decorations-and-overlays",
           "number": 5,
           "title": "Entry point: add pane decorations and overlays",
-          "checked": false
+          "checked": true
         },
         {
           "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-006-example-crate-or-test-that-uses-every-part-of-the-entry-point",
           "number": 6,
           "title": "Example crate or test that uses every part of the entry point",
-          "checked": false
+          "checked": true
         },
         {
           "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-007-docs-how-an-outside-crate-builds-on-heca",
           "number": 7,
           "title": "Docs: how an outside crate builds on heca",
-          "checked": false
+          "checked": true
         },
         {
           "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-008-3a-pane-header-buttons-by-name-one-registry-config-lists-names-extension-buttons-antonio-checks-by-eye",
@@ -135,13 +144,13 @@
           "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-009-3b-pane-header-chips-by-name-pane-facts-value-that-can-grow-retained-header-keyed-by-name-antonio-checks-by-eye",
           "number": 9,
           "title": "3b — Pane header chips by name (pane-facts value that can grow; retained header keyed by name) (Antonio checks by eye)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "47245745-7545-4dde-876d-03169ba2ba1a-check-010-3c-sidebar-pane-row-lines-by-name-a-slot-in-the-pane-row-cwd-git-lines-move-onto-it-antonio-checks-by-eye",
           "number": 10,
           "title": "3c — Sidebar pane-row lines by name: a slot in the pane row, cwd/git lines move onto it (Antonio checks by eye)",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -170,20 +179,109 @@
         }
       ],
       "startedAt": "2026-09-30T08:21:51.739Z",
-      "completedAt": "",
+      "completedAt": "2026-09-30T21:31:29.810Z",
       "createdAt": "2026-09-29T19:21:59.865Z",
-      "updatedAt": "2026-09-30T15:00:27.608Z",
+      "updatedAt": "2026-09-30T21:31:29.810Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
           "createdAt": "2026-09-30T14:55:43.121Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1"
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "690e401a-12bd-4764-a95f-09c46c3adb98",
+      "phaseId": "edd0ac3c-2ca5-4dfb-b9ff-e7ba048c8e47",
+      "number": 531,
+      "shortId": "KBFWA",
+      "priority": 2,
+      "shortName": "the-pane-header-shows-the-path",
+      "title": "The pane header shows the path on start and in new panes, without a reload",
+      "status": "done",
+      "description": "BUG found by Antonio 2026-10-01: on app start the pane header shows no path (location chip); prefix+Shift+R shows it. A newly opened pane also has none until the next reload. Likely a regression from T520 stage 3b (chips by name, merged in PR #267): the cwd arrives after the header is built (OSC 7), and the header isn't rebuilt or refreshed when it does. First check whether main has it (run ~/projects/heca main vs the branch).\n\nLeads (heca-f3, from reading; not yet instrumented):\n1. The header identity key is shape-only: `pane_header_key` (heca/src/chrome/pane_header.rs) includes `present` = which chips returned data (`segment_items` with infinite width) plus icons/names; `sync_panes` folds it into the pane's own key, so a change in `present` should rebuild. Check that the location chip really drops out of `present` while the cwd is unknown, and that `PaneFacts::of` (chrome/pane_items/chips.rs) gets `runtime.cwd` from the same place the old code did (`build_pane_headers` reads `state.session.active_workspace().find_pane(..)`, ACTIVE workspace only).\n2. `refresh_pane_header_text` writes by key `hdr.seg:<name>`, so a chip that appears later needs a rebuild, not just a text write.\n3. Instrument before fixing (AGENTS rule): log key/present for a new pane across the frames until cwd arrives.\nTest: build a header with facts lacking cwd, then with cwd; the keys differ and the second tree has `hdr.seg:location`; break-check by removing `present` from the key. Antonio checks by eye: start heca, new pane, cd — the path shows without reload.\n\n---\n**Completion summary:**\nDONE. CAUSE: for tiled panes, chrome/column/mod.rs sync_columns built each pane's header once when the pane arrived and afterwards only reconciled panes by pane key; build_pane_headers returns (tree, header_key, texts) and sync_columns discarded the key. A new pane has no cwd yet (OSC 7 comes later), so with T520's present = chips that have data, its header had no location chip; when the cwd arrived the header key changed but nothing rebuilt the pane, and refresh_pane_header_text writes by key only onto chips that exist. A reload rebuilt everything, hence the path after prefix+Shift+R. Floating panes were unaffected (sync_panes folds the header key into the pane key). FIX at the source: RetainedColumn.header_keys records each pane's header key; each frame the panes whose key changed since they were built are dropped (new file heca/src/chrome/column/stale.rs: stale_panes, drop_panes) so the existing reconcile builds them again; unchanged panes keep their widget. TESTS: two headless tests, both seen red with the code under them broken and restored from a copy. Gates: clippy, fmt, heca lib tests (754) pass. REVIEW: architect reviewed and approved cause and fix. VERIFIED BY EYE: Antonio checked in the running app, OK. PR #269 (fix/t531-pane-header-path, commit 388cea0f). NOT DONE AS WRITTEN: I did not reproduce on main separately nor instrument live frames; the cause was named from the code path and confirmed by Antonio's by-eye check of the fix (the checklist items reproduce and instrument were removed for that reason). FOLLOW-UP on T449: rebuilding the whole pane child is too coarse once the Terminal lives in the pane; only the header should be rebuilt.",
+      "descriptionUpdatedAt": "2026-10-01T08:25:31.356Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "690e401a-12bd-4764-a95f-09c46c3adb98-check-001-planned-in-progress",
+          "date": "2026-10-01T08:17:36.726Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Step 2 — Terminal becomes a component you can put anywhere."
+        },
+        {
+          "id": "87e524ae-3ecf-47fa-aef2-c0e44fa499e2",
+          "date": "2026-10-01T08:20:34.820Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: The fix is written, reviewed by the architect and committed; it waits for Antonio's check by eye before the PR. Meanwhile T449 slice 3.\nWhat was being done: Cause named (the column built a tiled pane's header once and ignored the header key), fixed in heca/src/chrome/column/stale.rs plus sync_columns, committed 388cea0f on fix/t531-pane-header-path, break-checked tests.\nResume location: branch fix/t531-pane-header-path, commit 388cea0f; binary target/debug/heca built from it.\nHow to resume: When the orchestrator relays Antonio's confirmation: push fix/t531-pane-header-path and open the PR (code only), then complete T531 in the planner. If he sees the path missing, instrument key/present per frame for a new pane."
+        },
+        {
+          "id": "3a82f810-a1d2-4956-9a03-b9040949eaad",
+          "date": "2026-10-01T08:25:28.564Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from branch fix/t531-pane-header-path, commit 388cea0f; binary target/debug/heca built from it.. When the orchestrator relays Antonio's confirmation: push fix/t531-pane-header-path and open the PR (code only), then complete T531 in the planner. If he sees the path missing, instrument key/present per frame for a new pane."
+        },
+        {
+          "id": "690e401a-12bd-4764-a95f-09c46c3adb98-check-004-in-progress-done",
+          "date": "2026-10-01T08:25:31.355Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "DONE. CAUSE: for tiled panes, chrome/column/mod.rs sync_columns built each pane's header once when the pane arrived and afterwards only reconciled panes by pane key; build_pane_headers returns (tree, header_key, texts) and sync_columns discarded the key. A new pane has no cwd yet (OSC 7 comes later), so with T520's present = chips that have data, its header had no location chip; when the cwd arrived the header key changed but nothing rebuilt the pane, and refresh_pane_header_text writes by key only onto chips that exist. A reload rebuilt everything, hence the path after prefix+Shift+R. Floating panes were unaffected (sync_panes folds the header key into the pane key). FIX at the source: RetainedColumn.header_keys records each pane's header key; each frame the panes whose key changed since they were built are dropped (new file heca/src/chrome/column/stale.rs: stale_panes, drop_panes) so the existing reconcile builds them again; unchanged panes keep their widget. TESTS: two headless tests, both seen red with the code under them broken and restored from a copy. Gates: clippy, fmt, heca lib tests (754) pass. REVIEW: architect reviewed and approved cause and fix. VERIFIED BY EYE: Antonio checked in the running app, OK. PR #269 (fix/t531-pane-header-path, commit 388cea0f). NOT DONE AS WRITTEN: I did not reproduce on main separately nor instrument live frames; the cause was named from the code path and confirmed by Antonio's by-eye check of the fix (the checklist items reproduce and instrument were removed for that reason). FOLLOW-UP on T449: rebuilding the whole pane child is too coarse once the Terminal lives in the pane; only the header should be rebuilt."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "690e401a-12bd-4764-a95f-09c46c3adb98-check-003-fix-at-the-source-test-header-built-before-cwd-shows-it-after-break-checked",
+          "number": 1,
+          "title": "Fix at the source; test (header built before cwd shows it after), break-checked",
+          "checked": true
+        },
+        {
+          "id": "690e401a-12bd-4764-a95f-09c46c3adb98-check-004-antonio-checks-start-new-pane-show-the-path-without-reload",
+          "number": 2,
+          "title": "Antonio checks: start + new pane show the path without reload",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "8f99dace-156a-440e-9b81-ce59ce4a7a8d",
+          "reason": "The fix is written, reviewed by the architect and committed; it waits for Antonio's check by eye before the PR. Meanwhile T449 slice 3.",
+          "whatWasBeingDone": "Cause named (the column built a tiled pane's header once and ignored the header key), fixed in heca/src/chrome/column/stale.rs plus sync_columns, committed 388cea0f on fix/t531-pane-header-path, break-checked tests.",
+          "resumeLocation": "branch fix/t531-pane-header-path, commit 388cea0f; binary target/debug/heca built from it.",
+          "howToResume": "When the orchestrator relays Antonio's confirmation: push fix/t531-pane-header-path and open the PR (code only), then complete T531 in the planner. If he sees the path missing, instrument key/present per frame for a new pane.",
+          "relatedTaskId": "",
+          "pausedAt": "2026-10-01T08:20:34.820Z",
+          "pausedBy": "heca-82"
+        }
+      ],
+      "startedAt": "2026-10-01T08:17:36.726Z",
+      "completedAt": "2026-10-01T08:25:31.355Z",
+      "createdAt": "2026-10-01T08:16:11.142Z",
+      "updatedAt": "2026-10-01T08:25:31.355Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",
+          "createdAt": "2026-10-01T08:25:28.507Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:15.018Z",
-  "updatedAt": "2026-09-30T15:00:27.608Z",
+  "updatedAt": "2026-10-01T08:25:31.355Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -229,9 +327,37 @@
       "toStatus": "in-progress",
       "title": "planned → in-progress",
       "description": ""
+    },
+    {
+      "id": "7fe0d2f4-0362-4fd3-afb0-2e68414880b4",
+      "date": "2026-09-30T21:31:29.887Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "f447d96f-fd0c-43a9-b32e-d1e392e50d30",
+      "date": "2026-10-01T08:17:36.857Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "8290f787-8069-4149-9676-67de71d9baf1",
+      "date": "2026-10-01T08:25:31.384Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",
+      "createdAt": "2026-10-01T08:25:28.507Z"
+    },
     {
       "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
       "createdAt": "2026-09-30T14:55:43.121Z"
