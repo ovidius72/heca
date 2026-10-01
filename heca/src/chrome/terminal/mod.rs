@@ -15,6 +15,7 @@ pub(crate) mod testing;
 mod viewport;
 
 pub(crate) use component::Terminal;
+use input::TerminalCommand;
 pub(crate) use input::{Cell, TerminalInput};
 pub(crate) use model::TerminalId;
 pub(crate) use viewport::Viewport;
@@ -26,19 +27,24 @@ use crate::app_state::AppState;
 /// **The terminal a pane shows** — made the first time it is asked for, the same one every time
 /// after, so the widget in a rebuilt tree and the one the app keeps agree.
 ///
-/// A pane's terminal takes its identity from the pane.
+/// Which terminal *process* it shows is the store's to say: it is attached here each time, so a
+/// pane whose process was started after its first tree still ends up showing it.
 pub(crate) fn view_of(state: &mut AppState, pane_id: PaneId) -> Terminal {
     let proxy = state.event_proxy.clone();
-    state
+    let process = state.backends.terminal_of(pane_id);
+    let terminal = state
         .terminals
         .entry(pane_id)
         .or_insert_with(|| {
             let terminal = Terminal::new();
-            terminal.attach(TerminalId(pane_id.0));
             terminal.bind(seams(proxy, pane_id));
             terminal
         })
-        .clone()
+        .clone();
+    if let Some(id) = process {
+        terminal.attach(id);
+    }
+    terminal
 }
 
 /// **Everything a pane's terminal says to its owner**: what its scrollback controls mean, and where
@@ -48,11 +54,33 @@ fn seams(
     pane_id: PaneId,
 ) -> input::Seams {
     let input_proxy = proxy.clone();
+    let command_proxy = proxy.clone();
     input::Seams {
         scroll: scroll_intents(proxy, pane_id),
         input: Box::new(move |input| {
             let _ = input_proxy
                 .send_event(crate::app::events::AppEvent::TerminalInput { pane_id, input });
+        }),
+        command: Box::new(move |id, command| {
+            use crate::app::events::AppEvent;
+            use crate::app::interaction::{InteractionIntent, InteractionSource};
+            use crate::input::WmAction;
+            let action = match command {
+                TerminalCommand::Run { text, enter } => WmAction::TerminalRun {
+                    pane_id: None,
+                    terminal: Some(id.0),
+                    text,
+                    enter,
+                },
+                TerminalCommand::Kill => WmAction::TerminalKill {
+                    pane_id: None,
+                    terminal: Some(id.0),
+                },
+            };
+            let _ = command_proxy.send_event(AppEvent::ChromeIntent {
+                source: InteractionSource::MouseContent,
+                intent: InteractionIntent::ActivateAction(action),
+            });
         }),
     }
 }

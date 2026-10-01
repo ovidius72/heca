@@ -79,12 +79,25 @@ pub(crate) enum TerminalInput {
     },
 }
 
+/// What the terminal's handle asks of its process. Unlike [`TerminalInput`], these are things a user
+/// or a script *means to do*, so the owner turns each into the action of the same name — the one way
+/// a key, the palette, RPC or heca-pro reaches a terminal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum TerminalCommand {
+    /// Type a line, and press Enter after it if `enter`.
+    Run { text: String, enter: bool },
+    /// End the terminal.
+    Kill,
+}
+
 /// **Everything a terminal's owner says to it, once**: what a click on the scrollback controls
 /// means, and where its input goes. They travel as one group, built in `mod.rs`.
 pub(crate) struct Seams {
     pub scroll: ScrollIntents,
     /// Where a [`TerminalInput`] goes.
     pub input: Box<dyn Fn(TerminalInput)>,
+    /// Where a [`TerminalCommand`] about the terminal with this id goes.
+    pub command: Box<dyn Fn(super::TerminalId, TerminalCommand)>,
 }
 
 #[cfg(test)]

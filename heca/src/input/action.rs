@@ -182,6 +182,20 @@ pub enum WmAction {
         pane_id: Option<PaneId>,
         step: FontZoomStep,
     },
+    /// **Type a line into a running terminal.** The target is a `terminal` (the id the store
+    /// issued), a `pane_id`, or — with neither — the focused pane's terminal. `enter` presses Enter
+    /// after the text, which is what makes it run.
+    TerminalRun {
+        pane_id: Option<PaneId>,
+        terminal: Option<u64>,
+        text: String,
+        enter: bool,
+    },
+    /// **End a terminal** — what closing its pane does. Same targets as [`TerminalRun`](Self::TerminalRun).
+    TerminalKill {
+        pane_id: Option<PaneId>,
+        terminal: Option<u64>,
+    },
 
     // ── Pane (unit) ──
     Float,
@@ -328,6 +342,8 @@ pub enum WmAction {
         kind: SpawnKind,
         float: bool,
         close_policy: PaneClosePolicy,
+        /// The folder to start in; `None` is heca's own.
+        cwd: Option<String>,
     },
 
     // ── Scrollback (host terminal viewport) ──
@@ -671,6 +687,7 @@ mod tests {
                 keep_on_error: true,
                 keep_on_success: false,
             },
+            cwd: None,
         };
         let _ = WmAction::AddPaneToColumn {
             ws_idx: 0,

@@ -2,7 +2,6 @@
 
 use super::confirm::request_destructive;
 use super::split_resize::handle_split_horizontal;
-use crate::app::backend_factory::{create_terminal_backend_for_state, terminal_grid_for_workspace};
 use crate::app::interaction::focused_pane_id;
 use crate::app_state::AppState;
 use crate::input::WmAction;
@@ -28,14 +27,10 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     state.session.add_workspace(working_area);
     let new_idx = state.session.workspaces.len() - 1;
     switch_workspace_tracked(state, new_idx);
-    let (cols, rows) = terminal_grid_for_workspace(state, new_idx);
     let next_id = state.session.next_id();
     let pane = LayoutPane::new(PaneId(next_id), pane_name(PaneId(next_id)));
     state.session.add_pane(pane, None, true);
-    state.backends.insert_for_pane(
-        PaneId(next_id),
-        create_terminal_backend_for_state(state, cols, rows),
-    );
+    state.start_shell_in(PaneId(next_id), new_idx);
     while state.last_visited_pane_per_ws.len() <= new_idx {
         state.last_visited_pane_per_ws.push(None);
     }
@@ -67,11 +62,7 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
         ws.scrolling
             .add_pane_to_column(capped_col, None, pane, true);
     }
-    let (cols, rows) = terminal_grid_for_workspace(state, target_ws);
-    state.backends.insert_for_pane(
-        backend_id,
-        create_terminal_backend_for_state(state, cols, rows),
-    );
+    state.start_shell_in(backend_id, target_ws);
 }
 
 /// Add a new column to a specific workspace (sidebar right-click context menu).
@@ -113,7 +104,7 @@ pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
     for &id in &pane_ids {
         state.clear_search(id);
     }
-    state.backends.remove_all(pane_ids);
+    state.backends.kill_all(pane_ids);
 
     // Remove the column
     if let Some(ws) = state.session.workspaces.get_mut(target_ws) {
@@ -155,7 +146,7 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
     for &id in &pane_ids {
         state.clear_search(id);
     }
-    state.backends.remove_all(pane_ids);
+    state.backends.kill_all(pane_ids);
 
     // Remove the workspace
     state.session.remove_workspace(target_ws);

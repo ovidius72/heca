@@ -193,7 +193,7 @@ fn window_gesture_has_it(state: &AppState) -> bool {
 }
 
 /// **The left button came up, anywhere.** (A release outside the window reaches no widget, because
-/// the library drops a capture when the pointer leaves — until P084(F004)/T534 lands, this one
+/// the library drops a capture when the pointer leaves — until P084(F004)/T536 lands, this one
 /// window-level rule ends the drag; then the selection captures the pointer like a scrollbar's
 /// thumb and this goes.) A host selection drag ends where the button does, even
 /// when the pointer has left the terminal it started in: the selection is confirmed up to the last

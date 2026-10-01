@@ -13,6 +13,7 @@ use std::path::Path;
 use std::sync::{Arc, OnceLock};
 use winit::event_loop::EventLoopProxy;
 
+use crate::app::backend_store::{Program, SpawnError, TerminalSpec};
 use crate::app::events::AppEvent;
 use crate::app_state::AppState;
 
@@ -40,50 +41,73 @@ fn estimate_terminal_units(extent: f64, approx_cell: f64, fallback: usize) -> us
     (extent / approx_cell).ceil().clamp(1.0, MAX_TERMINAL_UNITS) as usize
 }
 
-pub(crate) fn create_terminal_backend_for_state(
-    state: &AppState,
-    cols: usize,
-    rows: usize,
-) -> Box<dyn PaneBackend> {
-    let options = terminal_backend_options(
-        &state.theme,
-        Some(&state.event_proxy),
-        state.shell_integration_enabled,
-        state.terminal_scrollback_lines,
-        state.terminal_scroll_animations_enabled,
-    );
-    let mut backend =
-        create_terminal_backend_with_options(cols, rows, state.terminal_cell_size, options);
-    backend.set_link_detection(state.appearance.terminal.link_detection);
-    backend.set_image_capture(state.appearance.terminal.images);
-    backend
+/// **The settings every terminal process is started with**, gathered in one place so no caller
+/// threads the theme, the scrollback and the shell-integration choice by hand.
+pub(crate) struct LaunchSettings {
+    pub(crate) theme: Theme,
+    pub(crate) event_proxy: Option<EventLoopProxy<AppEvent>>,
+    pub(crate) shell_integration: bool,
+    pub(crate) scrollback: usize,
+    pub(crate) scroll_animations: bool,
+    pub(crate) cell_size: (f32, f32),
+    pub(crate) link_detection: bool,
+    pub(crate) images: bool,
 }
 
-pub(crate) fn create_command_backend_for_state(
-    state: &AppState,
-    cols: usize,
-    rows: usize,
-    command: &str,
-) -> Result<Box<dyn PaneBackend>, String> {
-    // Direct command panes spawn a concrete program inside the PTY; shell
-    // integration is intentionally disabled because OSC prompt/cwd hooks are a
-    // shell concern and would only add noise here.
-    let options = terminal_backend_options(
-        &state.theme,
-        Some(&state.event_proxy),
-        false,
-        state.terminal_scrollback_lines,
-        state.terminal_scroll_animations_enabled,
-    );
-    let mut backend = create_command_backend_with_options(
-        cols,
-        rows,
-        state.terminal_cell_size,
-        command,
-        options,
-    )?;
-    backend.set_link_detection(state.appearance.terminal.link_detection);
-    backend.set_image_capture(state.appearance.terminal.images);
+impl LaunchSettings {
+    /// What the running app says.
+    pub(crate) fn of(state: &AppState) -> Self {
+        Self {
+            theme: state.theme.clone(),
+            event_proxy: Some(state.event_proxy.clone()),
+            shell_integration: state.shell_integration_enabled,
+            scrollback: state.terminal_scrollback_lines,
+            scroll_animations: state.terminal_scroll_animations_enabled,
+            cell_size: state.terminal_cell_size,
+            link_detection: state.appearance.terminal.link_detection,
+            images: state.appearance.terminal.images,
+        }
+    }
+}
+
+/// **Build the process a spec describes.** Private to the store's door
+/// ([`BackendStore::ensure`](crate::app::backend_store::BackendStore::ensure)): nothing else starts
+/// a terminal.
+pub(crate) fn launch(
+    settings: &LaunchSettings,
+    spec: &TerminalSpec,
+) -> Result<Box<dyn PaneBackend>, SpawnError> {
+    let (cols, rows) = spec.grid;
+    let mut backend = match &spec.program {
+        Program::Shell => {
+            let mut options = terminal_backend_options(
+                &settings.theme,
+                settings.event_proxy.as_ref(),
+                settings.shell_integration,
+                settings.scrollback,
+                settings.scroll_animations,
+            );
+            options.cwd = spec.cwd.clone();
+            create_terminal_backend_with_options(cols, rows, settings.cell_size, options)
+        }
+        Program::Command(command) => {
+            // Direct command panes spawn a concrete program inside the PTY; shell integration is
+            // intentionally disabled because OSC prompt/cwd hooks are a shell concern and would
+            // only add noise here.
+            let mut options = terminal_backend_options(
+                &settings.theme,
+                settings.event_proxy.as_ref(),
+                false,
+                settings.scrollback,
+                settings.scroll_animations,
+            );
+            options.cwd = spec.cwd.clone();
+            create_command_backend_with_options(cols, rows, settings.cell_size, command, options)
+                .map_err(SpawnError)?
+        }
+    };
+    backend.set_link_detection(settings.link_detection);
+    backend.set_image_capture(settings.images);
     Ok(backend)
 }
 
@@ -100,30 +124,6 @@ pub(crate) fn terminal_grid_for_workspace(state: &AppState, ws_idx: usize) -> (u
             )
         })
         .unwrap_or(FALLBACK_TERMINAL_GRID)
-}
-
-#[expect(
-    clippy::too_many_arguments,
-    reason = "terminal backend creation threads theme/event/shell/scrollback/animation policy explicitly; grouping is a later refactor"
-)]
-pub(crate) fn create_terminal_backend(
-    cols: usize,
-    rows: usize,
-    theme: &Theme,
-    cell_size: (f32, f32),
-    event_proxy: Option<&EventLoopProxy<AppEvent>>,
-    shell_integration_enabled: bool,
-    scrollback_size: usize,
-    scroll_animations: bool,
-) -> Box<dyn PaneBackend> {
-    let options = terminal_backend_options(
-        theme,
-        event_proxy,
-        shell_integration_enabled,
-        scrollback_size,
-        scroll_animations,
-    );
-    create_terminal_backend_with_options(cols, rows, cell_size, options)
 }
 
 pub(crate) fn terminal_palette_defaults(theme: &Theme) -> Option<TerminalPaletteDefaults> {

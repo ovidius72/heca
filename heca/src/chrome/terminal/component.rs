@@ -6,7 +6,7 @@ use std::rc::Rc;
 use heca_core::layout::Rectangle;
 use heca_grid_ui::{Point, Size};
 
-use super::input::{Cell as GridCell, Seams, TerminalInput};
+use super::input::{Cell as GridCell, Seams, TerminalCommand, TerminalInput};
 use super::model::TerminalId;
 use super::viewport::{Controls, IntentSlot, Placed, Viewport};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt};
@@ -137,6 +137,43 @@ impl Terminal {
     pub(crate) fn show(&self, viewport: &Viewport) -> bool {
         self.shared.cell.set(viewport.cell);
         self.shared.controls.borrow_mut().show(viewport)
+    }
+
+    /// **Type a line into this terminal and press Enter** — the handle's `run`. Does nothing until the
+    /// terminal shows a process.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the handle API for whoever places a Terminal; the first placement beyond a pane arrives with T449 slice 2b"
+        )
+    )]
+    pub(crate) fn run(&self, text: &str) {
+        self.tell(TerminalCommand::Run {
+            text: text.to_string(),
+            enter: true,
+        });
+    }
+
+    /// **End this terminal** — the handle's `kill`.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the handle API for whoever places a Terminal; the first placement beyond a pane arrives with T449 slice 2b"
+        )
+    )]
+    pub(crate) fn kill(&self) {
+        self.tell(TerminalCommand::Kill);
+    }
+
+    fn tell(&self, command: TerminalCommand) {
+        let Some(id) = self.shared.id.get() else {
+            return;
+        };
+        if let Some(seams) = self.shared.intents.borrow().as_ref() {
+            (seams.command)(id, command);
+        }
     }
 
     /// Say which terminal process this shows. Said once, by whoever owns the processes.
@@ -396,6 +433,7 @@ mod tests {
         Seams {
             scroll,
             input: Box::new(|_| {}),
+            command: Box::new(|_, _| {}),
         }
     }
 
@@ -409,6 +447,7 @@ mod tests {
                 to_offset: Box::new(|_| {}),
             },
             input: Box::new(move |i| seen.borrow_mut().push(i)),
+            command: Box::new(|_, _| {}),
         };
         (seams, said)
     }
@@ -694,5 +733,43 @@ mod tests {
         t.place(None);
         assert_eq!(t.cell_at((45.0, 61.0)), None, "not drawn: no cell");
         assert_eq!(t.cell_origin(3, 4), None);
+    }
+    /// The handle's `run` and `kill` say what they mean, about the terminal they belong to — and say
+    /// nothing until there is a process to mean it about.
+    #[test]
+    fn the_handle_runs_and_kills_by_id() {
+        let told: Rc<RefCell<Vec<(u64, TerminalCommand)>>> = Rc::default();
+        let seen = told.clone();
+        let t = Terminal::new();
+        t.bind(Seams {
+            scroll: ScrollIntents {
+                to_bottom: Box::new(|| {}),
+                to_offset: Box::new(|_| {}),
+            },
+            input: Box::new(|_| {}),
+            command: Box::new(move |id, c| seen.borrow_mut().push((id.0, c))),
+        });
+        t.run("ls");
+        assert!(
+            told.borrow().is_empty(),
+            "no process yet, so nothing to run in"
+        );
+
+        t.attach(TerminalId(5));
+        t.run("ls -la");
+        t.kill();
+        assert_eq!(
+            *told.borrow(),
+            vec![
+                (
+                    5,
+                    TerminalCommand::Run {
+                        text: "ls -la".into(),
+                        enter: true
+                    }
+                ),
+                (5, TerminalCommand::Kill),
+            ]
+        );
     }
 }

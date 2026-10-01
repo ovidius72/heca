@@ -410,4 +410,46 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
             ),
         ],
     },
+    ActionDescriptor {
+        name: "terminal_run",
+        label: "Run in Terminal",
+        description: "Type a line into a running terminal and press Enter. Name the terminal by `terminal` (its id), or a `pane_id`; with neither, the focused pane's terminal.",
+        icon: None,
+        args: &[
+            ArgDescriptor::required("text", ArgKind::Text, "The line to type."),
+            ArgDescriptor::optional(
+                "terminal",
+                ArgKind::Int,
+                "The terminal's id, as the store issued it. Wins over pane_id.",
+            ),
+            ArgDescriptor::optional(
+                "pane_id",
+                ArgKind::Int,
+                "The pane whose terminal to use; omit for the focused one.",
+            ),
+            ArgDescriptor::optional(
+                "enter",
+                ArgKind::Bool,
+                "Press Enter after the text. Default true.",
+            ),
+        ],
+    },
+    ActionDescriptor {
+        name: "terminal_kill",
+        label: "Kill Terminal",
+        description: "End a terminal — the same as closing its pane. Name it by `terminal` (its id) or a `pane_id`; with neither, the focused pane's terminal.",
+        icon: None,
+        args: &[
+            ArgDescriptor::optional(
+                "terminal",
+                ArgKind::Int,
+                "The terminal's id, as the store issued it. Wins over pane_id.",
+            ),
+            ArgDescriptor::optional(
+                "pane_id",
+                ArgKind::Int,
+                "The pane whose terminal to end; omit for the focused one.",
+            ),
+        ],
+    },
 ];

@@ -231,6 +231,21 @@ pub(super) fn build_action(
             pane_id: get_u64(args, "pane_id").map(PaneId),
             step: get_enum(args, "step")?,
         }),
+        // Terminal (RPC): the target is a `terminal` id, a `pane_id`, or — with neither — the
+        // focused pane's terminal.
+        "terminal_run" => Some(WmAction::TerminalRun {
+            pane_id: get_u64(args, "pane_id").map(PaneId),
+            terminal: get_u64(args, "terminal"),
+            text: get_string(args, "text")?,
+            enter: args
+                .get("enter")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(true),
+        }),
+        "terminal_kill" => Some(WmAction::TerminalKill {
+            pane_id: get_u64(args, "pane_id").map(PaneId),
+            terminal: get_u64(args, "terminal"),
+        }),
 
         // ── Context-menu / sidebar targets (context-menu-5) ──
         // Reachable by NAME so a menu entry — built-in or plugin-contributed — carries an `Intent`
@@ -330,6 +345,7 @@ pub(super) fn build_action(
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(false),
             },
+            cwd: get_string(args, "cwd"),
         }),
         "submit_overlay" => Some(WmAction::SubmitOverlay {
             overlay: None,
@@ -367,6 +383,7 @@ mod tests {
                     keep_on_error: true,
                     keep_on_success: false,
                 },
+                cwd: None,
             })
         );
     }
@@ -523,5 +540,60 @@ mod tests {
             None,
             "region is required"
         );
+    }
+
+    #[test]
+    fn test_build_terminal_run_and_kill() {
+        // Bare: types into the focused pane's terminal and presses Enter.
+        let args = std::collections::HashMap::from([("text".to_string(), "ls".to_string())]);
+        assert_eq!(
+            build_action("terminal_run", &args),
+            Some(WmAction::TerminalRun {
+                pane_id: None,
+                terminal: None,
+                text: "ls".to_string(),
+                enter: true,
+            })
+        );
+        // By terminal id, without Enter.
+        let args = std::collections::HashMap::from([
+            ("text".to_string(), "vim".to_string()),
+            ("terminal".to_string(), "12".to_string()),
+            ("enter".to_string(), "false".to_string()),
+        ]);
+        assert_eq!(
+            build_action("terminal_run", &args),
+            Some(WmAction::TerminalRun {
+                pane_id: None,
+                terminal: Some(12),
+                text: "vim".to_string(),
+                enter: false,
+            })
+        );
+        assert_eq!(
+            build_action("terminal_run", &std::collections::HashMap::new()),
+            None,
+            "text is required"
+        );
+        let args = std::collections::HashMap::from([("pane_id".to_string(), "3".to_string())]);
+        assert_eq!(
+            build_action("terminal_kill", &args),
+            Some(WmAction::TerminalKill {
+                pane_id: Some(PaneId(3)),
+                terminal: None,
+            })
+        );
+    }
+
+    #[test]
+    fn test_spawn_command_takes_a_folder() {
+        let args = std::collections::HashMap::from([
+            ("command".to_string(), "htop".to_string()),
+            ("cwd".to_string(), "/tmp/work".to_string()),
+        ]);
+        let Some(WmAction::SpawnCommand { cwd, .. }) = build_action("spawn_command", &args) else {
+            panic!("spawn_command builds");
+        };
+        assert_eq!(cwd.as_deref(), Some("/tmp/work"));
     }
 }

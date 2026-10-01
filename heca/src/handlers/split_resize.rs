@@ -1,7 +1,6 @@
 //! Splitting a column, resizing columns and panes, and zooming a column.
 
 use super::navigation::handle_focus_workspace;
-use crate::app::backend_factory::{create_terminal_backend_for_state, terminal_grid_for_workspace};
 use crate::app_state::AppState;
 use crate::input::WmAction;
 use crate::pane_name;
@@ -9,20 +8,15 @@ use heca_core::layout::{ColumnWidth, Pane as LayoutPane, PaneId};
 
 pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
     let active_ws = state.session.active_workspace_idx;
-    let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
     let next_id = state.session.next_id();
     let pane = LayoutPane::new(PaneId(next_id), pane_name(PaneId(next_id)));
     let backend_id = PaneId(next_id);
     state.session.add_pane(pane, None, true);
-    state.backends.insert_for_pane(
-        backend_id,
-        create_terminal_backend_for_state(state, cols, rows),
-    );
+    state.start_shell_in(backend_id, active_ws);
 }
 
 pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
     let active_ws = state.session.active_workspace_idx;
-    let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
     let next_id = state.session.next_id();
     let pane = LayoutPane::new(PaneId(next_id), pane_name(PaneId(next_id)));
     let backend_id = PaneId(next_id);
@@ -34,10 +28,7 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.add_pane_to_column(col_idx, None, pane, true);
     }
-    state.backends.insert_for_pane(
-        backend_id,
-        create_terminal_backend_for_state(state, cols, rows),
-    );
+    state.start_shell_in(backend_id, active_ws);
 }
 
 pub fn handle_resize_increase(state: &mut AppState, _action: &WmAction) {

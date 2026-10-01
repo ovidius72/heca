@@ -94,6 +94,11 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
                 "Open it as a floating pane. Default false.",
             ),
             ArgDescriptor::optional(
+                "cwd",
+                ArgKind::Text,
+                "The folder to start in. Default: heca's own. A folder that does not exist is an error.",
+            ),
+            ArgDescriptor::optional(
                 "close_pane",
                 ArgKind::Bool,
                 "Close the pane when the command exits. Default false.",

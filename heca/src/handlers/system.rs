@@ -1,6 +1,6 @@
 //! App-wide actions: the palette, the context menu, reload, running a command, modes, font zoom, notifications and search history.
 
-use crate::app::backend_factory::{create_command_backend_for_state, terminal_grid_for_workspace};
+use crate::app::backend_store::TerminalSpec;
 use crate::app_state::AppState;
 use crate::input::{FontZoomStep, SpawnKind, WmAction};
 use heca_core::layout::{Pane as LayoutPane, PaneId};
@@ -55,6 +55,7 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
         kind,
         float,
         close_policy,
+        cwd,
     } = action
     else {
         return;
@@ -68,23 +69,19 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     }
 
     let active_ws = state.session.active_workspace_idx;
-    let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
-
-    // Build the backend before touching the layout — a spawn that fails (F009/P055/T225)
-    // should not leave an empty pane behind.
-    let backend = match create_command_backend_for_state(state, cols, rows, command) {
-        Ok(backend) => backend,
-        Err(e) => {
-            crate::notification::Notification::danger(format!("Couldn't run '{command}'"))
-                .body(e)
-                .dedup_key(format!("spawn.failed:{command}"))
-                .sticky()
-                .send();
-            return;
-        }
-    };
-
     let next_id = state.session.next_id();
+
+    // Start the process before touching the layout — a spawn that fails (F009/P055/T225)
+    // should not leave an empty pane behind.
+    let spec = TerminalSpec::command_in_workspace(state, active_ws, command, cwd.as_deref());
+    if let Err(e) = state.start_terminal(PaneId(next_id), spec) {
+        crate::notification::Notification::danger(format!("Couldn't run '{command}'"))
+            .body(e.to_string())
+            .dedup_key(format!("spawn.failed:{command}"))
+            .sticky()
+            .send();
+        return;
+    }
     let mut pane = LayoutPane::new(PaneId(next_id), command.clone());
     pane.close_policy = *close_policy;
 
@@ -96,7 +93,6 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     } else {
         state.session.add_pane(pane, None, true);
     }
-    state.backends.insert_for_pane(PaneId(next_id), backend);
 }
 
 /// Give chrome keyboard focus to a dock — by id, or by letter.
