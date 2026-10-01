@@ -6,6 +6,7 @@
 
 mod model;
 mod shell;
+mod stale;
 
 pub(crate) use model::ColumnShellModel;
 pub(crate) use shell::{ColumnCallbacks, ColumnShell};
@@ -26,6 +27,9 @@ pub(crate) struct RetainedColumn {
     /// surface, so whoever offers it has to know which panes are in here without reading a key
     /// back out of the tree.
     pub(crate) panes: Vec<PaneId>,
+    /// **What each pane's header was made of when it was built** — its header key. A pane whose
+    /// header has since changed shape is built again (see [`stale`]).
+    pub(crate) header_keys: std::collections::HashMap<PaneId, String>,
 }
 
 /// Drop every retained column — used when a config reload changes the theme baked into the trees.
@@ -129,6 +133,10 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
     let mut headers = crate::chrome::build_pane_headers(state);
     // The words a pane shows change constantly; they are written onto the retained child every
     // frame rather than rebuilt for (F003/P097/T500).
+    let header_keys: std::collections::HashMap<PaneId, String> = headers
+        .iter()
+        .map(|(id, (_, key, _))| (*id, key.clone()))
+        .collect();
     let header_texts: std::collections::HashMap<PaneId, Vec<_>> = headers
         .iter()
         .map(|(id, (_, _, texts))| (*id, texts.clone()))
@@ -185,12 +193,18 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
                     root,
                     key,
                     panes: model.panes.iter().map(|p| p.pane_id).collect(),
+                    header_keys: header_keys.clone(),
                 },
             );
         }
 
         if let Some(retained) = state.columns.get_mut(&col.id) {
             retained.panes = model.panes.iter().map(|p| p.pane_id).collect();
+            // A pane whose header changed shape since it was built is built again; the rest keep
+            // the widget they had.
+            let stale = stale::stale_panes(&retained.header_keys, &header_keys);
+            stale::drop_panes(&mut retained.root, &stale);
+            retained.header_keys = header_keys.clone();
             // **The panes are reconciled, never rebuilt with the column.** A pane that is still
             // here keeps the widget it had — its letter, a gesture in flight, an animation — and
             // only one that arrived is built. Rebuilding them all would be the 100% CPU idle this
