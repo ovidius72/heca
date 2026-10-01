@@ -67,6 +67,9 @@ pub(crate) fn mount_notification_stack(state: &mut AppState) {
         // **A card must not retire under the pointer reaching for its button.** The stack reports
         // the hover and nothing more; the runtime owns what it costs and hands the time back.
         .hovered_signal(state.notification_hovered)
+        // **How much of a message a card shows is the user's to say** — a path must show whole, so
+        // the card wraps and this only stops a runaway message from covering the window.
+        .max_lines_signal(state.notification_max_lines)
         .on_dismiss({
             let emit = emit.clone();
             move |toast_id| {

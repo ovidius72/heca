@@ -173,6 +173,11 @@ auto_dismiss_ms = 4000
 # after it up so there is never a blank slot, and the next in line joins at the end.
 max_visible = 5
 
+# The most lines a notification's title and its body may each take. Text longer than a
+# card is wide wraps onto more lines (a path folds after a "/") instead of being cut; text
+# that needs more than this ends with "…". Clamped to at least 1.
+max_lines = 8
+
 # ─────────────────────────────────────────────────────────────────────────────
 [confirm]
 # ─────────────────────────────────────────────────────────────────────────────

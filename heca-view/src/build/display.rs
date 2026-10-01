@@ -89,6 +89,11 @@ impl Label {
     pub fn wrap(self, on: bool) -> Self {
         self.prop("wrap", on)
     }
+    /// The most lines a wrapping label may take; text that needs more ends its last line with `…`.
+    /// Only meaningful with [`wrap`](Self::wrap). Unset ⇒ as many lines as it needs.
+    pub fn max_lines(self, n: usize) -> Self {
+        self.prop("max_lines", n)
+    }
     /// Text colour: a theme token name or a literal.
     pub fn color(self, colour: &str) -> Self {
         self.prop("color", PropValue::Color(colour.to_string()))
@@ -213,6 +218,11 @@ impl Toast {
     /// `body` slot and they become its body.
     pub fn body_text(self, text: impl Into<String>) -> Self {
         self.prop("body_text", PropValue::Text(text.into()))
+    }
+    /// The most lines the title and the body text may each take; text that needs more ends its last
+    /// line with `…`. Unset ⇒ as many lines as it needs — the text wraps, it is never cut to one.
+    pub fn max_lines(self, n: usize) -> Self {
+        self.prop("max_lines", n)
     }
     /// Whether it starts on screen. A described card that is closed takes no space until something
     /// opens it.

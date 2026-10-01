@@ -21,6 +21,48 @@ fn toast_height_grows_with_body_then_action() {
     assert!(with_action > with_body, "an action row adds further height");
 }
 
+/// **The text is never cut.** A body longer than the card is wide wraps onto more lines — the whole
+/// path is on screen, in pieces — and the card grows to hold them, up to the line cap.
+#[test]
+fn toast_body_wraps_instead_of_cutting_and_stops_at_the_line_cap() {
+    use heca_grid_ui::Toast;
+    let path = "/Users/antonio/projects/gleam/tutorial/gleam.toml is ignored until you trust it";
+    let short = layout_toast(&mut Toast::info("Saved").body_text("ok"));
+
+    let mut whole = Toast::info("Project settings not trusted").body_text(path);
+    let tall = layout_toast(&mut whole);
+    assert!(
+        tall > short,
+        "the long body takes more lines: {tall} vs {short}"
+    );
+    let drawn: String = common::paint(&whole, &Theme::default())
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.text.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("");
+    assert!(
+        drawn.contains("/Users/") && drawn.contains("gleam.toml") && !drawn.contains('…'),
+        "the path is shown whole, none of it cut: {drawn:?}"
+    );
+
+    // With a cap the card stops growing and marks the cut.
+    let mut capped = Toast::info("Project settings not trusted")
+        .max_lines(2)
+        .body_text(path);
+    let capped_h = layout_toast(&mut capped);
+    assert!(
+        capped_h < tall,
+        "the cap stops the growth: {capped_h} vs {tall}"
+    );
+    let marked = common::paint(&capped, &Theme::default())
+        .iter()
+        .any(|c| matches!(c, DrawCommand::Text(t) if t.text.ends_with('…')));
+    assert!(marked, "text over the cap ends with an ellipsis");
+}
+
 #[test]
 fn toast_dismiss_button_fires_on_dismiss_and_consumes() {
     use heca_grid_ui::Toast;

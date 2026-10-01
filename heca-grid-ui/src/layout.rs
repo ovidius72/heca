@@ -37,6 +37,9 @@ pub struct TextMeasure {
     /// Does the text reflow? A wrapping text answers with as many lines as the width needs; a
     /// cutting one is always **one** line and simply accepts whatever width it is given.
     pub wrap: bool,
+    /// The most lines a wrapping text may take (`None` = as many as it needs). The same cap the
+    /// paint applies, so the box is as tall as the lines that are drawn.
+    pub max_lines: Option<usize>,
 }
 
 /// Computes layout for a component tree using `taffy`.
@@ -430,7 +433,9 @@ fn measure_text_node(
     // A cutting label is one line whatever happens to it — it is the *width* it accepts, not the
     // height. Only a wrapping one turns width into height.
     let lines = if ctx.wrap {
-        wrap_lines(&ctx.text, mono_cells(width, cell)).len().max(1)
+        wrap_lines(&ctx.text, mono_cells(width, cell), ctx.max_lines)
+            .len()
+            .max(1)
     } else {
         1
     };

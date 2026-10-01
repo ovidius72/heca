@@ -2544,6 +2544,14 @@ A single text run bound to a `Signal<String>`.
 - **Builders**: `.align(TextAlign)`, `.color(Color)`, `.font_size(f32)` (pin a size),
   `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy), and the
   four text attributes: `.bold(bool)`, `.italic(bool)`, `.underline(bool)`, `.strikethrough(bool)`.
+- **When the text does not fit**: `.truncate(Ellipsis)` cuts it to one line with `…`; `.wrap(true)`
+  reflows it onto as many lines as the width needs instead (the two are exclusive, the last one set
+  wins). A word longer than the line is broken **after a path separator** (`/` or `\`) when one lies
+  inside the line, so a path folds at its directories, and hard-broken at the line's width when there
+  is none. `.max_lines(n)` caps a wrapping label: text that needs more ends its last line with `…`
+  (measure and paint share the one wrap function, so the box is exactly the drawn lines tall);
+  `.max_lines_signal()` is the live handle and `.with_max_lines_signal(sig)` adopts a caller-owned one
+  so several labels share a cap.
 - **Accessors**: `.text_signal() -> Signal<String>` (set it to update reactively), plus a signal per
   attribute — `.bold_signal()`, `.italic_signal()`, `.underline_signal()`, `.strikethrough_signal()`
   (all `Signal<bool>`). Flip one to restyle the label **in place**, with no rebuild: an enclosing
@@ -3794,7 +3802,7 @@ sidebar. Severity maps to theme tokens, never literals.
   (default `true` — the × affordance).
 - **Content is slots, and each takes any component**:
   - `.body(..)` — the column under the title. Takes a widget **or** an already-realized subtree,
-    through the one builder. `.body_text(text)` is **sugar** that builds the small ellipsised
+    through the one builder. `.body_text(text)` is **sugar** that builds the small **wrapping**
     `Label` you would have built — one code path, not two.
   - `.action(..)` — **repeatable**; call it again for a second action and they sit in a row that
     **wraps** when the card is too narrow. Takes a widget or a realized subtree alike. The caller
@@ -3825,7 +3833,11 @@ layout engine. It measured and placed them itself until F003/P082/T481, and a ca
 narrower than its own icon column then laid its title out past its right edge, because a constant
 column cannot consult the width the card was actually given. What follows from that:
 
-- **Narrow it and the text is cut, not moved.** The title and body carry an end ellipsis.
+- **The text wraps, it is never cut to one line.** The title and the `body_text` are wrapping
+  `Label`s, so a long path or error shows whole, folding after a `/`. `.max_lines(n)` is the one cap
+  they share (a `Signal` — `.max_lines_signal()`): text that needs more ends its last line with `…`.
+  Unset, a card takes as many lines as it needs. The app reads the cap from
+  `[settings.notification_system] max_lines`; the card holds no number of its own.
 - **The action button hugs its label**; the title and body fill the column.
 - **The severity tone is published, not painted on**: the icon and the title inherit it (the same
   mechanism `Item` uses for its row colour), so anything composed into the card follows it. The
@@ -5798,6 +5810,9 @@ entirely the engine's; only which corner meets which corner is left.
 
 - **Construct**: `ToastStack::new(items: Signal<Vec<ToastSpec>>)`; `.position(ToastPosition)`,
   `.gap(px)`, `.margin(px)`.
+- **`.max_lines_signal(Signal<usize>)`** — the most lines each card's title and body may take,
+  read from a host-owned signal (a config value) when a card is built; a card already up keeps the
+  cap it was built with. The stack holds no number of its own.
 - **Intents**: `.on_dismiss(|id| …)` (× clicked), `.on_action(|id, key| …)` (an action clicked —
   `key` is that action's own name, because a card may offer several and "which card" alone would
   not say what to do).

@@ -171,6 +171,14 @@ fn default_notification_max_visible() -> usize {
     5
 }
 
+/// Default most lines a notification's title or body may take before it ends with `…`.
+///
+/// A card wraps rather than cuts, so a long path or error shows whole; this only stops a runaway
+/// message from covering the window.
+fn default_notification_max_lines() -> usize {
+    8
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  NotificationSystemConfig
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -210,6 +218,11 @@ pub struct NotificationSystemConfig {
     /// next in line joins at the **end**. Default: 5. Clamped to at least 1.
     #[serde(default = "default_notification_max_visible")]
     pub max_visible: usize,
+    /// The most lines a card's title and its body may each take. Text longer than a card is wide
+    /// **wraps** onto further lines (a path folds after a `/`) instead of being cut; text that needs
+    /// more than this ends with `…`. Default: 8. Clamped to at least 1.
+    #[serde(default = "default_notification_max_lines")]
+    pub max_lines: usize,
 }
 
 impl Default for NotificationSystemConfig {
@@ -218,6 +231,7 @@ impl Default for NotificationSystemConfig {
             mode: NotificationSystem::default(),
             auto_dismiss_ms: default_notification_auto_dismiss_ms(),
             max_visible: default_notification_max_visible(),
+            max_lines: default_notification_max_lines(),
         }
     }
 }
@@ -585,6 +599,20 @@ mod tests {
         let s: SettingsConfig =
             toml::from_str("[notification_system]\nmode = \"app\"\n").expect("parses");
         assert_eq!(s.notification_system.max_visible, 5);
+    }
+
+    #[test]
+    fn notification_max_lines_defaults_to_eight_and_is_overridable() {
+        let s = SettingsConfig::default();
+        assert_eq!(s.notification_system.max_lines, 8);
+
+        let s: SettingsConfig =
+            toml::from_str("[notification_system]\nmax_lines = 3\n").expect("parses");
+        assert_eq!(s.notification_system.max_lines, 3);
+
+        let s: SettingsConfig =
+            toml::from_str("[notification_system]\nmax_visible = 2\n").expect("parses");
+        assert_eq!(s.notification_system.max_lines, 8);
     }
 
     #[test]
