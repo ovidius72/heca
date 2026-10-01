@@ -285,7 +285,7 @@ pub(super) struct ChromeFrame<'a> {
 }
 
 /// A sidebar collapse toggle for the **top bar** (sidebar-fu-14): a small arrow
-/// `IconButton` that emits `ActivateAction(action)` (expand↔rail for its region),
+/// `IconButton` that emits `ActivateAction(action)` (show↔hide for its region),
 /// carrying a tooltip with its keybind (resolved centrally by `action_name` — like every other
 /// chrome button; the tip is a property of the widget, so this still returns the widget). Lives in the always-visible top bar so it
 /// works in both expanded and collapsed states.
@@ -821,12 +821,11 @@ pub(crate) fn build_chrome_root(
         )
     });
 
-    // Top-bar collapse toggles (sidebar-fu-14): shown for each mounted sidebar so the
-    // expand/collapse control is always visible (works in both expanded + collapsed).
-    // The arrow flips with the state: expanded → point at the edge (collapse); collapsed
-    // → point away from the edge (expand).
-    let left_toggle = state.shown[RegionId::LeftSidebar].then(|| {
-        let glyph = if state.chrome_state.left_visible() {
+    // Top-bar sidebar toggles: always on screen — a hidden sidebar is brought back by the same
+    // button — and the arrow flips with the one visible/hidden state: shown → point at the edge
+    // (hide); hidden → point away from the edge (show).
+    let left_toggle = Some({
+        let glyph = if state.chrome_state.is_visible(RegionId::LeftSidebar) {
             Glyph::ArrowLineLeft
         } else {
             Glyph::ArrowLineRight
@@ -841,8 +840,8 @@ pub(crate) fn build_chrome_root(
             theme.colors.muted,
         )
     });
-    let right_toggle = state.shown[RegionId::RightSidebar].then(|| {
-        let glyph = if state.chrome_state.right_visible() {
+    let right_toggle = Some({
+        let glyph = if state.chrome_state.is_visible(RegionId::RightSidebar) {
             Glyph::ArrowLineRight
         } else {
             Glyph::ArrowLineLeft

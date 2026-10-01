@@ -173,14 +173,14 @@ focus_dock            = "prefix+Shift+e"  # Letters on every dock, pick one to f
 toggle_current_workspace_collapsed = "prefix+<"
 toggle_current_column_collapsed    = "prefix+("
 
-# ── Chrome region show/hide (mounted-gate, sidebar-fu-6) ──
+# ── Chrome region show/hide (sidebar-fu-6) ──
 # ⚠ CHANGED 2026-09-29 — the twelve actions show_/hide_/toggle_ × left_sidebar, right_sidebar,
 # top_bar, bottom_bar were removed. A binding that still names one of them does nothing; rewrite it
 # as below (the full old → new table is in docs/keybindings.md, "Changed actions").
 #
-# A DISTINCT axis from `sidebar_left`/`sidebar_right` above (which expand/collapse to
-# the rail): these fully MOUNT/UNMOUNT a region (zero width/height), the runtime twin
-# of `[settings] show_left_sidebar/…`. Unbound by default — uncomment to bind. One action,
+# The same one show/hide state as `sidebar_left`/`sidebar_right` above, for any of the four
+# regions (zero width/height when hidden); `[settings] show_left_sidebar/…` is where it starts.
+# Unbound by default — uncomment to bind. One action,
 # `set_region_visible`, takes the region (sidebar.left | sidebar.right | bar.top | bar.bottom)
 # and `visible` (show | hide | toggle; omitted, it toggles). Example:
 # [[keys.bind]]

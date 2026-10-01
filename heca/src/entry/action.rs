@@ -219,7 +219,7 @@ mod tests {
     /// handler gets a context that can only read and emit.
     #[test]
     fn what_a_handler_asks_for_comes_back_as_intents_for_the_host() {
-        let store = SharedChromeState::new(240.0, true, 240.0, true);
+        let store = SharedChromeState::new(240.0, 240.0);
         let out = run_once(
             &|cx, args| {
                 assert_eq!(args.action, "pro.start");

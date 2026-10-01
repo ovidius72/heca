@@ -455,9 +455,8 @@ pub enum WmAction {
         container_id: String,
         after_id: String,
     },
-    /// Show, hide or toggle a chrome region — fully unmounted when hidden (zero width/height), the
-    /// runtime twin of `[settings] show_left_sidebar` and friends. A DISTINCT axis from the
-    /// `RegionMode` expand/rail toggles (`SidebarLeft`/`SidebarRight`).
+    /// Show, hide or toggle a chrome region — zero width/height when hidden. The same one state
+    /// `[settings] show_left_sidebar` and friends start, and `SidebarLeft`/`SidebarRight` toggle.
     SetRegionVisible {
         region: crate::chrome::RegionId,
         visible: RegionVisibility,

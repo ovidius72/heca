@@ -377,16 +377,15 @@ pub(crate) async fn init_state(
     // Region visibility/width lives in chrome_state (was SidebarState). Build it
     // first so the ChromeHost can share its event bus. plugin-02: the host is
     // wired but empty — first-party providers register in plugin-03.
-    // Region *mode* (Expanded/Hidden→rail) is the runtime expand/collapse state.
-    // Config's `show_*_sidebar` is a separate hard "mounted" gate applied at render
-    // time (`AppState::{left,right}_sidebar_width`), so the runtime rail toggle stays
-    // independent of whether the region is configured on at all.
+    // Whether each region is shown is ONE state, `chrome_state.is_visible(region)`. `[settings]
+    // show_*` is only where it starts; the toggles flip it and a config reload sets it back.
     let chrome_state = crate::chrome::SharedChromeState::new(
         app_config.config.appearance.effective_sidebar_width(),
-        true,
         app_config.config.appearance.effective_sidebar_width(),
-        true,
     );
+    chrome_state.apply_visibility(&crate::chrome::shown_from_settings(
+        &app_config.config.settings,
+    ));
     let mut chrome_host = crate::chrome::ChromeHost::new(chrome_state.events());
     // Register the first built-in provider, seating the `workspaces` container in
     // `LeftSidebar`. This is not bookkeeping: the render path builds each region's body
@@ -524,7 +523,6 @@ pub(crate) async fn init_state(
         terminal_font_zoom_step: app_config.config.settings.terminal_font_zoom_step,
         mouse_wheel_change_font_size: app_config.config.settings.mouse_wheel_change_font_size,
         terminal_scroll_animations_enabled: app_config.config.settings.terminal_scroll_animations,
-        shown: crate::chrome::shown_from_settings(&app_config.config.settings),
         confirm: app_config.config.confirm.clone(),
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
         prefix_entered_at: None,

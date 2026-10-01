@@ -353,7 +353,7 @@ mod tests {
         use std::cell::RefCell;
         use std::rc::Rc;
 
-        let store = SharedChromeState::new(300.0, true, 300.0, false);
+        let store = SharedChromeState::new(300.0, 300.0);
         let seen: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
         let log = seen.clone();
         let _sub = store.events().subscribe("hint.changed", move |e| {

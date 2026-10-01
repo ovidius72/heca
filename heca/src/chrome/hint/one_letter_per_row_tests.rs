@@ -76,7 +76,7 @@ fn a_pane_pick_letters_its_row_in_each_dock_and_nothing_else() {
 
 fn pick_in_two_docks(lower_dock_scrolled: f32) {
     use heca_grid_ui::reactive::SignalUpdate;
-    let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+    let chrome = SharedChromeState::new(280.0, 260.0);
     // The screenshot's lower dock was scrolled: its workspace header was off the top.
     chrome
         .container_scroll("workspaces.left2")

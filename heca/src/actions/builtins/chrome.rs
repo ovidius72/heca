@@ -97,7 +97,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         icon: Some(Glyph::Sidebar),
         args: &[],
     },
-    // Chrome region show/hide mounted-gate (sidebar-fu-6). Unbound by default; the user binds it
+    // Chrome region show/hide (sidebar-fu-6) — the one visible/hidden state every region has. Unbound by default; the user binds it
     // in config with a region, and the palette offers it once per region.
     ActionDescriptor {
         name: "set_region_visible",

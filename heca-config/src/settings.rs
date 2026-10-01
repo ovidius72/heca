@@ -150,8 +150,9 @@ fn default_terminal_scroll_animations() -> bool {
 }
 
 /// Chrome regions are shown by default; a `show_*` toggle set to `false` fully
-/// hides that region (the sidebar collapses to `RegionMode::Hidden`; the tab /
-/// status bar collapses to zero height and the pane area reclaims the space).
+/// starts that region hidden (a sidebar takes no width; the tab / status bar collapses to zero
+/// height and the pane area reclaims the space). It is only the starting state: the show/hide
+/// toggles flip the same state, and a config reload sets it back.
 fn default_show_chrome_region() -> bool {
     true
 }
@@ -419,8 +420,8 @@ pub struct SettingsConfig {
     )]
     pub terminal_scroll_animations: bool,
 
-    /// Show the left sidebar region on startup. `false` starts it hidden
-    /// (`RegionMode::Hidden`); the runtime toggle can still reveal it.
+    /// Show the left sidebar region on startup. `false` starts it hidden; the runtime toggle
+    /// (`prefix+b`) shows it, and a config reload puts it back to this value.
     #[serde(default = "default_show_chrome_region", alias = "show-left-sidebar")]
     pub show_left_sidebar: bool,
     /// Show the right sidebar region on startup. `false` starts it hidden.

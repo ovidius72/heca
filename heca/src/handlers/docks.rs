@@ -5,43 +5,49 @@ use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
 use crate::update_session_viewport;
 
-/// Map a visible flag to a chrome region mode (visible = Expanded, hidden = Hidden).
-fn region_mode(visible: bool) -> heca_grid_ui::widgets::RegionMode {
-    if visible {
-        heca_grid_ui::widgets::RegionMode::Expanded
-    } else {
-        heca_grid_ui::widgets::RegionMode::Hidden
+/// **The one way a region is shown or hidden** — `set_region_visible`, `sidebar_left`,
+/// `sidebar_right` and revealing a dock's region all end here, so a region has exactly one
+/// visible/hidden state ([`SharedChromeState::is_visible`](crate::chrome::SharedChromeState)).
+/// `[settings] show_*` is where that state starts and a config reload sets it back.
+///
+/// On a real change it reflows the session viewport and forces a full chrome rebuild, exactly like
+/// the config-reload path. Drops the build, never the window root, so any surface that is up rides
+/// through it.
+fn set_region_visibility(
+    state: &mut AppState,
+    region: crate::chrome::RegionId,
+    how: crate::input::RegionVisibility,
+) {
+    let visible = how.apply(state.chrome_state.is_visible(region));
+    if !state.chrome_state.set_visible(region, visible) {
+        return;
     }
+    update_session_viewport(state);
+    state.chrome_tree = None;
 }
 
 pub fn handle_sidebar_left(state: &mut AppState, _action: &WmAction) {
-    let vis = !state.chrome_state.left_visible();
-    state.chrome_state.set_left_mode(region_mode(vis));
-    update_session_viewport(state);
+    set_region_visibility(
+        state,
+        crate::chrome::RegionId::LeftSidebar,
+        crate::input::RegionVisibility::Toggle,
+    );
 }
 
 pub fn handle_sidebar_right(state: &mut AppState, _action: &WmAction) {
-    let vis = !state.chrome_state.right_visible();
-    state.chrome_state.set_right_mode(region_mode(vis));
-    update_session_viewport(state);
+    set_region_visibility(
+        state,
+        crate::chrome::RegionId::RightSidebar,
+        crate::input::RegionVisibility::Toggle,
+    );
 }
 
 /// Make `region` visible if it is currently hidden, so something seated in it can be seen.
 ///
-/// A region is Expanded ⇄ Hidden (no icon rail — see `docs/sidebar-provider-modes.md`). An already
-/// expanded region keeps its (possibly user-resized) width — no reset; the setters are
-/// change-guarded, so revealing an already visible region is free.
-///
-/// Only the two sidebars have shell mode/size state today (`SharedChromeState.left`/`right`); the
-/// bars have none, so there is nothing to reveal for them and this says so rather than guessing.
+/// A region is shown or hidden (no icon rail — see `docs/sidebar-provider-modes.md`). A region that
+/// is already shown keeps its (possibly user-resized) width, and revealing it again is free.
 fn reveal_region(state: &mut AppState, region: crate::chrome::RegionId) {
-    use crate::chrome::RegionId;
-    use heca_grid_ui::widgets::RegionMode;
-    match region {
-        RegionId::LeftSidebar => state.chrome_state.set_left_mode(RegionMode::Expanded),
-        RegionId::RightSidebar => state.chrome_state.set_right_mode(RegionMode::Expanded),
-        RegionId::TopBar | RegionId::BottomBar => {}
-    }
+    set_region_visibility(state, region, crate::input::RegionVisibility::Show);
 }
 
 /// Enter sidebar-nav on the dock that has keyboard navigation — **whichever region it sits in**.
@@ -233,25 +239,12 @@ pub fn handle_reorder_container_after(state: &mut AppState, action: &WmAction) {
     }
 }
 
-/// Show / hide / toggle a chrome **shell** region via the mounted-gate (`AppState.shown` —
-/// fully unmount → zero width/height). This is the runtime side of `[settings] show_*`
-/// (sidebar-fu-6), a DISTINCT axis from the `RegionMode` expand/rail toggles. On an actual change it
-/// reflows the session viewport + forces a full chrome rebuild, exactly like the config-reload path.
+/// Show / hide / toggle a chrome region — the runtime side of `[settings] show_*`.
 pub fn handle_set_region_visible(state: &mut AppState, action: &WmAction) {
     let WmAction::SetRegionVisible { region, visible } = *action else {
         return;
     };
-    let cur = state.shown[region];
-    let new_val = visible.apply(cur);
-    if new_val == cur {
-        return;
-    }
-    state.shown[region] = new_val;
-    // Geometry changed → recompute the real viewport + force a full chrome rebuild
-    // (mirrors the reload path in `main.rs`). Drops the build, never the window root, so any
-    // surface that is up rides through it.
-    crate::app::render::update_session_viewport(state);
-    state.chrome_tree = None;
+    set_region_visibility(state, region, visible);
 }
 
 pub fn handle_layer_visibility(state: &mut AppState, action: &WmAction) {

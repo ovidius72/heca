@@ -284,7 +284,13 @@ impl HecaApp {
                 self.app_config.config.settings.mouse_wheel_change_font_size;
             state.terminal_scroll_animations_enabled =
                 self.app_config.config.settings.terminal_scroll_animations;
-            state.shown = crate::chrome::shown_from_settings(&self.app_config.config.settings);
+            // A reload puts every region back to what `[settings] show_*` says — the same call
+            // startup makes. The viewport re-flow below picks up the new sizes.
+            state
+                .chrome_state
+                .apply_visibility(&crate::chrome::shown_from_settings(
+                    &self.app_config.config.settings,
+                ));
             state
                 .notifications
                 .set_auto_dismiss(std::time::Duration::from_millis(
