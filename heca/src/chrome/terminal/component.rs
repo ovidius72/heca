@@ -160,6 +160,32 @@ impl Terminal {
         self.shared.placed.get()
     }
 
+    /// **The grid cell under `pos`**, in window coordinates — `None` when the terminal was not drawn
+    /// last frame, the point is off its grid, or its cell size is not known yet. The same answer its
+    /// own pointer handlers give, so a question about "the cell the mouse is on" has one source.
+    pub(crate) fn cell_at(&self, pos: (f32, f32)) -> Option<GridCell> {
+        self.shared.placed.get()?;
+        let (cell_w, cell_h) = self.shared.cell.get();
+        GridCell::at(
+            (pos.0 as f64, pos.1 as f64),
+            self.shared.bounds.get(),
+            cell_w as f64,
+            cell_h as f64,
+        )
+    }
+
+    /// **Where cell `(row, col)` is on screen** (its top-left, window coordinates) — the inverse of
+    /// [`cell_at`](Self::cell_at). `None` when the terminal was not drawn last frame.
+    pub(crate) fn cell_origin(&self, row: usize, col: usize) -> Option<(f32, f32)> {
+        self.shared.placed.get()?;
+        let (cell_w, cell_h) = self.shared.cell.get();
+        let at = self.shared.bounds.get().loc;
+        Some((
+            at.x as f32 + col as f32 * cell_w,
+            at.y as f32 + row as f32 * cell_h,
+        ))
+    }
+
     /// How much room the layout gave it the last time it was laid out.
     pub(crate) fn room(&self) -> Option<Size> {
         self.shared.size.get()
@@ -647,5 +673,26 @@ mod tests {
             let _ = heca_grid_ui::dispatch(root.as_mut(), &ev);
         }
         assert!(said.borrow().is_empty(), "{:?}", said.borrow());
+    }
+    /// The terminal answers "which cell is here" and "where is that cell" for everyone who asks,
+    /// from the box it was drawn in — and says nothing when it was not drawn.
+    #[test]
+    fn the_terminal_says_which_cell_is_where() {
+        let t = Terminal::new();
+        t.show(&scrolled(0));
+        let root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+        let _ = painted(root.as_ref());
+        let on_screen = Rectangle::new(heca_grid_ui::Point::new(0.0, 0.0), Size::new(300.0, 200.0));
+        t.place(Some(on_screen));
+        assert_eq!(
+            t.cell_at((45.0, 61.0)).map(|c| (c.row, c.col)),
+            Some((3, 4))
+        );
+        assert_eq!(t.cell_at((301.0, 5.0)), None, "off the grid");
+        assert_eq!(t.cell_origin(3, 4), Some((40.0, 60.0)));
+
+        t.place(None);
+        assert_eq!(t.cell_at((45.0, 61.0)), None, "not drawn: no cell");
+        assert_eq!(t.cell_origin(3, 4), None);
     }
 }

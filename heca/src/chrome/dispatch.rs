@@ -42,8 +42,9 @@ pub(crate) fn dispatch_surface_pointer(state: &mut crate::app_state::AppState, e
         matches!(ev, Event::Raw(_)),
         "dispatch_surface_pointer is the pointer path; keys go through the keymap",
     );
-    // The trees the window walk does not reach: each pane's own tree (its frame and header) and the
-    // pane's viewport widgets. They are separate roots, so they hear nothing that goes to the window.
+    // The trees the window walk does not reach: each pane's own tree and each column's (the frame,
+    // the header and the terminal with its scrollback controls). They are separate roots, so they
+    // hear nothing that goes to the window.
     let mut behind: Vec<&mut dyn Component> = Vec::new();
     for pane in state.panes.values_mut() {
         behind.push(&mut pane.root);
