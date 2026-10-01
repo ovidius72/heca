@@ -123,6 +123,19 @@ mod tests {
     /// the test body stays readable without a `clippy::type_complexity` allow.
     type ExitWitness = Rc<RefCell<Vec<(PaneId, Option<i32>)>>>;
 
+    /// Put a fake backend in the store through the same door every terminal comes through.
+    fn insert_fake(backends: &mut BackendStore, pane: PaneId, fake: FakeBackend) {
+        use crate::app::backend_store::{Program, TerminalSpec};
+        let spec = TerminalSpec {
+            program: Program::Shell,
+            cwd: None,
+            grid: (20, 6),
+        };
+        backends
+            .ensure(pane, spec, |_| Ok(Box::new(fake)))
+            .expect("a fake always starts");
+    }
+
     fn session_with_tiled_pane(id: PaneId) -> Session {
         let mut session = Session::new(
             SessionId(1),
@@ -158,7 +171,7 @@ mod tests {
         let mut backends = BackendStore::new();
         let mut fake = FakeBackend::new(20, 6);
         fake.set_runtime(runtime_nvim());
-        backends.insert_for_pane(pid, Box::new(fake));
+        insert_fake(&mut backends, pid, fake);
         let bus = ChromeEventBus::default();
 
         let _ = bus;
@@ -181,7 +194,7 @@ mod tests {
         let mut backends = BackendStore::new();
         let mut fake = FakeBackend::new(20, 6);
         fake.queue_exit(42);
-        backends.insert_for_pane(pid, Box::new(fake));
+        insert_fake(&mut backends, pid, fake);
         let bus = ChromeEventBus::default();
 
         let seen: ExitWitness = Rc::new(RefCell::new(Vec::new()));
@@ -278,7 +291,7 @@ mod tests {
             kind: ContentKind::Terminal,
             ..PaneRuntime::default()
         });
-        backends.insert_for_pane(pid, Box::new(fake));
+        insert_fake(&mut backends, pid, fake);
         let bus = ChromeEventBus::default();
 
         let _ = bus;

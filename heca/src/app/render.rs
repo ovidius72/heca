@@ -322,13 +322,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
         // layout, for every pane whether or not it is on screen; where it was drawn comes from its
         // surface request, and a terminal with none was not on screen.
         let (content_rect, drawn) = crate::chrome::terminal::content_box(state, *pane_id);
-        let base_cell = state.pane_base_cell_size(*pane_id);
         let mount = content_rect.and_then(|content_rect| {
             prepare_terminal_mount(
                 &mut state.backends,
                 *pane_id,
                 content_rect,
-                base_cell,
                 state.scale_factor as f32,
             )
         });
@@ -365,13 +363,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
             let fw = float.size.w as f32;
             let fh = float.size.h as f32;
             let (content_rect, drawn) = crate::chrome::terminal::content_box(state, float.pane.id);
-            let base_cell = state.pane_base_cell_size(float.pane.id);
             let mount = content_rect.and_then(|content_rect| {
                 prepare_terminal_mount(
                     &mut state.backends,
                     float.pane.id,
                     content_rect,
-                    base_cell,
                     state.scale_factor as f32,
                 )
             });

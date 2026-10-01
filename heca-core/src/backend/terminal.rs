@@ -35,6 +35,8 @@ pub struct ShellIntegrationAssets {
 struct ShellLaunch<'a> {
     integration: Option<ShellIntegrationAssets>,
     override_path: Option<&'a str>,
+    /// The folder to start in; `None` is the process's own working directory.
+    cwd: Option<&'a std::path::Path>,
     /// Clear the inherited environment before spawning, isolating the shell from
     /// the user's shell config (e.g. a `~/.bashrc` that loads bash-preexec and
     /// clobbers our OSC 133 `DEBUG` trap / `PROMPT_COMMAND`). `env` is applied
@@ -48,6 +50,8 @@ struct ShellLaunch<'a> {
 
 struct CommandLaunch<'a> {
     command: &'a str,
+    /// The folder to start in; `None` is the process's own working directory.
+    cwd: Option<&'a std::path::Path>,
     /// The shell to run it under, or `None` for the user's `$SHELL` — see
     /// [`TerminalBackendOptions::shell_override`].
     shell_override: Option<&'a str>,
@@ -83,6 +87,10 @@ pub struct TerminalBackendOptions {
     ///
     /// `None` — the default — uses `$SHELL`, falling back to `/bin/sh`.
     pub shell_override: Option<String>,
+    /// The folder to start in — a shell, or a spawned command. `None` — the default — is the
+    /// process's own working directory. A folder that does not exist makes the spawn fail, so a
+    /// caller that wants a fallback checks first.
+    pub cwd: Option<std::path::PathBuf>,
 }
 
 impl TerminalBackendOptions {
@@ -101,6 +109,7 @@ impl Default for TerminalBackendOptions {
             scrollback_size: Self::DEFAULT_SCROLLBACK_SIZE,
             scroll_animations: true,
             shell_override: None,
+            cwd: None,
         }
     }
 }
@@ -224,6 +233,7 @@ impl TerminalBackend {
                 scrollback_size: TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
                 scroll_animations: true,
                 shell_override: None,
+                cwd: None,
             },
         )
     }
@@ -246,6 +256,7 @@ impl TerminalBackend {
             LaunchTarget::Shell(ShellLaunch {
                 integration: options.shell_integration,
                 override_path: None,
+                cwd: options.cwd.as_deref(),
                 env_clear: false,
                 env: Vec::new(),
             }),
@@ -270,6 +281,7 @@ impl TerminalBackend {
             options.scroll_animations,
             LaunchTarget::Command(CommandLaunch {
                 command,
+                cwd: options.cwd.as_deref(),
                 shell_override: options.shell_override.as_deref(),
             }),
         )
@@ -292,21 +304,17 @@ impl TerminalBackend {
         let (cell_w, cell_h) = cell_size;
         let (pty, auto_close_on_exit) = match launch {
             LaunchTarget::Shell(shell) => {
-                let pty = match shell.override_path {
-                    Some(shell_path) => PtyHandle::new_with_shell(
-                        cols,
-                        rows,
-                        cell_size,
-                        wake_on_output,
-                        shell.integration,
-                        Some(shell_path),
-                        shell.env_clear,
-                        &shell.env,
-                    )?,
-                    None => {
-                        PtyHandle::new(cols, rows, cell_size, wake_on_output, shell.integration)?
-                    }
-                };
+                let pty = PtyHandle::new_with_shell(
+                    cols,
+                    rows,
+                    cell_size,
+                    wake_on_output,
+                    shell.integration,
+                    shell.override_path,
+                    shell.env_clear,
+                    &shell.env,
+                    shell.cwd,
+                )?;
                 (pty, true)
             }
             LaunchTarget::Command(command) => (
@@ -317,6 +325,7 @@ impl TerminalBackend {
                     wake_on_output,
                     command.command,
                     command.shell_override,
+                    command.cwd,
                 )?,
                 false,
             ),
@@ -478,6 +487,7 @@ impl TerminalBackend {
             ShellLaunch {
                 integration: None,
                 override_path: Some(shell),
+                cwd: None,
                 env_clear: false,
                 env: Vec::new(),
             },
@@ -1292,6 +1302,7 @@ mod tests {
             ShellLaunch {
                 integration: Some(integration),
                 override_path: Some(bash.to_str().expect("bash path should be valid utf-8")),
+                cwd: None,
                 env_clear: true,
                 env,
             },
@@ -1349,6 +1360,7 @@ mod tests {
             ShellLaunch {
                 integration: Some(integration),
                 override_path: Some(zsh.to_str().expect("zsh path should be valid utf-8")),
+                cwd: None,
                 env_clear: false,
                 env: Vec::new(),
             },
@@ -1391,6 +1403,9 @@ mod tests {
 
     #[test]
     fn terminal_backend_command_spawn_runs_and_stays_open_for_policy() {
+        // Spawns a real shell on a PTY, so it contends for the same scarce resource as the other
+        // shell tests and waits its turn like them.
+        let _serial = shell_test_guard();
         let mut backend = TerminalBackend::with_command(
             80,
             24,
@@ -1423,6 +1438,97 @@ mod tests {
             !backend.should_close(),
             "direct command backends stay open until pane close-policy decides"
         );
+    }
+
+    /// A fresh, empty folder under the system temp dir, resolved (macOS's `/tmp` is a symlink, and
+    /// `pwd` reports the resolved path).
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("heca-cwd-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        dir.canonicalize().expect("resolve scratch dir")
+    }
+
+    /// A shell starts in the folder it was told to start in.
+    #[test]
+    fn a_shell_starts_in_the_folder_it_is_given() {
+        let _serial = shell_test_guard();
+        let dir = scratch_dir("shell");
+        let mut backend = TerminalBackend::with_test_shell(
+            80,
+            24,
+            8.4,
+            14.0,
+            None,
+            None,
+            ShellLaunch {
+                integration: None,
+                override_path: Some("/bin/sh"),
+                cwd: Some(&dir),
+                env_clear: false,
+                env: Vec::new(),
+            },
+        )
+        .expect("shell should start in an existing folder");
+        warm_shell(&mut backend);
+        backend.process_input(b"pwd\r");
+        let want = dir.display().to_string();
+        assert!(
+            pump_backend_until(&mut backend, |b| terminal_text(b).contains(&want)),
+            "the shell should report {want}, saw:\n{}",
+            terminal_text(&backend)
+        );
+    }
+
+    /// A spawned command starts in the folder it was told to start in.
+    #[test]
+    fn a_command_starts_in_the_folder_it_is_given() {
+        let _serial = shell_test_guard();
+        let dir = scratch_dir("command");
+        let mut backend = TerminalBackend::with_command(
+            80,
+            24,
+            8.4,
+            14.0,
+            "pwd; exit 0",
+            TerminalBackendOptions {
+                shell_override: Some("/bin/sh".to_string()),
+                cwd: Some(dir.clone()),
+                ..TerminalBackendOptions::default()
+            },
+        )
+        .expect("command should start in an existing folder");
+        let want = dir.display().to_string();
+        assert!(
+            pump_backend_until(&mut backend, |b| terminal_text(b).contains(&want)),
+            "the command should report {want}, saw:\n{}",
+            terminal_text(&backend)
+        );
+    }
+
+    /// With no folder given, behaviour is what it always was: the process's own.
+    #[test]
+    fn no_folder_means_the_process_own() {
+        assert!(TerminalBackendOptions::default().cwd.is_none());
+    }
+
+    /// A folder that does not exist is a failed spawn — the caller decides what to fall back to.
+    #[test]
+    fn a_missing_folder_is_a_failed_spawn() {
+        let _serial = shell_test_guard();
+        let missing = std::env::temp_dir().join("heca-cwd-does-not-exist-xyz");
+        let result = TerminalBackend::with_command(
+            80,
+            24,
+            8.4,
+            14.0,
+            "pwd",
+            TerminalBackendOptions {
+                shell_override: Some("/bin/sh".to_string()),
+                cwd: Some(missing),
+                ..TerminalBackendOptions::default()
+            },
+        );
+        assert!(result.is_err(), "a missing folder must not spawn");
     }
 
     /// Serialises the tests that spawn a real shell on a PTY.

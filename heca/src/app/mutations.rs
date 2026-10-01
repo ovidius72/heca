@@ -4,7 +4,6 @@
 //! session layout state, focus bookkeeping, backend lifecycle, and the shared
 //! post-mutation hooks introduced in Phase 2.
 
-use crate::app::backend_factory::{create_terminal_backend_for_state, terminal_grid_for_workspace};
 use crate::app::focus::sync_focus;
 use crate::app_state::AppState;
 use heca_core::layout::{ColumnId, FocusDomain, Pane, PaneId, SessionShape};
@@ -98,7 +97,7 @@ pub(crate) fn close_pane_by_id_anywhere(state: &mut AppState, pane_id: PaneId) -
 
     for (ws_idx, ws) in state.session.workspaces.iter_mut().enumerate() {
         if let Some(removed) = crate::app::pane_ops::remove_pane_by_id(ws, pane_id) {
-            state.backends.remove_for_pane(removed.pane.id);
+            state.backends.kill_for_pane(removed.pane.id);
             state.clear_search(removed.pane.id);
             removed_ws_idx = Some(ws_idx);
             break;
@@ -106,7 +105,7 @@ pub(crate) fn close_pane_by_id_anywhere(state: &mut AppState, pane_id: PaneId) -
 
         if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id == pane_id) {
             let removed = ws.floating_panes.remove(float_idx);
-            state.backends.remove_for_pane(removed.pane.id);
+            state.backends.kill_for_pane(removed.pane.id);
             if ws.focus_domain == FocusDomain::Floating && ws.floating_panes.is_empty() {
                 ws.deactivate_floating_panes();
                 ws.focus_domain = FocusDomain::Tiled;
@@ -387,11 +386,7 @@ pub(crate) fn move_column_to_workspace(
                 .new_column(placeholder_col_id, placeholder_pane);
             ws.scrolling.add_column(None, placeholder_col, true);
         }
-        let (cols, rows) = terminal_grid_for_workspace(state, current_ws);
-        state.backends.insert_for_pane(
-            PaneId(next_id),
-            create_terminal_backend_for_state(state, cols, rows),
-        );
+        state.start_shell_in(PaneId(next_id), current_ws);
     }
 
     state.session.switch_to_workspace(target_ws);

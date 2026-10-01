@@ -500,7 +500,10 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::SearchPrevMatch
         // Per-pane font zoom operates on the focused (or specified) pane with no
         // layout impact — allowed in both tiled and floating domains.
-        | WmAction::PaneTerminalFontZoom { .. } => ActionPolicy::FocusedPaneLocal,
+        | WmAction::PaneTerminalFontZoom { .. }
+        // Typing into a terminal, or ending it, acts on one pane and moves nothing else.
+        | WmAction::TerminalRun { .. }
+        | WmAction::TerminalKill { .. } => ActionPolicy::FocusedPaneLocal,
 
         // ── Workspace-level: blocked when Floating ──
         WmAction::WorkspaceNext
@@ -1872,6 +1875,23 @@ mod tests {
             action_policy(&WmAction::ExitScrollback),
             ActionPolicy::FocusedPaneLocal
         );
+        for terminal_action in [
+            WmAction::TerminalRun {
+                pane_id: None,
+                terminal: None,
+                text: String::new(),
+                enter: true,
+            },
+            WmAction::TerminalKill {
+                pane_id: None,
+                terminal: None,
+            },
+        ] {
+            assert_eq!(
+                action_policy(&terminal_action),
+                ActionPolicy::FocusedPaneLocal
+            );
+        }
         assert_eq!(
             action_policy(&WmAction::ScrollToOffset { rows: 0 }),
             ActionPolicy::FocusedPaneLocal
@@ -2342,6 +2362,7 @@ mod tests {
                 kind: crate::input::SpawnKind::Terminal,
                 float: false,
                 close_policy: heca_core::runtime::PaneClosePolicy::default(),
+                cwd: None,
             },
         ];
         for action in &actions {

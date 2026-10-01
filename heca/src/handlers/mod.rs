@@ -19,6 +19,7 @@ mod selection;
 mod split_resize;
 mod system;
 mod take;
+mod terminal;
 mod workspace;
 
 pub(crate) use confirm::*;
@@ -35,4 +36,5 @@ pub use selection::*;
 pub use split_resize::*;
 pub use system::*;
 pub use take::*;
+pub use terminal::*;
 pub use workspace::*;

@@ -8,7 +8,7 @@
 //! It is not an action. An action is something a user or a script *means to do* — it is listed in
 //! the palette and callable by RPC — and a wheel turn per frame is not one.
 
-use heca_core::layout::Rectangle;
+use heca_core::layout::{Rectangle, Size};
 use heca_grid_ui::{Modifiers, PointerButton};
 
 use super::viewport::ScrollIntents;
@@ -47,6 +47,46 @@ impl Cell {
     }
 }
 
+/// **How many cells a terminal's box holds, and how big each is** — the size it asks its process to
+/// be. Reported only when it changes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Grid {
+    pub cols: usize,
+    pub rows: usize,
+    /// One cell's size once the box is divided exactly: the grid fills the box with no spare pixels.
+    pub cell_w: f32,
+    pub cell_h: f32,
+}
+
+impl Grid {
+    /// The most columns or rows a grid can have.
+    const MAX_UNITS: f32 = 16_384.0;
+
+    /// **The grid that fills `room` with cells about `nominal` big** — as many as fit, rounded up so
+    /// the last one is partly under the edge rather than leaving a gap, then each cell stretched to
+    /// share the box exactly. `None` when the nominal cell is not a size yet.
+    pub(crate) fn fit(room: Size, nominal: (f32, f32)) -> Option<Self> {
+        let (nominal_w, nominal_h) = nominal;
+        if !(nominal_w > 0.0 && nominal_h > 0.0 && nominal_w.is_finite() && nominal_h.is_finite()) {
+            return None;
+        }
+        let units = |extent: f64, cell: f32| -> usize {
+            if !(extent > 0.0 && extent.is_finite()) {
+                return 1;
+            }
+            (extent as f32 / cell).ceil().clamp(1.0, Self::MAX_UNITS) as usize
+        };
+        let cols = units(room.w, nominal_w);
+        let rows = units(room.h, nominal_h);
+        Some(Self {
+            cols,
+            rows,
+            cell_w: (room.w as f32 / cols as f32).max(1.0),
+            cell_h: (room.h as f32 / rows as f32).max(1.0),
+        })
+    }
+}
+
 /// One thing the pointer did to a terminal.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum TerminalInput {
@@ -77,6 +117,20 @@ pub(crate) enum TerminalInput {
         cell: Option<Cell>,
         modifiers: Modifiers,
     },
+    /// **The terminal's box changed size** (or its font did): this is the grid it wants its process
+    /// to have. Said once per change, not once per frame — and the message a client sends a server.
+    Resize(Grid),
+}
+
+/// What the terminal's handle asks of its process. Unlike [`TerminalInput`], these are things a user
+/// or a script *means to do*, so the owner turns each into the action of the same name — the one way
+/// a key, the palette, RPC or heca-pro reaches a terminal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum TerminalCommand {
+    /// Type a line, and press Enter after it if `enter`.
+    Run { text: String, enter: bool },
+    /// End the terminal.
+    Kill,
 }
 
 /// **Everything a terminal's owner says to it, once**: what a click on the scrollback controls
@@ -85,6 +139,8 @@ pub(crate) struct Seams {
     pub scroll: ScrollIntents,
     /// Where a [`TerminalInput`] goes.
     pub input: Box<dyn Fn(TerminalInput)>,
+    /// Where a [`TerminalCommand`] about the terminal with this id goes.
+    pub command: Box<dyn Fn(super::TerminalId, TerminalCommand)>,
 }
 
 #[cfg(test)]
@@ -116,5 +172,21 @@ mod tests {
     fn an_unusable_cell_size_is_no_cell() {
         assert_eq!(Cell::at((20.0, 30.0), rect(), 0.0, 16.0), None);
         assert_eq!(Cell::at((20.0, 30.0), rect(), 10.0, f64::NAN), None);
+    }
+
+    #[test]
+    fn a_box_is_filled_with_as_many_cells_as_it_takes() {
+        // 100 wide at 8 px: 12.5 cells, so 13, each a little under 8 so they share the box.
+        let g = Grid::fit(Size::new(100.0, 48.0), (8.0, 16.0)).expect("a size");
+        assert_eq!((g.cols, g.rows), (13, 3));
+        assert!((g.cell_w - 100.0 / 13.0).abs() < 1e-4 && (g.cell_h - 16.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_grid_needs_a_real_cell_size_and_never_has_no_cells() {
+        assert_eq!(Grid::fit(Size::new(100.0, 50.0), (0.0, 16.0)), None);
+        assert_eq!(Grid::fit(Size::new(100.0, 50.0), (8.0, f32::NAN)), None);
+        let tiny = Grid::fit(Size::new(0.0, -5.0), (8.0, 16.0)).expect("still a grid");
+        assert_eq!((tiny.cols, tiny.rows), (1, 1));
     }
 }

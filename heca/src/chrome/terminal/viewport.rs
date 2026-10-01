@@ -30,8 +30,12 @@ pub(crate) struct Viewport {
     pub scrollbar: ScrollbarVisibility,
     /// Whether the "N lines above" chip is wanted at all.
     pub badge: bool,
-    /// One cell's size in logical pixels — what turns a pointer position into a grid cell.
+    /// One cell's size in logical pixels as the process has it — what turns a pointer position into
+    /// a grid cell.
     pub cell: (f32, f32),
+    /// The size a cell is meant to be before the box is divided exactly: the font's own. What the
+    /// grid the terminal asks for is fitted from.
+    pub nominal_cell: (f32, f32),
 }
 
 impl Viewport {
@@ -215,6 +219,7 @@ mod tests {
             scrollbar: mode,
             badge: true,
             cell: (8.0, 16.0),
+            nominal_cell: (8.0, 16.0),
         }
     }
 

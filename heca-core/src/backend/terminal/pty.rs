@@ -84,26 +84,19 @@ pub(super) struct PtyHandle {
     shell: String,
 }
 
-impl PtyHandle {
-    pub(super) fn new(
-        cols: usize,
-        rows: usize,
-        cell_px: (f32, f32),
-        wake_on_output: Option<WakeCallback>,
-        shell_integration: Option<ShellIntegrationAssets>,
-    ) -> Result<Self, PtyError> {
-        Self::new_with_shell(
-            cols,
-            rows,
-            cell_px,
-            wake_on_output,
-            shell_integration,
-            None,
-            false,
-            &[],
-        )
+/// A folder to start in must be a folder. Checked before the fork: the child's own `chdir` failing
+/// does not fail the spawn, it just leaves a dead pane that exited with an error nobody sees.
+fn check_cwd(cwd: Option<&Path>) -> Result<(), PtyError> {
+    match cwd {
+        Some(dir) if !dir.is_dir() => Err(PtyError::new(
+            PtyOperation::Spawn,
+            anyhow::anyhow!("{} is not a folder", dir.display()),
+        )),
+        _ => Ok(()),
     }
+}
 
+impl PtyHandle {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new_with_shell(
         cols: usize,
@@ -114,7 +107,9 @@ impl PtyHandle {
         shell_override: Option<&str>,
         env_clear: bool,
         env: &[(String, String)],
+        cwd: Option<&Path>,
     ) -> Result<Self, PtyError> {
+        check_cwd(cwd)?;
         let pty_system = native_pty_system();
         let size = pty_size(cols, rows, cell_px);
         let pair = pty_system
@@ -124,7 +119,7 @@ impl PtyHandle {
         let shell = shell_override
             .map(str::to_string)
             .unwrap_or_else(default_shell);
-        let cmd = command_for_shell(&shell, shell_integration.as_ref(), env_clear, env);
+        let cmd = command_for_shell(&shell, shell_integration.as_ref(), env_clear, env, cwd);
         Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
     }
 
@@ -135,7 +130,9 @@ impl PtyHandle {
         wake_on_output: Option<WakeCallback>,
         command: &str,
         shell_override: Option<&str>,
+        cwd: Option<&Path>,
     ) -> Result<Self, PtyError> {
+        check_cwd(cwd)?;
         let pty_system = native_pty_system();
         let size = pty_size(cols, rows, cell_px);
         let pair = pty_system
@@ -147,7 +144,7 @@ impl PtyHandle {
         let shell = shell_override
             .map(str::to_string)
             .unwrap_or_else(default_shell);
-        let cmd = command_for_spawned_command(&shell, command);
+        let cmd = command_for_spawned_command(&shell, command, cwd);
         Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
     }
 
@@ -283,8 +280,12 @@ fn command_for_shell(
     shell_integration: Option<&ShellIntegrationAssets>,
     env_clear: bool,
     env: &[(String, String)],
+    cwd: Option<&Path>,
 ) -> CommandBuilder {
     let mut cmd = CommandBuilder::new(shell);
+    if let Some(cwd) = cwd {
+        cmd.cwd(cwd);
+    }
     if env_clear {
         cmd.env_clear();
     }
@@ -315,8 +316,11 @@ fn command_for_shell(
     cmd
 }
 
-fn command_for_spawned_command(shell: &str, command: &str) -> CommandBuilder {
+fn command_for_spawned_command(shell: &str, command: &str, cwd: Option<&Path>) -> CommandBuilder {
     let mut cmd = CommandBuilder::new(shell);
+    if let Some(cwd) = cwd {
+        cmd.cwd(cwd);
+    }
     #[cfg(windows)]
     {
         cmd.arg("/C");
@@ -482,7 +486,10 @@ mod tests {
 
     #[test]
     fn command_for_spawned_command_uses_shell_execution() {
-        let rendered = format!("{:?}", command_for_spawned_command("/bin/sh", "lazygit"));
+        let rendered = format!(
+            "{:?}",
+            command_for_spawned_command("/bin/sh", "lazygit", None)
+        );
         #[cfg(windows)]
         assert!(rendered.contains("/C"));
         #[cfg(not(windows))]

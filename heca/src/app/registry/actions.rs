@@ -217,6 +217,10 @@ pub fn build_registry() -> ActionRegistry {
         handle_pane_terminal_font_zoom,
     );
 
+    // ── Terminal (run a line, end it) ──
+    registry.register(WmActionKind::TerminalRun, handle_terminal_run);
+    registry.register(WmActionKind::TerminalKill, handle_terminal_kill);
+
     // ── Sidebar-specific (parameterized) ──
     registry.register(WmActionKind::AddPaneToColumn, handle_add_pane_to_column);
     registry.register(

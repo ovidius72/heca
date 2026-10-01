@@ -3,8 +3,9 @@
 //! This module owns first-launch wiring so `main.rs` can focus on lifecycle
 //! control flow rather than GPU/window/session bootstrapping details.
 
-use crate::app::backend_factory::{create_terminal_backend, estimate_terminal_grid};
+use crate::app::backend_factory::{LaunchSettings, estimate_terminal_grid, launch};
 use crate::app::backend_store::BackendStore;
+use crate::app::backend_store::{Program, TerminalSpec};
 use crate::app::terminal_metrics::resolve_terminal_cell_size;
 use crate::app_state::{self, AppState, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_TAB_BAR_HEIGHT};
@@ -355,19 +356,24 @@ pub(crate) async fn init_state(
     let mut backends = BackendStore::new();
     let (initial_cols, initial_rows) =
         estimate_terminal_grid(pane_area.size.w, pane_area.size.h, terminal_cell_size);
-    backends.insert_for_pane(
-        pane_id,
-        create_terminal_backend(
-            initial_cols,
-            initial_rows,
-            &app_config.theme,
-            terminal_cell_size,
-            Some(&event_proxy),
-            app_config.config.settings.shell_integration,
-            app_config.config.settings.terminal_scrollback_lines,
-            app_config.config.settings.terminal_scroll_animations,
-        ),
-    );
+    let settings = LaunchSettings {
+        theme: app_config.theme.clone(),
+        event_proxy: Some(event_proxy.clone()),
+        shell_integration: app_config.config.settings.shell_integration,
+        scrollback: app_config.config.settings.terminal_scrollback_lines,
+        scroll_animations: app_config.config.settings.terminal_scroll_animations,
+        cell_size: terminal_cell_size,
+        link_detection: app_config.config.appearance.terminal.link_detection,
+        images: app_config.config.appearance.terminal.images,
+    };
+    let first = TerminalSpec {
+        program: Program::Shell,
+        cwd: None,
+        grid: (initial_cols, initial_rows),
+    };
+    if let Err(err) = backends.ensure(pane_id, first, |spec| launch(&settings, spec)) {
+        eprintln!("[heca] could not start the first terminal: {err}");
+    }
 
     let ws_count = session.workspaces.len();
 
