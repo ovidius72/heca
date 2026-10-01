@@ -9,9 +9,7 @@ use crate::app::interaction::{InteractionIntent, InteractionSource, dispatch_act
 use crate::app::keyboard::{build_event_combo, is_prefix_match};
 use crate::app::mutations::{MutationKind, after_mutation_change};
 use crate::app::render::{render_frame, update_session_viewport};
-use crate::app::terminal_host::{
-    forward_mouse_button, forward_mouse_move, notify_window_focus_changed,
-};
+use crate::app::terminal_host::notify_window_focus_changed;
 use crate::app::terminal_metrics::refresh_terminal_cell_size;
 use crate::app_state::AppState;
 use crate::input::{FontZoomStep, WmAction};
@@ -276,20 +274,11 @@ pub(crate) fn handle_window_event(
             // The pane header and the pane viewport are their OWN retained trees, which a drag in
             // the window root does not reach — so they are still told to stay dark while something
             // is being carried, which is what keeps "nothing hovers under a drag" true for them.
-            let mut pane_viewport_over = false;
             if !crate::chrome::drag_in_flight(state) && !mouse::is_resizing(state) {
-                // Feed the move into the retained pane-info-bar headers so the action
-                // buttons' hover affordance lights up (repaint via mark_full_redraw below).
-                // Over a terminal's chip or scrollbar, or holding its thumb: a thumb grabbed here
-                // keeps the pointer even when the cursor has left its bounds, and the terminal
-                // must not see the move either way.
-                pane_viewport_over = crate::chrome::deliver_to_panes(state, &moved)
-                    || crate::chrome::terminal::controls_hovered(state);
-            }
-            // Don't forward moves to the terminal while resizing a divider or while a
-            // retained viewport widget (badge / scrollbar) owns the pointer.
-            if !mouse::is_resizing(state) && !pane_viewport_over {
-                forward_mouse_move(state, pos);
+                // Feed the move into the panes, so a header button's hover lights up and a
+                // terminal hears where the pointer is (it says so itself, and only for a move
+                // that landed on it, not on its chip or scrollbar).
+                crate::chrome::deliver_to_panes(state, &moved);
             }
             // Cursor affordance: Grab over a draggable, Grabbing while dragging.
             mouse::update_cursor(state, pos);
@@ -361,7 +350,7 @@ pub(crate) fn handle_window_event(
                 return;
             }
             // Read before the release block below ends any resize drag, so a release that ended
-            // one still counts as consumed and is not also forwarded to the terminal.
+            // one is not also taken for the end of a selection.
             let resize_before = mouse::is_resizing(state);
             if button == winit::event::MouseButton::Left && button_state == ElementState::Released {
                 // **The divider resize ends here, at the same level its press started it.** It used
@@ -385,21 +374,16 @@ pub(crate) fn handle_window_event(
                     return;
                 }
             }
-            let interactive_before = state.mouse.interactive_move.is_some();
             if let Some((action, source)) = mouse::on_mouse_input(state, &ev) {
                 dispatch_action(state, registry, source, &action);
             }
-            let started_interactive_move =
-                !interactive_before && state.mouse.interactive_move.is_some();
-            // A button event that started, drove, or ended a divider resize (e.g.
-            // the right-button fallback press, or a release) must not also reach the
-            // terminal — the gesture consumed it.
-            let resize_consumed = resize_before || mouse::is_resizing(state);
-            // A right-press that just opened the context menu (now a host-owned overlay layer)
-            // must not also forward to the terminal (it would deliver a stray right-click to the TUI).
-            let opened_context_menu = crate::chrome::top_modal(state).is_some();
-            if !started_interactive_move && !resize_consumed && !opened_context_menu {
-                forward_mouse_button(state, state.mouse.pos, button, button_state, registry);
+            // A host selection drag ends where the button does, wherever the pointer is. (A release
+            // that ended a divider resize was that gesture's, and is not this one's.)
+            if button == winit::event::MouseButton::Left
+                && button_state == ElementState::Released
+                && !resize_before
+            {
+                crate::app::terminal_host::on_left_release(state, registry);
             }
             // Snap the cursor on press/release (drag start → Grabbing, drop → Grab/Default)
             // without waiting for the next move.

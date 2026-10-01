@@ -99,9 +99,6 @@ pub(super) struct Controls {
     bar_visible: Signal<bool>,
     badge_visible: Signal<bool>,
     badge_label: Signal<String>,
-    /// Whether the pointer is over the bar or the chip.
-    bar_hovered: Signal<bool>,
-    badge_hovered: Signal<bool>,
 }
 
 impl Controls {
@@ -143,8 +140,6 @@ impl Controls {
             bar_visible: bar.base().visible,
             badge_visible: badge.base().visible,
             badge_label: badge.label_signal(),
-            bar_hovered: bar.base().pointer.hovered,
-            badge_hovered: badge.base().pointer.hovered,
         };
         let bar = bar.height(Length::Percent(1.0));
         // Out of the flow, with every edge left to the container: it lands where a lone child
@@ -179,11 +174,6 @@ impl Controls {
             || before.4 != self.badge_visible.get_untracked()
             || before.5 != self.badge_label.get_untracked()
     }
-
-    /// Is the pointer on the bar or the chip? The terminal under them must not hear it.
-    pub(super) fn hovered(&self) -> bool {
-        self.bar_hovered.get_untracked() || self.badge_hovered.get_untracked()
-    }
 }
 
 /// Every set of controls built for one terminal — one per node placed in a tree. The terminal
@@ -210,13 +200,6 @@ impl Placed {
             .iter()
             .filter_map(Weak::upgrade)
             .fold(false, |changed, c| c.show(viewport) | changed)
-    }
-
-    pub(super) fn hovered(&self) -> bool {
-        self.nodes
-            .iter()
-            .filter_map(Weak::upgrade)
-            .any(|c| c.hovered())
     }
 }
 

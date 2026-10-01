@@ -160,8 +160,3 @@ pub(crate) fn show_viewports<'a>(
     }
     changed
 }
-
-/// Is the pointer on any terminal's chip or scrollbar? The terminal underneath must not hear it.
-pub(crate) fn controls_hovered(state: &AppState) -> bool {
-    state.terminals.values().any(Terminal::controls_hovered)
-}

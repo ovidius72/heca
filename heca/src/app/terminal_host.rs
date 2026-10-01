@@ -8,8 +8,9 @@ use crate::actions::ActionRegistry;
 use crate::app::backend_store::BackendStore;
 use crate::app::interaction::{InteractionSource, dispatch_action};
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
-use crate::app_state::{AppState, InputMode, InteractiveMovePhase};
+use crate::app_state::{AppState, InputMode};
 use heca_grid_ui::Component as _;
+use heca_grid_ui::PointerButton;
 use heca_grid_ui::reactive::SignalUpdate as _;
 
 /// Default cell height in logical pixels for PixelDelta → line conversion
@@ -22,7 +23,7 @@ use heca_core::backend::{
     TerminalDamage, TerminalSnapshot,
 };
 use heca_core::layout::{PaneId, Rectangle};
-use winit::event::{ElementState, MouseButton, MouseScrollDelta};
+use winit::event::MouseScrollDelta;
 
 #[derive(Clone)]
 pub(crate) struct TerminalMount {
@@ -33,12 +34,6 @@ pub(crate) struct TerminalMount {
     /// full redraw, so later retained-content work can consume real row damage
     /// without changing the host contract again.
     pub damage: TerminalDamage,
-}
-
-#[derive(Clone, Copy)]
-struct TerminalInputTarget {
-    pane_id: PaneId,
-    content_rect: Rectangle,
 }
 
 pub(crate) fn prepare_terminal_mount(
@@ -95,171 +90,201 @@ fn fitted_grid_units(extent: f32, approx_cell: f32) -> usize {
     (extent / approx_cell).ceil().clamp(1.0, 16_384.0) as usize
 }
 
-pub(crate) fn forward_mouse_move(state: &mut AppState, pos: (f32, f32)) {
-    if state.mouse.interactive_move.is_some() || crate::chrome::drag_in_flight(state) {
-        return;
-    }
+/// **The presses a terminal's program has heard and not yet seen released**, so a release is passed
+/// on only where its press was: one that ends a divider resize, or a selection, is not the
+/// program's.
+#[derive(Default)]
+pub(crate) struct HeardPresses(Vec<(PaneId, BackendMouseButton)>);
 
-    // ── Host selection drag: update focus ──
-    //
-    // If a host-owned selection is in progress (Selecting phase) and the
-    // pointer is over the owning pane, update the selection focus to the
-    // current cell coordinates. This makes Shift+drag feel like a
-    // continuous selection gesture.
-    //
-    // We look up coordinates via `owner_id` (the pane the selection started
-    // on), NOT the pane under the cursor. If the mouse drifts outside the
-    // owning pane, `cell_coords_at_position` returns `None` for that pane's
-    // content rect and the focus freezes — this is the correct UX: releasing
-    // outside the pane still confirms the selection up to the last in-bounds
-    // cell.
-    if state.selection.is_selecting()
-        && state.selection.source() == Some(SelectionSource::MouseDrag)
-    {
-        if let Some(SelectionOwner::Pane(owner_id)) = state.selection.owner()
-            && let Some((row, col)) = cell_coords_at_position(state, owner_id, pos)
-            && let Some(snapshot) = state
-                .backends
-                .get(owner_id)
-                .and_then(|backend| backend.terminal_snapshot())
-        {
-            state
-                .selection
-                .update_focus(visible_row_to_stable_row(&snapshot, row), col);
-            state.needs_redraw = true;
+impl HeardPresses {
+    /// The program heard this press.
+    pub(crate) fn heard(&mut self, pane: PaneId, button: BackendMouseButton) {
+        if !self.0.contains(&(pane, button)) {
+            self.0.push((pane, button));
         }
-        return;
     }
 
-    let Some(target) = terminal_target_at_position(state, pos) else {
-        return;
-    };
-    if state.focused_pane != Some(target.pane_id) {
-        return;
-    }
-
-    let Some(event) = build_mouse_event(
-        state,
-        target,
-        pos,
-        BackendMouseEventKind::Move,
-        BackendMouseButton::None,
-    ) else {
-        return;
-    };
-    if let Some(backend) = state.backends.get_mut(target.pane_id) {
-        let _ = backend.process_mouse_event(&event);
+    /// A release came: was its press heard? Forgets it either way.
+    pub(crate) fn released(&mut self, pane: PaneId, button: BackendMouseButton) -> bool {
+        match self.0.iter().position(|p| *p == (pane, button)) {
+            Some(at) => {
+                self.0.swap_remove(at);
+                true
+            }
+            None => false,
+        }
     }
 }
 
-pub(crate) fn forward_mouse_button(
+/// **A button went down on a terminal.** What it means needs state — the selection, the settings,
+/// the window gesture that may have claimed the same press — so it is decided here.
+///
+/// The terminal does not take the press, so a window gesture (a divider, the move modifier) has
+/// already decided about it by the time this runs, and what it decided is in the state.
+fn on_press(
     state: &mut AppState,
-    pos: (f32, f32),
-    button: MouseButton,
-    button_state: ElementState,
-    registry: &ActionRegistry,
+    pane_id: PaneId,
+    button: PointerButton,
+    cell: Option<Cell>,
+    modifiers: heca_grid_ui::Modifiers,
 ) {
-    // Plain left-click (no Shift) while a selection is active: clear the selection
-    // and exit selection mode. This is intentional — a plain click in a terminal
-    // pane should clear any host selection so the user can resume normal terminal
-    // interaction. If we instead placed the caret at the click position, the user
-    // would be trapped in selection mode until they press Esc. The clear-on-click
-    // behavior matches most terminal emulators (select text, click elsewhere to
-    // deselect).
-    if button == MouseButton::Left
-        && button_state == ElementState::Pressed
-        && !state.modifiers.shift_key()
-        && state.selection.is_active()
-    {
+    // A plain left-click while a selection is active clears it and leaves selection mode — a click
+    // in a terminal puts you back in the program. Placing a caret at the click instead would trap
+    // the user in selection mode until Esc (the same as most terminal emulators).
+    if button == PointerButton::Left && !modifiers.shift && state.selection.is_active() {
         state.selection.clear();
         if matches!(state.input_mode, InputMode::Selection) {
             state.input_mode = InputMode::Normal;
         }
         state.needs_redraw = true;
     }
-
-    if started_interactive_move(state, button, button_state) || crate::chrome::drag_in_flight(state)
-    {
+    if window_gesture_has_it(state) {
         return;
     }
-
-    // ── Host selection entry path: Shift + left-drag ──
-    //
-    // When the user holds Shift and presses/releases the left button over a
-    // terminal pane, the event is routed to the shared host selection model
-    // instead of being forwarded to the terminal backend. This preserves TUI
-    // mouse behavior (plain left-click still goes to the terminal) while
-    // giving the host an explicit entry gesture for selection.
-    if button == MouseButton::Left && state.modifiers.shift_key() {
-        // Handle release first — this must work even when the pointer
-        // has left the owning pane (e.g. dragged outside and released).
-        // Only mouse-drag selections are ended by mouse release;
-        // keyboard- or RPC-started selections are unaffected.
-        if button_state == ElementState::Released {
-            if state.selection.is_selecting()
-                && state.selection.source() == Some(SelectionSource::MouseDrag)
-            {
-                // Confirm the selection, then copy to clipboard via the
-                // action registry (no registry bypass). Shift+drag is a
-                // complete gesture: select → release → copy, like most
-                // terminal emulators. It never entered selection mode, and
-                // copying clears the highlight — the same as `y` does.
-                state.selection.end();
-                dispatch_action(
-                    state,
-                    registry,
-                    InteractionSource::MouseContent,
-                    &WmAction::CopySelection,
-                );
-                state.needs_redraw = true;
-            }
-            return;
-        }
-
-        // Pressed path: need a valid target to begin selection.
-        let Some(target) = terminal_target_at_position(state, pos) else {
+    // **Host selection: Shift + left press.** It goes to the shared selection model instead of the
+    // program, which keeps a program's own mouse use (a plain click) intact while giving the host an
+    // explicit entry gesture.
+    if button == PointerButton::Left && modifiers.shift {
+        let Some(cell) = cell else {
             return;
         };
-        // Guard: only begin a HostGrid selection on panes whose backend
-        // actually supports terminal snapshots (i.e. has a cell grid).
-        // Future non-terminal panes (browser, Neovim GUI) will use
-        // `BackendNative` selection or a different entry path.
-        let has_terminal_grid = state
+        // Only a pane whose backend has a cell grid; a future browser or GUI pane would use its
+        // own selection.
+        let has_grid = state
             .backends
-            .get(target.pane_id)
+            .get(pane_id)
             .and_then(|backend| backend.terminal_snapshot())
             .is_some();
-        if !has_terminal_grid {
-            return;
-        }
-
-        if let Some((row, col)) = cell_coords_at_position(state, target.pane_id, pos) {
+        if has_grid {
             begin_terminal_selection_at(
                 state,
-                target.pane_id,
-                row,
-                col,
+                pane_id,
+                cell.row,
+                cell.col,
                 SelectionSource::MouseDrag,
             );
         }
         return;
     }
-
-    let Some(target) = terminal_target_at_position(state, pos) else {
+    let Some(button) = backend_button(button) else {
         return;
     };
-    let kind = match button_state {
-        ElementState::Pressed => BackendMouseEventKind::Press,
-        ElementState::Released => BackendMouseEventKind::Release,
-    };
-    let Some(button) = map_mouse_button(button) else {
+    let Some(cell) = cell else {
         return;
     };
-    let Some(event) = build_mouse_event(state, target, pos, kind, button) else {
-        return;
-    };
-    if let Some(backend) = state.backends.get_mut(target.pane_id) {
+    let event = backend_mouse_event(BackendMouseEventKind::Press, button, cell, modifiers);
+    if let Some(backend) = state.backends.get_mut(pane_id) {
         let _ = backend.process_mouse_event(&event);
+        // The release that pairs with this press is the program's to hear.
+        state.terminal_presses.heard(pane_id, button);
+    }
+}
+
+/// **A button came up over a terminal.** The program hears it only if it heard the press — a
+/// release that ends a divider resize, or a selection, is not the program's.
+fn on_release(
+    state: &mut AppState,
+    pane_id: PaneId,
+    button: PointerButton,
+    cell: Option<Cell>,
+    modifiers: heca_grid_ui::Modifiers,
+) {
+    let Some(button) = backend_button(button) else {
+        return;
+    };
+    if !state.terminal_presses.released(pane_id, button) {
+        return;
+    }
+    let Some(cell) = cell else {
+        return;
+    };
+    let event = backend_mouse_event(BackendMouseEventKind::Release, button, cell, modifiers);
+    if let Some(backend) = state.backends.get_mut(pane_id) {
+        let _ = backend.process_mouse_event(&event);
+    }
+}
+
+/// **The pointer moved over a terminal.**
+fn on_move(
+    state: &mut AppState,
+    pane_id: PaneId,
+    cell: Option<Cell>,
+    modifiers: heca_grid_ui::Modifiers,
+) {
+    if window_gesture_has_it(state) || crate::mouse::is_resizing(state) {
+        return;
+    }
+    // A host selection drag follows the pointer, in the pane it started in. Over another pane, or
+    // off the grid, it holds where it was — so a release outside still confirms the selection up to
+    // the last cell it reached.
+    if state.selection.is_selecting()
+        && state.selection.source() == Some(SelectionSource::MouseDrag)
+    {
+        if let Some(SelectionOwner::Pane(owner)) = state.selection.owner()
+            && owner == pane_id
+            && let Some(cell) = cell
+            && let Some(snapshot) = state
+                .backends
+                .get(pane_id)
+                .and_then(|backend| backend.terminal_snapshot())
+        {
+            state
+                .selection
+                .update_focus(visible_row_to_stable_row(&snapshot, cell.row), cell.col);
+            state.needs_redraw = true;
+        }
+        return;
+    }
+    // Only the pane that has the keyboard is told where the pointer is.
+    if state.focused_pane != Some(pane_id) {
+        return;
+    }
+    let Some(cell) = cell else {
+        return;
+    };
+    let event = backend_mouse_event(
+        BackendMouseEventKind::Move,
+        BackendMouseButton::None,
+        cell,
+        modifiers,
+    );
+    if let Some(backend) = state.backends.get_mut(pane_id) {
+        let _ = backend.process_mouse_event(&event);
+    }
+}
+
+/// Has a window gesture taken the pointer — a move of a pane, a drag in flight, a menu or dialog
+/// that just opened? Then the program does not hear it.
+fn window_gesture_has_it(state: &AppState) -> bool {
+    state.mouse.interactive_move.is_some()
+        || crate::chrome::drag_in_flight(state)
+        || crate::chrome::top_modal(state).is_some()
+}
+
+/// **The left button came up, anywhere.** A host selection drag ends where the button does, even
+/// when the pointer has left the terminal it started in: the selection is confirmed up to the last
+/// cell it reached and copied, as a complete gesture (select, release, copy) — the same as `y` does.
+pub(crate) fn on_left_release(state: &mut AppState, registry: &ActionRegistry) {
+    if state.selection.is_selecting()
+        && state.selection.source() == Some(SelectionSource::MouseDrag)
+    {
+        state.selection.end();
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::MouseContent,
+            &WmAction::CopySelection,
+        );
+        state.needs_redraw = true;
+    }
+}
+
+fn backend_button(button: PointerButton) -> Option<BackendMouseButton> {
+    match button {
+        PointerButton::Left => Some(BackendMouseButton::Left),
+        PointerButton::Middle => Some(BackendMouseButton::Middle),
+        PointerButton::Right => Some(BackendMouseButton::Right),
+        PointerButton::Other(_) => None,
     }
 }
 
@@ -281,6 +306,17 @@ pub(crate) fn on_terminal_input(
             cell,
             modifiers,
         } => on_wheel(state, registry, pane_id, ((x, y), pixels), cell, modifiers),
+        TerminalInput::Press {
+            button,
+            cell,
+            modifiers,
+        } => on_press(state, pane_id, button, cell, modifiers),
+        TerminalInput::Release {
+            button,
+            cell,
+            modifiers,
+        } => on_release(state, pane_id, button, cell, modifiers),
+        TerminalInput::Move { cell, modifiers } => on_move(state, pane_id, cell, modifiers),
     }
 }
 
@@ -477,12 +513,12 @@ pub(crate) fn should_intercept_selection_gesture(
     if move_modifier_held {
         return false;
     }
-    let Some(target) = terminal_target_at_position(state, pos) else {
+    let Some(pane_id) = crate::mouse::hit_test_pane(state, pos) else {
         return false;
     };
     state
         .backends
-        .get(target.pane_id)
+        .get(pane_id)
         .and_then(|backend| backend.terminal_snapshot())
         .is_some()
 }
@@ -655,33 +691,6 @@ pub(crate) fn ensure_caret_visible(
     // Else: caret is inside the visible range → no scroll needed.
 }
 
-fn build_mouse_event(
-    state: &AppState,
-    target: TerminalInputTarget,
-    pos: (f32, f32),
-    kind: BackendMouseEventKind,
-    button: BackendMouseButton,
-) -> Option<BackendMouseEvent> {
-    let (cell_w, cell_h) = state
-        .backends
-        .get(target.pane_id)
-        .map(|backend| backend.cell_size())
-        .unwrap_or(state.terminal_cell_size);
-    let cell = Cell::at(
-        (pos.0 as f64, pos.1 as f64),
-        target.content_rect,
-        cell_w as f64,
-        cell_h as f64,
-    )?;
-    let modifiers = heca_grid_ui::Modifiers {
-        ctrl: state.modifiers.control_key(),
-        alt: state.modifiers.alt_key(),
-        shift: state.modifiers.shift_key(),
-        meta: state.modifiers.super_key(),
-    };
-    Some(backend_mouse_event(kind, button, cell, modifiers))
-}
-
 /// **The backend's mouse event for a pointer at `cell`.** Everything it needs is in the arguments:
 /// the terminal worked out the cell, and the modifiers rode in with the event.
 fn backend_mouse_event(
@@ -738,21 +747,6 @@ fn begin_terminal_selection_at(
 
 fn visible_row_to_stable_row(snapshot: &heca_core::backend::TerminalSnapshot, row: usize) -> isize {
     snapshot.viewport_top_stable_row + row as isize
-}
-
-fn started_interactive_move(
-    state: &AppState,
-    button: MouseButton,
-    button_state: ElementState,
-) -> bool {
-    matches!(
-        (button, button_state, &state.mouse.interactive_move),
-        (
-            MouseButton::Left,
-            ElementState::Pressed,
-            Some(InteractiveMovePhase::Starting { .. } | InteractiveMovePhase::Moving { .. })
-        )
-    )
 }
 
 /// Convert a pointer position to terminal cell coordinates within a content
@@ -1047,15 +1041,6 @@ fn hyperlink_at_cell(
         .map(|span| span.uri.as_str())
 }
 
-fn map_mouse_button(button: MouseButton) -> Option<BackendMouseButton> {
-    match button {
-        MouseButton::Left => Some(BackendMouseButton::Left),
-        MouseButton::Middle => Some(BackendMouseButton::Middle),
-        MouseButton::Right => Some(BackendMouseButton::Right),
-        MouseButton::Back | MouseButton::Forward | MouseButton::Other(_) => None,
-    }
-}
-
 fn wheel_buttons(delta: MouseScrollDelta) -> Vec<BackendMouseButton> {
     match delta {
         MouseScrollDelta::LineDelta(x, y) => axis_wheel_buttons(x as f64, y as f64),
@@ -1136,15 +1121,6 @@ fn push_wheel_buttons(
     } else if delta < 0.0 {
         buttons.push(negative(steps));
     }
-}
-
-fn terminal_target_at_position(state: &AppState, pos: (f32, f32)) -> Option<TerminalInputTarget> {
-    let hovered_pane = crate::mouse::hit_test_pane(state, pos)?;
-    let content_rect = content_rect_for_pane(state, hovered_pane)?;
-    Some(TerminalInputTarget {
-        pane_id: hovered_pane,
-        content_rect,
-    })
 }
 
 /// The **outer** screen rect (full pane, before content inset) of every visible
@@ -1231,8 +1207,10 @@ fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle>
 
 #[cfg(test)]
 mod tests {
-    use super::{device_delta, host_scroll_notches, hyperlink_at_cell};
+    use super::{HeardPresses, device_delta, host_scroll_notches, hyperlink_at_cell};
+    use heca_core::backend::BackendMouseButton;
     use heca_core::backend::HyperlinkSpan;
+    use heca_core::layout::PaneId;
     use winit::event::MouseScrollDelta;
 
     fn span(row: usize, start_col: usize, end_col: usize, uri: &str) -> HyperlinkSpan {
@@ -1299,6 +1277,26 @@ mod tests {
         assert_eq!(
             host_scroll_notches(device_delta((0.0, 0.7), Some((0.0, 14.0))), 14.0),
             -1.0
+        );
+    }
+
+    #[test]
+    fn a_release_is_the_programs_only_where_its_press_was() {
+        let mut heard = HeardPresses::default();
+        let (a, b) = (PaneId(1), PaneId(2));
+        heard.heard(a, BackendMouseButton::Left);
+        assert!(
+            !heard.released(b, BackendMouseButton::Left),
+            "another pane's"
+        );
+        assert!(
+            !heard.released(a, BackendMouseButton::Right),
+            "another button's"
+        );
+        assert!(heard.released(a, BackendMouseButton::Left));
+        assert!(
+            !heard.released(a, BackendMouseButton::Left),
+            "heard once, released once"
         );
     }
 }

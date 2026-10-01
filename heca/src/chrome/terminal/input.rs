@@ -9,7 +9,7 @@
 //! the palette and callable by RPC — and a wheel turn per frame is not one.
 
 use heca_core::layout::Rectangle;
-use heca_grid_ui::Modifiers;
+use heca_grid_ui::{Modifiers, PointerButton};
 
 use super::viewport::ScrollIntents;
 
@@ -57,6 +57,23 @@ pub(crate) enum TerminalInput {
         y: f32,
         /// The device's own pixels, when it counts pixels (a trackpad) — same convention as `x`/`y`.
         pixels: Option<(f32, f32)>,
+        cell: Option<Cell>,
+        modifiers: Modifiers,
+    },
+    /// A button went down on the terminal itself — not on its scrollback controls.
+    Press {
+        button: PointerButton,
+        cell: Option<Cell>,
+        modifiers: Modifiers,
+    },
+    /// A button came up over the terminal.
+    Release {
+        button: PointerButton,
+        cell: Option<Cell>,
+        modifiers: Modifiers,
+    },
+    /// The pointer moved over the terminal itself.
+    Move {
         cell: Option<Cell>,
         modifiers: Modifiers,
     },

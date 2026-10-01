@@ -833,6 +833,9 @@ pub struct AppState {
     /// The terminal each pane shows, by pane — the client's view of a running terminal process:
     /// what a window draws, and how much room it was given. Client state, like the retained trees.
     pub(crate) terminals: HashMap<heca_core::layout::PaneId, crate::chrome::terminal::Terminal>,
+    /// The buttons whose press a terminal's program has heard and whose release it has not — so a
+    /// release is passed on only where its press was.
+    pub(crate) terminal_presses: crate::app::terminal_host::HeardPresses,
     /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
     /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
     /// trees; this holds runtime-added layers that join the same surface stack. See
