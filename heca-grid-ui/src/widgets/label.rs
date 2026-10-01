@@ -93,6 +93,10 @@ pub struct Label {
     /// changes the label's **measure**, so the next layout pass re-measures it — which is exactly
     /// what makes the rows below shift.
     wrap: Signal<bool>,
+    /// The most lines a **wrapping** label may take; text that needs more ends its last line with
+    /// `…`. `None` (the default) is "as many as it needs". A [`Signal`] for the same reason
+    /// [`wrap`](Self::wrap) is: it changes the measure, so a host can drive it from state.
+    max_lines: Signal<Option<usize>>,
     /// Character indices **in the source text** to draw as marks — a fuzzy match's hits. Empty (the
     /// default) means one text run, exactly as before marks existed.
     ///
@@ -125,6 +129,7 @@ impl Label {
             strikethrough: signal(false),
             truncate: Ellipsis::End,
             wrap: signal(false),
+            max_lines: signal(None),
             marks: signal(Vec::new()),
             mark_color: None,
             muted: false,
@@ -183,6 +188,32 @@ impl Label {
         self.base.style.layout.min_width = Some(Length::Px(0.0));
         self.remeasure();
         self
+    }
+
+    /// Cap a wrapping label at `n` lines. Text that needs more ends its last line with `…`, so the
+    /// reader knows there is more, and the label stops growing.
+    ///
+    /// Only meaningful with [`wrap`](Self::wrap); a cutting label is one line already. The measure
+    /// and the paint both take the cap from the one wrap function, so the box is sized for exactly
+    /// the lines that are drawn. `n` is at least 1.
+    #[heca_grid_ui_macros::prop]
+    pub fn max_lines(self, n: usize) -> Self {
+        self.max_lines.set(Some(n.max(1)));
+        self
+    }
+
+    /// Take the line cap from a **caller-owned** signal instead of this label's own, so one cap can
+    /// drive several labels — a card's title and body share one.
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
+    pub fn with_max_lines_signal(mut self, max_lines: Signal<Option<usize>>) -> Self {
+        self.max_lines = max_lines;
+        self
+    }
+
+    /// The line-cap signal — `None` for no cap. Set it to change the cap in place; the next layout
+    /// pass re-measures.
+    pub fn max_lines_signal(&self) -> Signal<Option<usize>> {
+        self.max_lines
     }
 
     /// The wrap signal — reflow the label in place, without rebuilding it. Flipping it changes the
@@ -272,7 +303,7 @@ impl Label {
         let text = self.text.get_untracked();
         let cells = mono_cells(self.base.bounds.size.w, self.cell());
         if self.wrap.get_untracked() {
-            return wrap_indexed(&text, cells)
+            return wrap_indexed(&text, cells, self.max_lines.get_untracked())
                 .into_iter()
                 .map(|line| line.into_iter().map(|(c, i)| (c, Some(i))).collect())
                 .collect();
@@ -516,6 +547,7 @@ impl Component for Label {
             text: self.text.get_untracked(),
             font: self.base.font,
             wrap,
+            max_lines: self.max_lines.get_untracked(),
         })
     }
 

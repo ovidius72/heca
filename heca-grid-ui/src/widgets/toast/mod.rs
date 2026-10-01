@@ -39,10 +39,10 @@ use crate::animation::Animation;
 use crate::builders::{LayoutExt, Parent};
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
-use crate::reactive::{Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::TextAlign;
 use crate::style::{Align, Direction, Length, WidgetSize};
-use crate::widgets::{Ellipsis, Flex, Glyph, Icon, IconButton, Label};
+use crate::widgets::{Flex, Glyph, Icon, IconButton, Label};
 use std::rc::Rc;
 
 /// Inner padding.
@@ -94,6 +94,8 @@ pub struct Toast {
     show_icon: bool,
     /// The title child's text signal (the child owns the text; this is the handle callers get).
     title: Signal<String>,
+    /// The line cap the title and `body_text` labels share.
+    max_lines: Signal<Option<usize>>,
     /// Whether a slot has been filled — an empty one is removed from layout entirely, so it costs
     /// neither space nor a gap.
     has_body: bool,
@@ -126,9 +128,14 @@ impl Toast {
         // The title is a real child, so the card composes like every other widget: the engine
         // lays the three columns out, each paints itself, and the text can be cut by the label's
         // own ellipsis instead of being drawn wherever a computed origin happened to land.
+        // **It wraps, never cuts**: a notification is read once and gone, so a path or an error
+        // shown as `/Users/antonio/projects/gleam/tu…` has failed at its one job. The title and the
+        // body share one line cap, so a card cannot grow without bound.
+        let max_lines = signal(None);
         let title = Label::new(title)
             .align(TextAlign::Start)
-            .truncate(Ellipsis::End);
+            .wrap(true)
+            .with_max_lines_signal(max_lines);
         let title_signal = title.text_signal();
         let column = Flex::column()
             .grow(1.0)
@@ -147,6 +154,7 @@ impl Toast {
             icon: None,
             show_icon: true,
             title: title_signal,
+            max_lines,
             has_body: false,
             has_actions: false,
             dismissible: true,
@@ -226,13 +234,15 @@ impl Toast {
         self
     }
 
-    /// Sugar for the common body: one line of small text. It builds the `Label` the caller would
-    /// have built, so there is one code path and not two.
+    /// Sugar for the common body: small text that wraps onto as many lines as it needs, up to the
+    /// card's [`max_lines`](Toast::max_lines). It builds the `Label` the caller would have built,
+    /// so there is one code path and not two.
     #[heca_grid_ui_macros::prop]
     pub fn body_text(self, body: impl Into<String>) -> Self {
         let label = Label::new(body)
             .align(TextAlign::Start)
-            .truncate(Ellipsis::End)
+            .wrap(true)
+            .with_max_lines_signal(self.max_lines)
             .font_scale(BODY_SCALE);
         self.body(label)
     }
@@ -311,6 +321,20 @@ impl Toast {
         self.on_dismiss = Some(Rc::new(f));
         self.sync_dismiss();
         self
+    }
+
+    /// The most lines the title and the `body_text` may each take; text that needs more ends with
+    /// `…`. Unset, they take as many as they need. A host reads this from config
+    /// (`[settings.notification_system] max_lines`) — the card holds no number of its own.
+    #[heca_grid_ui_macros::prop]
+    pub fn max_lines(self, n: usize) -> Self {
+        self.max_lines.set(Some(n.max(1)));
+        self
+    }
+
+    /// The line-cap signal shared by the title and the `body_text` (set it to change the cap live).
+    pub fn max_lines_signal(&self) -> Signal<Option<usize>> {
+        self.max_lines
     }
 
     /// The title text signal (set it to update reactively).

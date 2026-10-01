@@ -86,6 +86,8 @@ pub struct ToastStack {
     on_action: Option<OnToastAction>,
     /// **Is the pointer resting on one of the cards** — see [`hovered_signal`](Self::hovered_signal).
     hovered: Option<Signal<bool>>,
+    /// The line cap every card is built with — see [`max_lines_signal`](Self::max_lines_signal).
+    max_lines: Option<Signal<usize>>,
     /// One per child, same index — see [`Slot`].
     slots: Vec<Slot>,
 }
@@ -123,6 +125,7 @@ impl ToastStack {
             on_dismiss: None,
             on_action: None,
             hovered: None,
+            max_lines: None,
             slots: Vec::new(),
         };
         stack.sync_anchor();
@@ -197,6 +200,19 @@ impl ToastStack {
         self
     }
 
+    /// **The most lines a card's title and body may each take**, read from a signal the host owns
+    /// (a config value) at the moment each card is built. Without one, a card takes as many lines
+    /// as its text needs.
+    ///
+    /// The stack holds no number of its own: how much of a message is too much is the user's to
+    /// say, so it comes in, like [`hovered_signal`](Self::hovered_signal), rather than being chosen
+    /// here. A card that is already up keeps the cap it was built with.
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
+    pub fn max_lines_signal(mut self, max_lines: Signal<usize>) -> Self {
+        self.max_lines = Some(max_lines);
+        self
+    }
+
     /// Point the engine at the corner: which end of the column the cards pile against, and which
     /// side they hug. **This is the whole of the placement** — there is no arithmetic left.
     fn sync_anchor(&mut self) {
@@ -222,6 +238,9 @@ impl ToastStack {
     /// ghost — and one hardcoded face here cannot be wrong for every caller at once.
     fn build(&self, spec: &ToastSpec) -> Toast {
         let mut t = Toast::new(spec.title.clone()).severity(spec.severity);
+        if let Some(max_lines) = self.max_lines {
+            t = t.max_lines(max_lines.get_untracked());
+        }
         if let Some(g) = spec.icon {
             t = t.icon(g);
         }

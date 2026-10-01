@@ -172,10 +172,13 @@ fn label_decorations_follow_a_truncated_run() {
 /// **read from the font the engine resolved**, not from the default. The label inherits a
 /// size-variant-scaled font, so a hardcoded 15px cell measures the box a character wide.
 fn wrapped(text: &str, width: f64) -> (Vec<(String, f64)>, f64, usize) {
+    wrapped_label(Label::new(text).wrap(true), width)
+}
+
+/// [`wrapped`] for a label the caller configured (a line cap, say).
+fn wrapped_label(label: Label, width: f64) -> (Vec<(String, f64)>, f64, usize) {
     let theme = Theme::default();
-    let mut col = Flex::column()
-        .width(Length::Px(width as f32))
-        .child(Label::new(text).wrap(true));
+    let mut col = Flex::column().width(Length::Px(width as f32)).child(label);
     LayoutEngine::new().compute(&mut col, Size::new(800.0, 600.0));
     let label = col.base().children[0].base();
     let height = label.bounds.size.h;
@@ -544,4 +547,65 @@ fn label_decorations_follow_the_text_run_not_the_box() {
         (rule.loc.x + rule.size.w - (bounds.loc.x + bounds.size.w)).abs() < 0.5,
         "End-aligned: the run — and its rule — sit at the right edge of the box",
     );
+}
+
+/// **A path folds at its directories.** A word too long for the line is broken after a path
+/// separator when one lies inside the line, so the reader gets whole directory names, not a path
+/// cut mid-word — and when there is none it is still hard-broken (the test above).
+#[test]
+fn a_wrapping_label_folds_a_long_path_after_a_separator() {
+    let path = "/Users/antonio/projects/gleam/tutorial/src/main";
+    let (lines, _, cells) = wrapped(path, 190.0);
+    assert!(
+        lines.len() > 1,
+        "the path is longer than the line: {lines:?}"
+    );
+    let (last, rest) = lines.split_last().expect("lines");
+    for (line, _) in rest {
+        assert!(
+            line.ends_with('/'),
+            "{line:?} must end at a separator: {lines:?}"
+        );
+    }
+    for (line, _) in &lines {
+        assert!(
+            line.chars().count() <= cells,
+            "{line:?} overflows {cells} cells"
+        );
+    }
+    assert_eq!(
+        lines.iter().map(|(l, _)| l.as_str()).collect::<String>(),
+        path,
+        "nothing lost: {last:?}",
+    );
+}
+
+/// **A line cap stops the growth and says so.** Text that needs more lines than the cap ends its
+/// last line with `…`; the box is exactly the capped number of lines tall (measure and paint agree);
+/// text that fits is not marked.
+#[test]
+fn a_capped_wrapping_label_ends_with_an_ellipsis_and_is_that_many_lines_tall() {
+    let text = "the quick brown fox jumps over the lazy dog and keeps on running far away";
+    let (_, one_h, _) = wrapped("one line", 600.0);
+
+    let (lines, height, cells) = wrapped_label(Label::new(text).wrap(true).max_lines(2), 120.0);
+    assert_eq!(lines.len(), 2, "capped at two lines: {lines:?}");
+    assert!(
+        lines[1].0.ends_with('…'),
+        "the cut is marked: {:?}",
+        lines[1].0
+    );
+    assert!(
+        lines[1].0.chars().count() <= cells,
+        "the mark fits the line"
+    );
+    assert!(
+        (height - one_h * 2.0).abs() <= 1.5,
+        "the box is two lines tall, got {height}"
+    );
+
+    // Fits within the cap: no mark, nothing lost.
+    let (lines, _, _) = wrapped_label(Label::new("a few words").wrap(true).max_lines(2), 600.0);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0].0, "a few words");
 }

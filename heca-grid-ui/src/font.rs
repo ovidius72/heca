@@ -99,12 +99,17 @@ const PIXEL_ROUNDING_SLACK: f64 = 0.5;
 /// number of lines than the box was sized for — text drawn outside its own bounds, with nothing to
 /// catch it.
 ///
-/// A word longer than the line is **hard-broken** rather than allowed to overflow: a URL or a path
-/// with no spaces is common enough that refusing to break it means refusing to fit at all. Runs of
-/// whitespace collapse at a break, as they do in every wrapper, and an empty text is one empty line
-/// so a label never measures zero-height.
-pub fn wrap_lines(text: &str, cells: usize) -> Vec<String> {
-    wrap_indexed(text, cells)
+/// A word longer than the line is **broken** rather than allowed to overflow: a URL or a path
+/// with no spaces is common enough that refusing to break it means refusing to fit at all. It is
+/// broken **after a path separator** (`/` or `\`) when one lies inside the line, so a path folds
+/// at its directories; with none, it is hard-broken at the line's width. Runs of whitespace collapse
+/// at a break, as they do in every wrapper, and an empty text is one empty line so a label never
+/// measures zero-height.
+///
+/// `max_lines` caps the result. Text that needs more ends its last line with `…` — the only mark a
+/// reader needs to know there is more — instead of growing without bound.
+pub fn wrap_lines(text: &str, cells: usize, max_lines: Option<usize>) -> Vec<String> {
+    wrap_indexed(text, cells, max_lines)
         .into_iter()
         .map(|line| line.into_iter().map(|(c, _)| c).collect())
         .collect()
@@ -118,11 +123,30 @@ pub fn wrap_lines(text: &str, cells: usize) -> Vec<String> {
 /// land on the wrong letter after a reflow if it counted its way through the output.
 ///
 /// The inserted joining space carries the index of the whitespace it stands for, so a query that
-/// matched a space still marks one.
-pub fn wrap_indexed(text: &str, cells: usize) -> Vec<Vec<(char, usize)>> {
+/// matched a space still marks one. The `…` that closes a capped text carries an index past the end
+/// of the text, which is how a caller tells a character it added from one it was given.
+pub fn wrap_indexed(text: &str, cells: usize, max_lines: Option<usize>) -> Vec<Vec<(char, usize)>> {
     if cells == 0 {
         return vec![Vec::new()];
     }
+    let mut lines = wrap_all(text, cells);
+    if let Some(max) = max_lines.map(|m| m.max(1))
+        && lines.len() > max
+    {
+        lines.truncate(max);
+        // Close the last line with an ellipsis, making room for it if the line is full.
+        let last = lines.last_mut().expect("max is at least one line");
+        last.truncate(cells.saturating_sub(1));
+        last.push(('…', text.chars().count()));
+    }
+    lines
+}
+
+/// Characters a long word may be broken after — path separators, and nothing else.
+const PATH_SEPARATORS: [char; 2] = ['/', '\\'];
+
+/// Every line the text needs, uncapped.
+fn wrap_all(text: &str, cells: usize) -> Vec<Vec<(char, usize)>> {
     let chars: Vec<char> = text.chars().collect();
     // Word boundaries as index ranges over `chars` — `split_whitespace` would give the substrings
     // but not where they came from, which is the whole point here.
@@ -171,11 +195,58 @@ pub fn wrap_indexed(text: &str, cells: usize) -> Vec<Vec<(char, usize)>> {
         }
         let mut k = start;
         while end - k > cells {
-            lines.push(take(k..k + cells));
-            k += cells;
+            // Break after the last path separator that lies inside this line; with none, at the
+            // line's width. `j` is where the next piece starts, so the separator stays on this line.
+            let cut = (k + 1..=k + cells)
+                .rev()
+                .find(|&j| PATH_SEPARATORS.contains(&chars[j - 1]))
+                .unwrap_or(k + cells);
+            lines.push(take(k..cut));
+            k = cut;
         }
         line = take(k..end);
     }
     lines.push(line);
     lines
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lines(text: &str, cells: usize, max: Option<usize>) -> Vec<String> {
+        wrap_lines(text, cells, max)
+    }
+
+    #[test]
+    fn a_long_word_breaks_after_a_slash_when_one_is_in_the_line() {
+        assert_eq!(
+            lines("/Users/antonio/projects", 12, None),
+            ["/Users/", "antonio/", "projects"]
+        );
+    }
+
+    #[test]
+    fn a_windows_path_folds_after_a_backslash_the_same_way() {
+        assert_eq!(
+            lines("C:\\Users\\antonio\\src", 11, None),
+            ["C:\\Users\\", "antonio\\src"]
+        );
+    }
+
+    #[test]
+    fn a_long_word_with_no_separator_is_still_hard_broken() {
+        assert_eq!(lines("abcdefghij", 4, None), ["abcd", "efgh", "ij"]);
+    }
+
+    #[test]
+    fn text_over_the_cap_ends_its_last_line_with_an_ellipsis() {
+        let capped = lines("one two three four five six", 8, Some(2));
+        assert_eq!(capped.len(), 2, "{capped:?}");
+        assert!(capped[1].ends_with('…') && capped[1].chars().count() <= 8);
+        // At or under the cap, nothing is added.
+        assert_eq!(lines("one two", 8, Some(2)), ["one two"]);
+        // A cap of zero is one line, never none.
+        assert_eq!(lines("one two three", 5, Some(0)).len(), 1);
+    }
 }

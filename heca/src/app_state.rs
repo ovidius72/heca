@@ -1061,6 +1061,10 @@ pub struct AppState {
     /// a card's lifetime is; `NotificationRuntime::set_hovered` decides what it costs, which is
     /// that a card being read must not retire under the cursor reaching for its button.
     pub notification_hovered: heca_grid_ui::reactive::Signal<bool>,
+    /// **The most lines a notification card's title and body may each take** —
+    /// `[settings.notification_system] max_lines`, re-applied on reload. Read by the mounted
+    /// `ToastStack` when it builds each card.
+    pub notification_max_lines: heca_grid_ui::reactive::Signal<usize>,
     /// Whether the scoped `notification.pick` picker is open. `KeyHintGroup::open_when` on the
     /// toast surface reads this directly — F009/T492. In addition to global `prefix+/`, not
     /// instead.

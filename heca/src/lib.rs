@@ -318,6 +318,15 @@ impl HecaApp {
             {
                 state.needs_redraw = true;
             }
+            heca_grid_ui::reactive::SignalUpdate::set(
+                &state.notification_max_lines,
+                self.app_config
+                    .config
+                    .settings
+                    .notification_system
+                    .max_lines
+                    .max(1),
+            );
             state.confirm = self.app_config.config.confirm.clone();
             let link_detection = self.app_config.config.appearance.terminal.link_detection;
             let palette_defaults = terminal_palette_defaults(&state.theme);
