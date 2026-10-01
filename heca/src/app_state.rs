@@ -854,10 +854,6 @@ pub struct AppState {
     /// overlay-control actions (`SubmitOverlay`/`CloseOverlay`) resolve. See `chrome::overlay`
     /// and `pluggable-chrome-plugin-plan.md` §2.7.1/§2.7.2.
     pub overlays: crate::chrome::OverlayHost,
-    /// Retained per-pane terminal viewport widgets (scrollbar + scrolled-up badge),
-    /// keyed by pane. Built once per visible pane, updated/repositioned each frame,
-    /// painted read-only in `terminal_render`, dispatched pointer events in `events`.
-    pub pane_viewport_widgets: HashMap<PaneId, crate::chrome::RetainedPaneViewportWidgets>,
     /// Display shortcuts for every bound action, keyed by config name, resolved from
     /// config at load/reload (so tooltips/hints show the user's real, rebindable
     /// keys — never the defaults when overridden). Any chrome button looks its own

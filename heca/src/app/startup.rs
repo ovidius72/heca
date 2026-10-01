@@ -490,7 +490,6 @@ pub(crate) async fn init_state(
         pane_chips: crate::chrome::PaneChips::from_startup(),
         pane_lines: crate::chrome::PaneRowLines::from_startup(),
         overlays: crate::chrome::OverlayHost::default(),
-        pane_viewport_widgets: std::collections::HashMap::new(),
         // Filled in `resumed`, from the built keymaps, once every layer — including the
         // components' and any plugin's — has actually bound (F003/P086/T366).
         action_shortcuts: crate::chrome::ActionShortcuts::default(),

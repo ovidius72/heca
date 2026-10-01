@@ -5,9 +5,9 @@
 
 use crate::app::terminal_host::prepare_terminal_mount;
 use crate::app::terminal_render::{
-    PaneRenderState, TerminalPaneShell, TerminalRenderPassContext, blit_retained_terminal_layer,
-    paint_pane_frame, paint_pane_viewport, pane_scissor_rect, queue_terminal_dynamic_overlays,
-    render_terminal_mount, selection_overlay_for_pane, sync_retained_terminal_layers,
+    PaneRenderState, TerminalRenderPassContext, blit_retained_terminal_layer, paint_pane_frame,
+    pane_scissor_rect, queue_terminal_dynamic_overlays, render_terminal_mount,
+    selection_overlay_for_pane, sync_retained_terminal_layers,
 };
 use crate::app_state::{AppState, InputMode};
 use crate::chrome::ChromeConfig;
@@ -397,11 +397,17 @@ pub(crate) fn render_frame(state: &mut AppState) {
         }
     }
 
-    let mut viewport_widget_panes: Vec<&PaneRenderState> =
-        Vec::with_capacity(tiled_panes.len() + floating_panes.len());
-    viewport_widget_panes.extend(tiled_panes.iter());
-    viewport_widget_panes.extend(floating_panes.iter());
-    crate::chrome::sync_pane_viewport_widgets(state, &viewport_widget_panes);
+    // The chip and the scrollbar are children of each terminal and were painted above, before this
+    // frame's snapshots were read: a change shows on the next frame, so ask for one.
+    if crate::chrome::terminal::show_viewports(
+        state,
+        tiled_panes
+            .iter()
+            .chain(floating_panes.iter())
+            .filter_map(|p| p.mount.as_ref().map(|m| (p.pane_id, &m.snapshot))),
+    ) {
+        state.mark_full_redraw();
+    }
 
     // Recomputed each frame by the two `sync_retained_terminal_layers` calls
     // below (tiled + floating), which OR into it. Reset once here first.
@@ -686,46 +692,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // it guarantees the border/radius/highlight stay visible instead of being
     // visually swallowed by the terminal surface.
     if !tiled_panes.is_empty() {
-        let mut pane_scene = GuiScene::new();
-        pane_scene.push(heca_grid_ui::scene::DrawCommand::PushClip(
-            GuiRectangle::new(
-                GuiPoint::new(pane_area.loc.x, pane_area.loc.y),
-                GuiSize::new(pane_area.size.w, pane_area.size.h),
-            ),
-        ));
-
-        for pane in &tiled_panes {
-            // Which colour this pane's frame is, and what it re-tints inside itself, is the
-            // retained shell's own business — written on it by `chrome::sync_panes`.
-            paint_pane_viewport(
-                state,
-                &mut pane_scene,
-                TerminalPaneShell {
-                    pane_id: pane.pane_id,
-                    x: pane.x,
-                    y: pane.y,
-                    w: pane.w,
-                    h: pane.h,
-                },
-            );
-        }
-
-        pane_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
-        render_chrome(
-            &mut state.grid_renderer,
-            &mut state.text_renderer,
-            &state.queue,
-            &pane_scene,
-            ChromePassOpts {
-                damage: None,
-                glow_alpha_scale,
-            },
-            scene_view,
-            &mut encoder,
-            &mut overlay_sink,
-        );
-        // The columns, flushed after the viewport widgets exactly as they were painted after them
-        // when both shared one scene: the panes' frames and headers sit over the badge.
+        // The columns: each pane's frame, header and — inside its terminal — the chip and
+        // scrollbar, in one scene over the terminals just drawn.
         render_chrome(
             &mut state.grid_renderer,
             &mut state.text_renderer,
@@ -909,31 +877,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 }
             }
 
-            // The frame was painted early; the chip and scrollbar go over it.
-            let mut float_scene = GuiScene::new();
-            float_scene.push(heca_grid_ui::scene::DrawCommand::PushClip(
-                GuiRectangle::new(
-                    GuiPoint::new(pane_area.loc.x, pane_area.loc.y),
-                    GuiSize::new(pane_area.size.w, pane_area.size.h),
-                ),
-            ));
-            paint_pane_viewport(
-                state,
-                &mut float_scene,
-                TerminalPaneShell {
-                    pane_id: pane.pane_id,
-                    x: pane.x,
-                    y: pane.y,
-                    w: pane.w,
-                    h: pane.h,
-                },
-            );
-            float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
-            for scene in float_frames
-                .remove(&pane.pane_id)
-                .iter()
-                .chain(std::iter::once(&float_scene))
-            {
+            for scene in float_frames.remove(&pane.pane_id).iter() {
                 render_chrome(
                     &mut state.grid_renderer,
                     &mut state.text_renderer,

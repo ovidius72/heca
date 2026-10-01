@@ -224,7 +224,7 @@ fn a_right_click_is_handed_to_the_panes_as_well_as_the_chrome() {
 ///
 /// The press starts the drag in the event loop (`mouse::resize::on_press`, before the general mouse
 /// path). The release used to end it two layers down, inside `mouse::on_mouse_input` — which sits
-/// *behind* an early return: if a pane's viewport scrollbar claimed the release (it answers one
+/// *behind* an early return: if a terminal's scrollbar claimed the release (it answers one
 /// whenever it holds a thumb grab), the event loop returned and the resize was never told.
 ///
 /// `state.mouse.resize` then stayed `Some`, and every later cursor move took the resize branch in
@@ -244,11 +244,12 @@ fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
         "the button branch no longer ends the divider resize. It must: the press starts the \
              drag here, so the release has to end it here too, or the drag outlives the button.",
     );
-    // Searched FORWARD from where the resize ends, not from the top of the branch: the viewport
-    // widgets are given the press too, further up, and that call cannot swallow a release. What
-    // has to hold is that the swallowing call comes after the resize has been told.
+    // Searched FORWARD from where the resize ends, not from the top of the branch: the panes are
+    // given the press too, further up, and that call cannot swallow a release. What has to hold is
+    // that the swallowing call — the panes' answer to the release, which is where a terminal's
+    // scrollbar holding a thumb grab says so — comes after the resize has been told.
     assert!(
-        body[ends..].contains("crate::chrome::deliver_to_pane_viewports("),
+        body[ends..].contains("crate::chrome::deliver_to_panes("),
         "the divider resize is ended AFTER the branch that can return early and swallow the \
          release.\nA resize that is never told the button came up keeps resizing on every cursor \
          move, with nothing held down, until the pane is gone.",

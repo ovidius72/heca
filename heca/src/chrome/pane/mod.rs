@@ -53,31 +53,6 @@ pub(crate) struct RetainedPane {
 pub(crate) const ACTIVE_GLOW_RADIUS: f32 = 10.0;
 pub(crate) const ACTIVE_GLOW_STRENGTH: f32 = 0.55;
 
-/// **How much of a pane its header takes — measured, never computed.**
-///
-/// Read off the laid-out tree, so it is right for whatever was put in the header slot: a terminal's
-/// info bar today, something else tomorrow, of any height. It used to be arithmetic on the host's
-/// side — an approximation of `Tag`'s internal padding, plus a copy of the library's line-height
-/// ratio, plus a margin — which meant anything else placed in that slot had to add up to the same
-/// three numbers or sit wrong (Antonio, driving, 2026-09-02).
-///
-/// The shell builds the pane as a column of two when there is a header: the header at its natural
-/// height, then the content taking the rest — and a pane with no header has no node claiming that
-/// row, which is how "there is no header" answers.
-pub(crate) fn header_height(state: &crate::app_state::AppState, pane_id: PaneId) -> f32 {
-    let Some(retained) = state.panes.get(&pane_id) else {
-        return 0.0;
-    };
-    // **The header is found by NAME.** It says which row of the pane's template it is
-    // (`shell::PANE_HEADER_AREA`), so a second thing in the body cannot be mistaken for it and a
-    // pane without one simply has no node carrying that name.
-    //
-    // It used to ask "does this pane have two children?" — which AGENTS § 0 and docs/layout.md both
-    // name as never right, because the answer changes with anything else put in the body.
-    heca_grid_ui::area(&retained.root, shell::PANE_HEADER_AREA)
-        .map_or(0.0, |h| h.base().bounds.size.h as f32)
-}
-
 pub(crate) fn clear_panes(state: &mut crate::app_state::AppState) {
     state.panes.clear();
     crate::chrome::clear_columns(state);

@@ -272,11 +272,11 @@ pub(crate) fn handle_window_event(
             if !crate::chrome::drag_in_flight(state) && !mouse::is_resizing(state) {
                 // Feed the move into the retained pane-info-bar headers so the action
                 // buttons' hover affordance lights up (repaint via mark_full_redraw below).
-                crate::chrome::deliver_to_panes(state, &moved);
-                // Over one, or holding one: a thumb grabbed here keeps the pointer even when the
-                // cursor has left its bounds, and the terminal must not see the move either way.
-                pane_viewport_over = crate::chrome::deliver_to_pane_viewports(state, &moved)
-                    || crate::chrome::pane_viewport_at(state, pos);
+                // Over a terminal's chip or scrollbar, or holding its thumb: a thumb grabbed here
+                // keeps the pointer even when the cursor has left its bounds, and the terminal
+                // must not see the move either way.
+                pane_viewport_over = crate::chrome::deliver_to_panes(state, &moved)
+                    || crate::chrome::terminal::controls_hovered(state);
             }
             // Don't forward moves to the terminal while resizing a divider or while a
             // retained viewport widget (badge / scrollbar) owns the pointer.
@@ -338,17 +338,6 @@ pub(crate) fn handle_window_event(
                 state.mark_full_redraw();
                 return;
             }
-            // Terminal viewport widgets (scrollbar / badge) intercept a plain
-            // left-press before divider resize/content forwarding.
-            if button == winit::event::MouseButton::Left
-                && button_state == ElementState::Pressed
-                && !mouse::interactive_move_modifier_held(state)
-                && crate::chrome::deliver_to_pane_viewports(state, &ev)
-            {
-                mouse::update_cursor(state, state.mouse.pos);
-                state.mark_full_redraw();
-                return;
-            }
             // Divider resize: a plain left-press on a column/pane divider starts a
             // resize-drag. Only an actual divider hit consumes — a miss falls
             // through to the normal content/drag paths. A modifier-held press
@@ -382,8 +371,7 @@ pub(crate) fn handle_window_event(
                 // chrome tree is unconditional: it consumes nothing it did not start, and gating a
                 // release on position is precisely how a thumb ends up welded to the cursor.
                 crate::chrome::deliver(state, &ev);
-                crate::chrome::deliver_to_panes(state, &ev);
-                if crate::chrome::deliver_to_pane_viewports(state, &ev) {
+                if crate::chrome::deliver_to_panes(state, &ev) {
                     mouse::update_cursor(state, state.mouse.pos);
                     state.mark_full_redraw();
                     return;

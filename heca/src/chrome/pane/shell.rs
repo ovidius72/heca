@@ -52,7 +52,7 @@ pub(crate) struct PaneShell<'a> {
 }
 
 /// **The pane's two rows, named.** The parts say which one they are and the host asks by name —
-/// see [`crate::chrome::pane::header_height`], which used to count children instead.
+/// which used to count children instead.
 pub(crate) const PANE_HEADER_AREA: &str = "header";
 /// The row that takes whatever the header does not.
 pub(crate) const PANE_CONTENT_AREA: &str = "content";

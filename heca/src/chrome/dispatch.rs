@@ -51,10 +51,6 @@ pub(crate) fn dispatch_surface_pointer(state: &mut crate::app_state::AppState, e
     for column in state.columns.values_mut() {
         behind.push(&mut column.root);
     }
-    for widgets in state.pane_viewport_widgets.values_mut() {
-        behind.push(&mut widgets.badge);
-        behind.push(&mut widgets.scrollbar);
-    }
     if !surface_owns_pointer(&mut state.window_root, behind, ev) {
         return false;
     }
@@ -108,37 +104,6 @@ pub(crate) fn deliver_to_panes(state: &mut crate::app_state::AppState, ev: &Even
         handled |= heca_grid_ui::dispatch(root, ev) == heca_grid_ui::Handled::Yes;
     }
     handled
-}
-
-/// **Give every pane's viewport widgets the event** — the scrollback badge and the scrollbar.
-/// Returns whether one took it. The same one door as the headers, for the same reasons.
-pub(crate) fn deliver_to_pane_viewports(
-    state: &mut crate::app_state::AppState,
-    ev: &Event,
-) -> bool {
-    let mut handled = false;
-    for widgets in state.pane_viewport_widgets.values_mut() {
-        handled |= heca_grid_ui::dispatch(&mut widgets.badge, ev) == heca_grid_ui::Handled::Yes;
-        handled |= heca_grid_ui::dispatch(&mut widgets.scrollbar, ev) == heca_grid_ui::Handled::Yes;
-    }
-    handled
-}
-
-/// **Is a viewport widget under this point?** A question about geometry, not about an event — which
-/// is why it is its own function rather than a return value bolted onto a move.
-///
-/// The caller keeps a move from reaching the terminal underneath while the pointer is over one.
-pub(crate) fn pane_viewport_at(state: &crate::app_state::AppState, pos: (f32, f32)) -> bool {
-    let point = Point::new(pos.0 as f64, pos.1 as f64);
-    state.pane_viewport_widgets.values().any(|w| {
-        (w.badge.base().visible.get_untracked() && rect_contains(w.badge.base().bounds, point))
-            || (w.scrollbar.base().visible.get_untracked()
-                && rect_contains(w.scrollbar.base().bounds, point))
-    })
-}
-
-fn rect_contains(r: Rectangle, p: Point) -> bool {
-    p.x >= r.loc.x && p.x <= r.loc.x + r.size.w && p.y >= r.loc.y && p.y <= r.loc.y + r.size.h
 }
 
 /// **The one door into the window tree.** Every event the host gives the chrome goes through here.
@@ -273,10 +238,6 @@ pub(crate) fn next_redraw_across_trees(state: &crate::app_state::AppState) -> Op
     for root in crate::chrome::pane_roots(state) {
         soonest = soonest_redraw(soonest, root.next_redraw());
     }
-    for widgets in state.pane_viewport_widgets.values() {
-        soonest = soonest_redraw(soonest, widgets.badge.next_redraw());
-        soonest = soonest_redraw(soonest, widgets.scrollbar.next_redraw());
-    }
     soonest
 }
 
@@ -287,7 +248,6 @@ pub(crate) fn next_redraw_across_trees(state: &crate::app_state::AppState) -> Op
 pub(crate) fn cancel_every_tree(state: &mut crate::app_state::AppState, ev: &Event) {
     let _ = deliver(state, ev);
     let _ = deliver_to_panes(state, ev);
-    let _ = deliver_to_pane_viewports(state, ev);
 }
 
 #[cfg(test)]
