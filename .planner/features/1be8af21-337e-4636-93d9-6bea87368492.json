@@ -45,6 +45,14 @@
       "rationale": "Agreed with Antonio 2026-09-30. It keeps the existing rule that the owner half of a layer or action name is never an author's free string (heca/src/chrome/layers/layer.rs `layer_name`), so two extensions cannot claim each other's names and nothing can claim `heca.*`. One declaration per program instead of a prefix repeated on every item; pane decoration by name (T520 step 3) and later plugins use the same handle.",
       "implementationNotes": "Replaces the first free-string doors `heca::action(\"id\")` and `heca::layer(\"owner.short\")` in heca/src/entry/ (built earlier in T520). Registration goes through the same queues and the same ActionCatalog / register_named_layer paths; only how the name is formed changes. Server side: actions. Client side: layers and pane decoration. Test: two extensions with one name, a dotted short name, and the reserved name are each refused and reported.",
       "acceptedAt": "2026-09-30T09:14:44.075Z"
+    },
+    {
+      "id": "2c249a29-0d66-4806-8b9c-325b5931cc62",
+      "title": "A window's view lives in the window; the server only remembers the last view",
+      "decision": "Session is split so that the shared content (workspaces, columns, panes) stays in the session, and each window's view moves into a per-window value held by the client: the workspace shown, the workspace-switch animation, the scroll for each workspace, viewport size and scale. Layout math is shared and takes that view as an argument. The server stores only plain data: the last view per session, so that a newly attached window, or a restore, starts from it. A full layout copy per window and server-held views were both rejected.",
+      "rationale": "Antonio, 2026-10-02: the what was already decided (463ccd07), and he said to go with option 1 (stream2's A). It fits 463ccd07 (content shared, view per window), d108b88c (the server sends state, never interface, and holds no client state) and the save/restore decision. A layout copy per window would drift out of sync. Server-held views would put per-frame work and animation clocks on the server.",
+      "implementationNotes": "Two PRs. (1) Move ViewOffset, active workspace, switch, viewport and scale out of Session/ScrollingSpace (heca-core layout session.rs, scrolling.rs, workspace.rs) into a WindowView that the engine takes by reference. With one window the numbers are identical, so every layout test stays green. (2) The server/client door for layout changes (split, close, move…), named from the action catalog. This also unblocks moving PaneFacts / Server::facts / Change::FactsChanged behind the server (left over from P104 step 2c). Plugin lines are unchanged: a layer reads the shown workspace through its context, never through an id. Full options are in .planner/docs/handoff-p104-stream2.md.",
+      "acceptedAt": "2026-10-02T13:24:11.936Z"
     }
   ],
   "phaseIds": [
@@ -117,7 +125,7 @@
     }
   ],
   "createdAt": "2026-09-29T19:21:05.026Z",
-  "updatedAt": "2026-10-01T08:16:53.848Z",
+  "updatedAt": "2026-10-02T13:24:11.936Z",
   "sessionInfo": [
     {
       "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",

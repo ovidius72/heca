@@ -127,9 +127,9 @@
       "priority": 2,
       "shortName": "an-untrusted-project-file-is-a",
       "title": "An untrusted project file is announced on every start and reload, never remembered as seen",
-      "status": "in-progress",
-      "description": "BUG found by Antonio 2026-10-01 in the T523 trust notice (merged): the \"once\" rule keeps announced.json keyed by folder + file hash, remembered FOREVER (heca/src/project_trust.rs notify_if_untrusted, via heca/src/announced.rs first_time). Antonio changed his project file back to content he had been told about earlier and that is still untrusted; heca now ignores the file silently with no notice. announced.json already held that hash while project-trust.json trusts a different one.\n\nRule: an untrusted file being ignored must always be visible. While a project file is untrusted, notify on every start and every reload. \"Once\" only means the same notice is not repeated while it is still up in the running session (the notification store's dedup_key already does that for a live notice). Nothing about it is persisted in announced.json.\n\nFix (heca/src/project_trust.rs): remove the announced::first_time gate from notify_if_untrusted; split the decision into a pure notice_for(&ProjectFile) -> Option<Notification> (None when trusted) so it is testable without the notification runtime; notify_if_untrusted reads the project and sends it. Keep .dedup_key(folder+hash) and .sticky(). Update the module doc (\"once per folder and file content (announced)\"). announced.rs stays (other callers: expose pane_show_cwd, pane_items/listing).\n\nTests: the same untrusted content yields a notice every time it is asked (as after a restart), a trusted file yields none; break-checked by putting the first_time gate back and seeing it red.\n\nBranch fix/t523-trust-notice-every-start from origin/main. Antonio checks by eye: edit the project file to content seen before, restart heca: the notice shows.",
-      "descriptionUpdatedAt": "2026-10-01T13:27:46.258Z",
+      "status": "done",
+      "description": "BUG found by Antonio 2026-10-01 in the T523 trust notice (merged): the \"once\" rule keeps announced.json keyed by folder + file hash, remembered FOREVER (heca/src/project_trust.rs notify_if_untrusted, via heca/src/announced.rs first_time). Antonio changed his project file back to content he had been told about earlier and that is still untrusted; heca now ignores the file silently with no notice. announced.json already held that hash while project-trust.json trusts a different one.\n\nRule: an untrusted file being ignored must always be visible. While a project file is untrusted, notify on every start and every reload. \"Once\" only means the same notice is not repeated while it is still up in the running session (the notification store's dedup_key already does that for a live notice). Nothing about it is persisted in announced.json.\n\nFix (heca/src/project_trust.rs): remove the announced::first_time gate from notify_if_untrusted; split the decision into a pure notice_for(&ProjectFile) -> Option<Notification> (None when trusted) so it is testable without the notification runtime; notify_if_untrusted reads the project and sends it. Keep .dedup_key(folder+hash) and .sticky(). Update the module doc (\"once per folder and file content (announced)\"). announced.rs stays (other callers: expose pane_show_cwd, pane_items/listing).\n\nTests: the same untrusted content yields a notice every time it is asked (as after a restart), a trusted file yields none; break-checked by putting the first_time gate back and seeing it red.\n\nBranch fix/t523-trust-notice-every-start from origin/main. Antonio checks by eye: edit the project file to content seen before, restart heca: the notice shows.\n\n---\n**Completion summary:**\nShipped in PR #273 (merged; branch fix/t523-trust-notice-every-start, commit 77a675ae). heca/src/project_trust.rs only: notify_if_untrusted no longer asks announced.json; the decision is a pure notice_for(&ProjectFile) -> Option<Notification> (None when trusted, otherwise the same warning every time), notify_if_untrusted reads the project and sends it. dedup_key (folder+hash) and sticky kept, so the store still stops two identical live notices stacking up in one run; nothing is persisted between runs. announced.rs untouched. Verification: cargo test -p heca 769 passed; clippy clean; new test (an untrusted file read from disk gives a notice on every ask, a trusted one gives none) break-checked red with the first_time gate put back. Reviewed and approved by the orchestrator; checked by eye by Antonio: notice shows on start, returns after reload, stops once trusted.",
+      "descriptionUpdatedAt": "2026-10-01T19:51:41.668Z",
       "notes": "",
       "statusLog": [
         {
@@ -139,6 +139,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": "Temporary switch from Notification Text should not be truncated."
+        },
+        {
+          "id": "3fb07af2-2abd-42f2-b7ee-3fddaf257864-check-002-in-progress-done",
+          "date": "2026-10-01T19:51:41.667Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped in PR #273 (merged; branch fix/t523-trust-notice-every-start, commit 77a675ae). heca/src/project_trust.rs only: notify_if_untrusted no longer asks announced.json; the decision is a pure notice_for(&ProjectFile) -> Option<Notification> (None when trusted, otherwise the same warning every time), notify_if_untrusted reads the project and sends it. dedup_key (folder+hash) and sticky kept, so the store still stops two identical live notices stacking up in one run; nothing is persisted between runs. announced.rs untouched. Verification: cargo test -p heca 769 passed; clippy clean; new test (an untrusted file read from disk gives a notice on every ask, a trusted one gives none) break-checked red with the first_time gate put back. Reviewed and approved by the orchestrator; checked by eye by Antonio: notice shows on start, returns after reload, stops once trusted."
         }
       ],
       "decisions": [],
@@ -149,20 +157,20 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-10-01T13:28:17.011Z",
-      "completedAt": "",
+      "completedAt": "2026-10-01T19:51:41.667Z",
       "createdAt": "2026-10-01T13:27:46.199Z",
-      "updatedAt": "2026-10-01T13:28:17.011Z",
+      "updatedAt": "2026-10-01T19:51:41.667Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
           "createdAt": "2026-10-01T13:27:50.261Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1"
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:32.912Z",
-  "updatedAt": "2026-10-01T13:28:17.011Z",
+  "updatedAt": "2026-10-01T19:51:41.667Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -199,6 +207,14 @@
       "fromStatus": "done",
       "toStatus": "in-progress",
       "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "a3ace3ce-faf6-4f6e-b1eb-2f08f3ff0f58",
+      "date": "2026-10-01T19:51:41.694Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ],
