@@ -101,11 +101,9 @@ pub(crate) fn register_trust_action(registry: &mut ActionRegistry, catalog: &mut
     // The confirm gate asks first, with a verb of its own, on every surface that dispatches it.
     meta.confirm = Some(trust_confirm());
     let handler = Rc::new(|state: &mut crate::app_state::AppState, intent: &Intent| {
-        let start = match intent.args.get(FOLDER_ARG) {
-            Some(heca_view::PropValue::Text(folder)) => Some(std::path::PathBuf::from(folder)),
-            _ => std::env::current_dir().ok(),
+        let Some(start) = start_folder(intent) else {
+            return;
         };
-        let Some(start) = start else { return };
         let expected = match intent.args.get(HASH_ARG) {
             Some(heca_view::PropValue::Text(hash)) => Some(hash.clone()),
             _ => None,
@@ -130,6 +128,16 @@ pub(crate) fn register_trust_action(registry: &mut ActionRegistry, catalog: &mut
     let _ = register_dynamic(registry, catalog, meta, Some(handler));
 }
 
+/// **The folder a `trust_project` call is about**: the one it names, else the one heca was started
+/// in. The one answer, for the handler that trusts and the prompt that asks — two spellings of "the
+/// default folder" could disagree about which file the person was shown.
+fn start_folder(intent: &Intent) -> Option<std::path::PathBuf> {
+    match intent.args.get(FOLDER_ARG) {
+        Some(heca_view::PropValue::Text(folder)) => Some(std::path::PathBuf::from(folder)),
+        _ => std::env::current_dir().ok(),
+    }
+}
+
 /// Whether the file may be trusted: with an expected hash (from the notice) only if the file still
 /// has it; with none, always (the person is acting on the file as it is right now).
 fn hash_matches(expected: Option<&str>, current: &str) -> bool {
@@ -138,12 +146,9 @@ fn hash_matches(expected: Option<&str>, current: &str) -> bool {
 
 /// The prompt's body, naming the file and its folder from the call's arguments.
 fn describe_trust(intent: &Intent) -> String {
-    let folder = match intent.args.get(FOLDER_ARG) {
-        Some(heca_view::PropValue::Text(f)) => f.clone(),
-        _ => std::env::current_dir()
-            .map(|d| d.display().to_string())
-            .unwrap_or_default(),
-    };
+    let folder = start_folder(intent)
+        .map(|d| d.display().to_string())
+        .unwrap_or_default();
     format!(
         "Trust {folder}/.heca/config.toml? It can bind keys to commands, so only trust a project you know."
     )

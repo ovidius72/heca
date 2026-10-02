@@ -5,14 +5,13 @@
 //! writes nothing else (AGENTS § "Chrome buttons → action, tooltip"). heca's own six are registered
 //! here too, through the same [`PaneButtonDef`] — the first users of the registry, not a special case.
 
-use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::widgets::Glyph;
 
 use crate::actions::ActionCatalog;
-use crate::chrome::{Intent, PropValue, warn_author};
+use crate::chrome::{Intent, PropValue, StartupQueue, warn_author};
 use crate::input::WmAction;
 
 /// **Where a pane is** — the plain data a button needs to say what a click does. Never `AppState`.
@@ -198,22 +197,19 @@ impl PaneButtonDef {
 pub const PANE_ARG: &str = "pane";
 
 thread_local! {
-    /// Buttons added before the app took them. Thread-local like the queues beside it.
-    static QUEUE: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
-    static STARTED: Cell<bool> = const { Cell::new(false) };
+    /// Buttons added before the app took them.
+    static QUEUE: StartupQueue<String> = const { StartupQueue::new() };
 }
 
 /// Queue the button `name` (an action's full name) — called by `Extension::pane_button`. The app
 /// takes the queue once, as it starts; a call after that is said and dropped.
 pub(crate) fn add_extension_button(name: String) {
-    if STARTED.with(Cell::get) {
+    if let Err(name) = QUEUE.with(|q| q.add(name)) {
         warn_author(format!(
             "[heca] pane button '{name}' was added after the app started, so it does nothing — add \
              it before `heca::run()`"
         ));
-        return;
     }
-    QUEUE.with(|q| q.borrow_mut().push(name));
 }
 
 /// **Every pane button there is**, by name: heca's own and the ones other crates added.
@@ -233,9 +229,8 @@ impl Default for PaneButtons {
 impl PaneButtons {
     /// heca's own, then everything queued. Takes the queue and closes it: the app calls this once.
     pub(crate) fn from_startup() -> Self {
-        STARTED.with(|s| s.set(true));
         let mut all = Self::default();
-        for name in QUEUE.with(|q| std::mem::take(&mut *q.borrow_mut())) {
+        for name in QUEUE.with(StartupQueue::take) {
             all.add(PaneButtonDef::extension(name));
         }
         all
@@ -243,16 +238,10 @@ impl PaneButtons {
 
     /// Add one. A name already taken is refused and said — the first keeps it.
     fn add(&mut self, def: PaneButtonDef) {
-        if self.get(&def.name).is_some() {
-            warn_author(format!(
-                "[heca] a pane button called '{}' already exists, so this one was not added",
-                def.name
-            ));
-            return;
-        }
-        self.defs.push(def);
+        super::listing::add_unique(&mut self.defs, "pane button", def);
     }
 
+    #[cfg(test)]
     pub(crate) fn get(&self, name: &str) -> Option<&PaneButtonDef> {
         self.defs.iter().find(|d| d.name == name)
     }

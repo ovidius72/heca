@@ -41,8 +41,6 @@
 // the binary they read as unused. They are exercised by `host::region_list_tests`.
 #![allow(dead_code)]
 
-use std::cell::{Cell, RefCell};
-
 use super::RegionId;
 use crate::providers::Provider;
 
@@ -125,18 +123,18 @@ impl RegionHandle {
             ));
             return self;
         };
-        if STARTED.with(Cell::get) {
+        let refused = QUEUE.with(|q| {
+            ops.into_iter()
+                .map(|op| q.add((region, op)))
+                .any(|added| added.is_err())
+        });
+        if refused {
             super::identity::warn_author(format!(
                 "[heca] region '{}' was changed after startup — regions are set up once, as the app \
                  starts, so this change was dropped. Make it where the app or your plugin loads.",
                 self.name,
             ));
-            return self;
         }
-        QUEUE.with(|q| {
-            q.borrow_mut()
-                .extend(ops.into_iter().map(|op| (region, op)))
-        });
         self
     }
 }
@@ -159,22 +157,19 @@ pub struct RegionLayout {
 }
 
 thread_local! {
-    /// Changes made before the host took them. Thread-local rather than a global with a lock: the
-    /// chrome is built and changed on the UI thread only.
-    static QUEUE: RefCell<Vec<(RegionId, RegionOp)>> = const { RefCell::new(Vec::new()) };
-    /// Set once the host has taken the queue; from then on a change is refused out loud.
-    static STARTED: Cell<bool> = const { Cell::new(false) };
+    /// Changes made before the host took them.
+    static QUEUE: super::StartupQueue<(RegionId, RegionOp)> =
+        const { super::StartupQueue::new() };
 }
 
 /// A new host is starting: changes are accepted again until it takes them.
 pub(crate) fn open_for_startup() {
-    STARTED.with(|s| s.set(false));
+    QUEUE.with(super::StartupQueue::reopen);
 }
 
 /// Take every queued change and close the queue. The host calls this; nothing else should.
 pub(crate) fn take_for_startup() -> Vec<(RegionId, RegionOp)> {
-    STARTED.with(|s| s.set(true));
-    QUEUE.with(|q| std::mem::take(&mut *q.borrow_mut()))
+    QUEUE.with(super::StartupQueue::take)
 }
 
 /// **One value per region**, reached by the region's own name — `shown[RegionId::TopBar]`.

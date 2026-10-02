@@ -12,6 +12,8 @@ pub(crate) mod signals;
 pub(crate) use signals::{ChromeSignals, sync_chrome_signals, sync_chrome_state};
 pub(crate) mod column;
 pub(crate) use column::{RetainedColumn, clear_columns, offer_to_columns, sync_columns};
+pub(crate) mod startup_queue;
+pub(crate) use startup_queue::StartupQueue;
 pub(crate) mod pane;
 pub(crate) use pane::{RetainedPane, clear_panes, sync_panes};
 pub(crate) mod pane_header;
