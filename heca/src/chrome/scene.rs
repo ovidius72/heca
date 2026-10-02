@@ -480,7 +480,7 @@ pub(crate) fn paint_link_hints(
     for hint in candidates {
         let Some((x, y)) = crate::app::terminal_host::cell_screen_pos(
             state,
-            hint.pane_id,
+            hint.terminal,
             hint.row,
             hint.start_col,
         ) else {
@@ -560,12 +560,14 @@ fn paint_pane_search(
         if visible < 0 || visible >= rows {
             continue;
         }
-        let Some((x, y)) = crate::app::terminal_host::cell_screen_pos(
-            state,
-            pane_id,
-            visible as usize,
-            m.start_col,
-        ) else {
+        let Some((x, y)) = state.backends.identity_of(pane_id).and_then(|terminal| {
+            crate::app::terminal_host::cell_screen_pos(
+                state,
+                terminal,
+                visible as usize,
+                m.start_col,
+            )
+        }) else {
             continue;
         };
         let width = m.end_col.saturating_sub(m.start_col) as f32 * cell_w;

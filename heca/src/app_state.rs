@@ -188,14 +188,14 @@ pub struct SearchState {
     pub current: Option<usize>,
 }
 
-/// A single follow-link candidate: the letter to press, the pane it lives in, where
+/// A single follow-link candidate: the letter to press, the terminal it lives in, where
 /// to stamp its keycap (the link's first visible cell — `row` from the viewport top,
 /// `start_col` inclusive), and the URL to open. Built from `snapshot.hyperlinks`, so
 /// OSC 8 and auto-detected (linkify) links are followed identically.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinkHint {
     pub label: char,
-    pub pane_id: PaneId,
+    pub terminal: crate::chrome::terminal::TerminalId,
     pub row: usize,
     pub start_col: usize,
     pub url: String,
