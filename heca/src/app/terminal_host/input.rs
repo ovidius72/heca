@@ -280,6 +280,11 @@ pub(crate) fn on_terminal_input(
                 modifiers,
             );
         }
+        // What was typed into it while it held the keyboard — any terminal's, whoever owns it.
+        TerminalInput::Text(text) => return super::typing::on_text(state, terminal, &text),
+        TerminalInput::Key { key, modifiers } => {
+            return super::typing::on_key(state, terminal, key, modifiers);
+        }
         _ => {}
     }
     // The pointer's buttons and moves are every terminal's; what only a pane has (its selection)
@@ -289,7 +294,9 @@ pub(crate) fn on_terminal_input(
         TerminalInput::Wheel { .. }
         | TerminalInput::Resize(_)
         | TerminalInput::ScrollToBottom
-        | TerminalInput::ScrollTo { .. } => {}
+        | TerminalInput::ScrollTo { .. }
+        | TerminalInput::Text(_)
+        | TerminalInput::Key { .. } => {}
         TerminalInput::Press {
             button,
             cell,

@@ -10,6 +10,7 @@ mod hyperlinks;
 mod input;
 mod search;
 mod selection;
+mod typing;
 mod wheel;
 
 pub(crate) use frames::{column_frames, pane_outer_frames};

@@ -210,6 +210,10 @@ impl Terminal {
     }
 
     /// **End this terminal** — the handle's `kill`.
+    ///
+    /// An ended named terminal stays ended: the dock that placed it keeps showing the ended
+    /// terminal, and the declared table keeps its entry, so asking for the same name again does not
+    /// start another behind the user's back.
     pub fn kill(&self) {
         self.tell(TerminalCommand::Kill);
     }
@@ -306,20 +310,37 @@ impl Component for Terminal {
         }
     }
 
-    /// **Where the pointer is, told to the program** — only while it holds the keyboard when an
+    /// **What the user does to it while it holds the keyboard.**
+    ///
+    /// The pointer's moves are told to the program only while it holds the keyboard when an
     /// extension placed it, the rule a pane follows by being the focused pane: a program that
     /// tracks the mouse is not driven by a pointer merely passing over a panel. It reads its own
     /// flag, so a rebuilt tree cannot leave it believing something the framework no longer does.
+    ///
+    /// **Typing** reaches it like any widget: the tree delivers the key to the focus owner, so it
+    /// needs no registration and no host surface. Text arrives as text, a key that is not text as a
+    /// key with what was held; both go to whoever owns the process, which takes them (`Handled::Yes`)
+    /// so nothing behind it also answers. Nothing is said when nobody has said where input goes.
     fn on_event(&mut self, ev: &heca_grid_ui::Event) -> heca_grid_ui::Handled {
-        if let heca_grid_ui::Event::PointerMove(p) = ev
-            && (self.shared.declared.borrow().is_none() || self.base.is_focused())
-        {
-            self.shared.pointer_event(p, |p, cell| TerminalInput::Move {
-                cell,
-                modifiers: p.modifiers,
-            });
-        }
-        heca_grid_ui::Handled::No
+        use heca_grid_ui::{Event, Handled};
+        let said = match ev {
+            Event::PointerMove(p) => {
+                if self.shared.declared.borrow().is_none() || self.base.is_focused() {
+                    self.shared.pointer_event(p, |p, cell| TerminalInput::Move {
+                        cell,
+                        modifiers: p.modifiers,
+                    });
+                }
+                false
+            }
+            Event::TextInput(text) => self.shared.emit(TerminalInput::Text(text.clone())),
+            Event::Key { key, pressed: true } => self.shared.emit(TerminalInput::Key {
+                key: *key,
+                modifiers: heca_grid_ui::event::modifiers(),
+            }),
+            _ => false,
+        };
+        if said { Handled::Yes } else { Handled::No }
     }
 
     /// The box is known: say how big it is.

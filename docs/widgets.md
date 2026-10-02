@@ -2066,12 +2066,21 @@ demo.terminal("logs").command("tail -f app.log").cwd(dir)
 
 **Removing it never ends it.** Closing the dock, rebuilding the tree or hiding the overlay is like
 detaching: reopening shows the same terminal. Only an explicit kill (`.kill()`, or the `terminal_kill` action), or
-heca exiting, ends it; a killed one stays ended. A terminal in a pane is the pane's, and closing the
-pane ends it. Mouse wheel and the scrollbar work wherever it is placed. **A click gives it the keyboard**, like
-any focusable, and it then hears the pointer's moves (a program that tracks the mouse is not driven
-by a pointer merely passing over a panel); a pane's terminal follows the same rule by being the
-focused pane. Typing, selecting text, search and link hints for terminals no pane owns arrive with
-P094(F011)/T449 slices 5b and 5c.
+heca exiting, ends it; a killed one stays ended — its dock keeps showing the ended terminal, and the
+declared table keeps its entry, so asking for the same name again does not start another. A terminal
+in a pane is the pane's, and closing the pane ends it.
+
+**Wherever it is placed it is a terminal**: the wheel and the scrollbar work, and **a click gives it
+the keyboard**, like any focusable. Then it hears the pointer's moves (a program that tracks the
+mouse is not driven by a pointer merely passing over a panel; a pane's terminal follows the same
+rule by being the focused pane), and **what is typed reaches its program** — text as text, a key that
+is not text as the key with what was held (Ctrl+C is `c` and the Ctrl). Nothing is registered for
+that: the tree delivers the key to the widget that holds the keyboard, and the terminal takes it.
+
+In a dock, the dock's own keys (the sidebar's `j`/`k`/`Enter`, the `focus` floor's paging keys) are
+claimed first and the rest go to the terminal. `Escape` leaves the dock as shipped; give it up in the
+`focus` block (see the README) and it reaches the program like any other key. Selecting text, search
+and link hints for terminals no pane owns arrive with P094(F011)/T449 slice 5c.
 
 ### Grid
 

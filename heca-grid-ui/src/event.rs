@@ -138,6 +138,11 @@ pub enum GridKey {
     ArrowDown,
     Home,
     End,
+    PageUp,
+    PageDown,
+    Insert,
+    /// A function key, `1..=24`.
+    Function(u8),
 }
 
 impl GridKey {
@@ -150,7 +155,7 @@ impl GridKey {
     /// Aliases are accepted here so a caller normalises nothing.
     ///
     /// A single character is itself: `"a"` is [`Char('a')`](GridKey::Char). Anything longer that is
-    /// not named here is `None` — a function key, a dead key, a modifier on its own.
+    /// not named here is `None` — a dead key, a modifier on its own.
     ///
     /// ```
     /// use heca_grid_ui::GridKey;
@@ -160,7 +165,8 @@ impl GridKey {
     /// assert_eq!(GridKey::from_name("ArrowLeft"), Some(GridKey::ArrowLeft));
     /// assert_eq!(GridKey::from_name("left"), Some(GridKey::ArrowLeft));
     /// assert_eq!(GridKey::from_name("a"), Some(GridKey::Char('a')));
-    /// assert_eq!(GridKey::from_name("F5"), None);
+    /// assert_eq!(GridKey::from_name("F5"), Some(GridKey::Function(5)));
+    /// assert_eq!(GridKey::from_name("F99"), None);
     /// ```
     pub fn from_name(name: &str) -> Option<Self> {
         let lowered = name.to_lowercase();
@@ -177,7 +183,16 @@ impl GridKey {
             "arrowdown" | "down" => GridKey::ArrowDown,
             "home" => GridKey::Home,
             "end" => GridKey::End,
+            "pageup" => GridKey::PageUp,
+            "pagedown" => GridKey::PageDown,
+            "insert" => GridKey::Insert,
             s => {
+                // `f1` … `f24`: a function key is a letter and a number, not a character.
+                if let Some(n) = s.strip_prefix('f').and_then(|n| n.parse::<u8>().ok())
+                    && (1..=24).contains(&n)
+                {
+                    return Some(GridKey::Function(n));
+                }
                 let mut chars = s.chars();
                 match (chars.next(), chars.next()) {
                     (Some(c), None) => GridKey::Char(c),

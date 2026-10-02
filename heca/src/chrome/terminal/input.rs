@@ -9,7 +9,7 @@
 //! the palette and callable by RPC — and a wheel turn per frame is not one.
 
 use heca_core::layout::{Rectangle, Size};
-use heca_grid_ui::{Modifiers, PointerButton};
+use heca_grid_ui::{GridKey, Modifiers, PointerButton};
 
 use super::viewport::ScrollIntents;
 
@@ -87,8 +87,8 @@ impl Grid {
     }
 }
 
-/// One thing the pointer did to a terminal.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// One thing the user did to a terminal: the pointer, or the keyboard while it held it.
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum TerminalInput {
     /// The wheel turned. Lines, positive `y` meaning the content moves down (the grid's
     /// convention); the cell is where the pointer was, if it was on the grid.
@@ -121,6 +121,12 @@ pub(crate) enum TerminalInput {
     ScrollToBottom,
     /// **Scroll to `rows` above the live bottom** — the scrollbar thumb moved.
     ScrollTo { rows: usize },
+    /// **Text the user typed** — or pasted, or an IME composed — while the terminal held the
+    /// keyboard, exactly as the platform produced it (case and shifted symbols intact).
+    Text(String),
+    /// **A key that is not text** — Enter, an arrow, Ctrl+C — with what was held when it went
+    /// down. Whether the program wants it as an escape sequence is the process's own business.
+    Key { key: GridKey, modifiers: Modifiers },
     /// **The terminal's box changed size** (or its font did): this is the grid it wants its process
     /// to have. Said once per change, not once per frame — and the message a client sends a server.
     Resize(Grid),
