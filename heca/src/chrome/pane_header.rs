@@ -891,7 +891,7 @@ pub(crate) fn build_pane_headers(state: &crate::app_state::AppState) -> BuiltPan
     for input in &inputs {
         let facts = super::pane_items::PaneFacts::of(
             input.pane_id,
-            &state.programs,
+            &state.server.programs,
             &input.name,
             input.custom_name.as_deref(),
             input.runtime.as_ref(),

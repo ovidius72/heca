@@ -82,6 +82,7 @@ fn on_press(
         // Only a pane whose backend has a cell grid; a future browser or GUI pane would use its
         // own selection.
         let has_grid = state
+            .server
             .backends
             .get(pane_id)
             .and_then(|backend| backend.terminal_snapshot())
@@ -104,7 +105,7 @@ fn on_press(
         return;
     };
     let event = backend_mouse_event(BackendMouseEventKind::Press, button, cell, modifiers);
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.server.backends.get_mut(pane_id) {
         let _ = backend.process_mouse_event(&event);
         // The release that pairs with this press is the program's to hear.
         state.terminal_presses.heard(pane_id, button);
@@ -130,7 +131,7 @@ fn on_release(
         return;
     };
     let event = backend_mouse_event(BackendMouseEventKind::Release, button, cell, modifiers);
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.server.backends.get_mut(pane_id) {
         let _ = backend.process_mouse_event(&event);
     }
 }
@@ -138,7 +139,7 @@ fn on_release(
 /// **A terminal asked for a different grid.** Its process takes the cell size and the grid together,
 /// so the picture and the program agree on what a row is.
 fn on_resize(state: &mut AppState, pane_id: PaneId, grid: crate::chrome::terminal::Grid) {
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.server.backends.get_mut(pane_id) {
         backend.set_cell_size(grid.cell_w, grid.cell_h);
         backend.set_size(grid.cols, grid.rows);
         state.needs_redraw = true;
@@ -165,6 +166,7 @@ fn on_move(
             && owner == pane_id
             && let Some(cell) = cell
             && let Some(snapshot) = state
+                .server
                 .backends
                 .get(pane_id)
                 .and_then(|backend| backend.terminal_snapshot())
@@ -189,7 +191,7 @@ fn on_move(
         cell,
         modifiers,
     );
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.server.backends.get_mut(pane_id) {
         let _ = backend.process_mouse_event(&event);
     }
 }
@@ -333,6 +335,7 @@ fn on_wheel(
     // the view back to the bottom; selection mode is entered with `enter_selection_mode`.
     let shift_held = modifiers.shift;
     let wants_mouse = state
+        .server
         .backends
         .get(pane_id)
         .is_some_and(|b| b.is_mouse_grabbed());
@@ -354,6 +357,7 @@ fn on_wheel(
     // preserved history while the alt screen is active, so host scrollback in
     // alt-screen TUIs is an inherent limitation (see README).
     let host_can_scroll = state
+        .server
         .backends
         .get(pane_id)
         .and_then(|b| b.terminal_snapshot())
@@ -378,6 +382,7 @@ fn on_wheel(
     let signed_notches = host_scroll_notches(
         delta,
         state
+            .server
             .backends
             .get(pane_id)
             .map(|b| b.cell_size().1 as f64)
@@ -393,7 +398,7 @@ fn on_wheel(
         -(total as i32)
     };
 
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.server.backends.get_mut(pane_id) {
         backend.scroll_viewport(delta_i32);
     }
     state.needs_redraw = true;
@@ -429,6 +434,7 @@ pub(crate) fn should_intercept_selection_gesture(
         return false;
     };
     state
+        .server
         .backends
         .get(pane_id)
         .and_then(|backend| backend.terminal_snapshot())
@@ -484,7 +490,7 @@ fn forward_wheel_to_terminal(
     };
     for button in wheel_buttons(delta) {
         let event = backend_mouse_event(BackendMouseEventKind::Press, button, cell, modifiers);
-        if let Some(backend) = state.backends.get_mut(pane_id) {
+        if let Some(backend) = state.server.backends.get_mut(pane_id) {
             let _ = backend.process_mouse_event(&event);
         }
     }

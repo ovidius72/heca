@@ -104,7 +104,7 @@ pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
     for &id in &pane_ids {
         state.clear_search(id);
     }
-    state.backends.kill_all(pane_ids);
+    state.server.backends.kill_all(pane_ids);
 
     // Remove the column
     if let Some(ws) = state.session.workspaces.get_mut(target_ws) {
@@ -146,7 +146,7 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
     for &id in &pane_ids {
         state.clear_search(id);
     }
-    state.backends.kill_all(pane_ids);
+    state.server.backends.kill_all(pane_ids);
 
     // Remove the workspace
     state.session.remove_workspace(target_ws);

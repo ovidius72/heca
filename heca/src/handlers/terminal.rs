@@ -23,7 +23,7 @@ fn target(
 
 fn target_of(state: &AppState, pane_id: Option<PaneId>, terminal: Option<u64>) -> Option<PaneId> {
     target(pane_id, terminal, state.focused_pane, |id| {
-        state.backends.pane_of(id)
+        state.server.backends.pane_of(id)
     })
 }
 
@@ -45,7 +45,7 @@ pub fn handle_terminal_run(state: &mut AppState, action: &WmAction) {
     if *enter {
         bytes.push(b'\r');
     }
-    if let Some(backend) = state.backends.get_mut(pane) {
+    if let Some(backend) = state.server.backends.get_mut(pane) {
         backend.process_input(&bytes);
     }
 }

@@ -16,6 +16,7 @@ mod project_trust;
 mod providers;
 mod rpc;
 mod search_state;
+mod server;
 mod shortcut;
 mod state_file;
 
@@ -215,7 +216,7 @@ impl HecaApp {
             // them: a report taken before everything has bound is not a report.
             self.conflicts.report();
             state.theme = self.app_config.theme.clone();
-            state.programs = std::rc::Rc::new(self.app_config.config.programs.clone());
+            state.server.programs = std::rc::Rc::new(self.app_config.config.programs.clone());
             // Appearance: opacity re-reads every frame, so updating the snapshot
             // makes `transparency` (the amount) live-reload. The OS vibrancy
             // material is applied once at startup and NOT re-applied here — doing
@@ -293,6 +294,7 @@ impl HecaApp {
                     &self.app_config.config.settings,
                 ));
             state
+                .server
                 .notifications
                 .set_auto_dismiss(std::time::Duration::from_millis(
                     self.app_config
@@ -302,6 +304,7 @@ impl HecaApp {
                         .auto_dismiss_ms,
                 ));
             state
+                .server
                 .notifications
                 .set_mode(self.app_config.config.settings.notification_system.mode);
             // Every setting in this table must be re-applied here. One that is only read at startup
@@ -314,6 +317,7 @@ impl HecaApp {
                 .notification_system
                 .max_visible;
             if state
+                .server
                 .notifications
                 .set_max_visible(max_visible, std::time::Instant::now())
             {
@@ -331,7 +335,7 @@ impl HecaApp {
             state.confirm = self.app_config.config.confirm.clone();
             let link_detection = self.app_config.config.appearance.terminal.link_detection;
             let palette_defaults = terminal_palette_defaults(&state.theme);
-            for backend in state.backends.values_mut() {
+            for backend in state.server.backends.values_mut() {
                 backend.set_scroll_animations_enabled(state.terminal_scroll_animations_enabled);
                 backend.set_link_detection(link_detection);
                 backend.reload_terminal_config(palette_defaults, state.terminal_scrollback_lines);

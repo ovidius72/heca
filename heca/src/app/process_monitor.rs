@@ -23,7 +23,8 @@ use heca_core::layout::{PaneId, Session};
 /// so the store mirror sees fresh canonical values.
 pub(crate) fn sync_pane_runtime_from_backends(state: &mut AppState) {
     let bus = state.chrome_state.events();
-    let exits = sync_pane_runtime_from_backends_impl(&mut state.session, &mut state.backends);
+    let exits =
+        sync_pane_runtime_from_backends_impl(&mut state.session, &mut state.server.backends);
     let mut panes_to_close = Vec::new();
     for (pane, code) in exits {
         bus.emit(ChromeEvent::PaneExited { pane, code });

@@ -442,6 +442,25 @@ pub(crate) async fn init_state(
         }
     };
 
+    // What every window shares and none needs a window for. `[settings.notification_system]`
+    // config (F009/T186/T187/T191); the history depth of 50 is still a placeholder pending its own
+    // knob.
+    let server = crate::server::ServerState::new(
+        backends,
+        crate::notification::NotificationRuntime::with_capacity(
+            50,
+            std::time::Duration::from_millis(
+                app_config
+                    .config
+                    .settings
+                    .notification_system
+                    .auto_dismiss_ms,
+            ),
+            app_config.config.settings.notification_system.mode,
+            app_config.config.settings.notification_system.max_visible,
+        ),
+        app_config.config.programs.clone(),
+    );
     let mut state = Box::new(AppState {
         window,
         event_proxy,
@@ -459,11 +478,9 @@ pub(crate) async fn init_state(
         blur,
         backdrop,
         background,
-        git_runtime_cache: crate::app::git_monitor::GitRuntimeCache::default(),
+        server,
         session,
-        backends,
         theme: app_config.theme.clone(),
-        programs: std::rc::Rc::new(app_config.config.programs.clone()),
         appearance,
         command_palette_size: app_config.config.settings.command_palette_size,
         // Loaded from disk when `[settings] search_history` allows it; a missing, corrupt or
@@ -541,20 +558,6 @@ pub(crate) async fn init_state(
         pending_reload: false,
         window_focused: true,
         current_cursor: winit::window::CursorIcon::Default,
-        // `[settings.notification_system]` config (F009/T186/T187/T191); the history depth
-        // of 50 is still a placeholder pending its own knob.
-        notifications: crate::notification::NotificationRuntime::with_capacity(
-            50,
-            std::time::Duration::from_millis(
-                app_config
-                    .config
-                    .settings
-                    .notification_system
-                    .auto_dismiss_ms,
-            ),
-            app_config.config.settings.notification_system.mode,
-            app_config.config.settings.notification_system.max_visible,
-        ),
         notification_pick_open: heca_grid_ui::reactive::signal(false),
         notification_hovered: heca_grid_ui::reactive::signal(false),
         notification_max_lines: heca_grid_ui::reactive::signal(

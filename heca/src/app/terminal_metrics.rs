@@ -68,7 +68,7 @@ pub(crate) fn refresh_terminal_cell_size(state: &mut AppState) {
     // box or its font changes (`TerminalInput::Resize`), and the font it reads is the one just
     // measured above — so there is one place a size is decided.
     let scale = state.scale_factor as f32;
-    for backend in state.backends.values_mut() {
+    for backend in state.server.backends.values_mut() {
         backend.set_scale_factor(scale);
     }
 }
@@ -134,7 +134,7 @@ pub(crate) fn apply_pane_terminal_font_zoom(state: &mut AppState, pane_id: PaneI
     // Push the resolved cell size straight into the pane's backend so the PTY
     // reflows immediately rather than waiting for the next per-frame fit.
     let cell = state.pane_base_cell_size(pane_id);
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.server.backends.get_mut(pane_id) {
         backend.set_cell_size(cell.0, cell.1);
     }
     state.mark_full_redraw();

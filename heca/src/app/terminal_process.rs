@@ -70,7 +70,7 @@ impl AppState {
             }
         }
         let settings = LaunchSettings::of(self);
-        let ensured = ensure_with(&mut self.backends, pane, spec, &settings)?;
+        let ensured = ensure_with(&mut self.server.backends, pane, spec, &settings)?;
         if let Ensured::Kept { differs: true, .. } = ensured {
             Notification::warning("A terminal was already running for this pane")
                 .body("It keeps running as it was; the new program or folder was not applied.")

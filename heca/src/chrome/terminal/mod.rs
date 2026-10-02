@@ -31,7 +31,7 @@ use crate::app_state::AppState;
 /// pane whose process was started after its first tree still ends up showing it.
 pub(crate) fn view_of(state: &mut AppState, pane_id: PaneId) -> Terminal {
     let proxy = state.event_proxy.clone();
-    let process = state.backends.terminal_of(pane_id);
+    let process = state.server.backends.terminal_of(pane_id);
     let terminal = state
         .terminals
         .entry(pane_id)

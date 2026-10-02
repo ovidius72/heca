@@ -1928,17 +1928,17 @@ pub fn install_notification_sink(f: impl Fn(NotificationDraft) + 'static) {
 pub(crate) fn raise(state: &mut crate::app_state::AppState, draft: NotificationDraft) {
     // `[settings.notification_system] mode = "none"` — drop it here, before it reaches the
     // store, so nothing queues and no timer is scheduled.
-    if state.notifications.suppressed() {
+    if state.server.notifications.suppressed() {
         return;
     }
     let now = Instant::now();
     // `mode = "system"` with no OS backend yet (F009/T222) — fall back to the in-app stack and
     // say so once. Routed like any other in-app notification; when P063 installs the OS sink
     // this branch stops firing and `raise` hands the draft there instead.
-    if let Some(notice) = state.notifications.system_fallback_notice() {
-        let _ = state.notifications.push(notice, now);
+    if let Some(notice) = state.server.notifications.system_fallback_notice() {
+        let _ = state.server.notifications.push(notice, now);
     }
-    let _ = state.notifications.push(draft, now);
+    let _ = state.server.notifications.push(draft, now);
     state.needs_redraw = true;
 }
 

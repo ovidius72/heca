@@ -324,7 +324,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         let (content_rect, drawn) = crate::chrome::terminal::content_box(state, *pane_id);
         let mount = content_rect.and_then(|content_rect| {
             prepare_terminal_mount(
-                &mut state.backends,
+                &mut state.server.backends,
                 *pane_id,
                 content_rect,
                 state.scale_factor as f32,
@@ -365,7 +365,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             let (content_rect, drawn) = crate::chrome::terminal::content_box(state, float.pane.id);
             let mount = content_rect.and_then(|content_rect| {
                 prepare_terminal_mount(
-                    &mut state.backends,
+                    &mut state.server.backends,
                     float.pane.id,
                     content_rect,
                     state.scale_factor as f32,

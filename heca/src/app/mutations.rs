@@ -97,7 +97,7 @@ pub(crate) fn close_pane_by_id_anywhere(state: &mut AppState, pane_id: PaneId) -
 
     for (ws_idx, ws) in state.session.workspaces.iter_mut().enumerate() {
         if let Some(removed) = crate::app::pane_ops::remove_pane_by_id(ws, pane_id) {
-            state.backends.kill_for_pane(removed.pane.id);
+            state.server.backends.kill_for_pane(removed.pane.id);
             state.clear_search(removed.pane.id);
             removed_ws_idx = Some(ws_idx);
             break;
@@ -105,7 +105,7 @@ pub(crate) fn close_pane_by_id_anywhere(state: &mut AppState, pane_id: PaneId) -
 
         if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id == pane_id) {
             let removed = ws.floating_panes.remove(float_idx);
-            state.backends.kill_for_pane(removed.pane.id);
+            state.server.backends.kill_for_pane(removed.pane.id);
             if ws.focus_domain == FocusDomain::Floating && ws.floating_panes.is_empty() {
                 ws.deactivate_floating_panes();
                 ws.focus_domain = FocusDomain::Tiled;

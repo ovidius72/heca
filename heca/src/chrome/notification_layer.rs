@@ -62,7 +62,7 @@ pub(crate) fn surface_key() -> SurfaceKey {
 pub(crate) fn mount_notification_stack(state: &mut AppState) {
     let emit = layer_emitter(&state.event_proxy, surface_key());
 
-    let stack = ToastStack::new(state.notifications.visible_toasts)
+    let stack = ToastStack::new(state.server.notifications.visible_toasts)
         .position(ToastPosition::TopRight)
         // **A card must not retire under the pointer reaching for its button.** The stack reports
         // the hover and nothing more; the runtime owns what it costs and hands the time back.

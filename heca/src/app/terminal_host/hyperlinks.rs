@@ -34,6 +34,7 @@ pub(crate) fn hyperlink_uri_at_position(
 ) -> Option<String> {
     let (row, col) = cell_coords_at_position(state, pane_id, pos)?;
     let snapshot = state
+        .server
         .backends
         .get(pane_id)
         .and_then(|backend| backend.terminal_snapshot())?;
@@ -57,6 +58,7 @@ pub(crate) fn collect_link_hints(state: &AppState) -> Vec<crate::app_state::Link
             continue;
         }
         let Some(snapshot) = state
+            .server
             .backends
             .get(pane_id)
             .and_then(|backend| backend.terminal_snapshot())
@@ -107,6 +109,7 @@ pub(crate) fn hyperlink_uri_at_stable_cell(
     col: usize,
 ) -> Option<String> {
     let snapshot = state
+        .server
         .backends
         .get(pane_id)
         .and_then(|backend| backend.terminal_snapshot())?;

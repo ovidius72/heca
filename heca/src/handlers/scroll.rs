@@ -14,6 +14,7 @@ fn focused_terminal_page_rows(state: &AppState) -> usize {
         .focused_pane
         .and_then(|pane_id| {
             state
+                .server
                 .backends
                 .get(pane_id)
                 .and_then(|b| b.terminal_snapshot())
@@ -69,6 +70,7 @@ pub fn handle_scrollback_to_top(state: &mut AppState, _action: &WmAction) {
     // Move caret to the oldest scrollback content row.
     if let Some(pane_id) = state.focused_pane
         && let Some(ref snapshot) = state
+            .server
             .backends
             .get(pane_id)
             .and_then(|b| b.terminal_snapshot())
@@ -93,12 +95,13 @@ pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) {
     // Scroll to the live bottom immediately, then move the caret to the
     // cursor position (newest terminal text, not the adjusted cursor row).
     if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.backends.get_mut(pane_id)
+        && let Some(backend) = state.server.backends.get_mut(pane_id)
     {
         backend.scroll_to_bottom();
     }
     if let Some(pane_id) = state.focused_pane
         && let Some(ref snapshot) = state
+            .server
             .backends
             .get(pane_id)
             .and_then(|b| b.terminal_snapshot())
@@ -119,7 +122,7 @@ pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) {
 pub fn handle_exit_scrollback(state: &mut AppState, _action: &WmAction) {
     // Scroll to live bottom, clear selection, and exit selection mode.
     if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.backends.get_mut(pane_id)
+        && let Some(backend) = state.server.backends.get_mut(pane_id)
     {
         backend.scroll_to_bottom();
     }
@@ -156,7 +159,7 @@ fn scroll_focused_dock(state: &mut AppState, intent: heca_grid_ui::WidgetIntent)
 pub fn handle_scroll_line_up(state: &mut AppState, _action: &WmAction) {
     let lines = state.terminal_wheel_scroll_lines as i32;
     if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.backends.get_mut(pane_id)
+        && let Some(backend) = state.server.backends.get_mut(pane_id)
     {
         backend.scroll_viewport(lines);
     }
@@ -165,7 +168,7 @@ pub fn handle_scroll_line_up(state: &mut AppState, _action: &WmAction) {
 pub fn handle_scroll_line_down(state: &mut AppState, _action: &WmAction) {
     let lines = -(state.terminal_wheel_scroll_lines as i32);
     if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.backends.get_mut(pane_id)
+        && let Some(backend) = state.server.backends.get_mut(pane_id)
     {
         backend.scroll_viewport(lines);
     }
@@ -177,7 +180,7 @@ pub fn handle_scroll_page_up(state: &mut AppState, _action: &WmAction) {
     }
     let page_rows = focused_terminal_page_rows(state) as i32;
     if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.backends.get_mut(pane_id)
+        && let Some(backend) = state.server.backends.get_mut(pane_id)
     {
         // Direct page jumps are the primary user-visible discrete scrollback
         // jump path in Normal mode, so they should honor
@@ -193,7 +196,7 @@ pub fn handle_scroll_page_down(state: &mut AppState, _action: &WmAction) {
     }
     let page_rows = -(focused_terminal_page_rows(state) as i32);
     if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.backends.get_mut(pane_id)
+        && let Some(backend) = state.server.backends.get_mut(pane_id)
     {
         backend.scroll_viewport_animated(page_rows);
     }
@@ -204,7 +207,7 @@ pub fn handle_scroll_to_top(state: &mut AppState, _action: &WmAction) {
         return;
     }
     if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.backends.get_mut(pane_id)
+        && let Some(backend) = state.server.backends.get_mut(pane_id)
     {
         backend.scroll_to_top_animated();
     }
@@ -215,7 +218,7 @@ pub fn handle_scroll_to_bottom(state: &mut AppState, _action: &WmAction) {
         return;
     }
     if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.backends.get_mut(pane_id)
+        && let Some(backend) = state.server.backends.get_mut(pane_id)
     {
         backend.scroll_to_bottom_animated();
     }
@@ -245,7 +248,7 @@ pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) {
         return;
     };
     if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.backends.get_mut(pane_id)
+        && let Some(backend) = state.server.backends.get_mut(pane_id)
         && let Some(snapshot) = backend.terminal_snapshot()
     {
         let max_offset = snapshot.scrollback_rows.saturating_sub(snapshot.rows);

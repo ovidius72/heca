@@ -10,6 +10,7 @@ pub(crate) fn enter_selection_mode_for_focused_terminal(state: &mut AppState) ->
         return false;
     };
     let Some(snapshot) = state
+        .server
         .backends
         .get(pane_id)
         .and_then(|backend| backend.terminal_snapshot())
@@ -49,6 +50,7 @@ pub(crate) fn move_focused_terminal_selection(
         return false;
     };
     let Some(snapshot) = state
+        .server
         .backends
         .get(pane_id)
         .and_then(|backend| backend.terminal_snapshot())
@@ -159,13 +161,13 @@ pub(crate) fn ensure_caret_visible(
     if caret_stable_row < visible_top {
         // Caret moved above the visible top: scroll toward history (increase offset).
         let delta = (visible_top - caret_stable_row) as i32;
-        if let Some(backend) = state.backends.get_mut(pane_id) {
+        if let Some(backend) = state.server.backends.get_mut(pane_id) {
             backend.scroll_viewport(delta);
         }
     } else if caret_stable_row >= visible_bottom_exclusive {
         // Caret moved below the visible bottom: scroll toward live bottom (decrease offset).
         let delta = (caret_stable_row - visible_bottom_exclusive + 1) as i32;
-        if let Some(backend) = state.backends.get_mut(pane_id) {
+        if let Some(backend) = state.server.backends.get_mut(pane_id) {
             // Negative delta moves toward the live bottom.
             backend.scroll_viewport(-delta);
         }
@@ -181,6 +183,7 @@ pub(super) fn begin_terminal_selection_at(
     source: SelectionSource,
 ) {
     let Some(snapshot) = state
+        .server
         .backends
         .get(pane_id)
         .and_then(|backend| backend.terminal_snapshot())

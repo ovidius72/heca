@@ -540,6 +540,7 @@ fn paint_pane_search(
     viewport: Size,
 ) {
     let Some(snapshot) = state
+        .server
         .backends
         .get(pane_id)
         .and_then(|b| b.terminal_snapshot())
@@ -547,6 +548,7 @@ fn paint_pane_search(
         return;
     };
     let (cell_w, cell_h) = state
+        .server
         .backends
         .get(pane_id)
         .map(|b| b.cell_size())

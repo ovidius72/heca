@@ -118,7 +118,7 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     state
         .chrome_state
         .workspaces
-        .set_programs(state.programs.clone());
+        .set_programs(state.server.programs.clone());
     // Sidebar-nav selection: the **store owns it**. The nav handlers
     // publish into it (`publish_sidebar_selection`), and here it is projected back onto
     // the tree's positional `cursor` — which `sync_from_session` rebuilds from scratch, so

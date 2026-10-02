@@ -13,6 +13,7 @@ pub(crate) fn enter_scrollback_search(state: &mut AppState) {
         return;
     };
     if state
+        .server
         .backends
         .get(pane_id)
         .and_then(|b| b.terminal_snapshot())
@@ -62,6 +63,7 @@ pub(crate) fn run_scrollback_search(state: &mut AppState) {
         return;
     };
     let cols = match state
+        .server
         .backends
         .get(pane_id)
         .and_then(|b| b.terminal_snapshot())
@@ -71,6 +73,7 @@ pub(crate) fn run_scrollback_search(state: &mut AppState) {
     };
     let caret_row = state.selection.cursor_cell().map(|(_, row, _)| row);
     let matches = state
+        .server
         .backends
         .get(pane_id)
         .map(|b| b.search_scrollback(&query, cols))
@@ -131,6 +134,7 @@ fn jump_to_current_match(state: &mut AppState) {
         .selection
         .set_caret(SelectionOwner::Pane(pane_id), m.stable_row, m.start_col);
     if let Some(snapshot) = state
+        .server
         .backends
         .get(pane_id)
         .and_then(|b| b.terminal_snapshot())

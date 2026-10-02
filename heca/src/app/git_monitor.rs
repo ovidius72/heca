@@ -127,7 +127,7 @@ pub(crate) fn sync_pane_git_from_cwds(state: &mut AppState) {
     let provider = Git2Provider;
     sync_pane_git_from_cwds_impl(
         &mut state.session,
-        &mut state.git_runtime_cache,
+        &mut state.server.git_runtime_cache,
         &provider,
         Instant::now(),
         GIT_REFRESH_INTERVAL,

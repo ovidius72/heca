@@ -23,7 +23,7 @@ pub(crate) struct BackendPollResult {
 
 pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
     let mut result = BackendPollResult::default();
-    for backend in state.backends.values_mut() {
+    for backend in state.server.backends.values_mut() {
         let anim = backend.tick_animation();
         result.terminal_animating |= anim;
         if backend.update() {
@@ -40,7 +40,7 @@ pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
             crate::handlers::set_system_clipboard(&text);
         }
     }
-    let closing_panes = state.backends.pane_ids_to_close();
+    let closing_panes = state.server.backends.pane_ids_to_close();
     result.closed_any = !closing_panes.is_empty();
     for pane_id in closing_panes {
         close_pane_by_id_anywhere(state, pane_id);
@@ -213,9 +213,10 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     let now = Instant::now();
     use heca_grid_ui::reactive::SignalGet;
     let deadlines_moved = state
+        .server
         .notifications
         .set_hovered(state.notification_hovered.get_untracked(), now);
-    let notifications_expired = state.notifications.expire_due(now);
+    let notifications_expired = state.server.notifications.expire_due(now);
     if notifications_expired || deadlines_moved {
         state.needs_redraw = true;
     }
@@ -276,9 +277,9 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         || terminal_animating
         || image_animating
         || chrome_animating;
-    let toast_expiry = match state.notifications.is_hovered() {
+    let toast_expiry = match state.server.notifications.is_hovered() {
         true => None,
-        false => state.notifications.next_expiry(),
+        false => state.server.notifications.next_expiry(),
     };
     let schedule = next_wake(
         Instant::now(),

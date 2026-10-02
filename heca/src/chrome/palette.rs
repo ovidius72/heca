@@ -402,7 +402,7 @@ pub(crate) fn open_command_palette(
     let mut rows = entries(&state.action_catalog, &owners, &state.action_shortcuts);
     rows.extend(pane_entries(
         &state.session,
-        &state.programs,
+        &state.server.programs,
         state.last_focused,
     ));
     rows.extend(workspace_entries(&state.session, state.last_visited_ws_idx));
@@ -476,7 +476,7 @@ pub(crate) fn open_command_palette(
     // row and nothing else: rename a pane or start `nvim` in it and that row's text changes in
     // place, with no rebuild and no flash. The widget ranks off the same signals, so a row renamed
     // this way is also *found* by its new name and not the one it was built with.
-    let programs = state.programs.clone();
+    let programs = state.server.programs.clone();
     for (i, row) in rows.iter().enumerate() {
         let Some(pane) = row.pane else { continue };
         let Some((program, custom_name)) = state

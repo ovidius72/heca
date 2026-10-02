@@ -379,7 +379,7 @@ mod show_cwd_tests {
 /// re-shown if it was showing.
 pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::LayerId> {
     let name = super::layers::layer_name(super::layers::HOST_OWNER, SURFACE)?;
-    let programs = state.programs.clone();
+    let programs = state.server.programs.clone();
     // **Where each pane is, if the user asked for it** — `[appearance.expose] show_cwd`, no longer the
     // setting the sidebar's rows follow, read here because this is the file that may touch
     // `AppState`. Off ⇒ the model simply carries no folder, and nothing below has a flag to pass on.

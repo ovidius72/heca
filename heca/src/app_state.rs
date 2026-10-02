@@ -1,9 +1,7 @@
-use crate::app::backend_store::BackendStore;
 use crate::app::events::AppEvent;
 pub use crate::app::selection_model::SelectionState;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
-use heca_config::programs::ProgramsConfig;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
 use heca_renderer::backdrop::Backdrop;
@@ -717,17 +715,12 @@ pub struct AppState {
     /// panes composite translucently over). Cached; recomputes only on resize
     /// or gradient/blur param change. See `heca-renderer/src/background.rs`.
     pub background: BackgroundLayer,
-    /// Host-owned git metadata cache keyed by repo root / pane cwd.
-    pub git_runtime_cache: crate::app::git_monitor::GitRuntimeCache,
+    /// **What every window shares and none needs a window for** — the terminal processes, the
+    /// notification store, the git facts kept for panes, the program catalog. See
+    /// [`crate::server`]; the rest of this struct is the window and what it draws.
+    pub server: crate::server::ServerState,
     pub session: Session,
-    /// Content backends for panes that have one.
-    pub backends: BackendStore,
     pub theme: Theme,
-    /// Resolved program catalog copied from config and refreshed on reload.
-    /// The program catalog (`[program]`), behind an `Rc` so mirroring it into the chrome store is a
-    /// pointer clone and the store can tell "unchanged" from "reloaded" by identity
-    /// (F003/P086/T367).
-    pub programs: std::rc::Rc<ProgramsConfig>,
     /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.
     pub appearance: AppearanceConfig,
     /// How roomy the command palette is (`[settings] command_palette_size`). Re-read on reload, so
@@ -1053,9 +1046,6 @@ pub struct AppState {
     /// calls `Window::set_cursor` when the icon actually changes (cursor-moved fires
     /// very often). See `mouse::update_cursor`.
     pub current_cursor: winit::window::CursorIcon,
-    /// The notification store + its retained `Signal<Vec<ToastSpec>>` — F009/T208. Owns queueing,
-    /// lifecycle, dedup and the projection the mounted `ToastStack` persistent layer reads.
-    pub notifications: crate::notification::NotificationRuntime,
     /// **Is the pointer resting on a toast card**, written by
     /// [`ToastStack::hovered_signal`](heca_grid_ui::widgets::ToastStack::hovered_signal).
     ///
