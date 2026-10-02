@@ -9,6 +9,7 @@ pub(crate) mod cli;
 pub(crate) mod conflicts;
 pub mod events;
 pub mod focus;
+pub(crate) mod frame;
 pub(crate) mod frame_reasons;
 pub(crate) mod frame_times;
 pub mod git_monitor;
