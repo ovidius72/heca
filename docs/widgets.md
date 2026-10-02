@@ -635,8 +635,9 @@ wrong at every other. Use a number when you can say why this space should *not* 
 — a hairline rule, a scrollbar gutter, a value the window manager owns.
 
 `hairline` is about a pixel at the usual font (`0.08` of it, still rounded to a whole pixel) — the air
-between things that belong to **one control**: the buttons of a [`ButtonGroup`](#buttongroup), which is
-its default `gap`, so a destructive button's outline does not sit against its neighbour.
+between lines that belong to **one block**, such as the lines of text in a card. It is too thin to
+separate two bordered controls, so a [`ButtonGroup`](#buttongroup) uses `xs` (about three pixels) as its
+default `gap`: a destructive button's outline does not sit against its neighbour.
 
 Use the steps to **group**, which is what they are for: a tight `Xs` inside a label-and-control
 couple, a roomier `Md` between couples. That is a form layout with no arithmetic and no new widget.
@@ -2832,7 +2833,7 @@ Nothing is ever squashed, and nothing is ever silently unreachable.
 ButtonGroup::new()
     .size(WidgetSize::Header)                       // one size for every button in the group
     .variant(ButtonVariant::Ghost)                  // …and one variant
-    .gap(Spacing::Xs)                       // a token, never a pixel count (default: `Hairline`)
+    .gap(Spacing::Xs)                       // a token, never a pixel count (default: `Xs`)
     .child(Button::new("Split").icon(Glyph::Plus).on_click(split))
     .child(Button::new("Zoom").icon(Glyph::FrameCorners).on_click(zoom))
     .child(Button::new("Close").icon(Glyph::Minus).on_click(close))
