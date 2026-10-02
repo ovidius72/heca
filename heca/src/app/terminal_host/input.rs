@@ -6,7 +6,7 @@ use crate::actions::ActionRegistry;
 use crate::app::interaction::{InteractionSource, dispatch_action};
 use crate::app::selection_model::{SelectionOwner, SelectionSource};
 use crate::app_state::{AppState, InputMode};
-use crate::chrome::terminal::Cell;
+use crate::chrome::terminal::{Cell, TerminalId};
 use crate::input::WmAction;
 use heca_core::backend::{
     BackendModifiers, BackendMouseButton, BackendMouseEvent, BackendMouseEventKind,
@@ -20,19 +20,19 @@ use super::selection::{begin_terminal_selection_at, visible_row_to_stable_row};
 /// on only where its press was: one that ends a divider resize, or a selection, is not the
 /// program's.
 #[derive(Default)]
-pub(crate) struct HeardPresses(Vec<(PaneId, BackendMouseButton)>);
+pub(crate) struct HeardPresses(Vec<(TerminalId, BackendMouseButton)>);
 
 impl HeardPresses {
     /// The program heard this press.
-    pub(crate) fn heard(&mut self, pane: PaneId, button: BackendMouseButton) {
-        if !self.0.contains(&(pane, button)) {
-            self.0.push((pane, button));
+    pub(crate) fn heard(&mut self, terminal: TerminalId, button: BackendMouseButton) {
+        if !self.0.contains(&(terminal, button)) {
+            self.0.push((terminal, button));
         }
     }
 
     /// A release came: was its press heard? Forgets it either way.
-    pub(crate) fn released(&mut self, pane: PaneId, button: BackendMouseButton) -> bool {
-        match self.0.iter().position(|p| *p == (pane, button)) {
+    pub(crate) fn released(&mut self, terminal: TerminalId, button: BackendMouseButton) -> bool {
+        match self.0.iter().position(|p| *p == (terminal, button)) {
             Some(at) => {
                 self.0.swap_remove(at);
                 true
@@ -49,7 +49,8 @@ impl HeardPresses {
 /// already decided about it by the time this runs, and what it decided is in the state.
 fn on_press(
     state: &mut AppState,
-    pane_id: PaneId,
+    terminal: TerminalId,
+    pane: Option<PaneId>,
     button: PointerButton,
     cell: Option<Cell>,
     modifiers: heca_grid_ui::Modifiers,
@@ -71,7 +72,9 @@ fn on_press(
     // program, which keeps a program's own mouse use (a plain click) intact while giving the host an
     // explicit entry gesture.
     if button == PointerButton::Left && modifiers.shift {
-        let Some(cell) = cell else {
+        // Selecting is a pane's for now: the selection model is owned by a pane
+        // (P094(F011)/T449 slice 5c makes it any terminal's).
+        let (Some(pane_id), Some(cell)) = (pane, cell) else {
             return;
         };
         // Only a pane whose backend has a cell grid; a future browser or GUI pane would use its
@@ -99,10 +102,10 @@ fn on_press(
         return;
     };
     let event = backend_mouse_event(BackendMouseEventKind::Press, button, cell, modifiers);
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.backends.get_mut_by_id(terminal) {
         let _ = backend.process_mouse_event(&event);
         // The release that pairs with this press is the program's to hear.
-        state.terminal_presses.heard(pane_id, button);
+        state.terminal_presses.heard(terminal, button);
     }
 }
 
@@ -110,7 +113,7 @@ fn on_press(
 /// release that ends a divider resize, or a selection, is not the program's.
 fn on_release(
     state: &mut AppState,
-    pane_id: PaneId,
+    terminal: TerminalId,
     button: PointerButton,
     cell: Option<Cell>,
     modifiers: heca_grid_ui::Modifiers,
@@ -118,14 +121,14 @@ fn on_release(
     let Some(button) = backend_button(button) else {
         return;
     };
-    if !state.terminal_presses.released(pane_id, button) {
+    if !state.terminal_presses.released(terminal, button) {
         return;
     }
     let Some(cell) = cell else {
         return;
     };
     let event = backend_mouse_event(BackendMouseEventKind::Release, button, cell, modifiers);
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.backends.get_mut_by_id(terminal) {
         let _ = backend.process_mouse_event(&event);
     }
 }
@@ -147,7 +150,8 @@ fn on_resize(
 /// **The pointer moved over a terminal.**
 fn on_move(
     state: &mut AppState,
-    pane_id: PaneId,
+    terminal: TerminalId,
+    pane: Option<PaneId>,
     cell: Option<Cell>,
     modifiers: heca_grid_ui::Modifiers,
 ) {
@@ -161,11 +165,11 @@ fn on_move(
         && state.selection.source() == Some(SelectionSource::MouseDrag)
     {
         if let Some(SelectionOwner::Pane(owner)) = state.selection.owner()
-            && owner == pane_id
+            && Some(owner) == pane
             && let Some(cell) = cell
             && let Some(snapshot) = state
                 .backends
-                .get(pane_id)
+                .get_by_id(terminal)
                 .and_then(|backend| backend.terminal_snapshot())
         {
             state
@@ -175,8 +179,9 @@ fn on_move(
         }
         return;
     }
-    // Only the pane that has the keyboard is told where the pointer is.
-    if state.focused_pane != Some(pane_id) {
+    // A pane is told where the pointer is only while it has the keyboard; a terminal no pane owns
+    // hears it whenever the pointer is over it.
+    if pane.is_some() && state.focused_pane != pane {
         return;
     }
     let Some(cell) = cell else {
@@ -188,7 +193,7 @@ fn on_move(
         cell,
         modifiers,
     );
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.backends.get_mut_by_id(terminal) {
         let _ = backend.process_mouse_event(&event);
     }
 }
@@ -276,11 +281,9 @@ pub(crate) fn on_terminal_input(
         }
         _ => {}
     }
-    // What needs a pane — focus, host selection, the window's gestures — is the pane's. A terminal
-    // no pane owns does not get these yet (P094(F011)/T449 slice 5b).
-    let Some(pane_id) = state.backends.pane_of(terminal) else {
-        return;
-    };
+    // The pointer's buttons and moves are every terminal's; what only a pane has (its selection)
+    // is asked of `pane`, which is `None` for a terminal no pane owns.
+    let pane = state.backends.pane_of(terminal);
     match input {
         TerminalInput::Wheel { .. }
         | TerminalInput::Resize(_)
@@ -290,13 +293,13 @@ pub(crate) fn on_terminal_input(
             button,
             cell,
             modifiers,
-        } => on_press(state, pane_id, button, cell, modifiers),
+        } => on_press(state, terminal, pane, button, cell, modifiers),
         TerminalInput::Release {
             button,
             cell,
             modifiers,
-        } => on_release(state, pane_id, button, cell, modifiers),
-        TerminalInput::Move { cell, modifiers } => on_move(state, pane_id, cell, modifiers),
+        } => on_release(state, terminal, button, cell, modifiers),
+        TerminalInput::Move { cell, modifiers } => on_move(state, terminal, pane, cell, modifiers),
     }
 }
 
@@ -331,11 +334,11 @@ mod tests {
     #[test]
     fn a_release_is_the_programs_only_where_its_press_was() {
         let mut heard = HeardPresses::default();
-        let (a, b) = (PaneId(1), PaneId(2));
+        let (a, b) = (TerminalId(1), TerminalId(2));
         heard.heard(a, BackendMouseButton::Left);
         assert!(
             !heard.released(b, BackendMouseButton::Left),
-            "another pane's"
+            "another terminal's"
         );
         assert!(
             !heard.released(a, BackendMouseButton::Right),
