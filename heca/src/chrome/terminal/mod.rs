@@ -11,6 +11,7 @@ mod component;
 mod declared;
 mod input;
 mod model;
+mod shared;
 #[cfg(test)]
 pub(crate) mod testing;
 mod viewport;
