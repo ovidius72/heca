@@ -1,0 +1,272 @@
+use super::scrolling::ScrollingSpace;
+use super::types::*;
+
+/// Which layout domain has keyboard focus.
+///
+/// When `Floating`, only pane-local actions (close, rename) operate on the
+/// active floating pane. Tiled-layout mutations (resize, zoom, swap, move,
+/// column navigation) are no-op. Navigation between floating panes is
+/// deferred to a future phase.
+///
+/// The floating domain is **modal** — mouse clicks, keyboard shortcuts, and
+/// sidebar selection cannot switch to a tiled pane while a floating pane is
+/// focused. Use `prefix+f` (unfloat), closing the floating pane, or
+/// `prefix+i` (toggle) to return to `Tiled`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FocusDomain {
+    #[default]
+    Tiled,
+    Floating,
+}
+
+/// A workspace contains a scrolling layout and optionally floating panes.
+///
+/// This is heca's equivalent of NIRI's `Workspace<W>`, which contains
+/// both a `ScrollingSpace` (tiling) and a `FloatingSpace` (floating windows).
+#[derive(Debug, Clone)]
+pub struct Workspace {
+    pub id: WorkspaceId,
+    pub name: Option<String>,
+    /// The scrollable-tiling layout.
+    pub scrolling: ScrollingSpace,
+    /// Floating panes (future feature).
+    pub floating_panes: Vec<FloatingPane>,
+    /// Which layout domain has keyboard focus.
+    pub focus_domain: FocusDomain,
+}
+
+/// A floating pane with position and size.
+#[derive(Debug, Clone)]
+pub struct FloatingPane {
+    pub pane: super::column::Pane,
+    pub position: Point,
+    pub size: Size,
+    pub is_active: bool,
+    /// Original column index when floated (for restore).
+    pub original_column_idx: Option<usize>,
+    /// Original pane index within the column when floated.
+    pub original_pane_idx: Option<usize>,
+}
+
+impl Workspace {
+    pub fn new(
+        id: WorkspaceId,
+        working_area: Rectangle,
+        scale: f64,
+        options: LayoutOptions,
+    ) -> Self {
+        let scrolling = ScrollingSpace::new(working_area, scale, options);
+        Self {
+            id,
+            name: None,
+            scrolling,
+            floating_panes: Vec::new(),
+            focus_domain: FocusDomain::default(),
+        }
+    }
+
+    pub fn has_panes(&self) -> bool {
+        !self.scrolling.is_empty() || !self.floating_panes.is_empty()
+    }
+
+    pub fn active_pane(&self) -> Option<&super::column::Pane> {
+        if self.focus_domain == FocusDomain::Floating {
+            self.floating_panes
+                .iter()
+                .find(|p| p.is_active)
+                .map(|p| &p.pane)
+        } else {
+            self.scrolling.active_pane()
+        }
+    }
+
+    /// Clear active state from all floating panes.
+    pub fn deactivate_floating_panes(&mut self) {
+        for float in &mut self.floating_panes {
+            float.is_active = false;
+        }
+    }
+
+    /// Activate exactly one floating pane by id.
+    pub fn activate_floating_pane(&mut self, pane_id: PaneId) -> bool {
+        let mut found = false;
+        for float in &mut self.floating_panes {
+            let is_target = float.pane.id == pane_id;
+            float.is_active = is_target;
+            found |= is_target;
+        }
+        self.focus_domain = if found {
+            FocusDomain::Floating
+        } else {
+            FocusDomain::Tiled
+        };
+        found
+    }
+
+    /// Find any pane by ID across both scrolling and floating.
+    pub fn find_pane(&self, pane_id: PaneId) -> Option<&super::column::Pane> {
+        // Check floating panes first
+        if let Some(f) = self.floating_panes.iter().find(|f| f.pane.id == pane_id) {
+            return Some(&f.pane);
+        }
+        for col in &self.scrolling.columns {
+            let found = col.panes.iter().find(|p| p.id == pane_id);
+            if found.is_some() {
+                return found;
+            }
+        }
+        None
+    }
+
+    pub fn find_pane_mut(&mut self, pane_id: PaneId) -> Option<&mut super::column::Pane> {
+        // Check floating panes first
+        if let Some(f) = self
+            .floating_panes
+            .iter_mut()
+            .find(|f| f.pane.id == pane_id)
+        {
+            return Some(&mut f.pane);
+        }
+        // Check scrolling columns
+        for col in &mut self.scrolling.columns {
+            if let Some(pane) = col.panes.iter_mut().find(|p| p.id == pane_id) {
+                return Some(pane);
+            }
+        }
+        None
+    }
+
+    /// Update working area (called on resize).
+    pub fn update_working_area(&mut self, working_area: Rectangle) {
+        // Capture the old working area (as plain f64s, to avoid borrowing
+        // `self.scrolling.working_area` across the mutable call below).
+        let (old_x, old_y, old_w, old_h) = (
+            self.scrolling.working_area.loc.x,
+            self.scrolling.working_area.loc.y,
+            self.scrolling.working_area.size.w,
+            self.scrolling.working_area.size.h,
+        );
+        self.scrolling.update_working_area(working_area);
+        // Scale floating panes proportionally so they keep their relative position
+        // + coverage when the working area changes (window resize, chrome toggle).
+        // Without this, a float spawned at 95% keeps its absolute pixel size while
+        // the window grows/shrinks around it — drifting off-screen or looking
+        // stranded. Position is stored relative to the working-area origin (see
+        // `handle_float` + the render path), so a pure scale by the size ratio is
+        // correct (plus an origin shift in case `loc` ever moves).
+        let sx = working_area.size.w / old_w.max(1.0);
+        let sy = working_area.size.h / old_h.max(1.0);
+        if (sx - 1.0).abs() > 1e-6 || (sy - 1.0).abs() > 1e-6 {
+            for float in &mut self.floating_panes {
+                float.position.x = working_area.loc.x + (float.position.x - old_x) * sx;
+                float.position.y = working_area.loc.y + (float.position.y - old_y) * sy;
+                float.size.w *= sx;
+                float.size.h *= sy;
+            }
+        }
+    }
+
+    /// Advance all animations in this workspace.
+    pub fn advance_animations(&mut self) {
+        self.scrolling.advance_animations();
+    }
+
+    pub fn are_animations_ongoing(&self) -> bool {
+        self.scrolling.are_animations_ongoing()
+    }
+
+    /// Add a pane to the scrolling layout.
+    ///
+    /// `new_column_id` is spent only when a column is actually created (`column_idx` is `None`).
+    /// It is handed in rather than derived here because a [`ColumnId`] must be **allocated**: see
+    /// [`Session::next_id`](super::session::Session::next_id), the one counter panes and workspaces
+    /// already draw from.
+    pub fn add_pane(
+        &mut self,
+        pane: super::column::Pane,
+        column_idx: Option<usize>,
+        activate: bool,
+        new_column_id: ColumnId,
+    ) {
+        if let Some(idx) = column_idx {
+            // Add to existing column.
+            self.scrolling.add_pane_to_column(idx, None, pane, activate);
+        } else {
+            // Create new column.
+            let col = self.scrolling.new_column(new_column_id, pane);
+            self.scrolling.add_column(None, col, activate);
+        }
+    }
+
+    /// Focus left in the scrolling layout.
+    pub fn focus_left(&mut self) -> bool {
+        if self.focus_domain == FocusDomain::Floating {
+            false // TODO: floating focus
+        } else {
+            self.scrolling.focus_left()
+        }
+    }
+
+    /// Focus right in the scrolling layout.
+    pub fn focus_right(&mut self) -> bool {
+        if self.focus_domain == FocusDomain::Floating {
+            false // TODO: floating focus
+        } else {
+            self.scrolling.focus_right()
+        }
+    }
+
+    /// Focus up (previous pane in column, or previous workspace).
+    pub fn focus_up(&mut self) -> bool {
+        if self.focus_domain == FocusDomain::Floating {
+            false // TODO
+        } else if let Some(col) = self.scrolling.active_column_mut() {
+            if col.focus_up() {
+                true
+            } else {
+                // Wrap to previous column's last pane.
+                let col_idx = self.scrolling.active_column_idx;
+                if col_idx > 0 {
+                    self.scrolling.activate_column(col_idx - 1);
+                    if let Some(new_col) = self.scrolling.active_column_mut() {
+                        let last_idx = new_col.panes.len().saturating_sub(1);
+                        new_col.activate_pane(last_idx);
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Focus down (next pane in column, or next workspace).
+    pub fn focus_down(&mut self) -> bool {
+        if self.focus_domain == FocusDomain::Floating {
+            false // TODO
+        } else if let Some(col) = self.scrolling.active_column_mut() {
+            if col.focus_down() {
+                true
+            } else {
+                // Wrap to next column's first pane.
+                let col_idx = self.scrolling.active_column_idx;
+                if col_idx + 1 < self.scrolling.columns.len() {
+                    self.scrolling.activate_column(col_idx + 1);
+                    if let Some(new_col) = self.scrolling.active_column_mut() {
+                        new_col.activate_pane(0);
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+        } else {
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

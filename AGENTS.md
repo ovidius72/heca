@@ -1533,8 +1533,8 @@ myvim/
 │   │   │   ├── animation.rs  ← Animation, SwipeTracker, easing functions
 │   │   │   ├── view_offset.rs  ← ViewOffset (Static/Animation/Gesture)
 │   │   │   ├── column.rs  ← Column, Pane, height distribution
-│   │   │   ├── scrolling.rs  ← ScrollingSpace, focus, add/remove, view positions
-│   │   │   ├── workspace.rs  ← Workspace, FloatingPane
+│   │   │   ├── scrolling/    ← ScrollingSpace, focus, add/remove, view positions
+│   │   │   ├── workspace/    ← Workspace, FloatingPane
 │   │   │   └── session.rs ← Session, WorkspaceSwitch
 │   │   ├── backend/
 │   │   │   ├── mod.rs     ← PaneBackend trait, BackendRenderData
