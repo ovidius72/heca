@@ -64,8 +64,10 @@
 #
 # One resolution order, for every key:
 #
-#   the focused surface's own [[keys.surface]] entry
-#     → the floor its kind is guaranteed
+#   a focused dock's reserved way-out key (Escape as shipped)
+#     → the focused widget and its ancestors (a terminal docked in the sidebar gets its PageUp)
+#     → the focused surface's own [[keys.surface]] entry
+#     → the rest of the floor its kind is guaranteed
 #     → the global [keys] map
 #     → then swallowed (a layer, a dock) or sent to the program in the pane (heca.panes)
 #

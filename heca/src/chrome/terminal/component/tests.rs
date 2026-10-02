@@ -472,6 +472,33 @@ fn a_key_that_is_not_text_reaches_it_with_what_was_held() {
     );
 }
 
+/// **A program in a docked terminal gets its paging keys**: the tree gives the key to the terminal
+/// first, and only what it leaves is the dock's.
+#[test]
+fn the_paging_keys_reach_the_program_in_the_terminal() {
+    use heca_grid_ui::{GridKey, Modifiers};
+    let (mut root, said) = focused_terminal();
+
+    for key in [
+        GridKey::PageUp,
+        GridKey::PageDown,
+        GridKey::Home,
+        GridKey::End,
+    ] {
+        let taken = heca_grid_ui::dispatch(root.as_mut(), &Event::Key { key, pressed: true });
+        assert_eq!(taken, Handled::Yes, "{key:?}");
+    }
+
+    assert_eq!(
+        said.borrow()[0],
+        TerminalInput::Key {
+            key: GridKey::PageUp,
+            modifiers: Modifiers::default()
+        }
+    );
+    assert_eq!(said.borrow().len(), 4);
+}
+
 /// Nothing focused, nothing delivered: a terminal nobody clicked hears no typing, and a key coming
 /// *up* is not typing.
 #[test]

@@ -165,6 +165,9 @@ pub(crate) fn handle_window_event(
                     crate::app_state::InputMode::Prefix
                         | crate::app_state::InputMode::HintPick { .. }
                 );
+            // Whether the tree has already been offered this key (the layer branch below does it), so
+            // the key rules do not offer it a second time.
+            let mut offered_to_tree = false;
             if !picker_seq && layer_holds_keyboard(state) {
                 // Overlay key resolution via the single host-owned widget keymap
                 // (`widget-keys-config`). `Keymap::dispatch` delivers the raw key to the overlay
@@ -188,6 +191,7 @@ pub(crate) fn handle_window_event(
                     // why `q`, catalogued and bound to `close_overlay` alongside `Escape`, did
                     // nothing while the map was up: `Escape` resolves to the `dismiss` widget
                     // intent and was handled here, `q` resolves to nothing and died here.
+                    offered_to_tree = true;
                     if matches!(handled, Handled::Yes) {
                         state.mark_full_redraw();
                         return;
@@ -210,6 +214,7 @@ pub(crate) fn handle_window_event(
                     is_prefix,
                     is_ctrl,
                     is_shift,
+                    offered_to_tree,
                 },
             );
         }

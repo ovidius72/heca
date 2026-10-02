@@ -246,6 +246,29 @@ fn row_activates_on_click_and_key_when_interactive() {
     assert_eq!(clicks.get(), 2, "Enter activates the row that was clicked");
 }
 
+/// **A focused row does not take `j` or `k`**, as text or as keys, so they bubble to the dock above
+/// it — which is how the sidebar's cursor keys keep working now that the tree is offered a key
+/// before the dock's own bindings are.
+#[test]
+fn a_focused_row_leaves_j_and_k_to_the_container_above() {
+    use heca_grid_ui::Row;
+    let mut row = Row::new().child(Label::new("pane")).on_activate(|| {});
+    LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
+    row.base().focus(false);
+
+    for c in ['j', 'k'] {
+        assert_eq!(
+            heca_grid_ui::dispatch(&mut row, &Event::TextInput(c.to_string())),
+            Handled::No
+        );
+        let key = Event::Key {
+            key: GridKey::Char(c),
+            pressed: true,
+        };
+        assert_eq!(heca_grid_ui::dispatch(&mut row, &key), Handled::No);
+    }
+}
+
 #[test]
 fn row_without_on_activate_is_not_focusable() {
     use heca_grid_ui::Row;

@@ -576,8 +576,16 @@ Ctrl+B → p    Command palette (backend ready, UI pending)
   **layer** (the exposé, a modal, a menu, a plugin's), a focused **dock**, and `heca.panes` (the
   scrolling area) — and exactly one holds the keyboard. One resolution order, for every key:
 
-  > the focused surface's own `[[keys.surface]]` entry → the **floor** its kind is guaranteed → the
-  > global `[keys]` map → then swallowed (layer, dock) or sent to the pane (`heca.panes`).
+  > a dock's **reserved way-out key** → the focused widget and its ancestors (**the tree**) → the
+  > surface's own `[[keys.surface]]` entry → the rest of its **floor** → the global `[keys]` map →
+  > then swallowed (layer, dock) or sent to the pane (`heca.panes`).
+
+  That is the DOM's order: a key goes to the focused widget first and bubbles up, and the surface's
+  keys are its handlers on the way — they act on what the tree did not take, so a program in a docked
+  terminal gets its PageUp and the sidebar's `j`/`k` (which a `Row` does not take) still reach the
+  dock. The one exception is the key that leaves the dock, answered before the tree like a browser's
+  reserved shortcuts, so a terminal that eats every key cannot trap you
+  (`input/surface.rs::way_out_action`). A layer is in the tree and is offered the key first.
 
   Nearest declaration wins, so a surface key shadows a global one. **Every panel always has a way
   out, and by default it is `Escape`.** The floors are the `[[keys.mode]]` blocks `layer`

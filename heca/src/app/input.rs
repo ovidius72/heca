@@ -23,7 +23,7 @@ use pick_modes::{
     handle_workspace_pick_mode,
 };
 pub(crate) use surface::{
-    FOCUS_LAYER, FocusedSurface, LAYER_FLOOR, focused_surface, surface_action,
+    FOCUS_LAYER, FocusedSurface, LAYER_FLOOR, focused_surface, surface_action, way_out_action,
 };
 
 #[derive(Clone, Copy)]
@@ -35,6 +35,9 @@ pub(crate) struct KeyInputContext<'a> {
     pub is_prefix: bool,
     pub is_ctrl: bool,
     pub is_shift: bool,
+    /// Whether the window tree has already been offered this key — a layer in front is offered it
+    /// before the key rules run, so they must not offer it again.
+    pub offered_to_tree: bool,
 }
 
 pub(crate) fn handle_keyboard_input(
@@ -77,17 +80,34 @@ pub(crate) fn handle_keyboard_input(
                 return;
             }
 
-            // **A key acts on the surface in front of you** (F003/P082/T428). The focused surface
-            // resolves it first — its own `[[keys.surface]]` declaration, then the floor its kind
-            // is guaranteed — and the global map is the fallback for what nobody in front claimed.
-            // That is the ordinary nearest-declaration-wins rule, and it is what makes `Escape`
-            // mean *close the thing I am in* everywhere: a layer closes itself, a dock hands the
-            // keyboard back, the panes let it reach the program running in them.
+            // **A key acts on the surface in front of you** (F003/P082/T428), in the DOM's order:
+            // the key goes to the focused widget first and bubbles up, and the surface's own keys
+            // are its handlers on the way — they act on what the tree did not take.
             //
-            // It was the other way round until now, and a global `Escape` bound to `close_overlay`
-            // therefore ate the key before a focused dock could see it — closing nothing, because
-            // no overlay was up, and stranding the keyboard in the dock.
+            // **One exception, the way out.** The key that leaves a focused dock is reserved and
+            // answered before the tree, like a browser's reserved shortcuts: a terminal that holds
+            // the keyboard can eat every key it is sent, and it must not be able to trap you in
+            // the dock. Everything else the dock's keymap says — paging, the sidebar's `j`/`k` — is
+            // consulted after the tree, so a program in a docked terminal gets its PageUp.
             let surface = focused_surface(state);
+            if let Some(act) = way_out_action(&surface, mode_keymaps, ctx.event_combo) {
+                dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
+                return;
+            }
+            // What the surface holds goes to the tree. (A layer was offered the key before the key
+            // rules ran, by whoever holds it; the panes never are — their keys belong to the
+            // program in the pane.)
+            if surface.delivers_to_tree()
+                && !ctx.offered_to_tree
+                && crate::app::tree_keys::deliver_press_to_tree(
+                    state,
+                    ctx.event_combo,
+                    ctx.key_text,
+                ) == Some(heca_grid_ui::Handled::Yes)
+            {
+                state.mark_full_redraw();
+                return;
+            }
             if let Some(act) =
                 surface_action(&surface, mode_keymaps, component_keymaps, ctx.event_combo)
             {
@@ -121,13 +141,7 @@ pub(crate) fn handle_keyboard_input(
             // `state.focused_pane` is deliberately untouched: only the keyboard is redirected, so
             // `prefix+Enter` still splits the pane you last worked in.
             //
-            // What the surface's keymaps left over is not thrown away, though: it goes into the
-            // tree, to whatever inside the surface holds focus — a terminal docked in the sidebar
-            // is typed into the way a field is. The panes never do this (their keys belong to the
-            // program in the pane), and a key the tree does not take is still swallowed.
-            if surface.delivers_to_tree() {
-                crate::app::tree_keys::deliver_press_to_tree(state, ctx.event_combo, ctx.key_text);
-                state.mark_full_redraw();
+            if !matches!(surface, FocusedSurface::Panes) {
                 return;
             }
 

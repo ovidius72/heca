@@ -2077,9 +2077,11 @@ rule by being the focused pane), and **what is typed reaches its program** — t
 is not text as the key with what was held (Ctrl+C is `c` and the Ctrl). Nothing is registered for
 that: the tree delivers the key to the widget that holds the keyboard, and the terminal takes it.
 
-In a dock, the dock's own keys (the sidebar's `j`/`k`/`Enter`, the `focus` floor's paging keys) are
-claimed first and the rest go to the terminal. `Escape` leaves the dock as shipped; give it up in the
-`focus` block (see the README) and it reaches the program like any other key. Selecting text, search
+In a dock the terminal gets the key first, as any focused widget does, and the dock's own keys (the
+sidebar's `j`/`k`/`Enter`, the `focus` floor's paging keys) act on what it did not take — so a vim in
+a docked terminal gets its PageUp. The one reserved key is the way out: `Escape` leaves the dock as
+shipped, ahead of the terminal, so it cannot trap you. Move it in the `focus` block (see the README)
+and `Escape` reaches the program like any other key. Selecting text, search
 and link hints for terminals no pane owns arrive with P094(F011)/T449 slice 5c.
 
 ### Grid

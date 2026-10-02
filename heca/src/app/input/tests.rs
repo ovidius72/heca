@@ -228,6 +228,39 @@ fn the_sidebars_cursor_keys_are_claimed_before_the_tree_is_offered_a_key() {
     }
 }
 
+/// **Only the way out is ahead of the tree** (the DOM's order: the focused widget first, its
+/// ancestors' handlers after). A terminal that holds the keyboard can eat every key it is sent,
+/// so the key that leaves the dock is reserved — and everything else the dock's keymap says
+/// (paging, the sidebar's `j`/`k`/`Enter`) is not, which is what lets a docked terminal's
+/// program have its PageUp.
+#[test]
+fn only_the_way_out_of_a_dock_is_answered_before_the_tree() {
+    let (modes, _) = defaults();
+    let sidebar = dock("workspaces", "workspaces");
+    assert_eq!(
+        way_out_action(&sidebar, &modes, &KeyCombo::parse("Escape")),
+        Some(crate::keymap::ActionRef::Builtin(WmAction::UnfocusDock)),
+    );
+    for key in ["PageUp", "PageDown", "Home", "End", "j", "k", "Enter"] {
+        assert_eq!(
+            way_out_action(&sidebar, &modes, &KeyCombo::parse(key)),
+            None,
+            "{key} is a handler the tree gets to pre-empt",
+        );
+    }
+    // A layer or the panes have no reserved key here: a layer is in the tree, and the panes'
+    // keys belong to the program in the pane.
+    let layer = FocusedSurface::Layer { name: None };
+    assert_eq!(
+        way_out_action(&layer, &modes, &KeyCombo::parse("Escape")),
+        None
+    );
+    assert_eq!(
+        way_out_action(&FocusedSurface::Panes, &modes, &KeyCombo::parse("Escape")),
+        None
+    );
+}
+
 /// A dock is consulted at two names, **placement before component**, so narrowing one seating
 /// of a provider does not have to restate the rest (F003/P086/T362).
 #[test]

@@ -85,6 +85,32 @@ fn floor_action(
         .cloned()
 }
 
+/// **The reserved key**: the way out of a focused dock, if `combo` is it. Answered *before* the
+/// tree gets the key, like a browser's reserved shortcuts, so a terminal that takes every key it is
+/// sent cannot trap you in the dock. Only the way out is reserved — the rest of the dock's keys
+/// (paging, the sidebar's `j`/`k`) are handlers that act on what the tree did not take, see
+/// [`surface_action`].
+///
+/// A layer has none here: it is in the tree, and the tree delivers `Escape` to it as its own
+/// dismissal.
+pub(crate) fn way_out_action(
+    surface: &FocusedSurface,
+    mode_keymaps: &HashMap<String, KeymapRegistry>,
+    combo: &KeyCombo,
+) -> Option<crate::keymap::ActionRef> {
+    match surface {
+        FocusedSurface::Dock { .. } => {
+            floor_action(mode_keymaps, FOCUS_LAYER, combo).filter(|act| {
+                matches!(
+                    act,
+                    crate::keymap::ActionRef::Builtin(crate::input::WmAction::UnfocusDock)
+                )
+            })
+        }
+        FocusedSurface::Layer { .. } | FocusedSurface::Panes => None,
+    }
+}
+
 /// Which surface holds the keyboard, read off the session — the whole of [`AppState`] this rule
 /// needs, so [`surface_action`] can stay a pure function of plain data.
 pub(crate) fn focused_surface(state: &AppState) -> FocusedSurface {
