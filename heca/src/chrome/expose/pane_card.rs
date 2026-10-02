@@ -146,7 +146,7 @@ impl PaneCard<'_> {
         //
         // So the two states differ in **kind** rather than in strength — the same move `Row` makes
         // between its selected panel and its cursor ring. The current pane takes the accent edge and
-        // the halo a focused pane frame carries (`chrome::pane::ACTIVE_GLOW_*`, one definition for
+        // the halo a focused pane frame carries (the theme's `active_glow_*`, one definition for
         // both, so the map cannot drift from the app it pictures); last-visited keeps the faint fill
         // it had, and now has it to itself.
         if self.active {
@@ -154,8 +154,8 @@ impl PaneCard<'_> {
                 .border(theme.colors.accent, theme.focus_border_width)
                 .glow_with(
                     theme.colors.accent,
-                    crate::chrome::pane::ACTIVE_GLOW_RADIUS,
-                    crate::chrome::pane::ACTIVE_GLOW_STRENGTH,
+                    theme.colors.active_glow_radius,
+                    theme.colors.active_glow_strength,
                 );
         }
         // **The card the cursor is on holds the keyboard**, so its own handlers are what a key
@@ -188,7 +188,7 @@ impl PaneCard<'_> {
                     // Nothing to show *is* the setting being off — `model` resolved both into the
                     // same absence, so a card has one question to answer rather than two.
                     show: true,
-                    font_scale: crate::chrome::CARD_META_FONT_SCALE,
+                    size: heca_grid_ui::style::WidgetSize::Small,
                     // A card centres its content, so there is nothing to step in from.
                     indent: heca_grid_ui::style::Spacing::None,
                     theme,
@@ -196,7 +196,7 @@ impl PaneCard<'_> {
                 .build();
                 Flex::column()
                     .align("center")
-                    .gap(2.0)
+                    .gap(heca_grid_ui::style::Spacing::Hairline)
                     // **A card is a share of the strip, so its content absorbs the squeeze** —
                     // which is how a widget asks for it here (`Style::flex_shrink`: nothing shrinks
                     // unless it says so). Without it the block keeps its natural width, the card

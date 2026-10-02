@@ -36,6 +36,10 @@ pub(crate) struct PaneShellModel {
     /// inactive pane and unreadable. A letter says "press this to go here"; it is not a pane-state
     /// colour, so it must not follow the border.
     pub(crate) accent: [f32; 4],
+    /// The halo an **active** pane wears: its falloff radius and strength, from the theme's
+    /// `active_glow_radius` / `active_glow_strength`. Carried here, like the accent, because the
+    /// pane is painted with a doctored theme and must not read them from it.
+    pub(crate) active_glow: (f32, f32),
 }
 
 impl PaneShellModel {

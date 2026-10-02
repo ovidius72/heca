@@ -2,14 +2,9 @@
 
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::reactive::Signal;
-use heca_grid_ui::style::{Length, Spacing};
+use heca_grid_ui::style::{Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, Visibility};
-
-/// Gap between the folder glyph and the path, and the glyph's size — the line's own proportions,
-/// not the caller's.
-const GAP: f32 = 6.0;
-const ICON: f32 = 12.0;
 
 /// **Where a pane is** — a folder glyph and the home-relative path beside it.
 ///
@@ -26,9 +21,10 @@ pub(crate) struct FolderLine<'a> {
     pub(crate) path: Option<&'a str>,
     /// Whether the line is shown at all — `[settings] pane_show_cwd` and the caller's own reasons.
     pub(crate) show: bool,
-    /// Size relative to the surrounding text: metadata sits under the name, never beside it in
-    /// weight.
-    pub(crate) font_scale: f32,
+    /// The size variant of the line: metadata sits under the name, never beside it in weight, so a
+    /// caller says `Small`. The glyph and the path both take it from the row (a variant cascades to
+    /// what is composed inside), so they cannot disagree.
+    pub(crate) size: WidgetSize,
     /// **How far the line sits in from the name above it** — a token, resolved from the font, and
     /// applied *inside* this line's own visibility so the inset disappears with the line.
     ///
@@ -60,13 +56,13 @@ impl FolderLine<'_> {
         // Here rather than at each surface, for the same reason the line itself is here.
         let label = Label::new(self.path.unwrap_or_default())
             .color(self.theme.colors.foreground)
-            .font_scale(self.font_scale)
             .truncate(Ellipsis::Start);
         let text = label.text_signal();
         let widget = Visibility::new(
             Flex::row()
                 .align("center")
-                .gap(GAP)
+                .size(self.size)
+                .gap(Spacing::Sm)
                 // Inside the `Visibility`, never around it — see `indent`.
                 .padding_x(self.indent)
                 // Never wider than what holds it — see `PaneName`. The line is commonly centred,
@@ -77,11 +73,7 @@ impl FolderLine<'_> {
                 // thing on a card and the first that should give way — without this the line keeps
                 // its natural width and takes the card with it.
                 .shrink(1.0)
-                .child(
-                    Icon::new(Glyph::Folder)
-                        .size(ICON)
-                        .color(self.theme.colors.foreground),
-                )
+                .child(Icon::new(Glyph::Folder).color(self.theme.colors.foreground))
                 .child(label),
             self.show && self.path.is_some(),
         );
@@ -104,7 +96,7 @@ mod tests {
         FolderLine {
             path,
             show,
-            font_scale: 0.85,
+            size: WidgetSize::Small,
             indent: Spacing::None,
             theme: &GuiTheme::default(),
         }

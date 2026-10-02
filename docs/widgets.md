@@ -4886,6 +4886,7 @@ has, so **no widget opts in and no host paints on their behalf**.
 | `.tooltip_signal(Signal<String>)` | the same, from a live signal — an action's current keybinding, a changing status — so the bubble follows without the widget being rebuilt. |
 | `.tooltip_side(TooltipSide)` | which side to prefer (`Top` default). Flipped automatically when there is no room, so it is a preference, not a placement. No-op with no tooltip declared. |
 | `.tooltip_delay(seconds)` | how long the pointer must rest (default `0.5`). No-op with no tooltip declared. |
+| `.tooltip_quick(true)` | the library's shorter rest (`QUICK_DELAY`, half the default) — a name instead of a number, for a tip that carries what the widget had to cut short (a branch name in a narrow row). No-op with no tooltip declared. In a described tree: `.prop("tooltip_quick", PropValue::Bool(true))`. |
 
 All four are on `ComponentExt`, so they apply to **every** widget — and the first, third and fourth
 have the described spellings below. `tooltip_signal` is native-only, because a signal is a live host

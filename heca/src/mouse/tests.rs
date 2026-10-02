@@ -1,8 +1,12 @@
 use super::*;
-use crate::chrome::{DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_TAB_BAR_HEIGHT};
 use heca_core::layout::types::{LayoutOptions, Point, Rectangle, Size};
 use heca_core::layout::workspace::Workspace;
 use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane, PaneId};
+
+/// The default bar heights, from the one place that says them: the config's appearance.
+fn bars() -> heca_config::appearance::AppearanceConfig {
+    heca_config::appearance::AppearanceConfig::default()
+}
 
 #[test]
 fn test_rubberband_zero() {
@@ -127,8 +131,8 @@ fn test_find_pane_multi_column() {
 fn a_hidden_sidebar_leaves_no_strip_the_panes_do_not_own() {
     let r = ChromeConfig::for_window(
         Size::new(1280.0, 800.0),
-        DEFAULT_TAB_BAR_HEIGHT,
-        DEFAULT_STATUS_BAR_HEIGHT,
+        bars().effective_top_bar_height(),
+        bars().effective_bottom_bar_height(),
         0.0,
         0.0,
         0.0,
@@ -153,8 +157,8 @@ fn a_hidden_sidebar_leaves_no_strip_the_panes_do_not_own() {
 fn test_chrome_content_rect_left_sidebar() {
     let r = ChromeConfig::for_window(
         heca_core::layout::types::Size::new(1280.0, 800.0),
-        DEFAULT_TAB_BAR_HEIGHT,
-        DEFAULT_STATUS_BAR_HEIGHT,
+        bars().effective_top_bar_height(),
+        bars().effective_bottom_bar_height(),
         200.0,
         0.0,
         0.0,
@@ -170,8 +174,8 @@ fn test_chrome_content_rect_left_sidebar() {
 fn test_chrome_content_rect_no_sidebars() {
     let r = ChromeConfig::for_window(
         heca_core::layout::types::Size::new(1280.0, 800.0),
-        DEFAULT_TAB_BAR_HEIGHT,
-        DEFAULT_STATUS_BAR_HEIGHT,
+        bars().effective_top_bar_height(),
+        bars().effective_bottom_bar_height(),
         40.0,
         0.0,
         0.0,

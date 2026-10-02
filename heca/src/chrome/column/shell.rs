@@ -49,22 +49,20 @@ pub(crate) struct ColumnShell<'a> {
     pub(crate) contents: HashMap<PaneId, Box<dyn Component>>,
 }
 
-/// How wide the new-column offer is, as a share of the column it sits beside. A slot, not a
-/// column: wide enough to aim at and to carry a letter, narrow enough to read as an opening.
-const NEW_COLUMN_SHARE: f32 = 0.18;
-
 /// **The offer of a new column**, drawn in the gap right of the column the picked pane is in.
 ///
 /// It is a child of that column and placed outside its box, which `at_rect` allows — absolute
 /// placement is not clipped by a parent that does not clip. That is what keeps it out of every
 /// map and every walk: it arrives with the column and leaves with it.
-fn new_column_slot(cb: &ColumnCallbacks) -> Box<dyn Component> {
+/// `share` is how wide it is as a share of that column: a slot, not a column — wide enough to aim at
+/// and to carry a letter, narrow enough to read as an opening.
+fn new_column_slot(cb: &ColumnCallbacks, share: f32) -> Box<dyn Component> {
     let slot = Flex::column()
         .key(crate::chrome::NEW_COLUMN_KEY)
         .at_rect(
             heca_grid_ui::Length::Percent(1.0),
             0.0,
-            heca_grid_ui::Length::Percent(NEW_COLUMN_SHARE),
+            heca_grid_ui::Length::Percent(share),
             heca_grid_ui::Length::Percent(1.0),
         )
         // What picking it means: make a column here and move the pane into it. The column asks;
@@ -143,8 +141,8 @@ impl ColumnShell<'_> {
             column = column.child(pane_child(pane, self.model, self.pane_cb, header, content));
         }
         // Declared last so it draws over the gap rather than under the panes.
-        if self.model.new_column_slot {
-            column = column.child(new_column_slot(self.cb));
+        if let Some(share) = self.model.new_column_slot {
+            column = column.child(new_column_slot(self.cb, share));
         }
         column
     }

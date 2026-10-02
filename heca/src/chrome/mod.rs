@@ -17,8 +17,7 @@ pub(crate) use pane::{RetainedPane, clear_panes, sync_panes};
 pub(crate) mod pane_header;
 pub(crate) mod terminal;
 pub(crate) use pane_header::{
-    ActionShortcuts, CARD_META_FONT_SCALE, action_tooltip, build_pane_headers, home_relative_path,
-    pane_info_view, truncate_path_left,
+    ActionShortcuts, action_tooltip, build_pane_headers, home_relative_path, pane_info_view,
 };
 pub(crate) mod drag;
 pub(crate) mod pane_items;
@@ -134,15 +133,6 @@ pub use host::{MountedContribution, MoveError, RegionHost};
 use heca_core::layout::types::{Point, Rectangle, Size};
 use std::time::Duration;
 
-// ── Chrome metrics ──
-
-/// Default tab bar height in logical pixels.
-pub const DEFAULT_TAB_BAR_HEIGHT: f32 = 32.0;
-/// Default status bar height in logical pixels.
-pub const DEFAULT_STATUS_BAR_HEIGHT: f32 = 24.0;
-/// Default expanded sidebar width in logical pixels.
-pub const DEFAULT_SIDEBAR_WIDTH: f32 = 240.0;
-
 // ── Timing ──
 
 /// **How long prefix mode waits for the next key**, as configured.
@@ -151,25 +141,6 @@ pub fn prefix_timeout(state: &crate::app_state::AppState) -> Duration {
 }
 /// Target frame interval (~60 FPS).
 pub const FRAME_INTERVAL: Duration = Duration::from_millis(16);
-
-// ── Pane name overlay ──
-
-/// Font size factor for the pane name overlay (fraction of min(width, height)).
-pub const PANE_NAME_SIZE_FACTOR: f32 = 0.25;
-/// Minimum pane name font size in logical pixels.
-pub const PANE_NAME_SIZE_MIN: f32 = 24.0;
-/// Maximum pane name font size in logical pixels.
-pub const PANE_NAME_SIZE_MAX: f32 = 72.0;
-
-// ── Chrome text ──
-
-/// Default font size for chrome text (tab bar, status bar).
-pub const CHROME_TEXT_SIZE: f32 = 14.0;
-
-// ── Mouse ──
-
-/// Distance from content area edge that triggers edge scrolling (logical pixels).
-pub const EDGE_SCROLL_TRIGGER: f32 = 80.0;
 
 /// **How one window is divided** between the chrome at its edges and the panes in the middle.
 ///
@@ -317,16 +288,6 @@ pub(crate) fn runtime_snapshot(
     pane_id: PaneId,
 ) -> Option<PaneRuntime> {
     state.pane_runtime(pane_id)
-}
-
-// Kept short so the branch + git counts fit the sidebar card width without
-// overflowing (the row isn't width-clipped). The full branch is on hover.
-const SIDEBAR_GIT_BRANCH_MAX_CHARS: usize = 22;
-
-/// Truncate a branch for the sidebar, keeping the **tail** (the meaningful end,
-/// e.g. `…security-upgrade`) rather than the boilerplate `feature/` prefix.
-pub(crate) fn truncate_sidebar_git_branch(branch: &str) -> String {
-    truncate_path_left(branch, SIDEBAR_GIT_BRANCH_MAX_CHARS)
 }
 
 /// How a chrome widget reports a user action back to the app: it emits an

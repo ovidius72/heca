@@ -974,6 +974,9 @@ pub struct AppState {
     pub mouse_enabled: bool,
     /// Whether auto edge scroll is enabled.
     pub auto_scroll_edge: bool,
+    /// `[settings] edge_scroll_distance`: how close (px) a dragged pane must come to the content
+    /// edge for the view to scroll.
+    pub edge_scroll_distance: f32,
     /// Whether newly spawned terminal panes should auto-inject shell integration.
     pub shell_integration_enabled: bool,
     /// Append the process/program name (small, dimmed) next to a renamed pane's custom name
@@ -1126,7 +1129,7 @@ impl AppState {
             .chrome_state
             .is_visible(crate::chrome::RegionId::TopBar)
         {
-            crate::chrome::DEFAULT_TAB_BAR_HEIGHT
+            self.appearance.effective_top_bar_height()
         } else {
             0.0
         }
@@ -1139,7 +1142,7 @@ impl AppState {
             .chrome_state
             .is_visible(crate::chrome::RegionId::BottomBar)
         {
-            crate::chrome::DEFAULT_STATUS_BAR_HEIGHT
+            self.appearance.effective_bottom_bar_height()
         } else {
             0.0
         }

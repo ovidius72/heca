@@ -16,6 +16,7 @@ use super::{
 };
 use heca_grid_ui::Tone;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
+use heca_grid_ui::style::Spacing;
 use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement};
 
 /// A `.frameless(true)` [`DockFrame`] whose header carries the workspace's total pane count, and
@@ -64,7 +65,7 @@ impl WorkspaceFrame<'_> {
             // knows where its chevron is) and says nothing about what it means.
             .fold_hint_tone(Tone::Muted)
             .frameless(true)
-            .gap(4.0) // tighten the workspace header → body spacing
+            .gap(Spacing::Xs) // tighten the workspace header → body spacing
             .expanded(!seams.ws_state.is_ws_collapsed(ws_idx))
             .on_toggle(move |_| {
                 emit.fire(
@@ -74,8 +75,8 @@ impl WorkspaceFrame<'_> {
             .header(
                 Flex::row()
                     .align("center")
-                    .child(badge)
-                    .child(Flex::row().width(6.0)),
+                    .padding_right(Spacing::Sm)
+                    .child(badge),
             );
         // Light accent wash over the whole active workspace area (+ the accent count badge).
         // Signal-driven like every other state here, so it flips in place via
@@ -133,7 +134,7 @@ impl WorkspaceFrame<'_> {
         dock = dock.accepts(["pane", "column"]);
         // Columns stacked with a clear gap between them (the gap + bar mark each column);
         // panes inside a column are tight. Floating panes have no column.
-        let mut cols = Flex::column().gap(8.0);
+        let mut cols = Flex::column().gap(Spacing::Sm);
         for column in &ws.columns {
             cols = cols.child(ColumnGroup { column, ws_idx }.build(seams, reg));
         }

@@ -59,6 +59,9 @@ window_height = 800
 
 # Auto-scroll the workspace view when the pointer nears the left/right edge.
 auto_scroll_edge = true
+# How close (px) the pointer must come to the content area's edge, while dragging a pane,
+# for the view to start scrolling.
+edge_scroll_distance = 80.0
 
 # Center a single column even when it already fits in the viewport.
 always_center_single_column = false
@@ -304,6 +307,11 @@ hint_font_size = 12.0
 # OWN width so they stay visible even with borders off (default 1.5).
 # focus_border_width = 1.5
 
+# Height of the two bars, px (clamped 16..=96). Only used while the bar is shown
+# ([settings] show_top_bar / show_bottom_bar).
+# top_bar_height    = 32.0   # the tab bar
+# bottom_bar_height = 24.0   # the status bar
+
 # ─────────────────────────────────────────────────────────────────────────────
 [appearance.terminal]
 # ─────────────────────────────────────────────────────────────────────────────
@@ -328,6 +336,10 @@ hint_font_size = 12.0
 #                         bounce / taskbar flash) while unfocused. true | false
 # bell_visual           : flash the content area briefly on a bell. true | false
 # bell_audible          : system beep on a bell (macOS only for now). true | false
+# bell_flash_alpha      : how bright the visual bell's flash is at its peak, 0 (invisible)
+#                         … 255 (solid). Only used with bell_visual.
+# search_match_alpha    : opacity of the highlight over every scrollback-search match, 0 … 255.
+# search_current_match_alpha : the same for the match the search is on (bolder).
 transparency = 0
 floating_transparency = 0
 floating_blur = 0
@@ -340,6 +352,9 @@ link_detection = true
 bell_attention = true
 bell_visual = false
 bell_audible = false
+bell_flash_alpha = 56
+search_match_alpha = 64
+search_current_match_alpha = 150
 
 # ─────────────────────────────────────────────────────────────────────────────
 [appearance.pane]
@@ -367,6 +382,10 @@ bell_audible = false
 # floating_border_color = "#89b4fa"
 # gap                   = 8.0
 # padding               = 4.0
+# drag_label_size_factor = 0.25   # the name drawn over a dragged pane: share of its shorter side …
+# drag_label_min_size    = 24.0   # … kept between this many px …
+# drag_label_max_size    = 72.0   # … and this many.
+# new_column_slot_share  = 0.18   # how wide the "new column" opening is, as a share of the column
 #
 # Info bar (segmented pill inside the pane top + action buttons on the right):
 # title_segments : left side, in order. [] hides it.

@@ -12,6 +12,7 @@ use super::{ColumnEntry, MENU_COLUMN, column_key, column_row_items, pane_row::Pa
 use crate::chrome::{ChromeDragItem, RepaintWatch};
 use heca_grid_ui::Tone;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
+use heca_grid_ui::style::Spacing;
 use heca_grid_ui::widgets::{HintPlacement, MarkerGroup};
 
 /// A generic [`MarkerGroup`] (left marker bar + grip gutter) holding the column's stacked pane
@@ -45,7 +46,7 @@ impl ColumnGroup<'_> {
         );
         let mut col = MarkerGroup::new()
             .active(active)
-            .gap(3.0)
+            .gap(Spacing::Xs)
             .key(column_key(column.col_id))
             .context_menu({
                 let menu = crate::chrome::context_menu::menu_from_items(

@@ -183,6 +183,38 @@ pub const MIN_SIDEBAR_WIDTH: f32 = 160.0;
 pub const MAX_SIDEBAR_WIDTH: f32 = 560.0;
 const DEFAULT_SIDEBAR_WIDTH: f32 = 300.0;
 
+/// Bar heights (logical px) when `top_bar_height` / `bottom_bar_height` are unset, and the range a
+/// configured height is clamped to — a bar must stay tall enough to hold its text and short enough
+/// to leave the panes room.
+const DEFAULT_TOP_BAR_HEIGHT: f32 = 32.0;
+const DEFAULT_BOTTOM_BAR_HEIGHT: f32 = 24.0;
+const MIN_BAR_HEIGHT: f32 = 16.0;
+const MAX_BAR_HEIGHT: f32 = 96.0;
+
+/// The name drawn over a pane while it is dragged: its size is this share of the pane's shorter
+/// side, kept within `[min, max]` logical px. Defaults when the `drag_label_*` keys are unset.
+const DEFAULT_DRAG_LABEL_SIZE_FACTOR: f32 = 0.25;
+const DEFAULT_DRAG_LABEL_MIN_SIZE: f32 = 24.0;
+const DEFAULT_DRAG_LABEL_MAX_SIZE: f32 = 72.0;
+
+/// How wide the "new column" opening is beside a column, as a share of that column, when
+/// `new_column_slot_share` is unset.
+const DEFAULT_NEW_COLUMN_SLOT_SHARE: f32 = 0.18;
+
+/// Peak opacity (0..=255) of the visual-bell flash when `bell_flash_alpha` is unset.
+fn default_terminal_bell_flash_alpha() -> u8 {
+    56
+}
+
+/// Opacity (0..=255) of a scrollback-search match's highlight, and of the current match's (bolder),
+/// when `search_match_alpha` / `search_current_match_alpha` are unset.
+fn default_terminal_search_match_alpha() -> u8 {
+    64
+}
+fn default_terminal_search_current_match_alpha() -> u8 {
+    150
+}
+
 /// Default width of affordance outlines (focus ring + selection) when
 /// `focus_border_width` is unset — kept visible regardless of the global border.
 const DEFAULT_FOCUS_BORDER_WIDTH: f32 = 1.5;
@@ -278,6 +310,17 @@ pub struct TerminalAppearance {
     /// focus. macOS only for now (`NSBeep`); a no-op elsewhere. Default `false`.
     #[serde(default = "default_terminal_bell_audible")]
     pub bell_audible: bool,
+    /// How bright the visual bell's flash is at its peak, 0 (invisible) … 255 (solid). It fades out
+    /// over the flash window. Only used with `bell_visual`.
+    #[serde(default = "default_terminal_bell_flash_alpha")]
+    pub bell_flash_alpha: u8,
+    /// Opacity of the highlight over every scrollback-search match, 0 … 255.
+    #[serde(default = "default_terminal_search_match_alpha")]
+    pub search_match_alpha: u8,
+    /// Opacity of the highlight over the match the search is on, 0 … 255 — bolder than the rest so
+    /// it can be told apart.
+    #[serde(default = "default_terminal_search_current_match_alpha")]
+    pub search_current_match_alpha: u8,
     /// Render inline images emitted by terminal programs (iTerm2 `OSC 1337`,
     /// Sixel, Kitty graphics — e.g. Yazi previews). Disable to skip image capture
     /// and rendering entirely. Default `true`.
@@ -300,6 +343,9 @@ impl Default for TerminalAppearance {
             bell_attention: default_terminal_bell_attention(),
             bell_visual: default_terminal_bell_visual(),
             bell_audible: default_terminal_bell_audible(),
+            bell_flash_alpha: default_terminal_bell_flash_alpha(),
+            search_match_alpha: default_terminal_search_match_alpha(),
+            search_current_match_alpha: default_terminal_search_current_match_alpha(),
             images: default_terminal_images(),
         }
     }
@@ -336,6 +382,20 @@ pub struct PaneAppearance {
     /// `pane_padding`. Clamped `[0, 20]`.
     #[serde(default)]
     pub padding: Option<f32>,
+    /// The pane name drawn over a pane while it is dragged: its size as a share of the pane's
+    /// shorter side. `None` → 0.25.
+    #[serde(default)]
+    pub drag_label_size_factor: Option<f32>,
+    /// Smallest size (logical px) of that name. `None` → 24.
+    #[serde(default)]
+    pub drag_label_min_size: Option<f32>,
+    /// Largest size (logical px) of that name. `None` → 72.
+    #[serde(default)]
+    pub drag_label_max_size: Option<f32>,
+    /// How wide the "new column" opening beside a column is, as a share of that column
+    /// (`0.0..=1.0`). `None` → 0.18.
+    #[serde(default)]
+    pub new_column_slot_share: Option<f32>,
     /// Info-bar chips (left), by **name**, in order. Empty hides the left side. See
     /// [`default_pane_title_segments`]. A name nothing provides is reported and skipped.
     #[serde(default = "default_pane_title_segments")]
@@ -358,6 +418,10 @@ impl Default for PaneAppearance {
             floating_border_color: None,
             gap: None,
             padding: None,
+            drag_label_size_factor: None,
+            drag_label_min_size: None,
+            drag_label_max_size: None,
+            new_column_slot_share: None,
             title_segments: default_pane_title_segments(),
             title_actions: default_pane_title_actions(),
         }
@@ -554,6 +618,14 @@ pub struct AppearanceConfig {
     #[serde(default)]
     pub focus_border_width: Option<f32>,
 
+    /// Height of the top bar — the tab bar — in logical px. `None` → 32; clamped `[16, 96]`.
+    /// Only used while the bar is shown (`[settings] show_top_bar`).
+    #[serde(default)]
+    pub top_bar_height: Option<f32>,
+    /// Height of the bottom bar — the status bar — in logical px. `None` → 24; clamped `[16, 96]`.
+    /// Only used while the bar is shown (`[settings] show_bottom_bar`).
+    #[serde(default)]
+    pub bottom_bar_height: Option<f32>,
     // ── Per-surface sub-tables ──
     /// Terminal **content** translucency/blur (`[appearance.terminal]`).
     #[serde(default)]
@@ -828,6 +900,47 @@ impl AppearanceConfig {
             .clamp(MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH)
     }
 
+    /// Effective top-bar height (logical px). Config override → 32, clamped `[16, 96]`.
+    pub fn effective_top_bar_height(&self) -> f32 {
+        self.top_bar_height
+            .unwrap_or(DEFAULT_TOP_BAR_HEIGHT)
+            .clamp(MIN_BAR_HEIGHT, MAX_BAR_HEIGHT)
+    }
+
+    /// Effective bottom-bar height (logical px). Config override → 24, clamped `[16, 96]`.
+    pub fn effective_bottom_bar_height(&self) -> f32 {
+        self.bottom_bar_height
+            .unwrap_or(DEFAULT_BOTTOM_BAR_HEIGHT)
+            .clamp(MIN_BAR_HEIGHT, MAX_BAR_HEIGHT)
+    }
+
+    /// The size (logical px) of the name drawn over a dragged pane of `pane_min_side` px across:
+    /// the configured share of it, kept within the configured `[min, max]`.
+    pub fn effective_drag_label_size(&self, pane_min_side: f32) -> f32 {
+        let min = self
+            .pane
+            .drag_label_min_size
+            .unwrap_or(DEFAULT_DRAG_LABEL_MIN_SIZE);
+        let max = self
+            .pane
+            .drag_label_max_size
+            .unwrap_or(DEFAULT_DRAG_LABEL_MAX_SIZE)
+            .max(min);
+        let factor = self
+            .pane
+            .drag_label_size_factor
+            .unwrap_or(DEFAULT_DRAG_LABEL_SIZE_FACTOR);
+        (pane_min_side * factor).clamp(min, max)
+    }
+
+    /// How wide the "new column" opening is, as a share (`0.0..=1.0`) of the column beside it.
+    pub fn effective_new_column_slot_share(&self) -> f32 {
+        self.pane
+            .new_column_slot_share
+            .unwrap_or(DEFAULT_NEW_COLUMN_SLOT_SHARE)
+            .clamp(0.0, 1.0)
+    }
+
     // ── Border style / affordance resolvers ──
 
     /// Effective terminal-pane frame style. Config override → [`BorderStyle::Bordered`]
@@ -905,6 +1018,8 @@ impl Default for AppearanceConfig {
             border_color: None,
             border_radius: None,
             focus_border_width: None,
+            top_bar_height: None,
+            bottom_bar_height: None,
             terminal: TerminalAppearance::default(),
             pane: PaneAppearance::default(),
             sidebar: SidebarAppearance::default(),
@@ -920,6 +1035,43 @@ impl Default for AppearanceConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The bars, the drag label, the new-column opening and the bell/search highlights have a home
+    /// in config instead of a constant in the app — and today's values are what they default to.
+    #[test]
+    fn the_look_values_that_were_app_constants_default_to_what_they_were() {
+        let cfg = AppearanceConfig::default();
+        assert_eq!(cfg.effective_top_bar_height(), 32.0);
+        assert_eq!(cfg.effective_bottom_bar_height(), 24.0);
+        assert_eq!(cfg.effective_new_column_slot_share(), 0.18);
+        // A big pane: a quarter of the shorter side, capped at 72. A small one: floored at 24.
+        assert_eq!(cfg.effective_drag_label_size(1000.0), 72.0);
+        assert_eq!(cfg.effective_drag_label_size(200.0), 50.0);
+        assert_eq!(cfg.effective_drag_label_size(40.0), 24.0);
+        assert_eq!(cfg.terminal.bell_flash_alpha, 56);
+        assert_eq!(cfg.terminal.search_match_alpha, 64);
+        assert_eq!(cfg.terminal.search_current_match_alpha, 150);
+    }
+
+    #[test]
+    fn a_configured_look_value_wins_and_is_kept_sane() {
+        let cfg: AppearanceConfig = toml::from_str(
+            "top_bar_height = 40.0\nbottom_bar_height = 1000.0\n[pane]\n\
+             drag_label_min_size = 10.0\ndrag_label_max_size = 5.0\n\
+             new_column_slot_share = 2.0\n[terminal]\nbell_flash_alpha = 200\n",
+        )
+        .expect("parses");
+        assert_eq!(cfg.effective_top_bar_height(), 40.0);
+        assert_eq!(
+            cfg.effective_bottom_bar_height(),
+            96.0,
+            "clamped, not trusted"
+        );
+        assert_eq!(cfg.effective_new_column_slot_share(), 1.0);
+        // A max below the min cannot invert the range.
+        assert_eq!(cfg.effective_drag_label_size(1000.0), 10.0);
+        assert_eq!(cfg.terminal.bell_flash_alpha, 200);
+    }
 
     #[test]
     fn defaults_are_all_off() {

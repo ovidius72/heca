@@ -80,6 +80,7 @@ impl PaneShell<'_> {
             border_radius,
             content_inset,
             accent,
+            active_glow,
             ..
         } = *self.model;
 
@@ -96,11 +97,7 @@ impl PaneShell<'_> {
             .border(to_gui_color(border_color), border_width)
             .radius(border_radius);
         if active {
-            pane = pane.glow_with(
-                to_gui_color(border_color),
-                super::ACTIVE_GLOW_RADIUS,
-                super::ACTIVE_GLOW_STRENGTH,
-            );
+            pane = pane.glow_with(to_gui_color(border_color), active_glow.0, active_glow.1);
         }
 
         // The pane's own identity, from the data — never a counter, never a position. A pane id is
@@ -215,23 +212,18 @@ fn focus_pane(pane_id: PaneId) -> heca_view::Intent {
 ///
 /// This is the third thing in this file to move out of the rebuild key for the same reason; the
 /// other two are the rect and the header's words, each with the same story.
-pub(crate) fn focus_state_to(
-    root: &mut dyn heca_grid_ui::Component,
-    active: bool,
-    border_color: [f32; 4],
-    accent: [f32; 4],
-) {
-    let color = to_gui_color(border_color);
+pub(crate) fn focus_state_to(root: &mut dyn heca_grid_ui::Component, model: &PaneShellModel) {
+    let color = to_gui_color(model.border_color);
     let base = root.base_mut();
     if let Some(border) = base.style.visual.border.as_mut() {
         border.color = color;
     }
-    base.style.visual.glow = active.then_some(heca_grid_ui::scene::Glow {
+    base.style.visual.glow = model.active.then_some(heca_grid_ui::scene::Glow {
         color,
-        radius: super::ACTIVE_GLOW_RADIUS,
-        intensity: super::ACTIVE_GLOW_STRENGTH,
+        radius: model.active_glow.0,
+        intensity: model.active_glow.1,
     });
-    base.hint_style.color = Some(to_gui_color(accent));
+    base.hint_style.color = Some(to_gui_color(model.accent));
     // **A pane re-tints what it holds by publishing its hue, not by swapping the theme.**
     //
     // An active pane really does mean to re-accent its contents — that is its identity. It used to
@@ -368,7 +360,14 @@ mod tests {
         .build();
 
         let frame = [1.0, 0.0, 0.0, 1.0];
-        focus_state_to(&mut tree, true, frame, m.accent);
+        focus_state_to(
+            &mut tree,
+            &PaneShellModel {
+                active: true,
+                border_color: frame,
+                ..m
+            },
+        );
 
         assert_eq!(
             tree.base().style.visual.accent,
@@ -649,13 +648,25 @@ mod tests {
         }
         .build();
 
-        focus_state_to(&mut pane, false, [0.1, 0.9, 0.8, 1.0], [0.1, 0.9, 0.8, 1.0]);
+        focus_state_to(
+            &mut pane,
+            &PaneShellModel {
+                active: false,
+                ..model(3)
+            },
+        );
         assert!(
             pane.base().style.visual.glow.is_none(),
             "an unfocused pane has no halo"
         );
 
-        focus_state_to(&mut pane, true, [0.1, 0.9, 0.8, 1.0], [0.1, 0.9, 0.8, 1.0]);
+        focus_state_to(
+            &mut pane,
+            &PaneShellModel {
+                active: true,
+                ..model(3)
+            },
+        );
         assert!(
             pane.base().style.visual.glow.is_some(),
             "and a focused one does, without the tree being rebuilt to get it",

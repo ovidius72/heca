@@ -8,7 +8,7 @@ use crate::app::backend_store::BackendStore;
 use crate::app::backend_store::{Program, TerminalSpec};
 use crate::app::terminal_metrics::resolve_terminal_cell_size;
 use crate::app_state::{self, AppState, InputMode};
-use crate::chrome::{ChromeConfig, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_TAB_BAR_HEIGHT};
+use crate::chrome::ChromeConfig;
 use crate::keymap;
 use crate::pane_name;
 use heca_config::theme::AppConfig;
@@ -324,17 +324,17 @@ pub(crate) async fn init_state(
             (physical.height as f32 / scale_factor as f32) as f64,
         ),
         if app_config.config.settings.show_top_bar {
-            DEFAULT_TAB_BAR_HEIGHT
+            app_config.config.appearance.effective_top_bar_height()
         } else {
             0.0
         },
         if app_config.config.settings.show_bottom_bar {
-            DEFAULT_STATUS_BAR_HEIGHT
+            app_config.config.appearance.effective_bottom_bar_height()
         } else {
             0.0
         },
-        crate::chrome::DEFAULT_SIDEBAR_WIDTH,
-        crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+        app_config.config.appearance.effective_sidebar_width(),
+        app_config.config.appearance.effective_sidebar_width(),
         app_config
             .config
             .appearance
@@ -520,6 +520,7 @@ pub(crate) async fn init_state(
         remembered_letters: Default::default(),
         mouse_enabled: app_config.config.settings.mouse,
         auto_scroll_edge: app_config.config.settings.auto_scroll_edge,
+        edge_scroll_distance: app_config.config.settings.edge_scroll_distance,
         shell_integration_enabled: app_config.config.settings.shell_integration,
         pane_renamed_add_process_name: app_config.config.settings.pane_renamed_add_process_name,
         expose_show_cwd: crate::chrome::expose_show_cwd(&app_config.config),

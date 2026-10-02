@@ -21,8 +21,7 @@ use super::seams::{DockRegistries, DockSeams};
 use super::{MENU_PANE, PaneEntry, pane_key, pane_row_items, pane_row_press, row_hint};
 use crate::chrome::pane_items::LineCx;
 use crate::chrome::{
-    CARD_META_FONT_SCALE, ChromeDragItem, PaneFacts, RepaintWatch, alpha_u8, pane_info_view,
-    runtime_snapshot,
+    ChromeDragItem, PaneFacts, RepaintWatch, alpha_u8, pane_info_view, runtime_snapshot,
 };
 use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
@@ -91,9 +90,7 @@ impl PaneRow<'_> {
         // same one (F003/P086/T365). A **pick** is declared separately, on the wrapper below: it is a
         // different gesture and this row answers it differently.
         let press = crate::chrome::fires(seams.mount, pane_row_press(pane_id), seams.emit);
-        let icon_widget = Icon::new(info.icon)
-            .size(14.0)
-            .color(theme.colors.foreground);
+        let icon_widget = Icon::new(info.icon).color(theme.colors.foreground);
         let icon_signal = icon_widget.glyph_signal();
         // The pane's name — ONE label, not one per colour. Its colour follows the row's selected
         // state through the content colour the `Row` publishes each paint, which unstyled labels
@@ -137,7 +134,7 @@ impl PaneRow<'_> {
         // call site's.
         let process_hint_label = Label::new(process_hint_text)
             .color(theme.colors.foreground)
-            .font_scale(CARD_META_FONT_SCALE);
+            .size(heca_grid_ui::style::WidgetSize::Small);
         let process_hint_signal = process_hint_label.text_signal();
         let process_hint = Visibility::new(process_hint_label, info.process_hint.is_some());
         let process_hint_visible = process_hint.visible_signal();
@@ -187,7 +184,7 @@ impl PaneRow<'_> {
                     .with_alpha(alpha_u8(theme.colors.card_background_alpha)),
             )
             .radius(theme.colors.control_radius())
-            .padding(6.0)
+            .padding(Spacing::Sm)
             // No bar: the column's `MarkerGroup` already draws one down the left of every row here,
             // and the selected panel says which row is current. Two lines said it twice.
             .active(active)
