@@ -2227,6 +2227,16 @@ impl<'a> PaintCx<'a> {
         self.scene.end_overlay();
     }
 
+    /// **Paint `f` over this widget's children.** A widget paints first and its children after, so a
+    /// frame drawn in `paint` sits under whatever it holds; drawn here it sits over it. See
+    /// [`Scene::begin_outline`](crate::scene::Scene::begin_outline) — it keeps the clips it was
+    /// called inside, and paints in place inside an overlay.
+    pub fn outline(&mut self, f: impl FnOnce(&mut PaintCx<'a>)) {
+        self.scene.begin_outline();
+        f(self);
+        self.scene.end_outline();
+    }
+
     /// Run `f` with all its draws **clipped** to `rect` (logical px). Content that
     /// falls outside is scissored away by the renderer — the primitive a scrolling
     /// viewport uses so partial rows/glyphs are cut at the panel edge instead of

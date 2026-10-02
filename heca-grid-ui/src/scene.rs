@@ -24,6 +24,10 @@ use heca_core::layout::Rectangle;
 #[derive(Debug, Default, Clone)]
 pub struct Scene {
     commands: Vec<DrawCommand>,
+    /// What widgets asked to have painted **over their children** (a pane's border and glow): drawn
+    /// after every base command and before the overlay band. See
+    /// [`begin_outline`](Scene::begin_outline).
+    outline: Vec<DrawCommand>,
     overlay: Vec<DrawCommand>,
     /// `(start, end, depth)` ranges into `overlay`, one per [`begin_overlay`](Scene::begin_overlay)/
     /// [`end_overlay`](Scene::end_overlay) pair that produced commands. Each is a
@@ -36,6 +40,13 @@ pub struct Scene {
     overlay_segs: Vec<(usize, usize, usize)>,
     /// When set, [`push`](Scene::push) targets the overlay layer.
     to_overlay: bool,
+    /// When set, [`push`](Scene::push) targets the outline layer (unless the overlay layer is open).
+    to_outline: bool,
+    /// How many [`begin_outline`](Scene::begin_outline) calls are open **inside** an outline or an
+    /// overlay, where there is nothing to lift the draws over: they paint in place.
+    outline_nested: usize,
+    /// Clip rects currently open in the **base** layer, so an outline can open the same ones.
+    base_clips: Vec<Rectangle>,
     /// Start index in `overlay` of the currently open segment.
     seg_start: usize,
     /// Nesting depth of open [`begin_overlay`](Scene::begin_overlay) pairs. An overlay widget
@@ -70,6 +81,10 @@ impl Scene {
     /// Append a command to the active layer (base, or overlay while in
     /// [`begin_overlay`](Scene::begin_overlay)).
     pub fn push(&mut self, cmd: DrawCommand) {
+        if !self.to_overlay && self.to_outline {
+            self.outline.push(cmd);
+            return;
+        }
         if self.to_overlay {
             // Track clips open in this layer so a nested overlay splitting the
             // stream can't lose them (see `overlay_clips`).
@@ -82,7 +97,53 @@ impl Scene {
             }
             self.overlay.push(cmd);
         } else {
+            // Tracked so an outline begun inside these clips stays inside them.
+            match &cmd {
+                DrawCommand::PushClip(r) => self.base_clips.push(*r),
+                DrawCommand::PopClip => {
+                    self.base_clips.pop();
+                }
+                _ => {}
+            }
             self.commands.push(cmd);
+        }
+    }
+
+    /// **Paint what follows over everything drawn so far in this layer** — over the widget's own
+    /// children, which are painted after it. The border and glow of a pane belong here: a pane that
+    /// frames a terminal must not be covered by it.
+    ///
+    /// The outline is its own list, drawn after every base command and before the overlay band, and
+    /// each begin opens the clips that were open around it, so what is drawn there is clipped
+    /// exactly as it would have been in place — and the clips are closed again at
+    /// [`end_outline`](Scene::end_outline), so a piece never leaks into the next.
+    ///
+    /// **Inside an overlay, or another outline, it paints in place**: the overlay band is already
+    /// above, and the outer outline is already last.
+    pub fn begin_outline(&mut self) {
+        if self.to_overlay || self.to_outline {
+            self.outline_nested += 1;
+            return;
+        }
+        self.to_outline = true;
+        // A replay of already-tracked clips: appended directly so they are not tracked twice.
+        for rect in self.base_clips.clone() {
+            self.outline.push(DrawCommand::PushClip(rect));
+        }
+    }
+
+    /// Close the piece [`begin_outline`](Scene::begin_outline) opened.
+    pub fn end_outline(&mut self) {
+        if self.outline_nested > 0 {
+            self.outline_nested -= 1;
+            return;
+        }
+        if !self.to_outline {
+            return;
+        }
+        self.to_outline = false;
+        for _ in 0..self.base_clips.len() {
+            self.outline.push(DrawCommand::PopClip);
         }
     }
 
@@ -146,28 +207,35 @@ impl Scene {
     /// Clear all commands (reuse the allocation across frames).
     pub fn clear(&mut self) {
         self.commands.clear();
+        self.outline.clear();
         self.overlay.clear();
         self.overlay_segs.clear();
         self.overlay_clips.clear();
         self.clip_depth_stack.clear();
         self.to_overlay = false;
+        self.to_outline = false;
+        self.outline_nested = 0;
+        self.base_clips.clear();
         self.seg_start = 0;
         self.overlay_depth = 0;
     }
 
     /// Total number of queued commands (base + overlay).
     pub fn len(&self) -> usize {
-        self.commands.len() + self.overlay.len()
+        self.commands.len() + self.outline.len() + self.overlay.len()
     }
 
     /// Whether the scene has no commands.
     pub fn is_empty(&self) -> bool {
-        self.commands.is_empty() && self.overlay.is_empty()
+        self.commands.is_empty() && self.outline.is_empty() && self.overlay.is_empty()
     }
 
-    /// Iterate commands in draw order: base layer first, then overlay (on top).
+    /// Iterate commands in draw order: base layer, then the outline, then overlay (on top).
     pub fn iter(&self) -> impl Iterator<Item = &DrawCommand> {
-        self.commands.iter().chain(self.overlay.iter())
+        self.commands
+            .iter()
+            .chain(self.outline.iter())
+            .chain(self.overlay.iter())
     }
 
     /// Whether the overlay layer has any commands.
@@ -175,12 +243,18 @@ impl Scene {
         !self.overlay.is_empty()
     }
 
-    /// A scene containing only the **base** layer's commands. Hosts that draw in
-    /// two passes (rects then text) render this first, then [`overlay_layer`](Scene::overlay_layer)
-    /// on top — so overlay content occludes base text, not just base rects.
+    /// A scene containing only the **base** layer's commands, then the outline drawn over them.
+    /// Hosts that draw in two passes (rects then text) render this first, then
+    /// [`overlay_layer`](Scene::overlay_layer) on top — so overlay content occludes base text, not
+    /// just base rects.
     pub fn base_layer(&self) -> Scene {
         Scene {
-            commands: self.commands.clone(),
+            commands: self
+                .commands
+                .iter()
+                .chain(self.outline.iter())
+                .cloned()
+                .collect(),
             ..Default::default()
         }
     }
@@ -216,7 +290,7 @@ impl Scene {
         let mut out = Vec::new();
         // `None` = an empty clip: everything inside it is scissored away.
         let mut clips: Vec<Option<Rectangle>> = Vec::new();
-        for cmd in &self.commands {
+        for cmd in self.commands.iter().chain(self.outline.iter()) {
             let (what, rect) = match cmd {
                 DrawCommand::PushClip(r) => {
                     let inner = match clips.last() {
@@ -824,5 +898,81 @@ mod tests {
             vec![marker(8.0)],
             "the mid-nest push must not leak to base; only post-outer-close pushes are base"
         );
+    }
+
+    // ── the outline band: painted over what the widget's children drew ──
+
+    #[test]
+    fn an_outline_is_drawn_after_what_was_pushed_after_it_was_asked_for() {
+        let mut s = Scene::new();
+        s.push(marker(1.0)); // the widget's own fill
+        s.begin_outline();
+        s.push(marker(2.0)); // its border
+        s.end_outline();
+        s.push(marker(3.0)); // its child, painted after the widget
+        let drawn: Vec<_> = s.iter().cloned().collect();
+        assert_eq!(drawn, vec![marker(1.0), marker(3.0), marker(2.0)]);
+        assert_eq!(
+            s.base_layer().len(),
+            3,
+            "the base layer carries the outline"
+        );
+    }
+
+    #[test]
+    fn an_outline_keeps_every_clip_open_around_it_and_closes_them_again() {
+        let mut s = Scene::new();
+        s.push(clip(100.0)); // an outer pane's region
+        s.push(clip(50.0)); // a nested pane's region
+        s.begin_outline();
+        s.push(marker(2.0));
+        s.end_outline();
+        s.push(DrawCommand::PopClip);
+        s.push(DrawCommand::PopClip);
+        // A second outline, after the clips closed, must not inherit them.
+        s.begin_outline();
+        s.push(marker(4.0));
+        s.end_outline();
+
+        let drawn: Vec<_> = s.iter().cloned().collect();
+        assert_eq!(
+            drawn,
+            vec![
+                clip(100.0),
+                clip(50.0),
+                DrawCommand::PopClip,
+                DrawCommand::PopClip,
+                // outline piece one: the same two clips, then closed
+                clip(100.0),
+                clip(50.0),
+                marker(2.0),
+                DrawCommand::PopClip,
+                DrawCommand::PopClip,
+                // outline piece two: no clips were open
+                marker(4.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_outline_inside_an_overlay_or_another_outline_paints_in_place() {
+        let mut s = Scene::new();
+        s.begin_overlay();
+        s.begin_outline();
+        s.push(marker(1.0));
+        s.end_outline();
+        s.end_overlay();
+        assert_eq!(s.overlay_segments().count(), 1, "it stayed in the overlay");
+        assert!(s.outline.is_empty());
+
+        s.begin_outline();
+        s.begin_outline();
+        s.push(marker(2.0));
+        s.end_outline();
+        s.push(marker(3.0));
+        s.end_outline();
+        assert_eq!(s.outline, vec![marker(2.0), marker(3.0)]);
+        s.push(marker(4.0));
+        assert_eq!(s.commands, vec![marker(4.0)], "the pair closed: base again");
     }
 }
