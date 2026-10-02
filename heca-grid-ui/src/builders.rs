@@ -1270,6 +1270,20 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
+    /// **Show this widget's tooltip after the library's shorter rest**
+    /// ([`QUICK_DELAY`](crate::widgets::tooltip::QUICK_DELAY)) instead of the default — for a tip
+    /// that carries what the widget had to cut short (a branch name in a narrow row), so the reader
+    /// who goes to the pointer for it is not kept waiting. A name instead of a number at the call
+    /// site; the one that [`tooltip_delay`](Self::tooltip_delay) takes in seconds stays for a delay
+    /// that is genuinely its own. No-op when the widget has declared no tooltip.
+    #[heca_grid_ui_macros::prop]
+    fn tooltip_quick(mut self, quick: bool) -> Self {
+        if quick && let Some(tip) = self.base_mut().tooltip.as_mut() {
+            tip.delay = crate::widgets::tooltip::QUICK_DELAY;
+        }
+        self
+    }
+
     /// **What a pick does to this widget, when that differs from acting on it.**
     ///
     /// Being pickable is **not** what this turns on — anything actionable already wears a letter,

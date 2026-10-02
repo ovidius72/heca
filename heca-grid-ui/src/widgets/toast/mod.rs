@@ -41,23 +41,12 @@ use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::TextAlign;
-use crate::style::{Align, Direction, Length, WidgetSize};
+use crate::style::{Align, Direction, Length, Space, Spacing, WidgetSize};
 use crate::widgets::{Flex, Glyph, Icon, IconButton, Label};
 use std::rc::Rc;
 
-/// Inner padding.
-const PAD: f32 = 13.0;
-/// Gap between title, body, and the action row.
-const GAP: f32 = 6.0;
-/// Gap between the leading icon and the text column.
-const ICON_GAP: f32 = 10.0;
 /// Leading-icon size as a multiple of the resolved font (sits on the title line).
 const ICON_SCALE: f32 = 1.1;
-/// Body text multiplier relative to the title (which uses the resolved font).
-const BODY_SCALE: f32 = 0.9;
-/// Gap between two actions in the row under the body. The buttons' own height and padding are
-/// theirs — a control brings its metrics with it.
-const ACTION_GAP: f32 = 8.0;
 /// Rest-glow spread radius (px) — the card's share of the theme rest halo. A
 /// touch wider than the small controls (12): the toast is a card-sized surface
 /// and a tight halo read visibly weaker beside them (user-reported).
@@ -122,8 +111,10 @@ impl Toast {
         base.style.layout.width = Length::Px(DEFAULT_WIDTH);
         base.style.layout.direction = Direction::Row;
         base.style.layout.align = Align::Start; // icon, text and × all sit on the title line
-        base.style.layout.padding = (PAD).into();
-        base.style.layout.gap = (ICON_GAP).into();
+        // The card's air is steps of the theme's rhythm, so it scales with the font and a theme can
+        // retune it: the padding is a roomy step, the gap between the icon and the text another.
+        base.style.layout.padding = Space::Step(Spacing::Md);
+        base.style.layout.gap = Space::Step(Spacing::Md);
 
         // The title is a real child, so the card composes like every other widget: the engine
         // lays the three columns out, each paints itself, and the text can be cut by the label's
@@ -139,7 +130,7 @@ impl Toast {
         let title_signal = title.text_signal();
         let column = Flex::column()
             .grow(1.0)
-            .gap(GAP)
+            .gap(Spacing::Sm)
             .child(title)
             .child(empty_slot()) // BODY
             .child(empty_slot()); // ACTION
@@ -243,7 +234,7 @@ impl Toast {
             .align(TextAlign::Start)
             .wrap(true)
             .with_max_lines_signal(self.max_lines)
-            .font_scale(BODY_SCALE);
+            .size(WidgetSize::Small);
         self.body(label)
     }
 
@@ -263,7 +254,7 @@ impl Toast {
             self.has_actions = true;
             self.column_mut()[ACTION] = Box::new(
                 Flex::row()
-                    .gap(ACTION_GAP)
+                    .gap(Spacing::Sm)
                     // The row hugs its buttons — a column would otherwise stretch it edge to edge
                     // and the actions would read as a banner rather than as things to press.
                     .align_self("start")
@@ -273,7 +264,7 @@ impl Toast {
                     // **One more gap above the actions than between the text lines.** The title and
                     // the body are one block of prose; the buttons are a different kind of thing,
                     // and sharing the prose spacing read as a third line of text.
-                    .margin_top(Length::Px(GAP))
+                    .padding_top(Spacing::Sm)
                     // **A notification's actions are compact controls.** Declared on the row, not on
                     // the button, because the size variant cascades: a caller who sizes their own
                     // button still wins, which is what keeps the choice theirs.

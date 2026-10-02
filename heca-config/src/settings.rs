@@ -75,6 +75,12 @@ fn default_auto_scroll_edge() -> bool {
     true
 }
 
+/// Default distance from the content area's edge (logical px) at which a pane drag starts
+/// scrolling the view.
+fn default_edge_scroll_distance() -> f32 {
+    80.0
+}
+
 /// Shift is the near-universal "and swap them" modifier; it is a default, not a rule.
 fn default_swap_modifier() -> ModifierKey {
     ModifierKey::Shift
@@ -336,6 +342,10 @@ pub struct SettingsConfig {
     /// Automatically scroll the workspace view when the pointer hovers near the left/right edge.
     #[serde(default = "default_auto_scroll_edge")]
     pub auto_scroll_edge: bool,
+    /// How close (logical px) the pointer must come to the content area's edge, while dragging a
+    /// pane, for the view to start scrolling. Only used with `auto_scroll_edge`. Default 80.
+    #[serde(default = "default_edge_scroll_distance")]
+    pub edge_scroll_distance: f32,
     /// Modifier key that must be held to initiate an interactive pane drag with the mouse.
     #[serde(default)]
     pub interactive_move_modifier: ModifierKey,
@@ -478,6 +488,7 @@ impl Default for SettingsConfig {
             terminal_ansi: None,
             terminal_brights: None,
             auto_scroll_edge: default_auto_scroll_edge(),
+            edge_scroll_distance: default_edge_scroll_distance(),
             interactive_move_modifier: ModifierKey::default(),
             swap_modifier: default_swap_modifier(),
             always_center_single_column: default_always_center_single_column(),
@@ -523,6 +534,7 @@ mod tests {
         assert_eq!(s.terminal_ansi, None);
         assert_eq!(s.terminal_brights, None);
         assert!(s.auto_scroll_edge);
+        assert_eq!(s.edge_scroll_distance, 80.0);
         assert_eq!(s.interactive_move_modifier, ModifierKey::Super);
         assert_eq!(s.swap_modifier, ModifierKey::Shift);
         assert!(!s.always_center_single_column);

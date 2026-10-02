@@ -217,7 +217,7 @@ const KEYCAP_FONT_MUL: f32 = 0.85;
 /// table here rather than `Style::size`, whose font scaling would cascade to the whole panel.
 const fn panel_metrics(size: WidgetSize) -> (f64, usize) {
     match size {
-        WidgetSize::Small => (560.0, 6),
+        WidgetSize::Caption | WidgetSize::Small => (560.0, 6),
         WidgetSize::Normal => (700.0, 8),
         WidgetSize::Large | WidgetSize::Header => (1000.0, 12),
     }

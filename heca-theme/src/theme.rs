@@ -343,6 +343,14 @@ pub struct Theme {
     /// widget, so the active highlight flips in place via the bound signal.
     #[serde(default = "default_active_wash_alpha")]
     pub active_wash_alpha: f32,
+    /// Falloff radius (logical px, before the theme's `glow_size` scales it) of the halo around the
+    /// **active pane** — and the card that stands for it in the exposé. One token so the map and
+    /// the app cannot drift.
+    #[serde(default = "default_active_glow_radius")]
+    pub active_glow_radius: f32,
+    /// Strength (`0.0..=1.0`) of that halo.
+    #[serde(default = "default_active_glow_strength")]
+    pub active_glow_strength: f32,
     /// Opacity (`0.0..=1.0`) of a sidebar/list **card's resting background** tint
     /// (e.g. each pane card). Kept very low so a card reads as a subtle raised
     /// surface rather than a filled block. Theme/config-driven.
@@ -591,6 +599,12 @@ fn default_icon_secondary_alpha() -> f32 {
 fn default_active_wash_alpha() -> f32 {
     0.11
 }
+fn default_active_glow_radius() -> f32 {
+    10.0
+}
+fn default_active_glow_strength() -> f32 {
+    0.55
+}
 fn default_card_background_alpha() -> f32 {
     0.02
 }
@@ -807,6 +821,14 @@ impl Theme {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The active pane's halo is a theme token, with the values the app used to hard-code.
+    #[test]
+    fn the_active_glow_is_a_theme_token_with_todays_defaults() {
+        let theme = Theme::default();
+        assert_eq!(theme.active_glow_radius, 10.0);
+        assert_eq!(theme.active_glow_strength, 0.55);
+    }
 
     #[test]
     fn default_theme_is_grid_tron() {

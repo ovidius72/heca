@@ -823,6 +823,10 @@ overlay_border_style = "bracketed"   # bracketed | bordered | none — the share
                                      # `bordered` = plain edge, `none` = no frame. Each widget's own
                                      # accent border/glow is separate and unaffected.
 
+# The two bars (px, clamped 16..=96) — only used while the bar is shown
+# top_bar_height    = 32.0   # the tab bar
+# bottom_bar_height = 24.0   # the status bar
+
 # The `prefix+/` picker's letters
 hint_font_size = 12.0      # one size for EVERY letter in the app, in logical px. A letter is drawn
                            # over whatever it points at, so it is not scaled by the size of that
@@ -925,6 +929,7 @@ window_height = 800           # Initial window height
 mouse = true                  # Enable mouse interactions
 focus_follows_mouse = true    # Focus pane on hover
 auto_scroll_edge = true       # Auto-scroll near edges
+edge_scroll_distance = 80.0   # How close (px) a dragged pane must come to the edge for that to start
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
 pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`
@@ -1116,6 +1121,9 @@ A terminal bell (`\a`) can drive up to three independent cues, configured under
 bell_attention = true   # OS attention cue (Dock bounce / taskbar flash) while unfocused
 bell_visual    = false  # brief accent flash over the content area
 bell_audible   = false  # system beep (macOS only for now; no-op elsewhere)
+bell_flash_alpha = 56   # how bright the visual bell's flash is at its peak, 0..=255
+search_match_alpha = 64          # scrollback-search match highlight, 0..=255
+search_current_match_alpha = 150 # the match the search is on (bolder)
 ```
 
 `bell_attention` only fires while the window is unfocused; the visual and audible
@@ -1146,6 +1154,13 @@ title_segments = ["location", "app_name", "git_branch", "git_status"]
 # Right side — action buttons, in order. Each button's tooltip shows its real
 # configured keybinding.
 title_actions = ["split", "close"]
+
+# The name drawn over a pane while it is dragged: a share of the pane's shorter side, kept
+# between two sizes (px). And how wide the "new column" opening beside a column is (a share).
+# drag_label_size_factor = 0.25
+# drag_label_min_size    = 24.0
+# drag_label_max_size    = 72.0
+# new_column_slot_share  = 0.18
 
 [appearance.sidebar]
 # Sidebar shell appearance (independent of the panes; all optional):

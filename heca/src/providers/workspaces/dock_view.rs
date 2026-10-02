@@ -11,6 +11,7 @@ use super::seams::{DockRegistries, DockSeams};
 use super::{MENU_CONTAINER, WorkspaceTree, container_items, workspace_frame::WorkspaceFrame};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
+use heca_grid_ui::style::Spacing;
 use heca_grid_ui::widgets::{Flex, ScrollRegion};
 
 /// The workspace tree mounted inside the sidebar shell — one frame per workspace, in a scroll area
@@ -33,7 +34,7 @@ impl DockView<'_> {
             scroll,
             focused,
         } = self;
-        let mut col = Flex::column().gap(6.0).grow(1.0);
+        let mut col = Flex::column().gap(Spacing::Sm).grow(1.0);
         for workspace in &tree.workspaces {
             col = col.child(WorkspaceFrame { workspace }.build(seams, reg));
         }

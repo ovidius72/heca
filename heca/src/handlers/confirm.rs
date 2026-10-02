@@ -147,20 +147,30 @@ pub(crate) fn maybe_confirm_dynamic(state: &mut AppState, intent: &crate::chrome
     true
 }
 
-/// The built-in actions whose confirm [`maybe_confirm_destructive`] resolves from a raw
-/// [`WmAction`]. Every other action with a confirm is named and goes through
-/// [`maybe_confirm_dynamic`]; a confirm in neither list would never be asked.
-pub(crate) const BUILTIN_CONFIRMED: [&str; 3] = ["close", "delete_column", "delete_workspace"];
-
 /// Does a gate ask for this action's confirm? Used by the test that fails when a spec is declared
 /// somewhere nothing enforces it.
+///
+/// A built-in is asked for by [`maybe_confirm_destructive`], which finds its confirm through
+/// [`confirm_owner_name`] — so that one function **is** the list, and nothing is kept beside it. A
+/// named action (a component's, a plugin's, `trust_project`) goes through [`maybe_confirm_dynamic`].
 #[cfg(test)]
 pub(crate) fn gate_covers(catalog: &crate::actions::ActionCatalog, name: &str) -> bool {
-    if catalog.is_builtin(name) {
-        BUILTIN_CONFIRMED.contains(&name)
-    } else {
-        true
+    if !catalog.is_builtin(name) {
+        return true;
     }
+    use heca_core::layout::PaneId;
+    // One raw action per way a built-in reaches the gate; the owner they resolve to is the answer.
+    [
+        WmAction::ClosePane,
+        WmAction::ClosePaneById { pane_id: PaneId(0) },
+        WmAction::DeleteColumn {
+            ws_idx: 0,
+            col_idx: 0,
+        },
+        WmAction::DeleteWorkspace { ws_idx: 0 },
+    ]
+    .iter()
+    .any(|raw| confirm_owner_name(raw) == Some(name))
 }
 
 /// Whether the confirm prompt for `config_name` is enabled: the user's `[confirm].<name>` value
@@ -284,21 +294,17 @@ pub(crate) fn request_destructive(state: &mut AppState, raw_action: WmAction) {
 pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction) -> bool {
     // Resolve the dispatched action to its confirm config name + the concrete action to run on
     // `Proceed` (`ClosePane` → the focused pane's `ClosePaneById`, pinned now).
-    let (name, resolved) = match action {
+    let Some(name) = confirm_owner_name(action) else {
+        return false;
+    };
+    let resolved = match action {
         WmAction::ClosePane => match focused_pane_id(state) {
-            Some(pane_id) => ("close", WmAction::ClosePaneById { pane_id }),
+            Some(pane_id) => WmAction::ClosePaneById { pane_id },
             None => return false, // nothing focused → let the normal path no-op
         },
-        WmAction::ClosePaneById { .. } => ("close", action.clone()),
-        WmAction::DeleteColumn { .. } => ("delete_column", action.clone()),
-        WmAction::DeleteWorkspace { .. } => ("delete_workspace", action.clone()),
-        _ => return false,
+        other => other.clone(),
     };
     // `name` is the owner ACTION name; its meta's confirm spec carries the toggle key.
-    debug_assert!(
-        BUILTIN_CONFIRMED.contains(&name),
-        "'{name}' is resolved here but missing from BUILTIN_CONFIRMED"
-    );
     let Some(spec) = state.action_catalog.confirm_spec(name).cloned() else {
         return false;
     };
@@ -399,7 +405,7 @@ mod gate_coverage_tests {
     /// **A confirm declared where nothing asks it is a silent hole** — the one a named action's
     /// confirm fell into: its metadata said "ask first" and dispatch never did. Every action in the
     /// catalog that declares a confirm must be covered by a gate: a built-in by
-    /// [`maybe_confirm_destructive`] (its owner name is in [`BUILTIN_CONFIRMED`]), a named one by
+    /// [`maybe_confirm_destructive`] (its owner name comes from [`confirm_owner_name`]), a named one by
     /// [`maybe_confirm_dynamic`].
     #[test]
     fn every_declared_confirm_is_enforced_by_a_gate() {

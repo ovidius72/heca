@@ -30,7 +30,6 @@
 //! the app-wide text system (T519) lands; then a plugin's strings come from the language files
 //! under its own namespace, and these are what is shown when a translation is missing.
 
-use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use heca_grid_ui::Handled;
@@ -40,7 +39,7 @@ use crate::actions::{
 };
 use crate::app::conflicts::{ActionConflict, Conflicts};
 use crate::app_state::AppState;
-use crate::chrome::{Intent, SharedChromeState};
+use crate::chrome::{Intent, SharedChromeState, StartupQueue};
 use crate::providers::{ProviderCx, emit_queued};
 
 /// What an added action does when it runs.
@@ -53,11 +52,8 @@ struct Declared {
 }
 
 thread_local! {
-    /// Declarations made before the host took them. Thread-local like the region queue beside it:
-    /// the app is built and driven on the UI thread only.
-    static QUEUE: RefCell<Vec<Declared>> = const { RefCell::new(Vec::new()) };
-    /// Set once the host has taken the queue; from then on a declaration is refused out loud.
-    static STARTED: Cell<bool> = const { Cell::new(false) };
+    /// Declarations made before the host took them.
+    static QUEUE: StartupQueue<Box<Declared>> = const { StartupQueue::new() };
 }
 
 impl ActionMeta {
@@ -87,20 +83,17 @@ impl ActionMeta {
             ));
             return;
         }
-        if STARTED.with(Cell::get) {
+        let declared = Declared {
+            meta: self,
+            run: Rc::new(run),
+        };
+        if let Err(late) = QUEUE.with(|q| q.add(Box::new(declared))) {
             crate::chrome::warn_author(format!(
                 "[heca] action '{}' was added after the app started, so it does nothing — add it \
                  before `heca::run()`",
-                self.name
+                late.meta.name
             ));
-            return;
         }
-        QUEUE.with(|q| {
-            q.borrow_mut().push(Declared {
-                meta: self,
-                run: Rc::new(run),
-            })
-        });
     }
 }
 
@@ -120,9 +113,9 @@ pub(crate) fn register_queued_actions(
     catalog: &mut ActionCatalog,
     conflicts: &mut Conflicts,
 ) {
-    STARTED.with(|s| s.set(true));
     let mut seen = std::collections::HashSet::new();
-    for Declared { meta, run } in QUEUE.with(|q| std::mem::take(&mut *q.borrow_mut())) {
+    for declared in QUEUE.with(StartupQueue::take) {
+        let Declared { meta, run } = *declared;
         let id = meta.name.clone();
         // The registry lets a second registration replace the first (a dock remounting is meant
         // to). Two actions added under one name by one program is a mistake, so it is said.
@@ -161,8 +154,7 @@ mod tests {
 
     /// A fresh queue, as a new host would start with.
     fn reset() {
-        STARTED.with(|s| s.set(false));
-        QUEUE.with(|q| q.borrow_mut().clear());
+        QUEUE.with(StartupQueue::reset);
         super::super::extension::reset();
     }
 
@@ -256,7 +248,7 @@ mod tests {
         let _pro = pro();
         ActionMeta::new("other.start").run(|_, _| Handled::Yes);
         ActionMeta::new("start").run(|_, _| Handled::Yes);
-        assert!(QUEUE.with(|q| q.borrow().is_empty()));
+        assert!(QUEUE.with(|q| q.peek(<[_]>::is_empty)));
     }
 
     /// **After the host has started, a new action is refused out loud** — and the queue stays empty.
@@ -265,6 +257,6 @@ mod tests {
         reset();
         let _ = registered();
         pro().action("too_late").run(|_, _| Handled::Yes);
-        assert!(QUEUE.with(|q| q.borrow().is_empty()));
+        assert!(QUEUE.with(|q| q.peek(<[_]>::is_empty)));
     }
 }

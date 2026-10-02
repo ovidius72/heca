@@ -192,3 +192,30 @@ fn tooltip_flips_to_fit_the_viewport() {
         b.loc.y
     );
 }
+
+/// **A quick tooltip is a name for a shorter rest**, on every widget: the library's own quick delay,
+/// shorter than the default, and nothing at all on a widget that declared no tooltip.
+#[test]
+fn a_quick_tooltip_rests_for_the_librarys_quick_delay() {
+    use heca_grid_ui::widgets::tooltip::{DEFAULT_DELAY, QUICK_DELAY};
+
+    let plain = Label::new("main").tooltip("feat/long-branch-name");
+    let quick = Label::new("main")
+        .tooltip("feat/long-branch-name")
+        .tooltip_quick(true);
+    assert_eq!(
+        plain.base().tooltip.as_ref().map(|t| t.delay),
+        Some(DEFAULT_DELAY)
+    );
+    assert_eq!(
+        quick.base().tooltip.as_ref().map(|t| t.delay),
+        Some(QUICK_DELAY)
+    );
+    const { assert!(QUICK_DELAY < DEFAULT_DELAY) };
+
+    let none = Label::new("main").tooltip_quick(true);
+    assert!(
+        none.base().tooltip.is_none(),
+        "no tooltip declared: nothing to speed up"
+    );
+}

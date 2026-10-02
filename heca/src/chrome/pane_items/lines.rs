@@ -10,7 +10,6 @@
 //!
 //! *Client side*: a line is drawn. Its facts are plain data ([`PaneFacts`]).
 
-use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use heca_grid_ui::Component;
@@ -18,7 +17,7 @@ use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::Glyph;
 
 use super::PaneFacts;
-use crate::chrome::warn_author;
+use crate::chrome::{StartupQueue, warn_author};
 
 /// **What an added line shows**: an icon and some text.
 #[derive(Clone, Debug, PartialEq)]
@@ -100,9 +99,8 @@ impl PaneLineSet {
 pub(crate) type ProduceLine = dyn Fn(&PaneFacts) -> Option<PaneLine>;
 
 thread_local! {
-    /// Lines added before the app took them. Thread-local like the queues beside it.
-    static QUEUE: RefCell<Vec<(String, Rc<ProduceLine>)>> = const { RefCell::new(Vec::new()) };
-    static STARTED: Cell<bool> = const { Cell::new(false) };
+    /// Lines added before the app took them.
+    static QUEUE: StartupQueue<(String, Rc<ProduceLine>)> = const { StartupQueue::new() };
 }
 
 /// Queue the line `name` (`<extension>.<short>`) — called by `Extension::pane_line`. The app takes
@@ -111,14 +109,12 @@ pub(crate) fn add_extension_line(
     name: String,
     produce: impl Fn(&PaneFacts) -> Option<PaneLine> + 'static,
 ) {
-    if STARTED.with(Cell::get) {
+    if let Err((name, _)) = QUEUE.with(|q| q.add((name, Rc::new(produce)))) {
         warn_author(format!(
             "[heca] pane line '{name}' was added after the app started, so it does nothing — add it \
              before `heca::run()`"
         ));
-        return;
     }
-    QUEUE.with(|q| q.borrow_mut().push((name, Rc::new(produce))));
 }
 
 /// **Every pane-row line there is**, by name: heca's own and the ones other crates added.
@@ -141,9 +137,8 @@ impl Default for PaneRowLines {
 impl PaneRowLines {
     /// heca's own, then everything queued. Takes the queue and closes it: the app calls this once.
     pub(crate) fn from_startup() -> Self {
-        STARTED.with(|s| s.set(true));
         let mut all = Self::default();
-        for (name, produce) in QUEUE.with(|q| std::mem::take(&mut *q.borrow_mut())) {
+        for (name, produce) in QUEUE.with(StartupQueue::take) {
             all.add(PaneLineDef {
                 name,
                 build: crate::providers::workspaces::text_line(produce),
@@ -155,14 +150,7 @@ impl PaneRowLines {
 
     /// Add one. A name already taken is refused and said — the first keeps it.
     fn add(&mut self, def: PaneLineDef) {
-        if self.defs.iter().any(|d| d.name == def.name) {
-            warn_author(format!(
-                "[heca] a pane line called '{}' already exists, so this one was not added",
-                def.name
-            ));
-            return;
-        }
-        self.defs.push(Rc::new(def));
+        super::listing::add_unique(&mut self.defs, "pane line", Rc::new(def));
     }
 
     /// **The lines to show, in order** — the user's list by name, with what other crates added after

@@ -10,12 +10,12 @@
 use std::rc::Rc;
 
 use heca_grid_ui::Component;
-use heca_grid_ui::builders::{LayoutExt, Parent};
+use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
 use heca_grid_ui::reactive::{create_effect, signal};
-use heca_grid_ui::widgets::{Flex, Glyph, Icon, Label, Tooltip, TooltipSide, Visibility};
+use heca_grid_ui::style::{Length, Spacing, WidgetSize};
+use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, TooltipSide, Visibility};
 
 use super::pane_row::{META_INDENT, set_if_changed};
-use crate::chrome::CARD_META_FONT_SCALE;
 use crate::chrome::pane_items::{BuildLine, LineCx, PaneLineDef, ProduceLine};
 
 /// heca's own two lines, in the order the row has always shown them.
@@ -36,7 +36,7 @@ fn cwd_line(cx: &LineCx<'_>) -> Box<dyn Component> {
     let line = crate::components::FolderLine {
         path: None,
         show: false,
-        font_scale: CARD_META_FONT_SCALE,
+        size: WidgetSize::Caption,
         indent: META_INDENT,
         theme: cx.theme,
     }
@@ -62,21 +62,26 @@ fn cwd_line(cx: &LineCx<'_>) -> Box<dyn Component> {
 /// added, modified and deleted files. Absent outside a repository; a count of nothing is absent.
 fn git_line(cx: &LineCx<'_>) -> Box<dyn Component> {
     let theme = cx.theme;
+    // **Cut from the front by the row's own box**, so the tail — the meaningful end of a branch,
+    // `…security-upgrade` — survives, and how much fits is whatever the sidebar is wide enough for.
     let branch_label = Label::new("")
         .color(theme.colors.foreground)
-        .font_scale(0.8);
+        .truncate(Ellipsis::Start);
     let branch_shown = branch_label.text_signal();
     let branch_full = signal(String::new());
 
     // One count: a glyph and its words, hidden while there is nothing to say.
     let count = |glyph: Glyph, color| {
-        let label = Label::new("").color(color).font_scale(0.8);
+        // **A count is never cut**: it is the part of the row that is short and that says the most,
+        // so it keeps its own width and the branch beside it is what gives way.
+        let label = Label::new("").color(color).truncate(Ellipsis::None);
         let text = label.text_signal();
         let segment = Visibility::new(
             Flex::row()
                 .align("center")
-                .gap(4.0)
-                .child(Icon::new(glyph).size(12.0).color(color))
+                .gap(Spacing::Xs)
+                .shrink(0.0)
+                .child(Icon::new(glyph).color(color))
                 .child(label),
             false,
         );
@@ -90,17 +95,18 @@ fn git_line(cx: &LineCx<'_>) -> Box<dyn Component> {
     let row = Visibility::new(
         Flex::row()
             .align("center")
-            .gap(6.0)
+            .size(WidgetSize::Caption)
+            .gap(Spacing::Sm)
             .padding_x(META_INDENT)
+            // Never wider than the card: the row is as wide as its content up to the card, and then
+            // the branch — the one child that can — takes the squeeze.
+            .max_width(Length::FULL)
+            .child(Icon::new(Glyph::GitBranch).color(theme.colors.warning).shrink(0.0))
             .child(
-                Icon::new(Glyph::GitBranch)
-                    .size(12.0)
-                    .color(theme.colors.warning),
-            )
-            .child(
-                Tooltip::new_signal(branch_label, branch_full)
-                    .side(TooltipSide::Bottom)
-                    .delay(0.25),
+                branch_label
+                    .tooltip_signal(branch_full)
+                    .tooltip_side(TooltipSide::Bottom)
+                    .tooltip_quick(true),
             )
             .child(added)
             .child(modified)
@@ -117,10 +123,7 @@ fn git_line(cx: &LineCx<'_>) -> Box<dyn Component> {
             .as_ref()
             .map(crate::chrome::pane_header::git_branch)
             .unwrap_or_default();
-        set_if_changed(
-            branch_shown,
-            crate::chrome::truncate_sidebar_git_branch(&branch),
-        );
+        set_if_changed(branch_shown, branch.clone());
         set_if_changed(branch_full, branch);
         for (visible, text, value) in [
             (
@@ -152,18 +155,15 @@ fn git_line(cx: &LineCx<'_>) -> Box<dyn Component> {
 /// say for the pane. It runs again when the pane's facts change — that is what the subscription is.
 pub(crate) fn text_line(produce: Rc<ProduceLine>) -> Rc<BuildLine> {
     Rc::new(move |cx: &LineCx<'_>| {
-        let label = Label::new("")
-            .color(cx.theme.colors.foreground)
-            .font_scale(CARD_META_FONT_SCALE);
+        let label = Label::new("").color(cx.theme.colors.foreground);
         let text = label.text_signal();
-        let icon = Icon::new(Glyph::Circle)
-            .size(12.0)
-            .color(cx.theme.colors.foreground);
+        let icon = Icon::new(Glyph::Circle).color(cx.theme.colors.foreground);
         let glyph = icon.glyph_signal();
         let row = Visibility::new(
             Flex::row()
                 .align("center")
-                .gap(6.0)
+                .size(WidgetSize::Caption)
+                .gap(Spacing::Sm)
                 .padding_x(META_INDENT)
                 .child(icon)
                 .child(label),
@@ -233,6 +233,59 @@ mod tests {
         assert!(
             hidden(&mut root),
             "and hides again when that stops being true"
+        );
+    }
+
+    /// **In the git row the branch gives way and the counts never do** — measured in a card too
+    /// narrow for the whole row: every count is drawn whole, the branch is the part that is cut.
+    #[test]
+    fn a_narrow_git_row_cuts_the_branch_and_keeps_the_counts_whole() {
+        use heca_core::runtime::{GitInfo, PaneRuntime};
+        let theme = heca_grid_ui::theme::Theme::default();
+        let runtime = PaneRuntime {
+            git: Some(GitInfo {
+                branch: Some("feature/a-very-long-branch-name-for-dependency-upgrades".into()),
+                added: 12,
+                modified: 34,
+                deleted: 5,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let facts: Rc<dyn Fn() -> PaneFacts> = Rc::new(move || {
+            PaneFacts::of(
+                PaneId(1),
+                &ProgramsConfig::default(),
+                "shell",
+                None,
+                Some(&runtime),
+            )
+        });
+        let line = git_line(&LineCx {
+            theme: &theme,
+            facts,
+        });
+        // A card about as wide as a sidebar row, narrower than the row's natural width.
+        let mut root = Flex::column()
+            .width(heca_grid_ui::style::Length::Px(220.0))
+            .child(line);
+        let scene = crate::chrome::paint_chrome_root(&mut root, 220.0, 100.0, &theme);
+        let drawn: Vec<String> = scene
+            .iter()
+            .filter_map(|c| match c {
+                heca_grid_ui::DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect();
+        for count in ["12", "34", "5"] {
+            assert!(
+                drawn.iter().any(|t| t.contains(count) && !t.contains('…')),
+                "the count {count} is drawn whole: {drawn:?}"
+            );
+        }
+        assert!(
+            drawn.iter().any(|t| t.contains('…') && t.contains("upgrades")),
+            "the branch is the part that is cut, from the front: {drawn:?}"
         );
     }
 

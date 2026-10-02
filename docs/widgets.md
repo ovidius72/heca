@@ -1234,6 +1234,7 @@ widget owns the resulting geometry.
 
 | Variant | `font_scale` | `pad_scale` | Use |
 |---------|-------------|------------|-----|
+| `Caption` | `0.72` | `0.5` | **Supporting text** — a line of metadata under a name (a folder, a branch and its counts), with its glyphs. Say it on the row: `Flex::row().size(WidgetSize::Caption)`; an `Icon` with no px takes the row's font. In a described tree: `"size": "caption"`. |
 | `Small` | `0.8` | `0.5` | Compact controls (sidebar, dense toolbars). |
 | `Normal` *(default)* | `0.9` | `0.9` | The compact baseline for most controls. |
 | `Large` | `1.0` | `1.0` | Roomy controls at the full base font — the historical un-sized look. |
@@ -2727,7 +2728,7 @@ spellings — never two paint paths.
 - **Content builders**: `.icon(Glyph)` (prepend a leading `Icon` → children `[Icon, Label]`) ·
   `.child(impl Component)` (`Parent` — append **any** component, at any depth) ·
   `.content(..)` takes a widget **or** a subtree from a mapper — what `realize(&ViewNode)` returns.
-- **Look builders**: `.variant(ButtonVariant)` · `.size(WidgetSize)` (`Small`/`Normal`/`Large`/`Header`
+- **Look builders**: `.variant(ButtonVariant)` · `.size(WidgetSize)` (`Caption`/`Small`/`Normal`/`Large`/`Header`
   — scales font **and** padding, and **cascades into the content**) · `.font_size(f32)` (pin an
   explicit size) · `.glow(bool)` (hover glow, default on) · `.bordered(bool)` (default on).
 - **Behavior builders**: `.on_click(impl Fn() + 'static)`, plus the shared `LayoutExt`
@@ -4886,6 +4887,7 @@ has, so **no widget opts in and no host paints on their behalf**.
 | `.tooltip_signal(Signal<String>)` | the same, from a live signal — an action's current keybinding, a changing status — so the bubble follows without the widget being rebuilt. |
 | `.tooltip_side(TooltipSide)` | which side to prefer (`Top` default). Flipped automatically when there is no room, so it is a preference, not a placement. No-op with no tooltip declared. |
 | `.tooltip_delay(seconds)` | how long the pointer must rest (default `0.5`). No-op with no tooltip declared. |
+| `.tooltip_quick(true)` | the library's shorter rest (`QUICK_DELAY`, half the default) — a name instead of a number, for a tip that carries what the widget had to cut short (a branch name in a narrow row). No-op with no tooltip declared. In a described tree: `.prop("tooltip_quick", PropValue::Bool(true))`. |
 
 All four are on `ComponentExt`, so they apply to **every** widget — and the first, third and fourth
 have the described spellings below. `tooltip_signal` is native-only, because a signal is a live host

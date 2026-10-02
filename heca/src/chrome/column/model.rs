@@ -40,7 +40,10 @@ pub(crate) struct ColumnShellModel {
     /// column goes right of the current one, you keep your place in the strip", the rule
     /// `move_pane_to_new_column` already follows. It rides on the column rather than on a surface of
     /// its own because it is drawn beside this column and disappears with the pick.
-    pub(crate) new_column_slot: bool,
+    ///
+    /// `Some(share)` is the offer and how wide it is, as a share of this column — the config's
+    /// `[appearance.pane] new_column_slot_share`; `None` is no offer.
+    pub(crate) new_column_slot: Option<f32>,
 }
 
 impl ColumnShellModel {
@@ -51,7 +54,7 @@ impl ColumnShellModel {
     /// away the widget signals mid-gesture. Same split the pane shell already makes.
     pub(crate) fn key(&self) -> String {
         format!(
-            "{}|{:?}|{}",
+            "{}|{:?}|{:?}",
             self.col_id.0,
             self.focus_pane.map(|p| p.0),
             self.new_column_slot,

@@ -165,7 +165,8 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
             h: col.rect.size.h as f32,
             focus_pane: focus_pane_of(state, col),
             // Only the column the picked pane is in offers a new one beside it.
-            new_column_slot: picking_from_column(state, col),
+            new_column_slot: picking_from_column(state, col)
+                .then(|| state.appearance.effective_new_column_slot_share()),
             // The panes this column holds, in the order the layout engine placed them.
             panes: col
                 .panes
@@ -256,12 +257,7 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
                 if let Some(texts) = header_texts.get(&pane.pane_id) {
                     crate::chrome::pane_header::refresh_pane_header_text(child.as_ref(), texts);
                 }
-                crate::chrome::pane::shell::focus_state_to(
-                    child.as_mut(),
-                    pane.active,
-                    pane.border_color,
-                    pane.accent,
-                );
+                crate::chrome::pane::shell::focus_state_to(child.as_mut(), &pane);
                 let l = &mut child.base_mut().style.layout;
                 l.placement = Some(heca_grid_ui::style::Placement {
                     left: heca_grid_ui::Length::Px(pane.x - model.x),
@@ -377,7 +373,7 @@ mod tests {
                     crate::chrome::pane::testing::model_at(PaneId(*id), 0.0, *top, 400.0, *h)
                 })
                 .collect(),
-            new_column_slot: false,
+            new_column_slot: None,
         }
     }
 
@@ -495,7 +491,7 @@ mod tests {
     #[test]
     fn the_new_column_offer_is_a_child_placed_beside_the_column() {
         let mut m = with_panes(3, Some(7), &[(7, 0.0, 100.0)]);
-        m.new_column_slot = true;
+        m.new_column_slot = Some(0.18);
         let view = built(&m);
         let slot = view
             .base()

@@ -296,7 +296,7 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
     // During drag, scroll when near any edge:
     // - Absolute window edge (150px): covers sidebar area, fast (1000 px/s)
     // - Content area edge (80px): reaches hidden panes, fast (1000 px/s)
-    let content_trigger = crate::chrome::EDGE_SCROLL_TRIGGER;
+    let content_trigger = state.edge_scroll_distance;
 
     // Compute normalized delta, covering the full horizontal range without gaps.
     // Left side: trigger from window edge through sidebar into content area.

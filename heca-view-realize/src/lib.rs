@@ -268,6 +268,11 @@ pub fn realize(
         {
             tip.delay = (delay as f32).max(0.0);
         }
+        if node.props.get("tooltip_quick").and_then(PropValue::as_bool) == Some(true)
+            && let Some(tip) = realized.base_mut().tooltip.as_mut()
+        {
+            tip.delay = heca_grid_ui::widgets::tooltip::QUICK_DELAY;
+        }
     }
     // **Whether this node's ink is drawn**, read once here for every kind — CSS `visibility`.
     //
@@ -1657,6 +1662,7 @@ fn map_variant(v: ViewVariant) -> ButtonVariant {
 
 fn map_size(s: ViewSize) -> WidgetSize {
     match s {
+        ViewSize::Caption => WidgetSize::Caption,
         ViewSize::Small => WidgetSize::Small,
         ViewSize::Normal => WidgetSize::Normal,
         ViewSize::Large => WidgetSize::Large,
@@ -4904,6 +4910,35 @@ mod tests {
             "a tooltip declared on these kinds never reached the widget, so a described row \
              cannot say what it is while every native one can: {missing:#?}",
         );
+    }
+
+    /// **A quick tooltip is a name, not a number — in a described tree too.** `tooltip_quick` lands
+    /// on every kind the way `tooltip_delay` does, so a plugin's row can say it the way heca's own
+    /// does; `Label::new("x").tooltip("full text").tooltip_quick(true)` and the described
+    /// `tooltip_quick(true)` give the same delay.
+    #[test]
+    fn a_quick_tooltip_declared_on_any_kind_takes_the_librarys_quick_delay() {
+        let mut wrong: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            let (emit, _fired) = recording_emitter();
+            let node = sample_node(kind)
+                .prop("tooltip", PropValue::Text("Close the pane".into()))
+                .prop("tooltip_quick", PropValue::Bool(true));
+            let widget = realize(
+                &node,
+                &Theme::default(),
+                &emit,
+                &mut FormBindings::default(),
+            );
+            match &widget.base().tooltip {
+                Some(tip)
+                    if (tip.delay - heca_grid_ui::widgets::tooltip::QUICK_DELAY).abs()
+                        < f32::EPSILON => {}
+                Some(tip) => wrong.push(format!("{kind:?} (delay {})", tip.delay)),
+                None => wrong.push(format!("{kind:?} (no tooltip)")),
+            }
+        }
+        assert!(wrong.is_empty(), "tooltip_quick was ignored on: {wrong:#?}");
     }
 
     /// **A card never has to be named** (F003/P097/T501, correcting C2).

@@ -54,6 +54,10 @@ pub type TooltipSide = BesideSide;
 
 /// Seconds the pointer must rest before the bubble shows.
 pub const DEFAULT_DELAY: f32 = 0.5;
+/// The shorter rest for a tip that is the point of the thing it sits on — a value cut short on
+/// purpose (a branch name in a narrow row) that the reader goes to the pointer for.
+/// See [`ComponentExt::tooltip_quick`](crate::builders::ComponentExt::tooltip_quick).
+pub const QUICK_DELAY: f32 = DEFAULT_DELAY / 2.0;
 /// Gap between the target and the bubble (logical px).
 const GAP: f64 = 6.0;
 /// Bubble inner padding.

@@ -31,6 +31,19 @@ impl<T: Named> Named for std::rc::Rc<T> {
     }
 }
 
+/// **Add an item, unless its name is taken** — the first keeps it and the refusal is said. `what`
+/// names the kind ("pane button"). One rule, so a name means one item for every kind.
+pub(crate) fn add_unique<T: Named>(defs: &mut Vec<T>, what: &str, def: T) {
+    if defs.iter().any(|d| d.name() == def.name()) {
+        warn_author(format!(
+            "[heca] a {what} called '{}' already exists, so this one was not added",
+            def.name()
+        ));
+        return;
+    }
+    defs.push(def);
+}
+
 /// **The items to show, in order** — rules 1 and 2. A name nothing provides is skipped here and
 /// said by [`report`].
 pub(crate) fn shown<'a, T: Named>(

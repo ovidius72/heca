@@ -243,8 +243,8 @@ pub(super) fn build_sidebar_shell(
         .radius(border_radius)
         .width(inner_w)
         .height(inner_h)
-        .padding(10.0)
-        .gap(8.0)
+        .padding(Spacing::Md)
+        .gap(Spacing::Sm)
         .background(shell_bg);
     if let Some(content) = content {
         // Mounted directly: **the shell does not scroll** (F003/P011/T021).
@@ -395,7 +395,7 @@ fn chrome_root(
     // already treats as "nothing to update").
     if status_bar_height > 0.0 {
         // The status label's text is bound so mode/focus changes update it in place.
-        let status_label = Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg);
+        let status_label = Label::new(status).color(fg);
         let status_signal = status_label.text_signal();
         let (status_watch, _status_repaint) = RepaintWatch::new(status_label);
         signals.status = Some(status_signal);
@@ -404,9 +404,8 @@ fn chrome_root(
                 .width(w)
                 .height(status_bar_height)
                 .background(side_bg)
-                .radius(0.0)
                 .align("center")
-                .padding_xy(8.0, 0.0)
+                .padding_x(Spacing::Sm)
                 .child(status_watch),
         );
     }
@@ -426,13 +425,6 @@ pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiThem
     }
     scene
 }
-
-/// Keycap glyph size (logical px) for follow-link hints — compact so a label sits
-/// legibly over a single terminal cell.
-const LINK_HINT_FONT: f32 = 13.0;
-
-/// Peak alpha of the visual-bell flash overlay (faded out over the flash window).
-const BELL_FLASH_MAX_ALPHA: u8 = 56;
 
 /// Paint the **visual-bell** flash: a brief accent-tinted overlay over the content
 /// area that fades out, while `state.bell_flash_until` is in the future. Drawn into
@@ -454,7 +446,8 @@ pub(crate) fn paint_bell_flash(
     }
     let frac = deadline.saturating_duration_since(now).as_secs_f32()
         / crate::app::lifecycle::BELL_FLASH_DURATION.as_secs_f32();
-    let alpha = (frac.clamp(0.0, 1.0) * BELL_FLASH_MAX_ALPHA as f32).round() as u8;
+    let alpha =
+        (frac.clamp(0.0, 1.0) * state.appearance.terminal.bell_flash_alpha as f32).round() as u8;
     if alpha == 0 {
         return;
     }
@@ -494,23 +487,19 @@ pub(crate) fn paint_link_hints(
             continue;
         };
         let label = hint.label.to_string();
-        let size = heca_grid_ui::keycap_size(LINK_HINT_FONT, &label);
+        let size = heca_grid_ui::keycap_size(theme.hint_font_size, &label);
         // Anchor the keycap's top-left at the link's first cell.
         let cap = Rectangle::new(Point::new(x as f64, y as f64), size);
         heca_grid_ui::paint_keycap(
             &mut cx,
             cap,
             &label,
-            LINK_HINT_FONT,
+            theme.hint_font_size,
             None,
             heca_grid_ui::KeycapVariant::Filled,
         );
     }
 }
-
-/// Peak alpha for a non-current search-match highlight; the current match is bolder.
-const SEARCH_HL_ALPHA: u8 = 64;
-const SEARCH_HL_CURRENT_ALPHA: u8 = 150;
 
 /// Paint the scrollback-search overlay: a highlight rect over every visible match
 /// (the focused one bolder) plus a `/query` bar anchored to the searched pane's
@@ -585,9 +574,9 @@ fn paint_pane_search(
             Size::new(width as f64, cell_h as f64),
         );
         let alpha = if Some(i) == search.current {
-            SEARCH_HL_CURRENT_ALPHA
+            state.appearance.terminal.search_current_match_alpha
         } else {
-            SEARCH_HL_ALPHA
+            state.appearance.terminal.search_match_alpha
         };
         // A match highlight tracks terminal cells, not chrome, so it stays a painted
         // rect rather than a widget — but its corner still comes from the theme.

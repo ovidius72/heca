@@ -20,14 +20,13 @@
 //! **Names are `<extension>.<short>`**, the owner half coming from the [`Extension`](super::Extension)
 //! the layer hangs off — never written per layer.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use heca_grid_ui::theme::Theme as GuiTheme;
 
 use crate::app_state::AppState;
-use crate::chrome::{ChromeIntentEmitter, WidgetModel};
+use crate::chrome::{ChromeIntentEmitter, StartupQueue, WidgetModel};
 use crate::host::StateView;
 
 /// What a layer's tree is built from: the theme it is drawn in, the sink its widgets report to, and
@@ -73,9 +72,8 @@ impl LayerBuilder {
 }
 
 thread_local! {
-    /// Declarations made before the host took them — thread-local like the queues beside it.
-    static QUEUE: RefCell<Vec<(String, Rc<Build>)>> = const { RefCell::new(Vec::new()) };
-    static STARTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Declarations made before the host took them.
+    static QUEUE: StartupQueue<(String, Rc<Build>)> = const { StartupQueue::new() };
 }
 
 impl LayerBuilder {
@@ -86,14 +84,12 @@ impl LayerBuilder {
         if name.is_empty() {
             return;
         }
-        if STARTED.with(std::cell::Cell::get) {
+        if let Err((name, _)) = QUEUE.with(|q| q.add((name, Rc::new(build)))) {
             crate::chrome::warn_author(format!(
                 "[heca] layer '{name}' was added after the app started, so it does nothing — add \
                  it before `heca::run()`"
             ));
-            return;
         }
-        QUEUE.with(|q| q.borrow_mut().push((name, Rc::new(build))));
     }
 }
 
@@ -107,8 +103,7 @@ pub(crate) struct AddedLayers {
 /// Take the queue, close it, and register every layer — hidden, under its name. The host calls this
 /// once, as it starts.
 pub(crate) fn register_queued_layers(state: &mut AppState) {
-    STARTED.with(|s| s.set(true));
-    for (name, build) in QUEUE.with(|q| std::mem::take(&mut *q.borrow_mut())) {
+    for (name, build) in QUEUE.with(StartupQueue::take) {
         state.added_layers.by_name.insert(name.clone(), build);
         rebuild(state, &name);
     }
@@ -140,14 +135,13 @@ mod tests {
     #[test]
     fn a_layer_is_queued_under_its_extensions_name() {
         super::super::extension::reset();
-        QUEUE.with(|q| q.borrow_mut().clear());
-        STARTED.with(|s| s.set(false));
+        QUEUE.with(StartupQueue::reset);
         let pro = super::super::extension("pro");
         pro.layer("planner")
             .view(|_| unreachable!("only built when shown"));
         pro.layer("a.b").view(|_| unreachable!("refused"));
         let names: Vec<String> =
-            QUEUE.with(|q| q.borrow().iter().map(|(n, _)| n.clone()).collect());
+            QUEUE.with(|q| q.peek(|items| items.iter().map(|(n, _)| n.clone()).collect()));
         assert_eq!(names, ["pro.planner"]);
     }
 }

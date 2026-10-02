@@ -267,6 +267,7 @@ impl HecaApp {
             );
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
+            state.edge_scroll_distance = self.app_config.config.settings.edge_scroll_distance;
             state.shell_integration_enabled = self.app_config.config.settings.shell_integration;
             state.pane_renamed_add_process_name = self
                 .app_config

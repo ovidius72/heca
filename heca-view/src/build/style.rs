@@ -279,6 +279,14 @@ pub trait Style: Sized {
         self.prop("tooltip_delay", seconds)
     }
 
+    /// Show the tooltip after the library's shorter rest instead of the default — a name instead of
+    /// a number, for a tip that carries what the node had to cut short.
+    ///
+    /// Says nothing on a node that declared no [`tooltip`](Style::tooltip).
+    fn tooltip_quick(self, quick: bool) -> Self {
+        self.prop("tooltip_quick", quick)
+    }
+
     /// **Whether this node's ink is drawn**, keeping its box either way — CSS `visibility`.
     ///
     /// ```

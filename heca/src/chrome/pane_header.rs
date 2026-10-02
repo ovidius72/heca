@@ -262,10 +262,6 @@ pub(crate) fn refresh_pane_header_text(
 
 // ── In-pane info-bar header: segments (left) + interactive action buttons (right) ──
 
-/// Font multiplier for a sidebar card's **secondary metadata** — the dimmed `(process)`
-/// suffix and the cwd row — smaller than the name so it reads as supporting detail.
-pub(crate) const CARD_META_FONT_SCALE: f32 = 0.8;
-
 /// Per-pane context the header buttons need to build their (parameterized) actions
 /// and emit them through the app event loop.
 pub(crate) struct PaneHeaderCtx {

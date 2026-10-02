@@ -13,7 +13,7 @@
 //! read straight off the facts and are cheap; an added one is arbitrary code, so its answer is kept
 //! against the facts it was worked out from and reused until they differ.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -22,7 +22,7 @@ use heca_core::layout::PaneId;
 use heca_core::runtime::GitInfo;
 use heca_grid_ui::widgets::Glyph;
 
-use crate::chrome::warn_author;
+use crate::chrome::{StartupQueue, warn_author};
 
 /// **What is true of one pane right now** — everything a chip is worked out from.
 ///
@@ -119,9 +119,8 @@ impl super::listing::Named for PaneChipDef {
 }
 
 thread_local! {
-    /// Chips added before the app took them. Thread-local like the queues beside it.
-    static QUEUE: RefCell<Vec<(String, Rc<Produce>)>> = const { RefCell::new(Vec::new()) };
-    static STARTED: Cell<bool> = const { Cell::new(false) };
+    /// Chips added before the app took them.
+    static QUEUE: StartupQueue<(String, Rc<Produce>)> = const { StartupQueue::new() };
 }
 
 /// Queue the chip `name` (`<extension>.<short>`) — called by `Extension::pane_chip`. The app takes the
@@ -130,14 +129,12 @@ pub(crate) fn add_extension_chip(
     name: String,
     produce: impl Fn(&PaneFacts) -> Option<PaneChip> + 'static,
 ) {
-    if STARTED.with(Cell::get) {
+    if let Err((name, _)) = QUEUE.with(|q| q.add((name, Rc::new(produce)))) {
         warn_author(format!(
             "[heca] pane chip '{name}' was added after the app started, so it does nothing — add it \
              before `heca::run()`"
         ));
-        return;
     }
-    QUEUE.with(|q| q.borrow_mut().push((name, Rc::new(produce))));
 }
 
 /// An added chip's kept answers: per pane and chip, the facts it came from and what it said.
@@ -163,9 +160,8 @@ impl Default for PaneChips {
 impl PaneChips {
     /// heca's own, then everything queued. Takes the queue and closes it: the app calls this once.
     pub(crate) fn from_startup() -> Self {
-        STARTED.with(|s| s.set(true));
         let mut all = Self::default();
-        for (name, produce) in QUEUE.with(|q| std::mem::take(&mut *q.borrow_mut())) {
+        for (name, produce) in QUEUE.with(StartupQueue::take) {
             all.add(PaneChipDef {
                 name,
                 fit: Fit::Keep,
@@ -178,16 +174,10 @@ impl PaneChips {
 
     /// Add one. A name already taken is refused and said — the first keeps it.
     fn add(&mut self, def: PaneChipDef) {
-        if self.get(&def.name).is_some() {
-            warn_author(format!(
-                "[heca] a pane chip called '{}' already exists, so this one was not added",
-                def.name
-            ));
-            return;
-        }
-        self.defs.push(def);
+        super::listing::add_unique(&mut self.defs, "pane chip", def);
     }
 
+    #[cfg(test)]
     pub(crate) fn get(&self, name: &str) -> Option<&PaneChipDef> {
         self.defs.iter().find(|d| d.name == name)
     }
@@ -424,7 +414,7 @@ mod tests {
     /// code, so its answer is kept against the facts it came from.
     #[test]
     fn an_added_chip_runs_again_only_when_the_facts_change() {
-        let runs = Rc::new(Cell::new(0));
+        let runs = Rc::new(std::cell::Cell::new(0));
         let counted = runs.clone();
         let all = with_added(move |f| {
             counted.set(counted.get() + 1);

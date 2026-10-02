@@ -43,16 +43,6 @@ pub(crate) struct RetainedPane {
 ///
 /// Nothing has to be released with them: a pane declares its pick **on itself**, so a tree that is
 /// gone simply has no declaration left. That is the whole reason the picker registers nothing.
-/// **The halo an ACTIVE surface wears** — radius and strength.
-///
-/// One definition, because two things draw it: the focused pane's own frame
-/// ([`shell`](self::shell)) and the card that stands for that pane in the exposé
-/// (`chrome::expose::PaneCard`). Written twice they drift, and the map stops looking like the app
-/// it is a picture of. Scaled by the theme's `glow_size` at the single `PaintCx` chokepoint like
-/// every other glow, so `glow_size = none` removes it with the rest.
-pub(crate) const ACTIVE_GLOW_RADIUS: f32 = 10.0;
-pub(crate) const ACTIVE_GLOW_STRENGTH: f32 = 0.55;
-
 pub(crate) fn clear_panes(state: &mut crate::app_state::AppState) {
     state.panes.clear();
     crate::chrome::clear_columns(state);
@@ -80,6 +70,10 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
     let border_radius = state.appearance.effective_pane_border_radius(&state.theme);
     let content_inset = state.appearance.effective_pane_padding(&state.theme);
     let accent = state.theme.accent.to_f32x4();
+    let active_glow = (
+        state.theme.active_glow_radius,
+        state.theme.active_glow_strength,
+    );
 
     let active_pane = state
         .session
@@ -116,6 +110,7 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
                 border_radius,
                 content_inset,
                 accent,
+                active_glow,
             }
         })
         .collect();
@@ -201,12 +196,7 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
             // the widget and throwing away its signals.
             shell::size_to(&mut retained.root, model.w, model.h);
             // **What focus changed**, written on rather than rebuilt for — see `focus_state_to`.
-            shell::focus_state_to(
-                &mut retained.root,
-                model.active,
-                model.border_color,
-                model.accent,
-            );
+            shell::focus_state_to(&mut retained.root, model);
             LayoutEngine::new().compute(
                 &mut retained.root,
                 Size::new(model.w as f64, model.h as f64),

@@ -55,6 +55,10 @@ pub enum Align {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WidgetSize {
+    /// **Supporting text** — a line of metadata under a name (`0.72×`): a step below `Small`, which
+    /// is for compact controls. A folder, a branch and its counts read as detail, not as a second
+    /// title.
+    Caption,
     /// Compact controls (`0.8×`).
     Small,
     /// The default — tighter than the raw base font (`0.9×`).
@@ -71,6 +75,7 @@ impl WidgetSize {
     /// Multiplier for the inherited **font** size.
     pub fn font_scale(self) -> f32 {
         match self {
+            WidgetSize::Caption => 0.72,
             WidgetSize::Small => 0.8,
             WidgetSize::Normal => 0.9,
             WidgetSize::Large => 1.0,
@@ -87,7 +92,7 @@ impl WidgetSize {
     /// button cluster reads as one tight group, not a row of chunky boxes.
     pub fn pad_scale(self) -> f32 {
         match self {
-            WidgetSize::Small => 0.5,
+            WidgetSize::Caption | WidgetSize::Small => 0.5,
             WidgetSize::Normal => 0.9,
             WidgetSize::Large => 1.0,
             WidgetSize::Header => 0.4,
