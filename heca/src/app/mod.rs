@@ -22,6 +22,7 @@ pub mod pane_ops;
 pub mod process_monitor;
 pub mod registry;
 pub mod render;
+pub(crate) mod scene_flush;
 pub mod selection;
 pub mod selection_model;
 pub mod startup;

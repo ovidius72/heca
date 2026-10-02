@@ -6,7 +6,7 @@
 
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionState};
 use crate::app::terminal_host::TerminalMount;
-use crate::app_state::AppState;
+use crate::app_state::{AppState, InputMode};
 use heca_config::theme::Color;
 use heca_core::backend::{TerminalDamage, TerminalRowRange, TerminalSnapshot};
 use heca_core::layout::{PaneId, Point, Rectangle, Size};
@@ -15,7 +15,8 @@ use heca_grid_ui::{Color as GuiColor, PaintCx, Scene as GuiScene};
 use heca_renderer::image::ImageLayer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::terminal::{
-    CaretIndicator, SelectionOverlay, SelectionOverlaySpan, TerminalRenderer, TerminalStyle,
+    CaretIndicator, HyperlinkDecor, SelectionOverlay, SelectionOverlaySpan, TerminalFontFamilies,
+    TerminalRenderer, TerminalStyle,
 };
 use heca_renderer::text::{TextBox, TextRenderer};
 use std::collections::HashSet;
@@ -32,6 +33,49 @@ pub(crate) struct PaneRenderState {
     /// to date, but is not blitted: its box has no position to blit it at.
     pub(crate) drawn: bool,
     pub(crate) mount: Option<TerminalMount>,
+}
+
+impl PaneRenderState {
+    /// **The pane as this frame draws it**, whether tiled or floating: its box `(x, y, w, h)`, how
+    /// much room its terminal was given and whether it was drawn last frame, and the snapshot to
+    /// draw. Also tells the chrome store the terminal's scroll position, so what shows it follows.
+    ///
+    /// **The terminal's box is the terminal's own.** How much room it has comes from the layout,
+    /// for every pane whether or not it is on screen; where it was drawn comes from its surface
+    /// request, and a terminal with none was not on screen.
+    pub(crate) fn collect(
+        state: &mut AppState,
+        pane_id: PaneId,
+        (x, y, w, h): (f32, f32, f32, f32),
+    ) -> Self {
+        let (content_rect, drawn) = crate::chrome::terminal::content_box(state, pane_id);
+        let mount = content_rect.and_then(|content_rect| {
+            crate::app::terminal_host::prepare_terminal_mount(
+                &mut state.backends,
+                pane_id,
+                content_rect,
+                state.scale_factor as f32,
+            )
+        });
+        if let Some(ref m) = mount {
+            state.chrome_state.workspaces.set_pane_viewport(
+                pane_id,
+                m.snapshot.viewport_offset,
+                m.snapshot.at_bottom,
+                m.snapshot.scrollback_rows,
+            );
+        }
+        Self {
+            pane_id,
+            x,
+            y,
+            w,
+            h,
+            content_rect,
+            drawn,
+            mount,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -284,6 +328,147 @@ fn graphics_signature(graphics: &[heca_core::backend::GraphicsPlacement]) -> u64
         }
     }
     hasher.finish()
+}
+
+/// Project the terminal font-family group from config into the renderer's
+/// per-style family slots. The renderer stays config-free; this is the app-side
+/// bridge. Takes the whole `FontFamilies` so the `normal` slot can be resolved
+/// with the **terminal** embedded fallback (`terminal_normal()`), not the UI
+/// fallback — omitting `[font.family.terminal].normal` keeps Maple Mono, not
+/// Geist Mono. Borrows from `families` so the returned slots live as long as it.
+pub(crate) fn terminal_font_families_from(
+    families: &heca_config::font::FontFamilies,
+) -> TerminalFontFamilies<'_> {
+    let tf = &families.terminal;
+    TerminalFontFamilies {
+        normal: families.terminal_normal(),
+        bold: tf.bold.as_deref(),
+        italic: tf.italic.as_deref(),
+        bold_italic: tf.bold_italic.as_deref(),
+    }
+}
+
+/// Map the config hyperlink decoration onto the renderer's enum.
+pub(crate) fn hyperlink_decor_from(
+    style: heca_config::appearance::HyperlinkStyle,
+) -> HyperlinkDecor {
+    use heca_config::appearance::HyperlinkStyle as S;
+    match style {
+        S::None => HyperlinkDecor::None,
+        S::Color => HyperlinkDecor::Color,
+        S::Underline => HyperlinkDecor::Underline,
+        S::Undercurl => HyperlinkDecor::Undercurl,
+    }
+}
+
+/// **Where and how one terminal is drawn**: the texture it goes into, the mask and scissor that
+/// round it to its pane, and how see-through it is. A tiled pane and a floating one differ only in
+/// these, so they are one value, not two code paths.
+pub(crate) struct TerminalTarget<'a> {
+    pub(crate) view: &'a wgpu::TextureView,
+    /// The rounded content-clip mask the terminal tests against.
+    pub(crate) stencil: &'a wgpu::TextureView,
+    /// The scissor its cursor and selection are flushed under.
+    pub(crate) scissor: Option<(u32, u32, u32, u32)>,
+    pub(crate) surface_alpha: f32,
+    /// Everything a terminal draws is kept inside this (the content area).
+    pub(crate) content_clip: Rectangle,
+}
+
+/// **Draw the terminal surface `surface` a scene asked for**, if it is one of `panes`. A surface
+/// nobody can draw is left out rather than guessed at.
+pub(crate) fn draw_surface(
+    state: &mut AppState,
+    panes: &[PaneRenderState],
+    surface: u64,
+    target: &TerminalTarget<'_>,
+    encoder: &mut wgpu::CommandEncoder,
+) {
+    let shows = |pane: &&PaneRenderState| {
+        state
+            .terminals
+            .get(&pane.pane_id)
+            .and_then(|terminal| terminal.id())
+            .is_some_and(|id| id.0 == surface)
+    };
+    if let Some(pane) = panes.iter().find(shows) {
+        draw_pane_terminal(state, pane, target, encoder);
+    }
+}
+
+/// **Draw one pane's terminal where the scene put it**: its retained texture, then its cursor and
+/// selection over it — or, for a terminal with no retained layer yet, the full render.
+///
+/// A pane with nothing to draw (not on screen last frame, no snapshot yet) is skipped.
+pub(crate) fn draw_pane_terminal(
+    state: &mut AppState,
+    pane: &PaneRenderState,
+    target: &TerminalTarget<'_>,
+    encoder: &mut wgpu::CommandEncoder,
+) {
+    let (true, Some(_), Some(mount)) = (pane.drawn, pane.content_rect, pane.mount.as_ref()) else {
+        return;
+    };
+    let surface_physical_size = state.window.inner_size();
+    let selection_overlay = selection_overlay_for_pane(state, pane.pane_id, &mount.snapshot);
+    let font_size = state.effective_terminal_font_size(pane.pane_id);
+    if blit_retained_terminal_layer(
+        state,
+        pane.pane_id,
+        encoder,
+        target.view,
+        (
+            surface_physical_size.width as f32,
+            surface_physical_size.height as f32,
+        ),
+        mount,
+        Some(target.stencil),
+    ) {
+        queue_terminal_dynamic_overlays(
+            &mut state.text_renderer,
+            &mut state.primitive_renderer,
+            mount,
+            selection_overlay,
+            matches!(state.input_mode, InputMode::Selection),
+        );
+        state.primitive_renderer.render_clipped(
+            &state.device,
+            target.view,
+            encoder,
+            target.scissor,
+            Some(target.stencil),
+        );
+    } else {
+        render_terminal_mount(
+            TerminalRenderPassContext {
+                text_renderer: &mut state.text_renderer,
+                primitive_renderer: &mut state.primitive_renderer,
+                device: &state.device,
+                queue: &state.queue,
+                view: target.view,
+                encoder,
+                scale_factor: state.scale_factor,
+                surface_physical_size,
+                content_clip: target.content_clip,
+                stencil: Some(target.stencil),
+            },
+            TerminalStyle {
+                font_size,
+                families: terminal_font_families_from(&state.font_config.family),
+                surface_alpha: target.surface_alpha,
+                ligatures: state.appearance.terminal.ligatures,
+                hyperlink_style: hyperlink_decor_from(state.appearance.terminal.hyperlink_style),
+                hyperlink_color: state
+                    .appearance
+                    .terminal
+                    .hyperlink_color
+                    .unwrap_or(state.theme.accent)
+                    .to_f32x4(),
+            },
+            mount.clone(),
+            selection_overlay,
+        );
+    }
 }
 
 pub(crate) fn blit_retained_terminal_layer(

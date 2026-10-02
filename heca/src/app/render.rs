@@ -3,11 +3,10 @@
 //! These helpers keep low-level pane rendering and viewport synchronization out
 //! of `main.rs` while preserving the current render pipeline behavior.
 
-use crate::app::terminal_host::prepare_terminal_mount;
+use crate::app::scene_flush::{ChromePassOpts, flush_overlay_band, flush_scene};
 use crate::app::terminal_render::{
-    PaneRenderState, TerminalRenderPassContext, blit_retained_terminal_layer, paint_pane_frame,
-    pane_scissor_rect, queue_terminal_dynamic_overlays, render_terminal_mount,
-    selection_overlay_for_pane, sync_retained_terminal_layers,
+    PaneRenderState, TerminalTarget, draw_surface, hyperlink_decor_from, paint_pane_frame,
+    pane_scissor_rect, sync_retained_terminal_layers, terminal_font_families_from,
 };
 use crate::app_state::{AppState, InputMode};
 use crate::chrome::ChromeConfig;
@@ -16,38 +15,7 @@ use heca_grid_ui::Component;
 use heca_grid_ui::{
     Point as GuiPoint, Rectangle as GuiRectangle, Scene as GuiScene, Size as GuiSize,
 };
-use heca_renderer::grid::GridRenderer;
-use heca_renderer::terminal::{HyperlinkDecor, TerminalFontFamilies, TerminalStyle};
-use heca_renderer::text::TextRenderer;
-
-/// Project the terminal font-family group from config into the renderer's
-/// per-style family slots. The renderer stays config-free; this is the app-side
-/// bridge. Takes the whole `FontFamilies` so the `normal` slot can be resolved
-/// with the **terminal** embedded fallback (`terminal_normal()`), not the UI
-/// fallback — omitting `[font.family.terminal].normal` keeps Maple Mono, not
-/// Geist Mono. Borrows from `families` so the returned slots live as long as it.
-fn terminal_font_families_from(
-    families: &heca_config::font::FontFamilies,
-) -> TerminalFontFamilies<'_> {
-    let tf = &families.terminal;
-    TerminalFontFamilies {
-        normal: families.terminal_normal(),
-        bold: tf.bold.as_deref(),
-        italic: tf.italic.as_deref(),
-        bold_italic: tf.bold_italic.as_deref(),
-    }
-}
-
-/// Map the config hyperlink decoration onto the renderer's enum.
-fn hyperlink_decor_from(style: heca_config::appearance::HyperlinkStyle) -> HyperlinkDecor {
-    use heca_config::appearance::HyperlinkStyle as S;
-    match style {
-        S::None => HyperlinkDecor::None,
-        S::Color => HyperlinkDecor::Color,
-        S::Underline => HyperlinkDecor::Underline,
-        S::Undercurl => HyperlinkDecor::Undercurl,
-    }
-}
+use heca_renderer::terminal::TerminalStyle;
 
 /// Human-readable status mode label and suffix for the status bar.
 ///
@@ -103,90 +71,6 @@ pub(crate) fn status_mode_parts(
         InputMode::ColumnPick { .. } => ("MOVE PANE", pick_suffix()),
         InputMode::DockPick { .. } => ("FOCUS DOCK", pick_suffix()),
         InputMode::Selection => ("SELECTION", String::new()),
-    }
-}
-
-/// Factored chrome render pass: feeds a grid-ui `Scene` through `GridRenderer`
-/// and `TextRenderer`. Base layer first, then each overlay segment as its own
-/// rects-then-text pass (matching the showcase ordering that avoids overlay
-/// text-bleed).
-///
-/// Takes the renderer fields individually (not `&mut AppState`) because
-/// `render_frame` holds `let theme = &state.theme;` across its body.
-struct ChromePassOpts {
-    damage: Option<heca_grid_ui::Rectangle>,
-    glow_alpha_scale: f32,
-}
-
-#[expect(
-    clippy::too_many_arguments,
-    reason = "GPU flush pass threads renderers + queue + view + encoder + scene + overlay sink explicitly"
-)]
-fn render_chrome(
-    grid: &mut GridRenderer,
-    text: &mut TextRenderer,
-    queue: &wgpu::Queue,
-    scene: &heca_grid_ui::Scene,
-    opts: ChromePassOpts,
-    view: &wgpu::TextureView,
-    encoder: &mut wgpu::CommandEncoder,
-    // Overlay content (a button's hover Tooltip, a popover) is NOT flushed with this surface —
-    // it is collected here and flushed once, above every surface, by `render_overlay_band` at
-    // the end of the frame. This makes overlays a real **top band** (the surface-compositor
-    // paint-z-order model, docs/surface-compositor.md), so e.g. a pane-header tooltip is no
-    // longer occluded by a neighbouring pane or the sidebar that flush after it.
-    overlay_sink: &mut Vec<heca_grid_ui::Scene>,
-) {
-    // NOTE: `begin_frame()` is called once at the top of `render_frame`, not here.
-    // Calling it per `render_chrome` reset the persistent vertex-buffer write
-    // offset to 0 every pass, so each pass overwrote the previous pass's vertices
-    // at buffer offset 0 — and since all passes are submitted in one
-    // `queue.submit` at end of frame, every encoded pass read the *last* pass's
-    // vertex data. The result: only the final grid scene (chrome) rendered; the
-    // pane-shell scenes (Pass 3 borders + floating pane shells) drew the chrome
-    // geometry clipped to their own scissor and showed nothing. One
-    // `begin_frame()` per frame makes each `render()` append at a distinct offset
-    // so all grid scenes render their own geometry.
-    let damage = opts.damage.map(|r| {
-        [
-            r.loc.x as f32,
-            r.loc.y as f32,
-            r.size.w as f32,
-            r.size.h as f32,
-        ]
-    });
-    grid.set_damage(damage);
-    grid.set_clip(None);
-    text.set_damage(damage);
-    heca_renderer::scene::enqueue_scene(grid, text, &scene.base_layer(), opts.glow_alpha_scale);
-    grid.render(queue, view, encoder);
-    text.render(queue, view, encoder, None);
-    // Defer overlay segments to the frame-final top band (see the param doc + `render_overlay_band`).
-    overlay_sink.extend(scene.overlay_segments());
-}
-
-/// Flush the collected overlay segments from every surface, in accumulation order (panes →
-/// floats → chrome, so higher surfaces' overlays sit on top), **above all surface bases**.
-/// This is the overlay **top band** of the surface compositor's paint z-order: a tooltip /
-/// popover always paints over every pane, float, and the chrome/sidebars, never occluded by a
-/// surface that flushed after its own. Full repaint (no damage/clip); the segments already
-/// carry their own geometry.
-fn render_overlay_band(
-    grid: &mut GridRenderer,
-    text: &mut TextRenderer,
-    queue: &wgpu::Queue,
-    view: &wgpu::TextureView,
-    encoder: &mut wgpu::CommandEncoder,
-    overlays: &[heca_grid_ui::Scene],
-    glow_alpha_scale: f32,
-) {
-    grid.set_damage(None);
-    grid.set_clip(None);
-    text.set_damage(None);
-    for seg in overlays {
-        heca_renderer::scene::enqueue_scene(grid, text, seg, glow_alpha_scale);
-        grid.render(queue, view, encoder);
-        text.render(queue, view, encoder, None);
     }
 }
 
@@ -312,86 +196,44 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .collect();
     crate::chrome::terminal::place_from(state, &frames);
 
-    let mut tiled_panes = Vec::with_capacity(pane_positions.len());
-    for (pane_id, rect) in &pane_positions {
-        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
-        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
-        let pw = rect.size.w as f32;
-        let ph = rect.size.h as f32;
-        // **The terminal's box is the terminal's own.** How much room it was given comes from the
-        // layout, for every pane whether or not it is on screen; where it was drawn comes from its
-        // surface request, and a terminal with none was not on screen.
-        let (content_rect, drawn) = crate::chrome::terminal::content_box(state, *pane_id);
-        let mount = content_rect.and_then(|content_rect| {
-            prepare_terminal_mount(
-                &mut state.backends,
+    let tiled_panes: Vec<PaneRenderState> = pane_positions
+        .iter()
+        .map(|(pane_id, rect)| {
+            let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+            let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
+            PaneRenderState::collect(
+                state,
                 *pane_id,
-                content_rect,
-                state.scale_factor as f32,
+                (px, py, rect.size.w as f32, rect.size.h as f32),
             )
-        });
-        // Sync viewport state into the chrome store for GUI reactivity.
-        if let Some(ref m) = mount {
-            state.chrome_state.workspaces.set_pane_viewport(
-                *pane_id,
-                m.snapshot.viewport_offset,
-                m.snapshot.at_bottom,
-                m.snapshot.scrollback_rows,
-            );
-        }
-        tiled_panes.push(PaneRenderState {
-            pane_id: *pane_id,
-            x: px,
-            y: py,
-            w: pw,
-            h: ph,
-            content_rect,
-            drawn,
-            mount,
-        });
-    }
+        })
+        .collect();
 
     let terminal_font_config = state.font_config.clone();
     // Effective global terminal size (config + global zoom). Per-pane offsets are
     // applied inside `sync_retained_terminal_layers`; this is the base/fallback.
     let app_font_size = state.app_font_size();
-    let mut floating_panes = Vec::new();
-    if let Some(ws) = state.session.active_workspace() {
-        for float in &ws.floating_panes {
-            let fx = float.position.x as f32 + pane_area.loc.x as f32 + ws_offset.0;
-            let fy = float.position.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
-            let fw = float.size.w as f32;
-            let fh = float.size.h as f32;
-            let (content_rect, drawn) = crate::chrome::terminal::content_box(state, float.pane.id);
-            let mount = content_rect.and_then(|content_rect| {
-                prepare_terminal_mount(
-                    &mut state.backends,
-                    float.pane.id,
-                    content_rect,
-                    state.scale_factor as f32,
-                )
-            });
-            // Sync viewport state into the chrome store for GUI reactivity.
-            if let Some(ref m) = mount {
-                state.chrome_state.workspaces.set_pane_viewport(
-                    float.pane.id,
-                    m.snapshot.viewport_offset,
-                    m.snapshot.at_bottom,
-                    m.snapshot.scrollback_rows,
-                );
-            }
-            floating_panes.push(PaneRenderState {
-                pane_id: float.pane.id,
-                x: fx,
-                y: fy,
-                w: fw,
-                h: fh,
-                content_rect,
-                drawn,
-                mount,
-            });
-        }
-    }
+    let float_boxes: Vec<(heca_core::layout::PaneId, (f32, f32, f32, f32))> = state
+        .session
+        .active_workspace()
+        .map(|ws| {
+            ws.floating_panes
+                .iter()
+                .map(|float| {
+                    let x = float.position.x as f32 + pane_area.loc.x as f32 + ws_offset.0;
+                    let y = float.position.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
+                    (
+                        float.pane.id,
+                        (x, y, float.size.w as f32, float.size.h as f32),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let floating_panes: Vec<PaneRenderState> = float_boxes
+        .into_iter()
+        .map(|(pane_id, at)| PaneRenderState::collect(state, pane_id, at))
+        .collect();
 
     // The chip and the scrollbar are children of each terminal and were painted above, before this
     // frame's snapshots were read: a change shows on the next frame, so ask for one.
@@ -454,10 +296,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let view = surface_texture
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
-    let scene_view = state.compositor.scene_view();
+    // Cloned (a handle, not the texture) so the frame can hand `&mut state` to the flush while it
+    // holds the views.
+    let scene_tex = state.compositor.scene_view().clone();
+    let scene_view = &scene_tex;
     // Stencil buffer paired with the scene texture: holds the rounded content-clip
     // mask written each frame so terminal content follows the pane's rounded border.
-    let stencil_view = state.compositor.stencil_view();
+    let stencil_tex = state.compositor.stencil_view().clone();
+    let stencil_view = &stencil_tex;
 
     let mut encoder = state
         .device
@@ -465,9 +311,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
             label: Some("render"),
         });
 
-    let theme = &state.theme;
+    let float_background = state.theme.float_background.to_f32x4();
 
-    let bg = theme.background.to_linear_f32x4();
+    let bg = state.theme.background.to_linear_f32x4();
     // Transparent window: clear fully transparent so empty/background areas show
     // the frosted vibrancy at full strength. Chrome panels draw translucent
     // (chrome_alpha) on top; opaque panes/text/borders stay crisp. transparent
@@ -509,11 +355,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
     {
         let top = state
             .appearance
-            .effective_background_gradient_top(theme)
+            .effective_background_gradient_top(&state.theme)
             .to_linear_f32x4();
         let bottom = state
             .appearance
-            .effective_background_gradient_bottom(theme)
+            .effective_background_gradient_bottom(&state.theme)
             .to_linear_f32x4();
         let blur_radius = state.appearance.background_blur_radius() * scale;
         state.background.set_params(top, bottom, blur_radius);
@@ -568,7 +414,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // surface (`surface_alpha`) — no per-tiled-pane tint.
     let needs_floating_frost =
         floating_surface_alpha < 1.0 && state.appearance.terminal_floating_blur_radius() > 0.0;
-    let mut float_blurred_view: Option<&wgpu::TextureView> = None;
+    // A handle to the blurred texture, not a borrow of `state.blur`: the float loop below hands
+    // `&mut state` to the flush while it still needs the blur.
+    let mut float_blurred_view: Option<wgpu::TextureView> = None;
 
     // ── Stencil-write: rounded content-clip mask for tiled panes ──
     //
@@ -613,95 +461,36 @@ pub(crate) fn render_frame(state: &mut AppState) {
             .render_stencil(&state.queue, stencil_view, &mut encoder);
     }
 
-    // ── Pass 2: Terminal content ──
-    for pane in &tiled_panes {
-        if pane.drawn
-            && pane.content_rect.is_some()
-            && let Some(mount) = pane.mount.as_ref()
-        {
-            let pane_font_size = state.effective_terminal_font_size(pane.pane_id);
-            let selection_overlay =
-                selection_overlay_for_pane(state, pane.pane_id, &mount.snapshot);
-            if blit_retained_terminal_layer(
-                state,
-                pane.pane_id,
-                &mut encoder,
-                scene_view,
-                (
-                    surface_physical_size.width as f32,
-                    surface_physical_size.height as f32,
-                ),
-                mount,
-                Some(stencil_view),
-            ) {
-                queue_terminal_dynamic_overlays(
-                    &mut state.text_renderer,
-                    &mut state.primitive_renderer,
-                    mount,
-                    selection_overlay,
-                    matches!(state.input_mode, InputMode::Selection),
-                );
-            } else {
-                render_terminal_mount(
-                    TerminalRenderPassContext {
-                        text_renderer: &mut state.text_renderer,
-                        primitive_renderer: &mut state.primitive_renderer,
-                        device: &state.device,
-                        queue: &state.queue,
-                        view: scene_view,
-                        encoder: &mut encoder,
-                        scale_factor: state.scale_factor,
-                        surface_physical_size,
-                        content_clip: pane_area,
-                        stencil: Some(stencil_view),
-                    },
-                    TerminalStyle {
-                        font_size: pane_font_size,
-                        families: terminal_font_families_from(&state.font_config.family),
-                        surface_alpha,
-                        ligatures: state.appearance.terminal.ligatures,
-                        hyperlink_style: terminal_hyperlink_style,
-                        hyperlink_color: terminal_hyperlink_color,
-                    },
-                    mount.clone(),
-                    selection_overlay,
-                );
-            }
-        }
-    }
-    state.primitive_renderer.render_clipped(
-        &state.device,
-        scene_view,
-        &mut encoder,
-        content_scissor,
-        Some(stencil_view),
-    );
-
     // Overlay content (hover tooltips, popovers) from every surface — panes, floats, chrome —
     // is collected here and flushed once at the very end, above all bases (the surface-compositor
     // top band). Declared before the first surface flush; consumed after the last.
     let mut overlay_sink: Vec<heca_grid_ui::Scene> = Vec::new();
+    let chrome_pass = ChromePassOpts {
+        damage: None,
+        glow_alpha_scale,
+    };
 
-    // ── Pass 3: Pane chrome overlay (on top of terminal content) ──
+    // ── Pass 2: the columns, with each terminal drawn where the scene puts it ──
     //
-    // The terminal content is a rectangular raster path; drawing the shell after
-    // it guarantees the border/radius/highlight stay visible instead of being
-    // visually swallowed by the terminal surface.
+    // A terminal is a surface in the scene its pane paints, so it is drawn when the flush reaches
+    // it: what the scene drew before it is under it, what it draws after — the chip, the scrollbar,
+    // the pane's own border — is over it. Nothing here orders terminals against chrome.
     if !tiled_panes.is_empty() {
-        // The columns: each pane's frame, header and — inside its terminal — the chip and
-        // scrollbar, in one scene over the terminals just drawn.
-        render_chrome(
-            &mut state.grid_renderer,
-            &mut state.text_renderer,
-            &state.queue,
+        let tiled_target = TerminalTarget {
+            view: scene_view,
+            stencil: stencil_view,
+            scissor: content_scissor,
+            surface_alpha,
+            content_clip: pane_area,
+        };
+        flush_scene(
+            state,
             &column_scene,
-            ChromePassOpts {
-                damage: None,
-                glow_alpha_scale,
-            },
+            &chrome_pass,
             scene_view,
             &mut encoder,
             &mut overlay_sink,
+            &mut |state, id, encoder| draw_surface(state, &tiled_panes, id, &tiled_target, encoder),
         );
     }
 
@@ -713,13 +502,18 @@ pub(crate) fn render_frame(state: &mut AppState) {
     if needs_floating_frost {
         let radius_physical =
             state.appearance.terminal_floating_blur_radius() * state.scale_factor as f32;
-        float_blurred_view = Some(state.blur.process(
-            &state.device,
-            &state.queue,
-            &mut encoder,
-            scene_view,
-            radius_physical,
-        ));
+        float_blurred_view = Some(
+            state
+                .blur
+                .process(
+                    &state.device,
+                    &state.queue,
+                    &mut encoder,
+                    scene_view,
+                    radius_physical,
+                )
+                .clone(),
+        );
     }
 
     // ── Stencil-write: rounded content-clip mask for floating panes ──
@@ -777,7 +571,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 state.scale_factor,
                 surface_physical_size,
             );
-            if let Some(blurred) = float_blurred_view {
+            if let Some(blurred) = &float_blurred_view {
                 let scale = state.scale_factor as f32;
                 let vp_w = surface_physical_size.width as f32;
                 let vp_h = surface_physical_size.height as f32;
@@ -800,7 +594,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 // `float_background` (theme-driven floating-window frame color) so
                 // the pane is opaque/readable and the inner padding margin is
                 // filled, not transparent. Rounded-clipped via the floating stencil.
-                let bg = theme.float_background.to_f32x4();
+                let bg = float_background;
                 state
                     .primitive_renderer
                     .draw_rect(pane.x, pane.y, pane.w, pane.h, bg);
@@ -813,79 +607,26 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 );
             }
 
-            if pane.drawn
-                && let Some(mount) = pane.mount.as_ref()
-            {
-                let pane_font_size = state.effective_terminal_font_size(pane.pane_id);
-                let selection_overlay =
-                    selection_overlay_for_pane(state, pane.pane_id, &mount.snapshot);
-                if blit_retained_terminal_layer(
+            // The float's own scene, in order: its terminal where the scene puts it, then what is
+            // drawn over it.
+            if let Some(frame) = float_frames.remove(&pane.pane_id) {
+                let float_target = TerminalTarget {
+                    view: scene_view,
+                    stencil: stencil_view,
+                    scissor: float_scissor,
+                    surface_alpha: floating_surface_alpha,
+                    content_clip: pane_area,
+                };
+                flush_scene(
                     state,
-                    pane.pane_id,
-                    &mut encoder,
-                    scene_view,
-                    (
-                        surface_physical_size.width as f32,
-                        surface_physical_size.height as f32,
-                    ),
-                    mount,
-                    Some(stencil_view),
-                ) {
-                    queue_terminal_dynamic_overlays(
-                        &mut state.text_renderer,
-                        &mut state.primitive_renderer,
-                        mount,
-                        selection_overlay,
-                        matches!(state.input_mode, InputMode::Selection),
-                    );
-                    state.primitive_renderer.render_clipped(
-                        &state.device,
-                        scene_view,
-                        &mut encoder,
-                        float_scissor,
-                        Some(stencil_view),
-                    );
-                } else {
-                    render_terminal_mount(
-                        TerminalRenderPassContext {
-                            text_renderer: &mut state.text_renderer,
-                            primitive_renderer: &mut state.primitive_renderer,
-                            device: &state.device,
-                            queue: &state.queue,
-                            view: scene_view,
-                            encoder: &mut encoder,
-                            scale_factor: state.scale_factor,
-                            surface_physical_size,
-                            content_clip: pane_area,
-                            stencil: Some(stencil_view),
-                        },
-                        TerminalStyle {
-                            font_size: pane_font_size,
-                            families: terminal_font_families_from(&state.font_config.family),
-                            surface_alpha: floating_surface_alpha,
-                            ligatures: state.appearance.terminal.ligatures,
-                            hyperlink_style: terminal_hyperlink_style,
-                            hyperlink_color: terminal_hyperlink_color,
-                        },
-                        mount.clone(),
-                        selection_overlay,
-                    );
-                }
-            }
-
-            for scene in float_frames.remove(&pane.pane_id).iter() {
-                render_chrome(
-                    &mut state.grid_renderer,
-                    &mut state.text_renderer,
-                    &state.queue,
-                    scene,
-                    ChromePassOpts {
-                        damage: None,
-                        glow_alpha_scale,
-                    },
+                    &frame,
+                    &chrome_pass,
                     scene_view,
                     &mut encoder,
                     &mut overlay_sink,
+                    &mut |state, id, encoder| {
+                        draw_surface(state, &floating_panes, id, &float_target, encoder)
+                    },
                 );
             }
         }
@@ -902,10 +643,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     mouse::render_detached_pane(state, pane_area_rect);
     mouse::render_insert_hint(state, pane_area_rect);
-
-    // Reborrow compositor scene texture for the final flush (the previous
-    // `scene_view` borrow ended at its last use before the mouse:: calls above).
-    let scene_view = state.compositor.scene_view();
 
     state
         .primitive_renderer
@@ -965,26 +702,32 @@ pub(crate) fn render_frame(state: &mut AppState) {
     crate::chrome::paint_bell_flash(state, &mut chrome_scene, pane_area, w, h, &chrome_theme);
     // Scrollback-search match highlights + query bar. terminal-task-19.
     crate::chrome::paint_search(state, &mut chrome_scene, w, h, &chrome_theme);
-    render_chrome(
-        &mut state.grid_renderer,
-        &mut state.text_renderer,
-        &state.queue,
+    // Always repaint the full chrome (`chrome_pass` has no damage). The scene texture is cleared every
+    // frame (the clear pass above) and panes redraw in full, so a partial (damage-scissored) chrome
+    // repaint would leave the rest of the chrome (sidebars + tab/status bars) as bare background for
+    // that frame — the dark "re-render" flash seen mid-animation (e.g. the split button's press
+    // flash). Partial chrome is only sound with a *preserved* scene, which this render path does not
+    // keep. See PLAN.md "Damage-region render" for the deferred optimization that would make it
+    // sound.
+    //
+    // A terminal surface in this scene is a dock's or an overlay's, not a pane's: none is
+    // placeable yet (P094(F011)/T449 slice 5 adds the name-keyed process it needs), so the surface
+    // finder is given no panes and a surface here is left undrawn.
+    let dock_target = TerminalTarget {
+        view: scene_view,
+        stencil: stencil_view,
+        scissor: content_scissor,
+        surface_alpha,
+        content_clip: pane_area,
+    };
+    flush_scene(
+        state,
         &chrome_scene,
-        ChromePassOpts {
-            // Always repaint the full chrome. The scene texture is cleared every
-            // frame (the clear pass above) and panes redraw in full, so a partial
-            // (damage-scissored) chrome repaint would leave the rest of the chrome
-            // (sidebars + tab/status bars) as bare background for that frame — the
-            // dark "re-render" flash seen mid-animation (e.g. the split button's
-            // press flash). Partial chrome is only sound with a *preserved* scene,
-            // which this render path does not keep. See PLAN.md "Damage-region
-            // render" for the deferred optimization that would make it sound.
-            damage: None,
-            glow_alpha_scale,
-        },
+        &chrome_pass,
         scene_view,
         &mut encoder,
         &mut overlay_sink,
+        &mut |state, id, encoder| draw_surface(state, &[], id, &dock_target, encoder),
     );
 
     // ── Dynamic layers (overlay dialogs, the context menu, plugin panels, the exposé) ──
@@ -1072,7 +815,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // after the base flush, before the overlay band, which is the moment a backdrop means.
 
     // Top band: every surface's overlay content (tooltips, popovers), above all bases.
-    render_overlay_band(
+    flush_overlay_band(
         &mut state.grid_renderer,
         &mut state.text_renderer,
         &state.queue,

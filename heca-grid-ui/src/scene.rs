@@ -270,6 +270,57 @@ impl Scene {
         }
     }
 
+    /// **The base layer cut at every terminal surface**, so a host can draw each surface in scene
+    /// order: flush a run, put the surface where the scene put it, flush the next run over it.
+    ///
+    /// Each run is **self-contained**: the clips open at a cut are closed at the end of the run and
+    /// re-opened at the start of the next, so a run flushed on its own is clipped exactly as it was
+    /// in place. The outline band stays last, so a frame drawn over its children lands over the
+    /// surface too. A scene with no surface is one run, equal to [`base_layer`](Scene::base_layer).
+    ///
+    /// Only [`HostDraw::Surface`] cuts. A backdrop is not a cut: it is performed between the base
+    /// flush and the overlay flush, as before.
+    pub fn base_runs(&self) -> Vec<BaseRun> {
+        let mut runs = Vec::new();
+        let mut open: Vec<Rectangle> = Vec::new();
+        let mut draws = Scene::new();
+        for cmd in self.commands.iter().chain(self.outline.iter()) {
+            match cmd {
+                DrawCommand::Host(HostCmd {
+                    draw: HostDraw::Surface { id },
+                    rect,
+                    alpha,
+                }) => {
+                    for _ in &open {
+                        draws.commands.push(DrawCommand::PopClip);
+                    }
+                    runs.push(BaseRun {
+                        draws: std::mem::take(&mut draws),
+                        then: Some(SurfaceAt {
+                            id: *id,
+                            rect: *rect,
+                            alpha: *alpha,
+                        }),
+                    });
+                    for rect in &open {
+                        draws.commands.push(DrawCommand::PushClip(*rect));
+                    }
+                }
+                DrawCommand::PushClip(r) => {
+                    open.push(*r);
+                    draws.commands.push(cmd.clone());
+                }
+                DrawCommand::PopClip => {
+                    open.pop();
+                    draws.commands.push(cmd.clone());
+                }
+                _ => draws.commands.push(cmd.clone()),
+            }
+        }
+        runs.push(BaseRun { draws, then: None });
+        runs
+    }
+
     /// **What this scene draws outside `within`** — the framework's own answer to "does anything
     /// paint past the box it was given?", so a sweep asks it instead of re-implementing the walk.
     ///
@@ -347,6 +398,24 @@ impl Scene {
             ..Default::default()
         })
     }
+}
+
+/// One stretch of a scene's base layer, and the terminal surface the scene puts after it — see
+/// [`Scene::base_runs`].
+#[derive(Debug, Clone)]
+pub struct BaseRun {
+    /// What to flush first: ordinary rects and text, clipped as they were in the scene.
+    pub draws: Scene,
+    /// The surface that goes over `draws`, or `None` for the last run.
+    pub then: Option<SurfaceAt>,
+}
+
+/// Where the scene put a surface: the opaque id the widget gave it, its box and its opacity.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SurfaceAt {
+    pub id: u64,
+    pub rect: Rectangle,
+    pub alpha: f32,
 }
 
 /// One draw that fell outside the box it was measured against — see
@@ -974,5 +1043,99 @@ mod tests {
         assert_eq!(s.outline, vec![marker(2.0), marker(3.0)]);
         s.push(marker(4.0));
         assert_eq!(s.commands, vec![marker(4.0)], "the pair closed: base again");
+    }
+
+    // ── base runs: the scene cut at its terminal surfaces ──
+
+    fn surface(id: u64) -> DrawCommand {
+        DrawCommand::Host(HostCmd {
+            draw: HostDraw::Surface { id },
+            rect: Rectangle::new(Point::default(), Size::new(5.0, 5.0)),
+            alpha: 1.0,
+        })
+    }
+
+    #[test]
+    fn a_scene_without_a_surface_is_one_run_equal_to_its_base_layer() {
+        let mut s = Scene::new();
+        s.push(marker(1.0));
+        s.begin_outline();
+        s.push(marker(2.0));
+        s.end_outline();
+        let runs = s.base_runs();
+        assert_eq!(runs.len(), 1);
+        assert!(runs[0].then.is_none());
+        assert_eq!(
+            runs[0].draws.iter().cloned().collect::<Vec<_>>(),
+            s.base_layer().iter().cloned().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn a_surface_cuts_the_runs_and_the_outline_stays_after_it() {
+        let mut s = Scene::new();
+        s.push(marker(1.0)); // a pane's fill
+        s.begin_outline();
+        s.push(marker(9.0)); // its border, asked for before its child
+        s.end_outline();
+        s.push(surface(7)); // its terminal
+        s.push(marker(3.0)); // the chip, over the terminal
+        let runs = s.base_runs();
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].then.map(|at| at.id), Some(7));
+        assert_eq!(
+            runs[0].draws.iter().cloned().collect::<Vec<_>>(),
+            vec![marker(1.0)]
+        );
+        assert_eq!(
+            runs[1].draws.iter().cloned().collect::<Vec<_>>(),
+            vec![marker(3.0), marker(9.0)],
+            "the chip, then the border: both over the surface, the border last"
+        );
+    }
+
+    #[test]
+    fn every_run_closes_the_clips_it_opened_and_the_next_one_opens_them_again() {
+        let mut s = Scene::new();
+        s.push(clip(100.0));
+        s.push(clip(50.0));
+        s.push(marker(1.0));
+        s.push(surface(1));
+        s.push(marker(2.0));
+        s.push(DrawCommand::PopClip);
+        s.push(DrawCommand::PopClip);
+        let runs = s.base_runs();
+        let drawn = |r: &BaseRun| r.draws.iter().cloned().collect::<Vec<_>>();
+        assert_eq!(
+            drawn(&runs[0]),
+            vec![
+                clip(100.0),
+                clip(50.0),
+                marker(1.0),
+                DrawCommand::PopClip,
+                DrawCommand::PopClip
+            ]
+        );
+        assert_eq!(
+            drawn(&runs[1]),
+            vec![
+                clip(100.0),
+                clip(50.0),
+                marker(2.0),
+                DrawCommand::PopClip,
+                DrawCommand::PopClip
+            ]
+        );
+    }
+
+    #[test]
+    fn a_backdrop_is_not_a_cut() {
+        let mut s = Scene::new();
+        s.push(DrawCommand::Host(HostCmd {
+            draw: HostDraw::Backdrop { radius: 4.0 },
+            rect: Rectangle::new(Point::default(), Size::new(5.0, 5.0)),
+            alpha: 1.0,
+        }));
+        assert_eq!(s.base_runs().len(), 1);
     }
 }

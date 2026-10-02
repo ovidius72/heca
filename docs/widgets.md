@@ -1431,7 +1431,12 @@ stay DRY):
 
 `DrawCommand` variants: `Rect`, `Brackets`, `Text`, `Scanline`, `PushClip`/`PopClip`, `Host`.
 `Scene`: `new()`, `push`, `clear`, `len`, `is_empty`, `iter`, plus the overlay layer
-(`begin_overlay`/`end_overlay`, `base_layer`/`overlay_layer`).
+(`begin_overlay`/`end_overlay`, `base_layer`/`overlay_layer`), the outline band
+(`begin_outline`/`end_outline`, what `PaintCx::outline` records) and, for a host,
+`base_runs()`: the base layer (then the outline) cut at every `HostDraw::Surface`, as `BaseRun { draws, then }`.
+Flush `draws`, put the surface `then` names where the scene put it, flush the next run over it — so a
+terminal is covered by exactly what the scene draws after it. Every run is self-contained (clips open at a
+cut are closed at its end and re-opened at the start of the next); a scene with no surface is one run.
 
 #### `Host` — work only the host can do
 
