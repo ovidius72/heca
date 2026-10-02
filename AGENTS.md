@@ -360,8 +360,9 @@ Whoever places it constructs it, puts it in the tree, and writes no routing, no 
 surface registration and no ordering.
 
 ```rust
+let demo = heca::extension("demo");   // the program says who it is, once
 Overlay::new().blocking(false).child(
-    Pane::new("editor").child(Terminal::new("shell"))
+    Pane::new("editor").child(demo.terminal("shell"))
 )
 ```
 

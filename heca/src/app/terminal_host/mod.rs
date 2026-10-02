@@ -41,11 +41,11 @@ pub(crate) struct TerminalMount {
 
 pub(crate) fn prepare_terminal_mount(
     backends: &mut BackendStore,
-    pane_id: PaneId,
+    terminal: crate::chrome::terminal::TerminalId,
     content_rect: Rectangle,
     scale: f32,
 ) -> Option<TerminalMount> {
-    let backend = backends.get_mut(pane_id)?;
+    let backend = backends.get_mut_by_id(terminal)?;
     // Keep the device scale current so inline images report physical pixels (crisp on HiDPI).
     // Cheap: the backend ignores an unchanged scale. The *grid* is not set here — the terminal asks
     // for it when it changes (`TerminalInput::Resize`).

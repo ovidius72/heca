@@ -246,14 +246,26 @@ pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) {
     };
     if let Some(pane_id) = state.focused_pane
         && let Some(backend) = state.backends.get_mut(pane_id)
-        && let Some(snapshot) = backend.terminal_snapshot()
     {
-        let max_offset = snapshot.scrollback_rows.saturating_sub(snapshot.rows);
-        let target = (*rows).min(max_offset);
-        let delta = target as i32 - snapshot.viewport_offset as i32;
-        if delta != 0 {
-            backend.scroll_viewport(delta);
-        }
+        scroll_backend_to_offset(backend, *rows);
+    }
+}
+
+/// **Scroll a terminal to `rows` above its live bottom**, never past the top of its history. The one
+/// place that does it: the action for the focused pane and a click on any terminal's scrollbar
+/// both come here.
+pub(crate) fn scroll_backend_to_offset(
+    backend: &mut dyn heca_core::backend::PaneBackend,
+    rows: usize,
+) {
+    let Some(snapshot) = backend.terminal_snapshot() else {
+        return;
+    };
+    let max_offset = snapshot.scrollback_rows.saturating_sub(snapshot.rows);
+    let target = rows.min(max_offset);
+    let delta = target as i32 - snapshot.viewport_offset as i32;
+    if delta != 0 {
+        backend.scroll_viewport(delta);
     }
 }
 

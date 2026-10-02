@@ -6,12 +6,13 @@ use heca_grid_ui::{
 };
 use heca_renderer::terminal::TerminalStyle;
 
-use super::{FrameValues, PaneScenes};
+use super::{FrameTerminals, FrameValues, PaneScenes};
 use crate::app::terminal_render::{
-    PaneRenderState, hyperlink_decor_from, paint_pane_frame, sync_retained_terminal_layers,
+    TerminalRenderState, hyperlink_decor_from, paint_pane_frame, sync_retained_terminal_layers,
     terminal_font_families_from,
 };
 use crate::app_state::AppState;
+use crate::chrome::terminal::TerminalId;
 
 /// A scene that paints inside `area`: whatever `paint` draws is clipped to it.
 fn scene_clipped_to(area: Rectangle, paint: impl FnOnce(&mut GuiScene)) -> GuiScene {
@@ -70,12 +71,9 @@ pub(in crate::app) fn paint_scenes(state: &mut AppState, v: &FrameValues) -> Pan
     scenes
 }
 
-/// The tiled panes and the floating ones as this frame draws them, each with its terminal's
-/// snapshot.
-pub(in crate::app) fn collect_panes(
-    state: &mut AppState,
-    v: &FrameValues,
-) -> (Vec<PaneRenderState>, Vec<PaneRenderState>) {
+/// **Every terminal this frame draws**: the tiled panes', the floating panes', and those no pane
+/// owns — a dock's, an overlay's — each with its snapshot.
+pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> FrameTerminals {
     let pane_positions = state
         .session
         .active_workspace()
@@ -86,9 +84,11 @@ pub(in crate::app) fn collect_panes(
         .map(|(pane_id, rect)| {
             let px = v.pane_area.loc.x as f32 + v.ws_offset.0 + rect.loc.x as f32;
             let py = v.pane_area.loc.y as f32 + v.ws_offset.1 + rect.loc.y as f32;
-            PaneRenderState::collect(
+            let id = state.backends.id_for(*pane_id);
+            TerminalRenderState::collect(
                 state,
-                *pane_id,
+                id,
+                Some(*pane_id),
                 (px, py, rect.size.w as f32, rect.size.h as f32),
             )
         })
@@ -112,26 +112,43 @@ pub(in crate::app) fn collect_panes(
         .unwrap_or_default();
     let floating = float_boxes
         .into_iter()
-        .map(|(pane_id, at)| PaneRenderState::collect(state, pane_id, at))
+        .map(|(pane_id, at)| {
+            let id = state.backends.id_for(pane_id);
+            TerminalRenderState::collect(state, id, Some(pane_id), at)
+        })
         .collect();
-    (tiled, floating)
+    // The terminals no pane owns, in a stable order: the oldest id first.
+    let mut unowned: Vec<TerminalId> = state
+        .terminals
+        .keys()
+        .copied()
+        .filter(|id| state.backends.pane_of(*id).is_none())
+        .collect();
+    unowned.sort_by_key(|id| id.0);
+    let docked = unowned
+        .into_iter()
+        .map(|id| TerminalRenderState::collect(state, id, None, (0.0, 0.0, 0.0, 0.0)))
+        .collect();
+    FrameTerminals {
+        tiled,
+        floating,
+        docked,
+    }
 }
 
 /// **Bring every terminal's retained texture up to date**, and show each its viewport.
 pub(in crate::app) fn sync_terminal_layers(
     state: &mut AppState,
     v: &FrameValues,
-    tiled: &[PaneRenderState],
-    floating: &[PaneRenderState],
+    terminals: &FrameTerminals,
 ) {
     // The chip and the scrollbar are children of each terminal and were painted before this
     // frame's snapshots were read: a change shows on the next frame, so ask for one.
     if crate::chrome::terminal::show_viewports(
         state,
-        tiled
-            .iter()
-            .chain(floating.iter())
-            .filter_map(|p| p.mount.as_ref().map(|m| (p.pane_id, &m.snapshot))),
+        terminals
+            .all()
+            .filter_map(|t| t.mount.as_ref().map(|m| (t.id, t.pane, &m.snapshot))),
     ) {
         state.mark_full_redraw();
     }
@@ -162,15 +179,22 @@ pub(in crate::app) fn sync_terminal_layers(
     state.has_animated_images = false;
     sync_retained_terminal_layers(
         state,
-        tiled,
+        &terminals.tiled,
         style(v.surface_alpha),
         (v.w, v.h),
         v.phys_size,
     );
     sync_retained_terminal_layers(
         state,
-        floating,
+        &terminals.floating,
         style(v.floating_surface_alpha),
+        (v.w, v.h),
+        v.phys_size,
+    );
+    sync_retained_terminal_layers(
+        state,
+        &terminals.docked,
+        style(v.surface_alpha),
         (v.w, v.h),
         v.phys_size,
     );

@@ -7,7 +7,7 @@ use heca_grid_ui::Scene as GuiScene;
 use super::{Frame, PaneScenes};
 use crate::app::scene_flush::{ChromePassOpts, flush_scene};
 use crate::app::terminal_render::{
-    PaneRenderState, TerminalTarget, draw_surface, pane_scissor_rect,
+    TerminalRenderState, TerminalTarget, draw_surface, pane_scissor_rect,
 };
 use crate::app_state::AppState;
 use crate::mouse;
@@ -118,7 +118,11 @@ impl Frame {
     /// Clear-once contract: `render_stencil` clears the stencil to 0 then writes the mask; the
     /// content passes `Load` it (never clear). Called once for the tiled panes and once for the
     /// floating ones (after the tiled mask has been consumed), each guarded by there being a pane.
-    pub(in crate::app) fn write_mask(&mut self, state: &mut AppState, panes: &[PaneRenderState]) {
+    pub(in crate::app) fn write_mask(
+        &mut self,
+        state: &mut AppState,
+        panes: &[TerminalRenderState],
+    ) {
         if panes.is_empty() {
             return;
         }
@@ -155,17 +159,18 @@ impl Frame {
         &mut self,
         state: &mut AppState,
         scenes: &PaneScenes,
-        tiled: &[PaneRenderState],
+        tiled: &[TerminalRenderState],
     ) {
         if tiled.is_empty() {
             return;
         }
         let target = TerminalTarget {
             view: &self.scene,
-            stencil: &self.stencil,
+            stencil: Some(&self.stencil),
             scissor: self.v.content_scissor,
             surface_alpha: self.v.surface_alpha,
             content_clip: self.v.pane_area,
+            follow_scene_clip: false,
         };
         flush_scene(
             state,
@@ -177,7 +182,7 @@ impl Frame {
             &self.scene,
             &mut self.encoder,
             &mut self.overlay_sink,
-            &mut |state, id, encoder| draw_surface(state, tiled, id, &target, encoder),
+            &mut |state, at, encoder| draw_surface(state, tiled, at, &target, encoder),
         );
     }
 
@@ -192,7 +197,7 @@ impl Frame {
         &mut self,
         state: &mut AppState,
         scenes: &mut PaneScenes,
-        floating: &[PaneRenderState],
+        floating: &[TerminalRenderState],
     ) {
         let needs_frost = self.v.floating_surface_alpha < 1.0
             && state.appearance.terminal_floating_blur_radius() > 0.0;
@@ -271,15 +276,16 @@ impl Frame {
                     Some(&self.stencil),
                 );
             }
-            let Some(frame) = scenes.floats.remove(&pane.pane_id) else {
+            let Some(frame) = pane.pane.and_then(|id| scenes.floats.remove(&id)) else {
                 continue;
             };
             let target = TerminalTarget {
                 view: &self.scene,
-                stencil: &self.stencil,
+                stencil: Some(&self.stencil),
                 scissor,
                 surface_alpha: self.v.floating_surface_alpha,
                 content_clip: self.v.pane_area,
+                follow_scene_clip: false,
             };
             flush_scene(
                 state,
@@ -291,14 +297,18 @@ impl Frame {
                 &self.scene,
                 &mut self.encoder,
                 &mut self.overlay_sink,
-                &mut |state, id, encoder| draw_surface(state, floating, id, &target, encoder),
+                &mut |state, at, encoder| draw_surface(state, floating, at, &target, encoder),
             );
         }
     }
 
     /// **The chrome, painted last** so the sidebar shells sit on top of the pane content instead of
     /// panes bleeding under them. Returns the scene it flushed, for [`backdrops`](Self::backdrops).
-    pub(in crate::app) fn chrome(&mut self, state: &mut AppState) -> GuiScene {
+    pub(in crate::app) fn chrome(
+        &mut self,
+        state: &mut AppState,
+        docked: &[TerminalRenderState],
+    ) -> GuiScene {
         let pane_area_rect = Rectangle::new(
             heca_core::layout::Point::new(self.v.pane_area.loc.x, self.v.pane_area.loc.y),
             heca_core::layout::Size::new(self.v.pane_area.size.w, self.v.pane_area.size.h),
@@ -363,16 +373,13 @@ impl Frame {
         // Scrollback-search match highlights + query bar. terminal-task-19.
         crate::chrome::paint_search(state, &mut scene, w, h, &theme);
 
-        // A terminal surface in this scene is a dock's or an overlay's, not a pane's: none is
-        // placeable yet (P094(F011)/T449 slice 5 adds the name-keyed process it needs), so the
-        // surface finder is given no panes and a surface here is left undrawn.
-        let target = TerminalTarget {
-            view: &self.scene,
-            stencil: &self.stencil,
-            scissor: self.v.content_scissor,
-            surface_alpha: self.v.surface_alpha,
-            content_clip: self.v.pane_area,
-        };
+        // The trees just built may have declared terminals: one more frame starts and draws them.
+        if crate::chrome::terminal::declared_waiting() {
+            state.mark_full_redraw();
+        }
+        // A terminal in a dock is drawn where this scene puts it: no pane mask, clipped by what
+        // clips it here (a scroll region, a panel).
+        let target = super::docked_target(&self.scene, &self.v);
         let pass = self.pass();
         flush_scene(
             state,
@@ -381,7 +388,7 @@ impl Frame {
             &self.scene,
             &mut self.encoder,
             &mut self.overlay_sink,
-            &mut |state, id, encoder| draw_surface(state, &[], id, &target, encoder),
+            &mut |state, at, encoder| draw_surface(state, docked, at, &target, encoder),
         );
         scene
     }

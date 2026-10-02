@@ -12,9 +12,7 @@ fn cell_coords_at_position(
     pane_id: PaneId,
     pos: (f32, f32),
 ) -> Option<(usize, usize)> {
-    state
-        .terminals
-        .get(&pane_id)?
+    crate::chrome::terminal::of_pane(state, pane_id)?
         .cell_at(pos)
         .map(|c| (c.row, c.col))
 }
@@ -50,9 +48,7 @@ pub(crate) fn collect_link_hints(state: &AppState) -> Vec<crate::app_state::Link
     let mut hints = Vec::new();
     let mut idx = 0usize;
     for pane_id in laid_out_pane_ids(state) {
-        let drawn = state
-            .terminals
-            .get(&pane_id)
+        let drawn = crate::chrome::terminal::of_pane(state, pane_id)
             .is_some_and(|terminal| terminal.placed().is_some());
         if !drawn {
             continue;
@@ -91,7 +87,7 @@ pub(crate) fn cell_screen_pos(
     row: usize,
     col: usize,
 ) -> Option<(f32, f32)> {
-    state.terminals.get(&pane_id)?.cell_origin(row, col)
+    crate::chrome::terminal::of_pane(state, pane_id)?.cell_origin(row, col)
 }
 
 /// Target URI of the hyperlink at a **stable-row** cell in `pane_id`, if any.

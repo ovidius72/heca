@@ -1419,7 +1419,7 @@ stay DRY):
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
-| `.outline(\|cx\| …)` | Paint the closure **over this widget's children**. A widget paints first and its children after, so a frame drawn in `paint` sits *under* whatever the widget holds — a border under a terminal. Drawn here, it is recorded in the scene's **outline band**: after every base command, before the overlay band. The clips open around the call are re-opened for it (and closed after), so it is clipped exactly as it would have been in place — a pane scrolled inside a column keeps its border inside the column. **Inside an overlay or another outline it paints in place** (the overlay band is already on top). `Pane` uses it for its border, glow and brackets, so `Pane::new().child(Terminal::new("shell"))` frames its terminal with nothing for the author to do; a custom widget writes `cx.outline(\|cx\| cx.rect(bounds, Color::TRANSPARENT, border, radius, glow))`. `Scene::base_layer()` returns the base commands then the outline. |
+| `.outline(\|cx\| …)` | Paint the closure **over this widget's children**. A widget paints first and its children after, so a frame drawn in `paint` sits *under* whatever the widget holds — a border under a terminal. Drawn here, it is recorded in the scene's **outline band**: after every base command, before the overlay band. The clips open around the call are re-opened for it (and closed after), so it is clipped exactly as it would have been in place — a pane scrolled inside a column keeps its border inside the column. **Inside an overlay or another outline it paints in place** (the overlay band is already on top). `Pane` uses it for its border, glow and brackets, so a pane holding a terminal frames it with nothing for the author to do; a custom widget writes `cx.outline(\|cx\| cx.rect(bounds, Color::TRANSPARENT, border, radius, glow))`. `Scene::base_layer()` returns the base commands then the outline. |
 | `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. Re-entrant: an overlay painted **inside** another overlay's paint (a `Select` in a `Dialog` body) records a **deeper segment**, and `Scene::overlay_segments()` yields segments depth-ordered — the nested panel composites above everything its parent draws, including what the parent paints *after* it. |
 | `.with_content_color(color, \|cx\| …)` | Paint the closure's subtree with `color` as the **inherited content color** — `color` inheritance in the CSS sense. A control that *composes* its content (`Button`, `Item`) cannot set its children's colors (they are `impl Component`, so it doesn't know their types, and the `Theme` is only reachable in `paint`), so it publishes one state-derived value per frame and the children pull it. Because the control repaints while its hover eases, **the content animates with no per-child wiring**. |
 | `.with_control_tone(color, \|cx\| …)` | The **chrome** counterpart of the line above: publish a hue that **controls** inside the closure derive their own chrome from — border, hover sweep, press flash, focus ring. A [`Button`](#button)/[`IconButton`](#iconbutton) resolves own `.tone(..)` → this → `theme.accent`. Separate from content colour on purpose: six widgets publish a content colour already, and widening that one channel to also re-tint every control would have changed all six at once. **Nothing publishes a tone by default**, so it is retro-compatible by construction. See [the two channels](#two-things-a-container-publishes-to-what-it-holds--content-colour-and-control-tone). |
@@ -2006,6 +2006,38 @@ Pane::new().bordered().background(theme.surface).border(theme.accent, 2.0).paddi
             ),
     );
 ```
+
+### Terminal
+
+A running shell or command, drawn where you place it — a dock, an overlay, a plugin's panel. It fills
+the box it is put in and sizes its own grid from that box; whoever places it writes no rect, no
+click handling and no drawing pass. It is a **host** widget (it needs the app's terminal processes),
+so a program built on heca reaches it through its extension handle, never by naming the owner half:
+
+```rust
+let demo = heca::extension("demo");
+Flex::column()
+    .child(Label::new("Notes"))
+    .child(demo.terminal("shell").title("Scratch shell").grow(1.0))   // the terminal demo.shell
+// a command instead of the user's shell, in a folder:
+demo.terminal("logs").command("tail -f app.log").cwd(dir)
+```
+
+| builder | meaning |
+|---|---|
+| `extension.terminal("short")` | the terminal `<extension>.<short>`. **The name is the identity and never changes.** Every call with the same name is the same terminal, so building the dock again or opening the overlay again shows the process that was already running |
+| `.command("…")` | run this under the user's shell instead of the shell itself. Fixed when it starts |
+| `.cwd(path)` | start in this folder. Fixed when it starts |
+| `.title("…")` | what the user reads; defaults to the name. The user can rename it like a pane |
+| `.run("ls")` | type a line into it and press Enter. Does nothing until it has started |
+| `.kill()` | end it — the one thing that does |
+| `.grow(..)` / `.width(..)` … | the layout builders every widget has |
+
+**Removing it never ends it.** Closing the dock, rebuilding the tree or hiding the overlay is like
+detaching: reopening shows the same terminal. Only an explicit kill (`.kill()`, or the `terminal_kill` action), or
+heca exiting, ends it; a killed one stays ended. A terminal in a pane is the pane's, and closing the
+pane ends it. Mouse wheel and the scrollbar work wherever it is placed; typing, selecting text, search
+and link hints for terminals no pane owns arrive with P094(F011)/T449 slices 5b and 5c.
 
 ### Grid
 

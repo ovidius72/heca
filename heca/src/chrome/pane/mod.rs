@@ -138,7 +138,6 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
         })
         .unwrap_or_default();
     let all = pane_models(state);
-    let shown: std::collections::HashSet<PaneId> = all.iter().map(|m| m.pane_id).collect();
     let models: Vec<PaneShellModel> = all
         .into_iter()
         .filter(|m| !tiled.contains(&m.pane_id))
@@ -209,7 +208,7 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
     // in it can never be one frame out of step.
     crate::chrome::sync_columns(state);
     // A terminal is kept only for a pane that is shown.
-    crate::chrome::terminal::retain_only(state, &shown);
+    crate::chrome::terminal::retain_owned(state);
 }
 
 /// The app's edges, gathered once. A test calls this to get exactly the seams and nothing else

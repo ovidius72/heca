@@ -704,7 +704,7 @@ pub struct AppState {
     pub image_renderer: ImageRenderer,
     pub grid_renderer: GridRenderer,
     pub compositor: Compositor,
-    pub terminal_layers: HashMap<PaneId, RetainedTerminalLayer>,
+    pub terminal_layers: HashMap<crate::chrome::terminal::TerminalId, RetainedTerminalLayer>,
     pub terminal_layer_scratch: RetainedTerminalScratch,
     /// In-app frosted-blur primitive (shared, compositor-owned).
     /// Produces a blurred copy of the scene texture once per frame, then many
@@ -832,7 +832,8 @@ pub struct AppState {
     pub columns: HashMap<heca_core::layout::ColumnId, crate::chrome::RetainedColumn>,
     /// The terminal each pane shows, by pane — the client's view of a running terminal process:
     /// what a window draws, and how much room it was given. Client state, like the retained trees.
-    pub(crate) terminals: HashMap<heca_core::layout::PaneId, crate::chrome::terminal::Terminal>,
+    pub(crate) terminals:
+        HashMap<crate::chrome::terminal::TerminalId, crate::chrome::terminal::Terminal>,
     /// The buttons whose press a terminal's program has heard and whose release it has not — so a
     /// release is passed on only where its press was.
     pub(crate) terminal_presses: crate::app::terminal_host::HeardPresses,
@@ -1212,6 +1213,19 @@ impl AppState {
     /// plus the global zoom offset plus that pane's per-pane offset, clamped to the
     /// supported range. Both the PTY cell fit and the rendered glyph size derive
     /// from this single value so they never disagree.
+    /// The terminal font size for a terminal that may or may not belong to a pane: a pane has its own
+    /// zoom on top of the global one, any other terminal follows the global.
+    pub fn terminal_font_size(&self, pane: Option<PaneId>) -> f32 {
+        let pane_offset = pane
+            .and_then(|pane| self.pane_font_zoom.get(&pane))
+            .copied()
+            .unwrap_or(0.0);
+        (self.font_config.size.terminal + self.app_font_zoom + pane_offset).clamp(
+            crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MIN,
+            crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MAX,
+        )
+    }
+
     pub fn effective_terminal_font_size(&self, pane_id: PaneId) -> f32 {
         let pane_offset = self.pane_font_zoom.get(&pane_id).copied().unwrap_or(0.0);
         (self.font_config.size.terminal + self.app_font_zoom + pane_offset).clamp(

@@ -5,6 +5,9 @@
 //! there, flush what is drawn over it. A terminal inside a pane, a dock or an overlay is therefore
 //! covered by exactly what the scene draws after it (a chip, a scrollbar, the pane's own border)
 //! and by nothing else — no pass of the host's own decides that.
+//!
+//! The overlay band is flushed the same way, one segment at a time, so a terminal inside an overlay
+//! is drawn where its segment puts it.
 
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::text::TextRenderer;
@@ -17,9 +20,10 @@ pub(super) struct ChromePassOpts {
     pub(super) glow_alpha_scale: f32,
 }
 
-/// What draws the terminal surface `id` when the flush reaches it. Takes the state and the encoder
-/// because the surface needs both; the flush holds neither across the call.
-pub(super) type DrawSurface<'a> = dyn FnMut(&mut AppState, u64, &mut wgpu::CommandEncoder) + 'a;
+/// What draws a terminal surface when the flush reaches it. Takes the state and the encoder because
+/// the surface needs both; the flush holds neither across the call.
+pub(super) type DrawSurface<'a> =
+    dyn FnMut(&mut AppState, &heca_grid_ui::SurfaceAt, &mut wgpu::CommandEncoder) + 'a;
 
 /// **Flush `scene`'s base layer in scene order**, then hand its overlay segments to `overlay_sink`
 /// so they are flushed once, above every surface, by [`flush_overlay_band`].
@@ -45,7 +49,7 @@ pub(super) fn flush_scene(
             encoder,
         );
         if let Some(surface) = run.then {
-            draw_surface(state, surface.id, encoder);
+            draw_surface(state, &surface, encoder);
         }
     }
     overlay_sink.extend(scene.overlay_segments());
@@ -84,29 +88,4 @@ fn flush_base(
     heca_renderer::scene::enqueue_scene(grid, text, scene, opts.glow_alpha_scale);
     grid.render(queue, view, encoder);
     text.render(queue, view, encoder, None);
-}
-
-/// Flush the collected overlay segments from every surface, in accumulation order (panes →
-/// floats → chrome, so higher surfaces' overlays sit on top), **above all surface bases**.
-/// This is the overlay **top band** of the surface compositor's paint z-order: a tooltip /
-/// popover always paints over every pane, float, and the chrome/sidebars, never occluded by a
-/// surface that flushed after its own. Full repaint (no damage/clip); the segments already
-/// carry their own geometry.
-pub(super) fn flush_overlay_band(
-    grid: &mut GridRenderer,
-    text: &mut TextRenderer,
-    queue: &wgpu::Queue,
-    view: &wgpu::TextureView,
-    encoder: &mut wgpu::CommandEncoder,
-    overlays: &[heca_grid_ui::Scene],
-    glow_alpha_scale: f32,
-) {
-    grid.set_damage(None);
-    grid.set_clip(None);
-    text.set_damage(None);
-    for seg in overlays {
-        heca_renderer::scene::enqueue_scene(grid, text, seg, glow_alpha_scale);
-        grid.render(queue, view, encoder);
-        text.render(queue, view, encoder, None);
-    }
 }

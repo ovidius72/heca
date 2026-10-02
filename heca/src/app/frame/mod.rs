@@ -13,8 +13,10 @@ use std::collections::HashMap;
 use heca_core::layout::{PaneId, Rectangle};
 use heca_grid_ui::Scene as GuiScene;
 
-use crate::app::scene_flush::{ChromePassOpts, flush_overlay_band};
-use crate::app::terminal_render::pane_scissor_rect;
+use crate::app::scene_flush::{ChromePassOpts, flush_scene};
+use crate::app::terminal_render::{
+    TerminalRenderState, TerminalTarget, draw_surface, pane_scissor_rect,
+};
 use crate::app_state::AppState;
 use crate::chrome::ChromeConfig;
 
@@ -42,6 +44,21 @@ pub(super) struct FrameValues {
     floating_surface_alpha: f32,
     pane_border_radius: f32,
     content_scissor: Option<(u32, u32, u32, u32)>,
+}
+
+/// **Every terminal a frame draws**, grouped by where it sits.
+pub(in crate::app) struct FrameTerminals {
+    pub(in crate::app) tiled: Vec<TerminalRenderState>,
+    pub(in crate::app) floating: Vec<TerminalRenderState>,
+    /// The ones no pane owns: a dock's, an overlay's. Drawn where their scene puts them, with no
+    /// pane mask.
+    pub(in crate::app) docked: Vec<TerminalRenderState>,
+}
+
+impl FrameTerminals {
+    pub(in crate::app) fn all(&self) -> impl Iterator<Item = &TerminalRenderState> {
+        self.tiled.iter().chain(&self.floating).chain(&self.docked)
+    }
 }
 
 /// The columns and each float, painted into scenes before anything is measured against them.
@@ -88,6 +105,9 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
     // moment and same reason as the headers: built before the GPU borrow so render can paint them
     // read-only (F011/P094/T451).
     crate::chrome::sync_panes(state);
+    // The terminals extensions declared since the last frame are started now, so the scenes
+    // painted next already place them.
+    crate::chrome::terminal::start_declared(state);
 
     let phys_size = state.window.inner_size();
     let scale = state.scale_factor as f32;
@@ -184,19 +204,37 @@ impl Frame {
     }
 
     /// **The top band, then present**: every surface's overlay content (tooltips, popovers), above
-    /// all bases, and the scene texture onto the screen.
-    pub(super) fn finish(mut self, state: &mut AppState) {
-        flush_overlay_band(
-            &mut state.grid_renderer,
-            &mut state.text_renderer,
-            &state.queue,
-            &self.scene,
-            &mut self.encoder,
-            &self.overlay_sink,
-            self.v.glow_alpha_scale,
-        );
+    /// all bases, flushed segment by segment like any scene — so a terminal inside an overlay is
+    /// drawn where its segment puts it — and the scene texture onto the screen.
+    pub(super) fn finish(mut self, state: &mut AppState, docked: &[TerminalRenderState]) {
+        let pass = self.pass();
+        let target = docked_target(&self.scene, &self.v);
+        let overlays = std::mem::take(&mut self.overlay_sink);
+        for segment in &overlays {
+            flush_scene(
+                state,
+                segment,
+                &pass,
+                &self.scene,
+                &mut self.encoder,
+                &mut Vec::new(),
+                &mut |state, at, encoder| draw_surface(state, docked, at, &target, encoder),
+            );
+        }
         state.compositor.blit(&self.view, &mut self.encoder);
         state.queue.submit(std::iter::once(self.encoder.finish()));
         self.surface_texture.present();
+    }
+}
+
+/// Where a terminal no pane owns is drawn: no mask, and clipped by what clips it in its scene.
+fn docked_target<'a>(scene: &'a wgpu::TextureView, v: &FrameValues) -> TerminalTarget<'a> {
+    TerminalTarget {
+        view: scene,
+        stencil: None,
+        scissor: None,
+        surface_alpha: v.surface_alpha,
+        content_clip: v.pane_area,
+        follow_scene_clip: true,
     }
 }

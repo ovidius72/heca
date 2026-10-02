@@ -9,6 +9,7 @@ use heca_grid_ui::{Point, Size};
 use super::input::{Cell as GridCell, Grid, Seams, TerminalCommand, TerminalInput};
 use super::model::TerminalId;
 use super::viewport::{Controls, IntentSlot, Placed, Viewport};
+use crate::app::backend_store::Program;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt};
 use heca_grid_ui::component::{Base, Component, PaintCx};
 use heca_grid_ui::event::EventKind;
@@ -38,6 +39,20 @@ struct Shared {
     reported: Cell<Option<Grid>>,
     /// The scrollback controls of every node placed for this terminal.
     controls: RefCell<Placed>,
+    /// What an extension asked of it, if it placed it by name (`demo.terminal("shell")`).
+    declared: RefCell<Option<Declared>>,
+}
+
+/// **What an extension declared about a terminal it placed.** The name is the identity and never
+/// changes (`demo.shell`); the title is only what the user reads, and defaults to the name.
+pub(super) struct Declared {
+    pub(super) name: String,
+    pub(super) title: Option<String>,
+    pub(super) program: Program,
+    pub(super) cwd: Option<std::path::PathBuf>,
+    /// Whether the host has already started (or failed to start) what was declared. Done once: a
+    /// terminal that was later killed stays ended rather than starting again behind the user's back.
+    pub(super) resolved: bool,
 }
 
 /// **A terminal you can place anywhere** — the DOM's `<terminal/>`.
@@ -47,7 +62,7 @@ struct Shared {
 ///
 /// `Terminal` is a handle: [`Clone`] gives another view of the **same** terminal, so the one
 /// placed in a tree and the one kept by the caller agree at once.
-pub(crate) struct Terminal {
+pub struct Terminal {
     base: Base,
     shared: Rc<Shared>,
     /// This node's own scrollback controls. They are its children; the handle is kept so they stay
@@ -68,6 +83,7 @@ impl Terminal {
             nominal: Cell::new((0.0, 0.0)),
             reported: Cell::new(None),
             controls: RefCell::default(),
+            declared: RefCell::new(None),
         }))
     }
 
@@ -132,6 +148,87 @@ impl Terminal {
         })
     }
 
+    /// **A terminal an extension places by name** — the one every handle of that name shares, so a
+    /// dock built twice, or an overlay opened again, shows the same running process. Reached through
+    /// `extension("demo").terminal("shell")`, never by naming the owner half yourself.
+    pub(crate) fn declared(name: String) -> Self {
+        super::declared::of(name)
+    }
+
+    /// **Run this command instead of the user's shell**, under the shell so job control and rc behave
+    /// as in a pane. Fixed when the terminal starts: a running terminal's program does not change.
+    pub fn command(self, command: impl Into<String>) -> Self {
+        if let Some(declared) = self.shared.declared.borrow_mut().as_mut() {
+            declared.program = Program::Command(command.into());
+        }
+        self
+    }
+
+    /// **Start in this folder** (heca's own when unset). Fixed when the terminal starts.
+    pub fn cwd(self, folder: impl Into<std::path::PathBuf>) -> Self {
+        if let Some(declared) = self.shared.declared.borrow_mut().as_mut() {
+            declared.cwd = Some(folder.into());
+        }
+        self
+    }
+
+    /// **What the user reads** as this terminal's name; it defaults to the name it was declared
+    /// with. Only a title: the name is the identity and does not change.
+    pub fn title(self, title: impl Into<String>) -> Self {
+        if let Some(declared) = self.shared.declared.borrow_mut().as_mut() {
+            declared.title = Some(title.into());
+        }
+        self
+    }
+
+    /// The title to show: the one given, else the name; `None` for a terminal that was not
+    /// declared by an extension.
+    pub fn shown_title(&self) -> Option<String> {
+        self.shared
+            .declared
+            .borrow()
+            .as_ref()
+            .map(|d| d.title.clone().unwrap_or_else(|| d.name.clone()))
+    }
+
+    /// The declaration the host should start, if it has not yet.
+    pub(super) fn to_start(&self) -> Option<(String, Program, Option<std::path::PathBuf>)> {
+        let declared = self.shared.declared.borrow();
+        let declared = declared.as_ref().filter(|d| !d.resolved)?;
+        Some((
+            declared.name.clone(),
+            declared.program.clone(),
+            declared.cwd.clone(),
+        ))
+    }
+
+    /// Whether the host has yet to start what was declared.
+    pub(super) fn is_waiting(&self) -> bool {
+        self.shared
+            .declared
+            .borrow()
+            .as_ref()
+            .is_some_and(|d| !d.resolved)
+    }
+
+    /// The host started it (or could not): never start it again.
+    pub(super) fn resolved(&self) {
+        if let Some(declared) = self.shared.declared.borrow_mut().as_mut() {
+            declared.resolved = true;
+        }
+    }
+
+    /// Make this handle's shared state a declared terminal named `name`.
+    pub(super) fn declare(&self, name: String) {
+        *self.shared.declared.borrow_mut() = Some(Declared {
+            name,
+            title: None,
+            program: Program::Shell,
+            cwd: None,
+            resolved: false,
+        });
+    }
+
     /// Say what the terminal's owner wants of it: what a click on the scrollback controls means,
     /// and where its input goes. Said once, by whoever owns the terminal.
     pub(super) fn bind(&self, seams: Seams) {
@@ -148,14 +245,7 @@ impl Terminal {
 
     /// **Type a line into this terminal and press Enter** — the handle's `run`. Does nothing until the
     /// terminal shows a process.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the handle API for whoever places a Terminal; the first placement beyond a pane arrives with T449 slice 2b"
-        )
-    )]
-    pub(crate) fn run(&self, text: &str) {
+    pub fn run(&self, text: &str) {
         self.tell(TerminalCommand::Run {
             text: text.to_string(),
             enter: true,
@@ -163,14 +253,7 @@ impl Terminal {
     }
 
     /// **End this terminal** — the handle's `kill`.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the handle API for whoever places a Terminal; the first placement beyond a pane arrives with T449 slice 2b"
-        )
-    )]
-    pub(crate) fn kill(&self) {
+    pub fn kill(&self) {
         self.tell(TerminalCommand::Kill);
     }
 

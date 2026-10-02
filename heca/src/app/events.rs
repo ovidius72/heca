@@ -39,7 +39,7 @@ pub enum AppEvent {
     /// that holds the policy needing state (`terminal_host::on_terminal_input`). Not an action: a
     /// wheel turn is not something a user means to do.
     TerminalInput {
-        pane_id: heca_core::layout::PaneId,
+        terminal: crate::chrome::terminal::TerminalId,
         input: crate::chrome::terminal::TerminalInput,
     },
 }

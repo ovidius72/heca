@@ -61,7 +61,9 @@ pub fn extension(name: impl Into<String>) -> Extension {
     Extension { name: Some(name) }
 }
 
-/// A program's identity. See [`extension`].
+/// A program's identity. See [`extension`]. Cloning gives another handle on the same identity, for
+/// whatever needs it later (a dock that builds a terminal each time it is built).
+#[derive(Clone)]
 pub struct Extension {
     /// `None` when the name was refused.
     name: Option<String>,
@@ -84,6 +86,27 @@ impl Extension {
     /// [`view`](LayerBuilder::view).
     pub fn layer(&self, short: &str) -> LayerBuilder {
         LayerBuilder::named(self.full("layer", short).unwrap_or_default())
+    }
+
+    /// **A terminal** of this extension — `<extension>.<short>`, the name that is its identity and
+    /// never changes. Put it in any tree: a dock you build, an overlay from [`layer`](Self::layer).
+    /// Every call with the same short name is the same terminal, so rebuilding the dock or opening
+    /// the overlay again shows the process that was already running; closing either never ends it.
+    ///
+    /// ```ignore
+    /// let demo = heca::extension("demo");
+    /// demo.terminal("shell")                                // a shell, named demo.shell
+    /// demo.terminal("logs").command("tail -f app.log").title("Logs")
+    /// ```
+    ///
+    /// What the user reads is its [`title`](crate::Terminal::title), which defaults to the name; the
+    /// user can rename it like a pane. A refused extension name or short name gives a terminal that
+    /// starts nothing.
+    pub fn terminal(&self, short: &str) -> crate::Terminal {
+        match self.full("terminal", short) {
+            Some(name) => crate::Terminal::declared(name),
+            None => crate::Terminal::new(),
+        }
     }
 
     /// **A button in every pane's header** that runs this extension's action `short`
@@ -212,5 +235,26 @@ mod tests {
         assert_eq!(first.name(), Some("pro"));
         assert_eq!(second.name(), None);
         assert_eq!(second.action("x").name, "");
+    }
+
+    /// **A terminal is `<extension>.<short>`, built off the handle**: the owner half is never typed.
+    #[test]
+    fn a_terminal_is_named_by_the_extension_and_a_refused_one_starts_nothing() {
+        reset();
+        let pro = extension("pro");
+        assert_eq!(
+            pro.terminal("shell").shown_title().as_deref(),
+            Some("pro.shell")
+        );
+        assert_eq!(
+            extension("heca").terminal("shell").shown_title(),
+            None,
+            "`heca` is refused, so what hangs off it declares nothing"
+        );
+        assert_eq!(
+            pro.terminal("a.b").shown_title(),
+            None,
+            "a dotted short name is refused"
+        );
     }
 }

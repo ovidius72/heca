@@ -7,6 +7,7 @@
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionState};
 use crate::app::terminal_host::TerminalMount;
 use crate::app_state::{AppState, InputMode};
+use crate::chrome::terminal::TerminalId;
 use heca_config::theme::Color;
 use heca_core::backend::{TerminalDamage, TerminalRowRange, TerminalSnapshot};
 use heca_core::layout::{PaneId, Point, Rectangle, Size};
@@ -22,8 +23,11 @@ use heca_renderer::text::{TextBox, TextRenderer};
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
-pub(crate) struct PaneRenderState {
-    pub(crate) pane_id: PaneId,
+pub(crate) struct TerminalRenderState {
+    /// The terminal process this draws, by the id the store issued.
+    pub(crate) id: TerminalId,
+    /// The pane it belongs to, if one does: what only a pane has (zoom, selection) is asked of it.
+    pub(crate) pane: Option<PaneId>,
     pub(crate) x: f32,
     pub(crate) y: f32,
     pub(crate) w: f32,
@@ -35,7 +39,7 @@ pub(crate) struct PaneRenderState {
     pub(crate) mount: Option<TerminalMount>,
 }
 
-impl PaneRenderState {
+impl TerminalRenderState {
     /// **The pane as this frame draws it**, whether tiled or floating: its box `(x, y, w, h)`, how
     /// much room its terminal was given and whether it was drawn last frame, and the snapshot to
     /// draw. Also tells the chrome store the terminal's scroll position, so what shows it follows.
@@ -45,28 +49,30 @@ impl PaneRenderState {
     /// request, and a terminal with none was not on screen.
     pub(crate) fn collect(
         state: &mut AppState,
-        pane_id: PaneId,
+        id: TerminalId,
+        pane: Option<PaneId>,
         (x, y, w, h): (f32, f32, f32, f32),
     ) -> Self {
-        let (content_rect, drawn) = crate::chrome::terminal::content_box(state, pane_id);
+        let (content_rect, drawn) = crate::chrome::terminal::content_box(state, id);
         let mount = content_rect.and_then(|content_rect| {
             crate::app::terminal_host::prepare_terminal_mount(
                 &mut state.backends,
-                pane_id,
+                id,
                 content_rect,
                 state.scale_factor as f32,
             )
         });
-        if let Some(ref m) = mount {
+        if let (Some(m), Some(pane)) = (&mount, pane) {
             state.chrome_state.workspaces.set_pane_viewport(
-                pane_id,
+                pane,
                 m.snapshot.viewport_offset,
                 m.snapshot.at_bottom,
                 m.snapshot.scrollback_rows,
             );
         }
         Self {
-            pane_id,
+            id,
+            pane,
             x,
             y,
             w,
@@ -86,7 +92,7 @@ pub(crate) struct TerminalCopyBand {
 
 pub(crate) fn sync_retained_terminal_layers(
     state: &mut AppState,
-    panes: &[PaneRenderState],
+    panes: &[TerminalRenderState],
     terminal_style: TerminalStyle<'_>,
     window_logical_size: (f32, f32),
     window_physical_size: winit::dpi::PhysicalSize<u32>,
@@ -102,7 +108,7 @@ pub(crate) fn sync_retained_terminal_layers(
 
     for pane in panes {
         let Some(mount) = pane.mount.as_ref() else {
-            state.terminal_layers.remove(&pane.pane_id);
+            state.terminal_layers.remove(&pane.id);
             continue;
         };
 
@@ -110,7 +116,7 @@ pub(crate) fn sync_retained_terminal_layers(
         // size for this pane. The render key already folds in `font_size`, so a
         // zoom change on one pane repaints only that pane's retained layer.
         let mut pane_style = terminal_style;
-        pane_style.font_size = state.effective_terminal_font_size(pane.pane_id);
+        pane_style.font_size = state.terminal_font_size(pane.pane);
         let render_key = terminal_layer_render_key(&pane_style);
 
         let physical_size = retained_terminal_texture_size(mount.content_rect, state.scale_factor);
@@ -126,18 +132,15 @@ pub(crate) fn sync_retained_terminal_layers(
             physical_size.height,
         );
 
-        let layer = state
-            .terminal_layers
-            .entry(pane.pane_id)
-            .or_insert_with(|| {
-                crate::app_state::RetainedTerminalLayer::new(
-                    &state.device,
-                    state.surface_config.format,
-                    physical_size.width,
-                    physical_size.height,
-                    render_key,
-                )
-            });
+        let layer = state.terminal_layers.entry(pane.id).or_insert_with(|| {
+            crate::app_state::RetainedTerminalLayer::new(
+                &state.device,
+                state.surface_config.format,
+                physical_size.width,
+                physical_size.height,
+                render_key,
+            )
+        });
 
         let resized = layer.ensure_size(
             &state.device,
@@ -185,7 +188,7 @@ pub(crate) fn sync_retained_terminal_layers(
 
         render_terminal_layer_update(
             state,
-            pane.pane_id,
+            pane.id,
             mount,
             &damage,
             pane_style,
@@ -366,63 +369,77 @@ pub(crate) fn hyperlink_decor_from(
 /// these, so they are one value, not two code paths.
 pub(crate) struct TerminalTarget<'a> {
     pub(crate) view: &'a wgpu::TextureView,
-    /// The rounded content-clip mask the terminal tests against.
-    pub(crate) stencil: &'a wgpu::TextureView,
+    /// The rounded content-clip mask the terminal tests against. A pane has one; a terminal in a
+    /// dock or an overlay has none and is clipped by the scene alone.
+    pub(crate) stencil: Option<&'a wgpu::TextureView>,
     /// The scissor its cursor and selection are flushed under.
     pub(crate) scissor: Option<(u32, u32, u32, u32)>,
     pub(crate) surface_alpha: f32,
     /// Everything a terminal draws is kept inside this (the content area).
     pub(crate) content_clip: Rectangle,
+    /// Whether to keep it inside what clips it **in its scene** instead — a terminal in a dock or
+    /// an overlay is clipped by the scroll region or the panel around it, not by the content area.
+    pub(crate) follow_scene_clip: bool,
 }
 
 /// **Draw the terminal surface `surface` a scene asked for**, if it is one of `panes`. A surface
 /// nobody can draw is left out rather than guessed at.
 pub(crate) fn draw_surface(
     state: &mut AppState,
-    panes: &[PaneRenderState],
-    surface: u64,
+    terminals: &[TerminalRenderState],
+    surface: &heca_grid_ui::SurfaceAt,
     target: &TerminalTarget<'_>,
     encoder: &mut wgpu::CommandEncoder,
 ) {
-    let shows = |pane: &&PaneRenderState| {
-        state
-            .terminals
-            .get(&pane.pane_id)
-            .and_then(|terminal| terminal.id())
-            .is_some_and(|id| id.0 == surface)
-    };
-    if let Some(pane) = panes.iter().find(shows) {
-        draw_pane_terminal(state, pane, target, encoder);
+    if let Some(terminal) = terminals.iter().find(|t| t.id.0 == surface.id) {
+        let clip = surface.clip.filter(|_| target.follow_scene_clip);
+        draw_terminal(state, terminal, target, clip, encoder);
     }
 }
 
-/// **Draw one pane's terminal where the scene put it**: its retained texture, then its cursor and
+/// **Draw one terminal where the scene put it**: its retained texture, then its cursor and
 /// selection over it — or, for a terminal with no retained layer yet, the full render.
 ///
 /// A pane with nothing to draw (not on screen last frame, no snapshot yet) is skipped.
-pub(crate) fn draw_pane_terminal(
+pub(crate) fn draw_terminal(
     state: &mut AppState,
-    pane: &PaneRenderState,
+    pane: &TerminalRenderState,
     target: &TerminalTarget<'_>,
+    clip: Option<Rectangle>,
     encoder: &mut wgpu::CommandEncoder,
 ) {
     let (true, Some(_), Some(mount)) = (pane.drawn, pane.content_rect, pane.mount.as_ref()) else {
         return;
     };
     let surface_physical_size = state.window.inner_size();
-    let selection_overlay = selection_overlay_for_pane(state, pane.pane_id, &mount.snapshot);
-    let font_size = state.effective_terminal_font_size(pane.pane_id);
+    let selection_overlay = pane
+        .pane
+        .and_then(|p| selection_overlay_for_pane(state, p, &mount.snapshot));
+    let font_size = state.terminal_font_size(pane.pane);
+    // Clipped by its scene (a dock, an overlay) or by the target's own box (a pane).
+    let content_clip = clip.unwrap_or(target.content_clip);
+    let scissor = match clip {
+        Some(c) => pane_scissor_rect(
+            c.loc.x as f32,
+            c.loc.y as f32,
+            c.size.w as f32,
+            c.size.h as f32,
+            state.scale_factor,
+            surface_physical_size,
+        ),
+        None => target.scissor,
+    };
     if blit_retained_terminal_layer(
         state,
-        pane.pane_id,
+        pane.id,
         encoder,
-        target.view,
+        target,
         (
             surface_physical_size.width as f32,
             surface_physical_size.height as f32,
         ),
         mount,
-        Some(target.stencil),
+        clip,
     ) {
         queue_terminal_dynamic_overlays(
             &mut state.text_renderer,
@@ -435,8 +452,8 @@ pub(crate) fn draw_pane_terminal(
             &state.device,
             target.view,
             encoder,
-            target.scissor,
-            Some(target.stencil),
+            scissor,
+            target.stencil,
         );
     } else {
         render_terminal_mount(
@@ -449,8 +466,8 @@ pub(crate) fn draw_pane_terminal(
                 encoder,
                 scale_factor: state.scale_factor,
                 surface_physical_size,
-                content_clip: target.content_clip,
-                stencil: Some(target.stencil),
+                content_clip,
+                stencil: target.stencil,
             },
             TerminalStyle {
                 font_size,
@@ -473,34 +490,49 @@ pub(crate) fn draw_pane_terminal(
 
 pub(crate) fn blit_retained_terminal_layer(
     state: &AppState,
-    pane_id: PaneId,
+    terminal: TerminalId,
     encoder: &mut wgpu::CommandEncoder,
-    target: &wgpu::TextureView,
+    target: &TerminalTarget<'_>,
     viewport_px: (f32, f32),
     mount: &TerminalMount,
-    stencil: Option<&wgpu::TextureView>,
+    clip: Option<Rectangle>,
 ) -> bool {
-    let Some(layer) = state.terminal_layers.get(&pane_id) else {
+    let Some(layer) = state.terminal_layers.get(&terminal) else {
         return false;
     };
     let rect = mount.content_rect;
+    // The part of the terminal that shows: all of it, or what its clip leaves. The texture is
+    // cropped to match, so what shows is the same picture, not a squeezed one.
+    let shown = match clip {
+        Some(clip) => rect.intersection(clip),
+        None => Some(rect),
+    };
+    let Some(shown) = shown else {
+        return true;
+    };
+    let uv = [
+        ((shown.loc.x - rect.loc.x) / rect.size.w) as f32,
+        ((shown.loc.y - rect.loc.y) / rect.size.h) as f32,
+        ((shown.loc.x + shown.size.w - rect.loc.x) / rect.size.w) as f32,
+        ((shown.loc.y + shown.size.h - rect.loc.y) / rect.size.h) as f32,
+    ];
     let scale = state.scale_factor as f32;
     state.backdrop.draw(
         &state.device,
         &state.queue,
         encoder,
-        target,
+        target.view,
         layer.view(),
         viewport_px,
         (
-            rect.loc.x as f32 * scale,
-            rect.loc.y as f32 * scale,
-            rect.size.w as f32 * scale,
-            rect.size.h as f32 * scale,
+            shown.loc.x as f32 * scale,
+            shown.loc.y as f32 * scale,
+            shown.size.w as f32 * scale,
+            shown.size.h as f32 * scale,
         ),
-        Some([0.0, 0.0, 1.0, 1.0]),
+        Some(uv),
         1.0,
-        stencil,
+        target.stencil,
     );
     true
 }
@@ -541,9 +573,10 @@ fn retain_live_terminal_layers(state: &mut AppState) {
             live_panes.insert(float.pane.id);
         }
     }
+    let backends = &state.backends;
     state
         .terminal_layers
-        .retain(|pane_id, _| live_panes.contains(pane_id));
+        .retain(|id, _| backends.is_issued(*id));
     // Per-pane font-zoom state is keyed by pane; drop it for closed panes so the
     // maps don't leak entries across the app's lifetime.
     state
@@ -578,7 +611,7 @@ fn retained_terminal_texture_size(
 
 fn render_terminal_layer_update(
     state: &mut AppState,
-    pane_id: PaneId,
+    terminal: TerminalId,
     mount: &TerminalMount,
     damage: &TerminalDamage,
     terminal_style: TerminalStyle<'_>,
@@ -689,7 +722,7 @@ fn render_terminal_layer_update(
     );
     let layer_texture = state
         .terminal_layers
-        .get(&pane_id)
+        .get(&terminal)
         .expect("terminal layer must exist before updating")
         .texture();
     for band in copy_bands {

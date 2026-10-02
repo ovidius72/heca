@@ -300,6 +300,12 @@ impl Scene {
                             id: *id,
                             rect: *rect,
                             alpha: *alpha,
+                            clip: open.iter().copied().reduce(|a, b| {
+                                a.intersection(b).unwrap_or(Rectangle::new(
+                                    a.loc,
+                                    heca_core::layout::Size::new(0.0, 0.0),
+                                ))
+                            }),
                         }),
                     });
                     for rect in &open {
@@ -410,12 +416,16 @@ pub struct BaseRun {
     pub then: Option<SurfaceAt>,
 }
 
-/// Where the scene put a surface: the opaque id the widget gave it, its box and its opacity.
+/// Where the scene put a surface: the opaque id the widget gave it, its box, its opacity and what
+/// clips it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SurfaceAt {
     pub id: u64,
     pub rect: Rectangle,
     pub alpha: f32,
+    /// Every clip open where the surface was recorded, intersected — `None` when nothing clips it.
+    /// An empty intersection is a zero-sized rect: nothing of it shows.
+    pub clip: Option<Rectangle>,
 }
 
 /// One draw that fell outside the box it was measured against — see
@@ -1125,6 +1135,21 @@ mod tests {
                 DrawCommand::PopClip,
                 DrawCommand::PopClip
             ]
+        );
+    }
+
+    #[test]
+    fn a_surface_knows_every_clip_around_it() {
+        let mut s = Scene::new();
+        s.push(surface(1)); // nothing clips this one
+        s.push(clip(100.0));
+        s.push(clip(50.0));
+        s.push(surface(2)); // clipped by the smaller of the two
+        let runs = s.base_runs();
+        assert_eq!(runs[0].then.unwrap().clip, None);
+        assert_eq!(
+            runs[1].then.unwrap().clip,
+            Some(Rectangle::new(Point::default(), Size::new(50.0, 50.0)))
         );
     }
 

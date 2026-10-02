@@ -28,6 +28,7 @@ pub use args::{ArgKind, ArgSpec};
 // A dock: `regions(..).append(..)`, the `Provider` it takes, what its body is built from, and how
 // its widgets report what the user did (`fires`, `picks`).
 pub use chrome::pane_items::{PANE_ARG, PaneChip, PaneFacts, PaneLine};
+pub use chrome::terminal::Terminal;
 pub use chrome::{
     BuildCx, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution, Contribution,
     PlaceDock, RegionId, RegionSet, fires, picks, regions,
@@ -517,8 +518,13 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 state.mark_full_redraw();
                 state.window.request_redraw();
             }
-            AppEvent::TerminalInput { pane_id, input } => {
-                crate::app::terminal_host::on_terminal_input(state, &self.registry, pane_id, input);
+            AppEvent::TerminalInput { terminal, input } => {
+                crate::app::terminal_host::on_terminal_input(
+                    state,
+                    &self.registry,
+                    terminal,
+                    input,
+                );
                 state.mark_full_redraw();
                 state.window.request_redraw();
             }

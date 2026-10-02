@@ -117,6 +117,10 @@ pub(crate) enum TerminalInput {
         cell: Option<Cell>,
         modifiers: Modifiers,
     },
+    /// **Scroll back to the live bottom** — the scrollback chip was clicked.
+    ScrollToBottom,
+    /// **Scroll to `rows` above the live bottom** — the scrollbar thumb moved.
+    ScrollTo { rows: usize },
     /// **The terminal's box changed size** (or its font did): this is the grid it wants its process
     /// to have. Said once per change, not once per frame — and the message a client sends a server.
     Resize(Grid),

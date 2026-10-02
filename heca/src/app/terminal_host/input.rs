@@ -132,8 +132,12 @@ fn on_release(
 
 /// **A terminal asked for a different grid.** Its process takes the cell size and the grid together,
 /// so the picture and the program agree on what a row is.
-fn on_resize(state: &mut AppState, pane_id: PaneId, grid: crate::chrome::terminal::Grid) {
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+fn on_resize(
+    state: &mut AppState,
+    terminal: crate::chrome::terminal::TerminalId,
+    grid: crate::chrome::terminal::Grid,
+) {
+    if let Some(backend) = state.backends.get_mut_by_id(terminal) {
         backend.set_cell_size(grid.cell_w, grid.cell_h);
         backend.set_size(grid.cols, grid.rows);
         state.needs_redraw = true;
@@ -233,18 +237,55 @@ fn backend_button(button: PointerButton) -> Option<BackendMouseButton> {
 pub(crate) fn on_terminal_input(
     state: &mut AppState,
     registry: &ActionRegistry,
-    pane_id: PaneId,
+    terminal: crate::chrome::terminal::TerminalId,
     input: crate::chrome::terminal::TerminalInput,
 ) {
     use crate::chrome::terminal::TerminalInput;
+    // What every terminal does, whoever owns it: its grid and its scrollback.
     match input {
+        TerminalInput::Resize(grid) => return on_resize(state, terminal, grid),
+        TerminalInput::ScrollToBottom => {
+            if let Some(backend) = state.backends.get_mut_by_id(terminal) {
+                backend.scroll_to_bottom_animated();
+                state.needs_redraw = true;
+            }
+            return;
+        }
+        TerminalInput::ScrollTo { rows } => {
+            if let Some(backend) = state.backends.get_mut_by_id(terminal) {
+                crate::handlers::scroll_backend_to_offset(backend, rows);
+                state.needs_redraw = true;
+            }
+            return;
+        }
         TerminalInput::Wheel {
             x,
             y,
             pixels,
             cell,
             modifiers,
-        } => super::wheel::on_wheel(state, registry, pane_id, ((x, y), pixels), cell, modifiers),
+        } => {
+            return super::wheel::on_wheel(
+                state,
+                registry,
+                terminal,
+                ((x, y), pixels),
+                cell,
+                modifiers,
+            );
+        }
+        _ => {}
+    }
+    // What needs a pane — focus, host selection, the window's gestures — is the pane's. A terminal
+    // no pane owns does not get these yet (P094(F011)/T449 slice 5b).
+    let Some(pane_id) = state.backends.pane_of(terminal) else {
+        return;
+    };
+    match input {
+        TerminalInput::Wheel { .. }
+        | TerminalInput::Resize(_)
+        | TerminalInput::ScrollToBottom
+        | TerminalInput::ScrollTo { .. } => {}
         TerminalInput::Press {
             button,
             cell,
@@ -256,7 +297,6 @@ pub(crate) fn on_terminal_input(
             modifiers,
         } => on_release(state, pane_id, button, cell, modifiers),
         TerminalInput::Move { cell, modifiers } => on_move(state, pane_id, cell, modifiers),
-        TerminalInput::Resize(grid) => on_resize(state, pane_id, grid),
     }
 }
 

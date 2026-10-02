@@ -5,9 +5,9 @@ use crate::actions::ActionRegistry;
 use crate::app::interaction::{InteractionSource, dispatch_action};
 use crate::app_state::AppState;
 use crate::chrome::terminal::Cell;
+use crate::chrome::terminal::TerminalId;
 use crate::input::{FontZoomStep, WmAction};
 use heca_core::backend::{BackendMouseButton, BackendMouseEventKind};
-use heca_core::layout::PaneId;
 use winit::event::MouseScrollDelta;
 
 use super::input::backend_mouse_event;
@@ -28,7 +28,7 @@ fn device_delta((x, y): (f32, f32), pixels: Option<(f32, f32)>) -> MouseScrollDe
 pub(super) fn on_wheel(
     state: &mut AppState,
     registry: &ActionRegistry,
-    pane_id: PaneId,
+    terminal: TerminalId,
     ((x, y), pixels): ((f32, f32), Option<(f32, f32)>),
     cell: Option<Cell>,
     modifiers: heca_grid_ui::Modifiers,
@@ -36,7 +36,11 @@ pub(super) fn on_wheel(
     // **Ctrl/Meta+wheel is a font-zoom gesture**, resolved by the terminal it turned over. It is
     // consumed whatever the direction, so a modified wheel never reaches the program as a scroll.
     if state.mouse_wheel_change_font_size && (modifiers.ctrl || modifiers.meta) {
-        if y != 0.0 {
+        // The zoom is a pane's: a terminal no pane owns is not zoomed by it, but the wheel is still
+        // consumed.
+        if y != 0.0
+            && let Some(pane_id) = state.backends.pane_of(terminal)
+        {
             let step = if y < 0.0 {
                 FontZoomStep::In
             } else {
@@ -81,13 +85,13 @@ pub(super) fn on_wheel(
     let shift_held = modifiers.shift;
     let wants_mouse = state
         .backends
-        .get(pane_id)
+        .get_by_id(terminal)
         .is_some_and(|b| b.is_mouse_grabbed());
     let do_host_scroll = shift_held || (state.terminal_mouse_enabled && !wants_mouse);
 
     if !do_host_scroll {
         // Forward wheel to the terminal backend.
-        forward_wheel_to_terminal(state, pane_id, cell, modifiers, delta);
+        forward_wheel_to_terminal(state, terminal, cell, modifiers, delta);
         return;
     }
 
@@ -102,7 +106,7 @@ pub(super) fn on_wheel(
     // alt-screen TUIs is an inherent limitation (see README).
     let host_can_scroll = state
         .backends
-        .get(pane_id)
+        .get_by_id(terminal)
         .and_then(|b| b.terminal_snapshot())
         .is_some_and(|s| s.scrollback_rows > s.rows);
     if !host_can_scroll {
@@ -112,7 +116,7 @@ pub(super) fn on_wheel(
             // history).
             return;
         }
-        forward_wheel_to_terminal(state, pane_id, cell, modifiers, delta);
+        forward_wheel_to_terminal(state, terminal, cell, modifiers, delta);
         return;
     }
 
@@ -126,7 +130,7 @@ pub(super) fn on_wheel(
         delta,
         state
             .backends
-            .get(pane_id)
+            .get_by_id(terminal)
             .map(|b| b.cell_size().1 as f64)
             .unwrap_or(state.terminal_cell_size.1 as f64),
     );
@@ -140,7 +144,7 @@ pub(super) fn on_wheel(
         -(total as i32)
     };
 
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.backends.get_mut_by_id(terminal) {
         backend.scroll_viewport(delta_i32);
     }
     state.needs_redraw = true;
@@ -163,7 +167,7 @@ fn wheel_buttons(delta: MouseScrollDelta) -> Vec<BackendMouseButton> {
 /// `terminal-task-01h`).
 fn forward_wheel_to_terminal(
     state: &mut AppState,
-    pane_id: PaneId,
+    terminal: TerminalId,
     cell: Option<Cell>,
     modifiers: heca_grid_ui::Modifiers,
     delta: MouseScrollDelta,
@@ -173,7 +177,7 @@ fn forward_wheel_to_terminal(
     };
     for button in wheel_buttons(delta) {
         let event = backend_mouse_event(BackendMouseEventKind::Press, button, cell, modifiers);
-        if let Some(backend) = state.backends.get_mut(pane_id) {
+        if let Some(backend) = state.backends.get_mut_by_id(terminal) {
             let _ = backend.process_mouse_event(&event);
         }
     }
