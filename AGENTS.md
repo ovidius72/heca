@@ -1531,7 +1531,7 @@ myvim/
 ├── heca/                  ← Main binary (event loop, app state, rendering)
 │   ├── src/
 │   │   ├── main.rs        ← HecaApp, ApplicationHandler, render(), registry setup
-│   │   ├── app_state.rs   ← AppState, InputMode, DragState, SidebarState
+│   │   ├── app_state/     ← AppState (state.rs), InputMode (input_mode.rs), MouseState, the layout door (layout_door.rs)
 │   │   ├── input/         ← action.rs (WmAction + its derived WmActionKind), names.rs (action_from_name), build.rs (build_action), vocabulary.rs (argument word lists)
 │   │   ├── keymap.rs      ← KeymapRegistry, KeyCombo, event_combo_matches()
 │   │   ├── args.rs        ← The argument model (ArgDescriptor, ArgSpec, check_args) — actions and the CLI share it
