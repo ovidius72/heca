@@ -838,16 +838,14 @@ pub(crate) fn build_pane_headers(state: &crate::app_state::AppState) -> BuiltPan
         avail_w: f32,
     }
     let frames = crate::app::terminal_host::pane_outer_frames(state);
-    let active_ws = state.session.active_workspace_idx;
+    let active_ws = state.layout().active_workspace_idx();
     let mut inputs = Vec::with_capacity(frames.len());
     for (pane_id, _x, _y, w, _h) in frames {
         let (ws_idx, col_idx) = crate::find_pane_location(&state.session, pane_id)
             .map(|(ws, col, _)| (ws, col))
             .unwrap_or((active_ws, 0));
-        let (name, custom_name, runtime) = state
-            .session
-            .active_workspace()
-            .and_then(|ws| ws.find_pane(pane_id))
+        let (name, custom_name, runtime) = state.layout().active_workspace()
+            .and_then(|ws| ws.content().find_pane(pane_id))
             .map(|p| {
                 (
                     p.title.clone(),
@@ -858,16 +856,12 @@ pub(crate) fn build_pane_headers(state: &crate::app_state::AppState) -> BuiltPan
             .unwrap_or_else(|| (String::new(), None, None));
         // Floating panes aren't in any column (`find_pane_location` returns None);
         // detect them directly so the bar hides tiled-only buttons + flags float active.
-        let floating = state
-            .session
-            .active_workspace()
+        let floating = state.layout().active_workspace()
             .map(|ws| ws.floating_panes.iter().any(|f| f.pane.id == pane_id))
             .unwrap_or(false);
         let zoomed = !floating
-            && state
-                .session
-                .active_workspace()
-                .and_then(|ws| ws.scrolling.columns.get(col_idx))
+            && state.layout().active_workspace()
+                .and_then(|ws| ws.content().scrolling.columns.get(col_idx))
                 .map(|c| c.is_zoomed() || c.is_full_width)
                 .unwrap_or(false);
         inputs.push(Input {

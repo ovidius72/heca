@@ -1,6 +1,6 @@
 use crate::app_state::SidebarItemState;
 use crate::chrome::SidebarSelection;
-use heca_core::layout::{PaneId, session::Session};
+use heca_core::layout::{Layout, PaneId};
 
 /// A flat item in the sidebar navigation list.
 /// Built from the tree, skipping collapsed items.
@@ -170,7 +170,7 @@ impl WorkspaceTree {
     /// for toggle highlighting (Prefix+i).
     pub fn sync_from_session(
         &mut self,
-        session: &Session,
+        layout: Layout<'_>,
         last_visited_ws_idx: Option<usize>,
         focused_pane: Option<PaneId>,
         last_visited_pane_per_ws: &[Option<PaneId>],
@@ -191,10 +191,10 @@ impl WorkspaceTree {
         self.workspaces.clear();
         self.flat_items.clear();
 
-        self.workspaces = Vec::with_capacity(session.workspaces.len());
+        self.workspaces = Vec::with_capacity(layout.session().workspaces.len());
 
-        for (ws_idx, ws) in session.workspaces.iter().enumerate() {
-            let is_active = ws_idx == session.active_workspace_idx;
+        for (ws_idx, ws) in layout.session().workspaces.iter().enumerate() {
+            let is_active = ws_idx == layout.active_workspace_idx();
             let state = if is_active {
                 SidebarItemState::Active
             } else if Some(ws_idx) == last_visited_ws_idx {
@@ -230,7 +230,6 @@ impl WorkspaceTree {
 
             for &col_idx in &cols_to_show {
                 if let Some(col) = ws.scrolling.columns.get(col_idx) {
-                    let _is_active_col = col_idx == ws.scrolling.active_column_idx && is_active;
                     let col_collapsed = prev_col_collapsed
                         .get(&(ws_idx, col_idx))
                         .copied()

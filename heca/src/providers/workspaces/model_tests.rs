@@ -4,8 +4,8 @@ use super::*;
 use crate::app_state::SidebarItemState;
 use heca_core::layout::{
     Pane as LayoutPane, PaneId,
-    session::Session,
-    types::{SessionId, Size},
+    testing::Windowed,
+    types::Size,
 };
 
 // Workspace collapse is owned by chrome_state; these helpers drive it the way the
@@ -29,42 +29,24 @@ fn set_ws_collapsed(
     tree.apply_ws_collapsed(&set, Some(ws_idx));
 }
 
-fn make_test_session() -> (Session, Vec<u64>) {
-    let viewport = Size::new(1280.0, 800.0);
-    let mut session = Session::new(
-        SessionId(1),
-        viewport,
-        2.0,
-        heca_core::layout::types::LayoutOptions::default(),
-    );
+fn make_test_session() -> (Windowed, Vec<u64>) {
+    let mut session = Windowed::new(Size::new(1280.0, 800.0), 2.0);
 
-    // Create 3 panes in the first workspace
+    // Create 4 panes in the first workspace
     let _ids: Vec<u64> = (1..=4)
         .map(|i| {
             let pane = LayoutPane::new(PaneId(i), format!("Pane{}", i));
             let id = pane.id.0;
-            session.add_pane(pane, None, true);
+            session.m().add_pane(pane, None, true);
             id
         })
         .collect();
 
     // Add a second workspace with 1 pane
-    let wa = session
-        .active_workspace()
-        .map(|ws| {
-            let r = ws.scrolling.working_area;
-            heca_core::layout::types::Rectangle::new(r.loc, r.size)
-        })
-        .unwrap_or_else(|| {
-            heca_core::layout::types::Rectangle::new(
-                heca_core::layout::types::Point::new(0.0, 0.0),
-                viewport,
-            )
-        });
-    session.add_workspace(wa);
+    session.m().add_workspace();
     let pane5 = LayoutPane::new(PaneId(5), "Pane5");
     let _id5 = pane5.id.0;
-    session.add_pane(pane5, None, true);
+    session.m().add_pane(pane5, None, true);
 
     (session, vec![1, 2, 3, 4, 5])
 }
@@ -74,7 +56,7 @@ fn test_tree_rebuild() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
 
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     // Should have 2 workspaces
     assert_eq!(tree.workspaces.len(), 2, "should have 2 workspaces");
@@ -101,7 +83,7 @@ fn test_tree_rebuild() {
 fn test_tree_flat_items() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     // Flat items should contain workspaces, columns, and panes
     assert!(
@@ -127,7 +109,7 @@ fn test_tree_flat_items() {
 fn test_cursor_movement() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     assert_eq!(tree.cursor, 0, "cursor starts at 0");
 
@@ -162,7 +144,7 @@ fn test_cursor_movement() {
 fn test_expand_collapse_workspace() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     // Initially not collapsed
     assert!(
@@ -202,10 +184,10 @@ fn test_visited_tracking() {
     let mut tree = WorkspaceTree::new();
 
     // Simulate visiting workspace 1 (switch to it)
-    session.switch_to_workspace(1);
+    session.m().switch_to_workspace(1);
 
     // Rebuild with last_visited_ws_idx = 0 (WS 0 was visited before)
-    tree.sync_from_session(&session, Some(0), Some(PaneId(5)), &[]);
+    tree.sync_from_session(session.l(), Some(0), Some(PaneId(5)), &[]);
 
     // WS 1 should be active (current)
     assert_eq!(
@@ -227,11 +209,11 @@ fn test_rebuild_clears_previous() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
 
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
     let first_count = tree.flat_items.len();
 
     // Rebuild again — should be same result
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
     assert_eq!(
         tree.flat_items.len(),
         first_count,
@@ -240,7 +222,7 @@ fn test_rebuild_clears_previous() {
 
     // Cursor should be clamped if it was out of bounds
     tree.cursor = 9999;
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
     assert!(
         tree.cursor < tree.flat_items.len(),
         "cursor should be clamped after rebuild"
@@ -249,16 +231,10 @@ fn test_rebuild_clears_previous() {
 
 #[test]
 fn test_empty_session() {
-    let viewport = Size::new(1280.0, 800.0);
-    let session = Session::new(
-        SessionId(1),
-        viewport,
-        2.0,
-        heca_core::layout::types::LayoutOptions::default(),
-    );
+    let session = Windowed::new(Size::new(1280.0, 800.0), 2.0);
     let mut tree = WorkspaceTree::new();
 
-    tree.sync_from_session(&session, None, None, &[]);
+    tree.sync_from_session(session.l(), None, None, &[]);
 
     // Even an empty session has at least 1 workspace (the initial one)
     assert!(
@@ -272,7 +248,7 @@ fn test_empty_session() {
 fn test_toggle_expand_clamps_cursor() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     // Place cursor deep inside workspace 0 (e.g. on a pane).
     let ws0_last_idx = tree
@@ -306,7 +282,7 @@ fn test_toggle_expand_clamps_cursor() {
 fn test_column_expand_collapse() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     // Find first Column item in flat list.
     let col_idx = tree
@@ -346,7 +322,7 @@ fn test_column_expand_collapse() {
 fn test_collapse_workspace_moves_cursor_to_workspace_row() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     let pane_idx = tree
         .flat_items
@@ -368,7 +344,7 @@ fn test_collapse_workspace_moves_cursor_to_workspace_row() {
 fn test_collapse_column_moves_cursor_to_column_row() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     let pane_idx = tree
         .flat_items
@@ -403,7 +379,7 @@ fn test_collapse_column_moves_cursor_to_column_row() {
 fn test_toggle_workspace_collapsed_by_index_updates_cursor() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     let pane_idx = tree
         .flat_items
@@ -432,7 +408,7 @@ fn test_toggle_workspace_collapsed_by_index_updates_cursor() {
 fn test_toggle_column_collapsed_by_index_updates_cursor() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     let pane_idx = tree
         .flat_items
@@ -478,7 +454,7 @@ fn test_toggle_column_collapsed_by_index_updates_cursor() {
 fn test_collapse_persists_across_rebuild() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     // Collapse workspace 0.
     tree.cursor = 0;
@@ -492,7 +468,7 @@ fn test_collapse_persists_across_rebuild() {
 
     // Rebuild from session — sync defaults to expanded; the app re-applies the
     // canonical collapse set from chrome_state (as focus.rs does after sync).
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
     let set = chrome.workspaces.with_collapsed_ws(|s| s.clone());
     tree.apply_ws_collapsed(&set, None);
     assert!(
@@ -517,7 +493,7 @@ fn test_collapse_persists_across_rebuild() {
 fn selection_projects_the_row_under_the_cursor() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     // The cursor starts on the first row; the projection names that same row.
     let item = tree
@@ -547,11 +523,11 @@ fn selection_survives_a_tree_rebuild() {
     // own: the selected row has to survive the collapse for this to test index-shift rather
     // than row-removal.
     let (mut session, _ids) = make_test_session();
-    session.switch_to_workspace(1);
-    session.add_pane(LayoutPane::new(PaneId(9), "Pane9"), None, true);
+    session.m().switch_to_workspace(1);
+    session.m().add_pane(LayoutPane::new(PaneId(9), "Pane9"), None, true);
     let chrome = test_chrome();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     // Park the cursor on the pane in the SECOND workspace and publish it the way the nav
     // handlers do.
@@ -564,7 +540,7 @@ fn selection_survives_a_tree_rebuild() {
     // disappears, so its index shifts — the exact case a raw cursor index gets wrong.
     set_ws_collapsed(&mut tree, &chrome, 0, true);
     // Rebuild the way `after_layout_change` does: re-project collapse, then the selection.
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
     let set = chrome.workspaces.with_collapsed_ws(|s| s.clone());
     tree.apply_ws_collapsed(&set, None);
     tree.apply_nav_selection(chrome.workspaces.nav_selection());
@@ -588,7 +564,7 @@ fn store_selection_drives_the_cursor() {
     let (session, ids) = make_test_session();
     let chrome = test_chrome();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     let target = crate::chrome::SidebarSelection::Pane {
         pane_id: PaneId(*ids.last().expect("the session has panes")),
@@ -605,7 +581,7 @@ fn a_selection_whose_row_is_gone_leaves_the_cursor_in_range() {
     // cursor somewhere arbitrary — and must not panic.
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     tree.cursor_down();
     let before = tree.cursor;
@@ -621,7 +597,7 @@ fn a_selection_whose_row_is_gone_leaves_the_cursor_in_range() {
 fn no_selection_is_not_a_request_to_move() {
     let (session, _ids) = make_test_session();
     let mut tree = WorkspaceTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
 
     tree.cursor_down();
     let before = tree.cursor;
@@ -638,19 +614,14 @@ fn no_selection_is_not_a_request_to_move() {
 /// target, the drag identity and the remembered hint letter.
 #[test]
 fn a_row_keeps_its_key_when_a_column_is_inserted_before_it() {
-    let mut session = Session::new(
-        SessionId(1),
-        Size::new(1280.0, 800.0),
-        1.0,
-        heca_core::layout::types::LayoutOptions::default(),
-    );
+    let mut session = Windowed::new(Size::new(1280.0, 800.0), 1.0);
     for i in 1..=2u64 {
-        session.add_pane(LayoutPane::new(PaneId(i), format!("Pane{i}")), None, true);
+        session.m().add_pane(LayoutPane::new(PaneId(i), format!("Pane{i}")), None, true);
     }
 
-    let key_of_last = |session: &Session| {
+    let key_of_last = |session: &Windowed| {
         let mut tree = WorkspaceTree::new();
-        tree.sync_from_session(session, None, None, &[]);
+        tree.sync_from_session(session.l(), None, None, &[]);
         let ws = &tree.workspaces[0];
         let last = ws.columns.last().expect("a column");
         (
@@ -662,8 +633,9 @@ fn a_row_keeps_its_key_when_a_column_is_inserted_before_it() {
     let before = key_of_last(&session);
 
     // Split: a new column arrives *in front of* the last one, so every position after it shifts.
-    session.add_pane(LayoutPane::new(PaneId(9), "Pane9"), None, true);
-    if let Some(ws) = session.active_workspace_mut() {
+    session.m().add_pane(LayoutPane::new(PaneId(9), "Pane9"), None, true);
+    {
+        let mut ws = session.ws();
         let inserted = ws.scrolling.columns.pop().expect("the new column");
         ws.scrolling.columns.insert(0, inserted);
     }

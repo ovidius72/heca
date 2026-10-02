@@ -298,31 +298,31 @@ pub(crate) fn record_expose_cursor(state: &mut crate::app_state::AppState, pane_
 ///   highlight would fight the user: reading the *active workspace's* slot here is what made
 ///   deleting a pane in one row jump the map to another (Antonio, driving, 2026-08-11).
 ///
-/// Pure, and takes the `Session` rather than the `AppState` around it, so both answers are testable
+/// Pure, and takes the `Layout` rather than the `AppState` around it, so both answers are testable
 /// without a window — this resolution has now been got wrong three times.
 fn open_on(
-    session: &heca_core::layout::Session,
+    layout: heca_core::layout::Layout<'_>,
     already_up: bool,
     cursor_ws: Option<usize>,
     cursor_per_ws: &[Option<PaneId>],
 ) -> Option<PaneId> {
     if already_up {
         // The row the cursor is in, which is not necessarily the active workspace's.
-        let row = cursor_ws.unwrap_or(session.active_workspace_idx);
+        let row = cursor_ws.unwrap_or(layout.active_workspace_idx());
         let remembered = cursor_per_ws
             .get(row)
             .copied()
             .flatten()
             // A pane that has since been deleted is no answer at all — fall through to the
             // session's, which is exactly what the cursor was handed on to before it went.
-            .filter(|id| crate::app::focus::find_pane_workspace(session, *id).is_some());
+            .filter(|id| crate::app::focus::find_pane_workspace(layout.session(), *id).is_some());
         if remembered.is_some() {
             return remembered;
         }
     }
     // `active_pane` answers for both domains — the focused float when one is active, the tiled
     // pane otherwise — which is the same rule the model marks a card `active` by.
-    session
+    layout
         .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id)
@@ -385,7 +385,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     // `AppState`. Off ⇒ the model simply carries no folder, and nothing below has a flag to pass on.
     let folders = state.chrome_state.workspaces.expose_show_cwd();
     let rows = model(
-        &state.session,
+        state.layout(),
         |pane| {
             super::pane_info_view(
                 &programs,
@@ -401,7 +401,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     let theme = super::chrome_gui_theme(state);
     let already_up = state.layers.is_visible_named(&state.window_root, &name);
     let here = open_on(
-        &state.session,
+        state.layout(),
         already_up,
         state.expose_cursor_ws,
         &state.expose_cursor_per_ws,
@@ -427,7 +427,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     // The map's own "you were just here" mark, from the one field the bindings read.
     let previous = state
         .last_visited_pane_per_ws
-        .get(state.session.active_workspace_idx)
+        .get(state.layout().active_workspace_idx())
         .copied()
         .flatten()
         .filter(|id| crate::app::focus::find_pane_workspace(&state.session, *id).is_some());
@@ -467,7 +467,7 @@ mod tests {
         std::rc::Rc<std::cell::RefCell<Vec<String>>>,
     ) {
         let s = session();
-        let rows = model(&s, |p| p.title.clone(), false);
+        let rows = model(s.l(), |p| p.title.clone(), false);
         let theme = GuiTheme::default();
         let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
         let sink = seen.clone();
@@ -623,7 +623,7 @@ mod tests {
     #[test]
     fn a_row_carries_no_workspace_label() {
         let s = session();
-        let rows = model(&s, |p| p.title.clone(), false);
+        let rows = model(s.l(), |p| p.title.clone(), false);
         let theme = GuiTheme::default();
         let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(
             crate::app::interaction::InteractionSource::Keyboard,
@@ -695,8 +695,7 @@ mod tests {
     #[test]
     fn opening_the_map_starts_on_the_pane_the_session_is_focused_on() {
         let s = session();
-        let focused = s
-            .active_workspace()
+        let focused = s.l().active_workspace()
             .and_then(|ws| ws.active_pane())
             .map(|p| p.id)
             .expect("the fixture has a focused pane");
@@ -709,7 +708,7 @@ mod tests {
         );
 
         assert_eq!(
-            open_on(&s, false, Some(0), &remembered),
+            open_on(s.l(), false, Some(0), &remembered),
             Some(focused),
             "a fresh open ignores where the map was left",
         );
@@ -722,7 +721,7 @@ mod tests {
     fn rebuilding_the_map_keeps_the_cursor_where_it_stands() {
         let s = session();
         assert_eq!(
-            open_on(&s, true, Some(0), &[Some(PaneId(2))]),
+            open_on(s.l(), true, Some(0), &[Some(PaneId(2))]),
             Some(PaneId(2)),
             "while the map is up, the remembered cursor wins",
         );
@@ -735,12 +734,12 @@ mod tests {
     fn a_rebuild_stays_in_the_row_the_cursor_is_in() {
         let mut s = session();
         // Give the second workspace a pane, while the session stays focused in the first.
-        s.active_workspace_idx = 1;
-        s.add_pane(heca_core::layout::Pane::new(PaneId(3), "c"), None, false);
-        s.active_workspace_idx = 0;
+        s.show(1);
+        s.m().add_pane(heca_core::layout::Pane::new(PaneId(3), "c"), None, false);
+        s.show(0);
 
         assert_eq!(
-            open_on(&s, true, Some(1), &[Some(PaneId(1)), Some(PaneId(3))]),
+            open_on(s.l(), true, Some(1), &[Some(PaneId(1)), Some(PaneId(3))]),
             Some(PaneId(3)),
             "the cursor is in row 1, so the rebuild reads row 1 — not the active workspace's",
         );
@@ -751,13 +750,12 @@ mod tests {
     #[test]
     fn a_remembered_pane_that_no_longer_exists_falls_back_to_the_session() {
         let s = session();
-        let focused = s
-            .active_workspace()
+        let focused = s.l().active_workspace()
             .and_then(|ws| ws.active_pane())
             .map(|p| p.id)
             .expect("the fixture has a focused pane");
         assert_eq!(
-            open_on(&s, true, Some(0), &[Some(PaneId(404))]),
+            open_on(s.l(), true, Some(0), &[Some(PaneId(404))]),
             Some(focused),
         );
     }
@@ -770,7 +768,7 @@ mod tests {
     fn the_assembled_map_stays_inside_the_window() {
         for (w, h) in [(1280.0, 800.0), (1900.0, 1200.0), (800.0, 600.0)] {
             let s = session();
-            let rows = model(&s, |p| p.title.clone(), false);
+            let rows = model(s.l(), |p| p.title.clone(), false);
             let theme = GuiTheme::default();
             let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(
                 crate::app::interaction::InteractionSource::Keyboard,
@@ -810,7 +808,7 @@ mod tests {
     #[test]
     fn the_map_owns_its_picker_and_every_card_is_a_target() {
         let s = session();
-        let rows = model(&s, |p| p.title.clone(), false);
+        let rows = model(s.l(), |p| p.title.clone(), false);
         let theme = GuiTheme::default();
         let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(
             crate::app::interaction::InteractionSource::Keyboard,

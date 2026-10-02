@@ -2,39 +2,32 @@
 
 use super::*;
 
-impl ScrollingSpace {
-    fn capture_column_positions(&self) -> Vec<(ColumnId, f64)> {
-        self.column_xs()
-            .zip(self.columns.iter())
-            .map(|(x, col)| (col.id, x))
-            .collect()
-    }
-
+impl ScrollingMut<'_> {
     fn finish_active_column_width_change(&mut self, old_xs: &[(ColumnId, f64)], old_view_pos: f64) {
         self.update_all_column_widths();
 
         // Preserve view position so layout stays visually fixed during width changes.
-        let new_view_pos = self.view_pos();
+        let new_view_pos = self.reader().view_pos();
         let view_delta = old_view_pos - new_view_pos;
-        self.view_offset.offset(view_delta);
+        self.view.offset.offset(view_delta);
 
         // Ensure the active column stays visible after the width change.
-        let target_offset = self.compute_view_offset_for_column(self.active_column_idx, None);
-        let pixel = 1.0 / self.scale;
-        let diff = target_offset - self.view_offset.target();
+        let target_offset = self.reader().compute_view_offset_for_column(self.view.active_column, None);
+        let pixel = 1.0 / self.view.scale;
+        let diff = target_offset - self.view.offset.target();
         if diff.abs() < pixel {
-            self.view_offset.offset(diff);
+            self.view.offset.offset(diff);
         } else {
-            self.view_offset = ViewOffset::Animation(Animation::new(
-                self.view_offset.current(),
+            self.view.offset = ViewOffset::Animation(Animation::new(
+                self.view.offset.current(),
                 target_offset,
                 AnimationConfig::default(),
             ));
         }
 
         // Animate columns to their new positions.
-        let new_xs: Vec<f64> = self.column_xs().collect();
-        for (i, col) in self.columns.iter_mut().enumerate() {
+        let new_xs: Vec<f64> = self.space.column_xs().collect();
+        for (i, col) in self.space.columns.iter_mut().enumerate() {
             let old_x = old_xs
                 .iter()
                 .find(|(id, _)| *id == col.id)
@@ -49,16 +42,16 @@ impl ScrollingSpace {
 
     /// Toggle the active column between viewport-wide zoom and its previous width.
     pub fn toggle_active_column_zoom(&mut self) -> bool {
-        if self.active_column_idx >= self.columns.len() {
+        if self.view.active_column >= self.space.columns.len() {
             return false;
         }
 
-        let old_xs = self.capture_column_positions();
-        let old_view_pos = self.view_pos();
-        let active_idx = self.active_column_idx;
-        let active_was_zoomed = self.columns[active_idx].is_zoomed();
+        let old_xs = self.space.capture_column_positions();
+        let old_view_pos = self.reader().view_pos();
+        let active_idx = self.view.active_column;
+        let active_was_zoomed = self.space.columns[active_idx].is_zoomed();
 
-        let active_col = &mut self.columns[active_idx];
+        let active_col = &mut self.space.columns[active_idx];
         if active_was_zoomed {
             if let Some(previous_width) = active_col.zoom_restore_width.take() {
                 active_col.width = previous_width;
@@ -79,7 +72,7 @@ impl ScrollingSpace {
     /// To move that boundary instead, use
     /// [`move_active_column_left_boundary`](Self::move_active_column_left_boundary).
     pub fn resize_active_column(&mut self, delta: f64) {
-        self.resize_column(self.active_column_idx, delta);
+        self.resize_column(self.view.active_column, delta);
     }
 
     /// Move the boundary **to the left of** the active column by `delta`, positive being *right*
@@ -101,14 +94,14 @@ impl ScrollingSpace {
     ///
     /// **No-op for the first column**, which has nothing to its left to trade with.
     pub fn move_active_column_left_boundary(&mut self, delta: f64) {
-        let Some(left) = self.active_column_idx.checked_sub(1) else {
+        let Some(left) = self.view.active_column.checked_sub(1) else {
             return;
         };
-        let active = self.active_column_idx;
+        let active = self.view.active_column;
         // What each side can actually take. The boundary moves by the smaller of the two, so
         // neither column is asked for room it does not have.
-        let grow = self.achievable_width_delta(left, delta);
-        let shrink = self.achievable_width_delta(active, -delta);
+        let grow = self.reader().achievable_width_delta(left, delta);
+        let shrink = self.reader().achievable_width_delta(active, -delta);
         let moved = if delta >= 0.0 {
             grow.min(-shrink)
         } else {
@@ -121,33 +114,6 @@ impl ScrollingSpace {
         self.resize_column(active, -moved);
     }
 
-    /// **How much of `delta` column `idx` can actually take**, as a proportion delta — the same
-    /// clamp [`resize_column`](Self::resize_column) applies, asked in advance.
-    ///
-    /// It exists so a two-sided move can be clamped **once** rather than applied twice and left
-    /// inconsistent when only one side hits its limit.
-    fn achievable_width_delta(&self, idx: usize, delta: f64) -> f64 {
-        let Some(col) = self.columns.get(idx) else {
-            return 0.0;
-        };
-        let working_w = self.working_area.size.w;
-        let gaps = self.options.gaps;
-        let available_width = (working_w - gaps * 2.0).max(MIN_COLUMN_WIDTH);
-        let min_prop = ((MIN_COLUMN_WIDTH + gaps) / (working_w - gaps)).clamp(0.01, 1.0);
-        let base_width = if col.is_zoomed() {
-            ColumnWidth::Fixed(available_width)
-        } else {
-            col.width
-        };
-        match base_width {
-            ColumnWidth::Proportion(p) => (p + delta).clamp(min_prop, 1.0) - p,
-            ColumnWidth::Fixed(w) => {
-                let target = (w + delta * working_w).clamp(MIN_COLUMN_WIDTH, available_width);
-                (target - w) / working_w
-            }
-        }
-    }
-
     /// Resize column `idx` by `delta` (a proportion delta for `Proportion` widths,
     /// or a fraction of the working width for `Fixed`). Mutates the column's
     /// **canonical** [`ColumnWidth`] — so the change persists through later
@@ -155,46 +121,19 @@ impl ScrollingSpace {
     /// by the keyboard resize (active column), the mouse divider drag (any column),
     /// and RPC.
     pub fn resize_column(&mut self, idx: usize, delta: f64) {
-        if idx >= self.columns.len() {
+        if idx >= self.space.columns.len() {
             return;
         }
-
-        let working_w = self.working_area.size.w;
-        let gaps = self.options.gaps;
-        // A column may grow to fill the full visible width and shrink no smaller
-        // than MIN_COLUMN_WIDTH (so it never becomes a thin line).
-        let available_width = (working_w - gaps * 2.0).max(MIN_COLUMN_WIDTH);
-        // The proportion that resolves to MIN_COLUMN_WIDTH (see `Column::resolve_width`:
-        // width = (working_w - gaps) * p - gaps), and the proportion that fills the
-        // visible width (p = 1.0 ⇒ width = working_w - 2·gaps = available_width).
-        let min_prop = ((MIN_COLUMN_WIDTH + gaps) / (working_w - gaps)).clamp(0.01, 1.0);
 
         // Anchor on the **resized** column's left edge (its on-screen offset from
         // the view) so its right edge — the divider being dragged — tracks the
         // cursor, regardless of which column is active. Anchoring on the *active*
         // column (the old `finish_active_column_width_change`) made a left column
         // grow leftward when the right column was focused (the "wrong side" bug).
-        let old_rel = self.column_x(idx) - self.view_pos();
+        let old_rel = self.space.column_x(idx) - self.reader().view_pos();
 
-        if let Some(col) = self.columns.get_mut(idx) {
-            let base_width = if col.is_zoomed() {
-                ColumnWidth::Fixed(available_width)
-            } else {
-                col.width
-            };
-            // A column grows at most to the full visible width (`p = 1.0` ⇒
-            // `available_width`) and never beyond — no off-screen, weird super-wide
-            // columns. The view scrolls to keep the resized column fully visible
-            // (see the `ensure_active_column_visible` call below), so its right
-            // divider stays reachable while dragging instead of stalling at the edge.
-            let new_width = match base_width {
-                ColumnWidth::Proportion(p) => {
-                    ColumnWidth::Proportion((p + delta).clamp(min_prop, 1.0))
-                }
-                ColumnWidth::Fixed(w) => ColumnWidth::Fixed(
-                    (w + delta * working_w).clamp(MIN_COLUMN_WIDTH, available_width),
-                ),
-            };
+        if let Some((_, new_width)) = self.reader().clamped_width(idx, delta) {
+            let col = &mut self.space.columns[idx];
             col.width = new_width;
             col.zoom_restore_width = None;
             col.is_full_width = false;
@@ -204,13 +143,22 @@ impl ScrollingSpace {
         // Restore the resized column's on-screen left edge by shifting the view by
         // the amount it moved. No active-column recenter / per-move animation —
         // those fight a smooth per-pixel drag.
-        let new_rel = self.column_x(idx) - self.view_pos();
-        self.view_offset.offset(new_rel - old_rel);
+        let new_rel = self.space.column_x(idx) - self.reader().view_pos();
+        self.view.offset.offset(new_rel - old_rel);
         // If the resize pushed the active column's far edge off-screen, scroll to
         // keep it reachable (#3) — only when resizing the active column, so a
         // divider drag on another column doesn't yank the view.
-        if idx == self.active_column_idx {
+        if idx == self.view.active_column {
             self.ensure_active_column_visible();
+        }
+    }
+
+    /// Resize the active pane's height by `delta` logical px, trading with its neighbour —
+    /// the keyboard form of [`resize_pane_height`](Self::resize_pane_height).
+    pub fn resize_active_pane_height(&mut self, delta: f64) {
+        let (height, gaps) = (self.view.area.size.h, self.space.options.gaps);
+        if let Some(col) = self.space.columns.get_mut(self.view.active_column) {
+            col.resize_active_pane_height(delta, height, gaps);
         }
     }
 
@@ -218,9 +166,55 @@ impl ScrollingSpace {
     /// logical px (mouse divider drag / RPC). No-op for single-pane columns or
     /// out-of-range indices. Mirrors the keyboard `resize_active_pane_height`.
     pub fn resize_pane_height(&mut self, col_idx: usize, pane_idx: usize, delta: f64) {
-        let (working_h, gaps) = (self.working_area.size.h, self.options.gaps);
-        if let Some(col) = self.columns.get_mut(col_idx) {
+        let (working_h, gaps) = (self.view.area.size.h, self.space.options.gaps);
+        if let Some(col) = self.space.columns.get_mut(col_idx) {
             col.resize_pane_height(pane_idx, delta, working_h, gaps);
+        }
+    }
+}
+
+impl ScrollingRef<'_> {
+    /// Column `idx`'s width before and after a resize by `delta`, clamped to what fits: no
+    /// narrower than [`MIN_COLUMN_WIDTH`], no wider than the visible area. `None` when there is no
+    /// such column.
+    ///
+    /// **One clamp, asked two ways.** [`ScrollingMut::resize_column`] applies it;
+    /// [`achievable_width_delta`](Self::achievable_width_delta) asks it in advance so a two-sided
+    /// move can be clamped once.
+    fn clamped_width(&self, idx: usize, delta: f64) -> Option<(ColumnWidth, ColumnWidth)> {
+        let col = self.space.columns.get(idx)?;
+        let working_w = self.view.area.size.w;
+        let gaps = self.space.options.gaps;
+        // A column may grow to fill the full visible width and shrink no smaller than
+        // MIN_COLUMN_WIDTH (so it never becomes a thin line).
+        let available_width = (working_w - gaps * 2.0).max(MIN_COLUMN_WIDTH);
+        // The proportion that resolves to MIN_COLUMN_WIDTH (see `Column::resolve_width`:
+        // width = (working_w - gaps) * p - gaps); `p = 1.0` fills the visible width.
+        let min_prop = ((MIN_COLUMN_WIDTH + gaps) / (working_w - gaps)).clamp(0.01, 1.0);
+        let base = if col.is_zoomed() {
+            ColumnWidth::Fixed(available_width)
+        } else {
+            col.width
+        };
+        let new = match base {
+            ColumnWidth::Proportion(p) => ColumnWidth::Proportion((p + delta).clamp(min_prop, 1.0)),
+            ColumnWidth::Fixed(w) => {
+                ColumnWidth::Fixed((w + delta * working_w).clamp(MIN_COLUMN_WIDTH, available_width))
+            }
+        };
+        Some((base, new))
+    }
+
+    /// **How much of `delta` column `idx` can actually take**, as a proportion delta — the same
+    /// clamp [`resize_column`](ScrollingMut::resize_column) applies, asked in advance.
+    ///
+    /// It exists so a two-sided move can be clamped **once** rather than applied twice and left
+    /// inconsistent when only one side hits its limit.
+    fn achievable_width_delta(&self, idx: usize, delta: f64) -> f64 {
+        match self.clamped_width(idx, delta) {
+            Some((ColumnWidth::Proportion(p), ColumnWidth::Proportion(n))) => n - p,
+            Some((ColumnWidth::Fixed(w), ColumnWidth::Fixed(n))) => (n - w) / self.view.area.size.w,
+            _ => 0.0,
         }
     }
 }

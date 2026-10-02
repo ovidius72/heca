@@ -12,7 +12,7 @@ use crate::chrome::ChromeConfig;
 use crate::keymap;
 use crate::pane_name;
 use heca_config::theme::AppConfig;
-use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
+use heca_core::layout::{Pane as LayoutPane, PaneId, Session, WindowView};
 use heca_grid_ui::install_frame_request;
 use heca_renderer::backdrop::Backdrop;
 use heca_renderer::background::BackgroundLayer;
@@ -25,10 +25,10 @@ use std::sync::Arc;
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::window::Window;
 
-fn add_initial_pane(session: &mut Session) -> PaneId {
+fn add_initial_pane(session: &mut Session, view: &mut WindowView) -> PaneId {
     let pane_id = PaneId(session.next_id());
     let pane = LayoutPane::new(pane_id, pane_name(pane_id));
-    session.add_pane(pane, None, true);
+    session.through_mut(view).add_pane(pane, None, true);
     pane_id
 }
 
@@ -344,14 +344,10 @@ pub(crate) async fn init_state(
 
     let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     let layout_options = layout_options_from(app_config);
-    let mut session = Session::new(
-        heca_core::layout::types::SessionId(1),
-        viewport_size,
-        scale_factor,
-        layout_options,
-    );
+    let mut session = Session::new(heca_core::layout::types::SessionId(1), layout_options);
+    let mut view = WindowView::new(viewport_size, scale_factor);
 
-    let pane_id = add_initial_pane(&mut session);
+    let pane_id = add_initial_pane(&mut session, &mut view);
 
     let mut backends = BackendStore::new();
     let (initial_cols, initial_rows) =
@@ -480,6 +476,7 @@ pub(crate) async fn init_state(
         background,
         server,
         session,
+        view,
         theme: app_config.theme.clone(),
         appearance,
         command_palette_size: app_config.config.settings.command_palette_size,
@@ -596,7 +593,7 @@ pub(crate) async fn init_state(
 mod tests {
     use super::add_initial_pane;
     use heca_core::layout::{
-        Session,
+        Session, WindowView,
         types::{LayoutOptions, SessionId, Size},
     };
 
@@ -607,14 +604,10 @@ mod tests {
     /// that it is a real identity rather than a number derived from the column count.
     #[test]
     fn initial_pane_consumes_session_id_counter() {
-        let mut session = Session::new(
-            SessionId(1),
-            Size::new(1280.0, 800.0),
-            1.0,
-            LayoutOptions::default(),
-        );
+        let mut session = Session::new(SessionId(1), LayoutOptions::default());
+        let mut view = WindowView::new(Size::new(1280.0, 800.0), 1.0);
 
-        let first = add_initial_pane(&mut session);
+        let first = add_initial_pane(&mut session, &mut view);
         let second = session.next_id();
 
         assert!(second > first.0, "the counter must never reissue {first:?}");

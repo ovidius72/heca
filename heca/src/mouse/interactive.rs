@@ -36,7 +36,7 @@ pub(super) fn start_interactive_move(state: &mut AppState, pane_id: PaneId, mous
     let swap = heca_grid_ui::drag::DropAction::held().is_swap();
     state.mouse.interactive_move = Some(InteractiveMovePhase::Starting {
         pane_id,
-        original_ws: state.session.active_workspace_idx,
+        original_ws: state.layout().active_workspace_idx(),
         start_mouse: mouse_pos,
         threshold_sq: 64.0,
         swap,
@@ -55,7 +55,7 @@ pub(super) fn cancel_interactive_move(state: &mut AppState) {
         let ws_idx = det
             .original_ws
             .min(state.session.workspaces.len().saturating_sub(1));
-        if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
+        if let Some(mut ws) = state.layout_mut().workspace_mut(ws_idx) {
             if let Some(orig_idx) = ws
                 .scrolling
                 .columns
@@ -65,10 +65,10 @@ pub(super) fn cancel_interactive_move(state: &mut AppState) {
                 let pane_idx = det
                     .original_pane
                     .min(ws.scrolling.columns[orig_idx].panes.len());
-                ws.scrolling
+                ws.scroll_mut()
                     .add_pane_to_column(orig_idx, Some(pane_idx), det.pane, true);
             } else {
-                state.session.add_pane(det.pane, None, true);
+                state.layout_mut().add_pane(det.pane, None, true);
             }
         }
     }
@@ -82,7 +82,7 @@ pub(super) fn cancel_interactive_move(state: &mut AppState) {
 /// This clears any rubberband displacement from the
 /// `InteractiveMovePhase::Starting` phase.
 pub(super) fn reset_interactive_move_offset(state: &mut AppState) {
-    if let Some(ws) = state.session.active_workspace_mut() {
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
         for col in &mut ws.scrolling.columns {
             for pane in &mut col.panes {
                 pane.interactive_move_offset = Point::default();
@@ -115,8 +115,8 @@ pub(super) fn handle_interactive_move_starting(state: &mut AppState, pos: (f32, 
         let dy = pos.1 - start_mouse.1;
         let sq_dist = dx * dx + dy * dy;
 
-        if let Some(ws) = state.session.workspaces.get_mut(original_ws)
-            && let Some((ci, pi)) = super::find_pane_in_workspace(ws, pane_id)
+        if let Some(mut ws) = state.layout_mut().workspace_mut(original_ws)
+            && let Some((ci, pi)) = super::find_pane_in_workspace(&ws, pane_id)
         {
             let factor = super::rubberband(sq_dist / threshold_sq);
             ws.scrolling.columns[ci].panes[pi].interactive_move_offset =
@@ -160,24 +160,22 @@ pub(super) fn handle_interactive_move_drag(state: &mut AppState, pos: (f32, f32)
         _ => return,
     };
 
+    let active_ws = state.layout().active_workspace_idx();
     if state.mouse.detached_pane.is_none()
-        && let Some(ws) = state
-            .session
-            .workspaces
-            .get_mut(state.session.active_workspace_idx)
-        && let Some((ci, pi)) = super::find_pane_in_workspace(ws, source_id)
+        && let Some(mut ws) = state.layout_mut().workspace_mut(active_ws)
+        && let Some((ci, pi)) = super::find_pane_in_workspace(&ws, source_id)
     {
-        let col_x = ws.scrolling.column_x(ci) - ws.scrolling.view_pos();
-        let pane_y = ws.scrolling.working_area.loc.y + ws.scrolling.pane_y_in_column(ci, pi);
+        let col_x = ws.scrolling.column_x(ci) - ws.scroll().view_pos();
+        let pane_y = ws.scroll().area().loc.y + ws.scrolling.pane_y_in_column(ci, pi);
         ws.scrolling.columns[ci].panes[pi].interactive_move_offset = Point::new(
             pointer_in.0 as f64 - offset.0 as f64 - col_x,
             pointer_in.1 as f64 - offset.1 as f64 - pane_y,
         );
     }
 
-    if let Some(ws) = state.session.active_workspace() {
+    if let Some(ws) = state.layout().active_workspace() {
         let space = Point::new(
-            (pointer_in.0 as f64) + ws.scrolling.view_pos(),
+            (pointer_in.0 as f64) + ws.scroll().view_pos(),
             pointer_in.1 as f64,
         );
         state.mouse.insert_hint = Some(ws.scrolling.insert_position(space));
@@ -202,15 +200,15 @@ fn set_drag_swap_mode(state: &mut AppState, swap: bool) {
 /// in the layout and track it via `interactive_move_offset`.
 fn transition_to_moving(state: &mut AppState, pane_id: PaneId, mouse_pos: (f32, f32), swap: bool) {
     let (cx, cy) = super::content_area_origin(state);
-    let original_ws = state.session.active_workspace_idx;
+    let original_ws = state.layout().active_workspace_idx();
 
     // Find the pane and zero any rubberband offset from the starting phase.
     let (_col_ci, _col_pi, col_x, pane_y) = {
-        let ws = match state.session.workspaces.get_mut(original_ws) {
-            Some(ws) => ws,
-            None => return,
+        let mut layout = state.layout_mut();
+        let Some(mut ws) = layout.workspace_mut(original_ws) else {
+            return;
         };
-        let found = super::find_pane_in_workspace(ws, pane_id);
+        let found = super::find_pane_in_workspace(&ws, pane_id);
         let (ci, pi) = match found {
             Some(v) => v,
             None => return,
@@ -224,10 +222,9 @@ fn transition_to_moving(state: &mut AppState, pane_id: PaneId, mouse_pos: (f32, 
     // Compute grab offset: cursor position relative to pane top-left in content coords.
     let pointer_in = ((mouse_pos.0 - cx) as f64, (mouse_pos.1 - cy) as f64);
     let view_pos = state
-        .session
-        .workspaces
-        .get(original_ws)
-        .map(|ws| ws.scrolling.view_pos())
+        .layout()
+        .workspace(original_ws)
+        .map(|ws| ws.scroll().view_pos())
         .unwrap_or(0.0);
     let col_screen_x = col_x - view_pos;
     let offset = (

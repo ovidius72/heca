@@ -1,13 +1,14 @@
 use super::*;
+use crate::layout::testing::Seen;
 
 /// **A column's box is exactly the panes it holds**, and the two views agree because they are
 /// one walk (F003/P082/T474).
 #[test]
 fn a_column_spans_the_panes_inside_it_and_agrees_with_them() {
     let mut space = space_with_columns(2);
-    space.add_pane_to_column(0, None, Pane::new(PaneId(99), "second"), false);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(99), "second"), false);
 
-    let cols = space.columns_with_positions();
+    let cols = space.r().columns_with_positions();
     assert_eq!(cols.len(), 2, "two columns, the first holding two panes");
     assert_eq!(cols[0].panes.len(), 2);
 
@@ -34,7 +35,7 @@ fn a_column_spans_the_panes_inside_it_and_agrees_with_them() {
         .collect();
     assert_eq!(
         flat,
-        space.panes_with_positions(),
+        space.r().panes_with_positions(),
         "a pane must not be in two places depending on who asked",
     );
 }
@@ -46,10 +47,10 @@ fn a_column_spans_the_panes_inside_it_and_agrees_with_them() {
 #[test]
 fn a_displaced_pane_moves_where_it_is_drawn_and_not_where_it_belongs() {
     let mut space = space_with_columns(1);
-    let before = space.columns_with_positions()[0].rect;
+    let before = space.r().columns_with_positions()[0].rect;
 
     space.columns[0].panes[0].interactive_move_offset = Point::new(400.0, 90.0);
-    let after = &space.columns_with_positions()[0];
+    let after = &space.r().columns_with_positions()[0];
     let pane = after.panes[0];
 
     assert_eq!(
@@ -81,7 +82,7 @@ fn a_new_column_takes_the_layouts_default_width() {
         ..Default::default()
     };
     let area = Rectangle::from_size(Size::new(1000.0, 800.0));
-    let space = ScrollingSpace::new(area, 1.0, options);
+    let space = Seen::new(area, 1.0, options);
     let column = space.new_column(ColumnId(1), Pane::new(PaneId(1), "p"));
     assert_eq!(column.width, ColumnWidth::Proportion(0.7));
 }
@@ -89,10 +90,10 @@ fn a_new_column_takes_the_layouts_default_width() {
 #[test]
 fn a_pane_is_extracted_into_a_new_column_beside_its_own() {
     let mut space = space_with_columns(2);
-    space.add_pane_to_column(0, None, Pane::new(PaneId(99), "second"), false);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(99), "second"), false);
     assert_eq!(space.columns[0].panes.len(), 2);
 
-    assert!(space.extract_pane_to_new_column(PaneId(99), ColumnId(500)));
+    assert!(space.m().extract_pane_to_new_column(PaneId(99), ColumnId(500)));
 
     assert_eq!(space.columns.len(), 3, "a column was created");
     assert_eq!(space.columns[0].panes.len(), 1, "it left the one it was in");
@@ -115,12 +116,12 @@ fn a_pane_alone_in_its_column_is_left_where_it_is() {
     let mut space = space_with_columns(2);
     let before = space.columns.len();
 
-    assert!(!space.extract_pane_to_new_column(PaneId(1), ColumnId(500)));
+    assert!(!space.m().extract_pane_to_new_column(PaneId(1), ColumnId(500)));
     assert_eq!(space.columns.len(), before);
 }
 
-fn test_scrolling_space() -> ScrollingSpace {
-    ScrollingSpace::new(
+fn test_scrolling_space() -> Seen {
+    Seen::new(
         Rectangle::from_size(Size::new(1000.0, 800.0)),
         1.0,
         LayoutOptions::default(),
@@ -136,11 +137,11 @@ fn test_column(id: u64, width: ColumnWidth) -> Column {
 }
 
 /// A space with columns whose ids are `1..=n`, in order.
-fn space_with_columns(n: u64) -> ScrollingSpace {
+fn space_with_columns(n: u64) -> Seen {
     let mut space = test_scrolling_space();
     // activate=true appends in order (activate=false inserts at active+1).
     for id in 1..=n {
-        space.add_column(None, test_column(id, ColumnWidth::Proportion(0.5)), true);
+        space.m().add_column(None, test_column(id, ColumnWidth::Proportion(0.5)), true);
     }
     space
 }
@@ -152,10 +153,10 @@ fn column_ids(space: &ScrollingSpace) -> Vec<u64> {
 #[test]
 fn reorder_column_moves_and_activates() {
     let mut space = space_with_columns(4); // [1,2,3,4]
-    assert!(space.reorder_column(0, 2));
+    assert!(space.m().reorder_column(0, 2));
     assert_eq!(column_ids(&space), vec![2, 3, 1, 4]);
     assert_eq!(
-        space.active_column_idx, 2,
+        space.view.active_column, 2,
         "the moved column becomes active"
     );
 }
@@ -163,11 +164,11 @@ fn reorder_column_moves_and_activates() {
 #[test]
 fn reorder_column_clamps_and_no_ops() {
     let mut space = space_with_columns(3); // [1,2,3]
-    assert!(space.reorder_column(0, 99), "dst clamps to the last index");
+    assert!(space.m().reorder_column(0, 99), "dst clamps to the last index");
     assert_eq!(column_ids(&space), vec![2, 3, 1]);
-    assert!(!space.reorder_column(1, 1), "same index is a no-op");
+    assert!(!space.m().reorder_column(1, 1), "same index is a no-op");
     assert!(
-        !space.reorder_column(9, 0),
+        !space.m().reorder_column(9, 0),
         "out-of-range source is a no-op"
     );
 }
@@ -175,21 +176,21 @@ fn reorder_column_clamps_and_no_ops() {
 #[test]
 fn swap_columns_exchanges_positions() {
     let mut space = space_with_columns(4); // [1,2,3,4]
-    assert!(space.swap_columns(0, 3));
+    assert!(space.m().swap_columns(0, 3));
     assert_eq!(column_ids(&space), vec![4, 2, 3, 1]);
-    assert!(!space.swap_columns(1, 1), "self-swap is a no-op");
-    assert!(!space.swap_columns(0, 9), "out-of-range is a no-op");
+    assert!(!space.m().swap_columns(1, 1), "self-swap is a no-op");
+    assert!(!space.m().swap_columns(0, 9), "out-of-range is a no-op");
 }
 
 #[test]
 fn toggle_active_column_zoom_restores_previous_width() {
     let mut space = test_scrolling_space();
-    space.add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
 
     assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.5));
     assert!(!space.columns[0].is_zoomed());
 
-    assert!(space.toggle_active_column_zoom());
+    assert!(space.m().toggle_active_column_zoom());
     assert!(space.columns[0].is_zoomed());
     assert_eq!(
         space.columns[0].zoom_restore_width,
@@ -197,7 +198,7 @@ fn toggle_active_column_zoom_restores_previous_width() {
     );
     assert_eq!(space.column_widths[0], 984.0);
 
-    assert!(space.toggle_active_column_zoom());
+    assert!(space.m().toggle_active_column_zoom());
     assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.5));
     assert!(!space.columns[0].is_zoomed());
 }
@@ -205,19 +206,19 @@ fn toggle_active_column_zoom_restores_previous_width() {
 #[test]
 fn resize_column_persists_through_recompute_and_add() {
     let mut space = space_with_columns(2); // [1,2] each Proportion(0.5)
-    space.resize_column(0, 0.2);
+    space.m().resize_column(0, 0.2);
     assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.7));
     let w0 = space.column_widths[0];
     // A later layout mutation recomputes the width cache from the canonical
     // `col.width` — the resize must NOT be recomputed away (the niri landmine).
-    space.update_all_column_widths();
+    space.m().update_all_column_widths();
     assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.7));
     assert_eq!(
         space.column_widths[0], w0,
         "recompute preserves the manual resize"
     );
     // Adding a column must not reflow column 0 (independent proportions).
-    space.add_column(None, test_column(3, ColumnWidth::Proportion(0.5)), true);
+    space.m().add_column(None, test_column(3, ColumnWidth::Proportion(0.5)), true);
     assert_eq!(
         space.columns[0].width,
         ColumnWidth::Proportion(0.7),
@@ -228,10 +229,10 @@ fn resize_column_persists_through_recompute_and_add() {
 #[test]
 fn resize_column_clamps_and_ignores_out_of_range() {
     let mut space = space_with_columns(2);
-    space.resize_column(0, 10.0); // huge delta clamps to the full-width cap (1.0 = viewport)
+    space.m().resize_column(0, 10.0); // huge delta clamps to the full-width cap (1.0 = viewport)
     assert_eq!(space.columns[0].width, ColumnWidth::Proportion(1.0));
     // A huge negative delta clamps to the min-width proportion (small, non-zero).
-    space.resize_column(1, -10.0);
+    space.m().resize_column(1, -10.0);
     match space.columns[1].width {
         ColumnWidth::Proportion(p) => {
             assert!(
@@ -241,24 +242,24 @@ fn resize_column_clamps_and_ignores_out_of_range() {
         }
         other => panic!("expected a proportion, got {other:?}"),
     }
-    space.resize_column(99, 0.1); // out of range → no-op, no panic
+    space.m().resize_column(99, 0.1); // out of range → no-op, no panic
     assert_eq!(space.columns.len(), 2);
 }
 
 #[test]
 fn resize_pane_height_sets_preferred_and_no_ops_single_pane() {
     let mut space = test_scrolling_space();
-    space.add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
     // Single-pane column → no-op (the lone pane fills the column).
-    space.resize_pane_height(0, 0, 30.0);
+    space.m().resize_pane_height(0, 0, 30.0);
     assert_eq!(space.columns[0].panes[0].preferred_height, None);
     // Stack a second pane, then the resize takes effect.
-    space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), true);
-    space.resize_pane_height(0, 0, 30.0);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), true);
+    space.m().resize_pane_height(0, 0, 30.0);
     assert!(space.columns[0].panes[0].preferred_height.is_some());
     // Out-of-range column / pane index → no panic.
-    space.resize_pane_height(9, 0, 30.0);
-    space.resize_pane_height(0, 9, 30.0);
+    space.m().resize_pane_height(9, 0, 30.0);
+    space.m().resize_pane_height(0, 9, 30.0);
 }
 
 /// **A boundary moves space between its own two panes, and nothing else** (F004/P084/T413).
@@ -270,16 +271,16 @@ fn resize_pane_height_sets_preferred_and_no_ops_single_pane() {
 #[test]
 fn a_boundary_drag_leaves_the_pane_beyond_it_untouched() {
     let mut space = test_scrolling_space();
-    space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
-    space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
-    space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
 
     let before: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
     assert_eq!(before.len(), 3, "three stacked panes");
     let third = before[2];
 
     // Drag the boundary between pane 0 and pane 1 downwards.
-    space.resize_pane_height(0, 0, 60.0);
+    space.m().resize_pane_height(0, 0, 60.0);
     let after: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
 
     assert!(
@@ -309,14 +310,14 @@ fn a_boundary_drag_leaves_the_pane_beyond_it_untouched() {
 #[test]
 fn a_boundary_drag_stops_when_its_neighbour_hits_the_floor() {
     let mut space = test_scrolling_space();
-    space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
-    space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
-    space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
     let third = space.columns[0].pane_sizes[2].h;
 
     // Far more than the neighbour can give, repeatedly.
     for _ in 0..20 {
-        space.resize_pane_height(0, 0, 500.0);
+        space.m().resize_pane_height(0, 0, 500.0);
     }
     let after: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
 
@@ -343,12 +344,12 @@ fn the_keyboard_moves_a_divider_the_same_way_from_every_pane() {
     // Each seat in a three-pane column, and the boundary each one owns.
     for (active, boundary) in [(0usize, 0usize), (1, 1), (2, 1)] {
         let mut space = test_scrolling_space();
-        space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
-        space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
-        space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+        space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+        space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+        space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
 
         let before: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
-        let (h, gaps) = (space.working_area.size.h, space.options.gaps);
+        let (h, gaps) = (space.view.area.size.h, space.options.gaps);
         let col = &mut space.columns[0];
         col.active_pane_idx = active;
         col.move_active_pane_boundary(40.0, h, gaps);
@@ -384,12 +385,12 @@ fn the_keyboard_moves_a_divider_the_same_way_from_every_pane() {
 fn the_size_verb_still_grows_the_active_pane_from_every_seat() {
     for active in [0usize, 1, 2] {
         let mut space = test_scrolling_space();
-        space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
-        space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
-        space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+        space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+        space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+        space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
 
         let before: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
-        let (h, gaps) = (space.working_area.size.h, space.options.gaps);
+        let (h, gaps) = (space.view.area.size.h, space.options.gaps);
         let col = &mut space.columns[0];
         col.active_pane_idx = active;
         col.resize_active_pane_height(40.0, h, gaps);
@@ -406,18 +407,18 @@ fn the_size_verb_still_grows_the_active_pane_from_every_seat() {
 #[test]
 fn columns_can_be_zoomed_independently() {
     let mut space = test_scrolling_space();
-    space.add_column(None, test_column(1, ColumnWidth::Proportion(0.4)), true);
-    space.add_column(None, test_column(2, ColumnWidth::Proportion(0.6)), false);
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.4)), true);
+    space.m().add_column(None, test_column(2, ColumnWidth::Proportion(0.6)), false);
 
-    assert!(space.toggle_active_column_zoom());
+    assert!(space.m().toggle_active_column_zoom());
     assert!(space.columns[0].is_zoomed());
     assert_eq!(
         space.columns[0].zoom_restore_width,
         Some(ColumnWidth::Proportion(0.4))
     );
 
-    space.activate_column(1);
-    assert!(space.toggle_active_column_zoom());
+    space.m().activate_column(1);
+    assert!(space.m().toggle_active_column_zoom());
 
     assert!(space.columns[0].is_zoomed());
     assert_eq!(
@@ -430,7 +431,7 @@ fn columns_can_be_zoomed_independently() {
         Some(ColumnWidth::Proportion(0.6))
     );
 
-    assert!(space.toggle_active_column_zoom());
+    assert!(space.m().toggle_active_column_zoom());
     assert!(space.columns[0].is_zoomed());
     assert!(!space.columns[1].is_zoomed());
     assert_eq!(space.columns[1].width, ColumnWidth::Proportion(0.6));
@@ -441,24 +442,24 @@ fn scroll_view_pans_and_clamps_to_content_bounds() {
     // Three ~half-viewport columns overflow the 1000px viewport, so the view
     // can pan — but only within the content (never scrolls the layout away).
     let mut space = space_with_columns(3);
-    space.update_all_column_widths();
-    let vw = space.working_area.size.w;
+    space.m().update_all_column_widths();
+    let vw = space.view.area.size.w;
 
     // Pan hard left, then again → second is a no-op (already at the left bound).
-    space.scroll_view(-vw * 10.0);
-    let left_bound = space.view_pos();
-    space.scroll_view(-vw * 10.0);
+    space.m().scroll_view(-vw * 10.0);
+    let left_bound = space.r().view_pos();
+    space.m().scroll_view(-vw * 10.0);
     assert!(
-        (space.view_pos() - left_bound).abs() < 1.0,
+        (space.r().view_pos() - left_bound).abs() < 1.0,
         "clamped at the left content bound"
     );
 
     // Pan hard right, then again → clamped at the right bound.
-    space.scroll_view(vw * 10.0);
-    let right_bound = space.view_pos();
-    space.scroll_view(vw * 10.0);
+    space.m().scroll_view(vw * 10.0);
+    let right_bound = space.r().view_pos();
+    space.m().scroll_view(vw * 10.0);
     assert!(
-        (space.view_pos() - right_bound).abs() < 1.0,
+        (space.r().view_pos() - right_bound).abs() < 1.0,
         "clamped at the right content bound"
     );
     assert!(
@@ -470,12 +471,12 @@ fn scroll_view_pans_and_clamps_to_content_bounds() {
 #[test]
 fn scroll_view_is_noop_when_all_columns_fit() {
     let mut space = test_scrolling_space();
-    space.add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
-    space.update_all_column_widths();
-    let before = space.view_pos();
-    space.scroll_view(500.0);
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    space.m().update_all_column_widths();
+    let before = space.r().view_pos();
+    space.m().scroll_view(500.0);
     assert!(
-        (space.view_pos() - before).abs() < f64::EPSILON,
+        (space.r().view_pos() - before).abs() < f64::EPSILON,
         "a single column that fits the viewport does not scroll"
     );
 }
@@ -485,19 +486,20 @@ fn refocusing_active_column_refits_a_scrolled_view() {
     // After panning the view away, re-activating the already-active column must
     // scroll it back into view (#3: focusing a stranded column reveals it).
     let mut space = space_with_columns(3);
-    space.update_all_column_widths();
-    let active = space.active_column_idx;
-    let fitted = space.view_pos();
+    space.m().update_all_column_widths();
+    let active = space.view.active_column;
+    let fitted = space.r().view_pos();
     // Pan far away so the active column is off-screen.
-    space.scroll_view(-space.working_area.size.w * 10.0);
+    let pan = -space.view.area.size.w * 10.0;
+    space.m().scroll_view(pan);
     assert!(
-        (space.view_pos() - fitted).abs() > 1.0,
+        (space.r().view_pos() - fitted).abs() > 1.0,
         "precondition: the view has moved away from the active column"
     );
     // Re-activating the same column re-fits it.
-    space.activate_column(active);
+    space.m().activate_column(active);
     assert!(
-        space.view_offset.is_static(),
+        space.view.offset.is_static(),
         "ensure-visible snaps the view statically"
     );
 }
@@ -520,14 +522,14 @@ fn a_pane_added_to_a_column_that_was_dragged_full_still_gets_room() {
         ..Default::default()
     };
     let area = Rectangle::from_size(Size::new(1000.0, 800.0));
-    let mut space = ScrollingSpace::new(area, 1.0, opts);
-    space.add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
-    space.add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
+    let mut space = Seen::new(area, 1.0, opts);
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
     // Drag the divider well off centre, so the two of them fill the column between them.
-    space.resize_pane_height(0, 0, 120.0);
-    space.add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
+    space.m().resize_pane_height(0, 0, 120.0);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
 
-    let panes = space.panes_with_positions();
+    let panes = space.r().panes_with_positions();
     assert_eq!(panes.len(), 3, "three panes in the column");
     for (id, rect) in &panes {
         assert!(
@@ -554,11 +556,11 @@ fn a_pane_added_to_a_column_that_was_dragged_full_still_gets_room() {
 #[test]
 fn moving_a_columns_left_edge_trades_width_with_the_column_before_it() {
     let mut space = space_with_columns(3);
-    space.activate_column(1);
+    space.m().activate_column(1);
     let widths = |s: &ScrollingSpace| s.column_widths.clone();
 
     let before = widths(&space);
-    space.resize_active_column(0.1);
+    space.m().resize_active_column(0.1);
     let after_right = widths(&space);
     assert!(
         after_right[1] > before[1],
@@ -569,7 +571,7 @@ fn moving_a_columns_left_edge_trades_width_with_the_column_before_it() {
         "and leaves the column beside it alone"
     );
 
-    space.move_active_column_left_boundary(0.1);
+    space.m().move_active_column_left_boundary(0.1);
     let after_left = widths(&space);
     assert!(
         after_left[0] > after_right[0],
@@ -587,9 +589,9 @@ fn moving_a_columns_left_edge_trades_width_with_the_column_before_it() {
     );
 
     // The first column has nothing to its left, so there is no boundary to move.
-    space.activate_column(0);
+    space.m().activate_column(0);
     let pinned = widths(&space);
-    space.move_active_column_left_boundary(0.1);
+    space.m().move_active_column_left_boundary(0.1);
     assert_eq!(
         widths(&space),
         pinned,
@@ -606,12 +608,13 @@ fn a_pane_can_be_resized_from_either_of_its_edges() {
         ..Default::default()
     };
     let area = Rectangle::from_size(Size::new(1000.0, 800.0));
-    let mut space = ScrollingSpace::new(area, 1.0, opts);
-    space.add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
-    space.add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
-    space.add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
-    let heights = |s: &ScrollingSpace| -> Vec<f64> {
-        s.panes_with_positions()
+    let mut space = Seen::new(area, 1.0, opts);
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), String::from("p2")), true);
+    space.m().add_pane_to_column(0, None, Pane::new(PaneId(3), String::from("p3")), true);
+    let heights = |s: &Seen| -> Vec<f64> {
+        s.r()
+            .panes_with_positions()
             .iter()
             .map(|(_, r)| r.size.h)
             .collect()
@@ -623,7 +626,7 @@ fn a_pane_can_be_resized_from_either_of_its_edges() {
     space.columns[0].activate_pane(1);
 
     let before = heights(&space);
-    let h = space.working_area.size.h;
+    let h = space.view.area.size.h;
     let gaps = space.options.gaps;
     space.columns[0].move_active_pane_boundary(40.0, h, gaps);
     let after_bottom = heights(&space);
@@ -648,4 +651,34 @@ fn a_pane_can_be_resized_from_either_of_its_edges() {
     let pinned = heights(&space);
     space.columns[0].move_active_pane_top_boundary(40.0, h, gaps);
     assert_eq!(heights(&space), pinned, "no edge above the first pane");
+}
+
+/// **Changing focus does not make the view jump — it animates.** Moving the active column changes
+/// the origin `view_pos` is measured from, so the offset has to shift by exactly that much or the
+/// strip would snap on the first frame and only then slide.
+///
+/// The columns are wider than the window, so the target is far away and the move really animates
+/// (a target within a pixel is applied at once, which hides the shift).
+#[test]
+fn changing_the_active_column_leaves_the_view_where_it_was_until_it_animates() {
+    let mut space = test_scrolling_space();
+    for id in 1..=3 {
+        space
+            .m()
+            .add_column(None, test_column(id, ColumnWidth::Fixed(800.0)), true);
+    }
+    space.m().activate_column(0);
+    let before = space.r().view_pos();
+
+    space.m().activate_column(2);
+
+    assert!(
+        !space.view.offset.is_static(),
+        "precondition: the far column is reached by an animation",
+    );
+    assert!(
+        (space.r().view_pos() - before).abs() < 1.0,
+        "the view started from {before}, and first drew at {}",
+        space.r().view_pos(),
+    );
 }

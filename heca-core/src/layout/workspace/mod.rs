@@ -49,13 +49,8 @@ pub struct FloatingPane {
 }
 
 impl Workspace {
-    pub fn new(
-        id: WorkspaceId,
-        working_area: Rectangle,
-        scale: f64,
-        options: LayoutOptions,
-    ) -> Self {
-        let scrolling = ScrollingSpace::new(working_area, scale, options);
+    pub fn new(id: WorkspaceId, options: LayoutOptions) -> Self {
+        let scrolling = ScrollingSpace::new(options);
         Self {
             id,
             name: None,
@@ -67,17 +62,6 @@ impl Workspace {
 
     pub fn has_panes(&self) -> bool {
         !self.scrolling.is_empty() || !self.floating_panes.is_empty()
-    }
-
-    pub fn active_pane(&self) -> Option<&super::column::Pane> {
-        if self.focus_domain == FocusDomain::Floating {
-            self.floating_panes
-                .iter()
-                .find(|p| p.is_active)
-                .map(|p| &p.pane)
-        } else {
-            self.scrolling.active_pane()
-        }
     }
 
     /// Clear active state from all floating panes.
@@ -135,138 +119,11 @@ impl Workspace {
         }
         None
     }
-
-    /// Update working area (called on resize).
-    pub fn update_working_area(&mut self, working_area: Rectangle) {
-        // Capture the old working area (as plain f64s, to avoid borrowing
-        // `self.scrolling.working_area` across the mutable call below).
-        let (old_x, old_y, old_w, old_h) = (
-            self.scrolling.working_area.loc.x,
-            self.scrolling.working_area.loc.y,
-            self.scrolling.working_area.size.w,
-            self.scrolling.working_area.size.h,
-        );
-        self.scrolling.update_working_area(working_area);
-        // Scale floating panes proportionally so they keep their relative position
-        // + coverage when the working area changes (window resize, chrome toggle).
-        // Without this, a float spawned at 95% keeps its absolute pixel size while
-        // the window grows/shrinks around it — drifting off-screen or looking
-        // stranded. Position is stored relative to the working-area origin (see
-        // `handle_float` + the render path), so a pure scale by the size ratio is
-        // correct (plus an origin shift in case `loc` ever moves).
-        let sx = working_area.size.w / old_w.max(1.0);
-        let sy = working_area.size.h / old_h.max(1.0);
-        if (sx - 1.0).abs() > 1e-6 || (sy - 1.0).abs() > 1e-6 {
-            for float in &mut self.floating_panes {
-                float.position.x = working_area.loc.x + (float.position.x - old_x) * sx;
-                float.position.y = working_area.loc.y + (float.position.y - old_y) * sy;
-                float.size.w *= sx;
-                float.size.h *= sy;
-            }
-        }
-    }
-
-    /// Advance all animations in this workspace.
-    pub fn advance_animations(&mut self) {
-        self.scrolling.advance_animations();
-    }
-
-    pub fn are_animations_ongoing(&self) -> bool {
-        self.scrolling.are_animations_ongoing()
-    }
-
-    /// Add a pane to the scrolling layout.
-    ///
-    /// `new_column_id` is spent only when a column is actually created (`column_idx` is `None`).
-    /// It is handed in rather than derived here because a [`ColumnId`] must be **allocated**: see
-    /// [`Session::next_id`](super::session::Session::next_id), the one counter panes and workspaces
-    /// already draw from.
-    pub fn add_pane(
-        &mut self,
-        pane: super::column::Pane,
-        column_idx: Option<usize>,
-        activate: bool,
-        new_column_id: ColumnId,
-    ) {
-        if let Some(idx) = column_idx {
-            // Add to existing column.
-            self.scrolling.add_pane_to_column(idx, None, pane, activate);
-        } else {
-            // Create new column.
-            let col = self.scrolling.new_column(new_column_id, pane);
-            self.scrolling.add_column(None, col, activate);
-        }
-    }
-
-    /// Focus left in the scrolling layout.
-    pub fn focus_left(&mut self) -> bool {
-        if self.focus_domain == FocusDomain::Floating {
-            false // TODO: floating focus
-        } else {
-            self.scrolling.focus_left()
-        }
-    }
-
-    /// Focus right in the scrolling layout.
-    pub fn focus_right(&mut self) -> bool {
-        if self.focus_domain == FocusDomain::Floating {
-            false // TODO: floating focus
-        } else {
-            self.scrolling.focus_right()
-        }
-    }
-
-    /// Focus up (previous pane in column, or previous workspace).
-    pub fn focus_up(&mut self) -> bool {
-        if self.focus_domain == FocusDomain::Floating {
-            false // TODO
-        } else if let Some(col) = self.scrolling.active_column_mut() {
-            if col.focus_up() {
-                true
-            } else {
-                // Wrap to previous column's last pane.
-                let col_idx = self.scrolling.active_column_idx;
-                if col_idx > 0 {
-                    self.scrolling.activate_column(col_idx - 1);
-                    if let Some(new_col) = self.scrolling.active_column_mut() {
-                        let last_idx = new_col.panes.len().saturating_sub(1);
-                        new_col.activate_pane(last_idx);
-                    }
-                    true
-                } else {
-                    false
-                }
-            }
-        } else {
-            false
-        }
-    }
-
-    /// Focus down (next pane in column, or next workspace).
-    pub fn focus_down(&mut self) -> bool {
-        if self.focus_domain == FocusDomain::Floating {
-            false // TODO
-        } else if let Some(col) = self.scrolling.active_column_mut() {
-            if col.focus_down() {
-                true
-            } else {
-                // Wrap to next column's first pane.
-                let col_idx = self.scrolling.active_column_idx;
-                if col_idx + 1 < self.scrolling.columns.len() {
-                    self.scrolling.activate_column(col_idx + 1);
-                    if let Some(new_col) = self.scrolling.active_column_mut() {
-                        new_col.activate_pane(0);
-                    }
-                    true
-                } else {
-                    false
-                }
-            }
-        } else {
-            false
-        }
-    }
 }
+
+mod handle;
+
+pub use handle::{Detached, WorkspaceMut, WorkspaceRef};
 
 #[cfg(test)]
 mod tests;

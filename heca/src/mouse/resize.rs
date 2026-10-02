@@ -155,7 +155,7 @@ fn fallback_divider(boxes: &[PaneBox], pos: (f32, f32)) -> Option<ResizeDivider>
 /// `true` only on an actual hit — a miss falls through to the normal
 /// content/drag paths so the press isn't swallowed.
 pub(crate) fn on_press(state: &mut AppState, pos: (f32, f32)) -> bool {
-    if !state.mouse_enabled || crate::app::interaction::is_floating_domain(&state.session) {
+    if !state.mouse_enabled || crate::app::interaction::is_floating_domain(state.layout()) {
         return false;
     }
     let Some(divider) = divider_at(&pane_boxes(state), pos) else {
@@ -171,7 +171,7 @@ pub(crate) fn on_press(state: &mut AppState, pos: (f32, f32)) -> bool {
 /// Start a resize-drag from the right-button fallback (hold right-button on a
 /// pane). Returns `true` if a resize was started.
 pub(crate) fn on_right_press(state: &mut AppState, pos: (f32, f32)) -> bool {
-    if !state.mouse_enabled || crate::app::interaction::is_floating_domain(&state.session) {
+    if !state.mouse_enabled || crate::app::interaction::is_floating_domain(state.layout()) {
         return false;
     }
     let Some(divider) = fallback_divider(&pane_boxes(state), pos) else {
@@ -200,10 +200,8 @@ pub(crate) fn on_drag_move(state: &mut AppState, pos: (f32, f32)) -> Option<WmAc
             if dx == 0.0 {
                 return None;
             }
-            let working_w = state
-                .session
-                .active_workspace()
-                .map(|ws| ws.scrolling.working_area.size.w as f32)
+            let working_w = state.layout().active_workspace()
+                .map(|ws| ws.scroll().area().size.w as f32)
                 .unwrap_or(0.0);
             if working_w <= 0.0 {
                 return None;

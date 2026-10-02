@@ -63,7 +63,7 @@ pub fn handle_reset_pane_name_by_id(state: &mut AppState, action: &WmAction) {
 
 /// Clear the **active** workspace's custom name (context menu / RPC / keybind).
 pub fn handle_reset_workspace_name(state: &mut AppState, _action: &WmAction) {
-    let ws_idx = state.session.active_workspace_idx;
+    let ws_idx = state.layout().active_workspace_idx();
     apply_rename(state, RenameTarget::Workspace(ws_idx), String::new());
 }
 
@@ -186,11 +186,9 @@ fn enter_column_rename(state: &mut AppState, ws_idx: usize, col_idx: usize) {
 }
 
 pub fn handle_rename_column(state: &mut AppState, _action: &WmAction) {
-    let ws_idx = state.session.active_workspace_idx;
-    let Some(col_idx) = state
-        .session
-        .active_workspace()
-        .map(|ws| ws.scrolling.active_column_idx)
+    let ws_idx = state.layout().active_workspace_idx();
+    let Some(col_idx) = state.layout().active_workspace()
+        .map(|ws| ws.scroll().active_column_idx())
     else {
         return;
     };
@@ -210,7 +208,7 @@ pub fn handle_rename_target(state: &mut AppState, action: &WmAction) {
     let WmAction::RenameTarget { pane_id, name } = action else {
         return;
     };
-    if let Some(ws) = state.session.active_workspace_mut()
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut()
         && let Some(pane) = ws.find_pane_mut(*pane_id)
     {
         pane.title = if name.is_empty() {
@@ -244,7 +242,7 @@ fn enter_workspace_rename(state: &mut AppState, ws_idx: usize) {
 /// Rename the **active** workspace — the counterpart of [`handle_rename_pane`], and unbent for the
 /// same reason: the cursor's row belongs to `workspaces.rename_selected` (`r`).
 pub fn handle_rename_workspace(state: &mut AppState, _action: &WmAction) {
-    enter_workspace_rename(state, state.session.active_workspace_idx);
+    enter_workspace_rename(state, state.layout().active_workspace_idx());
 }
 
 /// Enter rename mode for a specific workspace by index — the context-menu / RPC entry point

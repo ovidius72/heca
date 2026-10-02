@@ -68,7 +68,7 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
         }
     }
 
-    let active_ws = state.session.active_workspace_idx;
+    let active_ws = state.layout().active_workspace_idx();
     let next_id = state.session.next_id();
 
     // Start the process before touching the layout — a spawn that fails (F009/P055/T225)
@@ -86,12 +86,12 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     pane.close_policy = *close_policy;
 
     if *float {
-        if let Some(ws) = state.session.active_workspace_mut() {
+        if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
             let rect = ws.default_float_rect();
             ws.add_floating_pane(pane, rect, None);
         }
     } else {
-        state.session.add_pane(pane, None, true);
+        state.layout_mut().add_pane(pane, None, true);
     }
 }
 

@@ -31,12 +31,17 @@ pub fn handle_place_pane(state: &mut AppState, action: &WmAction) {
         return;
     };
     let before = pane_rect(state, src_ws, pane_id);
-    let Some(pane) = state.session.workspaces[src_ws].take_pane(pane_id) else {
+    let Some(pane) = state
+        .layout_mut()
+        .workspace_mut(src_ws)
+        .and_then(|mut ws| ws.take_pane(pane_id))
+    else {
         return;
     };
     let new_column_id = ColumnId(state.session.next_id());
-    let ws = &mut state.session.workspaces[ws_idx];
-    ws.place_pane(pane, col_idx, pane_idx, new_column_id);
+    if let Some(mut ws) = state.layout_mut().workspace_mut(ws_idx) {
+        ws.place_pane(pane, col_idx, pane_idx, new_column_id);
+    }
     if let (Some(from), true) = (before, src_ws == ws_idx)
         && let Some(to) = pane_rect(state, ws_idx, pane_id)
     {
@@ -63,8 +68,10 @@ fn pane_rect(
     ws_idx: usize,
     pane_id: heca_core::layout::PaneId,
 ) -> Option<heca_core::layout::types::Rectangle> {
-    state.session.workspaces[ws_idx]
-        .scrolling
+    state
+        .layout()
+        .workspace(ws_idx)?
+        .scroll()
         .panes_with_positions()
         .into_iter()
         .find(|(id, _)| *id == pane_id)

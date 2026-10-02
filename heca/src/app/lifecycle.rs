@@ -176,7 +176,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.mark_full_redraw();
     }
 
-    state.session.advance_animations();
+    state.layout_mut().advance_animations();
     let dt = crate::chrome::FRAME_INTERVAL.as_secs_f32();
     // **Which surfaces are mid-exit, before anything advances.** The tick below is the one that
     // advances them — they are children of this tree — so the registry has to look either side of
@@ -262,7 +262,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         backend_closed: backend_poll.closed_any,
         chrome_runtime: chrome_runtime_changed,
         bell_flashing,
-        session_animating: state.session.are_animations_ongoing(),
+        session_animating: state.layout().are_animations_ongoing(),
         terminal_animating,
         image_animating,
         chrome_animating,
@@ -272,7 +272,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.window.request_redraw();
     }
 
-    let wake_animating = state.session.are_animations_ongoing()
+    let wake_animating = state.layout().are_animations_ongoing()
         || terminal_animating
         || image_animating
         || chrome_animating;

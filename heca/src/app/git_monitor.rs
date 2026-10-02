@@ -305,7 +305,7 @@ fn sync_one_pane_git<P: GitProvider>(
 mod tests {
     use super::{GitInfo, GitProvider, GitRuntimeCache, GitSnapshot, sync_pane_git_from_cwds_impl};
     use heca_core::layout::{
-        LayoutOptions, Pane, PaneId, Point, Session, SessionId, Size, workspace::FloatingPane,
+        Pane, PaneId, Point, Session, Size, testing::Windowed, workspace::FloatingPane,
     };
     use std::cell::Cell;
     use std::collections::HashMap;
@@ -369,22 +369,9 @@ mod tests {
     }
 
     fn session_with_tiled_pane(id: PaneId) -> Session {
-        let mut session = Session::new(
-            SessionId(1),
-            Size::new(1280.0, 800.0),
-            1.0,
-            LayoutOptions::default(),
-        );
-        let ws = session
-            .active_workspace_mut()
-            .expect("session should create an initial workspace");
-        ws.add_pane(
-            Pane::new(id, "editor"),
-            None,
-            true,
-            heca_core::layout::ColumnId(id.0),
-        );
-        session
+        let mut window = Windowed::new(Size::new(1280.0, 800.0), 1.0);
+        window.m().add_pane(Pane::new(id, "editor"), None, true);
+        window.session
     }
 
     #[test]
@@ -393,7 +380,9 @@ mod tests {
         let repo = PathBuf::from("/repo/project");
         let mut session = session_with_tiled_pane(pane_id);
         session
-            .active_workspace_mut()
+            
+            .workspaces
+            .first_mut()
             .expect("workspace")
             .find_pane_mut(pane_id)
             .expect("pane")
@@ -427,7 +416,9 @@ mod tests {
         );
 
         let runtime = session
-            .active_workspace()
+            
+            .workspaces
+            .first()
             .and_then(|ws| ws.find_pane(pane_id))
             .expect("pane")
             .runtime
@@ -443,7 +434,10 @@ mod tests {
         let root = PathBuf::from("/repo");
         let mut session = session_with_tiled_pane(PaneId(10));
         {
-            let ws = session.active_workspace_mut().expect("workspace");
+            let ws = session
+            .workspaces
+            .first_mut()
+            .expect("workspace");
             ws.find_pane_mut(PaneId(10)).expect("pane").runtime.cwd = Some(repo_a.clone());
             ws.floating_panes.push(FloatingPane {
                 pane: {
@@ -508,7 +502,9 @@ mod tests {
         let root = PathBuf::from("/repo");
         let mut session = session_with_tiled_pane(PaneId(10));
         session
-            .active_workspace_mut()
+            
+            .workspaces
+            .first_mut()
             .expect("workspace")
             .find_pane_mut(PaneId(10))
             .expect("pane")

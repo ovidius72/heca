@@ -52,7 +52,7 @@ pub fn handle_take_pane(state: &mut AppState, action: &WmAction) {
         return;
     }
 
-    let active_ws_idx = state.session.active_workspace_idx;
+    let active_ws_idx = state.layout().active_workspace_idx();
     let Some((src_ws, pane)) = remove_take_pane_source(state, target) else {
         return;
     };
@@ -63,10 +63,10 @@ pub fn handle_take_pane(state: &mut AppState, action: &WmAction) {
 }
 
 fn pane_is_already_active_column_tail(state: &AppState, pane_id: PaneId) -> bool {
-    let Some(ws) = state.session.active_workspace() else {
+    let Some(ws) = state.layout().active_workspace() else {
         return false;
     };
-    let active_col = ws.scrolling.active_column_idx;
+    let active_col = ws.scroll().active_column_idx();
     active_col < ws.scrolling.columns.len()
         && ws.scrolling.columns[active_col].panes.last().map(|p| p.id) == Some(pane_id)
 }
@@ -78,12 +78,11 @@ fn remove_take_pane_source(
     let tiled = crate::find_pane_location(&state.session, pane_id).and_then(
         |(src_ws, src_col, src_idx)| {
             state
-                .session
-                .workspaces
-                .get_mut(src_ws)
-                .and_then(|ws| {
+                .layout_mut()
+                .workspace_mut(src_ws)
+                .and_then(|mut ws| {
                     if src_col < ws.scrolling.columns.len() {
-                        ws.scrolling.remove_pane(src_col, src_idx)
+                        ws.scroll_mut().remove_pane(src_col, src_idx)
                     } else {
                         None
                     }
@@ -114,24 +113,23 @@ fn insert_taken_pane_into_active_column(
     pane: heca_core::layout::column::Pane,
     should_focus: bool,
 ) {
-    let active_col = state
-        .session
-        .active_workspace()
-        .map(|ws| ws.scrolling.active_column_idx)
+    let active_col = state.layout().active_workspace()
+        .map(|ws| ws.scroll().active_column_idx())
         .unwrap_or(0);
     let new_col_id = ColumnId(state.session.next_id());
-    let Some(ws) = state.session.active_workspace_mut() else {
+    let mut layout = state.layout_mut();
+    let Some(mut ws) = layout.active_workspace_mut() else {
         return;
     };
     if active_col < ws.scrolling.columns.len() {
-        ws.scrolling
+        ws.scroll_mut()
             .add_pane_to_column(active_col, None, pane, should_focus);
     } else if ws.scrolling.columns.is_empty() {
-        let col = ws.scrolling.new_column(new_col_id, pane);
-        ws.scrolling.add_column(None, col, should_focus);
+        ws.scroll_mut()
+            .add_new_column(None, new_col_id, pane, should_focus);
     } else {
         let last = ws.scrolling.columns.len() - 1;
-        ws.scrolling
+        ws.scroll_mut()
             .add_pane_to_column(last, None, pane, should_focus);
     }
 }

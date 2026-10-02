@@ -507,20 +507,35 @@ A keyboard-native workspace where every tool lives in a tiled, floating, or scra
 ## Architecture (NIRI Scrolling Layout)
 
 ```
-Session                          ← manages all workspaces + workspace switching
+Session                          ← the CONTENT every window shares
 ├── workspaces: Vec<Workspace>   ← arranged VERTICALLY (discrete switching)
 │   └── Workspace
 │       ├── scrolling: ScrollingSpace   ← horizontal COLUMNS (continuous scroll)
-│       │   ├── view_offset: ViewOffset ← animated horizontal scroll + snap
 │       │   ├── columns: Vec<Column>
 │       │   │   ├── width: ColumnWidth  ← Proportion | Fixed
 │       │   │   ├── panes: Vec<Pane>    ← vertical stack within column
 │       │   │   └── pane_sizes: Vec<Size>
-│       │   └── active_column_idx
+│       │   └── options: LayoutOptions
 │       └── floating_panes: Vec<FloatingPane>
-├── workspace_switch: WorkspaceSwitch  ← animated vertical transitions
-└── active_workspace_idx
+└── options: LayoutOptions
+
+WindowView                       ← what ONE window sees of it (held by the client)
+├── active_workspace             ← which workspace is shown
+├── switch: WorkspaceSwitch      ← animated vertical transitions
+├── viewport, scale              ← the window's size
+└── scrolls: {WorkspaceId → ScrollView}
+        ScrollView { offset: ViewOffset, active_column, area, scale }
+                                 ← animated horizontal scroll + snap, per workspace
 ```
+
+**Anything that needs both goes through one door** — `Layout` (reads) and `LayoutMut` (moves),
+made with `session.through(&view)` / `session.through_mut(&mut view)`; in the app,
+`state.layout()` / `state.layout_mut()` (and `state.workspace_mut(idx)` to hold one workspace across
+statements). A caller says `layout.focus_right()` and the scroll that follows it moves in the
+window that asked; nobody passes a view along. `WorkspaceRef` / `WorkspaceMut` and
+`ScrollingRef` / `ScrollingMut` are the same idea one level down (`ws.scroll_mut().add_column(..)`).
+Tests hold the pair with `heca_core::layout::testing` (`Windowed`, `Shown`, `Seen`). F012, decision
+2c249a29: two windows on one session share the content and move independently.
 
 ### Layout Rules (from NIRI)
 
@@ -534,8 +549,8 @@ Session                          ← manages all workspaces + workspace switchin
 
 | Axis | Container | Scroll Type | Mechanism |
 |------|-----------|-------------|-----------|
-| **Horizontal** | `ScrollingSpace.columns` | Continuous scroll + snap | `ViewOffset` (animated `f64`) |
-| **Vertical** | `Session.workspaces` | Discrete switch + animation | `WorkspaceSwitch` (animated index) |
+| **Horizontal** | `ScrollingSpace.columns` | Continuous scroll + snap | `ScrollView.offset` (a `ViewOffset`, animated `f64`) |
+| **Vertical** | `Session.workspaces` | Discrete switch + animation | `WindowView.switch` (a `WorkspaceSwitch`, animated index) |
 
 ### Keybinding Style (tmux-style prefix)
 

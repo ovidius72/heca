@@ -2,6 +2,7 @@ use super::animation::{Animation, AnimationConfig};
 use super::column::{Column, Pane};
 use super::types::*;
 use super::view_offset::{ViewOffset, compute_new_view_offset};
+use super::window_view::ScrollView;
 
 // Re-export PaneInsertTarget for convenience.
 pub use super::types::PaneInsertTarget;
@@ -17,59 +18,58 @@ enum Direction {
     Right,
 }
 
-/// A scrollable horizontal space for columns of panes.
+/// The columns of panes in one workspace — **the content every window shares**.
 ///
-/// This is heca's equivalent of NIRI's `ScrollingSpace<W>`.
-/// Columns are arranged left-to-right with gaps, and the view scrolls horizontally
-/// to bring the active column into view.
+/// This is heca's equivalent of NIRI's `ScrollingSpace<W>`: columns are arranged left-to-right
+/// with gaps. Where a window is looking at them — the scroll offset, the active column, the box
+/// they are laid out in — is not here: it is a [`ScrollView`], held by the window. Anything that
+/// needs both goes through [`ScrollingRef`] / [`ScrollingMut`], made with
+/// [`through`](Self::through) / [`through_mut`](Self::through_mut).
 #[derive(Debug, Clone)]
 pub struct ScrollingSpace {
     /// Columns of panes.
     pub columns: Vec<Column>,
     /// Cached per-column data (computed widths).
     pub column_widths: Vec<f64>,
-    /// Index of the currently active column.
-    pub active_column_idx: usize,
-    /// Horizontal scroll offset.
-    pub view_offset: ViewOffset,
-    /// Whether to activate the previous column on removal.
-    pub activate_prev_on_removal: Option<f64>,
-    /// Working area for layout computations.
-    pub working_area: Rectangle,
-    /// Current scale factor.
-    pub scale: f64,
     /// Layout options.
     pub options: LayoutOptions,
 }
 
+/// A [`ScrollingSpace`] as one window sees it: the reads that need a view.
+#[derive(Clone, Copy)]
+pub struct ScrollingRef<'a> {
+    space: &'a ScrollingSpace,
+    view: &'a ScrollView,
+}
+
+/// A [`ScrollingSpace`] as one window sees it: the moves, which change the content and move the
+/// view with it.
+pub struct ScrollingMut<'a> {
+    space: &'a mut ScrollingSpace,
+    view: &'a mut ScrollView,
+}
+
 impl ScrollingSpace {
-    pub fn new(working_area: Rectangle, scale: f64, options: LayoutOptions) -> Self {
+    pub fn new(options: LayoutOptions) -> Self {
         Self {
             columns: Vec::new(),
             column_widths: Vec::new(),
-            active_column_idx: 0,
-            view_offset: ViewOffset::Static(0.0),
-            activate_prev_on_removal: None,
-            working_area,
-            scale,
             options,
         }
     }
 
+    /// This space as the window holding `view` sees it.
+    pub fn through<'a>(&'a self, view: &'a ScrollView) -> ScrollingRef<'a> {
+        ScrollingRef { space: self, view }
+    }
+
+    /// This space, moved by the window holding `view`.
+    pub fn through_mut<'a>(&'a mut self, view: &'a mut ScrollView) -> ScrollingMut<'a> {
+        ScrollingMut { space: self, view }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.columns.is_empty()
-    }
-
-    pub fn active_column(&self) -> Option<&Column> {
-        self.columns.get(self.active_column_idx)
-    }
-
-    pub fn active_column_mut(&mut self) -> Option<&mut Column> {
-        self.columns.get_mut(self.active_column_idx)
-    }
-
-    pub fn active_pane(&self) -> Option<&Pane> {
-        self.active_column().and_then(|c| c.active_pane())
     }
 
     /// X position of each column (cumulative, starting at 0).
@@ -118,6 +118,36 @@ impl ScrollingSpace {
                 .position(|p| p.id == pane_id)
                 .map(|pi| (ci, pi))
         })
+    }
+
+    fn is_centering_focused_column(&self) -> bool {
+        self.options.center_focused_column == CenterFocusedColumn::Always
+            || (self.options.always_center_single_column && self.columns.len() <= 1)
+    }
+
+    fn capture_column_positions(&self) -> Vec<(ColumnId, f64)> {
+        self.column_xs()
+            .zip(self.columns.iter())
+            .map(|(x, col)| (col.id, x))
+            .collect()
+    }
+
+    /// Animate every column from its previous x (keyed by [`ColumnId`]) to its new
+    /// laid-out x — shared by [`ScrollingMut::reorder_column`] and
+    /// [`ScrollingMut::swap_columns`].
+    fn animate_columns_from(&mut self, old_xs: &[(ColumnId, f64)]) {
+        let new_xs: Vec<f64> = self.column_xs().collect();
+        for (i, col) in self.columns.iter_mut().enumerate() {
+            let old_x = old_xs
+                .iter()
+                .find(|(id, _)| *id == col.id)
+                .map(|(_, x)| *x)
+                .unwrap_or(new_xs[i]);
+            let diff = old_x - new_xs[i];
+            if diff.abs() > 0.5 {
+                col.animate_move_from(diff, AnimationConfig::default());
+            }
+        }
     }
 
     /// Compute the insert position for a point in space coordinates.
@@ -206,6 +236,26 @@ impl ScrollingSpace {
             }
         }
     }
+}
+
+impl<'a> ScrollingRef<'a> {
+    /// The box the columns are laid out in.
+    pub fn area(&self) -> Rectangle {
+        self.view.area
+    }
+
+    /// Index of the column the window has focused.
+    pub fn active_column_idx(&self) -> usize {
+        self.view.active_column
+    }
+
+    pub fn active_column(&self) -> Option<&'a Column> {
+        self.space.columns.get(self.view.active_column)
+    }
+
+    pub fn active_pane(&self) -> Option<&'a Pane> {
+        self.active_column().and_then(|c| c.active_pane())
+    }
 
     /// Get all panes with their render positions.
     pub fn panes_with_positions(&self) -> Vec<(PaneId, Rectangle)> {
@@ -229,20 +279,20 @@ impl ScrollingSpace {
     /// The one walk both public views are built on.
     fn laid_out_columns(&self) -> Vec<LaidOutColumn> {
         let view_off = Point::new(-self.view_pos(), 0.0);
-        let gaps = self.options.gaps;
+        let gaps = self.space.options.gaps;
 
-        self.columns
+        self.space.columns
             .iter()
             .enumerate()
             .map(|(col_idx, col)| {
-                let col_pos = Point::new(self.column_x(col_idx) + col.render_offset(), 0.0);
-                let mut pane_y = self.working_area.loc.y + gaps;
+                let col_pos = Point::new(self.space.column_x(col_idx) + col.render_offset(), 0.0);
+                let mut pane_y = self.view.area.loc.y + gaps;
                 let mut panes = Vec::with_capacity(col.panes.len());
 
                 for (pane_idx, pane) in col.panes.iter().enumerate() {
                     let size = col.pane_sizes.get(pane_idx).copied().unwrap_or(Size::new(
                         col.computed_width,
-                        self.working_area.size.h / col.panes.len().max(1) as f64,
+                        self.view.area.size.h / col.panes.len().max(1) as f64,
                     ));
 
                     // **Flow, then transform.** The slot is where the column stacks this pane; the
@@ -272,7 +322,7 @@ impl ScrollingSpace {
                         // An empty column has no panes to span, so it is its own width at the top
                         // of the working area — the box it would occupy the moment one arrives.
                         Rectangle::new(
-                            view_off + col_pos + Point::new(0.0, self.working_area.loc.y + gaps),
+                            view_off + col_pos + Point::new(0.0, self.view.area.loc.y + gaps),
                             Size::new(col.computed_width, 0.0),
                         )
                     }),
@@ -280,6 +330,55 @@ impl ScrollingSpace {
                 }
             })
             .collect()
+    }
+}
+
+impl std::ops::Deref for ScrollingRef<'_> {
+    type Target = ScrollingSpace;
+
+    fn deref(&self) -> &ScrollingSpace {
+        self.space
+    }
+}
+
+impl std::ops::Deref for ScrollingMut<'_> {
+    type Target = ScrollingSpace;
+
+    fn deref(&self) -> &ScrollingSpace {
+        self.space
+    }
+}
+
+impl ScrollingMut<'_> {
+    /// The same space, for the reads that only look.
+    pub fn reader(&self) -> ScrollingRef<'_> {
+        ScrollingRef {
+            space: self.space,
+            view: self.view,
+        }
+    }
+
+    /// Index of the column the window has focused.
+    pub fn active_column_idx(&self) -> usize {
+        self.view.active_column
+    }
+
+    /// The box the columns are laid out in.
+    pub fn area(&self) -> Rectangle {
+        self.view.area
+    }
+
+    /// Current view position (column_x + view_offset).
+    pub fn view_pos(&self) -> f64 {
+        self.reader().view_pos()
+    }
+
+    pub fn active_pane(&self) -> Option<&Pane> {
+        self.space.columns.get(self.view.active_column)?.active_pane()
+    }
+
+    pub fn active_column_mut(&mut self) -> Option<&mut Column> {
+        self.space.columns.get_mut(self.view.active_column)
     }
 }
 

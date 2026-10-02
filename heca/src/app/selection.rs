@@ -3,7 +3,7 @@
 //! These helpers support cross-workspace letter selection and safe lookup of
 //! panes that participate in swap-style actions.
 
-use heca_core::layout::{PaneId, Session};
+use heca_core::layout::{Layout, PaneId, Session};
 
 /// How many targets one pick can letter — the length of the alphabet, not a second number.
 pub(crate) const PANE_CANDIDATE_LIMIT: usize = heca_grid_ui::widgets::DEFAULT_LETTERS.len();
@@ -83,10 +83,11 @@ pub(crate) fn collect_all_pane_candidates(
 /// active column/pane to the workspace it already lives in is a no-op). Letters are
 /// assigned sequentially over the remaining workspaces; capped at 52.
 pub(crate) fn collect_workspace_candidates(
-    session: &Session,
+    layout: Layout<'_>,
 ) -> Vec<(char, usize, heca_core::layout::WorkspaceId)> {
-    let active = session.active_workspace_idx;
-    session
+    let active = layout.active_workspace_idx();
+    layout
+        .session()
         .workspaces
         .iter()
         .enumerate()
@@ -195,17 +196,17 @@ mod tests {
     };
     use heca_core::layout::{
         Pane as LayoutPane, PaneId, Session,
-        types::{LayoutOptions, SessionId, Size},
+        testing::Windowed,
+        types::Size,
     };
 
     fn make_session_with_panes(count: usize) -> Session {
-        let viewport = Size::new(1280.0, 800.0);
-        let mut session = Session::new(SessionId(1), viewport, 2.0, LayoutOptions::default());
+        let mut window = Windowed::new(Size::new(1280.0, 800.0), 2.0);
         for i in 1..=count as u64 {
             let pane = LayoutPane::new(PaneId(i), format!("Pane{i}"));
-            session.add_pane(pane, None, true);
+            window.m().add_pane(pane, None, true);
         }
-        session
+        window.session
     }
 
     /// **The column the pane is already in is not a destination** (Antonio, 2026-09-10: the letter

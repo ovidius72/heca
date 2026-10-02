@@ -225,9 +225,7 @@ pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
     };
 
     // Find the active pane.
-    let pane_id = match state
-        .session
-        .active_workspace()
+    let pane_id = match state.layout().active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|pane| pane.id)
         .or(state.focused_pane)

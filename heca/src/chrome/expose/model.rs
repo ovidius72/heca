@@ -15,7 +15,7 @@
 //! clips — there is no image command) plus per-pane offscreen capture in `heca-renderer`. Nothing
 //! in the layout, the navigation or the layer changes when that lands: only what fills the box.
 
-use heca_core::layout::{PaneId, Session};
+use heca_core::layout::{Layout, PaneId};
 
 /// One pane in the overview — a box, positioned by its column.
 #[derive(Debug, Clone, PartialEq)]
@@ -109,13 +109,12 @@ pub(crate) struct ExposeWorkspace {
 /// pane_show_cwd` — read once by `register` and applied here, so a card is handed a folder or it is
 /// not, and no component below carries a flag it only passes on.
 pub(crate) fn model(
-    session: &Session,
+    layout: Layout<'_>,
     mut name_of: impl FnMut(&heca_core::layout::Pane) -> String,
     folders: bool,
 ) -> Vec<ExposeWorkspace> {
-    session
-        .workspaces
-        .iter()
+    layout
+        .workspaces()
         .enumerate()
         .map(|(ws_idx, ws)| {
             let scrolling = &ws.scrolling;
@@ -147,7 +146,7 @@ pub(crate) fn model(
                                 .flatten()
                                 .map(crate::chrome::home_relative_path),
                             active: pane_idx == col.active_pane_idx
-                                && col_idx == scrolling.active_column_idx,
+                                && col_idx == ws.scroll().active_column_idx(),
                             // The layout's resolved height, which already accounts for
                             // `preferred_height`. A missing entry means the layout has not run
                             // yet, and equal weights are exactly the even split it falls back to.
@@ -168,8 +167,8 @@ pub(crate) fn model(
             // already spells as `view_pos()`. Read raw, the offset put the workspace rectangle at
             // the wrong place in every scrolled workspace — the map centred on a window that was
             // never where it said, and the pane you were on sat off the right edge.
-            let view_x = scrolling.view_pos();
-            let view_w = scrolling.working_area.size.w;
+            let view_x = ws.scroll().view_pos();
+            let view_w = ws.scroll().area().size.w;
 
             ExposeWorkspace {
                 ws_idx,
@@ -177,7 +176,7 @@ pub(crate) fn model(
                     .name
                     .clone()
                     .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1)),
-                active: ws_idx == session.active_workspace_idx,
+                active: ws_idx == layout.active_workspace_idx(),
                 floating: ws
                     .floating_panes
                     .iter()
@@ -199,7 +198,7 @@ pub(crate) fn model(
                     .collect(),
                 columns,
                 viewport: (view_x, view_w),
-                viewport_h: scrolling.working_area.size.h,
+                viewport_h: ws.scroll().area().size.h,
                 // A workspace with no columns is still a row, as wide as its viewport, so an empty
                 // workspace does not collapse to nothing and become unselectable.
                 strip_width: if strip > 0.0 { strip } else { view_w },
@@ -219,9 +218,9 @@ mod tests {
     #[test]
     fn a_row_carries_the_real_column_widths_and_the_strip_it_scrolls() {
         let s = session();
-        let rows = model(&s, |p| p.title.clone(), false);
+        let rows = model(s.l(), |p| p.title.clone(), false);
 
-        assert_eq!(rows.len(), s.workspaces.len(), "one row per workspace");
+        assert_eq!(rows.len(), s.session.workspaces.len(), "one row per workspace");
         assert_eq!(rows[0].name, "Editing");
         assert!(rows[0].active, "the first workspace is the active one");
         assert_eq!(rows[1].name, "Workspace 2");
@@ -254,13 +253,13 @@ mod tests {
     #[test]
     fn the_model_carries_the_resolved_pane_heights_not_an_even_split() {
         let mut s = session();
-        let ws = &mut s.workspaces[0];
-        ws.scrolling
+        let mut ws = s.ws();
+        ws.scroll_mut()
             .add_pane_to_column(0, None, Pane::new(PaneId(3), "c"), false);
-        let (h, gaps) = (ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
+        let (h, gaps) = (ws.scroll().area().size.h, ws.scrolling.options.gaps);
         ws.scrolling.columns[0].move_pane_boundary(0, 120.0, h, gaps);
 
-        let rows = model(&s, |p| p.title.clone(), false);
+        let rows = model(s.l(), |p| p.title.clone(), false);
         let stacked = &rows[0].columns[0].panes;
         assert_eq!(stacked.len(), 2, "two panes share the first column");
         assert!(
@@ -277,7 +276,7 @@ mod tests {
         use heca_core::layout::Point;
         use heca_core::layout::workspace::FloatingPane;
         let mut s = session();
-        s.workspaces[0].floating_panes.push(FloatingPane {
+        s.session.workspaces[0].floating_panes.push(FloatingPane {
             pane: Pane::new(PaneId(9), "float"),
             position: Point::new(40.0, 30.0),
             size: Size::new(200.0, 150.0),
@@ -285,20 +284,18 @@ mod tests {
             original_column_idx: None,
             original_pane_idx: None,
         });
-        s.workspaces[0].scrolling.view_offset =
-            heca_core::layout::view_offset::ViewOffset::Static(120.0);
+        s.scrolled(0, 120.0, 1);
 
         // **Stand on a later column**, so `column_x(active)` is not zero and reading `view_offset`
         // raw gives a different answer from `view_pos()`. With the active column at 0 the two
         // coincide and the bug hides — which is exactly how it survived until it was on screen.
-        s.workspaces[0].scrolling.active_column_idx = 1;
-        let anchor = s.workspaces[0].scrolling.column_x(1);
+        let anchor = s.session.workspaces[0].scrolling.column_x(1);
         assert!(
             anchor > 0.0,
             "the second column starts somewhere other than 0: {anchor}"
         );
 
-        let rows = model(&s, |p| p.title.clone(), false);
+        let rows = model(s.l(), |p| p.title.clone(), false);
         let f = &rows[0].floating[0];
         assert_eq!(f.pane_id, PaneId(9));
         assert_eq!(

@@ -867,7 +867,7 @@ fn handle_workspace_pick_mode(
                 // `move_column_to_workspace` resolves the source column against the
                 // active workspace, so re-activate the captured origin first in case
                 // the active workspace drifted while the pick was open.
-                if state.session.active_workspace_idx != origin_ws {
+                if state.layout().active_workspace_idx() != origin_ws {
                     crate::app::focus::switch_workspace_tracked(state, origin_ws);
                 }
                 WmAction::MoveColumnToWorkspace {

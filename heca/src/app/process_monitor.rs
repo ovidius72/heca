@@ -114,7 +114,7 @@ mod tests {
     use crate::chrome::{ChromeEvent, ChromeEventBus};
     use heca_core::backend::FakeBackend;
     use heca_core::layout::{
-        LayoutOptions, Pane, PaneId, Point, Session, SessionId, Size, workspace::FloatingPane,
+        Pane, PaneId, Point, Session, Size, testing::Windowed, workspace::FloatingPane,
     };
     use heca_core::runtime::{ContentKind, PaneClosePolicy, PaneRuntime, ProcessStatus};
     use std::cell::RefCell;
@@ -138,22 +138,9 @@ mod tests {
     }
 
     fn session_with_tiled_pane(id: PaneId) -> Session {
-        let mut session = Session::new(
-            SessionId(1),
-            Size::new(1280.0, 800.0),
-            1.0,
-            LayoutOptions::default(),
-        );
-        let ws = session
-            .active_workspace_mut()
-            .expect("session should create an initial workspace");
-        ws.add_pane(
-            Pane::new(id, "editor"),
-            None,
-            true,
-            heca_core::layout::ColumnId(id.0),
-        );
-        session
+        let mut window = Windowed::new(Size::new(1280.0, 800.0), 1.0);
+        window.m().add_pane(Pane::new(id, "editor"), None, true);
+        window.session
     }
 
     fn runtime_nvim() -> PaneRuntime {
@@ -179,7 +166,9 @@ mod tests {
         let _ = sync_pane_runtime_from_backends_impl(&mut session, &mut backends);
 
         let pane_runtime = session
-            .active_workspace()
+            
+            .workspaces
+            .first()
             .and_then(|ws| ws.find_pane(pid))
             .map(|p| p.runtime.clone())
             .expect("pane should exist");
@@ -262,7 +251,9 @@ mod tests {
         let _ = bus;
         let _ = sync_pane_runtime_from_backends_impl(&mut session, &mut backends);
         let rt = session
-            .active_workspace()
+            
+            .workspaces
+            .first()
             .and_then(|ws| ws.find_pane(pid))
             .map(|p| p.runtime.clone())
             .expect("pane should exist");
@@ -274,7 +265,10 @@ mod tests {
         let pid = PaneId(14);
         let mut session = session_with_tiled_pane(PaneId(99));
         {
-            let ws = session.active_workspace_mut().expect("workspace exists");
+            let ws = session
+            .workspaces
+            .first_mut()
+            .expect("workspace exists");
             ws.floating_panes.push(FloatingPane {
                 pane: Pane::new(pid, "float"),
                 position: Point::new(10.0, 10.0),
@@ -299,7 +293,7 @@ mod tests {
         let _ = sync_pane_runtime_from_backends_impl(&mut session, &mut backends);
 
         let rt = session
-            .active_workspace()
+            .workspaces.first()
             .and_then(|ws| ws.floating_panes.iter().find(|f| f.pane.id == pid))
             .map(|f| f.pane.runtime.clone())
             .expect("floating pane should exist");
@@ -312,7 +306,7 @@ mod tests {
         let pid = PaneId(21);
         let mut session = session_with_tiled_pane(pid);
         let pane = session
-            .active_workspace_mut()
+            .workspaces.first_mut()
             .and_then(|ws| ws.find_pane_mut(pid))
             .expect("pane should exist");
 
@@ -325,7 +319,7 @@ mod tests {
         assert!(pane_exit_should_close(&session, pid, Some(0)));
 
         let pane = session
-            .active_workspace_mut()
+            .workspaces.first_mut()
             .and_then(|ws| ws.find_pane_mut(pid))
             .expect("pane should exist");
         pane.close_policy = PaneClosePolicy {

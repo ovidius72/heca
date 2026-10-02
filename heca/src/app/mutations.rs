@@ -93,31 +93,31 @@ pub fn after_mutation_change(state: &mut AppState, kind: MutationKind) {
 }
 
 pub(crate) fn close_pane_by_id_anywhere(state: &mut AppState, pane_id: PaneId) -> bool {
-    let mut removed_ws_idx = None;
-
-    for (ws_idx, ws) in state.session.workspaces.iter_mut().enumerate() {
-        if let Some(removed) = crate::app::pane_ops::remove_pane_by_id(ws, pane_id) {
-            state.server.backends.kill_for_pane(removed.pane.id);
-            state.clear_search(removed.pane.id);
-            removed_ws_idx = Some(ws_idx);
-            break;
-        }
-
-        if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id == pane_id) {
+    let removed = {
+        let mut layout = state.layout_mut();
+        let workspaces = layout.reader().session().workspaces.len();
+        (0..workspaces).find_map(|ws_idx| {
+            let mut ws = layout.workspace_mut(ws_idx)?;
+            if let Some(removed) = crate::app::pane_ops::remove_pane_by_id(&mut ws, pane_id) {
+                return Some((ws_idx, removed.pane.id, true));
+            }
+            let float_idx = ws.floating_panes.iter().position(|f| f.pane.id == pane_id)?;
             let removed = ws.floating_panes.remove(float_idx);
-            state.server.backends.kill_for_pane(removed.pane.id);
             if ws.focus_domain == FocusDomain::Floating && ws.floating_panes.is_empty() {
                 ws.deactivate_floating_panes();
                 ws.focus_domain = FocusDomain::Tiled;
             }
-            removed_ws_idx = Some(ws_idx);
-            break;
-        }
-    }
+            Some((ws_idx, removed.pane.id, false))
+        })
+    };
 
-    let Some(ws_idx) = removed_ws_idx else {
+    let Some((ws_idx, removed_id, was_tiled)) = removed else {
         return false;
     };
+    state.server.backends.kill_for_pane(removed_id);
+    if was_tiled {
+        state.clear_search(removed_id);
+    }
 
     let should_destroy = state
         .session
@@ -151,35 +151,33 @@ pub(crate) fn move_pane_to_workspace_column(
     target_col: usize,
     join_existing: bool,
 ) {
-    let current_ws = state.session.active_workspace_idx;
+    let current_ws = state.layout().active_workspace_idx();
     if current_ws == target_ws {
         return;
     }
 
     let removed_pane = {
-        let ws = match state.session.workspaces.get_mut(current_ws) {
-            Some(ws) => ws,
-            None => return,
+        let mut layout = state.layout_mut();
+        let Some(mut ws) = layout.workspace_mut(current_ws) else {
+            return;
         };
         ws.scrolling
             .pane_indices(pane_id)
-            .and_then(|(ci, pi)| ws.scrolling.remove_pane(ci, pi))
+            .and_then(|(ci, pi)| ws.scroll_mut().remove_pane(ci, pi))
     };
 
     if let Some(pane) = removed_pane {
         let pane_id = pane.id;
-        state.session.switch_to_workspace(target_ws);
+        state.layout_mut().switch_to_workspace(target_ws);
 
-        let col_count = state
-            .session
-            .active_workspace()
+        let col_count = state.layout().active_workspace()
             .map(|ws| ws.scrolling.columns.len())
             .unwrap_or(0);
         if join_existing && target_col < col_count {
             // Stack into the existing target column (split with its panes).
-            if let Some(ws) = state.session.active_workspace_mut() {
+            if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
                 let pane_idx = ws.scrolling.columns[target_col].panes.len();
-                ws.scrolling
+                ws.scroll_mut()
                     .add_pane_to_column(target_col, Some(pane_idx), pane, true);
                 state.focused_pane = Some(pane_id);
             }
@@ -187,13 +185,9 @@ pub(crate) fn move_pane_to_workspace_column(
             // Insert the pane as its own new column at `target_col`. Generate a fresh
             // ColumnId before mutably borrowing the workspace.
             let new_col_id = ColumnId(state.session.next_id());
-            if let Some(ws) = state.session.active_workspace_mut() {
+            if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
                 let insert_pos = target_col.min(ws.scrolling.columns.len());
-                ws.scrolling.add_column(
-                    Some(insert_pos),
-                    ws.scrolling.new_column(new_col_id, pane),
-                    true,
-                );
+                ws.scroll_mut().add_new_column(Some(insert_pos), new_col_id, pane, true);
                 state.focused_pane = Some(pane_id);
             }
         }
@@ -217,16 +211,13 @@ pub(crate) fn move_pane_to_new_column(state: &mut AppState, pane_id: PaneId) -> 
     else {
         return false;
     };
-    if state.session.active_workspace_idx != ws_idx {
+    if state.layout().active_workspace_idx() != ws_idx {
         crate::app::focus::switch_workspace_tracked(state, ws_idx);
     }
     // Allocated before the mutable borrow, and spent only if the move happens.
     let new_col_id = ColumnId(state.session.next_id());
-    let moved = state
-        .session
-        .workspaces
-        .get_mut(ws_idx)
-        .map(|ws| ws.scrolling.extract_pane_to_new_column(pane_id, new_col_id))
+    let moved = state.layout_mut().workspace_mut(ws_idx)
+        .map(|mut ws| ws.scroll_mut().extract_pane_to_new_column(pane_id, new_col_id))
         .unwrap_or(false);
     if moved {
         state.focused_pane = Some(pane_id);
@@ -245,7 +236,7 @@ pub(crate) fn move_pane_to_column(
         return;
     }
 
-    let ws_idx = state.session.active_workspace_idx;
+    let ws_idx = state.layout().active_workspace_idx();
 
     // Validate indices before mutation. Allow `dst_col == col_count_before` to mean "append/new column".
     let col_count_before = state
@@ -258,14 +249,14 @@ pub(crate) fn move_pane_to_column(
         return;
     }
 
-    let removed_pane = if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
+    let removed_pane = if let Some(mut ws) = state.layout_mut().workspace_mut(ws_idx) {
         if let Some(pi) = ws
             .scrolling
             .columns
             .get(src_col)
             .and_then(|col| col.panes.iter().position(|p| p.id == pane_id))
         {
-            ws.scrolling.remove_pane(src_col, pi)
+            ws.scroll_mut().remove_pane(src_col, pi)
         } else {
             None
         }
@@ -308,18 +299,14 @@ pub(crate) fn move_pane_to_column(
         // cursor, the hint letters and a right-click cannot tell apart.
         let new_col_id = ColumnId(state.session.next_id());
 
-        if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
+        if let Some(mut ws) = state.layout_mut().workspace_mut(ws_idx) {
             if target_pos < ws.scrolling.columns.len() {
                 // Insert into existing column at target_pos
-                ws.scrolling
+                ws.scroll_mut()
                     .add_pane_to_column(target_pos, None, pane, true);
             } else {
                 // Create a new column at target_pos (append if equal to current len)
-                ws.scrolling.add_column(
-                    Some(target_pos),
-                    ws.scrolling.new_column(new_col_id, pane),
-                    true,
-                );
+                ws.scroll_mut().add_new_column(Some(target_pos), new_col_id, pane, true);
             }
             state.focused_pane = Some(pane_id);
         }
@@ -339,7 +326,7 @@ pub(crate) fn move_column_to_workspace(
     target_ws: usize,
     focus: bool,
 ) {
-    let current_ws = state.session.active_workspace_idx;
+    let current_ws = state.layout().active_workspace_idx();
     if current_ws == target_ws {
         return;
     }
@@ -348,14 +335,14 @@ pub(crate) fn move_column_to_workspace(
     }
 
     let removed_column = {
-        let ws = match state.session.workspaces.get_mut(current_ws) {
-            Some(ws) => ws,
-            None => return,
+        let mut layout = state.layout_mut();
+        let Some(mut ws) = layout.workspace_mut(current_ws) else {
+            return;
         };
         if col_idx >= ws.scrolling.columns.len() {
             return;
         }
-        ws.scrolling.remove_column(col_idx)
+        ws.scroll_mut().remove_column(col_idx)
     };
 
     let Some(column) = removed_column else { return };
@@ -380,18 +367,16 @@ pub(crate) fn move_column_to_workspace(
         let next_id = state.session.next_id();
         let placeholder_pane = Pane::new(PaneId(next_id), format!("pane{}", next_id));
         let placeholder_col_id = ColumnId(state.session.next_id());
-        if let Some(ws) = state.session.workspaces.get_mut(current_ws) {
-            let placeholder_col = ws
-                .scrolling
-                .new_column(placeholder_col_id, placeholder_pane);
-            ws.scrolling.add_column(None, placeholder_col, true);
+        if let Some(mut ws) = state.layout_mut().workspace_mut(current_ws) {
+            ws.scroll_mut()
+                .add_new_column(None, placeholder_col_id, placeholder_pane, true);
         }
         state.start_shell_in(PaneId(next_id), current_ws);
     }
 
-    state.session.switch_to_workspace(target_ws);
-    if let Some(ws) = state.session.active_workspace_mut() {
-        ws.scrolling.add_column(None, column, true);
+    state.layout_mut().switch_to_workspace(target_ws);
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
+        ws.scroll_mut().add_column(None, column, true);
     }
 
     if focus {
@@ -402,7 +387,7 @@ pub(crate) fn move_column_to_workspace(
         } else {
             current_ws
         };
-        state.session.switch_to_workspace(source_ws);
+        state.layout_mut().switch_to_workspace(source_ws);
         sync_focus(state);
     }
 
@@ -418,7 +403,7 @@ pub(crate) fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
         .unwrap_or(true);
 
     if is_empty && state.session.workspaces.len() > 1 {
-        state.session.remove_workspace(ws_idx);
+        state.layout_mut().remove_workspace(ws_idx);
 
         // Fix up last_visited_ws_idx if it pointed to the removed workspace.
         if state.last_visited_ws_idx == Some(ws_idx) {
@@ -462,22 +447,19 @@ pub(crate) fn move_column(
     }
 
     if src_ws == dst_ws {
-        if let Some(ws) = state.session.workspaces.get_mut(src_ws) {
-            ws.scrolling.reorder_column(src_col, dst_idx);
+        if let Some(mut ws) = state.layout_mut().workspace_mut(src_ws) {
+            ws.scroll_mut().reorder_column(src_col, dst_idx);
         }
         if focus {
-            state.session.switch_to_workspace(src_ws);
+            state.layout_mut().switch_to_workspace(src_ws);
         }
         sync_focus(state);
         state.needs_redraw = true;
         return;
     }
 
-    let Some(column) = state
-        .session
-        .workspaces
-        .get_mut(src_ws)
-        .and_then(|ws| ws.scrolling.remove_column(src_col))
+    let Some(column) = state.layout_mut().workspace_mut(src_ws)
+        .and_then(|mut ws| ws.scroll_mut().remove_column(src_col))
     else {
         return;
     };
@@ -497,12 +479,12 @@ pub(crate) fn move_column(
         destroy_empty_workspace(state, src_ws);
     }
 
-    if let Some(ws) = state.session.workspaces.get_mut(dst_ws) {
+    if let Some(mut ws) = state.layout_mut().workspace_mut(dst_ws) {
         let idx = dst_idx.min(ws.scrolling.columns.len());
-        ws.scrolling.add_column(Some(idx), column, focus);
+        ws.scroll_mut().add_column(Some(idx), column, focus);
     }
     if focus {
-        state.session.switch_to_workspace(dst_ws);
+        state.layout_mut().switch_to_workspace(dst_ws);
     }
     sync_focus(state);
     state.needs_redraw = true;
@@ -536,26 +518,20 @@ pub(crate) fn swap_columns_at(
         if a_col == b_col {
             return;
         }
-        if let Some(ws) = state.session.workspaces.get_mut(a_ws) {
-            ws.scrolling.swap_columns(a_col, b_col);
+        if let Some(mut ws) = state.layout_mut().workspace_mut(a_ws) {
+            ws.scroll_mut().swap_columns(a_col, b_col);
         }
     } else {
-        let col_a = state
-            .session
-            .workspaces
-            .get_mut(a_ws)
-            .and_then(|w| w.scrolling.remove_column(a_col));
-        let col_b = state
-            .session
-            .workspaces
-            .get_mut(b_ws)
-            .and_then(|w| w.scrolling.remove_column(b_col));
+        let col_a = state.layout_mut().workspace_mut(a_ws)
+            .and_then(|mut w| w.scroll_mut().remove_column(a_col));
+        let col_b = state.layout_mut().workspace_mut(b_ws)
+            .and_then(|mut w| w.scroll_mut().remove_column(b_col));
         if let (Some(ca), Some(cb)) = (col_a, col_b) {
-            if let Some(w) = state.session.workspaces.get_mut(a_ws) {
-                w.scrolling.add_column(Some(a_col), cb, false);
+            if let Some(mut w) = state.layout_mut().workspace_mut(a_ws) {
+                w.scroll_mut().add_column(Some(a_col), cb, false);
             }
-            if let Some(w) = state.session.workspaces.get_mut(b_ws) {
-                w.scrolling.add_column(Some(b_col), ca, false);
+            if let Some(mut w) = state.layout_mut().workspace_mut(b_ws) {
+                w.scroll_mut().add_column(Some(b_col), ca, false);
             }
         }
     }

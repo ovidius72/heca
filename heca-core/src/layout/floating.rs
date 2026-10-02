@@ -6,18 +6,9 @@
 
 use super::column::Pane;
 use super::types::*;
-use super::workspace::{FloatingPane, FocusDomain, Workspace};
+use super::workspace::{FloatingPane, FocusDomain, Workspace, WorkspaceMut};
 
 impl Workspace {
-    /// Where a pane floats when nothing says where: centred, [`float_size`] of the working area.
-    ///
-    /// [`float_size`]: LayoutOptions::float_size
-    pub fn default_float_rect(&self) -> Rectangle {
-        self.scrolling
-            .working_area
-            .centred_fraction(self.scrolling.options.float_size)
-    }
-
     /// Put `pane` in front as a floating pane at `rect`, and give floating the focus.
     ///
     /// `origin` is the column and row it came from, so [`unfloat_pane`](Self::unfloat_pane) can put
@@ -39,14 +30,16 @@ impl Workspace {
         });
         self.focus_domain = FocusDomain::Floating;
     }
+}
 
+impl WorkspaceMut<'_> {
     /// Take the tiled pane `pane_id` out of its column and float it at `rect`, remembering where it
     /// was. `false` when it is not tiled here.
     pub fn float_tiled_pane(&mut self, pane_id: PaneId, rect: Rectangle) -> bool {
         let Some((col, row)) = self.scrolling.pane_indices(pane_id) else {
             return false;
         };
-        let Some(pane) = self.scrolling.remove_pane(col, row) else {
+        let Some(pane) = self.scroll_mut().remove_pane(col, row) else {
             return false;
         };
         self.add_floating_pane(pane, rect, Some((col, row)));
@@ -72,12 +65,12 @@ impl Workspace {
                     .original_pane_idx
                     .unwrap_or(0)
                     .min(self.scrolling.columns[col].panes.len());
-                self.scrolling
+                self.scroll_mut()
                     .add_pane_to_column(col, Some(row), float.pane, true);
             }
             _ => {
-                let column = self.scrolling.new_column(new_column_id, float.pane);
-                self.scrolling.add_column(None, column, true);
+                self.scroll_mut()
+                    .add_new_column(None, new_column_id, float.pane, true);
             }
         }
         self.focus_domain = FocusDomain::Tiled;
@@ -87,19 +80,15 @@ impl Workspace {
 
 #[cfg(test)]
 mod tests {
-    use crate::layout::types::{LayoutOptions, Point, Rectangle, SessionId, Size};
-    use crate::layout::{ColumnId, FocusDomain, Pane, PaneId, Session};
+    use crate::layout::testing::Windowed;
+    use crate::layout::types::{LayoutOptions, Point, Rectangle, Size};
+    use crate::layout::{ColumnId, FocusDomain, Pane, PaneId};
 
     /// One workspace holding three panes, each in its own column: ids 1, 2, 3.
-    fn session() -> Session {
-        let mut s = Session::new(
-            SessionId(1),
-            Size::new(1000.0, 800.0),
-            1.0,
-            LayoutOptions::default(),
-        );
+    fn session() -> Windowed {
+        let mut s = Windowed::new(Size::new(1000.0, 800.0), 1.0);
         for i in 1..=3 {
-            s.add_pane(Pane::new(PaneId(i), ""), None, true);
+            s.m().add_pane(Pane::new(PaneId(i), ""), None, true);
         }
         s
     }
@@ -107,8 +96,8 @@ mod tests {
     #[test]
     fn the_default_float_is_centred_at_the_configured_share() {
         let s = session();
-        let ws = s.active_workspace().unwrap();
-        let area = ws.scrolling.working_area;
+        let ws = s.l().active_workspace().unwrap();
+        let area = ws.scroll().area();
         let rect = ws.default_float_rect();
         let share = LayoutOptions::default().float_size;
         assert_eq!(rect.size.w, area.size.w * share);
@@ -120,7 +109,7 @@ mod tests {
     #[test]
     fn floating_a_tiled_pane_takes_it_out_of_its_column_and_focuses_it() {
         let mut s = session();
-        let ws = s.active_workspace_mut().unwrap();
+        let mut ws = s.ws();
         let rect = Rectangle::new(Point::new(10.0, 20.0), Size::new(300.0, 200.0));
         assert!(ws.float_tiled_pane(PaneId(2), rect));
         assert!(ws.scrolling.pane_indices(PaneId(2)).is_none());
@@ -131,15 +120,15 @@ mod tests {
             .unwrap();
         assert_eq!((float.position, float.size), (rect.loc, rect.size));
         assert_eq!(ws.focus_domain, FocusDomain::Floating);
-        assert_eq!(ws.active_pane().map(|p| p.id), Some(PaneId(2)));
+        assert_eq!(ws.reader().active_pane().map(|p| p.id), Some(PaneId(2)));
     }
 
     #[test]
     fn unfloating_puts_a_pane_back_where_it_came_from() {
         let mut s = session();
-        let ws = s.active_workspace_mut().unwrap();
+        let mut ws = s.ws();
         let before = ws.scrolling.pane_indices(PaneId(2));
-        let rect = ws.default_float_rect();
+        let rect = ws.reader().default_float_rect();
         ws.float_tiled_pane(PaneId(2), rect);
         assert!(ws.unfloat_pane(PaneId(2), ColumnId(99)));
         assert_eq!(ws.scrolling.pane_indices(PaneId(2)), before);
@@ -150,9 +139,9 @@ mod tests {
     #[test]
     fn a_pane_that_never_tiled_unfloats_into_a_new_column() {
         let mut s = session();
-        let ws = s.active_workspace_mut().unwrap();
+        let mut ws = s.ws();
         let columns = ws.scrolling.columns.len();
-        let rect = ws.default_float_rect();
+        let rect = ws.reader().default_float_rect();
         ws.add_floating_pane(Pane::new(PaneId(7), ""), rect, None);
         assert!(ws.unfloat_pane(PaneId(7), ColumnId(99)));
         assert_eq!(ws.scrolling.columns.len(), columns + 1);
@@ -162,8 +151,8 @@ mod tests {
     #[test]
     fn only_a_pane_that_is_there_can_float_or_unfloat() {
         let mut s = session();
-        let ws = s.active_workspace_mut().unwrap();
-        let rect = ws.default_float_rect();
+        let mut ws = s.ws();
+        let rect = ws.reader().default_float_rect();
         assert!(!ws.float_tiled_pane(PaneId(42), rect));
         assert!(!ws.unfloat_pane(PaneId(1), ColumnId(99)));
     }

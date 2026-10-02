@@ -15,40 +15,43 @@ use crate::{
 use heca_core::layout::{ColumnId, PaneId};
 
 pub fn handle_swap_left(state: &mut AppState, _action: &WmAction) {
-    if let Some(ws) = state.session.active_workspace_mut() {
-        ws.scrolling.move_column_left();
-        ws.scrolling.align_view_to_active_column();
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
+        ws.scroll_mut().move_column_left();
+        ws.scroll_mut().align_view_to_active_column();
     }
 }
 
 pub fn handle_swap_right(state: &mut AppState, _action: &WmAction) {
-    if let Some(ws) = state.session.active_workspace_mut() {
-        ws.scrolling.move_column_right();
-        ws.scrolling.align_view_to_active_column();
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
+        ws.scroll_mut().move_column_right();
+        ws.scroll_mut().align_view_to_active_column();
     }
 }
 
 pub fn handle_swap_up(state: &mut AppState, _action: &WmAction) {
-    if let Some(ws) = state.session.active_workspace_mut() {
-        let col_idx = ws.scrolling.active_column_idx;
-        if let Some(col) = ws.scrolling.active_column() {
-            let pane_idx = col.active_pane_idx;
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
+        let col_idx = ws.scroll().active_column_idx();
+        let active = ws.scroll().active_column().map(|col| col.active_pane_idx);
+        if let Some(pane_idx) = active {
             let swap_with = pane_idx.saturating_sub(1);
             if swap_with != pane_idx {
-                let _ = swap_panes_same_column(ws, col_idx, pane_idx, swap_with);
+                let _ = swap_panes_same_column(&mut ws, col_idx, pane_idx, swap_with);
             }
         }
     }
 }
 
 pub fn handle_swap_down(state: &mut AppState, _action: &WmAction) {
-    if let Some(ws) = state.session.active_workspace_mut() {
-        let col_idx = ws.scrolling.active_column_idx;
-        if let Some(col) = ws.scrolling.active_column() {
-            let pane_idx = col.active_pane_idx;
-            let swap_with = (pane_idx + 1).min(col.panes.len().saturating_sub(1));
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
+        let col_idx = ws.scroll().active_column_idx();
+        let active = ws
+            .scroll()
+            .active_column()
+            .map(|col| (col.active_pane_idx, col.panes.len()));
+        if let Some((pane_idx, len)) = active {
+            let swap_with = (pane_idx + 1).min(len.saturating_sub(1));
             if swap_with != pane_idx {
-                let _ = swap_panes_same_column(ws, col_idx, pane_idx, swap_with);
+                let _ = swap_panes_same_column(&mut ws, col_idx, pane_idx, swap_with);
             }
         }
     }
@@ -62,8 +65,8 @@ pub fn handle_move_pane_left(state: &mut AppState, action: &WmAction) {
     }
     // Allocated before the workspace is borrowed; spent only if the move creates a column.
     let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
-    if let Some(ws) = state.session.active_workspace_mut() {
-        ws.scrolling.move_active_pane_left(new_column_id);
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
+        ws.scroll_mut().move_active_pane_left(new_column_id);
     }
 }
 
@@ -72,35 +75,31 @@ pub fn handle_move_pane_right(state: &mut AppState, action: &WmAction) {
         focus_pane_by_id(state, *id);
     }
     let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
-    if let Some(ws) = state.session.active_workspace_mut() {
-        ws.scrolling.move_active_pane_right(new_column_id);
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
+        ws.scroll_mut().move_active_pane_right(new_column_id);
     }
 }
 
 pub fn handle_move_column_up(state: &mut AppState, _action: &WmAction) {
-    let current_ws = state.session.active_workspace_idx;
+    let current_ws = state.layout().active_workspace_idx();
     if current_ws == 0 {
         return;
     }
     let target_ws = current_ws - 1;
-    let col_idx = state
-        .session
-        .active_workspace()
-        .map(|ws| ws.scrolling.active_column_idx)
+    let col_idx = state.layout().active_workspace()
+        .map(|ws| ws.scroll().active_column_idx())
         .unwrap_or(0);
     crate::move_column_to_workspace(state, col_idx, target_ws, true);
 }
 
 pub fn handle_move_column_down(state: &mut AppState, _action: &WmAction) {
-    let current_ws = state.session.active_workspace_idx;
+    let current_ws = state.layout().active_workspace_idx();
     if current_ws >= state.session.workspaces.len().saturating_sub(1) {
         return;
     }
     let target_ws = current_ws + 1;
-    let col_idx = state
-        .session
-        .active_workspace()
-        .map(|ws| ws.scrolling.active_column_idx)
+    let col_idx = state.layout().active_workspace()
+        .map(|ws| ws.scroll().active_column_idx())
         .unwrap_or(0);
     crate::move_column_to_workspace(state, col_idx, target_ws, true);
 }
@@ -166,8 +165,8 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
         // Same workspace.
         if acol == bcol {
             // Same column: delegate to shared helper.
-            if let Some(ws) = state.session.workspaces.get_mut(aws) {
-                let _ = swap_panes_same_column(ws, acol, api, bpi);
+            if let Some(mut ws) = state.layout_mut().workspace_mut(aws) {
+                let _ = swap_panes_same_column(&mut ws, acol, api, bpi);
             }
         } else {
             // Different columns, same workspace: use placeholder approach.
@@ -177,7 +176,8 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
             let new_col_for_a = ColumnId(state.session.next_id());
             let new_col_for_b = ColumnId(state.session.next_id());
 
-            if let Some(ws) = state.session.workspaces.get_mut(aws) {
+            let viewport = state.layout().viewport();
+            if let Some(ws) = state.layout_mut().workspace_mut(aws) {
                 swap_panes_diff_columns(crate::app::pane_ops::SwapDiffColumnsArgs {
                     ws,
                     a_id: *a_id,
@@ -191,15 +191,15 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                     new_col_for_a,
                     new_col_for_b,
                     pane_name_fn: &pane_name,
-                    viewport_w: state.session.viewport_size.w,
-                    viewport_h: state.session.viewport_size.h,
+                    viewport_w: viewport.w,
+                    viewport_h: viewport.h,
                 });
             }
         }
     } else {
         // Different workspaces: delegate to shared helper.
         swap_panes_cross_workspace(crate::app::pane_ops::SwapCrossWorkspaceArgs {
-            session: &mut state.session,
+            layout: state.layout_mut(),
             a_id: *a_id,
             b_id: *b_id,
             a_ws: aws,
@@ -225,7 +225,7 @@ pub fn handle_move_param(state: &mut AppState, action: &WmAction) {
     if let Some((ws_idx, col_idx, _)) = find_pane_location(&state.session, *pane_id) {
         // Ensure the source workspace is active before calling move_pane_to_column,
         // which operates on the active workspace.
-        if state.session.active_workspace_idx != ws_idx {
+        if state.layout().active_workspace_idx() != ws_idx {
             switch_workspace_tracked(state, ws_idx);
         }
         move_pane_to_column(state, *pane_id, col_idx, *target_col);
@@ -239,7 +239,7 @@ pub fn handle_move_pane_to_workspace(state: &mut AppState, action: &WmAction) {
     if let Some((current_ws, current_col, _)) = find_pane_location(&state.session, *pane_id)
         && current_ws != *ws_idx
     {
-        if state.session.active_workspace_idx != current_ws {
+        if state.layout().active_workspace_idx() != current_ws {
             switch_workspace_tracked(state, current_ws);
         }
         // Move-to-workspace: the pane becomes its own new column (preserve layout).
@@ -258,12 +258,12 @@ pub fn handle_move_pane_to_column(state: &mut AppState, action: &WmAction) {
     };
     if let Some((current_ws, current_col, _)) = find_pane_location(&state.session, *pane_id) {
         if current_ws == *ws_idx {
-            if state.session.active_workspace_idx != current_ws {
+            if state.layout().active_workspace_idx() != current_ws {
                 switch_workspace_tracked(state, current_ws);
             }
             move_pane_to_column(state, *pane_id, current_col, *col_idx);
         } else {
-            if state.session.active_workspace_idx != current_ws {
+            if state.layout().active_workspace_idx() != current_ws {
                 switch_workspace_tracked(state, current_ws);
             }
             // Move-to-column: stack the pane into the existing target column.

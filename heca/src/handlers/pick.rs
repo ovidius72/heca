@@ -223,13 +223,11 @@ pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
 /// workspace (shown as a `KeyHint` over its dock); the next keypress moves the active
 /// column into that workspace. Says so when there is no other workspace.
 pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAction) {
-    let ws_idx = state.session.active_workspace_idx;
-    let col_idx = state
-        .session
-        .active_workspace()
-        .map(|ws| ws.scrolling.active_column_idx)
+    let ws_idx = state.layout().active_workspace_idx();
+    let col_idx = state.layout().active_workspace()
+        .map(|ws| ws.scroll().active_column_idx())
         .unwrap_or(0);
-    let candidates = crate::app::selection::collect_workspace_candidates(&state.session);
+    let candidates = crate::app::selection::collect_workspace_candidates(state.layout());
     begin_pick(
         state,
         InputMode::WorkspacePick {
@@ -245,7 +243,7 @@ pub fn handle_move_pane_to_workspace_pick(state: &mut AppState, _action: &WmActi
     let Some(pane_id) = state.focused_pane else {
         return;
     };
-    let candidates = crate::app::selection::collect_workspace_candidates(&state.session);
+    let candidates = crate::app::selection::collect_workspace_candidates(state.layout());
     begin_pick(
         state,
         InputMode::WorkspacePick {

@@ -20,7 +20,7 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
     // Allocated before the workspace is borrowed; spent only if unfloating has to rebuild the
     // column this pane came from. A derived id could collide with a column that still exists.
     let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
-    if let Some(ws) = state.session.active_workspace_mut()
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut()
         && !ws.unfloat_pane(pane_id, new_column_id)
     {
         let rect = ws.default_float_rect();
@@ -39,7 +39,7 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
     else {
         return;
     };
-    if let Some(ws) = state.session.active_workspace_mut() {
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
         let rect = Rectangle::new(Point::new(*x, *y), Size::new(*width, *height));
         ws.float_tiled_pane(*pane_id, rect);
     }

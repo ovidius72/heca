@@ -168,7 +168,7 @@ pub fn on_mouse_input(
 
             // When a floating pane is modal, block all sidebar interaction.
             // No clicks, no drags, no mode changes.
-            if crate::app::interaction::is_floating_domain(&state.session) {
+            if crate::app::interaction::is_floating_domain(state.layout()) {
                 return None;
             }
 
@@ -341,25 +341,8 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
 
     let scroll_px = raw as f64 * actual_speed as f64 * dt;
 
-    if let Some(ws) = state.session.active_workspace_mut() {
-        let current = ws.scrolling.view_offset.current();
-        let active_idx = ws.scrolling.active_column_idx;
-        let total_w: f64 = ws.scrolling.column_widths.iter().sum();
-        let gaps = ws.scrolling.options.gaps;
-        let col_gaps = gaps * ws.scrolling.columns.len().max(1) as f64;
-        let content_w = total_w + col_gaps;
-        let vp_w = ws.scrolling.working_area.size.w;
-        // Left extent: allow scrolling to reveal all columns before the active one.
-        let before_w: f64 = ws.scrolling.column_widths.iter().take(active_idx).sum();
-        let before_gaps = active_idx as f64 * gaps;
-        let min_view = -(before_w + before_gaps + gaps);
-        // Right extent: allow scrolling until the last content edge aligns
-        // with the right viewport edge (plus a gap of padding).
-        let max_view = (content_w - vp_w + gaps).max(min_view);
-        let new_off = (current + scroll_px).clamp(min_view, max_view);
-        let current = ws.scrolling.view_offset.current();
-        let delta = new_off - current;
-        ws.scrolling.view_offset.offset(delta);
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
+        ws.scroll_mut().edge_scroll(scroll_px);
     }
 
     true
@@ -391,7 +374,7 @@ fn content_area_origin(state: &AppState) -> (f32, f32) {
 }
 
 fn find_pane_in_workspace(
-    ws: &mut heca_core::layout::workspace::Workspace,
+    ws: &heca_core::layout::workspace::Workspace,
     pane_id: PaneId,
 ) -> Option<(usize, usize)> {
     for (ci, col) in ws.scrolling.columns.iter().enumerate() {

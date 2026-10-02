@@ -246,13 +246,24 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // onto its retained shell by `chrome::sync_panes`, which is also where it becomes the hue the
     // pane publishes to its contents. Reading them here meant the host decided how a widget looked.
     let pane_border_radius = state.appearance.effective_pane_border_radius(&state.theme);
-    let pane_positions = state
-        .session
-        .active_workspace()
-        .map(|ws| ws.scrolling.panes_with_positions())
+    let pane_positions = state.layout().active_workspace()
+        .map(|ws| ws.scroll().panes_with_positions())
         .unwrap_or_default();
 
-    let ws_geometries = state.session.workspace_geometries();
+    // The floating panes of the shown workspace, once: where each is, as plain data. Both loops
+    // below borrow `state` for other things, so they cannot hold a layout handle themselves.
+    let floats: Vec<(heca_core::layout::PaneId, heca_core::layout::types::Rectangle)> = state
+        .layout()
+        .active_workspace()
+        .map(|ws| {
+            ws.floating_panes
+                .iter()
+                .map(|f| (f.pane.id, heca_core::layout::types::Rectangle::new(f.position, f.size)))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let ws_geometries = state.layout().workspace_geometries();
     let ws_offset = ws_geometries
         .first()
         .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
@@ -293,19 +304,15 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // backdrop and what goes over it.
     let mut float_frames: std::collections::HashMap<heca_core::layout::PaneId, GuiScene> =
         std::collections::HashMap::new();
-    if let Some(ws) = state.session.active_workspace() {
-        for float in &ws.floating_panes {
-            let mut frame = GuiScene::new();
-            frame.push(heca_grid_ui::scene::DrawCommand::PushClip(
-                GuiRectangle::new(
-                    GuiPoint::new(pane_area.loc.x, pane_area.loc.y),
-                    GuiSize::new(pane_area.size.w, pane_area.size.h),
-                ),
-            ));
-            paint_pane_frame(state, &mut frame, float.pane.id);
-            frame.push(heca_grid_ui::scene::DrawCommand::PopClip);
-            float_frames.insert(float.pane.id, frame);
-        }
+    for &(pane_id, _) in &floats {
+        let mut frame = GuiScene::new();
+        frame.push(heca_grid_ui::scene::DrawCommand::PushClip(GuiRectangle::new(
+            GuiPoint::new(pane_area.loc.x, pane_area.loc.y),
+            GuiSize::new(pane_area.size.w, pane_area.size.h),
+        )));
+        paint_pane_frame(state, &mut frame, pane_id);
+        frame.push(heca_grid_ui::scene::DrawCommand::PopClip);
+        float_frames.insert(pane_id, frame);
     }
     let frames: Vec<&GuiScene> = std::iter::once(&column_scene)
         .chain(float_frames.values())
@@ -356,41 +363,39 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // applied inside `sync_retained_terminal_layers`; this is the base/fallback.
     let app_font_size = state.app_font_size();
     let mut floating_panes = Vec::new();
-    if let Some(ws) = state.session.active_workspace() {
-        for float in &ws.floating_panes {
-            let fx = float.position.x as f32 + pane_area.loc.x as f32 + ws_offset.0;
-            let fy = float.position.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
-            let fw = float.size.w as f32;
-            let fh = float.size.h as f32;
-            let (content_rect, drawn) = crate::chrome::terminal::content_box(state, float.pane.id);
-            let mount = content_rect.and_then(|content_rect| {
-                prepare_terminal_mount(
-                    &mut state.server.backends,
-                    float.pane.id,
-                    content_rect,
-                    state.scale_factor as f32,
-                )
-            });
-            // Sync viewport state into the chrome store for GUI reactivity.
-            if let Some(ref m) = mount {
-                state.chrome_state.workspaces.set_pane_viewport(
-                    float.pane.id,
-                    m.snapshot.viewport_offset,
-                    m.snapshot.at_bottom,
-                    m.snapshot.scrollback_rows,
-                );
-            }
-            floating_panes.push(PaneRenderState {
-                pane_id: float.pane.id,
-                x: fx,
-                y: fy,
-                w: fw,
-                h: fh,
+    for &(pane_id, rect) in &floats {
+        let fx = rect.loc.x as f32 + pane_area.loc.x as f32 + ws_offset.0;
+        let fy = rect.loc.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
+        let fw = rect.size.w as f32;
+        let fh = rect.size.h as f32;
+        let (content_rect, drawn) = crate::chrome::terminal::content_box(state, pane_id);
+        let mount = content_rect.and_then(|content_rect| {
+            prepare_terminal_mount(
+                &mut state.server.backends,
+                pane_id,
                 content_rect,
-                drawn,
-                mount,
-            });
+                state.scale_factor as f32,
+            )
+        });
+        // Sync viewport state into the chrome store for GUI reactivity.
+        if let Some(ref m) = mount {
+            state.chrome_state.workspaces.set_pane_viewport(
+                pane_id,
+                m.snapshot.viewport_offset,
+                m.snapshot.at_bottom,
+                m.snapshot.scrollback_rows,
+            );
         }
+        floating_panes.push(PaneRenderState {
+            pane_id,
+            x: fx,
+            y: fy,
+            w: fw,
+            h: fh,
+            content_rect,
+            drawn,
+            mount,
+        });
     }
 
     // The chip and the scrollbar are children of each terminal and were painted above, before this
@@ -1091,7 +1096,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
 pub(crate) fn update_session_viewport(state: &mut AppState) {
     let pane_area = ChromeConfig::of(state).content_rect();
     let new_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
-    state.session.update_viewport(new_size);
+    state.layout_mut().update_viewport(new_size);
 }
 
 #[cfg(test)]

@@ -747,7 +747,7 @@ HecaApp                                   # winit runtime — the outer shell
      ├── ── Axis 1: canonical layout/session (the source of truth) ──
      ├── session: Session              [✓] # workspaces → columns → panes
      │    ├── workspaces: Vec<Workspace>    #   position = index (ordinal, not px)
-     │    ├── active_workspace_idx          #   which workspace is visible/focused
+     │    ├── WindowView.active_workspace   #   which workspace is visible/focused
      │    └── Workspace{ scrolling(columns), floating_panes, focus_domain }
      │         └── Column{ panes, active_pane_idx, width, … }
      │              └── Pane{ id, title, custom_name, runtime, … }
@@ -788,8 +788,8 @@ Planned subsystems (not yet in the tree):
 
 **Two orthogonal axes — the load-bearing idea.** *Axis 1* (`session`) owns the
 canonical layout: which workspaces/columns/panes exist, their ordinal position,
-what's visible (`active_workspace_idx`), and focus (hierarchical:
-`active_workspace_idx` → `workspace.focus_domain` → `column.active_pane_idx`,
+what's visible (`WindowView::active_workspace`), and focus (hierarchical:
+`WindowView::active_workspace` → `workspace.focus_domain` → `column.active_pane_idx`,
 cached in `focused_pane`). It is mutated **only** through actions
 (`WmAction → ActionRegistry.execute → handler`). *Axis 2* (chrome:
 `chrome_state` + `chrome_host` + event bus) is a **derived mirror + pluggable

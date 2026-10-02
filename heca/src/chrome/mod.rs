@@ -927,7 +927,7 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     // *directory* arrived, so that line was simply never revealed. The
     // card now attaches every metadata line always and each one shows itself, so a term
     // here would buy nothing and would put the next line's author back in this file.
-    state.session.active_workspace_idx.hash(&mut hsh);
+    state.layout().active_workspace_idx().hash(&mut hsh);
     for ws in &state.chrome_state.workspaces.tree().workspaces {
         ws.ws_idx.hash(&mut hsh);
         ws.name.hash(&mut hsh);
@@ -1042,7 +1042,7 @@ mod tests {
         assert_eq!(ids(false, false), (l_open, r_open));
     }
     use heca_config::programs::ProgramsConfig;
-    use heca_core::layout::{LayoutOptions, Session, SessionId};
+    use heca_core::layout::testing::Windowed;
     use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
     use std::path::PathBuf;
 
@@ -1968,22 +1968,14 @@ mod tests {
     #[test]
     fn sync_pane_runtime_state_projects_session_runtime_into_store() {
         let chrome = SharedChromeState::new(280.0, 260.0);
-        let mut session = Session::new(
-            SessionId(1),
-            Size::new(1280.0, 800.0),
-            1.0,
-            LayoutOptions::default(),
-        );
+        let mut window = Windowed::new(Size::new(1280.0, 800.0), 1.0);
         {
-            let ws = session
-                .active_workspace_mut()
+            window.m().add_pane(heca_core::layout::Pane::new(PaneId(10), "editor"), None, true);
+            let ws = window
+                .session
+                .workspaces
+                .first_mut()
                 .expect("session should create an initial workspace");
-            ws.add_pane(
-                heca_core::layout::Pane::new(PaneId(10), "editor"),
-                None,
-                true,
-                heca_core::layout::ColumnId(10),
-            );
             ws.floating_panes
                 .push(heca_core::layout::workspace::FloatingPane {
                     pane: heca_core::layout::Pane::new(PaneId(20), "git"),
@@ -2019,7 +2011,7 @@ mod tests {
             };
         }
 
-        super::signals::sync_pane_runtime_state(&session, &chrome.workspaces);
+        super::signals::sync_pane_runtime_state(&window.session, &chrome.workspaces);
 
         let tiled = chrome.workspaces.with_pane_runtime(PaneId(10), |runtime| {
             runtime.expect("tiled runtime").snapshot()
@@ -2049,38 +2041,27 @@ mod tests {
     #[test]
     fn sync_pane_runtime_state_prunes_removed_panes() {
         let chrome = SharedChromeState::new(280.0, 260.0);
-        let mut session = Session::new(
-            SessionId(1),
-            Size::new(1280.0, 800.0),
-            1.0,
-            LayoutOptions::default(),
-        );
-        {
-            let ws = session
-                .active_workspace_mut()
-                .expect("session should create an initial workspace");
-            ws.add_pane(
-                heca_core::layout::Pane::new(PaneId(10), "editor"),
-                None,
-                true,
-                heca_core::layout::ColumnId(10),
-            );
-        }
+        let mut window = Windowed::new(Size::new(1280.0, 800.0), 1.0);
+        window
+            .m()
+            .add_pane(heca_core::layout::Pane::new(PaneId(10), "editor"), None, true);
 
-        super::signals::sync_pane_runtime_state(&session, &chrome.workspaces);
+        super::signals::sync_pane_runtime_state(&window.session, &chrome.workspaces);
         assert!(
             chrome
                 .workspaces
                 .with_pane_runtime(PaneId(10), |runtime| runtime.is_some())
         );
 
-        session
-            .active_workspace_mut()
+        window
+            .session
+            .workspaces
+            .first_mut()
             .expect("session should keep its workspace")
             .scrolling
             .columns
             .clear();
-        super::signals::sync_pane_runtime_state(&session, &chrome.workspaces);
+        super::signals::sync_pane_runtime_state(&window.session, &chrome.workspaces);
 
         assert!(
             !chrome

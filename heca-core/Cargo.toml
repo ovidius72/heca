@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# Fixtures for tests of code built on the layout (`heca_core::layout::testing`).
+testing = []
+
 [dependencies]
 anyhow = "1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }

@@ -33,14 +33,12 @@ pub(crate) fn hit_test_pane_excluding(
         return None;
     }
 
-    let ws_offset = state
-        .session
-        .workspace_geometries()
+    let ws_offset = state.layout().workspace_geometries()
         .first()
         .map(|(_, r)| (r.loc.x as f32, r.loc.y as f32))
         .unwrap_or((0.0, 0.0));
 
-    if let Some(ws) = state.session.active_workspace() {
+    if let Some(ws) = state.layout().active_workspace() {
         for float in &ws.floating_panes {
             let seat = placed(pane_area, ws_offset, float.position, float.size);
             if seat.contains(at(pos)) && Some(float.pane.id) != exclude {
@@ -49,10 +47,8 @@ pub(crate) fn hit_test_pane_excluding(
         }
     }
 
-    let pane_positions = state
-        .session
-        .active_workspace()
-        .map(|ws| ws.scrolling.panes_with_positions())
+    let pane_positions = state.layout().active_workspace()
+        .map(|ws| ws.scroll().panes_with_positions())
         .unwrap_or_default();
 
     for (pane_id, rect) in &pane_positions {

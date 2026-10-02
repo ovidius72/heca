@@ -57,14 +57,14 @@ pub(crate) fn render_insert_hint(state: &mut AppState, pane_area: Rectangle) {
         Some(h) => h,
         None => return,
     };
-    let ws = match state.session.active_workspace() {
+    let ws = match state.layout().active_workspace() {
         Some(w) => w,
         None => return,
     };
 
-    let wa = ws.scrolling.working_area;
+    let wa = ws.scroll().area();
     let gaps = ws.scrolling.options.gaps;
-    let view_pos = ws.scrolling.view_pos();
+    let view_pos = ws.scroll().view_pos();
 
     let (rx, ry, rw, rh) = match hint {
         PaneInsertTarget::NewColumn(col_idx) => {
@@ -215,7 +215,7 @@ fn render_swap_target_hint(state: &mut AppState, pane_area: Rectangle) {
         None => return,
     };
 
-    let ws = match state.session.active_workspace() {
+    let ws = match state.layout().active_workspace() {
         Some(w) => w,
         None => return,
     };
@@ -238,7 +238,7 @@ fn render_swap_target_hint(state: &mut AppState, pane_area: Rectangle) {
         None => return,
     };
 
-    let col_x = ws.scrolling.column_x(col_idx) - ws.scrolling.view_pos();
+    let col_x = ws.scrolling.column_x(col_idx) - ws.scroll().view_pos();
     let pane_y = ws.scrolling.pane_y_in_column(col_idx, pane_idx);
     let col_w = ws
         .scrolling

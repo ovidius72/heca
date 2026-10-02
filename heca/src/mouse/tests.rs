@@ -1,6 +1,6 @@
 use super::*;
-use heca_core::layout::types::{LayoutOptions, Point, Rectangle, Size};
-use heca_core::layout::workspace::Workspace;
+use heca_core::layout::testing::Shown;
+use heca_core::layout::types::{Point, Size};
 use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane, PaneId};
 
 /// The default bar heights, from the one place that says them: the config's appearance.
@@ -35,13 +35,8 @@ fn test_rubberband_negative() {
 
 #[test]
 fn test_find_pane_found() {
-    let mut ws = Workspace::new(
-        heca_core::layout::WorkspaceId(1),
-        Rectangle::new(Point::default(), Size::new(1280.0, 800.0)),
-        2.0,
-        LayoutOptions::default(),
-    );
-    ws.scrolling.add_column(
+    let mut ws = Shown::new(Size::new(1280.0, 800.0));
+    ws.m().scroll_mut().add_column(
         None,
         Column::new(
             ColumnId(42),
@@ -50,18 +45,13 @@ fn test_find_pane_found() {
         ),
         false,
     );
-    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(100)), Some((0, 0)));
+    assert_eq!(find_pane_in_workspace(&ws, PaneId(100)), Some((0, 0)));
 }
 
 #[test]
 fn test_find_pane_not_found() {
-    let mut ws = Workspace::new(
-        heca_core::layout::WorkspaceId(1),
-        Rectangle::new(Point::default(), Size::new(1280.0, 800.0)),
-        2.0,
-        LayoutOptions::default(),
-    );
-    ws.scrolling.add_column(
+    let mut ws = Shown::new(Size::new(1280.0, 800.0));
+    ws.m().scroll_mut().add_column(
         None,
         Column::new(
             ColumnId(1),
@@ -70,29 +60,19 @@ fn test_find_pane_not_found() {
         ),
         false,
     );
-    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(999)), None);
+    assert_eq!(find_pane_in_workspace(&ws, PaneId(999)), None);
 }
 
 #[test]
 fn test_find_pane_empty() {
-    let mut ws = Workspace::new(
-        heca_core::layout::WorkspaceId(1),
-        Rectangle::new(Point::default(), Size::new(1280.0, 800.0)),
-        2.0,
-        LayoutOptions::default(),
-    );
-    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(1)), None);
+    let ws = Shown::new(Size::new(1280.0, 800.0));
+    assert_eq!(find_pane_in_workspace(&ws, PaneId(1)), None);
 }
 
 #[test]
 fn test_find_pane_multi_column() {
-    let mut ws = Workspace::new(
-        heca_core::layout::WorkspaceId(1),
-        Rectangle::new(Point::default(), Size::new(1280.0, 800.0)),
-        2.0,
-        LayoutOptions::default(),
-    );
-    ws.scrolling.add_column(
+    let mut ws = Shown::new(Size::new(1280.0, 800.0));
+    ws.m().scroll_mut().add_column(
         None,
         Column::new(
             ColumnId(10),
@@ -101,7 +81,7 @@ fn test_find_pane_multi_column() {
         ),
         false,
     );
-    ws.scrolling.add_column(
+    ws.m().scroll_mut().add_column(
         None,
         Column::new(
             ColumnId(20),
@@ -110,13 +90,13 @@ fn test_find_pane_multi_column() {
         ),
         false,
     );
-    ws.scrolling
+    ws.m().scroll_mut()
         .add_pane_to_column(0, Some(1), Pane::new(PaneId(3), "c"), false);
 
-    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(1)), Some((0, 0)));
-    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(3)), Some((0, 1)));
-    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(2)), Some((1, 0)));
-    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(999)), None);
+    assert_eq!(find_pane_in_workspace(&ws, PaneId(1)), Some((0, 0)));
+    assert_eq!(find_pane_in_workspace(&ws, PaneId(3)), Some((0, 1)));
+    assert_eq!(find_pane_in_workspace(&ws, PaneId(2)), Some((1, 0)));
+    assert_eq!(find_pane_in_workspace(&ws, PaneId(999)), None);
 }
 
 /// **With a sidebar hidden, the panes own that edge right up to the window** — there is no strip

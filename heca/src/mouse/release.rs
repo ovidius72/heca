@@ -167,7 +167,7 @@ fn handle_content_move(
         InteractionSource::MouseContent,
         WmAction::PlacePane {
             pane_id: source_id,
-            ws_idx: state.session.active_workspace_idx,
+            ws_idx: state.layout().active_workspace_idx(),
             col_idx,
             pane_idx,
         },

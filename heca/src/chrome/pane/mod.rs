@@ -75,14 +75,10 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
         state.theme.active_glow_strength,
     );
 
-    let active_pane = state
-        .session
-        .active_workspace()
+    let active_pane = state.layout().active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
-    let floating: std::collections::HashSet<PaneId> = state
-        .session
-        .active_workspace()
+    let floating: std::collections::HashSet<PaneId> = state.layout().active_workspace()
         .map(|ws| ws.floating_panes.iter().map(|f| f.pane.id).collect())
         .unwrap_or_default();
 
@@ -126,11 +122,9 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
     // (`chrome::column`), built, placed, focused and painted there — so building a second tree for
     // it here would be two widgets answering to one name, and two of everything the pane carries.
     // A floating pane belongs to no column, so it is still the host's to place.
-    let tiled: std::collections::HashSet<PaneId> = state
-        .session
-        .active_workspace()
+    let tiled: std::collections::HashSet<PaneId> = state.layout().active_workspace()
         .map(|ws| {
-            ws.scrolling
+            ws.scroll()
                 .panes_with_positions()
                 .into_iter()
                 .map(|(id, _)| id)

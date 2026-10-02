@@ -3,7 +3,7 @@ pub use crate::app::selection_model::SelectionState;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
 use heca_config::theme::Theme;
-use heca_core::layout::{PaneId, Session};
+use heca_core::layout::{Layout, LayoutMut, PaneId, Session, WindowView};
 use heca_renderer::backdrop::Backdrop;
 use heca_renderer::background::BackgroundLayer;
 use heca_renderer::blur::Blur;
@@ -719,7 +719,12 @@ pub struct AppState {
     /// notification store, the git facts kept for panes, the program catalog. See
     /// [`crate::server`]; the rest of this struct is the window and what it draws.
     pub server: crate::server::ServerState,
+    /// The workspaces, columns and panes — the content every window on this session shares.
     pub session: Session,
+    /// What **this window** sees of the session: the workspace shown, the scroll of each
+    /// workspace, the window's size. Reach both through [`layout`](Self::layout) and
+    /// [`layout_mut`](Self::layout_mut).
+    pub(crate) view: WindowView,
     pub theme: Theme,
     /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.
     pub appearance: AppearanceConfig,
@@ -1069,6 +1074,17 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// The session as this window sees it — for everything that reads where things are.
+    pub fn layout(&self) -> Layout<'_> {
+        self.session.through(&self.view)
+    }
+
+    /// The session, moved by this window — for everything that changes where things are. A move
+    /// shifts this window's scroll with it; nothing at the call site has to say so.
+    pub fn layout_mut(&mut self) -> LayoutMut<'_> {
+        self.session.through_mut(&mut self.view)
+    }
+
     /// **Ask the server to do something, and react to what changed** — the one door from a window
     /// to the state every window shares. The server's clock is read here, not the asker's.
     pub(crate) fn ask_server(&mut self, action: crate::server::ServerAction) {

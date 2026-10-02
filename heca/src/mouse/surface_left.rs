@@ -9,7 +9,7 @@ use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::chrome::ChromeDragItem;
 use crate::input::WmAction;
 use crate::providers::workspaces::WorkspaceRow;
-use heca_core::layout::{PaneId, Workspace};
+use heca_core::layout::{Detached, PaneId};
 use heca_grid_ui::drag::DropSide;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -82,10 +82,8 @@ pub(crate) fn accept_drop(
 /// A copy of workspace `ws_idx` with `pane_id` already taken out — what `place_pane` counts its
 /// indices on, since it takes the pane out before placing it. Placing next to a card in the same
 /// column the pane came from would otherwise land one row off.
-fn without(state: &AppState, ws_idx: usize, pane_id: PaneId) -> Option<Workspace> {
-    let mut ws = state.session.workspaces.get(ws_idx)?.clone();
-    ws.take_pane(pane_id);
-    Some(ws)
+fn without(state: &AppState, ws_idx: usize, pane_id: PaneId) -> Option<Detached> {
+    Some(state.layout().workspace(ws_idx)?.without_pane(pane_id))
 }
 
 /// The `place_pane` a drop on a sidebar row means: beside a pane card (above it on its top half),
@@ -128,7 +126,7 @@ fn place_on_row(
             let ws = without(state, original_ws, pane_id)?;
             (
                 original_ws,
-                ws.scrolling.active_column_idx,
+                ws.reader().scroll().active_column_idx(),
                 Some(usize::MAX),
             )
         }
@@ -169,7 +167,7 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
         _ => return false,
     };
 
-    let original_ws = state.session.active_workspace_idx;
+    let original_ws = state.layout().active_workspace_idx();
 
     // Reset drag offset so layout positions are correct for removal.
     crate::mouse::interactive::reset_interactive_move_offset(state);

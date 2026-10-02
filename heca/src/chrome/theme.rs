@@ -151,9 +151,7 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
 
 /// The status-bar text projection (`N panes | focus | MODE…`).
 pub(crate) fn chrome_status(state: &crate::app_state::AppState) -> String {
-    let pane_count = state
-        .session
-        .active_workspace()
+    let pane_count = state.layout().active_workspace()
         .map(|ws| {
             ws.scrolling
                 .columns
@@ -162,9 +160,7 @@ pub(crate) fn chrome_status(state: &crate::app_state::AppState) -> String {
                 .sum::<usize>()
         })
         .unwrap_or(0);
-    let focus_title = state
-        .session
-        .active_workspace()
+    let focus_title = state.layout().active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.custom_name.as_deref().unwrap_or(p.title.as_str()))
         .unwrap_or("—");

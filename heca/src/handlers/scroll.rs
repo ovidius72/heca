@@ -271,9 +271,9 @@ pub fn handle_scroll_view_right(state: &mut AppState, _action: &WmAction) {
 }
 
 fn scroll_view_by(state: &mut AppState, sign: f64) {
-    if let Some(ws) = state.session.active_workspace_mut() {
-        let step = ws.scrolling.working_area.size.w * 0.25;
-        ws.scrolling.scroll_view(sign * step);
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
+        let step = ws.scroll().area().size.w * 0.25;
+        ws.scroll_mut().scroll_view(sign * step);
     }
 }
 
