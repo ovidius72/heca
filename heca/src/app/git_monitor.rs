@@ -124,14 +124,17 @@ struct GitSyncContext<'a, P> {
 }
 
 pub(crate) fn sync_pane_git_from_cwds(state: &mut AppState) {
-    let provider = Git2Provider;
-    sync_pane_git_from_cwds_impl(
-        &mut state.session,
-        &mut state.server.git_runtime_cache,
-        &provider,
-        Instant::now(),
-        GIT_REFRESH_INTERVAL,
-    );
+    state
+        .server
+        .refresh_git(&mut state.session, Instant::now());
+}
+
+/// The cache and the real git provider bound together, for [`ServerState::refresh_git`]: the
+/// server owns the cache, and asking git is the server's work, never a window's.
+///
+/// [`ServerState::refresh_git`]: crate::server::ServerState::refresh_git
+pub(crate) fn refresh(session: &mut Session, cache: &mut GitRuntimeCache, now: Instant) {
+    sync_pane_git_from_cwds_impl(session, cache, &Git2Provider, now, GIT_REFRESH_INTERVAL);
 }
 
 fn sync_pane_git_from_cwds_impl<P: GitProvider>(

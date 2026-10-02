@@ -37,7 +37,7 @@ pub struct ServerState {
     /// The notification store: queueing, lifecycle, dedup, timers, and the list a window shows.
     notifications: NotificationRuntime,
     /// Git facts for panes' folders, kept by repo root so a repo shared by panes is read once.
-    pub git_runtime_cache: GitRuntimeCache,
+    git_runtime_cache: GitRuntimeCache,
     /// The program catalog (`[program]`), behind an `Rc` so mirroring it into the chrome store is
     /// a pointer clone and the store can tell "unchanged" from "reloaded" by identity
     /// (F003/P086/T367). Refreshed on reload.
@@ -97,6 +97,14 @@ impl ServerState {
             .then_some(Change::NotificationsChanged)
             .into_iter()
             .collect()
+    }
+
+    /// **Bring every pane's git facts up to date** from its working directory, re-asking git only
+    /// when a repository's cached answer is old. The session is passed in because the panes' runtime
+    /// still lives in it (the step that splits the session's shared layout from each window's view
+    /// moves it here).
+    pub(crate) fn refresh_git(&mut self, session: &mut heca_core::layout::Session, now: Instant) {
+        crate::app::git_monitor::refresh(session, &mut self.git_runtime_cache, now);
     }
 
     /// **When the server next has something to do** — the next notification deadline — or `None`
