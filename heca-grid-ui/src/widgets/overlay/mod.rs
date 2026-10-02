@@ -135,7 +135,7 @@ pub struct Overlay {
     on_outside_click: Option<Box<dyn Fn()>>,
     /// **What the dismiss key means to this surface**, when it means anything.
     ///
-    /// An open overlay already holds the keyboard (`base.focused = open`), so the key arrives here
+    /// An open overlay already holds the keyboard (it follows `open`), so the key arrives here
     /// whatever composes it — it was simply dropped, because this widget answered pointer events
     /// and nothing else. Every surface built on top therefore wrote its own dismissal: `Dialog`,
     /// `ContextMenu` and `CommandPalette` each have one, three copies of the same sentence, and a
@@ -185,12 +185,14 @@ impl Overlay {
         base.style.layout.padding = (VIEWPORT_MARGIN).into();
         // The flag every component carries, not one of this widget's own — see `Base::open`.
         let open = base.open;
-        // **An open layer holds the keyboard.** Binding `open` to `Base::focused` is the whole of
-        // how keys and intents reach a panel: the framework delivers them down the focus owner's
-        // ancestor chain, so an open overlay is on that path and a closed one is not. It replaces
-        // this widget forwarding every key and intent into its panel by hand — the forwarding that
-        // had to exist because the overlay had taken over its own subtree's walk in the first place.
-        base.focused = open;
+        // **An open layer holds the keyboard.** Following `open` into `Base::focused`
+        // (`Base::follow_focus_modal`) is the whole of how keys and intents reach a panel: the
+        // framework delivers them down the focus owner's ancestor chain, so an open overlay is on
+        // that path and a closed one is not. It replaces this widget forwarding every key and
+        // intent into its panel by hand — the forwarding that had to exist because the overlay had
+        // taken over its own subtree's walk in the first place. Modal: closing it gives the
+        // keyboard back to the widget that held it when it opened.
+        base.follow_focus_modal(open);
         Self {
             base,
             blocking: true,
@@ -394,15 +396,15 @@ impl Overlay {
     /// [`open_signal`](Overlay::open_signal), so a caller could drive *its* state but never hand it
     /// *theirs* — backwards from how state is held everywhere else here.
     ///
-    /// `base.focused` is bound to whichever signal is in force — that binding is the whole of how
-    /// keys reach a panel — so adopting yours rebinds it rather than leaving it pointed at a signal
+    /// The overlay's keyboard follows whichever signal is in force — that is the whole of how keys
+    /// reach a panel — so adopting yours re-points it rather than leaving it following a signal
     /// nobody writes any more.
     #[heca_grid_ui_macros::host_only(
         "a live signal; a description carries a starting value, `opened`"
     )]
     pub fn open_when(mut self, open: Signal<bool>) -> Self {
         self.base.open = open;
-        self.base.focused = open;
+        self.base.follow_focus_modal(open);
         self.base
             .presence
             .assume_open(crate::reactive::SignalGet::get_untracked(&open));
@@ -652,7 +654,7 @@ impl Component for Overlay {
 
     fn follow_open(&mut self, open: Signal<bool>) {
         self.base.open = open;
-        self.base.focused = open;
+        self.base.follow_focus_modal(open);
         self.base
             .presence
             .assume_open(crate::reactive::SignalGet::get_untracked(&open));
@@ -667,12 +669,6 @@ impl Component for Overlay {
     fn focus_first_quiet(&mut self) {
         if let Some(panel) = self.base.children.first_mut() {
             self.focus.focus_first_quiet(panel.as_mut());
-        }
-    }
-
-    fn focus_at_trapped(&mut self, pos: heca_core::layout::Point) {
-        if let Some(panel) = self.base.children.first_mut() {
-            self.focus.focus_at_trapped(panel.as_mut(), pos);
         }
     }
 
@@ -824,7 +820,7 @@ impl Component for Overlay {
             Event::PointerUp(_) | Event::PointerMove(_) | Event::Scroll(_) => self.swallow(),
             // **The dismiss key, answered where the keys already arrive.**
             //
-            // An open overlay holds the keyboard — `base.focused = open`, set in the constructor —
+            // An open overlay holds the keyboard — it follows `open`, set in the constructor —
             // so this key has always been delivered here and was simply dropped. Every surface
             // built on top wrote its own dismissal instead (`Dialog`, `ContextMenu`,
             // `CommandPalette`: three copies of one sentence), and a surface **composed** rather

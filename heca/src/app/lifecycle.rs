@@ -183,6 +183,8 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // it to catch the frame an exit finishes. Reading it afterwards misses that frame entirely.
     let leaving_before = state.layers.leaving_before_tick(&state.window_root);
     let mut chrome_animating = state.window_root.tick(dt);
+    // The tree is the one truth about where the keyboard is; the store follows it.
+    crate::app::tree_focus::settle_window_focus(state);
     // Tick every pane's own tree, so its info bar's action buttons' press flash, hover animation
     // and tooltip reveal advance (and a redraw is requested while they animate) instead of getting
     // stuck. The bar is a child of its pane, so one tick reaches both.

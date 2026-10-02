@@ -338,7 +338,7 @@ of it; `tests/pointer_routing.rs` + `tests/pointer_delivery.rs` hold it.
    that hands an event to `self.children`, means you are rebuilding the router. There is no
    container in the library that forwards events, and there must not be one.
 3. **Nothing focused ⇒ nothing delivered.** A surface that wants keys **holds focus**
-   (`Base::focused`, bound to its own open/keyboard-target signal). Do not add a predicate instead
+   (`Base::focused`, which it follows from its own open/keyboard-target signal with `Base::follow_focus`). Do not add a predicate instead
    — `routes_own_subtree`, `takes_raw_keys` and `takes_text_input` were exactly that and are
    **deleted**. Never reintroduce them.
 4. **Per-element handlers need that element to be the target.** A cursor inside a container
@@ -1356,10 +1356,33 @@ Button::destructive("Delete")
   nothing delivered.** The focus walk takes the **topmost** claim (children last-first, like
   hit-testing), because an open layer and the button clicked before it both carry the flag.
 - **A surface that wants keys holds focus**, and a caller wires nothing:
-  `Overlay`/`ContextMenu`/`CommandPalette` bind `Base::focused` to their **open** signal;
-  `FocusScope` and `ScrollRegion` bind it to the host's keyboard-target signal — a dock binds the
-  same signal to both, so the wrapper draws the ring and the region answers the keys; `Select`
+  `Overlay`/`ContextMenu`/`CommandPalette` follow their **open** signal into `Base::focused`;
+  `FocusScope` and `ScrollRegion` follow the host's keyboard-target signal — a dock gives the same
+  signal to both, so the wrapper draws the ring and the region answers the keys; `Select`
   focuses itself when the list opens. **Do not add a predicate instead.**
+- **`focused` means one thing — the widget the keyboard is aimed at, ONE per tree — and has one
+  door.** It is written only by `Base::focus(visible)` / `Base::blur()`, or by
+  `Base::follow_focus(signal)` / `follow_focus_modal(signal)` for a surface whose focus a host
+  decides (open, a dock's keyboard target). A widget never *is* the host's signal: aliasing it made
+  "this is open" and "the keyboard is here" the same value, and a click that blurred the widget
+  would have closed it. `heca/tests/focus_door.rs` fails on any other writer. A widget cannot blur
+  another (it holds no tree), so a request is *claimed* and `focus::settle` — run by the router
+  before it delivers a key or a press, and once a frame by the host (`settle_focus`) — makes it
+  true: the previous holder lets go. A **modal** (`follow_focus_modal`: Overlay, ContextMenu,
+  CommandPalette, the hint picker) remembers who held the keyboard when it opened and gives it
+  back on close; a **region** (`follow_focus`: a dock) takes it unless something inside already
+  has it, and returns to the control it held when it last let go. There is no "most recent wins":
+  there is one holder.
+- **The tree is the one truth about where the keyboard is; the chrome store follows it.** The host
+  reads it with `heca_grid_ui::keyboard_owner` (`app/tree_focus.rs`) and sets
+  `focused_container` to the dock the owner sits in. A dock focused by an action reaches the tree
+  through the signal its region follows. Never keep a second record of it.
+- **A press focuses the deepest focusable under it, in every tree, with nothing declared** — the
+  browser's rule, done once in the pointer router (`focus::focus_on_press`). A press on nothing
+  focusable changes nothing; a press inside the widget that already holds the keyboard changes
+  nothing; otherwise the previous holder lets go. Do not add `focus_at`, a `.focus_on_press()`
+  builder or a trapped variant — the copies of this rule that lived in `Overlay` and `Dialog` are
+  deleted.
 - **Typed text is `Event::TextInput`, not a key.** A field types from it and from nothing else; a
   raw `GridKey::Char` is a shortcut. Do not re-introduce a host-side "deliver the real character"
   fixup — that patch existed only because a field rebuilt text from keys.

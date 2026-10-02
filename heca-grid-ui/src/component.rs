@@ -9,7 +9,7 @@
 use crate::color::Color;
 use crate::drag::DropSide;
 use crate::hint::DeclaredAction;
-use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use crate::reactive::{Signal, SignalGet, signal};
 use crate::scene::{
     Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, RectCmd, ScanlineCmd,
     Scene, Shadow, TextAlign, TextCmd, TextStyle,
@@ -225,7 +225,13 @@ pub struct Base {
     /// by focus traversal. A common, base-level property every widget inherits.
     pub disabled: Signal<bool>,
     /// Whether this component currently holds keyboard focus.
+    ///
+    /// Written only through the focus door ([`Base::focus`] / [`Base::blur`] and the signal a
+    /// widget follows, [`Base::follow_focus`]); read it, never set it.
     pub focused: Signal<bool>,
+    /// Who focused this widget last, and the host signal it follows, if any. See
+    /// [`FocusDoor`](crate::focus::FocusDoor).
+    pub(crate) focus_door: crate::focus::FocusDoor,
     /// Whether the focus ring should show — true for keyboard focus, false for
     /// mouse focus (focus-visible behavior).
     pub focus_visible: Signal<bool>,
@@ -704,6 +710,7 @@ impl Base {
             visible: signal(true),
             disabled: signal(false),
             focused: signal(false),
+            focus_door: crate::focus::FocusDoor::default(),
             focus_visible: signal(false),
             focusable: false,
             focus_barrier: false,
@@ -906,6 +913,9 @@ impl Base {
     /// how they came to disagree: two widgets had hand-written `presence.tick` and neither ended
     /// the exit, which is a rule in two call sites and therefore in the wrong place.
     pub fn tick_presence(&mut self, dt: f32) -> bool {
+        // A widget that follows a host signal for focus catches up here, once a frame, for every
+        // widget — see [`Base::follow_focus`].
+        self.sync_focus_follow();
         let animating = self.presence.tick(dt);
         // **Exactly the frame an exit ends.** Asked of the presence rather than inferred from
         // "not open and not leaving", which is also true of a widget that was never up — and which
@@ -1075,10 +1085,6 @@ pub trait Component {
     /// What a surface does as it opens so Enter works immediately, while the ring still waits for
     /// the user to actually navigate. Default: nothing.
     fn focus_first_quiet(&mut self) {}
-
-    /// **A click inside this surface moves its keyboard**, and a click that hits no control leaves
-    /// the keyboard where it is — the trapped-panel rule. Default: nothing.
-    fn focus_at_trapped(&mut self, _pos: heca_core::layout::Point) {}
 
     /// **Dismiss this surface.**
     ///
@@ -1336,14 +1342,12 @@ pub trait Component {
     /// flag (which drives the focus ring). Override to add behaviour.
     /// `visible` is true for keyboard focus (show the ring), false for mouse.
     fn on_focus(&mut self, visible: bool) {
-        self.base_mut().focused.set(true);
-        self.base_mut().focus_visible.set(visible);
+        self.base().focus(visible);
     }
 
     /// Called when this component loses keyboard focus. Default: clear it.
     fn on_blur(&mut self) {
-        self.base_mut().focused.set(false);
-        self.base_mut().focus_visible.set(false);
+        self.base().blur();
     }
 
     /// The taffy style for this component's layout node. Default: the base
@@ -1516,6 +1520,7 @@ pub fn deliver(node: &mut dyn Component, ev: &Event) -> Handled {
         // first row in a list answering an Enter meant for the cursor, an unfocused dock answering
         // an intent aimed at its neighbour. A host that wants a key to reach a surface focuses the
         // surface — which it already does, because that is what the focus ring means.
+        crate::focus::settle(node);
         let Some(path) = focus_path(node) else {
             return Handled::No;
         };
@@ -1536,19 +1541,12 @@ fn is_keyboard(ev: &Event) -> bool {
     )
 }
 
-/// The path from `node` to the **deepest** widget in it holding keyboard focus, or `None` when
-/// nothing in this tree does.
-///
-/// Deepest, because focus nests: a host marks a whole dock as the keyboard's target *and* the field
-/// inside it is focused, and the key belongs to the field. Hidden and invisible subtrees are
-/// skipped — a closed overlay still holds the focus flag its field had when it closed, and that
-/// must not pull the keyboard into something nobody can see.
 /// **Does anything in this subtree hold the keyboard?**
 ///
 /// The public form of [`focus_path`] — a host asking "is this surface the one taking keys" gets the
 /// same answer the event walk uses, rather than inventing a predicate beside it. A surface that
-/// wants keys holds focus (`Overlay`, `ContextMenu` and `CommandPalette` all bind their open signal
-/// to [`Base::focused`]), so an open layer answers `true` by being open.
+/// wants keys holds focus (`Overlay`, `ContextMenu` and `CommandPalette` follow their open signal
+/// for it), so an open layer answers `true` by being open.
 ///
 /// Hidden and invisible subtrees are skipped, so a dismissed surface that still carries the focus
 /// flag its field had when it closed does not answer `true`.
@@ -1556,22 +1554,10 @@ pub fn holds_keyboard(node: &dyn Component) -> bool {
     focus_path(node).is_some()
 }
 
+/// The path from `node` to the widget in it that owns the keyboard, or `None` when nothing in this
+/// tree does. See [`focus::holder_path`](crate::focus::holder_path) for how a holder is chosen.
 pub(crate) fn focus_path(node: &dyn Component) -> Option<Vec<usize>> {
-    // **Last-added first**, the same order hit-testing uses: what is drawn on top owns the input.
-    // Several things can carry the focus flag at once — an open layer says it holds the keyboard,
-    // and the button the user clicked before opening it still says so too — and the one on top is
-    // the one that means it. Walking in document order picked the button and left every keystroke
-    // falling through the palette to the page behind it.
-    for (i, child) in node.base().children.iter().enumerate().rev() {
-        if !child.base().visible.get_untracked() || child.base().style.layout.hidden {
-            continue;
-        }
-        if let Some(mut sub) = focus_path(child.as_ref()) {
-            sub.insert(0, i);
-            return Some(sub);
-        }
-    }
-    node.base().focused.get_untracked().then(Vec::new)
+    crate::focus::holder_path(node)
 }
 
 /// Capture down `path`, then handlers and [`on_event`](Component::on_event) back up — the same

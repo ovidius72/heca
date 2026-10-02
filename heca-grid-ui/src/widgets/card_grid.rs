@@ -42,6 +42,11 @@ impl GridCell {
         }
     }
 
+    /// The signal this cell lights when the cursor is on it — the one it was made with.
+    pub fn selected(&self) -> Signal<bool> {
+        self.selected
+    }
+
     /// Wire the card's **hover** signal, so pointing at a card moves the cursor onto it.
     ///
     /// The cursor stays single-valued: hovering *moves* it rather than raising a second claim

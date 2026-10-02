@@ -180,7 +180,8 @@ fn on_move(
         return;
     }
     // A pane is told where the pointer is only while it has the keyboard; a terminal no pane owns
-    // hears it whenever the pointer is over it.
+    // follows the same rule on its own (it says nothing unless it holds focus), so by the time it
+    // is heard here there is nothing left to decide.
     if pane.is_some() && state.focused_pane != pane {
         return;
     }

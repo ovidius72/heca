@@ -3201,7 +3201,7 @@ impl ApplicationHandler for App {
                         // `[` collapses the sidebar to its icon rail (G5) and back,
                         // but only when nothing is focused — so it still types into
                         // a focused Input.
-                        GridKey::Char('[') if state.focus.focused().is_none() => {
+                        GridKey::Char('[') if !heca_grid_ui::holds_keyboard(&state.ui) => {
                             let next = match state.sidebar_mode.get_untracked() {
                                 RegionMode::CollapsedRail => RegionMode::Expanded,
                                 _ => RegionMode::CollapsedRail,
@@ -3210,20 +3210,20 @@ impl ApplicationHandler for App {
                         }
                         // `p` opens/closes a workspaces-rail pick: every pane cell
                         // shows its letter keycap (the generic KeyHint overlay).
-                        GridKey::Char('p') if state.focus.focused().is_none() => {
+                        GridKey::Char('p') if !heca_grid_ui::holds_keyboard(&state.ui) => {
                             let on = !state.rail_pick;
                             state.set_rail_pick(on);
                         }
                         // While a pick is open, a letter selects its pane cell.
                         GridKey::Char(c) if state.rail_pick => state.rail_pick_select(c),
                         // `c` toggles the centered clip-viewport demo (task B).
-                        GridKey::Char('c') if state.focus.focused().is_none() => {
+                        GridKey::Char('c') if !heca_grid_ui::holds_keyboard(&state.ui) => {
                             state.clip_demo = !state.clip_demo;
                         }
                         // `n` fires a "needs attention" pulse on a pane. The widget
                         // flashes; the *host* plays the sound (grid-ui is audio-free)
                         // — here, the terminal bell.
-                        GridKey::Char('n') if state.focus.focused().is_none() => {
+                        GridKey::Char('n') if !heca_grid_ui::holds_keyboard(&state.ui) => {
                             state.attention_req.set(true);
                             print!("\x07");
                             use std::io::Write;
@@ -3234,7 +3234,7 @@ impl ApplicationHandler for App {
                         // AND the action's button variant, because **the developer raising a
                         // notification chooses how its action reads** — the stack builds what the
                         // spec says and picks no face of its own (F003/P096/T486).
-                        GridKey::Char('t') if state.focus.focused().is_none() => {
+                        GridKey::Char('t') if !heca_grid_ui::holds_keyboard(&state.ui) => {
                             state.toasts.update(|v| {
                                 let id = v.iter().map(|s| s.id).max().unwrap_or(0) + 1;
                                 let (severity, variant, how) = match id % 4 {

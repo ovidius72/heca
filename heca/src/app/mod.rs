@@ -31,3 +31,5 @@ pub mod terminal_host;
 pub mod terminal_metrics;
 pub mod terminal_process;
 pub mod terminal_render;
+pub(crate) mod tree_focus;
+pub(crate) mod tree_keys;

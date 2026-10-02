@@ -98,6 +98,9 @@ impl Terminal {
         base.style.layout.direction = heca_grid_ui::style::Direction::Row;
         base.style.layout.justify = "end".into();
         base.style.layout.align = "start".into();
+        // **It takes the keyboard when it is clicked**, like any focusable — and says nothing else:
+        // no host wiring teaches it that.
+        base.focusable = true;
         // **The scrollback controls are part of the terminal**, drawn over its picture by the same
         // walk, so placing a terminal anywhere places them with it.
         let (controls, layers) = Controls::build(&shared.intents);
@@ -116,10 +119,10 @@ impl Terminal {
             let me = me.clone();
             move |cx| me.wheel(cx)
         })
-        // **So are the buttons and the pointer's moves**, but only when the terminal itself is what
-        // they landed on: the chip and the scrollbar are its children, and a press or a move on
-        // them is theirs. None of these takes the event — a window gesture (a divider, a move
-        // modifier) decides about the same press on its own.
+        // **So are the buttons** (and the pointer's moves, in `on_event`), but only when the
+        // terminal itself is what they landed on: the chip and the scrollbar are its children, and
+        // a press or a move on them is theirs. None of these takes the event — a window gesture (a
+        // divider, a move modifier) decides about the same press on its own.
         .on(EventKind::PointerDown, {
             let me = me.clone();
             move |cx| {
@@ -131,7 +134,6 @@ impl Terminal {
             }
         })
         .on(EventKind::PointerUp, {
-            let me = me.clone();
             move |cx| {
                 me.pointer(cx, |p, cell| TerminalInput::Release {
                     button: p.button,
@@ -139,12 +141,6 @@ impl Terminal {
                     modifiers: p.modifiers,
                 })
             }
-        })
-        .on(EventKind::PointerMove, move |cx| {
-            me.pointer(cx, |p, cell| TerminalInput::Move {
-                cell,
-                modifiers: p.modifiers,
-            })
         })
     }
 
@@ -367,13 +363,21 @@ impl Shared {
         cx: &mut heca_grid_ui::event::EventCx<'_>,
         make: impl Fn(&heca_grid_ui::PointerEvent, Option<GridCell>) -> TerminalInput,
     ) {
-        let Some(p) = cx.pointer().copied() else {
-            return;
-        };
+        if let Some(p) = cx.pointer().copied() {
+            self.pointer_event(&p, make);
+        }
+    }
+
+    /// [`pointer`](Self::pointer) for a pointer event already in hand.
+    fn pointer_event(
+        &self,
+        p: &heca_grid_ui::PointerEvent,
+        make: impl Fn(&heca_grid_ui::PointerEvent, Option<GridCell>) -> TerminalInput,
+    ) {
         if p.target_bounds != Some(self.bounds.get()) {
             return;
         }
-        self.emit(make(&p, self.cell_at(&p)));
+        self.emit(make(p, self.cell_at(p)));
     }
 
     /// The wheel turned over the terminal.
@@ -423,6 +427,22 @@ impl Component for Terminal {
         for child in &self.base.children {
             heca_grid_ui::paint_child(child.as_ref(), cx);
         }
+    }
+
+    /// **Where the pointer is, told to the program** — only while it holds the keyboard when an
+    /// extension placed it, the rule a pane follows by being the focused pane: a program that
+    /// tracks the mouse is not driven by a pointer merely passing over a panel. It reads its own
+    /// flag, so a rebuilt tree cannot leave it believing something the framework no longer does.
+    fn on_event(&mut self, ev: &heca_grid_ui::Event) -> heca_grid_ui::Handled {
+        if let heca_grid_ui::Event::PointerMove(p) = ev
+            && (self.shared.declared.borrow().is_none() || self.base.is_focused())
+        {
+            self.shared.pointer_event(p, |p, cell| TerminalInput::Move {
+                cell,
+                modifiers: p.modifiers,
+            });
+        }
+        heca_grid_ui::Handled::No
     }
 
     /// The box is known: say how big it is.
@@ -796,6 +816,37 @@ mod tests {
         assert!(
             matches!(said[2], TerminalInput::Release { button: PointerButton::Right, cell, .. } if cell == want),
             "{said:?}"
+        );
+    }
+
+    /// **A terminal an extension placed hears the pointer move only while it holds the keyboard** —
+    /// the rule a pane follows by being the focused pane. A click gives it the keyboard (the
+    /// framework's rule for every focusable); until then a pointer passing over a panel does not
+    /// drive the program's mouse tracking.
+    #[test]
+    fn a_placed_terminal_hears_the_pointer_move_only_while_it_holds_the_keyboard() {
+        let (seams, said) = recording();
+        let t = Terminal::new();
+        t.declare("demo.pad".into());
+        t.bind(seams);
+        t.show(&scrolled(0));
+        let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+        let _ = painted(root.as_ref());
+        let at = heca_grid_ui::Point::new(45.0, 61.0);
+
+        heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_moved(at));
+        assert!(pointer_input(&said).is_empty(), "not focused: nothing said");
+
+        // A click on it gives it the keyboard — nothing declared anywhere.
+        heca_grid_ui::dispatch(
+            root.as_mut(),
+            &Event::pointer_pressed(at, PointerButton::Left),
+        );
+        heca_grid_ui::dispatch(root.as_mut(), &Event::pointer_moved(at));
+        let said = pointer_input(&said);
+        assert!(
+            said.iter().any(|i| matches!(i, TerminalInput::Move { .. })),
+            "focused: the move is said {said:?}"
         );
     }
 

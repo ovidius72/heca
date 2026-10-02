@@ -175,21 +175,14 @@ pub(crate) fn handle_window_event(
                 // Use the already-normalized `event_combo` (which carries the macOS
                 // physical-key fallback for `Ctrl+letter`, unlike the raw logical key) so vim
                 // `Ctrl+h/j/k/l` resolve to the right chord.
-                if let Some((combo_key, mods)) = crate::app::registry::combo_to_grid(&event_combo) {
+                if let Some(handled) =
+                    crate::app::tree_keys::deliver_press_to_tree(state, &event_combo, &key_text)
+                {
                     // **One call: the surface does not write the order.** Committed text, then the
                     // key, then the intents it resolves to — all inside `deliver_press`, so this
                     // surface and every other one feed a widget identically. Writing the sequence
                     // here is how the showcase came to have no `TextInput` step at all while the
                     // same `CommandPalette` typed fine in this app.
-                    let press = heca_grid_ui::KeyPress {
-                        key: combo_key,
-                        text: Some(key_text.to_string()),
-                        mods,
-                    };
-                    let keymap = state.widget_keymap.clone();
-                    let handled = keymap.deliver_press(&press, |ev| {
-                        heca_grid_ui::dispatch(&mut state.window_root, ev)
-                    });
                     // **A key the overlay ignored is not consumed by the overlay.** Returning
                     // regardless swallowed every binding an open surface had no use for — which is
                     // why `q`, catalogued and bound to `close_overlay` alongside `Escape`, did

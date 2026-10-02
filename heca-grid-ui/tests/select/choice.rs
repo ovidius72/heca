@@ -74,12 +74,16 @@ fn a_choice_is_one_tab_stop_whatever_it_contains() {
 
     let mut focus = FocusManager::new();
     focus.advance(&mut ui, true);
-    let first = focus.focused();
+    let first = focus.focused(&mut ui);
     focus.advance(&mut ui, true);
-    assert_ne!(focus.focused(), first, "each option is its own Tab stop");
+    assert_ne!(
+        focus.focused(&mut ui),
+        first,
+        "each option is its own Tab stop"
+    );
     focus.advance(&mut ui, true);
     assert_eq!(
-        focus.focused(),
+        focus.focused(&mut ui),
         first,
         "exactly two focusables — focus wraps"
     );

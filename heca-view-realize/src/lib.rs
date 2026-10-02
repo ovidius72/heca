@@ -4973,7 +4973,6 @@ mod tests {
             .child(card("redis"));
 
         use heca_grid_ui::event::{Event, WidgetIntent};
-        use heca_grid_ui::reactive::SignalUpdate as _;
 
         let mut grid = realize(
             &node,
@@ -4983,7 +4982,7 @@ mod tests {
         );
         // Keys reach the focus owner and nowhere else, so a test that activates says who is
         // holding the keyboard — exactly as a real surface has to.
-        grid.base_mut().focused.set(true);
+        grid.base().focus(false);
         heca_grid_ui::dispatch(grid.as_mut(), &Event::Widget(WidgetIntent::Activate));
 
         assert_eq!(
@@ -5008,7 +5007,6 @@ mod tests {
     #[test]
     fn a_described_grid_walks_its_cards_the_way_it_draws_them() {
         use heca_grid_ui::event::{Event, WidgetIntent};
-        use heca_grid_ui::reactive::SignalUpdate as _;
 
         let card = |name: &str| {
             ViewNode::new(WidgetKind::Surface).child(ViewNode::new(WidgetKind::Label).text(name))
@@ -5027,7 +5025,7 @@ mod tests {
                 &emit,
                 &mut FormBindings::default(),
             );
-            grid.base_mut().focused.set(true);
+            grid.base().focus(false);
             for _ in 0..steps {
                 heca_grid_ui::dispatch(grid.as_mut(), &Event::Widget(WidgetIntent::ItemNext));
             }

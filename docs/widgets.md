@@ -228,6 +228,7 @@ Event::Raw(RawPointer)                     ← the ONLY pointer event a host bui
        │
        ├─ hit_test ──────────► the target under the pointer, and the ancestors above it
        ├─ hover diff ────────► PointerEnter / PointerLeave
+       ├─ focus on press ────► the deepest focusable under it gets the keyboard (Focus / Blur)
        ├─ press+release ─────► PointerDown / PointerUp / Click / DoubleClick / RightClick / …
        ├─ drag threshold ────► DragStart / Drag / DragEnter / DragOver / DragLeave / Drop / DragEnd
        └─ delivery:
@@ -429,12 +430,41 @@ A surface that wants keys must **hold focus**, which it already had to do to dra
 
 | widget | how it says the keyboard is here |
 |---|---|
-| `Input`, `Button`, `Row`, `Item`, `Choice`, `Tabs` | ordinary focus — a click or Tab, via `FocusManager` |
-| `Overlay`, `ContextMenu`, `CommandPalette` | `Base::focused` is bound to the **open** signal: open *is* focused |
+| `Input`, `Button`, `Row`, `Item`, `Choice`, `Tabs`, `Terminal` | ordinary focus — a **click** (the router focuses the deepest focusable under the press, in every tree, with nothing declared) or Tab |
+| `Overlay`, `ContextMenu`, `CommandPalette` | **follow** their open signal into `Base::focused` (`Base::follow_focus_modal`): open *is* focused, and closing gives the keyboard back to whoever held it |
 | `Select` | opening the list focuses it |
 | `Dialog` | its own `FocusManager` focuses a field or button, so text reaches the field and the dialog hears what the field declined on the way back up |
-| `FocusScope`, `ScrollRegion` | `Base::focused` is bound to the **host's** keyboard-target signal. A dock binds the **same** signal to both: the wrapper draws the ring, the region answers the keys |
+| `FocusScope`, `ScrollRegion` | **follow** the host's keyboard-target signal (`Base::follow_focus`). A dock gives the **same** signal to both: the wrapper draws the ring, the region answers the keys |
 | `CardGrid` | focusable in its constructor — it moves a cursor with the keyboard |
+
+**`focused` means one thing: the widget the keyboard is aimed at** — `document.activeElement`, **one
+per tree**. It is written in one place, `Base::focus(visible)` / `Base::blur()`; a surface whose focus
+a host decides calls `base.follow_focus(signal)` (a region: a dock) or `follow_focus_modal(signal)`
+(a surface that opens over the page) and keeps its **own** flag, catching up with the signal once a
+frame and whenever a key is about to be delivered. It never *is* the host's signal: that made "this
+is open" and "the keyboard is here" one value, and a click that blurred the widget would have closed
+it. `heca/tests/focus_door.rs` fails on any other writer.
+
+**A widget cannot blur another — it holds no tree — so it *claims*, and `settle` makes it true.** The
+router settles before it delivers a key or a press, and a host calls `settle_focus(root)` once a
+frame. The rules are the browser's:
+
+- a claim takes the keyboard and **the previous holder lets go**;
+- a **region** whose signal turns true takes it *unless something inside already has it* (a dock
+  told it holds the keyboard does not steal it from the terminal you just clicked in), and when it
+  lets go it remembers what inside held the keyboard, so taking it again goes back there;
+- a **modal** remembers who held the keyboard when it opened and **gives it back when it closes** —
+  if the keyboard was still its own to give.
+
+`FocusManager` keeps no position of its own, so a click, a surface opening and Tab never disagree
+about where the keyboard is. A host asks the tree where it is (`keyboard_owner`: the path, the named
+region it is in, whether a surface above the page holds it) instead of keeping a second record.
+
+**A press focuses the deepest focusable under it.** Nothing to declare: place a focusable widget
+anywhere and clicking it gives it the keyboard (no ring — it was the mouse), the way clicking an
+`<input>` does. A press on nothing focusable changes nothing; a press inside the widget that already
+holds the keyboard changes nothing and is not told it gained focus again; otherwise the widget that
+held it lets go. There is no `.focus_on_press()` and no trapped variant.
 
 Three predicates paid for this before: `takes_raw_keys` ("I take keys without being focused"),
 `takes_text_input` ("I may claim typed text") and `routes_own_subtree`. All three were questions a
@@ -1348,6 +1378,7 @@ a run's vertex count.
 | Can I turn it off? | Yes — `[appearance] show_focus_border = false` (config override → theme `show_focus_border` token, default `true`); live-reloads with `prefix+Shift+r`. |
 | How thick / what color? | `focus_border_width` (`[appearance]`, default 1.5 — independent of `border_width` so the ring survives borders-off) and the `focus_ring` theme token (unset ⇒ per-tone derivation via `effective_focus_ring()` / `focus_ring_tone()`). |
 | What does it wrap? | The **control**, not its label: `Checkbox` rings its box only; `Toggle` its track; list rows (`Row`/`Item`/`Choice`) ring their row as the selectable unit. |
+| What does a click do? | Focuses the deepest focusable under it **without** a ring (mouse focus). Enter/Space work and an `Input`'s caret shows; the ring waits for Tab or the arrows. |
 | What if the focused thing is an **area**, not a control? | Wrap it in [`FocusScope`](#focusscope) and drive it from a host signal — it gates the subtree's keys on that focus as well as drawing the ring. A control owns its focus so it draws its own ring; an area the keyboard is *aimed* at (a sidebar dock the scroll keys act on) has no owner in the tree — only the host knows which subtree holds it. Same outline, same theme tokens. |
 
 ### `Color`
@@ -2036,8 +2067,11 @@ demo.terminal("logs").command("tail -f app.log").cwd(dir)
 **Removing it never ends it.** Closing the dock, rebuilding the tree or hiding the overlay is like
 detaching: reopening shows the same terminal. Only an explicit kill (`.kill()`, or the `terminal_kill` action), or
 heca exiting, ends it; a killed one stays ended. A terminal in a pane is the pane's, and closing the
-pane ends it. Mouse wheel and the scrollbar work wherever it is placed; typing, selecting text, search
-and link hints for terminals no pane owns arrive with P094(F011)/T449 slices 5b and 5c.
+pane ends it. Mouse wheel and the scrollbar work wherever it is placed. **A click gives it the keyboard**, like
+any focusable, and it then hears the pointer's moves (a program that tracks the mouse is not driven
+by a pointer merely passing over a panel); a pane's terminal follows the same rule by being the
+focused pane. Typing, selecting text, search and link hints for terminals no pane owns arrive with
+P094(F011)/T449 slices 5b and 5c.
 
 ### Grid
 

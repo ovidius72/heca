@@ -16,7 +16,6 @@ use crate::input::WmAction;
 use crate::keymap::{KeyCombo, KeymapRegistry, Keymaps};
 use heca_core::layout::PaneId;
 use heca_grid_ui::Component as _;
-use heca_grid_ui::reactive::SignalUpdate as _;
 use std::collections::HashMap;
 use winit::keyboard::{Key, NamedKey, PhysicalKey};
 
@@ -162,7 +161,14 @@ pub(crate) fn handle_keyboard_input(
             //
             // `state.focused_pane` is deliberately untouched: only the keyboard is redirected, so
             // `prefix+Enter` still splits the pane you last worked in.
-            if !matches!(surface, FocusedSurface::Panes) {
+            //
+            // What the surface's keymaps left over is not thrown away, though: it goes into the
+            // tree, to whatever inside the surface holds focus — a terminal docked in the sidebar
+            // is typed into the way a field is. The panes never do this (their keys belong to the
+            // program in the pane), and a key the tree does not take is still swallowed.
+            if surface.delivers_to_tree() {
+                crate::app::tree_keys::deliver_press_to_tree(state, ctx.event_combo, ctx.key_text);
+                state.mark_full_redraw();
                 return;
             }
 
@@ -285,7 +291,7 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
         // Keep the matches for n/N; just leave query-entry. The field is no longer
         // taking keys, so it must not keep showing a caret as though it were.
         if let Some(search) = state.active_search_mut() {
-            search.input.borrow_mut().base_mut().focused.set(false);
+            search.input.borrow().base().blur();
         }
         state.input_mode = InputMode::Selection;
         state.needs_redraw = true;
@@ -1157,6 +1163,26 @@ mod tests {
                 ),
                 None,
                 "{key} belongs to the pane when no overlay is up",
+            );
+        }
+    }
+
+    /// **The sidebar's own keys are claimed before anything reaches the tree.** A key a dock's
+    /// keymap resolves is the host's, so a focused terminal or field inside the dock never sees
+    /// `j`/`k`/`Enter` and the cursor keeps moving. Only what comes back `None` here is handed to
+    /// whatever inside the dock holds focus.
+    #[test]
+    fn the_sidebars_cursor_keys_are_claimed_before_the_tree_is_offered_a_key() {
+        let (modes, components) = defaults();
+        let sidebar = dock("workspaces", "workspaces");
+        assert!(
+            sidebar.delivers_to_tree(),
+            "a dock offers the tree what it leaves over"
+        );
+        for key in ["j", "k", "Enter"] {
+            assert!(
+                surface_action(&sidebar, &modes, &components, &KeyCombo::parse(key)).is_some(),
+                "{key} stays with the sidebar",
             );
         }
     }

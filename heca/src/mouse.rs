@@ -427,7 +427,6 @@ mod tests;
 /// and never took part in hit-testing.
 fn search_field_press(state: &mut AppState, pos: (f32, f32)) -> bool {
     use heca_grid_ui::Component as _;
-    use heca_grid_ui::reactive::SignalUpdate as _;
 
     let pos = heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64);
     let hit = state.searches.iter().find_map(|(&pane_id, search)| {
@@ -444,7 +443,7 @@ fn search_field_press(state: &mut AppState, pos: (f32, f32)) -> bool {
     };
     if let Some(search) = state.searches.get(&pane_id) {
         let mut field = search.input.borrow_mut();
-        field.base_mut().focused.set(true);
+        field.base().focus(false);
         heca_grid_ui::dispatch(
             &mut *field,
             &heca_grid_ui::Event::pointer_pressed(pos, heca_grid_ui::PointerButton::Left),

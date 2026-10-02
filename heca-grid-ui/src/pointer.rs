@@ -262,6 +262,10 @@ fn route_press(root: &mut dyn Component, raw: &RawPointer) -> Handled {
         return Handled::No;
     };
 
+    // Focus is decided before the tree is told of the press, so a widget that consumes it is still
+    // the widget that holds the keyboard.
+    crate::focus::focus_on_press(root, &path);
+
     // The click run belongs to the widget the press landed on, so two presses on two widgets are
     // never a double click however quickly they follow each other.
     let count =

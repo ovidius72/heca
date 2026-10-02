@@ -811,7 +811,6 @@ mod by_surface {
     use crate::builders::Parent as _;
     use crate::component::Component;
     use crate::hint::*;
-    use crate::reactive::SignalUpdate as _;
     use crate::widgets::Flex;
     use heca_core::layout::Size;
 
@@ -948,7 +947,7 @@ mod by_surface {
         // Taking the keyboard is NOT written: an overlay holds focus while it is open, and that is
         // how it takes keys. A bare `Flex` has no such story, so this test says so explicitly —
         // which is the one case the override exists for.
-        panel.base_mut().focused.set(true);
+        panel.base().focus(false);
         panel.base_mut().key = Some("myplugin.panel".into());
         panel.base_mut().surface = true;
 

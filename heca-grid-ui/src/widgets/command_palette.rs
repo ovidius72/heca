@@ -280,7 +280,7 @@ impl CommandPalette {
         // **Open is focused.** The palette's query field is its own (a `RefCell<Input>`, not a
         // child), so the palette is the widget that types — and it types because it holds the
         // keyboard, not because it declared that it takes raw keys and text.
-        base.focused = open;
+        base.follow_focus_modal(open);
         // **A palette locks because it is a palette.** It has the keyboard for its query line,
         // and nothing behind it should be acted on while you are typing into it.
         base.lock = true;
@@ -293,7 +293,7 @@ impl CommandPalette {
             // as long as the palette does.
             query: RefCell::new({
                 let mut q = Input::new();
-                q.base_mut().focused = open;
+                q.base_mut().follow_focus(open);
                 q
             }),
             selected: 0,
@@ -1019,7 +1019,7 @@ impl Component for CommandPalette {
                 let mut q = self.query.borrow_mut();
                 q.base_mut().bounds = query;
                 q.base_mut().font = font;
-                q.base_mut().focused.set(true); // so the caret shows + blinks
+                q.base().focus(false); // so the caret shows + blinks
                 q.paint(cx);
             }
             // The Input hides its placeholder while focused; draw ours when empty.
@@ -1363,7 +1363,7 @@ impl Component for CommandPalette {
         // repaint of just the panel — no full-frame, no pegging frames every tick.
         let flipped = {
             let mut q = self.query.borrow_mut();
-            q.base_mut().focused.set(open);
+            q.base().sync_focus_follow();
             q.tick(dt);
             let f = q.base().needs_paint();
             q.base().clear_needs_paint();

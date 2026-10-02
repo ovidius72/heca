@@ -50,7 +50,7 @@ fn toggle_keyboard_activation_flips_via_focus() {
 
     let mut focus = FocusManager::new();
     focus.advance(&mut ui, true);
-    assert_eq!(focus.focused(), Some(0), "toggle is focusable");
+    assert_eq!(focus.focused(&mut ui), Some(0), "toggle is focusable");
 
     // Space toggles the focused switch off (it started on).
     focus.deliver_key(&mut ui, GridKey::Space);

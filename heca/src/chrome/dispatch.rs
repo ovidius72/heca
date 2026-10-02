@@ -128,7 +128,12 @@ pub(crate) fn deliver_to_panes(state: &mut crate::app_state::AppState, ev: &Even
 /// scrolling. The drift is handled properly twice over: the tree rebuilds when `chrome_signature`
 /// changes, and `sync_chrome_signals` pushes value-state into its bound signals every frame.
 pub(crate) fn deliver(state: &mut crate::app_state::AppState, ev: &Event) -> bool {
-    heca_grid_ui::dispatch(&mut state.window_root, ev) == heca_grid_ui::Handled::Yes
+    let handled = heca_grid_ui::dispatch(&mut state.window_root, ev) == heca_grid_ui::Handled::Yes;
+    // A press may have moved the keyboard; the store that the key rules read follows at once.
+    if matches!(ev, Event::Raw(raw) if raw.kind == heca_grid_ui::RawPointerKind::Pressed) {
+        crate::app::tree_focus::settle_window_focus(state);
+    }
+    handled
 }
 
 /// **Open the menu declared nearest the focused widget**, bubbling outwards — the keyboard

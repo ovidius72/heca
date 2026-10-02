@@ -16,8 +16,9 @@
 //!
 //! It adds exactly two things, both from that one signal:
 //!
-//! 1. **The keyboard.** The signal is bound to [`Base::focused`](crate::component::Base::focused),
-//!    which is how the framework already decides where a key goes: keyboard events are delivered
+//! 1. **The keyboard.** The scope follows the signal into [`Base::focused`](crate::component::Base::focused)
+//!    ([`Base::follow_focus`](crate::component::Base::follow_focus)), which is how the framework
+//!    already decides where a key goes: keyboard events are delivered
 //!    down the focus owner's ancestor chain and back up it, so an unfocused scope is simply not on
 //!    the path. It has nothing to gate, nothing to decline and nothing to forward — a host sends
 //!    one semantic intent into a tree of scopes and the focused one is the only one it reaches.
@@ -54,7 +55,7 @@ use crate::style::{Direction, Length};
 pub struct FocusScope {
     base: Base,
     /// Host-owned focus state: `true` draws the outline, `false` draws nothing.
-    focused: Signal<bool>,
+    ring: Signal<bool>,
     /// Corner radius override; otherwise the theme's control radius.
     radius: Option<f32>,
     /// Outline colour override; otherwise the theme's effective focus ring.
@@ -84,7 +85,7 @@ impl FocusScope {
         base.children.push(child);
         Self {
             base,
-            focused: signal(false),
+            ring: signal(false),
             radius: None,
             color: None,
             seen: false,
@@ -94,21 +95,21 @@ impl FocusScope {
     /// Bind the **host-owned** focus signal. The host sets it when its keyboard focus moves, so
     /// key, mouse and RPC all drive the affordance through one path.
     ///
-    /// It is bound to [`Base::focused`] as well, and that is the whole of the gate: keyboard
+    /// The scope follows it into [`Base::focused`] as well, and that is the whole of the gate: keyboard
     /// events are delivered down the focus owner's ancestor chain, so an unfocused scope is not on
     /// the path and is never offered a key. There is nothing here to decline, and nothing to
     /// declare.
     #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn focus(mut self, focused: Signal<bool>) -> Self {
         self.seen = focused.get_untracked();
-        self.focused = focused;
-        self.base.focused = focused;
+        self.ring = focused;
+        self.base.follow_focus(focused);
         self
     }
 
     /// The focus signal (e.g. to set it directly).
     pub fn focus_signal(&self) -> Signal<bool> {
-        self.focused
+        self.ring
     }
 
     /// Corner radius of the outline in logical px (default: the theme's control radius).
@@ -143,7 +144,7 @@ impl Component for FocusScope {
         for child in &self.base.children {
             paint_child(child.as_ref(), cx);
         }
-        if !self.focused.get_untracked() {
+        if !self.ring.get_untracked() {
             return;
         }
         // Whether focus outlines are drawn at all is the theme's decision, exactly as it is for
@@ -162,7 +163,7 @@ impl Component for FocusScope {
     }
 
     fn tick(&mut self, dt: f32) -> bool {
-        let focused = self.focused.get_untracked();
+        let focused = self.ring.get_untracked();
         if focused != self.seen {
             self.seen = focused;
             // Only this subtree's bounds are damaged — the ring appears/disappears in place, with
@@ -325,7 +326,10 @@ mod tests {
             &mut self.base
         }
         fn on_event(&mut self, ev: &Event) -> Handled {
-            self.seen.borrow_mut().push(format!("{ev:?}"));
+            // Being told it gained the keyboard is not the keyboard arriving.
+            if !matches!(ev, Event::Focus | Event::Blur) {
+                self.seen.borrow_mut().push(format!("{ev:?}"));
+            }
             // `No` on purpose: "it arrived" is the claim, and a widget that ignores an event must
             // not stop its siblings from seeing it.
             Handled::No
@@ -348,7 +352,7 @@ mod tests {
     fn dock(focused: bool) -> (FocusScope, std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
         let (mut probe, seen) = Probe::new();
         let sig = signal(focused);
-        probe.base_mut().focused = sig;
+        probe.base_mut().follow_focus(sig);
         (FocusScope::new(probe).focus(sig), seen)
     }
 
@@ -461,7 +465,7 @@ mod tests {
     fn the_keyboard_follows_the_signal() {
         let (mut probe, seen) = Probe::new();
         let focused = signal(false);
-        probe.base_mut().focused = focused;
+        probe.base_mut().follow_focus(focused);
         let mut scope = FocusScope::new(probe).focus(focused);
         crate::component::dispatch(&mut scope, &Event::Widget(WidgetIntent::ScrollPageDown));
         assert!(seen.borrow().is_empty());

@@ -944,7 +944,7 @@ mod tests {
         let fired = Rc::new(Cell::new(0));
         let count = fired.clone();
         let mut b = Button::new("Cancel").on_click(move || count.set(count.get() + 1));
-        b.base_mut().focused.set(true);
+        b.base().focus(false);
 
         assert_eq!(
             dispatch(&mut b, &Event::Widget(WidgetIntent::Activate)),
@@ -959,7 +959,7 @@ mod tests {
         let fired = Rc::new(Cell::new(0));
         let count = fired.clone();
         let mut b = Button::new("Cancel").on_click(move || count.set(count.get() + 1));
-        b.base_mut().focused.set(true);
+        b.base().focus(false);
         b.base_mut().disabled.set(true);
 
         assert_eq!(

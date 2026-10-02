@@ -633,13 +633,13 @@ impl ScrollRegion {
     /// This is what makes "scroll the focused surface" work without the host having to know where
     /// the region sits in the tree (F003/P011/T012): the intent is dispatched into the whole tree
     /// and every region that is not the target declines.
-    /// It binds [`Base::focused`] too, which is how the intent gets here at all: keyboard events
+    /// It follows the signal into [`Base::focused`] too, which is how the intent gets here at all: keyboard events
     /// are delivered to the focus owner and the region it encloses, so a region that says the
     /// keyboard is aimed at it *is* the owner, and one that says otherwise is not on the path.
     #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn keyboard_target(mut self, focused: Signal<bool>) -> Self {
         self.keyboard_target = Some(focused);
-        self.base.focused = focused;
+        self.base.follow_focus(focused);
         self
     }
 

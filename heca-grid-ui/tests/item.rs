@@ -28,7 +28,7 @@ fn item_activates_on_click_when_interactive() {
     // Space activates too (keyboard).
     // A raw key reaches only the widget that owns the keyboard — focus it, as a real surface
     // would before sending one.
-    item.base_mut().focused.set(true);
+    item.base().focus(true);
     heca_grid_ui::dispatch(
         &mut item,
         &Event::Key {
@@ -231,27 +231,19 @@ fn row_activates_on_click_and_key_when_interactive() {
 
     click_at(&mut row, outside, PointerButton::Left);
     assert_eq!(clicks.get(), 0, "a click outside the row does nothing");
+    // **A raw key reaches the widget that owns the keyboard.** Unfocused, the row does not take
+    // Enter — which is what stopped it eating keys meant for the list it sits in.
+    let enter = Event::Key {
+        key: GridKey::Enter,
+        pressed: true,
+    };
+    heca_grid_ui::dispatch(&mut row, &enter);
+    assert_eq!(clicks.get(), 0, "an unfocused row ignores Enter");
     click_at(&mut row, center, PointerButton::Left);
     assert_eq!(clicks.get(), 1, "a click inside the row activates it");
-    // **A raw key reaches the widget that owns the keyboard.** Unfocused, the row no longer
-    // takes Enter — which is what stopped it eating keys meant for the list it sits in.
-    heca_grid_ui::dispatch(
-        &mut row,
-        &Event::Key {
-            key: GridKey::Enter,
-            pressed: true,
-        },
-    );
-    assert_eq!(clicks.get(), 1, "an unfocused row ignores Enter");
-    row.base_mut().focused.set(true);
-    heca_grid_ui::dispatch(
-        &mut row,
-        &Event::Key {
-            key: GridKey::Enter,
-            pressed: true,
-        },
-    );
-    assert_eq!(clicks.get(), 2, "Enter activates the focused row");
+    // …and the click gave it the keyboard, as clicking a control does anywhere else.
+    heca_grid_ui::dispatch(&mut row, &enter);
+    assert_eq!(clicks.get(), 2, "Enter activates the row that was clicked");
 }
 
 #[test]
@@ -302,7 +294,7 @@ fn rail_cell_activates_on_click_and_enter() {
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     // A raw key reaches only the widget that owns the keyboard — focus it, as a real surface
     // would before sending one.
-    cell.base_mut().focused.set(true);
+    cell.base().focus(true);
     click_at(&mut cell, center, PointerButton::Left);
     heca_grid_ui::dispatch(
         &mut cell,
