@@ -294,8 +294,8 @@ of the **action**, not of the binding, because the same action is reached from a
 the palette, a button and RPC.
 
 A **way out** of a surface is declared once for every surface of that kind, not per surface: the
-`[[keys.mode]] name = "layer"` block is the floor every overlay answers (`Escape`, plus `q` and
-`Ctrl+q` as shipped), and `name = "focus"` is the same thing for a focused dock. Declared there they
+`[[keys.mode]] name = "layer"` block is the floor every overlay answers (`Escape`, `q` and
+`Ctrl+q` as shipped), and `name = "focus"` is the same thing for a focused dock (`Escape`). Declared there they
 exist **only while that kind of surface holds the keyboard**, so the program running in a pane keeps
 those keys — `:q` still quits vim, and `Ctrl+q` still reaches readline. That is what makes them
 different from the global `[keys]` map, which is consulted whether or not anything is in front.
@@ -375,9 +375,25 @@ A container does not have to declare anything to be usable:
   names the component and lands on the seating you were last in. Pressing it again while that
   container holds the keyboard gives it back. The name is reserved — a component cannot have an
   action called `global_focus`.
-- **`Escape`** — gives the keyboard back to the main region. Always bound, for every container, and
-  **not removable**. You can add other ways out by binding `unfocus_dock`; you cannot take this one
-  away, because a dock that declares nothing must still be leavable without the mouse.
+- **`Escape`** — gives the keyboard back to the main region. Bound for every container as shipped
+  (the `focus` block of `keybindings.default.toml`), so a dock that declares nothing is still
+  leavable without the mouse. **Every panel always has a way out, and by default it is `Escape`**:
+  to move it, bind `unfocus_dock` to another key (`unfocus_dock = "prefix+Escape"`, or in the block)
+  and give `Escape` up with `unbind`:
+
+  ```toml
+  [[keys.mode]]
+  name = "focus"
+  unbind = ["Escape"]
+  [[keys.mode.bindings]]
+  action = "unfocus_dock"
+  keys = "Ctrl+g"
+  ```
+
+  A config that leaves a floor with no key — in the block or behind the prefix — is refused for
+  that floor, `Escape` is put back, and the start-up report says so. With `Escape` given up, it
+  reaches whatever is typed into inside the dock (a terminal's program, say) like any key nobody
+  claimed. The same holds for overlays (`name = "layer"`, `close_overlay`).
 
 Two components asking for the same `global_focus` combo is reported at startup like any other
 collision.
@@ -1750,6 +1766,7 @@ is entered via actions, not a keybinding trigger.
 **Sticky vs Non-sticky modes:**
 
 - **Sticky** (`sticky = true`): Stay in mode until `Escape` or `Enter`. Resize mode is sticky.
+- **`unbind = ["…"]`**: keys to take out of the mode, the shipped ones included — a block's own bindings are added to the shipped ones, so this is how a key is given up. It is how the way out of a dock or an overlay is moved (see the `focus` and `layer` blocks): bind the action to another key, then unbind `Escape`.
 - **Non-sticky** (`sticky = false`, or chord): Execute one action then exit. Like `prefix+w` → `1` creates workspace 1.
 
 ### Binding Precedence

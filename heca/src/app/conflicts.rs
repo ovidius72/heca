@@ -61,17 +61,38 @@ pub(crate) struct ModifierConflict {
     pub(crate) fallback: String,
 }
 
+/// **A kind of surface the config left with no way out.** Every panel must be leavable from the
+/// keyboard, so the config is refused for that surface and the shipped way out is put back.
+#[derive(Debug)]
+pub(crate) struct WayOutRefused {
+    /// What the user can no longer leave, in words ("a focused dock", "an overlay").
+    pub(crate) surface: String,
+    /// The action that leaves it.
+    pub(crate) action: String,
+    /// The key put back.
+    pub(crate) restored: String,
+}
+
 /// Everything that collided while the app was being assembled.
 #[derive(Debug, Default)]
 pub(crate) struct Conflicts {
     pub(crate) keys: Vec<BindingConflict>,
     pub(crate) actions: Vec<ActionConflict>,
     pub(crate) modifiers: Vec<ModifierConflict>,
+    pub(crate) way_outs: Vec<WayOutRefused>,
 }
 
 impl Conflicts {
     pub(crate) fn is_empty(&self) -> bool {
-        self.keys.is_empty() && self.actions.is_empty() && self.modifiers.is_empty()
+        self.keys.is_empty()
+            && self.actions.is_empty()
+            && self.modifiers.is_empty()
+            && self.way_outs.is_empty()
+    }
+
+    /// A surface the config left with no key to leave it by.
+    pub(crate) fn way_out(&mut self, refused: WayOutRefused) {
+        self.way_outs.push(refused);
     }
 
     /// A key bound to something else in the same layer.
@@ -106,8 +127,16 @@ impl Conflicts {
         eprintln!(
             "[heca] {} keybinding/action conflict(s) — the last declaration wins unless stated \
              otherwise:",
-            self.keys.len() + self.actions.len() + self.modifiers.len()
+            self.keys.len() + self.actions.len() + self.modifiers.len() + self.way_outs.len()
         );
+
+        for c in &self.way_outs {
+            eprintln!(
+                "[heca]   {} was left with no key for '{}' — refused; '{}' is back. Every panel \
+                 needs a way out: bind '{}' to another key before giving this one up.",
+                c.surface, c.action, c.restored, c.action,
+            );
+        }
 
         for c in &self.modifiers {
             eprintln!(

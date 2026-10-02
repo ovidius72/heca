@@ -579,13 +579,20 @@ Ctrl+B → p    Command palette (backend ready, UI pending)
   > the focused surface's own `[[keys.surface]]` entry → the **floor** its kind is guaranteed → the
   > global `[keys]` map → then swallowed (layer, dock) or sent to the pane (`heca.panes`).
 
-  Nearest declaration wins, so a surface key shadows a global one. The floors are `Escape` and they
-  are not removable: a layer closes itself, a dock hands the keyboard back, and **the panes have
-  none** so `Escape` reaches the program in the pane and vim still works. That is why `Escape` must
-  **never** be a global binding — a global one outranks all three at once, which is exactly how
-  `close_overlay` came to eat it while a dock was focused, closing nothing because no overlay was
-  up. The rule lives in `app/input.rs::surface_action` (pure, unit-tested) with `focused_surface`
-  reducing `AppState` to it; the floors are asserted in `registry::assert_escape_floor`.
+  Nearest declaration wins, so a surface key shadows a global one. **Every panel always has a way
+  out, and by default it is `Escape`.** The floors are the `[[keys.mode]]` blocks `layer`
+  (`close_overlay`: a layer closes itself) and `focus` (`unfocus_dock`: a dock hands the keyboard
+  back), each shipped bound to `Escape` in `keybindings.default.toml` and **movable**: bind the
+  action to another key and give `Escape` up with `unbind = ["Escape"]` in the same block. What is
+  guaranteed is that a floor is never left with no key — in the floor or behind the prefix; a
+  config that does is refused for that floor, `Escape` is put back and the start-up report says so
+  (`registry::floors::assert_way_out`). That is also why `Escape` must **never** be a global
+  binding — a global one outranks all three at once, which is exactly how `close_overlay` came to
+  eat it while a dock was focused, closing nothing because no overlay was up — and **the panes
+  have no floor**, so `Escape` reaches the program in the pane and vim still works. With the dock's
+  `Escape` given up it falls to whatever inside the dock holds the keyboard, like any unclaimed
+  key. The rule lives in `app/input/surface.rs::surface_action` (pure, unit-tested) with
+  `focused_surface` reducing `AppState` to it.
 - **The sidebar's own keys are SETTLED — do not casually re-decide them.**
   - Sidebar navigation is **selection-driven**.
   - `j`/`k` and `Up`/`Down` move the sidebar cursor **only**. Main scrolling/focus state does

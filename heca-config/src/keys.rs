@@ -186,6 +186,12 @@ pub struct KeyModeConfig {
     pub sticky: bool,
     #[serde(default)]
     pub bindings: Vec<ModeBindingConfig>,
+    /// Keys to take **out** of this mode, whatever bound them — the shipped bindings included. It is
+    /// how a mode's way out is moved: `unbind = ["Escape"]` beside a binding of the same action to
+    /// another key. The mode's bindings are added to the shipped ones, so without this a shipped
+    /// key could never be given up. Same name and meaning as `[[keys.surface]]`'s `unbind`.
+    #[serde(default)]
+    pub unbind: Vec<String>,
 }
 
 fn default_mode_sticky() -> bool {
