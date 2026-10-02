@@ -84,7 +84,10 @@ pub(crate) fn handle_window_event(
         }
         WindowEvent::RedrawRequested => {
             state.needs_redraw = true;
+            state.frame_times.start();
             render_frame(state);
+            let passes = state.grid_renderer.passes() + state.text_renderer.passes();
+            state.frame_times.finish(passes);
         }
         WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
             state.scale_factor = scale_factor;

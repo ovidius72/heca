@@ -1937,6 +1937,24 @@ The agreed behavior for float toggling is:
 
 ---
 
+### Frame timing
+
+For tuning the render path, run heca with `HECA_FRAME_TIMES` set (any value):
+
+```sh
+HECA_FRAME_TIMES=1 cargo run --release -p heca
+```
+
+Every 120 frames that drew, it prints one line on stderr — the average time `render_frame` took on the
+CPU and the average number of render passes it began:
+
+```text
+[frame-times] 120 frames: 1.84 ms CPU, 9.0 render passes per frame (GPU time is not measured)
+```
+
+It is CPU time only: the GPU runs after the frame is submitted, so work moved from the CPU to the GPU
+looks like a win here. Off unless the variable is set.
+
 ## Architecture
 
 ```

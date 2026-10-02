@@ -381,6 +381,8 @@ pub struct TextRenderer {
     /// pass appends at its own offset (via `queue.write_buffer`) rather than
     /// allocating a staging buffer per frame. Reset by `begin_frame`.
     frame_vtx: u32,
+    /// Render passes begun since [`begin_frame`](Self::begin_frame): what the frame-time log reports.
+    passes: u32,
     frame_idx: u32,
     commands: Vec<TextCommand>,
     font_family: String,
@@ -670,6 +672,7 @@ impl TextRenderer {
             current_clip: None,
             damage: None,
             frame_vtx: 0,
+            passes: 0,
             frame_idx: 0,
             commands: Vec::new(),
             font_family: heca_grid_ui::font::DEFAULT_MONO_FAMILY.to_string(),
@@ -727,11 +730,17 @@ impl TextRenderer {
         self.damage = damage;
     }
 
+    /// How many render passes this renderer has begun since [`begin_frame`](Self::begin_frame).
+    pub fn passes(&self) -> u32 {
+        self.passes
+    }
+
     /// Reset the per-frame buffer write offsets and advance the frame counter. Call
     /// once at the start of each frame, before any `render` passes — the counter
     /// drives cache eviction, so it must count visual frames, not the (multiple)
     /// render passes within a frame.
     pub fn begin_frame(&mut self) {
+        self.passes = 0;
         self.frame_vtx = 0;
         self.frame_idx = 0;
         self.frame += 1;
@@ -1582,6 +1591,7 @@ impl TextRenderer {
         queue.write_buffer(&self.vertex_buffer, v_off, vertex_data);
         queue.write_buffer(&self.index_buffer, i_off, index_data);
 
+        self.passes += 1;
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("text_render_pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
