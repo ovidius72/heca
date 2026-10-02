@@ -134,7 +134,7 @@ impl PaneRow<'_> {
         // call site's.
         let process_hint_label = Label::new(process_hint_text)
             .color(theme.colors.foreground)
-            .size(heca_grid_ui::style::WidgetSize::Small);
+            .size(heca_grid_ui::style::WidgetSize::Caption);
         let process_hint_signal = process_hint_label.text_signal();
         let process_hint = Visibility::new(process_hint_label, info.process_hint.is_some());
         let process_hint_visible = process_hint.visible_signal();

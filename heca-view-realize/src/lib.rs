@@ -1662,6 +1662,7 @@ fn map_variant(v: ViewVariant) -> ButtonVariant {
 
 fn map_size(s: ViewSize) -> WidgetSize {
     match s {
+        ViewSize::Caption => WidgetSize::Caption,
         ViewSize::Small => WidgetSize::Small,
         ViewSize::Normal => WidgetSize::Normal,
         ViewSize::Large => WidgetSize::Large,

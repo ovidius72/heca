@@ -188,7 +188,7 @@ impl PaneCard<'_> {
                     // Nothing to show *is* the setting being off — `model` resolved both into the
                     // same absence, so a card has one question to answer rather than two.
                     show: true,
-                    size: heca_grid_ui::style::WidgetSize::Small,
+                    size: heca_grid_ui::style::WidgetSize::Caption,
                     // A card centres its content, so there is nothing to step in from.
                     indent: heca_grid_ui::style::Spacing::None,
                     theme,

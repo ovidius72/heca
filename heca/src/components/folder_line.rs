@@ -22,7 +22,7 @@ pub(crate) struct FolderLine<'a> {
     /// Whether the line is shown at all — `[settings] pane_show_cwd` and the caller's own reasons.
     pub(crate) show: bool,
     /// The size variant of the line: metadata sits under the name, never beside it in weight, so a
-    /// caller says `Small`. The glyph and the path both take it from the row (a variant cascades to
+    /// caller says `Caption`. The glyph and the path both take it from the row (a variant cascades to
     /// what is composed inside), so they cannot disagree.
     pub(crate) size: WidgetSize,
     /// **How far the line sits in from the name above it** — a token, resolved from the font, and
@@ -96,11 +96,31 @@ mod tests {
         FolderLine {
             path,
             show,
-            size: WidgetSize::Small,
+            size: WidgetSize::Caption,
             indent: Spacing::None,
             theme: &GuiTheme::default(),
         }
         .build()
+    }
+
+    /// **Metadata is smaller than the name above it** — measured, not assumed: the line's text and
+    /// glyph resolve to a smaller font than a label beside it that asked for nothing.
+    #[test]
+    fn the_line_is_smaller_than_the_name_it_sits_under() {
+        use heca_grid_ui::LayoutEngine;
+        use heca_grid_ui::builders::Parent;
+        use heca_grid_ui::widgets::Label;
+        let line = built(Some("~/projects/heca"), true);
+        let mut column = Flex::column().child(Label::new("name")).child(line.widget);
+        LayoutEngine::new()
+            .base_font(15.0)
+            .compute(&mut column, heca_grid_ui::Size::new(400.0, 200.0));
+        let name = column.base().children[0].base().font;
+        let row = &column.base().children[1].base().children[0];
+        let glyph = row.base().children[0].base().font;
+        let path = row.base().children[1].base().font;
+        assert!(glyph < name, "the glyph is smaller: {glyph} vs {name}");
+        assert!(path < name, "the path is smaller: {path} vs {name}");
     }
 
     /// It draws the path it was given, and it is a glyph plus that path — nothing else.
