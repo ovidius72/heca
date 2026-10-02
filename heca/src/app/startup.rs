@@ -560,6 +560,7 @@ pub(crate) async fn init_state(
         current_cursor: winit::window::CursorIcon::Default,
         notification_pick_open: heca_grid_ui::reactive::signal(false),
         notification_hovered: heca_grid_ui::reactive::signal(false),
+        toasts: heca_grid_ui::reactive::signal(Vec::new()),
         notification_max_lines: heca_grid_ui::reactive::signal(
             app_config
                 .config

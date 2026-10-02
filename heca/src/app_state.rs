@@ -1054,6 +1054,10 @@ pub struct AppState {
     /// a card's lifetime is; `NotificationRuntime::set_hovered` decides what it costs, which is
     /// that a card being read must not retire under the cursor reaching for its button.
     pub notification_hovered: heca_grid_ui::reactive::Signal<bool>,
+    /// **The cards the toast stack draws** — this window's signal over the server's list of
+    /// notifications on show, refreshed when the server reports a change
+    /// ([`sync_toasts`](Self::sync_toasts)).
+    pub toasts: heca_grid_ui::reactive::Signal<Vec<heca_grid_ui::widgets::ToastSpec>>,
     /// **The most lines a notification card's title and body may each take** —
     /// `[settings.notification_system] max_lines`, re-applied on reload. Read by the mounted
     /// `ToastStack` when it builds each card.
@@ -1076,8 +1080,20 @@ impl AppState {
     pub(crate) fn apply(&mut self, changes: Vec<crate::server::Change>) {
         for change in changes {
             match change {
-                crate::server::Change::NotificationsChanged => self.needs_redraw = true,
+                crate::server::Change::NotificationsChanged => {
+                    self.sync_toasts();
+                    self.needs_redraw = true;
+                }
             }
+        }
+    }
+
+    /// Point the toast stack's signal at what the server says is on show, if that changed.
+    pub(crate) fn sync_toasts(&mut self) {
+        use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
+        let next = self.server.visible_toasts();
+        if self.toasts.get_untracked() != next {
+            self.toasts.set(next);
         }
     }
 

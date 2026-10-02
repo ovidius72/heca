@@ -109,12 +109,10 @@ impl ServerState {
         }
     }
 
-    /// **The notifications on show**, as the list a window draws. A signal: it is the window's
-    /// projection of the server's store, rewritten when the store changes.
-    pub(crate) fn toasts(
-        &self,
-    ) -> heca_grid_ui::reactive::Signal<Vec<heca_grid_ui::widgets::ToastSpec>> {
-        self.notifications.visible_toasts
+    /// **The notifications on show**, as plain data — the list a window draws from. Read it when a
+    /// [`Change::NotificationsChanged`] arrives; the window keeps its own signal over it.
+    pub(crate) fn visible_toasts(&self) -> Vec<heca_grid_ui::widgets::ToastSpec> {
+        self.notifications.visible_toasts()
     }
 
     /// What pressing `key` on the notification `id` does, and whether it dismisses after — or
@@ -146,7 +144,6 @@ impl ServerState {
 mod tests {
     use super::*;
     use crate::notification::NotificationDraft;
-    use heca_grid_ui::reactive::SignalGet;
     use std::time::Duration;
 
     fn server(mode: heca_config::settings::NotificationSystem) -> ServerState {
@@ -158,7 +155,7 @@ mod tests {
     }
 
     fn on_screen(server: &ServerState) -> usize {
-        server.toasts().get_untracked().len()
+        server.visible_toasts().len()
     }
 
     /// **The server's state needs no window.** It is built from plain data, so a test — and later a
