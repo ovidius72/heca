@@ -1065,6 +1065,22 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// **Ask the server to do something, and react to what changed** — the one door from a window
+    /// to the state every window shares. The server's clock is read here, not the asker's.
+    pub(crate) fn ask_server(&mut self, action: crate::server::ServerAction) {
+        let changes = self.server.execute(action, std::time::Instant::now());
+        self.apply(changes);
+    }
+
+    /// Do what only a window can about what the server says changed.
+    pub(crate) fn apply(&mut self, changes: Vec<crate::server::Change>) {
+        for change in changes {
+            match change {
+                crate::server::Change::NotificationsChanged => self.needs_redraw = true,
+            }
+        }
+    }
+
     /// The scrollback search for `pane`, if it has one.
     pub fn search_for(&self, pane: PaneId) -> Option<&SearchState> {
         self.searches.get(&pane)

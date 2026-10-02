@@ -138,27 +138,18 @@ pub fn handle_notification_dismiss_one(state: &mut AppState, action: &WmAction) 
         return;
     };
     let id = crate::notification::NotificationId::from_raw(*notification_id);
-    state
-        .server
-        .notifications
-        .dismiss_one(id, std::time::Instant::now());
+    state.ask_server(crate::server::ServerAction::DismissOne(id));
 }
 
 /// Dismiss every currently visible notification — no on-screen control; reachable from the
 /// command palette, a keybinding, and RPC.
 pub fn handle_notification_dismiss_all(state: &mut AppState, _action: &WmAction) {
-    state
-        .server
-        .notifications
-        .dismiss_all(std::time::Instant::now());
+    state.ask_server(crate::server::ServerAction::DismissAll);
 }
 
 /// Dismiss the first eligible visible notification in stable toast order.
 pub fn handle_notification_dismiss_last(state: &mut AppState, _action: &WmAction) {
-    state
-        .server
-        .notifications
-        .dismiss_last(std::time::Instant::now());
+    state.ask_server(crate::server::ServerAction::DismissLast);
 }
 
 /// Toggle the scoped picker over the visible toast actions/×, in addition to (never instead
@@ -182,11 +173,7 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
         return;
     };
     let id = crate::notification::NotificationId::from_raw(*notification_id);
-    let Some((intent, dismiss_after)) = state
-        .server
-        .notifications
-        .action_and_dismiss_after_for_visible(id, key)
-    else {
+    let Some((intent, dismiss_after)) = state.server.toast_action(id, key) else {
         return;
     };
     // Fired **as the stack**, so the relayed intent is judged exactly as the click that asked for
@@ -197,10 +184,7 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
     );
     emit.fire(crate::app::interaction::InteractionIntent::View(intent));
     if dismiss_after {
-        state
-            .server
-            .notifications
-            .dismiss_one(id, std::time::Instant::now());
+        state.ask_server(crate::server::ServerAction::DismissOne(id));
     }
 }
 

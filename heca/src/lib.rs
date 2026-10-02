@@ -293,36 +293,18 @@ impl HecaApp {
                 .apply_visibility(&crate::chrome::shown_from_settings(
                     &self.app_config.config.settings,
                 ));
-            state
-                .server
-                .notifications
-                .set_auto_dismiss(std::time::Duration::from_millis(
-                    self.app_config
-                        .config
-                        .settings
-                        .notification_system
-                        .auto_dismiss_ms,
-                ));
-            state
-                .server
-                .notifications
-                .set_mode(self.app_config.config.settings.notification_system.mode);
             // Every setting in this table must be re-applied here. One that is only read at startup
             // is dead until someone remembers it — the defect `P031(F006)/T415` is filed against,
-            // and `max_visible` walked straight into it the day it was added (2026-08-31).
-            let max_visible = self
-                .app_config
-                .config
-                .settings
-                .notification_system
-                .max_visible;
-            if state
-                .server
-                .notifications
-                .set_max_visible(max_visible, std::time::Instant::now())
-            {
-                state.needs_redraw = true;
-            }
+            // and `max_visible` walked straight into it the day it was added (2026-08-31). The
+            // notification settings go to the server whole, so none can be left out.
+            let notifications = &self.app_config.config.settings.notification_system;
+            state.ask_server(crate::server::ServerAction::Configure(
+                crate::server::NotificationSettings {
+                    auto_dismiss: std::time::Duration::from_millis(notifications.auto_dismiss_ms),
+                    mode: notifications.mode,
+                    max_visible: notifications.max_visible,
+                },
+            ));
             heca_grid_ui::reactive::SignalUpdate::set(
                 &state.notification_max_lines,
                 self.app_config

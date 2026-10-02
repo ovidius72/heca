@@ -212,14 +212,13 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // hover; what it *means* is decided in the runtime, which is where the lifetime lives.
     let now = Instant::now();
     use heca_grid_ui::reactive::SignalGet;
-    let deadlines_moved = state
+    let hovered = state.notification_hovered.get_untracked();
+    let moved = state
         .server
-        .notifications
-        .set_hovered(state.notification_hovered.get_untracked(), now);
-    let notifications_expired = state.server.notifications.expire_due(now);
-    if notifications_expired || deadlines_moved {
-        state.needs_redraw = true;
-    }
+        .execute(crate::server::ServerAction::Hover(hovered), now);
+    state.apply(moved);
+    let expired = state.server.tick(now);
+    state.apply(expired);
 
     let backend_poll = poll_backends(state);
     let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
@@ -277,10 +276,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         || terminal_animating
         || image_animating
         || chrome_animating;
-    let toast_expiry = match state.server.notifications.is_hovered() {
-        true => None,
-        false => state.server.notifications.next_expiry(),
-    };
+    let toast_expiry = state.server.next_wake();
     let schedule = next_wake(
         Instant::now(),
         WakeRequests {
