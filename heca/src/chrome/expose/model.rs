@@ -274,17 +274,13 @@ mod tests {
     /// in the wrong place the moment the workspace is scrolled.
     #[test]
     fn a_floating_pane_is_offset_by_the_scroll_so_it_lands_where_it_looks() {
-        use heca_core::layout::Point;
-        use heca_core::layout::workspace::FloatingPane;
+        use heca_core::layout::{Point, Rectangle};
         let mut s = session();
-        s.workspaces[0].floating_panes.push(FloatingPane {
-            pane: Pane::new(PaneId(9), "float"),
-            position: Point::new(40.0, 30.0),
-            size: Size::new(200.0, 150.0),
-            is_active: false,
-            original_column_idx: None,
-            original_pane_idx: None,
-        });
+        s.workspaces[0].add_floating_pane(
+            Pane::new(PaneId(9), "float"),
+            Rectangle::new(Point::new(40.0, 30.0), Size::new(200.0, 150.0)),
+            None,
+        );
         s.workspaces[0].scrolling.view_offset =
             heca_core::layout::view_offset::ViewOffset::Static(120.0);
 

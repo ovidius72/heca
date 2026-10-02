@@ -6,7 +6,7 @@
 
 use super::column::Pane;
 use super::types::*;
-use super::workspace::{FloatingPane, FocusDomain, Workspace};
+use super::workspace::{FloatOrigin, FloatingPane, FocusDomain, Workspace};
 
 impl Workspace {
     /// Where a pane floats when nothing says where: centred, [`float_size`] of the working area.
@@ -20,22 +20,16 @@ impl Workspace {
 
     /// Put `pane` in front as a floating pane at `rect`, and give floating the focus.
     ///
-    /// `origin` is the column and row it came from, so [`unfloat_pane`](Self::unfloat_pane) can put
-    /// it back; `None` for a pane that never tiled (one spawned floating).
-    pub fn add_floating_pane(
-        &mut self,
-        pane: Pane,
-        rect: Rectangle,
-        origin: Option<(usize, usize)>,
-    ) {
+    /// `origin` is where it came from, so [`unfloat_pane`](Self::unfloat_pane) can put it back;
+    /// `None` for a pane that never tiled (one spawned floating).
+    pub fn add_floating_pane(&mut self, pane: Pane, rect: Rectangle, origin: Option<FloatOrigin>) {
         self.deactivate_floating_panes();
         self.floating_panes.push(FloatingPane {
             pane,
             position: rect.loc,
             size: rect.size,
             is_active: true,
-            original_column_idx: origin.map(|(col, _)| col),
-            original_pane_idx: origin.map(|(_, row)| row),
+            origin,
         });
         self.focus_domain = FocusDomain::Floating;
     }
@@ -46,16 +40,23 @@ impl Workspace {
         let Some((col, row)) = self.scrolling.pane_indices(pane_id) else {
             return false;
         };
+        // Read before the pane leaves: a column that loses its last pane goes with it.
+        let origin = FloatOrigin {
+            column: self.scrolling.columns[col].id,
+            position: col,
+            row,
+        };
         let Some(pane) = self.scrolling.remove_pane(col, row) else {
             return false;
         };
-        self.add_floating_pane(pane, rect, Some((col, row)));
+        self.add_floating_pane(pane, rect, Some(origin));
         true
     }
 
-    /// Put the floating pane `pane_id` back into the tiling and focus it there — at the column and
-    /// row it came from while that column still exists, else in a new column `new_column_id`.
-    /// `false` when it is not floating here.
+    /// Put the floating pane `pane_id` back into the tiling and focus it there — in the column it
+    /// came from, at its row, while that column still exists; else in a new column `new_column_id`
+    /// where that column used to be (at the end for a pane that never tiled). `false` when it is not
+    /// floating here.
     pub fn unfloat_pane(&mut self, pane_id: PaneId, new_column_id: ColumnId) -> bool {
         let Some(idx) = self
             .floating_panes
@@ -66,18 +67,26 @@ impl Workspace {
         };
         let float = self.floating_panes.remove(idx);
         self.deactivate_floating_panes();
-        match float.original_column_idx {
-            Some(col) if col < self.scrolling.columns.len() => {
-                let row = float
-                    .original_pane_idx
-                    .unwrap_or(0)
-                    .min(self.scrolling.columns[col].panes.len());
+        let home = float.origin.and_then(|origin| {
+            let idx = self
+                .scrolling
+                .columns
+                .iter()
+                .position(|column| column.id == origin.column)?;
+            Some((idx, origin.row))
+        });
+        match home {
+            Some((col, row)) => {
+                let row = row.min(self.scrolling.columns[col].panes.len());
                 self.scrolling
                     .add_pane_to_column(col, Some(row), float.pane, true);
             }
-            _ => {
+            None => {
+                let at = float
+                    .origin
+                    .map(|origin| origin.position.min(self.scrolling.columns.len()));
                 let column = self.scrolling.new_column(new_column_id, float.pane);
-                self.scrolling.add_column(None, column, true);
+                self.scrolling.add_column(at, column, true);
             }
         }
         self.focus_domain = FocusDomain::Tiled;
@@ -134,17 +143,56 @@ mod tests {
         assert_eq!(ws.active_pane().map(|p| p.id), Some(PaneId(2)));
     }
 
+    /// The ids of the panes in column order, one entry per column of one pane: the neighbours of a
+    /// pane are what "back where it came from" means.
+    fn order(ws: &super::Workspace) -> Vec<u64> {
+        ws.scrolling
+            .columns
+            .iter()
+            .flat_map(|c| c.panes.iter().map(|p| p.id.0))
+            .collect()
+    }
+
     #[test]
-    fn unfloating_puts_a_pane_back_where_it_came_from() {
+    fn unfloating_a_pane_alone_in_its_column_puts_it_back_between_the_same_neighbours() {
         let mut s = session();
         let ws = s.active_workspace_mut().unwrap();
-        let before = ws.scrolling.pane_indices(PaneId(2));
+        assert_eq!(order(ws), vec![1, 2, 3]);
         let rect = ws.default_float_rect();
         ws.float_tiled_pane(PaneId(2), rect);
+        // Its column went with it: pane 3 now sits where pane 2's column was.
+        assert_eq!(order(ws), vec![1, 3]);
         assert!(ws.unfloat_pane(PaneId(2), ColumnId(99)));
-        assert_eq!(ws.scrolling.pane_indices(PaneId(2)), before);
+        assert_eq!(
+            order(ws),
+            vec![1, 2, 3],
+            "between 1 and 3, not split into 3"
+        );
+        let (col, row) = ws.scrolling.pane_indices(PaneId(2)).unwrap();
+        assert_eq!(
+            ws.scrolling.columns[col].panes.len(),
+            1,
+            "in a column of its own"
+        );
+        assert_eq!(row, 0);
         assert!(ws.floating_panes.is_empty());
         assert_eq!(ws.focus_domain, FocusDomain::Tiled);
+    }
+
+    #[test]
+    fn unfloating_a_pane_from_a_shared_column_goes_back_to_its_row() {
+        let mut s = session();
+        let ws = s.active_workspace_mut().unwrap();
+        // Stack panes 4 and 5 under pane 1 in column 0 (rows 1 and 2).
+        ws.scrolling
+            .add_pane_to_column(0, None, Pane::new(PaneId(4), ""), false);
+        ws.scrolling
+            .add_pane_to_column(0, None, Pane::new(PaneId(5), ""), false);
+        let before = ws.scrolling.pane_indices(PaneId(4)).unwrap();
+        let rect = ws.default_float_rect();
+        ws.float_tiled_pane(PaneId(4), rect);
+        assert!(ws.unfloat_pane(PaneId(4), ColumnId(99)));
+        assert_eq!(ws.scrolling.pane_indices(PaneId(4)), Some(before));
     }
 
     #[test]

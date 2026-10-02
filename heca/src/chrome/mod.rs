@@ -1984,15 +1984,11 @@ mod tests {
                 true,
                 heca_core::layout::ColumnId(10),
             );
-            ws.floating_panes
-                .push(heca_core::layout::workspace::FloatingPane {
-                    pane: heca_core::layout::Pane::new(PaneId(20), "git"),
-                    position: Point::new(50.0, 50.0),
-                    size: Size::new(400.0, 300.0),
-                    is_active: true,
-                    original_column_idx: None,
-                    original_pane_idx: None,
-                });
+            ws.add_floating_pane(
+                heca_core::layout::Pane::new(PaneId(20), "git"),
+                Rectangle::new(Point::new(50.0, 50.0), Size::new(400.0, 300.0)),
+                None,
+            );
             ws.find_pane_mut(PaneId(10)).expect("tiled pane").runtime = PaneRuntime {
                 program: Some("nvim".into()),
                 status: ProcessStatus::Running,
