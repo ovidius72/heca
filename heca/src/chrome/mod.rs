@@ -1341,7 +1341,7 @@ mod tests {
             pass_box_down(body.as_mut());
             let mut picked = KeyHint::new(body);
             pass_box_down(&mut picked);
-            Box::new(FocusScope::new(picked).focus(signal(true)))
+            Box::new(FocusScope::new(picked))
         };
 
         let mut stack = Flex::column().gap(8.0).grow(1.0);
@@ -1396,8 +1396,7 @@ mod tests {
 
         let body: WidgetModel = Box::new(Flex::column().height(120.0));
         // What `focus_and_pick` does with `share = 0.0`: wrap, and touch no layout.
-        let wrapped: WidgetModel =
-            Box::new(FocusScope::new(KeyHint::new(body)).focus(signal(false)));
+        let wrapped: WidgetModel = Box::new(FocusScope::new(KeyHint::new(body)));
         let mut region = Flex::column().height(600.0).child(with_flex(wrapped, 0.0));
         LayoutEngine::new().compute(&mut region, CoreSize::new(300.0, 600.0));
 
@@ -1828,15 +1827,15 @@ mod tests {
             !outlined(&mut shell),
             "no dock has focus yet, so nothing is outlined",
         );
-        chrome.set_focused_container(Some("workspaces".into()));
+        assert!(heca_grid_ui::focus_scope(&mut shell, "workspaces"));
         assert!(
             outlined(&mut shell),
-            "the focused dock is outlined in the theme's focus colour — same tree, one signal",
+            "the dock the keyboard is in is outlined in the theme's focus colour — read off the tree",
         );
-        chrome.set_focused_container(Some("something-else".into()));
+        heca_grid_ui::release_scope(&mut shell, "workspaces");
         assert!(
             !outlined(&mut shell),
-            "and focus elsewhere takes the outline away",
+            "and the keyboard leaving it takes the outline away",
         );
     }
 

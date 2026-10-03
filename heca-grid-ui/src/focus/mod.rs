@@ -11,9 +11,11 @@
 //! `Base.focused`, so widgets can render a focus ring reactively.
 
 mod door;
+mod scope;
 mod settle;
 
 pub(crate) use door::FocusDoor;
+pub use scope::{contains_keyboard, focus_scope, page_scope, release_scope};
 pub(crate) use settle::{focus_on_press, holder_path, settle};
 
 /// **Make a tree's keyboard owner single, now.** Run by the router before it delivers a key or a

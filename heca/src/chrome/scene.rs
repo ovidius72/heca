@@ -37,17 +37,17 @@ pub(super) fn with_flex(mut body: WidgetModel, parts: f32) -> WidgetModel {
     body
 }
 
-/// Wrap a container body in the two things the **host** owns about it: whether it holds chrome
-/// keyboard focus, and its letter while a dock pick is open (F003/P011/T020).
+/// Wrap a container body in the two things the **host** owns about it: the region it names itself
+/// as (so the keyboard can be given to it, and a press inside it resolves back to it), and its
+/// letter while a dock pick is open (F003/P011/T020).
 ///
-/// Both are host state, not container state — a container cannot know that it is the focused one, or
-/// which letter it was given among its siblings — so they are applied here rather than left to each
-/// provider to remember. Both wrappers are transparent: they hug the body and route events, focus and
-/// drag straight through, so the container behaves exactly as it does unwrapped.
+/// Both are host state, not container state — a container cannot know which letter it was given
+/// among its siblings — so they are applied here rather than left to each provider to remember. Both
+/// wrappers are transparent: they hug the body and route events, focus and drag straight through, so
+/// the container behaves exactly as it does unwrapped.
 ///
-/// The focus signal is the **same one** the container's own scroll area binds as its keyboard target
-/// (`StateView::container_keyboard_target`), so the ring and the keys can never disagree about which
-/// dock has focus.
+/// The focus ring is not wired: the region draws it itself while the keyboard is anywhere inside it
+/// (`FocusScope`), so the ring and the keys can never disagree about which dock has focus.
 fn focus_and_pick(
     mut body: WidgetModel,
     container: &str,
@@ -110,7 +110,6 @@ fn focus_and_pick(
             // lettered — but that is a keyboard destination `prefix+Shift+e` already offers, so in
             // `prefix+/` it was a letter per placement pointing at something with its own key.
             .hint_scope([crate::chrome::DOCK_PICK_SCOPE])
-            .focus(ctx.state().container_keyboard_target(container))
             // Still declared: `offer_hint_by_key` matches it so the DOCK PICK can letter this
             // container (`chrome/hint/letters.rs`). It is no longer read by any hit-test.
             .scope_key(container),

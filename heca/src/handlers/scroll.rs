@@ -148,7 +148,7 @@ pub fn handle_exit_scrollback(state: &mut AppState, _action: &WmAction) {
 /// and its clamp, so the arithmetic lives in the widget, once, for every container that will ever
 /// nest one.
 fn scroll_focused_dock(state: &mut AppState, intent: heca_grid_ui::WidgetIntent) -> bool {
-    if state.chrome_state.focused_container().is_none() {
+    if crate::app::tree_focus::focused_dock(state).is_none() {
         return false;
     }
     crate::chrome::deliver(state, &heca_grid_ui::Event::Widget(intent));

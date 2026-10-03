@@ -129,7 +129,8 @@ pub(crate) fn deliver_to_panes(state: &mut crate::app_state::AppState, ev: &Even
 /// changes, and `sync_chrome_signals` pushes value-state into its bound signals every frame.
 pub(crate) fn deliver(state: &mut crate::app_state::AppState, ev: &Event) -> bool {
     let handled = heca_grid_ui::dispatch(&mut state.window_root, ev) == heca_grid_ui::Handled::Yes;
-    // A press may have moved the keyboard; the store that the key rules read follows at once.
+    // A press may have moved the keyboard: settle it and announce it now, so what the key rules read
+    // off the tree is current before the next key.
     if matches!(ev, Event::Raw(raw) if raw.kind == heca_grid_ui::RawPointerKind::Pressed) {
         crate::app::tree_focus::settle_window_focus(state);
     }
@@ -149,9 +150,7 @@ pub(crate) fn open_declared_menu_for_focus(state: &mut crate::app_state::AppStat
     // widget (a plugin's input) when the cursor names nothing.
     let cursor = {
         use heca_grid_ui::reactive::SignalGet as _;
-        state
-            .chrome_state
-            .focused_container()
+        crate::app::tree_focus::focused_dock(state)
             .and_then(|mount| state.chrome_state.container_cursor(&mount).get())
     };
     heca_grid_ui::open_for_keyboard(&state.window_root, cursor.as_deref())

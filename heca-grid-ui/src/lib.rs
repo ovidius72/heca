@@ -79,7 +79,10 @@ pub use event::{
     DragEvent, EventCx, EventKind, Handlers, PointerButton, PointerEvent, RawPointer,
     RawPointerKind,
 };
-pub use focus::{FocusManager, KeyboardOwner, keyboard_owner, settle_focus};
+pub use focus::{
+    FocusManager, KeyboardOwner, contains_keyboard, focus_scope, keyboard_owner, page_scope,
+    release_scope, settle_focus,
+};
 pub use hint::{
     DeclaredAction, Hint, SurfaceHints, clear_hints, collect_actions, collect_hints,
     collect_hints_by_surface, fire_action, fire_hint, hint_intent, hint_targets_of, offer_hint,

@@ -54,7 +54,11 @@ fn gather(node: &dyn Component, path: &mut Vec<usize>, shown: bool, out: &mut Ve
 }
 
 /// The path to the widget with focus identity `id` anywhere under `scope`, if it is still shown and
-/// can still take focus.
+/// not disabled.
+///
+/// **Not "focusable"**: the widgets this returns to held the keyboard once, and some are regions that
+/// took it without being a control (a dock a host focused by name). Asking them to be focusable now
+/// would leave the keyboard with nobody when a dialog over such a region closes.
 fn find_focusable(root: &dyn Component, scope: &[usize], id: u64) -> Option<Vec<usize>> {
     fn walk(
         node: &dyn Component,
@@ -69,7 +73,7 @@ fn find_focusable(root: &dyn Component, scope: &[usize], id: u64) -> Option<Vec<
             return None;
         }
         if base.focus_door.id.get() == id {
-            return node.focusable().then(|| path.clone());
+            return (!base.disabled.get_untracked()).then(|| path.clone());
         }
         for (i, child) in base.children.iter().enumerate() {
             path.push(i);
@@ -93,7 +97,12 @@ fn arrive(root: &mut dyn Component, path: &[usize]) {
 
 /// A followed signal turned true for the widget at `path`: take the keyboard, unless something
 /// inside it already has it.
-fn follow(root: &mut dyn Component, path: &[usize], holder: &mut Option<Vec<usize>>, prior: u64) {
+pub(super) fn follow(
+    root: &mut dyn Component,
+    path: &[usize],
+    holder: &mut Option<Vec<usize>>,
+    prior: u64,
+) {
     let door = &at(root, path).base().focus_door;
     let modal = door.follows.get().is_some_and(|f| f.modal);
     // Something inside already has it: this region is where the keyboard already is. (A surface

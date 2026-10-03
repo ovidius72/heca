@@ -1372,13 +1372,14 @@ Button::destructive("Delete")
   hit-testing), because an open layer and the button clicked before it both carry the flag.
 - **A surface that wants keys holds focus**, and a caller wires nothing:
   `Overlay`/`ContextMenu`/`CommandPalette` follow their **open** signal into `Base::focused`;
-  `FocusScope` and `ScrollRegion` follow the host's keyboard-target signal — a dock gives the same
-  signal to both, so the wrapper draws the ring and the region answers the keys; `Select`
-  focuses itself when the list opens. **Do not add a predicate instead.**
+  `Select` focuses itself when the list opens. A dock is not told by a signal: the host gives it the
+  keyboard by name (`focus_scope`), `FocusScope` draws its ring while the keyboard is anywhere
+  inside it (`contains_keyboard`, CSS `:focus-within`), and a scroll intent reaches the dock because
+  intents enter the focused region. **Do not add a predicate instead.**
 - **`focused` means one thing — the widget the keyboard is aimed at, ONE per tree — and has one
   door.** It is written only by `Base::focus(visible)` / `Base::blur()`, or by
   `Base::follow_focus(signal)` / `follow_focus_modal(signal)` for a surface whose focus a host
-  decides (open, a dock's keyboard target). A widget never *is* the host's signal: aliasing it made
+  decides (open), or the host calls `focus_scope`/`release_scope` for a named region. A widget never *is* the host's signal: aliasing it made
   "this is open" and "the keyboard is here" the same value, and a click that blurred the widget
   would have closed it. `heca/tests/focus_door.rs` fails on any other writer. A widget cannot blur
   another (it holds no tree), so a request is *claimed* and `focus::settle` — run by the router
@@ -1388,10 +1389,13 @@ Button::destructive("Delete")
   back on close; a **region** (`follow_focus`: a dock) takes it unless something inside already
   has it, and returns to the control it held when it last let go. There is no "most recent wins":
   there is one holder.
-- **The tree is the one truth about where the keyboard is; the chrome store follows it.** The host
-  reads it with `heca_grid_ui::keyboard_owner` (`app/tree_focus.rs`) and sets
-  `focused_container` to the dock the owner sits in. A dock focused by an action reaches the tree
-  through the signal its region follows. Never keep a second record of it.
+- **The tree is the one truth about where the keyboard is, and nothing else keeps a copy.** The host
+  asks it (`app/tree_focus.rs::focused_dock`, which is `heca_grid_ui::page_scope`: the dock the
+  keyboard is in, looking through a dialog above it to where it returns) and moves it through the
+  same door (`focus_scope` / `release_scope`, **host-only**: they take a region name, which a plugin
+  never passes — a plugin calls a method on its own widget). The chrome store hears only an
+  announcement, once per change (`ContainerFocusChanged`), and the memory of which dock held it
+  last. Never add a flag, signal or store field that says where the keyboard is.
 - **A press focuses the deepest focusable under it, in every tree, with nothing declared** — the
   browser's rule, done once in the pointer router (`focus::focus_on_press`). A press on nothing
   focusable changes nothing; a press inside the widget that already holds the keyboard changes

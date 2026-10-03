@@ -119,7 +119,7 @@ pub(crate) fn focused_surface(state: &AppState) -> FocusedSurface {
             name: state.layers.name_of(id),
         };
     }
-    match state.chrome_state.focused_container() {
+    match crate::app::tree_focus::focused_dock(state) {
         Some(mount) => {
             let kind = state
                 .chrome_host

@@ -1123,7 +1123,7 @@ impl AppState {
     /// highlight the moment the overlay appears. It used to ask whether the app was in a mode; a
     /// container holding the keyboard is the thing that was always meant.
     pub fn container_cursor_visible(&self) -> bool {
-        self.chrome_state.focused_container().is_some()
+        crate::app::tree_focus::focused_dock(self).is_some()
     }
 
     /// Effective tab-bar (top bar) height: the default when shown, `0.0` when

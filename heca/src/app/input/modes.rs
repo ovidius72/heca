@@ -26,7 +26,7 @@ pub(super) fn handle_prefix_mode(
         // The double-prefix literal passthrough is for a pane that is *taking text*. While a dock
         // holds the keyboard nothing is, so sending a literal `Ctrl+B` to a pane the user is not
         // typing in is a surprise rather than a passthrough (F003/P085/T352).
-        if state.chrome_state.focused_container().is_some() {
+        if crate::app::tree_focus::focused_dock(state).is_some() {
             return;
         }
         if let Some(pane_id) = state.focused_pane

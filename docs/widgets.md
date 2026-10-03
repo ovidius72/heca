@@ -434,7 +434,7 @@ A surface that wants keys must **hold focus**, which it already had to do to dra
 | `Overlay`, `ContextMenu`, `CommandPalette` | **follow** their open signal into `Base::focused` (`Base::follow_focus_modal`): open *is* focused, and closing gives the keyboard back to whoever held it |
 | `Select` | opening the list focuses it |
 | `Dialog` | its own `FocusManager` focuses a field or button, so text reaches the field and the dialog hears what the field declined on the way back up |
-| `FocusScope`, `ScrollRegion` | **follow** the host's keyboard-target signal (`Base::follow_focus`). A dock gives the **same** signal to both: the wrapper draws the ring, the region answers the keys |
+| `FocusScope` | holds nothing itself; draws its ring while the keyboard is **anywhere inside it** (`contains_keyboard`, CSS `:focus-within`). A host moves the keyboard into a named region with `focus_scope` (and out with `release_scope`) — host-only, because they take a name |
 | `CardGrid` | focusable in its constructor — it moves a cursor with the keyboard |
 
 **`focused` means one thing: the widget the keyboard is aimed at** — `document.activeElement`, **one
@@ -1379,7 +1379,7 @@ a run's vertex count.
 | How thick / what color? | `focus_border_width` (`[appearance]`, default 1.5 — independent of `border_width` so the ring survives borders-off) and the `focus_ring` theme token (unset ⇒ per-tone derivation via `effective_focus_ring()` / `focus_ring_tone()`). |
 | What does it wrap? | The **control**, not its label: `Checkbox` rings its box only; `Toggle` its track; list rows (`Row`/`Item`/`Choice`) ring their row as the selectable unit. |
 | What does a click do? | Focuses the deepest focusable under it **without** a ring (mouse focus). Enter/Space work and an `Input`'s caret shows; the ring waits for Tab or the arrows. |
-| What if the focused thing is an **area**, not a control? | Wrap it in [`FocusScope`](#focusscope) and drive it from a host signal — it gates the subtree's keys on that focus as well as drawing the ring. A control owns its focus so it draws its own ring; an area the keyboard is *aimed* at (a sidebar dock the scroll keys act on) has no owner in the tree — only the host knows which subtree holds it. Same outline, same theme tokens. |
+| What if the focused thing is an **area**, not a control? | Wrap it in [`FocusScope`](#focusscope) — it draws the ring while the keyboard is anywhere inside it, so there is nothing to wire and the ring cannot disagree with where the keys go. A control owns its focus so it draws its own ring; an area the keyboard is *in* (a sidebar dock the scroll keys act on) is outlined by its wrapper. Same outline, same theme tokens. |
 
 ### `Color`
 
@@ -2439,16 +2439,15 @@ or the content fits — so a nested region or the host still gets a turn. Consum
 instead would make the key do nothing at all, silently. Handled after the children,
 like the wheel, so the innermost scrollable region wins.
 
-`keyboard_target(Signal<bool>)` says whether *this* region is the keyboard's
-target. Unset means yes, so a single-region app needs no wiring; a host with
-several regions in one tree binds it on each and depends on no default. That is how
-"scroll the focused surface" works without the host knowing where any region sits
-in the tree.
+A region needs no flag to say whether it is the one the keyboard is aimed at: a keyboard intent
+**enters the focused region**, so the dock the keyboard is in is the one whose `ScrollRegion` answers,
+and a region in another dock is never offered it. That is how "scroll the focused surface" works
+without the host knowing where any region sits in the tree.
 
-**In heca that signal *is* chrome keyboard focus.** Every mounted container binds it to
-"am I the focused dock" (`StateView::container_keyboard_target`, keyed by mount id), and
-the same signal drives the [`FocusScope`](#focusscope) the host wraps the container in — so
-what the ring shows and what the scroll keys reach cannot disagree. `focus_dock` moves it.
+**In heca the host moves the keyboard into a dock by name** (`focus_dock` →
+`heca_grid_ui::focus_scope`), and the [`FocusScope`](#focusscope) the host wraps the container in
+draws the ring while the keyboard is inside — so what the ring shows and what the scroll keys reach
+are the same fact, the tree's.
 
 ### Scrolling is composed — nest a scroll area where the scrolling belongs
 
@@ -4889,67 +4888,58 @@ which is what lets a column wear a letter as a *destination* while staying out o
 
 ### FocusScope
 
-A **generic** transparent wrapper that makes its child subtree a **keyboard focus scope**: keys enter
-only while it holds focus, and it outlines itself while it does. Both from one host-owned
-`Signal<bool>`.
+A **generic** transparent wrapper that outlines its child while **the keyboard is anywhere inside
+it** — CSS `:focus-within`, read off the tree.
 
 Every focusable *control* already rings itself and answers for its own keys, because it owns its
 focus. `FocusScope` is for the other case: when the thing holding keyboard focus is **a whole area** —
-a sidebar dock the scroll keys act on, a panel a mode is aimed at — no single widget in the tree owns
-that focus, so none can answer for it. The host does, by flipping one signal (read-via-signals /
-write-via-actions), exactly as it drives [`KeyHint`](#keyhint).
+a sidebar dock the scroll keys act on, a panel a mode is aimed at — so the focus belongs to the
+subtree, not to one widget. The wrapper asks the tree one question, `contains_keyboard(self)`, and
+rings while the answer is yes. **There is no flag to set**: the ring reads the tree, and the tree is
+where keyboard focus lives, so the ring cannot say "the keys come here" while the keys go elsewhere.
 
-It adds exactly two things:
-
-1. **The gate.** `Event::Key` and `Event::Widget` enter the subtree only while the scope holds focus.
-   An unfocused scope neither reacts nor **consumes**: it declines, so the next sibling — the scope
-   that does hold focus — still gets its turn. That is what lets a host broadcast one semantic intent
-   (say `WidgetIntent::ScrollPageDown`) into a tree of scopes and have the right one answer, without
-   knowing where any of them sits. Consuming instead would mean the first scope in a region silently
-   ate everything.
-2. **The outline**, in place — no tree rebuild.
+How the keyboard gets there is the ordinary way: Tab, a press on something inside, or the host asking
+for the region by name — `heca_grid_ui::focus_scope(root, "name")` (and `release_scope` to take it
+back). Those two take a **name string**, which only the host knows (an action, an RPC line), so they
+are **for the host**; a plugin that wants its own region focused calls a method on the widget it
+built and never passes a name. Keys and intents follow the tree's focus too: an intent **enters the
+focused region** and whatever inside owns the capability (a `ScrollRegion`) answers, so a host
+sends one semantic intent (say `WidgetIntent::ScrollPageDown`) and only the dock the keyboard is in
+hears it.
 
 **The pointer is never gated.** Click, drag, hover and wheel reach an unfocused scope exactly as
 before: the mouse carries its own target, so it needs no focus to say where it meant — and a click on
 an unfocused dock is how you focus it. (`tests/pointer_delivery.rs` holds this to the whole pointer
 set, focused and unfocused.)
 
-The two halves share the signal on purpose: a ring that says "the keys come here" while the keys go
-elsewhere is worse than no ring.
-
 - **Construct**: `FocusScope::new(child)` — a widget or a
-  dynamically built subtree (a `realize`d tree, a provider's render seam).
+  dynamically built subtree (a `realize`d tree, a provider's render seam). Name it with
+  `.scope_key("id")` for the host to find it.
 - **Builders**:
-  - `.focus(Signal<bool>)` — the host-owned focus state. **Host-only** (a live signal, which static
-    data cannot drive). Default: an internal signal that is `false`, i.e. no outline.
   - `.radius(px)` — corner radius of the outline. Default: the theme's `control_radius()`.
   - `.color(Color)` — outline colour. Default: `effective_focus_ring()` (the `focus_ring` token, or
     the accent shifted toward `foreground`). Override to mark a *kind* of focus distinctly, the way
     `KeyHint::color` distinguishes kinds of pick target.
-- **Accessors**: `.focus_signal() -> Signal<bool>`.
-- **Routing**: none of its own. `.focus(sig)` binds that signal to `Base::focused`, and the
-  framework delivers keyboard events to the focus owner's chain — so an unfocused scope is simply
-  not on the path, and the focused one is, with nothing gated, declined or forwarded. It used to
-  claim `routes_own_subtree` and skip the walk per event kind; that predicate is gone.
+- **Reads (host)**: `contains_keyboard(node)` (is the keyboard inside this subtree), `page_scope(root)`
+  (the named region the keyboard is in on the page, looking through a dialog above it to where it
+  returns).
 - **Theme**: the outline is [`PaintCx::focus_ring`] — the same primitive every control's ring uses,
   at `focus_border_width`, offset outside the bounds like a CSS `outline`. A theme with
   `show_focus_border = false` hides this one too: whether focus outlines are drawn is the theme's
   decision, uniformly, not each caller's.
 
 ```rust
-// The host owns the signal; an action moves focus and the ring follows, with no rebuild.
-let focused = signal(false);
-let framed = FocusScope::new(my_container).focus(focused);
-// …later, from an action:
-focused.set(true);
+// Wrap an area; it outlines itself whenever the keyboard is inside it.
+let framed = FocusScope::new(my_container).scope_key("my-dock");
+// The host, from an action:
+heca_grid_ui::focus_scope(&mut window_root, "my-dock");
 ```
 
-Declaratively there is nothing to author: the whole widget is a live host signal, so a described
+Declaratively there is nothing to author: the ring is read off a live tree, so a described
 `FocusScope` would be a dead frame (the same reason [`ScrollBar`](#scrollbar) is host-only). A plugin
 that wants its container to show focus gets it for free — **heca wraps every mounted container
-itself**, together with its dock-pick keycap, and drives the ring from the same signal the
-container's scroll area binds as its keyboard target. See
-[chrome-and-ui.md](chrome-and-ui.md) → chrome keyboard focus.
+itself**, together with its dock-pick keycap. See [chrome-and-ui.md](chrome-and-ui.md) → chrome
+keyboard focus.
 
 ### Tooltip
 

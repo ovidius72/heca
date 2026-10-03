@@ -282,7 +282,9 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
     // (F004/P084/T400). Here the layer claims only the keyboard, and `ActionPolicy` decides the
     // rest — `Global` actions still run, `ContainerFocused` ones do not.
     let modal_holds_keyboard = state.layers.top_modal_id(&state.window_root).is_some();
-    if keyboard_driven && !modal_holds_keyboard && state.chrome_state.focused_container().is_some()
+    if keyboard_driven
+        && !modal_holds_keyboard
+        && crate::app::tree_focus::focused_dock(state).is_some()
     {
         return Domain::Container;
     }
@@ -1067,7 +1069,7 @@ pub(crate) fn focus_container_then_action(
         eprintln!("[heca] interaction: no container mounted as '{container}'");
         return IntentOutcome::NotRunnable;
     }
-    if state.chrome_state.focused_container().as_deref() != Some(container) {
+    if crate::app::tree_focus::focused_dock(state).as_deref() != Some(container) {
         dispatch_action(
             state,
             registry,
