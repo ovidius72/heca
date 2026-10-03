@@ -1,4 +1,5 @@
 use super::*;
+use crate::color::Color;
 use heca_core::layout::{Point, Size};
 
 fn clip(w: f64) -> DrawCommand {
