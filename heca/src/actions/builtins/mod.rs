@@ -23,6 +23,10 @@ mod workspace;
 pub struct ActionDescriptor {
     /// Config key name (e.g. "focus_left").
     pub name: &'static str,
+    /// **Where it runs** — see [`Side`]. Required, like `args`: a struct literal has to fill every
+    /// field, so an action cannot be added without saying which side of the server/client split
+    /// it is on.
+    pub side: super::Side,
     /// Human-readable label for the command palette.
     pub label: &'static str,
     /// Short description of what the action does.
@@ -62,3 +66,6 @@ pub fn builtins_by_category() -> impl Iterator<Item = (ActionCategory, &'static 
 pub fn builtins() -> impl Iterator<Item = &'static ActionDescriptor> {
     builtins_by_category().map(|(_, d)| d)
 }
+
+#[cfg(test)]
+mod tests;

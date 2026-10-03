@@ -1,6 +1,7 @@
 //! The built-in Pane actions, in the order they are listed.
 
 use super::ActionDescriptor;
+use crate::actions::Side;
 use crate::args::{ArgDescriptor, ArgKind};
 use heca_grid_ui::Glyph;
 
@@ -8,6 +9,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // ── Font zoom ──
     ActionDescriptor {
         name: "pane_terminal_font_increase",
+        side: Side::Client,
         label: "Increase Terminal Font",
         description: "Increase the focused pane's terminal font size.",
         icon: None,
@@ -15,6 +17,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "pane_terminal_font_decrease",
+        side: Side::Client,
         label: "Decrease Terminal Font",
         description: "Decrease the focused pane's terminal font size.",
         icon: None,
@@ -22,6 +25,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "pane_terminal_font_reset",
+        side: Side::Client,
         label: "Reset Terminal Font",
         description: "Reset the focused pane to follow the app-wide font size.",
         icon: None,
@@ -29,6 +33,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "close",
+        side: Side::Server,
         label: "Close Pane",
         description: "Close the active pane.",
         // Remove/close pane; pairs with add-pane's FolderSimplePlus (both act on a
@@ -38,6 +43,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "float",
+        side: Side::Server,
         label: "Toggle Float",
         description: "Toggle the active pane between tiling and floating.",
         icon: Some(Glyph::Cards),
@@ -45,6 +51,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "pane_select",
+        side: Side::Client,
         label: "Quick-Select Pane",
         description: "Press a letter to focus it.",
         icon: None,
@@ -52,6 +59,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "open_link",
+        side: Side::Client,
         label: "Open Link",
         description: "Open the hyperlink in the OS default handler.",
         // Constructed with a URL (mouse/HintKey/selection/menu); no global key.
@@ -64,6 +72,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "follow_link",
+        side: Side::Client,
         label: "Follow Link",
         description: "Press a letter to open the link.",
         icon: Some(Glyph::GitBranch),
@@ -74,6 +83,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // "+ focus" variants make the focus-follow difference explicit.
     ActionDescriptor {
         name: "swap_pane",
+        side: Side::Client,
         label: "Quick-Swap Pane",
         description: "Select a pane to swap with — focus stays where it is.",
         icon: None,
@@ -81,6 +91,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "swap_and_focus_pane",
+        side: Side::Client,
         label: "Swap and Focus",
         description: "Select a pane to swap with, then follow focus to it.",
         icon: None,
@@ -88,6 +99,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "pane_take",
+        side: Side::Client,
         label: "Take Pane",
         description: "Select a pane to pull into the active column — focus stays where it is.",
         icon: None,
@@ -95,6 +107,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "pane_take_and_focus",
+        side: Side::Client,
         label: "Take and Focus",
         description: "Select a pane to pull into the active column, then focus it.",
         icon: None,
@@ -102,6 +115,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "rename_pane",
+        side: Side::Client,
         label: "Rename Pane",
         description: "Rename the active pane/tab.",
         icon: Some(Glyph::NotePencil),
@@ -109,6 +123,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "reset_pane_name",
+        side: Side::Server,
         label: "Use Process Name",
         description: "Clear the pane's custom name, reverting to the program name.",
         icon: Some(Glyph::Backspace),
@@ -117,6 +132,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // ── Scrollback (host terminal viewport) ──
     ActionDescriptor {
         name: "scrollback_page_up",
+        side: Side::Client,
         label: "Scrollback Page Up",
         description: "Scroll the terminal viewport up by one page and enter selection mode.",
         icon: None,
@@ -124,6 +140,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scrollback_page_down",
+        side: Side::Client,
         label: "Scrollback Page Down",
         description: "Scroll the terminal viewport down by one page and enter selection mode.",
         icon: None,
@@ -131,6 +148,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scrollback_line_up",
+        side: Side::Client,
         label: "Scrollback Line Up",
         description: "Scroll the terminal viewport up by a configurable number of lines (selection mode).",
         icon: None,
@@ -142,6 +160,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scrollback_line_down",
+        side: Side::Client,
         label: "Scrollback Line Down",
         description: "Scroll the terminal viewport down by a configurable number of lines (selection mode).",
         icon: None,
@@ -153,6 +172,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scrollback_to_top",
+        side: Side::Client,
         label: "Scrollback to Top",
         description: "Jump the terminal viewport to the top of scrollback history.",
         icon: Some(Glyph::CaretUp),
@@ -160,6 +180,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scrollback_to_bottom",
+        side: Side::Client,
         label: "Scrollback to Bottom",
         description: "Snap the terminal viewport to the live bottom (latest output).",
         icon: Some(Glyph::CaretDown),
@@ -167,6 +188,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "exit_scrollback",
+        side: Side::Client,
         label: "Exit Scrollback",
         description: "Snap to the live bottom, clear selection, and exit selection mode.",
         icon: Some(Glyph::XCircle),
@@ -175,6 +197,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // ── Direct scroll (non-prefix, no selection mode entry) ──
     ActionDescriptor {
         name: "scroll_page_up",
+        side: Side::Client,
         label: "Scroll Page Up",
         description: "Scroll the terminal viewport up by one page immediately. Stays in Normal mode, repeatable.",
         icon: None,
@@ -182,6 +205,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scroll_page_down",
+        side: Side::Client,
         label: "Scroll Page Down",
         description: "Scroll the terminal viewport down by one page immediately. Stays in Normal mode, repeatable.",
         icon: None,
@@ -189,6 +213,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scroll_line_up",
+        side: Side::Client,
         label: "Scroll Line Up",
         description: "Scroll the terminal viewport up by a configurable number of lines immediately. Stays in Normal mode, repeatable.",
         icon: None,
@@ -196,6 +221,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scroll_line_down",
+        side: Side::Client,
         label: "Scroll Line Down",
         description: "Scroll the terminal viewport down by a configurable number of lines immediately. Stays in Normal mode, repeatable.",
         icon: None,
@@ -203,6 +229,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scroll_to_top",
+        side: Side::Client,
         label: "Scroll to Top",
         description: "Jump the terminal viewport to the top of scrollback history immediately. Stays in Normal mode, repeatable.",
         icon: Some(Glyph::CaretUp),
@@ -210,6 +237,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scroll_to_bottom",
+        side: Side::Client,
         label: "Scroll to Bottom",
         description: "Snap the terminal viewport to the live bottom immediately. Stays in Normal mode, repeatable.",
         icon: Some(Glyph::CaretDown),
@@ -218,6 +246,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // ── Horizontal scroll (a chrome container's scroll area; a pane has one axis) ──
     ActionDescriptor {
         name: "scroll_to_offset",
+        side: Side::Client,
         label: "Scroll to Offset",
         description: "Jump the terminal viewport to an explicit offset in rows above the live bottom. Used by the GUI scrollbar and RPC; no default keybinding.",
         icon: None,
@@ -230,6 +259,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // ── Selection (host capability) ──
     ActionDescriptor {
         name: "enter_selection_mode",
+        side: Side::Client,
         label: "Enter Selection Mode",
         description: "Enter the host-owned selection input mode. Selection data is driven by surface adapters (mouse, keyboard, RPC).",
         icon: None,
@@ -237,6 +267,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "selection_left",
+        side: Side::Client,
         label: "Selection Left",
         description: "Move the active selection focus one cell left in selection mode.",
         icon: None,
@@ -244,6 +275,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "selection_right",
+        side: Side::Client,
         label: "Selection Right",
         description: "Move the active selection focus one cell right in selection mode.",
         icon: None,
@@ -251,6 +283,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "selection_up",
+        side: Side::Client,
         label: "Selection Up",
         description: "Move the active selection focus one row up in selection mode.",
         icon: None,
@@ -258,6 +291,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "selection_down",
+        side: Side::Client,
         label: "Selection Down",
         description: "Move the active selection focus one row down in selection mode.",
         icon: None,
@@ -265,6 +299,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "clear_selection",
+        side: Side::Client,
         label: "Clear Selection",
         description: "Clear the active selection and exit selection mode if active.",
         icon: None,
@@ -272,6 +307,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "copy_selection",
+        side: Side::Client,
         label: "Copy Selection",
         description: "Copy the active selection text to the system clipboard.",
         icon: None,
@@ -279,6 +315,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "paste_clipboard",
+        side: Side::Client,
         label: "Paste Clipboard",
         description: "Paste system clipboard content into the focused pane (bracketed-paste aware).",
         icon: None,
@@ -286,6 +323,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "begin_selection",
+        side: Side::Client,
         label: "Begin Selection",
         description: "Start a selection from the caret position in selection mode. No-op if a selection already exists — clear first to restart.",
         icon: None,
@@ -293,6 +331,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "toggle_selection_endpoint",
+        side: Side::Client,
         label: "Toggle Selection Endpoint",
         description: "Swap which end of the selection is active so movement grows from the other side.",
         icon: None,
@@ -300,6 +339,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "open_link_at_caret",
+        side: Side::Client,
         label: "Open Link at Caret",
         description: "Open the hyperlink under the selection caret.",
         icon: Some(Glyph::GitBranch),
@@ -307,6 +347,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "search_scrollback",
+        side: Side::Client,
         label: "Search Scrollback",
         description: "Type to search the scrollback; Enter keeps matches, Esc cancels.",
         icon: Some(Glyph::Search),
@@ -314,6 +355,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "search_next_match",
+        side: Side::Client,
         label: "Next Search Match",
         description: "Jump to the next scrollback-search match.",
         icon: Some(Glyph::Search),
@@ -321,6 +363,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "search_prev_match",
+        side: Side::Client,
         label: "Previous Search Match",
         description: "Jump to the previous scrollback-search match.",
         icon: Some(Glyph::CaretDown),
@@ -338,6 +381,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // labels and categories come with it, since metadata lives in one place per action.
     ActionDescriptor {
         name: "float_at",
+        side: Side::Server,
         label: "Float Pane at Position",
         description: "Float a pane at an explicit position and size.",
         icon: None,
@@ -351,6 +395,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "close_pane_by_id",
+        side: Side::Server,
         label: "Close Pane by Id",
         description: "Close a specific pane by id, whether or not it is focused.",
         icon: Some(Glyph::XSquare),
@@ -362,6 +407,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "rename_target",
+        side: Side::Server,
         label: "Rename Pane To",
         description: "Set a pane's name directly, without opening the rename prompt.",
         icon: Some(Glyph::NotePencil),
@@ -372,6 +418,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "rename_pane_by_id",
+        side: Side::Client,
         label: "Rename Pane",
         description: "Open the rename prompt for a specific pane.",
         icon: Some(Glyph::NotePencil),
@@ -383,6 +430,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "reset_pane_name_by_id",
+        side: Side::Server,
         label: "Reset Pane Name",
         description: "Drop a pane's custom name so it follows its process again.",
         icon: None,
@@ -394,6 +442,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "pane_terminal_font_zoom",
+        side: Side::Client,
         label: "Pane Font Zoom",
         description: "Step one terminal pane's font size up, down, or back to following the app.",
         icon: None,
@@ -412,6 +461,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "terminal_run",
+        side: Side::Server,
         label: "Run in Terminal",
         description: "Type a line into a running terminal and press Enter. Name the terminal by `terminal` (its id), or a `pane_id`; with neither, the focused pane's terminal.",
         icon: None,
@@ -436,6 +486,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "terminal_kill",
+        side: Side::Server,
         label: "Kill Terminal",
         description: "End a terminal — the same as closing its pane. Name it by `terminal` (its id) or a `pane_id`; with neither, the focused pane's terminal.",
         icon: None,

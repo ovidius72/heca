@@ -1,12 +1,14 @@
 //! The built-in Navigation actions, in the order they are listed.
 
 use super::ActionDescriptor;
+use crate::actions::Side;
 use crate::args::{ArgDescriptor, ArgKind};
 use heca_grid_ui::Glyph;
 
 pub(super) const ACTIONS: &[ActionDescriptor] = &[
     ActionDescriptor {
         name: "focus_left",
+        side: Side::Client,
         label: "Focus Column Left",
         description: "Move focus to the column on the left.",
         icon: Some(Glyph::CaretLeft),
@@ -14,6 +16,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "focus_right",
+        side: Side::Client,
         label: "Focus Column Right",
         description: "Move focus to the column on the right.",
         icon: Some(Glyph::CaretRight),
@@ -21,6 +24,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "focus_up",
+        side: Side::Client,
         label: "Focus Pane Up",
         description: "Move focus to the pane above in the current column.",
         icon: Some(Glyph::CaretUp),
@@ -28,6 +32,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "focus_down",
+        side: Side::Client,
         label: "Focus Pane Down",
         description: "Move focus to the pane below in the current column.",
         icon: Some(Glyph::CaretDown),
@@ -35,6 +40,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "next_pane",
+        side: Side::Client,
         label: "Next Pane in Column",
         description: "Cycle focus forward through panes in the active column.",
         icon: Some(Glyph::ArrowLineRight),
@@ -42,6 +48,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "prev_pane",
+        side: Side::Client,
         label: "Previous Pane in Column",
         description: "Cycle focus backward through panes in the active column.",
         icon: Some(Glyph::ArrowLineLeft),
@@ -49,6 +56,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "workspace_next",
+        side: Side::Client,
         label: "Next Workspace",
         description: "Switch to the next workspace.",
         icon: Some(Glyph::CaretDown),
@@ -56,6 +64,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "workspace_prev",
+        side: Side::Client,
         label: "Previous Workspace",
         description: "Switch to the previous workspace.",
         icon: Some(Glyph::CaretUp),
@@ -63,6 +72,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "focus_toggle_local",
+        side: Side::Client,
         label: "Last Pane",
         description: "Toggle between current and last-focused pane in the same workspace.",
         icon: None,
@@ -70,6 +80,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "focus_toggle_global",
+        side: Side::Client,
         label: "Last Workspace",
         description: "Toggle between current and last-visited workspace.",
         icon: None,
@@ -87,6 +98,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // labels and categories come with it, since metadata lives in one place per action.
     ActionDescriptor {
         name: "focus_pane",
+        side: Side::Client,
         label: "Focus Pane",
         description: "Move focus to a specific pane by id.",
         icon: None,
@@ -98,6 +110,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "focus_workspace",
+        side: Side::Client,
         label: "Focus Workspace",
         description: "Switch to a specific workspace by index.",
         icon: None,
@@ -109,6 +122,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "hint_pick",
+        side: Side::Client,
         label: "Pick with Letters",
         description: "Put a letter on everything you can act on; press one to act on it.",
         icon: Some(Glyph::Lightning),

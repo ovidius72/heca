@@ -1,12 +1,14 @@
 //! The built-in Workspace actions, in the order they are listed.
 
 use super::ActionDescriptor;
+use crate::actions::Side;
 use crate::args::{ArgDescriptor, ArgKind};
 use heca_grid_ui::Glyph;
 
 pub(super) const ACTIONS: &[ActionDescriptor] = &[
     ActionDescriptor {
         name: "create_workspace",
+        side: Side::Server,
         label: "Create Workspace",
         description: "Create a new workspace and switch to it.",
         icon: Some(Glyph::StackPlus),
@@ -14,6 +16,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "rename_workspace",
+        side: Side::Client,
         label: "Rename Workspace",
         description: "Rename the current workspace.",
         icon: Some(Glyph::NotePencil),
@@ -21,6 +24,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "reset_workspace_name",
+        side: Side::Server,
         label: "Use Default Name",
         description: "Clear the workspace's custom name, reverting to \"Workspace N\".",
         icon: Some(Glyph::Backspace),
@@ -28,6 +32,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "delete_workspace",
+        side: Side::Server,
         label: "Delete Workspace",
         description: "Delete a workspace and all its panes (not the last workspace).",
         icon: Some(Glyph::StackMinus),
@@ -49,6 +54,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // labels and categories come with it, since metadata lives in one place per action.
     ActionDescriptor {
         name: "rename_workspace_by_idx",
+        side: Side::Client,
         label: "Rename Workspace",
         description: "Open the rename prompt for a specific workspace.",
         icon: Some(Glyph::NotePencil),
@@ -60,6 +66,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "reset_workspace_name_by_idx",
+        side: Side::Server,
         label: "Reset Workspace Name",
         description: "Drop a workspace's custom name so it follows its default again.",
         icon: None,

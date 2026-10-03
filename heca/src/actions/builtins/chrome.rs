@@ -1,12 +1,14 @@
 //! The built-in Chrome actions, in the order they are listed.
 
 use super::ActionDescriptor;
+use crate::actions::Side;
 use crate::args::{ArgDescriptor, ArgKind};
 use heca_grid_ui::Glyph;
 
 pub(super) const ACTIONS: &[ActionDescriptor] = &[
     ActionDescriptor {
         name: "cursor_to",
+        side: Side::Client,
         label: "Move Container Cursor",
         description: "Put a mounted container's cursor on a named row. Moves the cursor and nothing else.",
         icon: None,
@@ -25,6 +27,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "focus_dock",
+        side: Side::Client,
         label: "Focus Dock",
         description: "Give chrome keyboard focus to a dock — press a letter to pick one, or name it.",
         icon: None,
@@ -39,6 +42,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "toggle_dock",
+        side: Side::Client,
         label: "Toggle Dock Focus",
         description: "Give a dock the keyboard, or hand it back if that dock already has it.",
         icon: None,
@@ -53,6 +57,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "clear_search_history",
+        side: Side::Client,
         label: "Clear Search History",
         description: "Forget the past queries the command palette remembers.",
         icon: None,
@@ -67,6 +72,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "clear_search_ranking",
+        side: Side::Client,
         label: "Clear Search Ranking",
         description: "Forget which commands you use, so the palette stops ordering by habit.",
         icon: None,
@@ -78,6 +84,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "unfocus_dock",
+        side: Side::Client,
         label: "Release Dock Focus",
         description: "Give the keyboard back to the focused pane, releasing chrome focus.",
         icon: None,
@@ -85,6 +92,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "sidebar_left",
+        side: Side::Client,
         label: "Toggle Left Sidebar",
         description: "Show or hide the left sidebar.",
         icon: Some(Glyph::Sidebar),
@@ -92,6 +100,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "sidebar_right",
+        side: Side::Client,
         label: "Toggle Right Sidebar",
         description: "Show or hide the right sidebar.",
         icon: Some(Glyph::Sidebar),
@@ -101,6 +110,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // in config with a region, and the palette offers it once per region.
     ActionDescriptor {
         name: "set_region_visible",
+        side: Side::Client,
         label: "Set Region Visibility",
         description: "Show, hide or toggle a chrome region (sidebar or bar) — hidden means fully unmounted.",
         icon: Some(Glyph::Sidebar),
@@ -126,6 +136,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // and carry no default binding.
     ActionDescriptor {
         name: "chrome.container.move_to_region",
+        side: Side::Client,
         label: "Move Container to Region",
         description: "Move a chrome container to another region (left/right sidebar, top/bottom bar).",
         icon: Some(Glyph::ArrowLineRight),
@@ -144,6 +155,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "chrome.container.move_left_sidebar",
+        side: Side::Client,
         label: "Move Container to Left Sidebar",
         description: "Move a chrome container into the left sidebar.",
         icon: Some(Glyph::ArrowLineLeft),
@@ -155,6 +167,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "chrome.container.move_right_sidebar",
+        side: Side::Client,
         label: "Move Container to Right Sidebar",
         description: "Move a chrome container into the right sidebar.",
         icon: Some(Glyph::ArrowLineRight),
@@ -166,6 +179,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "chrome.container.reorder_before",
+        side: Side::Client,
         label: "Reorder Container Before",
         description: "Move a chrome container before another in its region (omit the target to move it to the end).",
         icon: None,
@@ -184,6 +198,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "chrome.container.reorder_after",
+        side: Side::Client,
         label: "Reorder Container After",
         description: "Move a chrome container after another in its region.",
         icon: None,
@@ -202,6 +217,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "collapse_current_workspace",
+        side: Side::Client,
         label: "Collapse Workspace Row",
         description: "Collapse the active workspace row in the sidebar tree UI.",
         icon: None,
@@ -209,6 +225,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "expand_current_workspace",
+        side: Side::Client,
         label: "Expand Workspace Row",
         description: "Expand the active workspace row in the sidebar tree UI.",
         icon: None,
@@ -216,6 +233,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "toggle_current_workspace_collapsed",
+        side: Side::Client,
         label: "Toggle Workspace Row",
         description: "Toggle the active workspace row collapsed state in the sidebar tree UI.",
         icon: None,
@@ -223,6 +241,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "collapse_current_column",
+        side: Side::Client,
         label: "Collapse Column Row",
         description: "Collapse the focused tiled column row in the sidebar tree UI.",
         icon: None,
@@ -230,6 +249,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "expand_current_column",
+        side: Side::Client,
         label: "Expand Column Row",
         description: "Expand the focused tiled column row in the sidebar tree UI.",
         icon: None,
@@ -237,6 +257,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "toggle_current_column_collapsed",
+        side: Side::Client,
         label: "Toggle Column Row",
         description: "Toggle the focused tiled column row collapsed state in the sidebar tree UI.",
         icon: None,
@@ -244,6 +265,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "submit_overlay",
+        side: Side::Client,
         label: "Choose Overlay Button",
         description: "Choose a button of the front-most dialog or menu, by its id — as clicking it would.",
         icon: None,
@@ -257,6 +279,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "close_overlay",
+        side: Side::Client,
         label: "Close Overlay",
         description: "Dismiss the front-most overlay — the exposé, a dialog, a menu.",
         icon: None,
@@ -266,6 +289,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "show_layer",
+        side: Side::Client,
         label: "Show Layer",
         description: "Bring an addressable layer into the stack — an expose, a plugin panel.",
         icon: None,
@@ -286,6 +310,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "hide_layer",
+        side: Side::Client,
         label: "Hide Layer",
         description: "Take an addressable layer back out of the stack.",
         icon: None,
@@ -306,6 +331,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "toggle_layer",
+        side: Side::Client,
         label: "Toggle Layer",
         description: "Show an addressable layer if hidden, hide it if shown.",
         icon: None,
@@ -327,6 +353,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // ── Notifications (F009) ──
     ActionDescriptor {
         name: "notification_dismiss_one",
+        side: Side::Client,
         label: "Dismiss Notification",
         description: "Dismiss a visible notification by id, when its lifecycle permits it.",
         icon: Some(Glyph::XSquare),
@@ -338,6 +365,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "notification_dismiss_all",
+        side: Side::Client,
         label: "Dismiss All Notifications",
         description: "Dismiss every currently visible notification.",
         icon: Some(Glyph::XSquare),
@@ -345,6 +373,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "notification_dismiss_last",
+        side: Side::Client,
         label: "Dismiss Last Notification",
         description: "Dismiss the first eligible visible notification in stable toast order.",
         icon: Some(Glyph::XSquare),
@@ -352,6 +381,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "notification_pick",
+        side: Side::Client,
         label: "Pick Notification Action",
         description: "Open a scoped picker over the visible toast actions/dismiss affordances, in addition to their global prefix+/ letters.",
         icon: None,
@@ -359,6 +389,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "notification_action_relay",
+        side: Side::Client,
         label: "Run Notification Action",
         description: "Internal: the toast's inline action button cannot carry its own Intent (the notification, and therefore the Intent, does not exist yet when the button is built at mount time), so it names this relay by id + key instead — an address, not a smuggled closure — and the relay resolves it against the store and dispatches it. Not meant to be bound directly.",
         icon: None,
@@ -374,6 +405,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // ── Horizontal scroll (a chrome container's scroll area; a pane has one axis) ──
     ActionDescriptor {
         name: "scroll_page_left",
+        side: Side::Client,
         label: "Scroll Page Left",
         description: "Scroll the focused chrome container one page left. Does nothing when no dock holds chrome focus — a terminal viewport has no horizontal axis.",
         icon: None,
@@ -381,6 +413,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scroll_page_right",
+        side: Side::Client,
         label: "Scroll Page Right",
         description: "Scroll the focused chrome container one page right. Does nothing when no dock holds chrome focus — a terminal viewport has no horizontal axis.",
         icon: None,
@@ -388,6 +421,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scroll_to_left_edge",
+        side: Side::Client,
         label: "Scroll to Left Edge",
         description: "Jump the focused chrome container to its left edge. Does nothing when no dock holds chrome focus.",
         icon: None,
@@ -395,6 +429,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scroll_to_right_edge",
+        side: Side::Client,
         label: "Scroll to Right Edge",
         description: "Jump the focused chrome container to its right edge. Does nothing when no dock holds chrome focus.",
         icon: None,
