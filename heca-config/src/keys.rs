@@ -245,7 +245,7 @@ pub struct KeysConfig {
     #[serde(default)]
     pub bind: Vec<ModeBindingConfig>,
     /// Widget-internal keybindings (`[keys.widgets]`): the generic, cross-widget navigation +
-    /// editing vocabulary (`item_next`/`item_previous`, `menu_up`/`menu_down`, `menu_history_up`/`menu_history_down`, `activate`,
+    /// editing vocabulary (`item_next`/`item_previous`, `menu_up`/`menu_down`, `menu_history_up`/`menu_history_down`, `find`/`find_next`/`find_previous`, `activate`,
     /// `dismiss`, `edit_*`) that the app resolves into a `heca_grid_ui::Keymap`. Applies only
     /// while an interactive widget/overlay is focused; never hijacks normal-mode input.
     #[serde(default)]

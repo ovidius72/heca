@@ -850,6 +850,16 @@ pub enum WidgetIntent {
     /// A **newer** past query, and past the newest, the draft the walk interrupted.
     /// `menu_history_down`.
     MenuHistoryDown,
+    /// **Open this terminal's search** — whichever terminal holds the keyboard answers. `find`.
+    ///
+    /// Vocabulary for anything that has a body of text to look through: it names the capability
+    /// and leaves the key to the user (`[keys.widgets]`; unbound by default).
+    Find,
+    /// **The next match** of the search that is open. `find_next`.
+    FindNext,
+    /// **The previous match** of the search that is open. `find_previous`.
+    FindPrevious,
+
     /// Activate / commit / submit the current entry or primary action. `activate`.
     Activate,
     /// Dismiss / cancel / close the overlay. `dismiss`.

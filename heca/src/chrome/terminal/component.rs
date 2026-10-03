@@ -6,13 +6,14 @@ use std::rc::Rc;
 use heca_core::layout::Rectangle;
 use heca_grid_ui::{Point, Size};
 
-use super::input::{Cell as GridCell, Seams, TerminalCommand, TerminalInput};
+use super::input::{Cell as GridCell, Seams, Search, TerminalCommand, TerminalInput};
 use super::model::TerminalId;
+use super::search::{SearchBar, SearchSlot};
 use super::shared::{Declared, Shared};
 use super::viewport::{Controls, IntentSlot, Viewport};
 use crate::app::backend_store::Program;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt};
-use heca_grid_ui::component::{Base, Component, PaintCx};
+use heca_grid_ui::component::{Base, Component, GridKey, PaintCx, WidgetIntent};
 use heca_grid_ui::event::EventKind;
 use heca_grid_ui::style::Length;
 
@@ -45,6 +46,7 @@ impl Terminal {
             reported: Cell::new(None),
             controls: RefCell::default(),
             declared: RefCell::new(None),
+            search: SearchSlot::default(),
         }))
     }
 
@@ -66,6 +68,9 @@ impl Terminal {
         // walk, so placing a terminal anywhere places them with it.
         let (controls, layers) = Controls::build(&shared.intents);
         base.children.extend(layers);
+        // **So is its search**: the bar over the picture, drawn by the same walk, hearing the same
+        // keyboard. Declared after the controls, so it is on top of them.
+        base.children.push(Box::new(SearchBar::new(shared.clone())));
         let controls = Rc::new(controls);
         shared.controls.borrow_mut().add(&controls);
         let me = shared.clone();
@@ -197,7 +202,59 @@ impl Terminal {
     pub(crate) fn show(&self, viewport: &Viewport) -> bool {
         self.shared.cell.set(viewport.cell);
         self.shared.nominal.set(viewport.nominal_cell);
-        self.shared.controls.borrow_mut().show(viewport)
+        let search = &self.shared.search;
+        let highlights_changed = search.set_view(viewport.top_stable_row, viewport.rows)
+            | search.set_look(viewport.match_alpha, viewport.current_match_alpha);
+        self.shared.controls.borrow_mut().show(viewport) | highlights_changed
+    }
+
+    /// **Open the search bar and put the keyboard in its field** — the handle's `find`. Works
+    /// wherever the terminal is placed; the bar is its own.
+    pub fn find(&self) {
+        self.shared.search.open();
+    }
+
+    /// Whether the search bar is open — what a test asks, since the bar itself is the user's view.
+    #[cfg(test)]
+    pub(crate) fn search_open(&self) -> bool {
+        self.shared.search.is_open()
+    }
+
+    /// **Dismiss the search** — the bar goes, and the matches and the query with it.
+    pub fn close_search(&self) {
+        self.shared.search.close();
+    }
+
+    /// **Go to the next match** of the search that is open.
+    pub fn find_next(&self) {
+        self.shared.step(true);
+    }
+
+    /// **Go to the previous match** of the search that is open.
+    pub fn find_previous(&self) {
+        self.shared.step(false);
+    }
+
+    /// **Move to the next or previous match**, wrapping. Returns whether it moved, so the caller
+    /// can ask for a frame. The terminal holds the matches, so it is the one that steps.
+    pub(crate) fn step_match(&self, forward: bool) -> bool {
+        self.shared.search.step(forward)
+    }
+
+    /// The match the search is on, if any: where the caller scrolls to.
+    pub(crate) fn current_match(&self) -> Option<heca_core::backend::SearchMatch> {
+        self.shared.search.current_match()
+    }
+
+    /// **Show these matches**, `current` the focused one — what the owner found for the query the
+    /// terminal said. Returns whether anything the user can see changed: the same result again
+    /// changes nothing and asks for no frame.
+    pub(crate) fn show_matches(
+        &self,
+        matches: Vec<heca_core::backend::SearchMatch>,
+        current: Option<usize>,
+    ) -> bool {
+        self.shared.search.set_result(matches, current)
     }
 
     /// **Type a line into this terminal and press Enter** — the handle's `run`. Does nothing until the
@@ -280,6 +337,13 @@ impl Terminal {
     }
 }
 
+impl Terminal {
+    /// The search is open and the keyboard is not on the terminal itself: it is in the bar.
+    fn keyboard_is_in_search(&self) -> bool {
+        self.shared.search.is_open() && !self.base.is_focused()
+    }
+}
+
 impl Clone for Terminal {
     /// Another view of the same terminal: a separate node for a tree, the same name and the same
     /// report of its size.
@@ -305,6 +369,9 @@ impl Component for Terminal {
         if let Some(id) = self.shared.id.get() {
             cx.surface(self.base.bounds, id.0);
         }
+        self.shared
+            .search
+            .paint_highlights(cx, self.base.bounds.loc, self.shared.cell.get());
         for child in &self.base.children {
             heca_grid_ui::paint_child(child.as_ref(), cx);
         }
@@ -333,6 +400,31 @@ impl Component for Terminal {
                 }
                 false
             }
+            // **While the keyboard is in the search field, the field's keys are not the program's.**
+            // What the field did not take bubbles here: Enter keeps the matches and gives the
+            // keyboard to the terminal, Escape dismisses the search, and nothing else is typed
+            // into the process behind the bar.
+            Event::TextInput(_) | Event::Key { .. } if self.keyboard_is_in_search() => {
+                if let Event::Key { key, pressed: true } = ev {
+                    match key {
+                        GridKey::Enter => self.base.focus(false),
+                        GridKey::Escape => {
+                            self.shared.search.close();
+                            self.shared.emit(TerminalInput::Search(Search::Close));
+                            self.base.focus(false);
+                        }
+                        _ => {}
+                    }
+                }
+                true
+            }
+            // **What a user binds to find answers here** — to whichever terminal holds the keyboard.
+            Event::Widget(WidgetIntent::Find) => {
+                self.shared.search.open();
+                true
+            }
+            Event::Widget(WidgetIntent::FindNext) => self.shared.step(true),
+            Event::Widget(WidgetIntent::FindPrevious) => self.shared.step(false),
             Event::TextInput(text) => self.shared.emit(TerminalInput::Text(text.clone())),
             Event::Key { key, pressed: true } => self.shared.emit(TerminalInput::Key {
                 key: *key,

@@ -98,7 +98,6 @@ pub(crate) fn close_pane_by_id_anywhere(state: &mut AppState, pane_id: PaneId) -
     for (ws_idx, ws) in state.session.workspaces.iter_mut().enumerate() {
         if let Some(removed) = crate::app::pane_ops::remove_pane_by_id(ws, pane_id) {
             state.backends.kill_for_pane(removed.pane.id);
-            state.clear_search(removed.pane.id);
             removed_ws_idx = Some(ws_idx);
             break;
         }

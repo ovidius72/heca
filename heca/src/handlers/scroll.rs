@@ -128,8 +128,11 @@ pub fn handle_exit_scrollback(state: &mut AppState, _action: &WmAction) {
     state.selection.clear();
     // Leaving the copy-mode session also ends that pane's scrollback search; other
     // panes keep theirs.
-    if let Some(pane) = state.search_target_pane() {
-        state.clear_search(pane);
+    if let Some(terminal) = state.search_target() {
+        // Its bar closes with it: leaving copy-mode ends the search the terminal was showing.
+        if let Some(handle) = state.terminals.get(&terminal) {
+            handle.close_search();
+        }
     }
     if matches!(state.input_mode, InputMode::Selection) {
         state.input_mode = InputMode::Normal;

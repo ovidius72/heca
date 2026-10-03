@@ -2062,6 +2062,7 @@ demo.terminal("logs").command("tail -f app.log").cwd(dir)
 | `.title("…")` | what the user reads; defaults to the name. The user can rename it like a pane |
 | `.run("ls")` | type a line into it and press Enter. Does nothing until it has started |
 | `.kill()` | end it — the one thing that does |
+| `.find()` / `.find_next()` / `.find_previous()` | open its search bar with the keyboard in the field / step to the next / previous match. Works wherever it is placed |
 | `.grow(..)` / `.width(..)` … | the layout builders every widget has |
 
 **Removing it never ends it.** Closing the dock, rebuilding the tree or hiding the overlay is like
@@ -2081,8 +2082,19 @@ In a dock the terminal gets the key first, as any focused widget does, and the d
 sidebar's `j`/`k`/`Enter`, the `focus` floor's paging keys) act on what it did not take — so a vim in
 a docked terminal gets its PageUp. The one reserved key is the way out: `Escape` leaves the dock as
 shipped, ahead of the terminal, so it cannot trap you. Move it in the `focus` block (see the README)
-and `Escape` reaches the program like any other key. Selecting text, search
-and link hints for terminals no pane owns arrive with P094(F011)/T449 slice 5c.
+and `Escape` reaches the program like any other key. Selecting text and link hints
+for terminals no pane owns arrive with P094(F011)/T449 slice 5c.
+
+**It searches itself.** The search bar — a query field and a match counter — is a **child of the
+terminal**, drawn at its bottom-right corner by the same walk as the scrollback chip, so placing a
+terminal anywhere places its search with it and nothing is wired by whoever placed it. The terminal
+also paints the highlights on its matches (the current one bolder). The user opens it with the
+`search_scrollback` action; a terminal that holds the keyboard answers the `find` intent too, so
+`[keys.widgets] find = "ctrl+shift+f"` (also `find_next`, `find_previous`; unbound by default) opens
+the search of whichever terminal has the keyboard. While the field has the keyboard what is typed is
+the query, not the program's; **Enter** leaves the field and keeps the matches (`n`/`N` step), **Escape**
+dismisses the search. The terminal only says what the user did; the owner finds the matches (it holds
+the process) and shows them back, and an unchanged result asks for no frame.
 
 ### Grid
 

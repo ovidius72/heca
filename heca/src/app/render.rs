@@ -35,7 +35,7 @@ pub(crate) fn status_mode_parts(
         InputMode::HintPick { .. } => {
             ("HINT", " — press a letter to activate a target".to_string())
         }
-        InputMode::Search => (
+        InputMode::Search { .. } => (
             "SEARCH",
             " — type to search, Enter to keep, Esc to cancel".to_string(),
         ),

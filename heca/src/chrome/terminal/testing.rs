@@ -45,3 +45,23 @@ pub(crate) fn header_above(
     LayoutEngine::new().compute(root.as_mut(), Size::new(w, h));
     root
 }
+
+/// Seams that keep what the terminal said, and the list it said it to.
+pub(crate) fn recording() -> (
+    super::input::Seams,
+    std::rc::Rc<std::cell::RefCell<Vec<super::input::TerminalInput>>>,
+) {
+    use super::input::Seams;
+    use super::viewport::ScrollIntents;
+    let said = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let seen = said.clone();
+    let seams = Seams {
+        scroll: ScrollIntents {
+            to_bottom: Box::new(|| {}),
+            to_offset: Box::new(|_| {}),
+        },
+        input: Box::new(move |i| seen.borrow_mut().push(i)),
+        command: Box::new(|_, _| {}),
+    };
+    (seams, said)
+}

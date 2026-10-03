@@ -1,5 +1,5 @@
 use super::super::input::Grid;
-use super::super::testing::{header_above, laid_out_in};
+use super::super::testing::{header_above, laid_out_in, recording};
 use super::*;
 use heca_grid_ui::scene::{DrawCommand, HostDraw, Scene};
 use heca_grid_ui::theme::Theme;
@@ -109,21 +109,6 @@ fn seams(scroll: ScrollIntents) -> Seams {
     }
 }
 
-/// Seams that keep what the terminal said.
-fn recording() -> (Seams, Rc<RefCell<Vec<TerminalInput>>>) {
-    let said = Rc::new(RefCell::new(Vec::new()));
-    let seen = said.clone();
-    let seams = Seams {
-        scroll: ScrollIntents {
-            to_bottom: Box::new(|| {}),
-            to_offset: Box::new(|_| {}),
-        },
-        input: Box::new(move |i| seen.borrow_mut().push(i)),
-        command: Box::new(|_, _| {}),
-    };
-    (seams, said)
-}
-
 fn scrolled(offset: usize) -> Viewport {
     Viewport {
         rows: 24,
@@ -132,6 +117,9 @@ fn scrolled(offset: usize) -> Viewport {
         scrollbar: ScrollbarVisibility::WhenNeeded,
         badge: true,
         cell: (10.0, 20.0),
+        top_stable_row: 0,
+        match_alpha: 64,
+        current_match_alpha: 150,
         nominal_cell: (10.0, 20.0),
     }
 }

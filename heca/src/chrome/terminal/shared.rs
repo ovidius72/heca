@@ -8,8 +8,9 @@ use std::cell::{Cell, RefCell};
 use heca_core::layout::Rectangle;
 use heca_grid_ui::Size;
 
-use super::input::{Cell as GridCell, Grid, TerminalInput};
+use super::input::{Cell as GridCell, Grid, Search, TerminalInput};
 use super::model::TerminalId;
+use super::search::SearchSlot;
 use super::viewport::{IntentSlot, Placed};
 use crate::app::backend_store::Program;
 
@@ -39,6 +40,8 @@ pub(super) struct Shared {
     pub(super) controls: RefCell<Placed>,
     /// What an extension asked of it, if it placed it by name (`demo.terminal("shell")`).
     pub(super) declared: RefCell<Option<Declared>>,
+    /// Its search: whether the bar is open, the query, and the matches it was told to show.
+    pub(super) search: SearchSlot,
 }
 
 /// **What an extension declared about a terminal it placed.** The name is the identity and never
@@ -81,6 +84,11 @@ impl Shared {
         if self.emit(TerminalInput::Resize(grid)) {
             self.reported.set(Some(grid));
         }
+    }
+
+    /// Ask the owner to step to the next or previous match. `false` when nobody listens.
+    pub(super) fn step(&self, forward: bool) -> bool {
+        self.emit(TerminalInput::Search(Search::Step { forward }))
     }
 
     /// The grid cell the pointer is on, if it is on the grid.

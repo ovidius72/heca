@@ -9,8 +9,7 @@ use crate::app::interaction::dispatch_action_ref;
 use crate::app::keyboard::{winit_key_to_backend_event, winit_key_to_terminal_input};
 use crate::app_state::{AppState, InputMode};
 use crate::keymap::{KeyCombo, Keymaps};
-use heca_grid_ui::Component as _;
-use winit::keyboard::{Key, NamedKey, PhysicalKey};
+use winit::keyboard::{Key, PhysicalKey};
 
 mod modes;
 mod pick_modes;
@@ -201,8 +200,8 @@ pub(crate) fn handle_keyboard_input(
         InputMode::HintPick { candidates } => {
             handle_hint_pick_mode(registry, state, &candidates, ctx);
         }
-        InputMode::Search => {
-            handle_search_mode(state, ctx);
+        InputMode::Search { terminal } => {
+            handle_search_mode(state, terminal, ctx);
         }
         InputMode::PaneSwap {
             candidates,
@@ -243,70 +242,21 @@ pub(crate) fn handle_keyboard_input(
     }
 }
 
-/// Scrollback-search query entry (`InputMode::Search`). Mirrors rename-style buffer
-/// editing: characters/backspace edit the query and re-run the search live; Enter
-/// keeps the matches and returns to selection mode (so `n`/`N` navigate there); Esc
-/// cancels the search. terminal-task-19.
-fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
-    let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
-    let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
-
-    if is_escape {
-        // Cancels only this pane's search; other panes keep theirs.
-        if let Some(pane) = state.search_target_pane() {
-            state.clear_search(pane);
-        }
-        state.input_mode = InputMode::Selection;
-        state.needs_redraw = true;
-        return;
-    }
-    if is_enter {
-        // Keep the matches for n/N; just leave query-entry. The field is no longer
-        // taking keys, so it must not keep showing a caret as though it were.
-        if let Some(search) = state.active_search_mut() {
-            search.input.borrow().base().blur();
-        }
-        state.input_mode = InputMode::Selection;
-        state.needs_redraw = true;
-        return;
-    }
-
-    // Everything else is *text editing*, so it goes to the `Input` through the same
-    // host-owned widget keymap every other field uses (`widget-keys-config`). That is
-    // what makes `Ctrl+u`, `Ctrl+w`, select-all and caret motion behave here exactly
-    // as they do in a dialog or the command palette — this handler used to parse
-    // Backspace and single characters itself and silently ignored the rest.
-    let Some((combo_key, mods)) = crate::app::registry::combo_to_grid(ctx.event_combo) else {
-        return;
-    };
-    // Typed text goes in as text, before the chord is resolved: `Event::TextInput` carries what
-    // the platform says the key produced, so case and shifted symbols survive without the host
-    // patching the key it sends. Mirrors the overlay path.
-    let mut edited = false;
-    if let Some(text) = heca_grid_ui::typed_text(Some(ctx.key_text), mods)
-        && let Some(search) = state.active_search_mut()
-    {
-        let ev = heca_grid_ui::Event::TextInput(text);
-        let handled = heca_grid_ui::dispatch(&mut *search.input.borrow_mut(), &ev);
-        if handled == heca_grid_ui::Handled::Yes {
-            crate::app::terminal_host::run_scrollback_search(state);
-            state.needs_redraw = true;
-            return;
-        }
-    }
-    let key = combo_key;
-    let keymap = state.widget_keymap.clone();
-    keymap.dispatch(key, mods, |ev| match state.active_search_mut() {
-        Some(search) => {
-            let handled = heca_grid_ui::dispatch(&mut *search.input.borrow_mut(), ev);
-            edited |= handled == heca_grid_ui::Handled::Yes;
-            handled
-        }
-        None => heca_grid_ui::Handled::No,
-    });
-    if edited {
-        crate::app::terminal_host::run_scrollback_search(state);
-    }
+/// **A terminal's search field has the keyboard**, so what is typed goes into the terminal's own
+/// tree, where the field takes it through the same rule as every other field: text as text, the
+/// editing shortcuts as the intents they resolve to. Enter and Escape come back as the terminal's
+/// own messages (keep the matches, dismiss the search), which is also what leaves this mode.
+fn handle_search_mode(
+    state: &mut AppState,
+    terminal: crate::chrome::terminal::TerminalId,
+    ctx: KeyInputContext<'_>,
+) {
+    crate::app::tree_keys::deliver_press_to_terminal_tree(
+        state,
+        terminal,
+        ctx.event_combo,
+        ctx.key_text,
+    );
     state.needs_redraw = true;
 }
 

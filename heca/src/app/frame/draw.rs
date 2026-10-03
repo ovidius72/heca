@@ -370,8 +370,6 @@ impl Frame {
         crate::chrome::paint_link_hints(state, &mut scene, w, h, &theme);
         // Visual-bell flash over the content area (fades out). terminal-task-17.
         crate::chrome::paint_bell_flash(state, &mut scene, self.v.pane_area, w, h, &theme);
-        // Scrollback-search match highlights + query bar. terminal-task-19.
-        crate::chrome::paint_search(state, &mut scene, w, h, &theme);
 
         // The trees just built may have declared terminals: one more frame starts and draws them.
         if crate::chrome::terminal::declared_waiting() {

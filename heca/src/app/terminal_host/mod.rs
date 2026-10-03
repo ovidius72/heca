@@ -18,7 +18,7 @@ pub(crate) use hyperlinks::{
     cell_screen_pos, collect_link_hints, hyperlink_uri_at_position, hyperlink_uri_at_stable_cell,
 };
 pub(crate) use input::{HeardPresses, on_left_release, on_terminal_input};
-pub(crate) use search::{enter_scrollback_search, run_scrollback_search, search_step};
+pub(crate) use search::{enter_scrollback_search, search_step};
 pub(crate) use selection::{
     ensure_caret_visible, enter_selection_mode_for_focused_terminal,
     move_focused_terminal_selection,

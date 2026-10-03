@@ -101,9 +101,6 @@ pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
         .map(|col| col.panes.iter().map(|p| p.id).collect())
         .unwrap_or_default();
 
-    for &id in &pane_ids {
-        state.clear_search(id);
-    }
     state.backends.kill_all(pane_ids);
 
     // Remove the column
@@ -143,9 +140,6 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
         })
         .unwrap_or_default();
 
-    for &id in &pane_ids {
-        state.clear_search(id);
-    }
     state.backends.kill_all(pane_ids);
 
     // Remove the workspace

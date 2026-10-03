@@ -23,6 +23,18 @@ impl FocusedSurface {
     }
 }
 
+/// The press a combo and its text make, in the tree's terms. `None` when the key has no tree form.
+fn press_of(combo: &KeyCombo, key_text: &str) -> Option<heca_grid_ui::KeyPress> {
+    // The already-normalized combo, which carries the macOS physical-key fallback for
+    // `Ctrl+letter`, unlike the raw logical key — so vim-style `Ctrl+h/j/k/l` resolve correctly.
+    let (key, mods) = crate::app::registry::combo_to_grid(combo)?;
+    Some(heca_grid_ui::KeyPress {
+        key,
+        text: Some(key_text.to_string()),
+        mods,
+    })
+}
+
 /// Give one key press to the window tree: the committed text, the key, then the intents the key
 /// resolves to — in that order, written once inside `Keymap::deliver_press`, so every surface feeds
 /// a widget identically.
@@ -34,17 +46,30 @@ pub(crate) fn deliver_press_to_tree(
     combo: &KeyCombo,
     key_text: &str,
 ) -> Option<Handled> {
-    // The already-normalized combo, which carries the macOS physical-key fallback for
-    // `Ctrl+letter`, unlike the raw logical key — so vim-style `Ctrl+h/j/k/l` resolve correctly.
-    let (key, mods) = crate::app::registry::combo_to_grid(combo)?;
-    let press = heca_grid_ui::KeyPress {
-        key,
-        text: Some(key_text.to_string()),
-        mods,
-    };
-    let keymap = state.widget_keymap.clone();
-    Some(keymap.deliver_press(&press, |ev| {
+    let press = press_of(combo, key_text)?;
+    // The keymap and the tree are different fields, so both are borrowed as they are: no copy.
+    Some(state.widget_keymap.deliver_press(&press, |ev| {
         heca_grid_ui::dispatch(&mut state.window_root, ev)
+    }))
+}
+
+/// Give one key press to **the tree a terminal lives in**: its pane's own tree, or the window's for
+/// a terminal no pane owns. The same delivery as [`deliver_press_to_tree`], aimed at a tree the
+/// window's keyboard does not own yet (pane trees are not part of it).
+pub(crate) fn deliver_press_to_terminal_tree(
+    state: &mut AppState,
+    terminal: crate::chrome::terminal::TerminalId,
+    combo: &KeyCombo,
+    key_text: &str,
+) -> Option<Handled> {
+    let press = press_of(combo, key_text)?;
+    let pane = state.backends.pane_of(terminal);
+    // Keymap, pane trees and window tree are different fields: borrowed as they are, no copy.
+    Some(state.widget_keymap.deliver_press(&press, |ev| {
+        match pane.and_then(|pane| state.panes.get_mut(&pane)) {
+            Some(retained) => heca_grid_ui::dispatch(&mut retained.root, ev),
+            None => heca_grid_ui::dispatch(&mut state.window_root, ev),
+        }
     }))
 }
 

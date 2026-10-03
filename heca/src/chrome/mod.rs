@@ -52,12 +52,10 @@ pub(crate) use dispatch::{
 use scene::chrome_scene;
 #[allow(unused_imports)]
 use scene::{
-    ChromeFrame, build_region_content, build_sidebar_shell, pass_box_down, search_bar_tree,
-    search_field_slot, sidebar_toggle_button, with_flex,
+    ChromeFrame, build_region_content, build_sidebar_shell, pass_box_down, sidebar_toggle_button,
+    with_flex,
 };
-pub(crate) use scene::{
-    build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints, paint_search,
-};
+pub(crate) use scene::{build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints};
 mod layers_glue;
 pub(crate) use layers_glue::{rebuild_named_layer, register_named_layer};
 mod notification_layer;
@@ -2349,95 +2347,5 @@ mod tests {
                 "a resize to {w} rebuilt the header instead of re-laying it out"
             );
         }
-    }
-}
-
-#[cfg(test)]
-mod search_bar_tests {
-    use super::*;
-
-    /// A pane deliberately far from the window origin: a bar placed relative to the
-    /// window instead of the pane lands nowhere near this rect.
-    fn pane() -> Rectangle {
-        Rectangle::new(Point::new(600.0, 100.0), Size::new(640.0, 1400.0))
-    }
-
-    fn viewport() -> Size {
-        Size::new(1900.0, 1600.0)
-    }
-
-    /// Lay the bar out for a query field of `field` size and return the bar's own
-    /// bounds — the row holding the field slot and the counter.
-    fn laid_out_bar_bounds(field: Size, count: Option<String>) -> Rectangle {
-        let theme = GuiTheme::default();
-        let mut root = search_bar_tree(field, count, pane(), &theme);
-        LayoutEngine::new()
-            .base_font(theme.font_size)
-            .compute(&mut root, viewport());
-        // root (pane box) -> row
-        root.base().children[0].base().bounds
-    }
-
-    /// A representative measured field size.
-    fn field(w: f64) -> Size {
-        Size::new(w, 22.0)
-    }
-
-    /// **Regression guard.** The bar is positioned purely by margins on its box, so
-    /// it must land inside the pane it belongs to. This caught the engine silently
-    /// dropping a root's margin, which drew the bar over the *sidebar* — a whole pane
-    /// away from the terminal it described.
-    #[test]
-    fn the_search_bar_lands_inside_its_pane() {
-        let b = laid_out_bar_bounds(field(120.0), Some("29/36".into()));
-        let p = pane();
-        assert!(
-            b.loc.x >= p.loc.x
-                && b.loc.y >= p.loc.y
-                && b.loc.x + b.size.w <= p.loc.x + p.size.w
-                && b.loc.y + b.size.h <= p.loc.y + p.size.h,
-            "bar at {:?} escaped its pane {p:?}",
-            b
-        );
-    }
-
-    /// It is anchored to the bottom-right specifically, not merely somewhere inside.
-    #[test]
-    fn the_search_bar_hugs_the_bottom_right_corner() {
-        let b = laid_out_bar_bounds(field(120.0), Some("29/36".into()));
-        let p = pane();
-        let right_gap = (p.loc.x + p.size.w) - (b.loc.x + b.size.w);
-        let bottom_gap = (p.loc.y + p.size.h) - (b.loc.y + b.size.h);
-        assert!(
-            right_gap < p.size.w / 2.0 && bottom_gap < p.size.h / 2.0,
-            "expected bottom-right; gaps were right={right_gap} bottom={bottom_gap}"
-        );
-    }
-
-    /// The bar is sized by the field the engine measured, not by arithmetic — the old
-    /// version clamped width to a hand-picked 120..480 range computed from a hardcoded
-    /// glyph advance ratio.
-    #[test]
-    fn a_wider_field_makes_a_wider_bar() {
-        let narrow = laid_out_bar_bounds(field(80.0), None).size.w;
-        let wide = laid_out_bar_bounds(field(300.0), None).size.w;
-        assert!(
-            wide > narrow,
-            "wide bar {wide} should exceed narrow {narrow}"
-        );
-    }
-
-    /// **The field must land in the slot the tree reserved**, or the caret and the
-    /// text would draw somewhere other than the bar the user sees.
-    #[test]
-    fn the_reserved_slot_matches_the_field_size() {
-        let theme = GuiTheme::default();
-        let f = field(140.0);
-        let mut root = search_bar_tree(f, Some("1/3".into()), pane(), &theme);
-        LayoutEngine::new()
-            .base_font(theme.font_size)
-            .compute(&mut root, viewport());
-        let slot = search_field_slot(&root).expect("the tree always reserves a slot");
-        assert_eq!((slot.size.w, slot.size.h), (f.w, f.h));
     }
 }

@@ -11,6 +11,7 @@ mod component;
 mod declared;
 mod input;
 mod model;
+mod search;
 mod shared;
 #[cfg(test)]
 pub(crate) mod testing;
@@ -18,7 +19,7 @@ mod viewport;
 
 pub use component::Terminal;
 use input::TerminalCommand;
-pub(crate) use input::{Cell, Grid, TerminalInput};
+pub(crate) use input::{Cell, Grid, Search, TerminalInput};
 pub(crate) use model::TerminalId;
 pub(crate) use viewport::Viewport;
 
@@ -236,6 +237,9 @@ pub(crate) fn show_viewports<'a>(
             scrollbar: appearance.show_scrollbar,
             badge: appearance.show_scrolled_up_badge,
             cell: (snapshot.cell_w, snapshot.cell_h),
+            top_stable_row: snapshot.viewport_top_stable_row,
+            match_alpha: appearance.search_match_alpha,
+            current_match_alpha: appearance.search_current_match_alpha,
             nominal_cell: pane.map_or(state.terminal_cell_size, |pane| {
                 state.pane_base_cell_size(pane)
             }),

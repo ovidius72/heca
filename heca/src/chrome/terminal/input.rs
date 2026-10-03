@@ -130,6 +130,24 @@ pub(crate) enum TerminalInput {
     /// **The terminal's box changed size** (or its font did): this is the grid it wants its process
     /// to have. Said once per change, not once per frame — and the message a client sends a server.
     Resize(Grid),
+    /// **Something about the terminal's own search** — see [`Search`].
+    Search(Search),
+}
+
+/// What a terminal says about its **search**, which it runs as part of itself: the bar is its own
+/// child, so it hears the field and says what the user did to it. The matches are the owner's to
+/// find (it holds the process); the terminal paints what it is told.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Search {
+    /// The query field took the keyboard (`true`) or gave it up (`false`) — a click on it, a key
+    /// that opened it, Enter that left it. The owner routes typing accordingly.
+    Editing(bool),
+    /// The query changed: this is the whole new text. Said once per edit.
+    Query(String),
+    /// Move to the next (`forward`) or previous match.
+    Step { forward: bool },
+    /// The search was dismissed: forget the matches.
+    Close,
 }
 
 /// What the terminal's handle asks of its process. Unlike [`TerminalInput`], these are things a user

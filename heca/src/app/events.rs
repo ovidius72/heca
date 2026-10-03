@@ -127,8 +127,7 @@ pub(crate) fn handle_window_event(
                         state.modifiers,
                     );
                     if let Some((key, _)) = crate::app::registry::combo_to_grid(&combo) {
-                        let keymap = state.widget_keymap.clone();
-                        let handled = keymap.deliver_release(key, |ev| {
+                        let handled = state.widget_keymap.deliver_release(key, |ev| {
                             heca_grid_ui::dispatch(&mut state.window_root, ev)
                         });
                         if matches!(handled, Handled::Yes) {

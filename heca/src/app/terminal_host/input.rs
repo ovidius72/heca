@@ -274,6 +274,8 @@ pub(crate) fn on_terminal_input(
         TerminalInput::Key { key, modifiers } => {
             return super::typing::on_key(state, terminal, key, modifiers);
         }
+        // What it says about its own search: the matches are the host's to find.
+        TerminalInput::Search(search) => return super::search::on_search(state, terminal, search),
         _ => {}
     }
     // The pointer's buttons and moves are every terminal's; what only a pane has (its selection)
@@ -285,7 +287,8 @@ pub(crate) fn on_terminal_input(
         | TerminalInput::ScrollToBottom
         | TerminalInput::ScrollTo { .. }
         | TerminalInput::Text(_)
-        | TerminalInput::Key { .. } => {}
+        | TerminalInput::Key { .. }
+        | TerminalInput::Search(_) => {}
         TerminalInput::Press {
             button,
             cell,
