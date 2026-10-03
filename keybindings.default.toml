@@ -189,8 +189,8 @@ toggle_current_column_collapsed    = "prefix+("
 # args   = { region = "bar.bottom" }
 
 # ── Workspace navigation ──
-workspace_prev = ["prefix+u", "prefix+Ctrl+p"]
-workspace_next = ["prefix+d", "prefix+Ctrl+n"]
+workspace_prev = "prefix+Ctrl+p"
+workspace_next = "prefix+Ctrl+n"
 
 # ── Focus toggle ──
 focus_toggle_local  = "prefix+i"        # Toggle last pane (same workspace)
