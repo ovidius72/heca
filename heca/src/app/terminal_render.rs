@@ -412,9 +412,8 @@ pub(crate) fn draw_terminal(
         return;
     };
     let surface_physical_size = state.window.inner_size();
-    let selection_overlay = pane
-        .pane
-        .and_then(|p| selection_overlay_for_pane(state, p, &mount.snapshot));
+    // Any terminal's, whoever owns it: the selection is a terminal's, asked of its id.
+    let selection_overlay = selection_overlay_for_terminal(state, pane.id, &mount.snapshot);
     let font_size = state.terminal_font_size(pane.pane);
     // Clipped by its scene (a dock, an overlay) or by the target's own box (a pane).
     let content_clip = clip.unwrap_or(target.content_clip);
@@ -945,12 +944,12 @@ pub(crate) fn render_terminal_mount(
     primitive_renderer.render_clipped(device, view, encoder, clip_rect, stencil);
 }
 
-pub(crate) fn selection_overlay_for_pane(
+pub(crate) fn selection_overlay_for_terminal(
     state: &AppState,
-    pane_id: PaneId,
+    terminal: TerminalId,
     snapshot: &TerminalSnapshot,
 ) -> Option<SelectionOverlay> {
-    build_selection_overlay(&state.selection, pane_id, snapshot, &state.theme.accent)
+    build_selection_overlay(&state.selection, terminal, snapshot, &state.theme.accent)
 }
 
 fn to_gui_color(color: [f32; 4]) -> GuiColor {
@@ -1040,7 +1039,7 @@ fn rect_to_text_box(rect: Rectangle) -> TextBox {
 // after #118 moved this fn out of `render.rs`.
 pub(super) fn build_selection_overlay(
     selection: &SelectionState,
-    pane_id: PaneId,
+    terminal: TerminalId,
     snapshot: &TerminalSnapshot,
     accent: &Color,
 ) -> Option<SelectionOverlay> {
@@ -1062,7 +1061,7 @@ pub(super) fn build_selection_overlay(
         ..
     } = selection
     {
-        if *owner != SelectionOwner::Pane(pane_id) {
+        if *owner != SelectionOwner(terminal) {
             return None;
         }
         let row = stable_to_visible(*stable_row)?;
@@ -1082,7 +1081,7 @@ pub(super) fn build_selection_overlay(
     }
 
     let active = selection.active()?;
-    if active.owner != SelectionOwner::Pane(pane_id) {
+    if active.owner != SelectionOwner(terminal) {
         return None;
     }
     match &active.region {
@@ -1168,9 +1167,9 @@ mod tests {
     use crate::app::selection_model::{
         SelectionOwner, SelectionRegion, SelectionSource, SelectionState,
     };
+    use crate::chrome::terminal::TerminalId;
     use heca_config::theme::Color;
     use heca_core::backend::{TerminalDamage, TerminalRowRange, TerminalSnapshot};
-    use heca_core::layout::PaneId;
     use heca_renderer::terminal::{TerminalFontFamilies, TerminalStyle};
 
     fn snapshot(rows: usize, cell_h: f32) -> TerminalSnapshot {
@@ -1235,14 +1234,14 @@ mod tests {
             a: 255,
         };
         let snap = selection_snapshot(20, 10, 0);
-        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
+        assert!(build_selection_overlay(&selection, TerminalId(1), &snap, &accent).is_none());
     }
 
     #[test]
     fn build_selection_overlay_returns_none_when_owner_mismatch() {
         let mut selection = SelectionState::new();
         selection.begin(
-            SelectionOwner::Pane(PaneId(7)),
+            SelectionOwner(TerminalId(7)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 2,
@@ -1259,14 +1258,14 @@ mod tests {
         };
         let snap = selection_snapshot(20, 10, 0);
         // Query with a different pane id -> None
-        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
+        assert!(build_selection_overlay(&selection, TerminalId(1), &snap, &accent).is_none());
     }
 
     #[test]
     fn build_selection_overlay_returns_none_for_backend_native() {
         let mut selection = SelectionState::new();
         selection.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::Rpc,
             SelectionRegion::BackendNative,
         );
@@ -1277,14 +1276,14 @@ mod tests {
             a: 255,
         };
         let snap = selection_snapshot(20, 10, 0);
-        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
+        assert!(build_selection_overlay(&selection, TerminalId(1), &snap, &accent).is_none());
     }
 
     #[test]
     fn build_selection_overlay_returns_overlay_for_host_grid_on_owning_pane() {
         let mut selection = SelectionState::new();
         selection.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 2,
@@ -1301,7 +1300,7 @@ mod tests {
             a: 255,
         };
         let snap = selection_snapshot(20, 10, 0);
-        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent);
+        let overlay = build_selection_overlay(&selection, TerminalId(1), &snap, &accent);
         assert!(overlay.is_some());
         let overlay = overlay.unwrap();
         assert_eq!(overlay.spans.len(), 4);
@@ -1322,7 +1321,7 @@ mod tests {
     fn build_selection_overlay_handles_reverse_multiline_selection() {
         let mut selection = SelectionState::new();
         selection.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 8,
@@ -1339,7 +1338,7 @@ mod tests {
             a: 255,
         };
         let snap = selection_snapshot(20, 10, 0);
-        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent).unwrap();
+        let overlay = build_selection_overlay(&selection, TerminalId(1), &snap, &accent).unwrap();
         assert_eq!(overlay.spans.len(), 5);
         assert_eq!(overlay.spans[0].row, 4);
         assert_eq!(overlay.spans[0].start_col, 3);
@@ -1352,7 +1351,7 @@ mod tests {
     #[test]
     fn build_selection_overlay_caret_returns_caret_indicator() {
         let mut selection = SelectionState::new();
-        selection.set_caret(SelectionOwner::Pane(PaneId(1)), 3, 7);
+        selection.set_caret(SelectionOwner(TerminalId(1)), 3, 7);
         let accent = Color {
             r: 100,
             g: 150,
@@ -1360,7 +1359,7 @@ mod tests {
             a: 255,
         };
         let snap = selection_snapshot(20, 10, 0);
-        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent).unwrap();
+        let overlay = build_selection_overlay(&selection, TerminalId(1), &snap, &accent).unwrap();
         // Caret-only state: no selection spans.
         assert!(overlay.spans.is_empty());
         // But we get a caret indicator at the caret position.
@@ -1377,7 +1376,7 @@ mod tests {
     #[test]
     fn build_selection_overlay_caret_owner_mismatch_returns_none() {
         let mut selection = SelectionState::new();
-        selection.set_caret(SelectionOwner::Pane(PaneId(2)), 0, 0);
+        selection.set_caret(SelectionOwner(TerminalId(2)), 0, 0);
         let accent = Color {
             r: 100,
             g: 150,
@@ -1385,14 +1384,14 @@ mod tests {
             a: 255,
         };
         let snap = selection_snapshot(20, 10, 0);
-        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
+        assert!(build_selection_overlay(&selection, TerminalId(1), &snap, &accent).is_none());
     }
 
     #[test]
     fn build_selection_overlay_active_selection_has_focus_caret() {
         let mut selection = SelectionState::new();
         selection.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::KeyboardMode,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 2,
@@ -1408,7 +1407,7 @@ mod tests {
             a: 255,
         };
         let snap = selection_snapshot(20, 10, 0);
-        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent).unwrap();
+        let overlay = build_selection_overlay(&selection, TerminalId(1), &snap, &accent).unwrap();
         // Active selection: should have both selection spans and a focus-end caret.
         assert!(!overlay.spans.is_empty());
         let caret = overlay

@@ -126,15 +126,18 @@ fn jump_to_current_match(state: &mut AppState) {
     else {
         return;
     };
-    state
-        .selection
-        .set_caret(SelectionOwner::Pane(pane_id), m.stable_row, m.start_col);
+    if let Some(terminal) = state.backends.identity_of(pane_id) {
+        state
+            .selection
+            .set_caret(SelectionOwner(terminal), m.stable_row, m.start_col);
+    }
     if let Some(snapshot) = state
         .backends
         .get(pane_id)
         .and_then(|b| b.terminal_snapshot())
+        && let Some(terminal) = state.backends.identity_of(pane_id)
     {
-        ensure_caret_visible(state, pane_id, m.stable_row, &snapshot);
+        ensure_caret_visible(state, terminal, m.stable_row, &snapshot);
     }
     state.needs_redraw = true;
 }

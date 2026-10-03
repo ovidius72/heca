@@ -50,7 +50,6 @@ impl HeardPresses {
 fn on_press(
     state: &mut AppState,
     terminal: TerminalId,
-    pane: Option<PaneId>,
     button: PointerButton,
     cell: Option<Cell>,
     modifiers: heca_grid_ui::Modifiers,
@@ -72,27 +71,17 @@ fn on_press(
     // program, which keeps a program's own mouse use (a plain click) intact while giving the host an
     // explicit entry gesture.
     if button == PointerButton::Left && modifiers.shift {
-        // Selecting is a pane's for now: the selection model is owned by a pane
-        // (P094(F011)/T449 slice 5c makes it any terminal's).
-        let (Some(pane_id), Some(cell)) = (pane, cell) else {
+        // Any terminal's, whoever owns it: the selection is owned by the terminal itself.
+        let Some(cell) = cell else {
             return;
         };
-        // Only a pane whose backend has a cell grid; a future browser or GUI pane would use its
-        // own selection.
-        let has_grid = state
-            .backends
-            .get(pane_id)
-            .and_then(|backend| backend.terminal_snapshot())
-            .is_some();
-        if has_grid {
-            begin_terminal_selection_at(
-                state,
-                pane_id,
-                cell.row,
-                cell.col,
-                SelectionSource::MouseDrag,
-            );
-        }
+        begin_terminal_selection_at(
+            state,
+            terminal,
+            cell.row,
+            cell.col,
+            SelectionSource::MouseDrag,
+        );
         return;
     }
     let Some(button) = backend_button(button) else {
@@ -164,8 +153,8 @@ fn on_move(
     if state.selection.is_selecting()
         && state.selection.source() == Some(SelectionSource::MouseDrag)
     {
-        if let Some(SelectionOwner::Pane(owner)) = state.selection.owner()
-            && Some(owner) == pane
+        if let Some(SelectionOwner(owner)) = state.selection.owner()
+            && owner == terminal
             && let Some(cell) = cell
             && let Some(snapshot) = state
                 .backends
@@ -301,7 +290,7 @@ pub(crate) fn on_terminal_input(
             button,
             cell,
             modifiers,
-        } => on_press(state, terminal, pane, button, cell, modifiers),
+        } => on_press(state, terminal, button, cell, modifiers),
         TerminalInput::Release {
             button,
             cell,

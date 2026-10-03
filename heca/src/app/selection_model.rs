@@ -17,14 +17,13 @@
 //! cell coordinates, wide-char filler handling, row-trailing whitespace trimming)
 //! but does not own clipboard I/O.
 
-use heca_core::layout::PaneId;
+use crate::chrome::terminal::TerminalId;
 
-/// The pane or surface that currently owns the active selection.
+/// **The terminal that owns the active selection** — any terminal, whoever owns it: a pane's, or
+/// one an extension placed in a dock or an overlay. A pane is asked for its terminal's id, so there
+/// is one owner and one path, not a pane kind and a second kind for the rest.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum SelectionOwner {
-    /// A pane in the session. All current content surfaces are panes.
-    Pane(PaneId),
-}
+pub struct SelectionOwner(pub TerminalId);
 
 /// How the current selection was initiated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -461,15 +460,12 @@ mod tests {
         assert_eq!(s.cursor_cell(), None);
 
         // Caret-only state → the caret cell.
-        s.set_caret(SelectionOwner::Pane(PaneId(7)), 3, 5);
-        assert_eq!(
-            s.cursor_cell(),
-            Some((SelectionOwner::Pane(PaneId(7)), 3, 5))
-        );
+        s.set_caret(SelectionOwner(TerminalId(7)), 3, 5);
+        assert_eq!(s.cursor_cell(), Some((SelectionOwner(TerminalId(7)), 3, 5)));
 
         // Active selection → the moving FOCUS endpoint, not the anchor.
         s.begin(
-            SelectionOwner::Pane(PaneId(9)),
+            SelectionOwner(TerminalId(9)),
             SelectionSource::KeyboardMode,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 2,
@@ -478,17 +474,14 @@ mod tests {
                 focus_col: 4,
             },
         );
-        assert_eq!(
-            s.cursor_cell(),
-            Some((SelectionOwner::Pane(PaneId(9)), 8, 4))
-        );
+        assert_eq!(s.cursor_cell(), Some((SelectionOwner(TerminalId(9)), 8, 4)));
     }
 
     #[test]
     fn begin_transitions_to_selecting_host_grid() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -498,7 +491,7 @@ mod tests {
             },
         );
         assert!(s.is_selecting());
-        assert_eq!(s.owner(), Some(SelectionOwner::Pane(PaneId(1))));
+        assert_eq!(s.owner(), Some(SelectionOwner(TerminalId(1))));
         assert_eq!(s.source(), Some(SelectionSource::MouseDrag));
         assert_eq!(s.render_mode(), Some(SelectionRenderMode::HostGrid));
         assert_eq!(
@@ -516,7 +509,7 @@ mod tests {
     fn begin_transitions_to_selecting_backend_native() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(2)),
+            SelectionOwner(TerminalId(2)),
             SelectionSource::Rpc,
             SelectionRegion::BackendNative,
         );
@@ -536,7 +529,7 @@ mod tests {
     fn update_focus_no_op_when_selected() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -564,7 +557,7 @@ mod tests {
     fn update_focus_changes_host_grid_focus() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(7)),
+            SelectionOwner(TerminalId(7)),
             SelectionSource::KeyboardMode,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 2,
@@ -589,7 +582,7 @@ mod tests {
     fn update_focus_is_no_op_for_backend_native() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::BackendNative,
         );
@@ -601,7 +594,7 @@ mod tests {
     fn end_confirms_selection() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::KeyboardMode,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -637,7 +630,7 @@ mod tests {
     fn end_is_idempotent_when_selected() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::KeyboardMode,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -665,7 +658,7 @@ mod tests {
     fn clear_resets_state() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::Rpc,
             SelectionRegion::BackendNative,
         );
@@ -682,12 +675,12 @@ mod tests {
     #[test]
     fn caret_state_is_pre_selection() {
         let mut s = SelectionState::new();
-        s.set_caret(SelectionOwner::Pane(PaneId(1)), 3, 5);
+        s.set_caret(SelectionOwner(TerminalId(1)), 3, 5);
         // Caret is not "active" (no selection gesture), but it has an owner.
         assert!(!s.is_active());
         assert!(s.is_caret());
         assert_eq!(s.phase(), SelectionPhase::Inactive);
-        assert_eq!(s.owner(), Some(SelectionOwner::Pane(PaneId(1))));
+        assert_eq!(s.owner(), Some(SelectionOwner(TerminalId(1))));
         assert!(s.active().is_none()); // no selection payload
         assert_eq!(s.caret_pos(), Some((3, 5)));
     }
@@ -695,7 +688,7 @@ mod tests {
     #[test]
     fn caret_move_updates_position() {
         let mut s = SelectionState::new();
-        s.set_caret(SelectionOwner::Pane(PaneId(1)), 0, 0);
+        s.set_caret(SelectionOwner(TerminalId(1)), 0, 0);
         s.move_caret(2, 7);
         assert_eq!(s.caret_pos(), Some((2, 7)));
     }
@@ -711,14 +704,14 @@ mod tests {
     #[test]
     fn begin_selection_from_caret() {
         let mut s = SelectionState::new();
-        s.set_caret(SelectionOwner::Pane(PaneId(1)), 3, 5);
+        s.set_caret(SelectionOwner(TerminalId(1)), 3, 5);
         s.begin_selection_from_caret(SelectionSource::KeyboardMode);
         // Now in Selecting state with anchor and focus at the caret position.
         assert!(s.is_active());
         assert!(!s.is_caret());
         assert!(s.is_selecting());
         let active = s.active().unwrap();
-        assert_eq!(active.owner, SelectionOwner::Pane(PaneId(1)));
+        assert_eq!(active.owner, SelectionOwner(TerminalId(1)));
         assert_eq!(active.source, SelectionSource::KeyboardMode);
         match &active.region {
             SelectionRegion::HostGrid {
@@ -754,7 +747,7 @@ mod tests {
     fn toggle_selection_endpoint_swaps_anchor_and_focus() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::KeyboardMode,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -786,7 +779,7 @@ mod tests {
     fn toggle_endpoint_no_op_on_backend_native() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::Rpc,
             SelectionRegion::BackendNative,
         );
@@ -798,7 +791,7 @@ mod tests {
     #[test]
     fn toggle_endpoint_no_op_on_caret() {
         let mut s = SelectionState::new();
-        s.set_caret(SelectionOwner::Pane(PaneId(1)), 0, 0);
+        s.set_caret(SelectionOwner(TerminalId(1)), 0, 0);
         s.toggle_selection_endpoint();
         // Still in caret state.
         assert!(s.is_caret());
@@ -808,7 +801,7 @@ mod tests {
     fn toggle_endpoint_works_on_selected_state() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::KeyboardMode,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 1,
@@ -840,7 +833,7 @@ mod tests {
     #[test]
     fn clear_resets_caret_to_inactive() {
         let mut s = SelectionState::new();
-        s.set_caret(SelectionOwner::Pane(PaneId(1)), 0, 0);
+        s.set_caret(SelectionOwner(TerminalId(1)), 0, 0);
         s.clear();
         assert!(!s.is_caret());
         assert!(!s.is_active());
@@ -868,7 +861,7 @@ mod tests {
     #[test]
     fn active_selection_render_mode_derives_from_region() {
         let active = ActiveSelection {
-            owner: SelectionOwner::Pane(PaneId(1)),
+            owner: SelectionOwner(TerminalId(1)),
             source: SelectionSource::Rpc,
             region: SelectionRegion::BackendNative,
         };
@@ -879,7 +872,7 @@ mod tests {
     fn begin_resets_prior_selection() {
         let mut s = SelectionState::new();
         s.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -891,12 +884,12 @@ mod tests {
         s.update_focus(0, 10);
         s.end();
         s.begin(
-            SelectionOwner::Pane(PaneId(2)),
+            SelectionOwner(TerminalId(2)),
             SelectionSource::Rpc,
             SelectionRegion::BackendNative,
         );
         assert!(s.is_selecting());
-        assert_eq!(s.owner(), Some(SelectionOwner::Pane(PaneId(2))));
+        assert_eq!(s.owner(), Some(SelectionOwner(TerminalId(2))));
         assert_eq!(s.source(), Some(SelectionSource::Rpc));
         assert_eq!(s.render_mode(), Some(SelectionRenderMode::BackendNative));
         assert_eq!(s.region(), Some(&SelectionRegion::BackendNative));
@@ -1213,7 +1206,7 @@ mod extraction_tests {
         ])];
         let mut sel = SelectionState::new();
         sel.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -1236,7 +1229,7 @@ mod extraction_tests {
         ];
         let mut sel = SelectionState::new();
         sel.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -1262,7 +1255,7 @@ mod extraction_tests {
         // Anchor at bottom-right, focus at top-left → same text as forward.
         let mut sel = SelectionState::new();
         sel.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::KeyboardMode,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 1,
@@ -1290,7 +1283,7 @@ mod extraction_tests {
         ])];
         let mut sel = SelectionState::new();
         sel.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -1316,7 +1309,7 @@ mod extraction_tests {
     fn extract_backend_native_returns_none() {
         let mut sel = SelectionState::new();
         sel.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::Rpc,
             SelectionRegion::BackendNative,
         );
@@ -1334,7 +1327,7 @@ mod extraction_tests {
         ])];
         let mut sel = SelectionState::new();
         sel.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -1360,7 +1353,7 @@ mod extraction_tests {
         ])];
         let mut sel = SelectionState::new();
         sel.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -1386,7 +1379,7 @@ mod extraction_tests {
         ])];
         let mut sel = SelectionState::new();
         sel.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
                 anchor_stable_row: 0,
@@ -1413,7 +1406,7 @@ mod extraction_tests {
         ])];
         let mut sel = SelectionState::new();
         sel.begin(
-            SelectionOwner::Pane(PaneId(1)),
+            SelectionOwner(TerminalId(1)),
             SelectionSource::MouseDrag,
             // Start at column 1 (the filler of '中') — should include '中'
             SelectionRegion::HostGrid {

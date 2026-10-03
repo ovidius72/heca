@@ -1094,8 +1094,10 @@ impl AppState {
     /// storage the resolution itself has to be shared.
     pub fn search_target_pane(&self) -> Option<PaneId> {
         match self.selection.owner() {
-            Some(crate::app::selection_model::SelectionOwner::Pane(id)) => Some(id),
-            _ => self.focused_pane,
+            Some(crate::app::selection_model::SelectionOwner(terminal)) => {
+                self.backends.pane_of(terminal).or(self.focused_pane)
+            }
+            None => self.focused_pane,
         }
     }
 

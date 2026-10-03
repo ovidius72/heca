@@ -82,7 +82,9 @@ pub fn handle_scrollback_to_top(state: &mut AppState, _action: &WmAction) {
         } else {
             state.selection.update_focus(oldest, 0);
         }
-        ensure_caret_visible(state, pane_id, oldest, snapshot);
+        if let Some(terminal) = state.backends.identity_of(pane_id) {
+            ensure_caret_visible(state, terminal, oldest, snapshot);
+        }
     }
 }
 

@@ -122,13 +122,13 @@ pub(crate) fn cell_screen_pos(
 /// selection mode). terminal-task-18.
 pub(crate) fn hyperlink_uri_at_stable_cell(
     state: &AppState,
-    pane_id: PaneId,
+    terminal: crate::chrome::terminal::TerminalId,
     stable_row: isize,
     col: usize,
 ) -> Option<String> {
     let snapshot = state
         .backends
-        .get(pane_id)
+        .get_by_id(terminal)
         .and_then(|backend| backend.terminal_snapshot())?;
     let visible_row = stable_row - snapshot.viewport_top_stable_row;
     if visible_row < 0 || visible_row >= snapshot.rows as isize {

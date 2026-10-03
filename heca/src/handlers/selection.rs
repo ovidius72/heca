@@ -121,7 +121,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
             Some(a) => a,
             None => return, // No active selection — safe no-op.
         };
-        let SelectionOwner::Pane(pane_id) = active.owner;
+        let SelectionOwner(terminal) = active.owner;
         let (start_stable, end_stable) = match &active.region {
             SelectionRegion::HostGrid {
                 anchor_stable_row,
@@ -137,7 +137,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
         // Get the terminal snapshot for the owning pane.
         let snapshot = match state
             .backends
-            .get(pane_id)
+            .get_by_id(terminal)
             .and_then(|b| b.terminal_snapshot())
         {
             Some(s) => s,
@@ -150,7 +150,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
         // copyable even when they are no longer in the visible viewport.
         let lines = state
             .backends
-            .get(pane_id)
+            .get_by_id(terminal)
             .map(|b| b.lines_in_stable_range(start_stable, end_stable, snapshot.cols))
             .unwrap_or_default();
 
