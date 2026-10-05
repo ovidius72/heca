@@ -85,11 +85,9 @@ impl AppState {
     /// The context is built from the session and this window's view only, so the server's own
     /// state stays borrowable beside it.
     pub(crate) fn run_on_server(&mut self, action: &crate::input::WmAction, name: &str) {
-        let asker = crate::server::Asker {
-            focused_pane: self.focused_pane,
-        };
+        let asker = crate::server::Asker::seen_through(self.layout(), self.focused_pane);
         let mut cx = crate::server::ServerCx {
-            layout: self.session.through_mut(&mut self.view),
+            layout: crate::server::ServerLayout::new(self.session.through_mut(&mut self.view)),
             asker,
         };
         let changes = self.server.run(&mut cx, action);

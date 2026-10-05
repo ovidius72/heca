@@ -16,7 +16,7 @@ pub(super) fn float(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
         return Vec::new();
     };
     let new_column_id = ColumnId(cx.layout.next_id());
-    let Some(mut ws) = cx.layout.active_workspace_mut() else {
+    let Some(mut ws) = cx.layout.workspace_mut(cx.asker.workspace) else {
         return Vec::new();
     };
     if !ws.unfloat_pane(pane, new_column_id) {
@@ -39,7 +39,7 @@ pub(super) fn float_at(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> 
         return Vec::new();
     };
     let rect = Rectangle::new(Point::new(*x, *y), Size::new(*width, *height));
-    cx.change_active_workspace(|mut ws| {
+    cx.change_asker_workspace(|mut ws| {
         ws.float_tiled_pane(*pane_id, rect);
     })
 }

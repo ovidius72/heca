@@ -5,6 +5,8 @@
 //! says `Side::Server`; [`handler_for`] is the one place it is looked up.
 
 mod add;
+#[cfg(test)]
+mod asker_tests;
 mod layout;
 #[cfg(test)]
 mod layout_tests;

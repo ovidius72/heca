@@ -11,26 +11,26 @@ const COLUMN_STEP: f64 = 0.05;
 const PANE_STEP: f64 = 40.0;
 
 pub(super) fn resize_increase(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_active_workspace(|mut ws| ws.scroll_mut().resize_active_column(COLUMN_STEP))
+    cx.change_asker_workspace(|mut ws| ws.scroll_mut().resize_active_column(COLUMN_STEP))
 }
 
 pub(super) fn resize_decrease(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_active_workspace(|mut ws| ws.scroll_mut().resize_active_column(-COLUMN_STEP))
+    cx.change_asker_workspace(|mut ws| ws.scroll_mut().resize_active_column(-COLUMN_STEP))
 }
 
 /// Toggle the active column between viewport-wide zoom and its previous width.
 pub(super) fn zoom_column(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_active_workspace(|mut ws| {
+    cx.change_asker_workspace(|mut ws| {
         ws.scroll_mut().toggle_active_column_zoom();
     })
 }
 
 pub(super) fn pane_height_increase(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_active_workspace(|mut ws| ws.scroll_mut().resize_active_pane_height(PANE_STEP))
+    cx.change_asker_workspace(|mut ws| ws.scroll_mut().resize_active_pane_height(PANE_STEP))
 }
 
 pub(super) fn pane_height_decrease(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_active_workspace(|mut ws| ws.scroll_mut().resize_active_pane_height(-PANE_STEP))
+    cx.change_asker_workspace(|mut ws| ws.scroll_mut().resize_active_pane_height(-PANE_STEP))
 }
 
 /// Zoom the column at `(ws_idx, col_idx)` — in that workspace, whichever one a window is showing.
@@ -65,7 +65,7 @@ pub(super) fn resize(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
     else {
         return Vec::new();
     };
-    cx.change_active_workspace(|mut ws| match target {
+    cx.change_asker_workspace(|mut ws| match target {
         ResizeTarget::Column => {
             let delta = *amount / 1000.0;
             // A column's left edge is the right edge of the column before it, so `Left` moves
@@ -100,7 +100,7 @@ pub(super) fn resize_to(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change>
     else {
         return Vec::new();
     };
-    cx.change_active_workspace(|mut ws| match target {
+    cx.change_asker_workspace(|mut ws| match target {
         ResizeTarget::Column => {
             if let Some(col) = ws.scroll_mut().active_column_mut() {
                 col.width = ColumnWidth::Fixed(*width);
@@ -127,7 +127,7 @@ pub(super) fn resize_column_by(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<
     let WmAction::ResizeColumnBy { col_idx, delta } = action else {
         return Vec::new();
     };
-    cx.change_active_workspace(|mut ws| ws.scroll_mut().resize_column(*col_idx, *delta))
+    cx.change_asker_workspace(|mut ws| ws.scroll_mut().resize_column(*col_idx, *delta))
 }
 
 /// Resize one stacked pane's height — a divider drag or RPC. `delta` is logical px; dragging down
@@ -141,7 +141,7 @@ pub(super) fn resize_pane_height_by(cx: &mut ServerCx<'_>, action: &WmAction) ->
     else {
         return Vec::new();
     };
-    cx.change_active_workspace(|mut ws| {
+    cx.change_asker_workspace(|mut ws| {
         ws.scroll_mut().resize_pane_height(*col_idx, *pane_idx, *delta)
     })
 }

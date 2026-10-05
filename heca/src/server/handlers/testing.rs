@@ -8,7 +8,7 @@ use heca_core::layout::PaneId;
 use crate::app::backend_store::BackendStore;
 use crate::input::WmAction;
 use crate::notification::NotificationRuntime;
-use crate::server::{Asker, Change, ServerCx, ServerState};
+use crate::server::{Asker, Change, ServerCx, ServerLayout, ServerState};
 
 pub(super) fn server() -> ServerState {
     ServerState::new(
@@ -32,11 +32,18 @@ pub(super) fn run(window: &mut Windowed, action: WmAction) -> Vec<Change> {
     run_for(window, None, action)
 }
 
-/// Run `action` for a window whose focused pane is `focused`.
+/// Run `action` for a window whose focused pane is `focused`, and that shows what it shows.
 pub(super) fn run_for(window: &mut Windowed, focused: Option<PaneId>, action: WmAction) -> Vec<Change> {
+    let asker = Asker::seen_through(window.l(), focused);
+    run_as(window, asker, action)
+}
+
+/// Run `action` for this asker — which need not be where the window's own view is, as it is not
+/// when two windows share a session.
+pub(super) fn run_as(window: &mut Windowed, asker: Asker, action: WmAction) -> Vec<Change> {
     let mut cx = ServerCx {
-        layout: window.m(),
-        asker: Asker { focused_pane: focused },
+        layout: ServerLayout::new(window.m()),
+        asker,
     };
     server().run(&mut cx, &action)
 }

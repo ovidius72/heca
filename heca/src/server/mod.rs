@@ -19,6 +19,7 @@ mod action;
 mod change;
 mod cx;
 mod handlers;
+mod layout;
 
 use std::rc::Rc;
 use std::time::Instant;
@@ -28,6 +29,7 @@ use heca_config::programs::ProgramsConfig;
 pub(crate) use action::{NotificationSettings, ServerAction};
 pub(crate) use change::{Change, Refusal};
 pub(crate) use cx::{Asker, ServerCx};
+pub(crate) use layout::ServerLayout;
 
 use crate::app::backend_store::BackendStore;
 use crate::app::git_monitor::GitRuntimeCache;

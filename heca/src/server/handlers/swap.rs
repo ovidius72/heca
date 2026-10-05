@@ -12,7 +12,7 @@ fn laid_out(changed: bool) -> Vec<Change> {
 
 /// Move the active column one place left, and bring it into view.
 pub(super) fn swap_left(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_active_workspace(|mut ws| {
+    cx.change_asker_workspace(|mut ws| {
         ws.scroll_mut().move_column_left();
         ws.scroll_mut().align_view_to_active_column();
     })
@@ -20,7 +20,7 @@ pub(super) fn swap_left(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change
 
 /// Move the active column one place right, and bring it into view.
 pub(super) fn swap_right(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_active_workspace(|mut ws| {
+    cx.change_asker_workspace(|mut ws| {
         ws.scroll_mut().move_column_right();
         ws.scroll_mut().align_view_to_active_column();
     })
@@ -28,14 +28,14 @@ pub(super) fn swap_right(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Chang
 
 /// Swap the active pane with the one above it.
 pub(super) fn swap_up(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_active_workspace(|mut ws| {
+    cx.change_asker_workspace(|mut ws| {
         ws.swap_active_pane_up();
     })
 }
 
 /// Swap the active pane with the one below it.
 pub(super) fn swap_down(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_active_workspace(|mut ws| {
+    cx.change_asker_workspace(|mut ws| {
         ws.swap_active_pane_down();
     })
 }

@@ -28,8 +28,8 @@ fn move_along(
     step: impl FnOnce(&mut heca_core::layout::WorkspaceMut<'_>, ColumnId) -> bool,
 ) -> Vec<Change> {
     let workspace = match pane {
-        Some(id) => cx.layout.reader().session().pane_location(id).map(|(ws, ..)| ws),
-        None => Some(cx.layout.reader().active_workspace_idx()),
+        Some(id) => cx.layout.session().pane_location(id).map(|(ws, ..)| ws),
+        None => Some(cx.asker.workspace),
     };
     // Allocated before the workspace is borrowed; spent only if the move makes a column.
     let new_column = ColumnId(cx.layout.next_id());
@@ -77,7 +77,7 @@ pub(super) fn move_to_workspace(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec
     let WmAction::MovePaneToWorkspace { pane_id, ws_idx } = action else {
         return Vec::new();
     };
-    let Some((_, column, _)) = cx.layout.reader().session().pane_location(*pane_id) else {
+    let Some((_, column, _)) = cx.layout.session().pane_location(*pane_id) else {
         return Vec::new();
     };
     landed(*pane_id, cx.layout.move_pane_to_workspace(*pane_id, *ws_idx, column, false))
@@ -93,7 +93,7 @@ pub(super) fn move_to_column(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Ch
     else {
         return Vec::new();
     };
-    let Some((workspace, ..)) = cx.layout.reader().session().pane_location(*pane_id) else {
+    let Some((workspace, ..)) = cx.layout.session().pane_location(*pane_id) else {
         return Vec::new();
     };
     let moved = match workspace == *ws_idx {
@@ -108,7 +108,7 @@ pub(super) fn move_to_new_column(cx: &mut ServerCx<'_>, _action: &WmAction) -> V
     let Some(pane) = cx.asker.focused_pane else {
         return Vec::new();
     };
-    if cx.layout.reader().session().pane_location(pane).is_none() {
+    if cx.layout.session().pane_location(pane).is_none() {
         return Vec::new();
     }
     match cx.layout.move_pane_to_new_column(pane) {
@@ -126,7 +126,7 @@ pub(super) fn take_pane(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change>
     else {
         return Vec::new();
     };
-    let into = cx.layout.reader().active_workspace_idx();
+    let into = cx.asker.workspace;
     landed(*pane_id, cx.layout.take_pane_into(*pane_id, into, *focus_after))
 }
 

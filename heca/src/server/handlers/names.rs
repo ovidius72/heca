@@ -58,7 +58,7 @@ pub(super) fn reset_pane_name_by_id(cx: &mut ServerCx<'_>, action: &WmAction) ->
 
 /// Clear the name of the workspace the asker is in.
 pub(super) fn reset_workspace_name(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    let ws = cx.layout.reader().active_workspace_idx();
+    let ws = cx.asker.workspace;
     named(cx.layout.rename_workspace(ws, ""))
 }
 

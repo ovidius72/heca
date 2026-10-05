@@ -21,12 +21,8 @@ fn landed(moved: Option<Moved>) -> Vec<Change> {
 
 /// Move the asker's active column to the workspace `to` of the one it is in.
 fn move_active_column(cx: &mut ServerCx<'_>, to: impl FnOnce(usize, usize) -> Option<usize>) -> Vec<Change> {
-    let layout = cx.layout.reader();
-    let from = layout.active_workspace_idx();
-    let Some(column) = layout.active_workspace().map(|ws| ws.scroll().active_column_idx()) else {
-        return Vec::new();
-    };
-    let count = layout.session().workspaces.len();
+    let (from, column) = (cx.asker.workspace, cx.asker.column);
+    let count = cx.layout.session().workspaces.len();
     let Some(target) = to(from, count) else {
         return Vec::new();
     };
@@ -46,7 +42,7 @@ pub(super) fn move_column_to_workspace(cx: &mut ServerCx<'_>, action: &WmAction)
     let WmAction::MoveColumnToWorkspace { col_idx, ws_idx, .. } = action else {
         return Vec::new();
     };
-    let from = cx.layout.reader().active_workspace_idx();
+    let from = cx.asker.workspace;
     landed(cx.layout.move_column_to_workspace(from, *col_idx, *ws_idx))
 }
 
