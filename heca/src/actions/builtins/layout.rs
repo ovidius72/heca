@@ -187,7 +187,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "delete_current_column",
-        side: Side::Server,
+        side: Side::Client,
         label: "Delete Current Column",
         description: "Delete the focused pane's column (or the sidebar selection's) and all its panes, after asking.",
         icon: Some(Glyph::Trash),
@@ -440,6 +440,22 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
             ),
             ArgDescriptor::required("width", ArgKind::Float, "The new width."),
             ArgDescriptor::required("height", ArgKind::Float, "The new height."),
+        ],
+    },
+    ActionDescriptor {
+        name: "rename_column_to",
+        side: Side::Server,
+        label: "Rename Column To",
+        description: "Set a column's name directly, without opening the rename prompt. An empty name clears it.",
+        icon: Some(Glyph::NotePencil),
+        args: &[
+            ArgDescriptor::required(
+                "ws_idx",
+                ArgKind::Int,
+                "Index of the workspace holding the column.",
+            ),
+            ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to rename."),
+            ArgDescriptor::required("name", ArgKind::Text, "The new name."),
         ],
     },
     ActionDescriptor {

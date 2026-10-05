@@ -65,6 +65,17 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         )],
     },
     ActionDescriptor {
+        name: "rename_workspace_to",
+        side: Side::Server,
+        label: "Rename Workspace To",
+        description: "Set a workspace's name directly, without opening the rename prompt. An empty name clears it.",
+        icon: Some(Glyph::NotePencil),
+        args: &[
+            ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace to rename."),
+            ArgDescriptor::required("name", ArgKind::Text, "The new name."),
+        ],
+    },
+    ActionDescriptor {
         name: "reset_workspace_name_by_idx",
         side: Side::Server,
         label: "Reset Workspace Name",

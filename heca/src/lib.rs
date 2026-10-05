@@ -231,7 +231,9 @@ impl HecaApp {
             // `center_focused_column` and pressing reload appeared to do nothing — the settings
             // were live in the file and dead in the app (Antonio, 2026-08-11). One mapping,
             // `startup::layout_options_from`, shared by both paths so they cannot drift.
-            state.session.options = crate::app::startup::layout_options_from(&self.app_config);
+            state
+                .session
+                .set_options(crate::app::startup::layout_options_from(&self.app_config));
             // Font config (families + sizes) is decoupled from the color theme;
             // reload it so `prefix+Shift+r` picks up `[font]` changes live.
             state.font_config = self.app_config.config.font.clone();
@@ -320,20 +322,9 @@ impl HecaApp {
             }
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;
-            // Pane gap and chrome geometry changes must reflow the real viewport
+            // Layout options and chrome geometry changes must reflow the real viewport
             // path so cached column widths, pane sizes, and working areas stay
             // coherent after reload.
-            let pane_gap = self
-                .app_config
-                .config
-                .appearance
-                .effective_pane_gap(&self.app_config.theme) as f64;
-            if (state.session.options.gaps - pane_gap).abs() > f64::EPSILON {
-                state.session.options.gaps = pane_gap;
-                for ws in &mut state.session.workspaces {
-                    ws.scrolling.options.gaps = pane_gap;
-                }
-            }
             update_session_viewport(state);
             // Force a full chrome rebuild so STRUCTURAL config (border style, pane
             // info bar, etc.) re-applies — the chrome is otherwise only rebuilt when

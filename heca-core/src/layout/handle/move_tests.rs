@@ -1,28 +1,10 @@
 //! Swaps and moves of panes and columns, through the layout the way a window moves them.
 
 use crate::layout::testing::Windowed;
-use crate::layout::{Moved, Pane, PaneId, Size};
+use crate::layout::{Moved, Pane, PaneId};
 
-/// A window on `shape`: one workspace per entry, each a list of columns, each a list of pane ids.
 fn window(shape: &[&[&[u64]]]) -> Windowed {
-    let mut window = Windowed::new(Size::new(1000.0, 800.0), 1.0);
-    for _ in 1..shape.len() {
-        window.m().add_workspace();
-    }
-    for (idx, columns) in shape.iter().enumerate() {
-        window.show(idx);
-        for panes in *columns {
-            let mut it = panes.iter();
-            let Some(first) = it.next() else { continue };
-            window.m().add_pane(Pane::new(PaneId(*first), "p"), None, true);
-            let col = window.l().workspace(idx).map_or(0, |ws| ws.scrolling.columns.len() - 1);
-            for id in it {
-                window.ws().scroll_mut().add_pane_to_column(col, None, Pane::new(PaneId(*id), "p"), false);
-            }
-        }
-    }
-    window.show(0);
-    window
+    Windowed::with_shape(shape)
 }
 
 /// The panes of every column of workspace `ws`, as ids.
@@ -264,4 +246,18 @@ fn how_far_a_move_slides_in_from_is_the_layouts_option() {
     w.session.options.move_slide_reach = 0.0;
     let none = w.m().slide();
     assert_eq!((none.x, none.y), (0.0, 0.0));
+}
+
+#[test]
+fn new_options_reach_every_workspace_and_the_ones_made_later() {
+    let mut w = window(&[&[&[1]], &[&[2]]]);
+    let mut options = w.session.options.clone();
+    options.float_size = 0.5;
+    w.session.set_options(options);
+    assert!(w.session.workspaces.iter().all(|ws| ws.scrolling.options.float_size == 0.5));
+    w.m().add_workspace();
+    assert_eq!(w.session.workspaces[2].scrolling.options.float_size, 0.5);
+    let rect = w.ws().reader().default_float_rect();
+    let area = w.l().active_workspace().map(|ws| ws.scroll().area()).expect("a workspace");
+    assert_eq!(rect.size.w, area.size.w * 0.5);
 }

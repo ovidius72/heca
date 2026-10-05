@@ -30,7 +30,6 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::ScrollViewRight, handle_scroll_view_right);
 
     // ── Pane ──
-    registry.register(WmActionKind::ClosePane, handle_close_pane);
     registry.register(WmActionKind::PaneSelect, handle_pane_select);
     registry.register(WmActionKind::FollowLink, handle_follow_link);
     registry.register(WmActionKind::HintPick, handle_hint_pick);
@@ -67,14 +66,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::RenamePane, handle_rename_pane);
     registry.register(WmActionKind::RenameColumn, handle_rename_column);
     registry.register(WmActionKind::RenameColumnByIdx, handle_rename_column_by_idx);
-    registry.register(WmActionKind::ClosePaneById, handle_close_pane_by_id);
-    registry.register(WmActionKind::RenameTarget, handle_rename_target);
     registry.register(WmActionKind::RenamePaneById, handle_rename_pane_by_id);
-    registry.register(WmActionKind::ResetPaneName, handle_reset_pane_name);
-    registry.register(
-        WmActionKind::ResetPaneNameById,
-        handle_reset_pane_name_by_id,
-    );
 
     // ── Workspace ──
     registry.register(WmActionKind::CreateWorkspace, handle_create_workspace);
@@ -82,14 +74,6 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(
         WmActionKind::RenameWorkspaceByIdx,
         handle_rename_workspace_by_idx,
-    );
-    registry.register(
-        WmActionKind::ResetWorkspaceName,
-        handle_reset_workspace_name,
-    );
-    registry.register(
-        WmActionKind::ResetWorkspaceNameByIdx,
-        handle_reset_workspace_name_by_idx,
     );
 
     // ── Sidebar / Chrome ──
@@ -176,8 +160,6 @@ pub fn build_registry() -> ActionRegistry {
     // ── Sidebar-specific (parameterized) ──
 
     // ── Destructive ──
-    registry.register(WmActionKind::DeleteColumn, handle_delete_column);
-    registry.register(WmActionKind::DeleteWorkspace, handle_delete_workspace);
     registry.register(
         WmActionKind::DeleteCurrentColumn,
         handle_delete_current_column,

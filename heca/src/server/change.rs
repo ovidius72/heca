@@ -25,10 +25,14 @@ pub(crate) enum Change {
         workspace: usize,
         column: usize,
     },
+    /// The pane is gone from the layout. Whatever ran in it is the window's to end.
+    PaneRemoved { pane: heca_core::layout::PaneId },
     /// A column now sits at index `column` of workspace `workspace` (numbered as they are now).
     ColumnMoved { workspace: usize, column: usize },
     /// The workspace that was at `index` is gone; every later one is one lower.
     WorkspaceRemoved { index: usize },
+    /// A pane, column or workspace has a different name.
+    NamesChanged,
     /// The server did not do what was asked, and why. Not a change to anything: a window says it
     /// in its own words.
     Refused(Refusal),
@@ -42,6 +46,17 @@ pub(crate) enum Refusal {
 }
 
 impl Change {
+    /// What a removal says: each pane that went, then the workspace that went with them — or, when
+    /// no workspace did, that the layout changed.
+    pub(crate) fn after_removal(removed: heca_core::layout::Removed) -> Vec<Self> {
+        let panes = removed.panes.into_iter().map(|pane| Self::PaneRemoved { pane });
+        let last = match removed.removed_workspace {
+            Some(index) => Self::WorkspaceRemoved { index },
+            None => Self::LayoutChanged,
+        };
+        panes.chain([last]).collect()
+    }
+
     /// What a move that landed says: the workspace it emptied and removed first, if any, then
     /// where it landed.
     pub(crate) fn after_move(moved: heca_core::layout::Moved, landed: Self) -> Vec<Self> {

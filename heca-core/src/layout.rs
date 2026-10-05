@@ -49,7 +49,7 @@ pub mod window_view;
 pub mod workspace;
 
 pub use column::{Column, Pane};
-pub use handle::{Added, Layout, LayoutMut, Moved};
+pub use handle::{Added, Layout, LayoutMut, Moved, Removed};
 pub use scrolling::{LaidOutColumn, LaidOutPane, ScrollingMut, ScrollingRef, ScrollingSpace};
 pub use session::Session;
 pub use shape::SessionShape;

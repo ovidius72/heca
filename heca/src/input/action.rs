@@ -243,8 +243,20 @@ pub enum WmAction {
     ClosePaneById {
         pane_id: PaneId,
     },
+    /// Name a pane — what the rename prompt does when it is submitted; an empty name clears it.
     RenameTarget {
         pane_id: PaneId,
+        name: String,
+    },
+    /// Name a workspace by index; an empty name clears it.
+    RenameWorkspaceTo {
+        ws_idx: usize,
+        name: String,
+    },
+    /// Name a column; an empty name clears it.
+    RenameColumnTo {
+        ws_idx: usize,
+        col_idx: usize,
         name: String,
     },
     /// Enter rename mode for a specific pane by id (context menu / RPC / sidebar target),

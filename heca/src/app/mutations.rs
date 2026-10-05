@@ -6,7 +6,7 @@
 
 use crate::app::focus::sync_focus;
 use crate::app_state::AppState;
-use heca_core::layout::{FocusDomain, PaneId, SessionShape};
+use heca_core::layout::{PaneId, SessionShape};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MutationKind {
@@ -92,59 +92,13 @@ pub fn after_mutation_change(state: &mut AppState, kind: MutationKind) {
     after_mutation_change_inner(state, kind);
 }
 
+/// Close the pane with this id, wherever it is — the one way a pane that goes away on its own (its
+/// shell exited) is removed, with the same facts the close action reports.
 pub(crate) fn close_pane_by_id_anywhere(state: &mut AppState, pane_id: PaneId) -> bool {
-    let removed = {
-        let mut layout = state.layout_mut();
-        let workspaces = layout.reader().session().workspaces.len();
-        (0..workspaces).find_map(|ws_idx| {
-            let mut ws = layout.workspace_mut(ws_idx)?;
-            if let Some(removed) = crate::app::pane_ops::remove_pane_by_id(&mut ws, pane_id) {
-                return Some((ws_idx, removed.pane.id, true));
-            }
-            let float_idx = ws.floating_panes.iter().position(|f| f.pane.id == pane_id)?;
-            let removed = ws.floating_panes.remove(float_idx);
-            if ws.focus_domain == FocusDomain::Floating && ws.floating_panes.is_empty() {
-                ws.deactivate_floating_panes();
-                ws.focus_domain = FocusDomain::Tiled;
-            }
-            Some((ws_idx, removed.pane.id, false))
-        })
-    };
-
-    let Some((ws_idx, removed_id, was_tiled)) = removed else {
+    let Some(removed) = state.layout_mut().remove_pane_anywhere(pane_id) else {
         return false;
     };
-    state.server.backends.kill_for_pane(removed_id);
-    if was_tiled {
-        state.clear_search(removed_id);
-    }
-
-    let should_destroy = state
-        .session
-        .workspaces
-        .get(ws_idx)
-        .map(|ws| !ws.has_panes())
-        .unwrap_or(false)
-        && state.session.workspaces.len() > 1;
-
-    if should_destroy {
-        destroy_empty_workspace(state, ws_idx);
-    }
-
+    state.apply(crate::server::Change::after_removal(removed));
     after_layout_change(state);
     true
-}
-
-/// Remove workspace `ws_idx` when it is empty and another remains, and forget it in the window's
-/// tracking.
-pub(crate) fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
-    if !state.layout_mut().remove_workspace_if_empty(ws_idx) {
-        return;
-    }
-    crate::app_state::Tracking {
-        last_visited_ws: &mut state.last_visited_ws_idx,
-        last_visited_pane_per_ws: &mut state.last_visited_pane_per_ws,
-        expose_cursor_per_ws: &mut state.expose_cursor_per_ws,
-    }
-    .forget_workspace(ws_idx);
 }

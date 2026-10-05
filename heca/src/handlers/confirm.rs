@@ -1,7 +1,5 @@
 //! The confirm step every destructive action goes through, and its wording.
 
-use super::pane::handle_close_pane_by_id;
-use super::workspace::{handle_delete_column, handle_delete_workspace};
 use crate::app::interaction::focused_pane_id;
 use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
@@ -251,15 +249,12 @@ fn confirm_title_for(action: &WmAction, target: &str) -> String {
     }
 }
 
-/// Run a raw destructive action immediately (no confirm) by calling its handler
-/// directly — the no-dialog branch of [`request_destructive`].
+/// Run a raw destructive action immediately (no confirm) — the no-dialog branch of
+/// [`request_destructive`]. They are server actions, so they run there, as the registry would run
+/// them.
 fn run_destructive_now(state: &mut AppState, action: &WmAction) {
-    match action {
-        WmAction::ClosePaneById { .. } => handle_close_pane_by_id(state, action),
-        WmAction::DeleteColumn { .. } => handle_delete_column(state, action),
-        WmAction::DeleteWorkspace { .. } => handle_delete_workspace(state, action),
-        _ => {}
-    }
+    let name = crate::actions::builtin_name(action.kind()).unwrap_or_default();
+    state.run_on_server(action, name);
 }
 
 /// The confirm-or-run chokepoint for a **raw** destructive action, used by the sidebar / keyboard

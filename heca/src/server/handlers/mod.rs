@@ -12,7 +12,13 @@ mod move_column;
 #[cfg(test)]
 mod move_tests;
 mod move_pane;
+mod names;
+#[cfg(test)]
+mod names_tests;
 mod pane;
+mod remove;
+#[cfg(test)]
+mod remove_tests;
 mod swap;
 #[cfg(test)]
 mod testing;
@@ -23,7 +29,7 @@ use crate::input::{WmAction, WmActionKind};
 /// A server action's handler.
 pub(crate) type ServerHandler = fn(&mut ServerCx<'_>, &WmAction) -> Vec<Change>;
 
-/// **The server actions that cannot run on the server yet, because they start a terminal.**
+/// **The server actions that cannot run on the server yet, because they start or find a terminal.**
 ///
 /// Starting a shell builds its launch settings from the window — the event proxy that wakes the
 /// loop, the theme, the cell size and viewport — and the terminals are not yet behind the server.
@@ -37,6 +43,7 @@ pub(crate) const AWAITING_TERMINALS: &[WmActionKind] = &[
     WmActionKind::SpawnCommand,
     WmActionKind::CreateWorkspace,
     WmActionKind::TerminalRun,
+    WmActionKind::TerminalKill,
 ];
 
 /// The server handler for `kind`, if the action has been moved here.
@@ -73,6 +80,17 @@ pub(crate) fn handler_for(kind: WmActionKind) -> Option<ServerHandler> {
         K::PlacePane => move_pane::place_pane,
         K::AddPaneToColumn => add::add_pane_to_column,
         K::AddColumnToWorkspace => add::add_column_to_workspace,
+        K::ClosePane => remove::close,
+        K::ClosePaneById => remove::close_pane_by_id,
+        K::DeleteColumn => remove::delete_column,
+        K::DeleteWorkspace => remove::delete_workspace,
+        K::RenameTarget => names::rename_target,
+        K::RenameWorkspaceTo => names::rename_workspace_to,
+        K::RenameColumnTo => names::rename_column_to,
+        K::ResetPaneName => names::reset_pane_name,
+        K::ResetPaneNameById => names::reset_pane_name_by_id,
+        K::ResetWorkspaceName => names::reset_workspace_name,
+        K::ResetWorkspaceNameByIdx => names::reset_workspace_name_by_idx,
         K::Float => pane::float,
         K::FloatAt => pane::float_at,
         _ => return None,
@@ -102,10 +120,8 @@ mod tests {
 
     /// **A server action is not run by a window handler**: either the server has it, or it is on
     /// the one list of those waiting for the terminals. This is the finish line of moving the
-    /// actions over; until the last file is converted it is expected to fail, so it is ignored
-    /// with that reason and must be switched on, not weakened, when the conversion is done.
+    /// actions over: a new server action with no handler fails it, and the list can only shrink.
     #[test]
-    #[ignore = "the conversion of the server actions is not finished"]
     fn every_server_action_runs_on_the_server_or_awaits_the_terminals() {
         let sides = sides();
         let stragglers: Vec<_> = WmActionKind::iter()

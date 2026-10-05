@@ -84,3 +84,22 @@ fn test_rename_target_copy() {
     let copied = t; // RenameTarget is Copy — `t` stays usable below.
     assert_eq!(t, copied);
 }
+
+/// **The rename dialog submits the catalogued action**, so a rename from the dialog, a key, RPC or
+/// a plugin is one route. Every target names an action the registry knows.
+#[test]
+fn the_rename_dialog_submits_the_action_that_names_the_target() {
+    use crate::input::WmAction;
+    assert_eq!(
+        RenameTarget::Pane(PaneId(4)).rename_to("x".into()),
+        WmAction::RenameTarget { pane_id: PaneId(4), name: "x".into() }
+    );
+    assert_eq!(
+        RenameTarget::Workspace(2).rename_to("x".into()),
+        WmAction::RenameWorkspaceTo { ws_idx: 2, name: "x".into() }
+    );
+    assert_eq!(
+        RenameTarget::Column { ws_idx: 1, col_idx: 3 }.rename_to("x".into()),
+        WmAction::RenameColumnTo { ws_idx: 1, col_idx: 3, name: "x".into() }
+    );
+}

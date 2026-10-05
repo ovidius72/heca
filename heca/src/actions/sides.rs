@@ -5,10 +5,17 @@
 //! action that fires.
 
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use super::{Side, builtins};
 use crate::args::{ArgSpec, sample_args};
 use crate::input::WmActionKind;
+
+/// The one table, built the first time it is asked for.
+pub(crate) fn shared() -> &'static Sides {
+    static SIDES: OnceLock<Sides> = OnceLock::new();
+    SIDES.get_or_init(Sides::from_builtins)
+}
 
 /// `kind → side`, for every built-in.
 pub(crate) struct Sides {

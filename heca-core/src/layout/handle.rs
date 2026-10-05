@@ -293,9 +293,16 @@ impl LayoutMut<'_> {
 }
 
 mod moves;
+mod names;
+#[cfg(test)]
+mod name_tests;
+mod remove;
+#[cfg(test)]
+mod remove_tests;
 #[cfg(test)]
 mod move_tests;
 mod swap;
 pub use moves::{Added, Moved};
+pub use remove::Removed;
 #[cfg(test)]
 mod tests;

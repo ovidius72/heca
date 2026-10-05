@@ -1,85 +1,15 @@
 //! Renaming a pane, column or workspace, resetting a custom name, and the rename dialog.
 
 use crate::app::interaction::focused_pane_id;
-use crate::app::mutations::after_metadata_change;
 use crate::app_state::{AppState, RenameTarget};
 use crate::input::WmAction;
 use heca_core::layout::PaneId;
 
-/// Apply a rename to `target`: an empty `new_name` clears the custom override (the item goes
-/// back to its default / process-tracked name). Searches all workspaces so a by-id pane rename
-/// works regardless of the active workspace.
-fn apply_rename(state: &mut AppState, target: RenameTarget, new_name: String) {
-    let name = (!new_name.is_empty()).then_some(new_name);
-    match target {
-        RenameTarget::Workspace(ws_idx) => {
-            if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-                ws.name = name;
-            }
-        }
-        RenameTarget::Column { ws_idx, col_idx } => {
-            if let Some(col) = state
-                .session
-                .workspaces
-                .get_mut(ws_idx)
-                .and_then(|ws| ws.scrolling.columns.get_mut(col_idx))
-            {
-                col.name = name;
-            }
-        }
-        RenameTarget::Pane(pane_id) => {
-            if let Some(pane) = state
-                .session
-                .workspaces
-                .iter_mut()
-                .find_map(|ws| ws.find_pane_mut(pane_id))
-            {
-                pane.custom_name = name;
-            }
-        }
-    }
-    after_metadata_change(state);
-    state.needs_redraw = true;
-}
-
-// ── Reset name (clear the custom name → back to the program / default label) ──
-// All reuse `apply_rename` with an empty string, which stores `None` (see its `then_some`),
-// so the pane falls back to the program name and the workspace to `Workspace N`.
-
-/// Clear the **focused** pane's custom name (context menu on a pane / RPC / keybind).
-pub fn handle_reset_pane_name(state: &mut AppState, _action: &WmAction) {
-    if let Some(pane_id) = state.focused_pane {
-        apply_rename(state, RenameTarget::Pane(pane_id), String::new());
-    }
-}
-
-/// Clear a specific pane's custom name by id (sidebar menu / RPC).
-pub fn handle_reset_pane_name_by_id(state: &mut AppState, action: &WmAction) {
-    let WmAction::ResetPaneNameById { pane_id } = action else {
-        return;
-    };
-    apply_rename(state, RenameTarget::Pane(*pane_id), String::new());
-}
-
-/// Clear the **active** workspace's custom name (context menu / RPC / keybind).
-pub fn handle_reset_workspace_name(state: &mut AppState, _action: &WmAction) {
-    let ws_idx = state.layout().active_workspace_idx();
-    apply_rename(state, RenameTarget::Workspace(ws_idx), String::new());
-}
-
-/// Clear a specific workspace's custom name by index (sidebar menu / RPC).
-pub fn handle_reset_workspace_name_by_idx(state: &mut AppState, action: &WmAction) {
-    let WmAction::ResetWorkspaceNameByIdx { ws_idx } = action else {
-        return;
-    };
-    apply_rename(state, RenameTarget::Workspace(*ws_idx), String::new());
-}
-
 /// Open the rename dialog for `target`, pre-filled with `current_name`. A host-owned modal
 /// (`OverlayHost::open_modal`) with a single `Input` field (bound to the `"name"` form field)
 /// and **OK / Cancel** buttons; the `Dialog` owns focus/keyboard (Tab / Shift+Tab between the
-/// field and buttons, Enter submits, Esc cancels). On OK the new name is applied via
-/// [`apply_rename`]; Cancel / Esc leaves the item unchanged. Replaces the old bottom-bar
+/// field and buttons, Enter submits, Esc cancels). On OK the new name is set by the
+/// action that names it, the same one a key, a plugin or RPC runs; Cancel / Esc leaves the item unchanged. Replaces the old bottom-bar
 /// `InputMode::Rename` flow.
 fn open_rename_dialog(state: &mut AppState, target: RenameTarget, current_name: String) {
     use crate::chrome::PropValue;
@@ -104,7 +34,7 @@ fn open_rename_dialog(state: &mut AppState, target: RenameTarget, current_name: 
         danger: false,
         dismissible: true,
     };
-    crate::chrome::open_modal(state, spec, move |state, _registry, result| {
+    crate::chrome::open_modal(state, spec, move |state, registry, result| {
         if let crate::chrome::ModalResult::Action { id, data } = result
             && id == "ok"
         {
@@ -116,7 +46,7 @@ fn open_rename_dialog(state: &mut AppState, target: RenameTarget, current_name: 
                 .to_string();
             // Submission cannot be blank — a blank OK leaves the item's name unchanged.
             if !name.is_empty() {
-                apply_rename(state, target, name);
+                registry.execute(&target.rename_to(name), state);
             }
         }
     });
@@ -202,21 +132,6 @@ pub fn handle_rename_column_by_idx(state: &mut AppState, action: &WmAction) {
         return;
     };
     enter_column_rename(state, *ws_idx, *col_idx);
-}
-
-pub fn handle_rename_target(state: &mut AppState, action: &WmAction) {
-    let WmAction::RenameTarget { pane_id, name } = action else {
-        return;
-    };
-    if let Some(mut ws) = state.layout_mut().active_workspace_mut()
-        && let Some(pane) = ws.find_pane_mut(*pane_id)
-    {
-        pane.title = if name.is_empty() {
-            format!("pane{pane_id}")
-        } else {
-            name.clone()
-        };
-    }
 }
 
 /// Open the rename dialog for workspace `ws_idx`, pre-filled with its current name. Shared by

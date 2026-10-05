@@ -409,7 +409,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         name: "rename_target",
         side: Side::Server,
         label: "Rename Pane To",
-        description: "Set a pane's name directly, without opening the rename prompt.",
+        description: "Set a pane's name directly, without opening the rename prompt. An empty name clears it.",
         icon: Some(Glyph::NotePencil),
         args: &[
             ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to rename."),

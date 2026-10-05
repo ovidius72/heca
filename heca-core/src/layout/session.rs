@@ -57,6 +57,15 @@ impl Session {
         })
     }
 
+    /// Use these options from now on: for the workspaces there are, which each keep their own copy
+    /// to lay themselves out with, and for the ones made later.
+    pub fn set_options(&mut self, options: LayoutOptions) {
+        for ws in &mut self.workspaces {
+            ws.scrolling.options = options.clone();
+        }
+        self.options = options;
+    }
+
     /// The workspace holding `pane`, tiled or floating.
     pub fn workspace_holding(&self, pane: PaneId) -> Option<usize> {
         self.workspaces.iter().position(|ws| ws.find_pane(pane).is_some())

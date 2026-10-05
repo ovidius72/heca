@@ -2,73 +2,8 @@
 
 use super::docks::focus_navigable_dock;
 use super::pick::{begin_pick, pane_candidates_with_stable_letters};
-use crate::app::interaction::focused_pane_id;
 use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
-
-/// Close the currently focused pane.
-///
-/// Delegates to the floating or tiled close path based on the focused pane's
-/// domain. After removal, destroys the workspace if it's empty and others
-/// remain, or leaves it empty if it's the only one.
-///
-/// # Floating domain
-///
-/// - Removes the floating pane and its backend.
-/// - Switches to `FocusDomain::Tiled` only when no floating panes remain.
-/// - Focuses the last visited tiled pane (or syncs from session state).
-///
-/// # Tiled domain
-///
-/// - Removes the active pane from the active column.
-/// - Removes its backend.
-///
-/// # Empty workspace handling
-///
-/// If the workspace becomes empty after closing and there are multiple
-/// workspaces, the empty one is destroyed and focus switches. If it's
-/// the only workspace, it's left empty — the user can repopulate it via
-/// the normal split bindings: `prefix+Enter` (new pane in a new column)
-/// or `prefix+v` (new pane in the current column). In an empty workspace,
-/// either binding effectively creates the first pane again.
-pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
-    let Some(pane_id) = focused_pane_id(state) else {
-        return;
-    };
-    // Raw close on the focused pane (`ClosePaneById` handles tiled + floating + empty-workspace
-    // cleanup). Confirmation is owned by the **central destructive gate** at the dispatch
-    // chokepoint (`maybe_confirm_destructive`), which intercepts `ClosePane` before it reaches
-    // this handler; so this runs only for direct handler-to-handler execution and must NOT
-    // re-gate (that would double-confirm).
-    handle_close_pane_by_id(state, &WmAction::ClosePaneById { pane_id });
-}
-
-/// Close a specific pane by ID (RPC-style).
-///
-/// Handles both tiled and floating panes. After removal, destroys the
-/// workspace if it's empty and other workspaces remain. If it's the only
-/// workspace, it stays empty — the user can repopulate it via the normal
-/// split bindings: `prefix+Enter` (new pane in a new column) or `prefix+v`
-/// (new pane in the current column). In an empty workspace, either binding
-/// effectively creates the first pane again.
-/// Close the pane with this id — **wherever it is**, not only in the workspace you are standing in.
-///
-/// The whole point of a by-id action is that the caller names a pane the keyboard is not on: the
-/// sidebar, a context menu, the exposé and RPC all reach panes in other workspaces. This searched
-/// `active_workspace_mut()` alone, so every one of those silently did nothing off the current
-/// workspace — deleting from the exposé's first row worked and its second row did not (Antonio,
-/// driving, 2026-08-11).
-///
-/// It is the same act [`close_pane_by_id_anywhere`](crate::app::mutations::close_pane_by_id_anywhere)
-/// already performed for a shell that exits on its own, which had the search right and the tidying
-/// up (empty-workspace destruction, search state, backend teardown) with it. Two implementations of
-/// one act, and the user-facing one was the poorer: now there is one.
-pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
-    let WmAction::ClosePaneById { pane_id } = action else {
-        return;
-    };
-    crate::app::mutations::close_pane_by_id_anywhere(state, *pane_id);
-}
 
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {

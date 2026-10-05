@@ -31,6 +31,19 @@ impl RenameTarget {
             RenameTarget::Workspace(_) => "rename_workspace",
         }
     }
+
+    /// The action that gives this thing `name` — what the rename dialog submits, the same action a
+    /// key, a plugin or RPC would run. An empty name clears it.
+    pub fn rename_to(self, name: String) -> crate::input::WmAction {
+        use crate::input::WmAction;
+        match self {
+            RenameTarget::Pane(pane_id) => WmAction::RenameTarget { pane_id, name },
+            RenameTarget::Column { ws_idx, col_idx } => {
+                WmAction::RenameColumnTo { ws_idx, col_idx, name }
+            }
+            RenameTarget::Workspace(ws_idx) => WmAction::RenameWorkspaceTo { ws_idx, name },
+        }
+    }
 }
 
 

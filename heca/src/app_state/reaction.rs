@@ -64,6 +64,11 @@ pub(crate) struct Reaction {
     /// Start a shell in this pane of this workspace. The terminals are still the window's, so a
     /// pane the server made is given its shell here; it goes when they move behind the server.
     pub(crate) start_shell: Option<(PaneId, usize)>,
+    /// End the terminal in this pane, which is gone. Like the shell start, the terminals are
+    /// still the window's, so this goes when they move behind the server.
+    pub(crate) stop_terminals: Vec<PaneId>,
+    /// Names changed: whatever shows them is out of date.
+    pub(crate) names_changed: bool,
 }
 
 /// The words for why the server did nothing, to follow the action's own label in the status bar.
@@ -129,6 +134,8 @@ pub(crate) fn window_reacts(
             }
             reaction.start_shell = Some((pane, workspace));
         }
+        Change::NamesChanged => reaction.names_changed = true,
+        Change::PaneRemoved { pane } => reaction.stop_terminals.push(pane),
         Change::PaneMoved { workspace, .. } => {
             // A pane moved by this window is shown where it landed.
             if asked.is_some() {
@@ -151,7 +158,7 @@ pub(crate) fn window_reacts(
 mod tests {
     use super::*;
     use heca_core::layout::testing::Windowed;
-    use heca_core::layout::{Pane, PaneId, Size};
+    use heca_core::layout::PaneId;
 
     /// What a window remembers, owned, for a test to hold.
     #[derive(Default)]
@@ -172,17 +179,7 @@ mod tests {
     }
 
     fn two_workspaces_of_two_columns() -> Windowed {
-        let mut window = Windowed::new(Size::new(1000.0, 800.0), 1.0);
-        window.m().add_workspace();
-        for idx in 0..2 {
-            window.show(idx);
-            for n in 0..2u64 {
-                let id = PaneId(10 * idx as u64 + n + 1);
-                window.m().add_pane(Pane::new(id, "p"), None, true);
-            }
-        }
-        window.show(0);
-        window
+        Windowed::with_shape(&[&[&[1], &[2]], &[&[11], &[12]]])
     }
 
     /// A column zoomed in another workspace is shown: the window goes there, remembers where it
@@ -345,6 +342,36 @@ mod tests {
             Change::NotificationsChanged,
         ] {
             assert_eq!(react(&mut window, &mut tracked, other, None).start_shell, None, "{other:?}");
+        }
+    }
+
+    /// A pane that is gone has its terminal ended by the window, and nothing else asks for that —
+    /// pinned with the shell start so both go together when the terminals are behind the server.
+    #[test]
+    fn a_removed_pane_has_its_terminal_ended_and_nothing_else_does() {
+        let mut window = two_workspaces_of_two_columns();
+        let mut tracked = Tracked::default();
+        let gone = react(&mut window, &mut tracked, Change::PaneRemoved { pane: PaneId(2) }, None);
+        assert_eq!(gone.stop_terminals, [PaneId(2)]);
+        for other in [
+            Change::LayoutChanged,
+            Change::PaneAdded { pane: PaneId(7), workspace: 0, column: 0 },
+            landed_in_workspace_1(),
+            Change::WorkspaceRemoved { index: 0 },
+            Change::NotificationsChanged,
+        ] {
+            assert!(react(&mut window, &mut tracked, other, None).stop_terminals.is_empty(), "{other:?}");
+        }
+    }
+
+    /// A name that changed tells the window what shows names is out of date; nothing else does.
+    #[test]
+    fn only_a_name_change_says_names_are_out_of_date() {
+        let mut window = two_workspaces_of_two_columns();
+        let mut tracked = Tracked::default();
+        assert!(react(&mut window, &mut tracked, Change::NamesChanged, None).names_changed);
+        for other in [Change::LayoutChanged, Change::PaneRemoved { pane: PaneId(1) }, landed_in_workspace_1()] {
+            assert!(!react(&mut window, &mut tracked, other, None).names_changed, "{other:?}");
         }
     }
 }

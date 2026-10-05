@@ -17,7 +17,6 @@ pub mod keyboard;
 pub(crate) mod keys_show;
 pub mod lifecycle;
 pub mod mutations;
-pub mod pane_ops;
 pub mod process_monitor;
 pub mod registry;
 pub mod render;

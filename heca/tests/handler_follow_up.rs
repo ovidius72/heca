@@ -35,7 +35,7 @@ fn no_handler_runs_the_follow_up_itself() {
     let src = common::module_source("handlers");
     let bodies = handler_bodies(&src);
     assert!(
-        bodies.len() > 100,
+        bodies.len() > 50,
         "found only {} handlers — the reader no longer understands the source",
         bodies.len()
     );

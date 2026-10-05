@@ -18,6 +18,11 @@ pub(crate) fn sides_for_tests() -> SidesForTests {
 #[cfg(test)]
 mod testing;
 
+/// A name the built-in action of this kind is known by.
+pub(crate) fn builtin_name(kind: crate::input::WmActionKind) -> Option<&'static str> {
+    sides::shared().name_of(kind)
+}
+
 pub use builtins::builtins;
 pub use catalog::{
     ActionCatalog, ActionCategory, ActionMeta, GENERIC_ACTION_ICON, Side, builtin_args,

@@ -106,6 +106,12 @@ fn default_overview_zoom_from() -> f64 {
     0.8
 }
 
+/// Default share of the working area a pane takes when it floats with nowhere given: `0.95`,
+/// which leaves a margin that shows it is floating, not tiled.
+fn default_float_size() -> f64 {
+    0.95
+}
+
 /// Default reach of a move's slide animation: nine tenths of the window.
 fn default_move_slide_reach() -> f64 {
     0.9
@@ -376,6 +382,10 @@ pub struct SettingsConfig {
     /// and back into. `1.0` disables the animation. Clamped to `0.2..=4.0`.
     #[serde(default = "default_overview_zoom_from")]
     pub overview_zoom_from: f64,
+    /// How much of the working area a pane takes when it floats with nowhere given — a fraction of
+    /// each side, centred. Clamped to `0.1..=1.0`.
+    #[serde(default = "default_float_size")]
+    pub float_size: f64,
     /// How far a pane that moved or swapped animates in from, as a fraction of the window.
     /// `0` makes moves jump. Clamped to `0.0..=1.0`.
     #[serde(default = "default_move_slide_reach")]
@@ -504,6 +514,7 @@ impl Default for SettingsConfig {
             center_focused_column: CenterFocusedColumn::default(),
             overview_zoom_from: default_overview_zoom_from(),
             overview_gap: default_overview_gap(),
+            float_size: default_float_size(),
             move_slide_reach: default_move_slide_reach(),
             shell_integration: default_shell_integration(),
             pane_renamed_add_process_name: default_pane_renamed_add_process_name(),

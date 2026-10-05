@@ -59,6 +59,13 @@ impl AppState {
                 asked.map(|a| a.action),
             );
             self.needs_redraw |= reaction.redraw;
+            if reaction.names_changed {
+                crate::app::mutations::after_metadata_change(self);
+            }
+            for pane in &reaction.stop_terminals {
+                self.clear_search(*pane);
+            }
+            self.server.backends.kill_all(reaction.stop_terminals);
             if let Some((pane, workspace)) = reaction.start_shell {
                 self.start_shell_in(pane, workspace);
             }

@@ -414,6 +414,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ResizeTo { .. }
         | WmAction::RenameColumn
         | WmAction::RenameColumnByIdx { .. }
+        | WmAction::RenameColumnTo { .. }
         | WmAction::DeleteColumn { .. }
         | WmAction::ZoomColumnAtIndex { .. }
         | WmAction::DeleteCurrentColumn
@@ -512,6 +513,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::CreateWorkspace
         | WmAction::RenameWorkspace
         | WmAction::RenameWorkspaceByIdx { .. }
+        | WmAction::RenameWorkspaceTo { .. }
         | WmAction::ResetWorkspaceName
         | WmAction::ResetWorkspaceNameByIdx { .. }
         | WmAction::DeleteWorkspace { .. } => ActionPolicy::WorkspaceLevel,

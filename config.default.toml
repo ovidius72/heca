@@ -84,6 +84,11 @@ overview_gap = 0.1
 # Clamped to 0.2..=4.0.
 overview_zoom_from = 0.8
 
+# How much of the working area a pane takes when it floats with nowhere given, as a
+# fraction of each side, centred. 0.95 leaves a margin that shows it is floating.
+# Clamped to 0.1..=1.0.
+float_size = 0.95
+
 # How far a pane that moved or swapped animates in from, as a fraction of the window.
 # A pane that crossed the screen eases in from this far away instead of flying over
 # the whole thing. 0 makes moves jump. Clamped to 0.0..=1.0.

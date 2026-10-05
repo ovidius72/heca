@@ -34,7 +34,7 @@ pub struct ActionRegistry {
     /// not runnable by the host — its owner is across the plugin boundary (plugin-08).
     dyn_handlers: HashMap<String, DynHandler>,
     /// Which side each kind of built-in runs on — what `execute` routes by.
-    sides: super::sides::Sides,
+    sides: &'static super::sides::Sides,
 }
 
 /// The handler for a name-keyed action. Unlike [`ActionHandler`] (a bare `fn` pointer keyed by
@@ -129,7 +129,7 @@ impl ActionRegistry {
         Self {
             handlers: HashMap::new(),
             dyn_handlers: HashMap::new(),
-            sides: super::sides::Sides::from_builtins(),
+            sides: super::sides::shared(),
         }
     }
 

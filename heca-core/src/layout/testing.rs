@@ -105,6 +105,31 @@ impl Windowed {
         }
     }
 
+    /// A window of `size` on a session of the given shape: one workspace per entry, each a list of
+    /// columns, each a list of pane ids (the first one makes the column, the others stack under
+    /// it). Workspace 0 is shown.
+    pub fn with_shape(shape: &[&[&[u64]]]) -> Self {
+        let mut window = Self::new(Size::new(1000.0, 800.0), 1.0);
+        for _ in 1..shape.len() {
+            window.m().add_workspace();
+        }
+        for (idx, columns) in shape.iter().enumerate() {
+            window.show(idx);
+            for panes in *columns {
+                let mut ids = panes.iter();
+                let Some(first) = ids.next() else { continue };
+                window.m().add_pane(super::Pane::new(super::PaneId(*first), "p"), None, true);
+                let col = window.l().workspace(idx).map_or(0, |ws| ws.scrolling.columns.len() - 1);
+                for id in ids {
+                    let pane = super::Pane::new(super::PaneId(*id), "p");
+                    window.ws().scroll_mut().add_pane_to_column(col, None, pane, false);
+                }
+            }
+        }
+        window.show(0);
+        window
+    }
+
     /// The reads.
     pub fn l(&self) -> Layout<'_> {
         self.session.through(&self.view)
