@@ -205,7 +205,14 @@ impl LayoutEngine {
                 self.updated += 1;
                 match context {
                     Some(ctx) => self.tree.new_leaf_with_context(style, ctx)?,
-                    None => self.tree.new_with_children(style, &child_nodes)?,
+                    None => {
+                        // Children go in through `set_children`, as for an existing node: it takes
+                        // each one out of the parent it had, where `new_with_children` leaves
+                        // that parent listing a child it no longer has.
+                        let node = self.tree.new_leaf(style)?;
+                        self.tree.set_children(node, &child_nodes)?;
+                        node
+                    }
                 }
             }
         };

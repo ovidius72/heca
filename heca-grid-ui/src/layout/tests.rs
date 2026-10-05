@@ -360,3 +360,47 @@ fn a_component_moved_in_from_another_tree_is_laid_out_in_its_new_one() {
     let b = outer.base().children[0].base().bounds;
     assert_eq!((b.size.w, b.size.h), (80.0, 30.0));
 }
+
+/// A component that moves into a new parent while its old parent goes must not leave the old
+/// parent listing it: dropping it later used to leave a dead node in the new parent's list and
+/// the next pass panicked inside taffy. Passes: built, moved under a new parent, dropped, laid
+/// out again. Run repeatedly because the order nodes are taken out in is not fixed.
+#[test]
+fn a_component_moved_under_a_new_parent_can_be_dropped_later() {
+    use crate::widgets::Label;
+    let live = |root: &Flex| {
+        root.base()
+            .layout_cache
+            .borrow()
+            .as_ref()
+            .map_or(0, |r| r.live.len())
+    };
+    let size = Size::new(400.0, 300.0);
+    for _ in 0..50 {
+        let mut engine = LayoutEngine::new();
+        let mut root = Flex::column()
+            .width(300.0)
+            .height(200.0)
+            .child(Flex::row().child(Flex::row().child(Label::new("moved"))));
+        engine.compute(&mut root, size);
+
+        let moved = root.base_mut().children[0]
+            .base_mut()
+            .children
+            .remove(0)
+            .base_mut()
+            .children
+            .remove(0);
+        root.base_mut().children.clear();
+        root.base_mut()
+            .children
+            .push(Box::new(Flex::row().child(moved)));
+        engine.compute(&mut root, size);
+        assert_eq!(live(&root), 3, "root, the new row and the moved label");
+
+        root.base_mut().children.clear();
+        engine.compute(&mut root, size);
+        engine.compute(&mut root, size);
+        assert_eq!(live(&root), 1, "only the root is left");
+    }
+}

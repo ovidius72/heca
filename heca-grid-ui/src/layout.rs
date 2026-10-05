@@ -220,7 +220,7 @@ impl LayoutEngine {
             .copied()
             .collect::<Vec<_>>()
         {
-            let _ = self.tree.remove(gone);
+            self.tree.remove(gone)?;
         }
         self.live = std::mem::take(&mut self.seen);
         // Publish the size the tree is being laid out against **before** anything is placed: a
