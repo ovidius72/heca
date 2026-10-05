@@ -1002,10 +1002,14 @@ pub trait Component {
     /// rebuilt. `true` when it took them; `false` when it declares no
     /// [`on_props`](crate::builders::ComponentExt::on_props) or declares one for another type.
     fn set_props(&mut self, props: &dyn std::any::Any) -> bool {
-        self.base_mut()
-            .props
-            .as_mut()
-            .is_some_and(|slot| slot.take(props))
+        let base = self.base_mut();
+        // The slot is lifted out while it runs: its handler is given the base it lives in.
+        let Some(mut slot) = base.props.take() else {
+            return false;
+        };
+        let took = slot.take(props, base);
+        base.props.get_or_insert(slot);
+        took
     }
 
     /// Whether this component participates in keyboard focus traversal
