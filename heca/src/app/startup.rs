@@ -78,6 +78,7 @@ pub(crate) fn layout_options_from(
             .overview_zoom_from
             .clamp(0.2, 4.0),
         overview_gap: app_config.config.settings.overview_gap.clamp(0.0, 1.0),
+        move_slide_reach: app_config.config.settings.move_slide_reach.clamp(0.0, 1.0),
         center_focused_column: match app_config.config.settings.center_focused_column {
             heca_config::settings::CenterFocusedColumn::Never => C::Never,
             heca_config::settings::CenterFocusedColumn::OnOverflow => C::OnOverflow,

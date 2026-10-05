@@ -4,6 +4,7 @@
 //! One file per category, mirroring `crate::handlers`. An action moves here when its descriptor
 //! says `Side::Server`; [`handler_for`] is the one place it is looked up.
 
+mod add;
 mod layout;
 #[cfg(test)]
 mod layout_tests;
@@ -68,6 +69,10 @@ pub(crate) fn handler_for(kind: WmActionKind) -> Option<ServerHandler> {
         K::MoveColumnDown => move_column::move_column_down,
         K::MoveColumnToWorkspace => move_column::move_column_to_workspace,
         K::MoveColumn => move_column::move_column,
+        K::TakePane => move_pane::take_pane,
+        K::PlacePane => move_pane::place_pane,
+        K::AddPaneToColumn => add::add_pane_to_column,
+        K::AddColumnToWorkspace => add::add_column_to_workspace,
         K::Float => pane::float,
         K::FloatAt => pane::float_at,
         _ => return None,

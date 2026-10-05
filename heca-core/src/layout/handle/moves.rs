@@ -4,7 +4,8 @@
 //! None of them changes which workspace a window shows beyond what removing one forces: showing the
 //! new place is the window's decision.
 
-use crate::layout::{ColumnId, LayoutMut, PaneId};
+use super::swap::{rect_of, slide_from};
+use crate::layout::{ColumnId, LayoutMut, Pane, PaneId};
 
 /// Where a moved pane or column landed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,6 +16,17 @@ pub struct Moved {
     pub column: usize,
     /// The workspace the move left empty and removed, numbered as it was before the move.
     pub removed_workspace: Option<usize>,
+}
+
+/// Where a pane that was made landed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Added {
+    /// The new pane.
+    pub pane: PaneId,
+    /// Its workspace.
+    pub workspace: usize,
+    /// Its column.
+    pub column: usize,
 }
 
 impl LayoutMut<'_> {
@@ -194,6 +206,109 @@ impl LayoutMut<'_> {
             ws.scroll_mut().add_column(Some(b_col), a, false);
         }
         true
+    }
+
+    /// Take a pane from wherever it is — a column, or the floating layer, of any workspace — to
+    /// the bottom of the active column of workspace `dst_ws`. `activate` makes it the active pane
+    /// there. `None` when it is not anywhere, or is already that column's last pane.
+    pub fn take_pane_into(&mut self, pane: PaneId, dst_ws: usize, activate: bool) -> Option<Moved> {
+        let src_ws = self.session.workspace_holding(pane)?;
+        let dst = self.reader().workspace(dst_ws)?;
+        let col = dst.scroll().active_column_idx();
+        let tail = dst.scrolling.columns.get(col).and_then(|c| c.panes.last()).map(|p| p.id);
+        if tail == Some(pane) {
+            return None;
+        }
+        let was_floating = self.reader().workspace(src_ws)?.scrolling.pane_indices(pane).is_none();
+        let mut src = self.workspace_mut(src_ws)?;
+        let taken = src.take_pane(pane)?;
+        if was_floating {
+            src.deactivate_floating_panes();
+            src.focus_domain = crate::layout::FocusDomain::Tiled;
+        }
+        let new_column = ColumnId(self.session.next_id());
+        let mut ws = self.workspace_mut(dst_ws)?;
+        let count = ws.scrolling.columns.len();
+        let landed = match count {
+            0 => {
+                ws.scroll_mut().add_new_column(None, new_column, taken, activate);
+                0
+            }
+            _ => {
+                let at = col.min(count - 1);
+                ws.scroll_mut().add_pane_to_column(at, None, taken, activate);
+                at
+            }
+        };
+        let removed = (src_ws != dst_ws && self.remove_workspace_if_empty(src_ws)).then_some(src_ws);
+        let workspace = match removed {
+            Some(gone) if gone < dst_ws => dst_ws - 1,
+            _ => dst_ws,
+        };
+        Some(Moved { workspace, column: landed, removed_workspace: removed })
+    }
+
+    /// Put a pane at row `row` of column `col` of workspace `dst_ws` — or, with no row, in a new
+    /// column there — sliding it from where it was when it stays in its workspace. Nothing
+    /// happens, and the pane is not touched, when the workspace is not there or the pane is not
+    /// anywhere.
+    pub fn place_pane(
+        &mut self,
+        pane: PaneId,
+        dst_ws: usize,
+        col: usize,
+        row: Option<usize>,
+    ) -> Option<Moved> {
+        if dst_ws >= self.session.workspaces.len() {
+            return None;
+        }
+        let src_ws = self.session.workspace_holding(pane)?;
+        let slide = self.slide();
+        let from = self.workspace_mut(src_ws).and_then(|ws| rect_of(&ws, pane));
+        let taken = self.workspace_mut(src_ws)?.take_pane(pane)?;
+        let new_column = ColumnId(self.session.next_id());
+        let mut ws = self.workspace_mut(dst_ws)?;
+        ws.place_pane(taken, col, row, new_column);
+        if src_ws == dst_ws {
+            slide_from(&mut ws, pane, from, slide);
+        }
+        let column = ws.scrolling.pane_indices(pane).map_or(0, |(c, _)| c);
+        Some(Moved { workspace: dst_ws, column, removed_workspace: None })
+    }
+
+    /// Make a pane at the bottom of column `col` of workspace `ws` (the last column, when `col` is
+    /// past it; a column of its own when there is none), active. `None` when the workspace is not
+    /// there.
+    pub fn add_pane_to_column(&mut self, ws: usize, col: usize) -> Option<Added> {
+        let pane = Pane::new(PaneId(self.next_id()), String::new());
+        let id = pane.id;
+        let new_column = ColumnId(self.session.next_id());
+        let mut workspace = self.workspace_mut(ws)?;
+        let count = workspace.scrolling.columns.len();
+        let column = match count {
+            0 => {
+                workspace.scroll_mut().add_new_column(None, new_column, pane, true);
+                0
+            }
+            _ => {
+                let at = col.min(count - 1);
+                workspace.scroll_mut().add_pane_to_column(at, None, pane, true);
+                at
+            }
+        };
+        Some(Added { pane: id, workspace: ws, column })
+    }
+
+    /// Make a pane in a new column of workspace `ws`, after its active column, active. `None`
+    /// when the workspace is not there.
+    pub fn add_column(&mut self, ws: usize) -> Option<Added> {
+        let pane = Pane::new(PaneId(self.next_id()), String::new());
+        let id = pane.id;
+        let new_column = ColumnId(self.session.next_id());
+        let mut workspace = self.workspace_mut(ws)?;
+        workspace.add_pane(pane, None, true, new_column);
+        let column = workspace.scroll().active_column_idx();
+        Some(Added { pane: id, workspace: ws, column })
     }
 
     /// Tidy up after something left workspace `src_ws` for `dst_ws`, landing at `column`: remove

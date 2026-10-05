@@ -28,7 +28,6 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::OpenContextMenu, handle_open_context_menu);
     registry.register(WmActionKind::ScrollViewLeft, handle_scroll_view_left);
     registry.register(WmActionKind::ScrollViewRight, handle_scroll_view_right);
-    registry.register(WmActionKind::PlacePane, handle_place_pane);
 
     // ── Pane ──
     registry.register(WmActionKind::ClosePane, handle_close_pane);
@@ -51,7 +50,6 @@ pub fn build_registry() -> ActionRegistry {
     );
     registry.register(WmActionKind::PaneTake, handle_pane_take);
     registry.register(WmActionKind::PaneTakeAndFocus, handle_pane_take_and_focus);
-    registry.register(WmActionKind::TakePane, handle_take_pane);
     // Chrome container placement (plugin-02, §2.9).
     registry.register(
         WmActionKind::MoveContainerToRegion,
@@ -176,11 +174,6 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::TerminalKill, handle_terminal_kill);
 
     // ── Sidebar-specific (parameterized) ──
-    registry.register(WmActionKind::AddPaneToColumn, handle_add_pane_to_column);
-    registry.register(
-        WmActionKind::AddColumnToWorkspace,
-        handle_add_column_to_workspace,
-    );
 
     // ── Destructive ──
     registry.register(WmActionKind::DeleteColumn, handle_delete_column);

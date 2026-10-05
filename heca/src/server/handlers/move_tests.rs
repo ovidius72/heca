@@ -101,3 +101,40 @@ fn a_pane_with_a_neighbour_goes_into_a_new_column() {
     let changes = run_for(&mut w, Some(PaneId(50)), WmAction::MovePaneToNewColumn);
     assert_eq!(changes, [Change::PaneMoved { pane: PaneId(50), workspace: 0, column: 1 }]);
 }
+
+/// Taking a pane puts it at the bottom of the asker's active column and says where it landed.
+#[test]
+fn a_taken_pane_lands_in_the_active_column() {
+    let mut w = two_workspaces_of_two_columns();
+    let changes = run(&mut w, WmAction::TakePane { pane_id: PaneId(1), focus_after: true });
+    assert_eq!(changes, [Change::PaneMoved { pane: PaneId(1), workspace: 0, column: 0 }]);
+    assert!(run(&mut w, WmAction::TakePane { pane_id: PaneId(1), focus_after: true }).is_empty());
+}
+
+/// Placing a pane in a workspace that is not there says nothing and keeps the pane.
+#[test]
+fn a_placed_pane_says_where_it_landed_and_a_bad_place_keeps_it() {
+    let mut w = two_workspaces_of_two_columns();
+    let place = |ws_idx| WmAction::PlacePane { pane_id: PaneId(1), ws_idx, col_idx: 0, pane_idx: None };
+    assert!(run(&mut w, place(9)).is_empty());
+    assert_eq!(w.session.workspaces[0].scrolling.columns.len(), 2);
+    assert_eq!(
+        run(&mut w, place(1)),
+        [Change::PaneMoved { pane: PaneId(1), workspace: 1, column: 0 }]
+    );
+}
+
+/// Making a pane says it was added and where; a workspace that is not there says nothing.
+#[test]
+fn a_made_pane_is_reported_as_added() {
+    let mut w = two_workspaces_of_two_columns();
+    let changes = run(&mut w, WmAction::AddPaneToColumn { ws_idx: 1, col_idx: 0 });
+    let [Change::PaneAdded { workspace: 1, column: 0, pane }] = changes[..] else {
+        panic!("unexpected {changes:?}");
+    };
+    assert!(w.session.workspaces[1].find_pane(pane).is_some());
+    let changes = run(&mut w, WmAction::AddColumnToWorkspace { ws_idx: 0 });
+    assert!(matches!(changes[..], [Change::PaneAdded { workspace: 0, .. }]));
+    assert_eq!(w.session.workspaces[0].scrolling.columns.len(), 3, "a column of its own");
+    assert!(run(&mut w, WmAction::AddColumnToWorkspace { ws_idx: 9 }).is_empty());
+}

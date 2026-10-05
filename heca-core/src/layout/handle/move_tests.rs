@@ -175,3 +175,93 @@ fn the_last_workspace_is_not_removed_when_empty() {
     assert!(!w.m().remove_workspace_if_empty(0));
     assert_eq!(w.session.workspaces.len(), 1);
 }
+
+#[test]
+fn a_pane_is_taken_to_the_bottom_of_the_active_column() {
+    let mut w = window(&[&[&[1], &[2, 3]]]);
+    let moved = w.m().take_pane_into(PaneId(1), 0, true);
+    assert_eq!(moved, Some(Moved { workspace: 0, column: 0, removed_workspace: None }));
+    assert_eq!(columns(&w, 0), [vec![2, 3, 1]]);
+    assert_eq!(w.m().take_pane_into(PaneId(1), 0, true), None, "already the tail");
+    assert_eq!(w.m().take_pane_into(PaneId(99), 0, true), None);
+}
+
+#[test]
+fn a_floating_pane_is_taken_into_the_tiling() {
+    let mut w = window(&[&[&[1]]]);
+    let rect = w.ws().reader().default_float_rect();
+    w.ws().add_floating_pane(Pane::new(PaneId(9), "f"), rect, None);
+    assert!(w.m().take_pane_into(PaneId(9), 0, true).is_some());
+    assert_eq!(columns(&w, 0), [[1, 9]]);
+    assert!(w.session.workspaces[0].floating_panes.is_empty());
+}
+
+#[test]
+fn taking_a_floating_pane_leaves_the_others_unfocused() {
+    let mut w = window(&[&[&[1]]]);
+    let rect = w.ws().reader().default_float_rect();
+    w.ws().add_floating_pane(Pane::new(PaneId(8), "f"), rect, None);
+    w.ws().add_floating_pane(Pane::new(PaneId(9), "f"), rect, None);
+    assert!(w.m().take_pane_into(PaneId(9), 0, true).is_some());
+    let ws = &w.session.workspaces[0];
+    assert_eq!(ws.floating_panes.len(), 1);
+    assert!(!ws.floating_panes[0].is_active);
+    assert_eq!(ws.focus_domain, crate::layout::FocusDomain::Tiled);
+}
+
+#[test]
+fn taking_the_only_pane_of_another_workspace_removes_it_and_renumbers() {
+    let mut w = window(&[&[&[1]], &[&[2]]]);
+    w.show(1);
+    let moved = w.m().take_pane_into(PaneId(1), 1, true);
+    assert_eq!(moved, Some(Moved { workspace: 0, column: 0, removed_workspace: Some(0) }));
+    assert_eq!(columns(&w, 0), [[2, 1]]);
+}
+
+#[test]
+fn a_pane_is_placed_at_a_row_or_in_a_new_column() {
+    let mut w = window(&[&[&[1], &[2, 3]]]);
+    let moved = w.m().place_pane(PaneId(1), 0, 0, Some(1));
+    assert_eq!(moved, Some(Moved { workspace: 0, column: 0, removed_workspace: None }));
+    assert_eq!(columns(&w, 0), [[2, 1, 3]]);
+    let moved = w.m().place_pane(PaneId(3), 0, 0, None);
+    assert_eq!(moved.map(|m| m.column), Some(0));
+    assert_eq!(columns(&w, 0), [vec![3], vec![2, 1]]);
+}
+
+#[test]
+fn a_pane_placed_in_a_workspace_that_is_not_there_is_not_lost() {
+    let mut w = window(&[&[&[1], &[2]]]);
+    assert_eq!(w.m().place_pane(PaneId(1), 5, 0, None), None);
+    assert_eq!(columns(&w, 0), [vec![1], vec![2]]);
+}
+
+#[test]
+fn a_pane_is_made_in_a_column_capped_to_the_last_one() {
+    let mut w = window(&[&[&[1], &[2]]]);
+    let added = w.m().add_pane_to_column(0, 9).expect("workspace 0");
+    assert_eq!((added.workspace, added.column), (0, 1));
+    assert_eq!(columns(&w, 0), [vec![1], vec![2, added.pane.0]]);
+    assert!(w.m().add_pane_to_column(7, 0).is_none());
+}
+
+#[test]
+fn a_pane_is_made_in_an_empty_workspace_and_in_a_new_column() {
+    let mut w = window(&[&[&[1]], &[]]);
+    let first = w.m().add_pane_to_column(1, 3).expect("workspace 1");
+    assert_eq!(columns(&w, 1), [vec![first.pane.0]]);
+    let second = w.m().add_column(1).expect("workspace 1");
+    assert_eq!(columns(&w, 1), [vec![first.pane.0], vec![second.pane.0]]);
+    assert_eq!(second.column, 1);
+    assert_ne!(first.pane, second.pane);
+}
+
+#[test]
+fn how_far_a_move_slides_in_from_is_the_layouts_option() {
+    let mut w = window(&[&[&[1]]]);
+    let full = w.m().slide();
+    assert_eq!((full.x, full.y), (900.0, 720.0), "nine tenths of the window by default");
+    w.session.options.move_slide_reach = 0.0;
+    let none = w.m().slide();
+    assert_eq!((none.x, none.y), (0.0, 0.0));
+}

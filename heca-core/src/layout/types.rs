@@ -190,6 +190,10 @@ pub struct LayoutOptions {
     /// How much of the working area a pane takes when it floats with nowhere given — a fraction of
     /// each side, centred. `0.95` leaves a margin that shows it is floating, not tiled.
     pub float_size: f64,
+    /// How far a pane that moved or swapped animates in from, as a fraction of the window: a pane
+    /// that crossed the screen eases in from this far away instead of flying over the whole thing.
+    /// `0` makes moves jump.
+    pub move_slide_reach: f64,
     /// The scale the exposé **opens from**, relative to its own map size — it animates out of this
     /// and back into it on the way out. `1.0` means no animation.
     ///
@@ -213,6 +217,7 @@ impl Default for LayoutOptions {
             always_center_single_column: false,
             default_column_width: ColumnWidth::Proportion(0.5),
             float_size: 0.95,
+            move_slide_reach: 0.9,
             // niri's defaults: zoom 0.5, gap a tenth of a screen.
             overview_zoom_from: 0.8,
             overview_gap: 0.1,

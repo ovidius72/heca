@@ -61,6 +61,9 @@ pub(crate) struct Reaction {
     pub(crate) redraw: bool,
     /// Say, in the status bar, why the action asked for did nothing.
     pub(crate) refusal: Option<Refusal>,
+    /// Start a shell in this pane of this workspace. The terminals are still the window's, so a
+    /// pane the server made is given its shell here; it goes when they move behind the server.
+    pub(crate) start_shell: Option<(PaneId, usize)>,
 }
 
 /// The words for why the server did nothing, to follow the action's own label in the status bar.
@@ -99,7 +102,7 @@ pub(crate) fn window_reacts(
     change: &Change,
     asked: Option<&WmAction>,
 ) -> Reaction {
-    let mut reaction = Reaction { redraw: true, refusal: None };
+    let mut reaction = Reaction { redraw: true, ..Reaction::default() };
     match *change {
         Change::LayoutChanged => {
             // An action that named a pane focuses it even when nothing moved.
@@ -119,6 +122,12 @@ pub(crate) fn window_reacts(
             if let Some(mut ws) = layout.workspace_mut(workspace) {
                 ws.scroll_mut().activate_column(column);
             }
+        }
+        Change::PaneAdded { pane, workspace, .. } => {
+            if asked.is_some() {
+                show_workspace(layout, tracking.last_visited_ws, workspace);
+            }
+            reaction.start_shell = Some((pane, workspace));
         }
         Change::PaneMoved { workspace, .. } => {
             // A pane moved by this window is shown where it landed.
@@ -309,5 +318,33 @@ mod tests {
         react(&mut window, &mut tracked, Change::LayoutChanged, Some(&ask));
         assert_eq!(window.l().active_workspace_idx(), 1);
         assert_eq!(window.l().workspace(1).map(|ws| ws.scroll().active_column_idx()), Some(0));
+    }
+
+    /// Only the asking window is taken to a pane it made; every window is told to start its shell,
+    /// because until the terminals are behind the server nothing else will. Pinned so that
+    /// reaction is found and removed with that work: no other fact asks for a shell.
+    #[test]
+    fn a_made_pane_gets_its_shell_and_nothing_else_does() {
+        let added = Change::PaneAdded { pane: PaneId(7), workspace: 1, column: 0 };
+        let mut window = two_workspaces_of_two_columns();
+        let mut tracked = Tracked::default();
+        let heard = react(&mut window, &mut tracked, added, None);
+        assert_eq!(heard.start_shell, Some((PaneId(7), 1)));
+        assert_eq!(window.l().active_workspace_idx(), 0, "another window does not follow");
+        let ask = WmAction::AddPaneToColumn { ws_idx: 1, col_idx: 0 };
+        react(&mut window, &mut tracked, added, Some(&ask));
+        assert_eq!(window.l().active_workspace_idx(), 1);
+
+        for other in [
+            Change::LayoutChanged,
+            Change::ColumnZoomed { workspace: 0, column: 0 },
+            landed_in_workspace_1(),
+            Change::ColumnMoved { workspace: 0, column: 0 },
+            Change::WorkspaceRemoved { index: 0 },
+            Change::Refused(Refusal::OnlyPaneInColumn),
+            Change::NotificationsChanged,
+        ] {
+            assert_eq!(react(&mut window, &mut tracked, other, None).start_shell, None, "{other:?}");
+        }
     }
 }

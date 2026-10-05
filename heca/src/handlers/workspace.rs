@@ -1,7 +1,6 @@
 //! Workspaces and columns as things: create, delete, add to, collapse and expand.
 
 use super::confirm::request_destructive;
-use super::split_resize::handle_split_horizontal;
 use crate::app::interaction::focused_pane_id;
 use crate::app_state::AppState;
 use crate::input::WmAction;
@@ -22,50 +21,6 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     while state.expose_cursor_per_ws.len() <= new_idx {
         state.expose_cursor_per_ws.push(None);
     }
-}
-
-/// Add a pane to a specific column in a specific workspace.
-/// Switches to the target workspace first.
-pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
-    let WmAction::AddPaneToColumn { ws_idx, col_idx } = action else {
-        return;
-    };
-    let target_ws = *ws_idx;
-    if target_ws >= state.session.workspaces.len() {
-        return;
-    }
-    // Switch to target workspace if needed
-    if state.layout().active_workspace_idx() != target_ws {
-        crate::switch_workspace_tracked(state, target_ws);
-    }
-    let next_id = state.session.next_id();
-    let pane = LayoutPane::new(PaneId(next_id), pane_name(PaneId(next_id)));
-    let backend_id = PaneId(next_id);
-    let col = *col_idx;
-    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
-        let capped_col = col.min(ws.scrolling.columns.len().saturating_sub(1));
-        ws.scroll_mut()
-            .add_pane_to_column(capped_col, None, pane, true);
-    }
-    state.start_shell_in(backend_id, target_ws);
-}
-
-/// Add a new column to a specific workspace (sidebar right-click context menu).
-/// Switches to the target workspace if needed, then creates a new column via a
-/// horizontal split. Explicit target, so unlike `sidebar_create_column` it does not
-/// depend on the sidebar-nav mode or cursor.
-pub fn handle_add_column_to_workspace(state: &mut AppState, action: &WmAction) {
-    let WmAction::AddColumnToWorkspace { ws_idx } = action else {
-        return;
-    };
-    let target_ws = *ws_idx;
-    if target_ws >= state.session.workspaces.len() {
-        return;
-    }
-    if state.layout().active_workspace_idx() != target_ws {
-        crate::switch_workspace_tracked(state, target_ws);
-    }
-    handle_split_horizontal(state, &WmAction::SplitHorizontal);
 }
 
 /// Delete a column and all its panes (destructive).

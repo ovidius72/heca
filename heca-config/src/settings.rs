@@ -106,6 +106,11 @@ fn default_overview_zoom_from() -> f64 {
     0.8
 }
 
+/// Default reach of a move's slide animation: nine tenths of the window.
+fn default_move_slide_reach() -> f64 {
+    0.9
+}
+
 fn default_always_center_single_column() -> bool {
     false
 }
@@ -371,6 +376,10 @@ pub struct SettingsConfig {
     /// and back into. `1.0` disables the animation. Clamped to `0.2..=4.0`.
     #[serde(default = "default_overview_zoom_from")]
     pub overview_zoom_from: f64,
+    /// How far a pane that moved or swapped animates in from, as a fraction of the window.
+    /// `0` makes moves jump. Clamped to `0.0..=1.0`.
+    #[serde(default = "default_move_slide_reach")]
+    pub move_slide_reach: f64,
     /// Auto-inject shell integration snippets for OSC 133/OSC 7 pane runtime signals.
     #[serde(default = "default_shell_integration")]
     pub shell_integration: bool,
@@ -495,6 +504,7 @@ impl Default for SettingsConfig {
             center_focused_column: CenterFocusedColumn::default(),
             overview_zoom_from: default_overview_zoom_from(),
             overview_gap: default_overview_gap(),
+            move_slide_reach: default_move_slide_reach(),
             shell_integration: default_shell_integration(),
             pane_renamed_add_process_name: default_pane_renamed_add_process_name(),
             pane_show_cwd: default_pane_show_cwd(),

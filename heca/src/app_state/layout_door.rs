@@ -59,6 +59,9 @@ impl AppState {
                 asked.map(|a| a.action),
             );
             self.needs_redraw |= reaction.redraw;
+            if let Some((pane, workspace)) = reaction.start_shell {
+                self.start_shell_in(pane, workspace);
+            }
             if let (Some(reason), Some(asked)) = (reaction.refusal, asked) {
                 self.status_note = Some(crate::handlers::act_refusal(
                     &self.action_catalog,

@@ -19,6 +19,12 @@ pub(crate) enum Change {
         workspace: usize,
         column: usize,
     },
+    /// A new pane now sits in column `column` of workspace `workspace`. Nothing runs in it yet.
+    PaneAdded {
+        pane: heca_core::layout::PaneId,
+        workspace: usize,
+        column: usize,
+    },
     /// A column now sits at index `column` of workspace `workspace` (numbered as they are now).
     ColumnMoved { workspace: usize, column: usize },
     /// The workspace that was at `index` is gone; every later one is one lower.

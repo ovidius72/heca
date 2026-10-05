@@ -57,6 +57,11 @@ impl Session {
         })
     }
 
+    /// The workspace holding `pane`, tiled or floating.
+    pub fn workspace_holding(&self, pane: PaneId) -> Option<usize> {
+        self.workspaces.iter().position(|ws| ws.find_pane(pane).is_some())
+    }
+
     /// Create a new workspace and append it.
     pub fn add_workspace(&mut self) -> WorkspaceId {
         let id = WorkspaceId(self.next_id());

@@ -5,10 +5,6 @@ use crate::layout::animation::AnimationConfig;
 use crate::layout::types::{ColumnId, Point, Rectangle};
 use crate::layout::{LayoutMut, Pane, PaneId, WorkspaceMut};
 
-/// How far a pane may animate from, as a share of the window: a swap across the screen eases in
-/// from the edge instead of flying over the whole thing.
-const MAX_SLIDE: f64 = 0.9;
-
 /// Where a pane is: workspace, column, and row within the column.
 #[derive(Clone, Copy)]
 struct Spot {
@@ -126,9 +122,10 @@ impl LayoutMut<'_> {
         true
     }
 
-    fn slide(&self) -> Point {
+    pub(super) fn slide(&self) -> Point {
         let viewport = self.reader().viewport();
-        Point::new(viewport.w * MAX_SLIDE, viewport.h * MAX_SLIDE)
+        let reach = self.session.options.move_slide_reach;
+        Point::new(viewport.w * reach, viewport.h * reach)
     }
 }
 
@@ -185,7 +182,7 @@ impl WorkspaceMut<'_> {
     }
 }
 
-fn rect_of(ws: &WorkspaceMut<'_>, pane: PaneId) -> Option<Rectangle> {
+pub(super) fn rect_of(ws: &WorkspaceMut<'_>, pane: PaneId) -> Option<Rectangle> {
     ws.scroll()
         .panes_with_positions()
         .into_iter()
@@ -254,7 +251,7 @@ fn put_over_placeholder(
 }
 
 /// Animate a pane from `from` to where it is now, at most `slide` away.
-fn slide_from(ws: &mut WorkspaceMut<'_>, pane: PaneId, from: Option<Rectangle>, slide: Point) {
+pub(super) fn slide_from(ws: &mut WorkspaceMut<'_>, pane: PaneId, from: Option<Rectangle>, slide: Point) {
     let (Some(from), Some((col, row))) = (from, ws.scrolling.pane_indices(pane)) else {
         return;
     };

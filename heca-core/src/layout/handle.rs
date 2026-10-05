@@ -296,6 +296,6 @@ mod moves;
 #[cfg(test)]
 mod move_tests;
 mod swap;
-pub use moves::Moved;
+pub use moves::{Added, Moved};
 #[cfg(test)]
 mod tests;

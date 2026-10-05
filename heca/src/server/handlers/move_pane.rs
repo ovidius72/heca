@@ -116,3 +116,30 @@ pub(super) fn move_to_new_column(cx: &mut ServerCx<'_>, _action: &WmAction) -> V
         None => vec![Change::Refused(Refusal::OnlyPaneInColumn)],
     }
 }
+
+/// Take a pane from wherever it is to the bottom of the asker's active column.
+pub(super) fn take_pane(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
+    let WmAction::TakePane {
+        pane_id,
+        focus_after,
+    } = action
+    else {
+        return Vec::new();
+    };
+    let into = cx.layout.reader().active_workspace_idx();
+    landed(*pane_id, cx.layout.take_pane_into(*pane_id, into, *focus_after))
+}
+
+/// Put a pane at an exact place.
+pub(super) fn place_pane(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
+    let WmAction::PlacePane {
+        pane_id,
+        ws_idx,
+        col_idx,
+        pane_idx,
+    } = action
+    else {
+        return Vec::new();
+    };
+    landed(*pane_id, cx.layout.place_pane(*pane_id, *ws_idx, *col_idx, *pane_idx))
+}
