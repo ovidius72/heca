@@ -38,10 +38,8 @@ pub(super) fn float_at(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> 
     else {
         return Vec::new();
     };
-    let Some(mut ws) = cx.layout.active_workspace_mut() else {
-        return Vec::new();
-    };
     let rect = Rectangle::new(Point::new(*x, *y), Size::new(*width, *height));
-    ws.float_tiled_pane(*pane_id, rect);
-    vec![Change::LayoutChanged]
+    cx.change_active_workspace(|mut ws| {
+        ws.float_tiled_pane(*pane_id, rect);
+    })
 }

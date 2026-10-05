@@ -5,6 +5,8 @@
 //! says `Side::Server`; [`handler_for`] is the one place it is looked up.
 
 mod layout;
+#[cfg(test)]
+mod layout_tests;
 mod pane;
 
 use super::{Change, ServerCx};
@@ -38,6 +40,11 @@ pub(crate) fn handler_for(kind: WmActionKind) -> Option<ServerHandler> {
         K::ZoomColumn => layout::zoom_column,
         K::PaneHeightIncrease => layout::pane_height_increase,
         K::PaneHeightDecrease => layout::pane_height_decrease,
+        K::ZoomColumnAtIndex => layout::zoom_column_at_index,
+        K::Resize => layout::resize,
+        K::ResizeTo => layout::resize_to,
+        K::ResizeColumnBy => layout::resize_column_by,
+        K::ResizePaneHeightBy => layout::resize_pane_height_by,
         K::Float => pane::float,
         K::FloatAt => pane::float_at,
         _ => return None,

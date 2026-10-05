@@ -24,12 +24,14 @@ impl AppState {
     /// Do what only a window can about what the server says changed.
     pub(crate) fn apply(&mut self, changes: Vec<crate::server::Change>) {
         for change in changes {
-            match change {
-                crate::server::Change::NotificationsChanged => {
-                    self.sync_toasts();
-                    self.needs_redraw = true;
-                }
-                crate::server::Change::LayoutChanged => self.needs_redraw = true,
+            if matches!(change, crate::server::Change::NotificationsChanged) {
+                self.sync_toasts();
+                self.needs_redraw = true;
+                continue;
+            }
+            let mut layout = self.session.through_mut(&mut self.view);
+            if super::reaction::window_reacts(&mut layout, &mut self.last_visited_ws_idx, &change) {
+                self.needs_redraw = true;
             }
         }
     }

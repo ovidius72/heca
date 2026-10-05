@@ -70,12 +70,8 @@ pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: PaneId) {
 /// same-workspace pane toggle (Prefix+i) and must not be overwritten by
 /// workspace switches.
 pub(crate) fn switch_workspace_tracked(state: &mut AppState, new_idx: usize) {
-    let current_ws = state.layout().active_workspace_idx();
-    if current_ws == new_idx {
-        return;
-    }
-    state.last_visited_ws_idx = Some(current_ws);
-    state.layout_mut().switch_to_workspace(new_idx);
+    let mut layout = state.session.through_mut(&mut state.view);
+    crate::app_state::show_workspace(&mut layout, &mut state.last_visited_ws_idx, new_idx);
 }
 
 /// Sync `focused_pane` from session active state and rebuild dependent UI state.

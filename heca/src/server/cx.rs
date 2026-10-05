@@ -1,6 +1,8 @@
 //! What a server handler is given: the shared content to change, and who asked.
 
-use heca_core::layout::{LayoutMut, PaneId};
+use heca_core::layout::{LayoutMut, PaneId, WorkspaceMut};
+
+use super::Change;
 
 /// Plain data about the window that asked — what a server action needs to know that only the
 /// window knows. The server never reads it from a window: with several windows (F012) each request
@@ -19,4 +21,21 @@ pub(crate) struct ServerCx<'a> {
     pub(crate) layout: LayoutMut<'a>,
     /// Who asked.
     pub(crate) asker: Asker,
+}
+
+impl ServerCx<'_> {
+    /// Change the layout of the workspace the asker is in, and say the layout changed. Says nothing
+    /// when there is no workspace — there was nothing to change.
+    pub(crate) fn change_active_workspace(
+        &mut self,
+        change: impl FnOnce(WorkspaceMut<'_>),
+    ) -> Vec<Change> {
+        match self.layout.active_workspace_mut() {
+            Some(ws) => {
+                change(ws);
+                vec![Change::LayoutChanged]
+            }
+            None => Vec::new(),
+        }
+    }
 }

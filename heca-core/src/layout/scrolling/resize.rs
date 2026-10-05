@@ -3,7 +3,12 @@
 use super::*;
 
 impl ScrollingMut<'_> {
-    fn finish_active_column_width_change(&mut self, old_xs: &[(ColumnId, f64)], old_view_pos: f64) {
+    fn finish_column_width_change(
+        &mut self,
+        column: usize,
+        old_xs: &[(ColumnId, f64)],
+        old_view_pos: f64,
+    ) {
         self.update_all_column_widths();
 
         // Preserve view position so layout stays visually fixed during width changes.
@@ -11,8 +16,8 @@ impl ScrollingMut<'_> {
         let view_delta = old_view_pos - new_view_pos;
         self.view.offset.offset(view_delta);
 
-        // Ensure the active column stays visible after the width change.
-        let target_offset = self.reader().compute_view_offset_for_column(self.view.active_column, None);
+        // Ensure the changed column stays visible after the width change.
+        let target_offset = self.reader().compute_view_offset_for_column(column, None);
         let pixel = 1.0 / self.view.scale;
         let diff = target_offset - self.view.offset.target();
         if diff.abs() < pixel {
@@ -42,25 +47,29 @@ impl ScrollingMut<'_> {
 
     /// Toggle the active column between viewport-wide zoom and its previous width.
     pub fn toggle_active_column_zoom(&mut self) -> bool {
-        if self.view.active_column >= self.space.columns.len() {
+        self.toggle_column_zoom(self.view.active_column)
+    }
+
+    /// Toggle the column at `idx` between viewport-wide zoom and its previous width, whichever
+    /// column is active. The view follows the zoomed column so it stays visible.
+    pub fn toggle_column_zoom(&mut self, idx: usize) -> bool {
+        if idx >= self.space.columns.len() {
             return false;
         }
 
         let old_xs = self.space.capture_column_positions();
         let old_view_pos = self.reader().view_pos();
-        let active_idx = self.view.active_column;
-        let active_was_zoomed = self.space.columns[active_idx].is_zoomed();
 
-        let active_col = &mut self.space.columns[active_idx];
-        if active_was_zoomed {
-            if let Some(previous_width) = active_col.zoom_restore_width.take() {
-                active_col.width = previous_width;
+        let column = &mut self.space.columns[idx];
+        if column.is_zoomed() {
+            if let Some(previous_width) = column.zoom_restore_width.take() {
+                column.width = previous_width;
             }
         } else {
-            active_col.zoom_restore_width = Some(active_col.width);
+            column.zoom_restore_width = Some(column.width);
         }
 
-        self.finish_active_column_width_change(&old_xs, old_view_pos);
+        self.finish_column_width_change(idx, &old_xs, old_view_pos);
         true
     }
 
@@ -128,7 +137,7 @@ impl ScrollingMut<'_> {
         // Anchor on the **resized** column's left edge (its on-screen offset from
         // the view) so its right edge — the divider being dragged — tracks the
         // cursor, regardless of which column is active. Anchoring on the *active*
-        // column (the old `finish_active_column_width_change`) made a left column
+        // column (the old active-column recentre) made a left column
         // grow leftward when the right column was focused (the "wrong side" bug).
         let old_rel = self.space.column_x(idx) - self.reader().view_pos();
 

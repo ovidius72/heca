@@ -11,4 +11,6 @@ pub(crate) enum Change {
     NotificationsChanged,
     /// The arrangement of panes or columns is different: a column was resized, a pane was moved.
     LayoutChanged,
+    /// The column at `column` in the workspace at `workspace` was zoomed or restored.
+    ColumnZoomed { workspace: usize, column: usize },
 }

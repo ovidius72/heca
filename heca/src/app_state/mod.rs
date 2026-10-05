@@ -25,6 +25,7 @@ mod input_mode;
 mod layout_door;
 mod metrics;
 mod mouse_state;
+mod reaction;
 mod search;
 mod state;
 mod terminal_layers;
@@ -34,6 +35,7 @@ pub use mouse_state::*;
 pub use search::*;
 pub use state::*;
 pub use terminal_layers::*;
+pub(crate) use reaction::show_workspace;
 
 #[cfg(test)]
 mod tests;

@@ -405,6 +405,20 @@ fn the_size_verb_still_grows_the_active_pane_from_every_seat() {
 }
 
 #[test]
+fn a_column_is_zoomed_by_index_without_becoming_active() {
+    let mut space = test_scrolling_space();
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.4)), true);
+    space.m().add_column(None, test_column(2, ColumnWidth::Proportion(0.6)), false);
+
+    assert!(space.m().toggle_column_zoom(1));
+    assert!(space.columns[1].is_zoomed());
+    assert!(!space.columns[0].is_zoomed());
+    assert_eq!(space.view.active_column, 0, "zooming does not move the active column");
+
+    assert!(!space.m().toggle_column_zoom(9), "no such column");
+}
+
+#[test]
 fn columns_can_be_zoomed_independently() {
     let mut space = test_scrolling_space();
     space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.4)), true);

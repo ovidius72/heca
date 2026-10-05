@@ -25,7 +25,6 @@ pub fn build_registry() -> ActionRegistry {
     // ── Layout ──
     registry.register(WmActionKind::SplitHorizontal, handle_split_horizontal);
     registry.register(WmActionKind::SplitVertical, handle_split_vertical);
-    registry.register(WmActionKind::ZoomColumnAtIndex, handle_zoom_column_at_index);
     registry.register(WmActionKind::OpenContextMenu, handle_open_context_menu);
     registry.register(WmActionKind::ScrollViewLeft, handle_scroll_view_left);
     registry.register(WmActionKind::ScrollViewRight, handle_scroll_view_right);
@@ -51,13 +50,6 @@ pub fn build_registry() -> ActionRegistry {
     );
     registry.register(WmActionKind::MoveColumn, handle_move_column);
     registry.register(WmActionKind::SwapColumns, handle_swap_columns);
-    registry.register(WmActionKind::Resize, handle_resize);
-    registry.register(WmActionKind::ResizeColumnBy, handle_resize_column_by);
-    registry.register(
-        WmActionKind::ResizePaneHeightBy,
-        handle_resize_pane_height_by,
-    );
-    registry.register(WmActionKind::ResizeTo, handle_resize_to);
 
     // ── Pane ──
     registry.register(WmActionKind::ClosePane, handle_close_pane);
