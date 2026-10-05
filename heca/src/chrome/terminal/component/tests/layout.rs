@@ -91,3 +91,23 @@ fn a_terminal_with_no_process_paints_nothing() {
     heca_grid_ui::paint_child(root.as_ref(), &mut PaintCx::new(&mut scene, &theme));
     assert!(scene.iter().all(|c| !matches!(c, DrawCommand::Host(_))));
 }
+
+/// **A frame caused only by a terminal printing lays nothing out.** What changes is the picture the
+/// host draws for the surface and the viewport it shows back; no widget's style or text does. So a
+/// second layout pass over the same tree, with the viewport shown again, updates no node and taffy
+/// answers from its own cache.
+#[test]
+fn a_terminal_that_only_prints_changes_no_layout_node() {
+    let t = Terminal::new();
+    t.show(&scrolled(0));
+    let mut root = laid_out_in(Box::new(t.clone()), 300.0, 200.0);
+    let size = heca_grid_ui::Size::new(300.0, 200.0);
+    let mut engine = heca_grid_ui::LayoutEngine::new();
+    engine.compute(root.as_mut(), size);
+
+    // A frame: the owner shows the viewport again, as it does after every burst of output.
+    t.show(&scrolled(0));
+    engine.compute(root.as_mut(), size);
+
+    assert_eq!(engine.updated_nodes(), 0, "nothing in the tree changed");
+}

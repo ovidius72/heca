@@ -217,6 +217,11 @@ pub struct Base {
     pub style: Style,
     /// This component's node in the layout tree (set during layout).
     pub node: Option<taffy::NodeId>,
+    /// Which retained layout tree [`node`](Self::node) belongs to, so a component moved in from
+    /// another tree is not taken for a node of this one.
+    pub(crate) layout_tree: Cell<u64>,
+    /// What this tree remembers of its last layout — only a root holds one.
+    pub(crate) layout_cache: RefCell<Option<Box<crate::layout::RetainedLayout>>>,
     /// Absolute bounds in logical pixels, filled in after layout.
     pub bounds: Rectangle,
     /// Whether this component is rendered.
@@ -706,6 +711,8 @@ impl Base {
             style: Style::default(),
             grid_area: None,
             node: None,
+            layout_tree: Cell::new(0),
+            layout_cache: RefCell::new(None),
             bounds: Rectangle::from_size(Size::new(0.0, 0.0)),
             visible: signal(true),
             disabled: signal(false),
