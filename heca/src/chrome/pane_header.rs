@@ -12,6 +12,9 @@ use super::*;
 use heca_grid_ui::builders::StyleExt as _;
 use heca_grid_ui::widgets::{Button, ButtonGroup, ButtonVariant};
 
+mod env;
+pub(crate) use env::{HeaderEnv, PaneHeader, give_header_facts};
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PaneInfoView {
     pub(crate) icon: Glyph,
@@ -780,6 +783,29 @@ pub(crate) struct PaneHeaderInput {
     avail_w: f32,
 }
 
+#[cfg(test)]
+impl PaneHeaderInput {
+    /// Facts for pane `pane_id` and nothing else — what a test hands a pane.
+    pub(crate) fn for_test(pane_id: PaneId) -> Self {
+        Self {
+            pane_id,
+            ws_idx: 0,
+            col_idx: 0,
+            name: String::new(),
+            custom_name: None,
+            runtime: None,
+            zoomed: false,
+            floating: false,
+            avail_w: 100.0,
+        }
+    }
+
+    /// Which pane these facts are about.
+    pub(crate) fn pane(&self) -> PaneId {
+        self.pane_id
+    }
+}
+
 /// **Read what every pane's header depends on**, once a frame. `None` when the info bar is
 /// disabled: no pane gets one.
 ///
@@ -852,71 +878,6 @@ pub(crate) fn pane_header_inputs(
         .pane_chips
         .retain_panes(&inputs.keys().copied().collect());
     Some(inputs)
-}
-
-/// **Tell a pane's header what is true of it now.** Cheap when nothing changed: the shape is summed
-/// up in a key, and the header builds a tree only when the key is not the one it already shows.
-pub(crate) fn show_pane_header(
-    state: &crate::app_state::AppState,
-    theme: &GuiTheme,
-    input: &PaneHeaderInput,
-    header: &heca_grid_ui::widgets::Keyed,
-) {
-    let segments = state
-        .pane_chips
-        .shown(&state.appearance.pane.title_segments);
-    let actions = state
-        .pane_buttons
-        .shown(&state.appearance.pane.title_actions);
-    let font = theme.font_size;
-    let facts = super::pane_items::PaneFacts::of(
-        input.pane_id,
-        &state.programs,
-        &input.name,
-        input.custom_name.as_deref(),
-        input.runtime.as_ref(),
-    );
-    let content = PaneHeaderContent {
-        facts: &facts,
-        segments: &segments,
-        chips: &state.pane_chips,
-        actions: &actions,
-        ws_idx: input.ws_idx,
-        col_idx: input.col_idx,
-        zoomed: input.zoomed,
-        floating: input.floating,
-        shortcuts: &state.action_shortcuts,
-        catalog: &state.action_catalog,
-    };
-    let key = pane_header_key(&content, font, input.avail_w);
-    // **The words travel beside the tree, not inside its identity**: they are written onto the tree
-    // by the key of the chip that shows each, so a command changing the program it shows moves the
-    // words and nothing else.
-    let words: Vec<_> = segment_items(
-        content.chips,
-        content.segments,
-        content.facts,
-        input.avail_w,
-        font,
-    )
-    .into_iter()
-    .map(|(name, _, text)| (segment_text_key(&name), text))
-    .collect();
-    header.texts(words);
-    header.show(key, || {
-        let band = crate::chrome::theme::top_bottom_pane_background_color(&state.theme);
-        let ctx = PaneHeaderCtx {
-            pane_id: input.pane_id,
-            ws_idx: input.ws_idx,
-            col_idx: input.col_idx,
-            event_proxy: state.event_proxy.clone(),
-        };
-        let root = build_pane_header(&content, theme, band, font, input.avail_w, ctx)?;
-        // The identity rule's warning half: each control carries a key naming which pane's
-        // control it is, and this says so if that ever goes.
-        super::identity::report_ambiguous_widgets("pane-header", &root);
-        Some(Box::new(root) as Box<dyn Component>)
-    });
 }
 
 #[cfg(test)]

@@ -19,7 +19,8 @@ pub(crate) use pane::{RetainedPane, clear_panes, sync_panes};
 pub(crate) mod pane_header;
 pub(crate) mod terminal;
 pub(crate) use pane_header::{
-    ActionShortcuts, action_tooltip, home_relative_path, pane_header_inputs, pane_info_view, show_pane_header,
+    ActionShortcuts, HeaderEnv, PaneHeader, action_tooltip, home_relative_path,
+    give_header_facts, pane_header_inputs, pane_info_view,
 };
 pub(crate) mod drag;
 pub(crate) mod pane_items;

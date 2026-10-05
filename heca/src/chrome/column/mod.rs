@@ -26,9 +26,6 @@ pub(crate) struct RetainedColumn {
     /// surface, so whoever offers it has to know which panes are in here without reading a key
     /// back out of the tree.
     pub(crate) panes: Vec<PaneId>,
-    /// **Each pane's header**, held by the column that holds the pane, for as long as the pane is
-    /// in it. The host tells each the facts; each builds its own tree only when its shape changes.
-    pub(crate) headers: std::collections::HashMap<PaneId, heca_grid_ui::widgets::Keyed>,
 }
 
 /// Drop every retained column — used when a config reload changes the theme baked into the trees.
@@ -134,7 +131,8 @@ pub(crate) fn sync_columns(
     // **The panes come from the same reading of the session the pane surface uses**, so a column
     // and the panes in it can never disagree about where anything is.
     let pane_models = crate::chrome::pane::pane_models(state);
-    let theme = crate::chrome::chrome_gui_theme(state);
+    // What a header is built from, taken the first time a pane is built this frame.
+    let mut env: Option<std::rc::Rc<crate::chrome::HeaderEnv>> = None;
     // What each pane runs: the terminal the app keeps for it, placed in the pane's content slot.
     let mut contents: std::collections::HashMap<PaneId, Box<dyn heca_grid_ui::Component>> =
         pane_models
@@ -174,25 +172,21 @@ pub(crate) fn sync_columns(
             .get(&col.id)
             .map(|c| c.key != key)
             .unwrap_or(true);
+        // A header is built from what is true now, taken when a pane is built: with the column, or
+        // when a pane arrives in it.
+        let arriving = state
+            .columns
+            .get(&col.id)
+            .is_none_or(|c| model.panes.iter().any(|p| !c.panes.contains(&p.pane_id)));
+        if headers.is_some() && (needs_build || arriving) {
+            env.get_or_insert_with(|| crate::chrome::HeaderEnv::of(state));
+        }
         if needs_build {
-            // A header for each pane, when the info bar is on: held by the column beside the pane.
-            let made: std::collections::HashMap<PaneId, heca_grid_ui::widgets::Keyed> = headers
-                .map(|_| {
-                    model
-                        .panes
-                        .iter()
-                        .map(|p| (p.pane_id, heca_grid_ui::widgets::Keyed::new()))
-                        .collect()
-                })
-                .unwrap_or_default();
             let root = ColumnShell {
                 model: &model,
                 cb: &cb,
                 pane_cb: &pane_cb,
-                headers: made
-                    .iter()
-                    .map(|(id, h)| (*id, Box::new(h.clone()) as Box<dyn heca_grid_ui::Component>))
-                    .collect(),
+                header_env: headers.and(env.clone()),
                 contents: model
                     .panes
                     .iter()
@@ -206,7 +200,6 @@ pub(crate) fn sync_columns(
                     root,
                     key,
                     panes: model.panes.iter().map(|p| p.pane_id).collect(),
-                    headers: made,
                 },
             );
         }
@@ -217,11 +210,7 @@ pub(crate) fn sync_columns(
             // here keeps the widget it had — its letter, a gesture in flight, an animation — and
             // only one that arrived is built. Rebuilding them all would be the 100% CPU idle this
             // surface was warned about.
-            let RetainedColumn {
-                root,
-                headers: kept,
-                ..
-            } = &mut *retained;
+            let RetainedColumn { root, .. } = &mut *retained;
             // The panes by the name each answers to, made once rather than searched for per child.
             let by_key: std::collections::HashMap<String, &crate::chrome::pane::PaneShellModel> =
                 model
@@ -235,16 +224,12 @@ pub(crate) fn sync_columns(
                 let Some(pane) = by_key.get(key).copied() else {
                     return Box::new(heca_grid_ui::widgets::Flex::column());
                 };
-                let header = headers.map(|_| {
-                    let held = kept
-                        .entry(pane.pane_id)
-                        .or_insert_with(heca_grid_ui::widgets::Keyed::new);
-                    Box::new(held.clone()) as Box<dyn heca_grid_ui::Component>
-                });
+                let header = headers
+                    .and(env.clone())
+                    .map(crate::chrome::PaneHeader::new);
                 let content = contents.remove(&pane.pane_id);
                 shell::pane_child(pane, &model, &pane_cb, header, content)
             });
-            kept.retain(|id, _| model.panes.iter().any(|p| p.pane_id == *id));
             // Each pane sits where the layout engine put it, and says so itself — the rect is a
             // per-frame input, exactly as the column's own is. What focus changed and the words in
             // its header ride along the same way: written onto the retained child rather than
@@ -257,6 +242,10 @@ pub(crate) fn sync_columns(
                 };
                 let pane = pane.clone();
                 crate::chrome::pane::shell::focus_state_to(child.as_mut(), &pane);
+                // What is true of the pane now: its header builds only if its shape changed.
+                if let Some(input) = headers.and_then(|h| h.get(&pane.pane_id)) {
+                    crate::chrome::give_header_facts(child.as_mut(), input);
+                }
                 let l = &mut child.base_mut().style.layout;
                 l.placement = Some(heca_grid_ui::style::Placement {
                     left: heca_grid_ui::Length::Px(pane.x - model.x),
@@ -264,20 +253,6 @@ pub(crate) fn sync_columns(
                     width: heca_grid_ui::Length::Px(pane.w),
                     height: heca_grid_ui::Length::Px(pane.h),
                 });
-            }
-        }
-        // Each header is told what is true of its pane and builds its own tree only if its shape
-        // changed; the column keeps the pane's widget either way. Done before the layout below, so
-        // a tree that arrives is laid out in the same frame.
-        for pane in &model.panes {
-            if let (Some(input), Some(header)) = (
-                headers.and_then(|h| h.get(&pane.pane_id)),
-                state
-                    .columns
-                    .get(&col.id)
-                    .and_then(|c| c.headers.get(&pane.pane_id)),
-            ) {
-                crate::chrome::show_pane_header(state, &theme, input, header);
             }
         }
         if let Some(retained) = state.columns.get_mut(&col.id) {
@@ -408,7 +383,7 @@ mod tests {
             model: m,
             cb: &cb,
             pane_cb: &pane_cb(),
-            headers: Default::default(),
+            header_env: None,
             contents: Default::default(),
         }
         .build()
@@ -578,7 +553,7 @@ mod tests {
             model: &m,
             cb: &cb,
             pane_cb: &pane_cb(),
-            headers: Default::default(),
+            header_env: None,
             contents: Default::default(),
         }
         .build();

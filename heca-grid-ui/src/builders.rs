@@ -890,6 +890,14 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
+    /// **Take new props of type `T`** from whoever owns this widget: `f` runs with each value
+    /// [`set_props`](crate::component::Component::set_props) hands over. The facts a widget shows
+    /// arrive here, so its owner never reaches inside it.
+    fn on_props<T: std::any::Any>(mut self, f: impl FnMut(&T) + 'static) -> Self {
+        self.base_mut().props = Some(crate::props::PropsSlot::of(f));
+        self
+    }
+
     /// Register `f` for `kind`. It receives an [`EventCx`](crate::event::EventCx) and consumes the
     /// event only if it calls [`stop_propagation`](crate::event::EventCx::stop_propagation).
     fn on(

@@ -40,7 +40,10 @@ pub(crate) struct PaneShell<'a> {
     /// It is a **child**, which is the whole point: the layout places it, it sizes itself, and one
     /// walk delivers its input. Before this it was a second retained tree the app laid out,
     /// positioned by hand and routed events to separately (F003/P097/T497).
-    pub(crate) header: Option<Box<dyn heca_grid_ui::Component>>,
+    ///
+    /// The pane keeps the header it is given as its own: it seats the node as a child and answers
+    /// the facts it is handed by showing them there.
+    pub(crate) header: Option<crate::chrome::PaneHeader>,
     /// **The content slot — what actually runs in this pane**, under the header.
     ///
     /// Empty today: a terminal paints itself into the pane's rect rather than being a child
@@ -156,12 +159,12 @@ impl PaneShell<'_> {
             Some(content) => content,
             None => Box::new(heca_grid_ui::widgets::Flex::column().grow(1.0)),
         };
-        let body = match self.header {
+        let body = match &self.header {
             Some(header) => heca_grid_ui::widgets::Grid::new()
                 .template_row("auto 1fr")
                 .template_area([PANE_HEADER_AREA, PANE_CONTENT_AREA])
                 .child([
-                    header.area(PANE_HEADER_AREA),
+                    header.seat().area(PANE_HEADER_AREA),
                     content.area(PANE_CONTENT_AREA),
                 ]),
             // **A missing part is a missing row**, not a flag and not a zero-height placeholder.
@@ -170,6 +173,9 @@ impl PaneShell<'_> {
                 .template_area([PANE_CONTENT_AREA])
                 .child(content.area(PANE_CONTENT_AREA)),
         };
+        if let Some(header) = self.header {
+            pane = header.answer_props(pane);
+        }
         pane = pane.child(
             body.width(heca_grid_ui::Length::Percent(1.0))
                 .height(heca_grid_ui::Length::Percent(1.0)),
@@ -311,12 +317,50 @@ mod tests {
         let mut with_header = PaneShell {
             model: &m,
             cb: &cb,
-            header: Some(Box::new(Flex::row().height(18.0))),
+            header: Some(crate::chrome::PaneHeader::showing(|_, _| {})),
             content: Some(Box::new(Flex::column())),
         }
         .build();
         LayoutEngine::new().compute(&mut with_header, Size::new(200.0, 200.0));
         assert!(named(&with_header, PANE_HEADER_AREA));
+    }
+
+    /// **A pane shows the facts it is handed in the header it holds** — the header is the pane's
+    /// own, so whoever owns the pane never reaches it. A pane with no header takes none, and a value
+    /// of any other type is refused.
+    #[test]
+    fn a_pane_shows_the_facts_it_is_handed_in_its_own_header() {
+        use crate::chrome::PaneHeader;
+        use crate::chrome::pane_header::PaneHeaderInput;
+        use heca_grid_ui::Component;
+        let (cb, _) = recording_callbacks();
+        let m = model(4);
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let mut with = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: Some(PaneHeader::showing({
+                let seen = seen.clone();
+                move |input, _| seen.borrow_mut().push(input.pane())
+            })),
+            content: None,
+        }
+        .build();
+        assert!(with.set_props(&PaneHeaderInput::for_test(PaneId(4))));
+        assert_eq!(*seen.borrow(), vec![PaneId(4)]);
+        assert!(!with.set_props(&"not facts"), "another type is refused");
+
+        let mut without = PaneShell {
+            model: &m,
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build();
+        assert!(
+            !without.set_props(&PaneHeaderInput::for_test(PaneId(4))),
+            "a pane with no header takes none",
+        );
     }
 
     /// It renders what it was given: the pane's own identity, from its id.

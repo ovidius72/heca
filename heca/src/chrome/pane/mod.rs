@@ -36,10 +36,6 @@ pub(crate) struct RetainedPane {
     pub(crate) root: UiPane,
     /// The model key the tree was built from.
     pub(crate) key: String,
-    /// **The pane's header**, which the pane's shell holds for the pane's life. The host tells it
-    /// the facts; it builds its own tree only when its shape changes. `None` when the info bar is
-    /// disabled.
-    pub(crate) header: Option<heca_grid_ui::widgets::Keyed>,
 }
 
 /// Drop every retained pane shell — used when a config reload changes the theme or font baked into
@@ -153,7 +149,8 @@ pub(crate) fn sync_panes(
         .collect();
 
     let cb = callbacks(state);
-    let theme = crate::chrome::chrome_gui_theme(state);
+    // What a header is built from, taken the first time a pane is built this frame.
+    let mut env: Option<std::rc::Rc<crate::chrome::HeaderEnv>> = None;
 
     // ── Phase 2: build (only when changed), lay out, position, prune ──
     let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
@@ -172,32 +169,27 @@ pub(crate) fn sync_panes(
                 as Box<dyn heca_grid_ui::Component>;
             // What each pane wants along its top, placed as an ordinary child — the shell has no
             // idea what a terminal is, so the bar arrives like any other content.
-            let header = headers.map(|_| heca_grid_ui::widgets::Keyed::new());
+            let header = headers.map(|_| {
+                let env = env.get_or_insert_with(|| crate::chrome::HeaderEnv::of(state));
+                crate::chrome::PaneHeader::new(env.clone())
+            });
             let root = PaneShell {
                 model,
                 cb: &cb,
-                header: header
-                    .as_ref()
-                    .map(|h| Box::new(h.clone()) as Box<dyn heca_grid_ui::Component>),
+                header,
                 content: Some(content),
             }
             .build();
             state
                 .panes
-                .insert(model.pane_id, RetainedPane { root, key, header });
-        }
-        // Tell the header what is true of the pane now: it builds only if its shape changed, and it
-        // writes its own words, so nothing here touches the tree.
-        if let (Some(input), Some(header)) = (
-            headers.and_then(|h| h.get(&model.pane_id)),
-            state
-                .panes
-                .get(&model.pane_id)
-                .and_then(|p| p.header.as_ref()),
-        ) {
-            crate::chrome::show_pane_header(state, &theme, input, header);
+                .insert(model.pane_id, RetainedPane { root, key });
         }
         if let Some(retained) = state.panes.get_mut(&model.pane_id) {
+            // Tell the pane what is true of it now: its header builds only if its shape changed,
+            // and writes its own words, so nothing here touches the tree.
+            if let Some(input) = headers.and_then(|h| h.get(&model.pane_id)) {
+                crate::chrome::give_header_facts(&mut retained.root, input);
+            }
             // The pane's rect is a per-frame input, written onto the retained tree rather than
             // built into it — so a zoom, a resize or a float moves the frame without rebuilding
             // the widget and throwing away its signals.

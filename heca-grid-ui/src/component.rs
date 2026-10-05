@@ -500,6 +500,9 @@ pub struct Base {
     /// [`ComponentExt`](crate::builders::ComponentExt) writes and [`dispatch`] runs. `None` until the
     /// first one is registered, which is the common case and costs a null pointer.
     pub handlers: Option<Box<Handlers>>,
+    /// What this widget does with the props its owner hands it — see [`crate::props`]. `None` for
+    /// a widget that takes none.
+    pub props: Option<crate::props::PropsSlot>,
     /// **The context menu this widget carries**, built fresh each time it is triggered.
     ///
     /// A universal slot like [`key`](Self::key) and [`drag_source`](Self::drag_source), so
@@ -737,6 +740,7 @@ impl Base {
             viewport: Size::new(f64::MAX, f64::MAX),
             pointer: crate::pointer::PointerState::new(),
             handlers: None,
+            props: None,
             context_menu: None,
             surface: false,
             surface_slot: None,
@@ -993,6 +997,16 @@ pub trait Component {
     fn base(&self) -> &Base;
     /// Mutably borrow this component's base.
     fn base_mut(&mut self) -> &mut Base;
+
+    /// **Hand this widget new props**: the facts its owner holds, for it to show without being
+    /// rebuilt. `true` when it took them; `false` when it declares no
+    /// [`on_props`](crate::builders::ComponentExt::on_props) or declares one for another type.
+    fn set_props(&mut self, props: &dyn std::any::Any) -> bool {
+        self.base_mut()
+            .props
+            .as_mut()
+            .is_some_and(|slot| slot.take(props))
+    }
 
     /// Whether this component participates in keyboard focus traversal
     /// (Tab/Shift+Tab). The default reads the declared [`Base::focusable`] flag and

@@ -95,6 +95,7 @@ pub use nav::{child_name, collect_keys, identity_of, key_at, node_with_key, node
 pub use pointer::{PointerState, clear_hover, dragging, hit_test};
 pub use scene::{BaseRun, DrawCommand, Escape, FontRole, Scene, SurfaceAt, TextStyle};
 pub mod prop;
+pub mod props;
 pub use heca_grid_ui_macros::{PropName, prop, props};
 pub use prop::{PropInput, PropName, SetProp};
 pub use style::{

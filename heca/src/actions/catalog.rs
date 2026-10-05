@@ -216,6 +216,7 @@ impl std::fmt::Debug for ActionMeta {
 /// handler is `fn(&mut AppState, &WmAction)` and receives no registry, so metadata must be
 /// reachable from the state. The registry holds the *handlers*; this holds the *metadata*. One of
 /// each — never two of either.
+#[derive(Clone)]
 pub struct ActionCatalog {
     by_name: HashMap<String, ActionMeta>,
     /// Names in stable order (built-ins in [`builtins`] order, then registration order).
