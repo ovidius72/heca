@@ -1,52 +1,12 @@
 //! The layout actions, run the way the registry runs them: the server's `run` against a session
 //! and one window's view of it.
 
-use std::time::Duration;
-
 use heca_core::layout::testing::Windowed;
-use heca_core::layout::{ColumnWidth, Pane, PaneId, Size};
+use heca_core::layout::{ColumnWidth, Pane, PaneId};
 
-use crate::app::backend_store::BackendStore;
+use super::testing::{run, two_workspaces_of_two_columns};
 use crate::input::{ResizeEdge, ResizeTarget, WmAction};
-use crate::notification::NotificationRuntime;
-use crate::server::{Asker, Change, ServerCx, ServerState};
-
-fn server() -> ServerState {
-    ServerState::new(
-        BackendStore::new(),
-        NotificationRuntime::with_capacity(
-            50,
-            Duration::from_millis(4000),
-            Default::default(),
-            5,
-        ),
-        Default::default(),
-    )
-}
-
-/// A window on a session of two workspaces, each with two columns.
-fn two_workspaces_of_two_columns() -> Windowed {
-    let mut window = Windowed::new(Size::new(1000.0, 800.0), 1.0);
-    window.m().add_workspace();
-    for idx in 0..2 {
-        window.show(idx);
-        for n in 0..2u64 {
-            window
-                .m()
-                .add_pane(Pane::new(PaneId(10 * idx as u64 + n + 1), "p"), None, true);
-        }
-    }
-    window.show(0);
-    window
-}
-
-fn run(window: &mut Windowed, action: WmAction) -> Vec<Change> {
-    let mut cx = ServerCx {
-        layout: window.m(),
-        asker: Asker { focused_pane: None },
-    };
-    server().run(&mut cx, &action)
-}
+use crate::server::Change;
 
 fn width_of(window: &Windowed, ws: usize, col: usize) -> ColumnWidth {
     window.session.workspaces[ws].scrolling.columns[col].width

@@ -213,6 +213,21 @@ impl WorkspaceMut<'_> {
         }
     }
 
+    /// Make `pane_id` the active pane of this workspace — tiled (its column active, scrolled into
+    /// view) or floating. `false` when it is not here.
+    pub fn activate_pane(&mut self, pane_id: PaneId) -> bool {
+        if let Some((col, row)) = self.scrolling.pane_indices(pane_id) {
+            self.deactivate_floating_panes();
+            self.focus_domain = FocusDomain::Tiled;
+            self.scroll_mut().activate_column(col);
+            if let Some(column) = self.scrolling.columns.get_mut(col) {
+                column.activate_pane(row);
+            }
+            return true;
+        }
+        self.activate_floating_pane(pane_id)
+    }
+
     /// Focus left in the scrolling layout.
     pub fn focus_left(&mut self) -> bool {
         if self.ws.focus_domain == FocusDomain::Floating {

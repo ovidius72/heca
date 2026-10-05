@@ -2,6 +2,13 @@
 
 use super::*;
 
+/// What this window asked the server: the action, and the name it is known by.
+#[derive(Clone, Copy)]
+pub(crate) struct Asked<'a> {
+    pub(crate) action: &'a crate::input::WmAction,
+    pub(crate) name: &'a str,
+}
+
 impl AppState {
     /// The session as this window sees it — for everything that reads where things are.
     pub fn layout(&self) -> Layout<'_> {
@@ -21,8 +28,18 @@ impl AppState {
         self.apply(changes);
     }
 
-    /// Do what only a window can about what the server says changed.
+    /// Do what only a window can about what the server says changed on its own.
     pub(crate) fn apply(&mut self, changes: Vec<crate::server::Change>) {
+        self.apply_answer(changes, None);
+    }
+
+    /// Do what only a window can about what the server says changed. `asked` is the built-in this
+    /// window sent, by name and as data, when the changes answer one.
+    pub(crate) fn apply_answer(
+        &mut self,
+        changes: Vec<crate::server::Change>,
+        asked: Option<Asked<'_>>,
+    ) {
         for change in changes {
             if matches!(change, crate::server::Change::NotificationsChanged) {
                 self.sync_toasts();
@@ -30,8 +47,24 @@ impl AppState {
                 continue;
             }
             let mut layout = self.session.through_mut(&mut self.view);
-            if super::reaction::window_reacts(&mut layout, &mut self.last_visited_ws_idx, &change) {
-                self.needs_redraw = true;
+            let mut tracking = super::reaction::Tracking {
+                last_visited_ws: &mut self.last_visited_ws_idx,
+                last_visited_pane_per_ws: &mut self.last_visited_pane_per_ws,
+                expose_cursor_per_ws: &mut self.expose_cursor_per_ws,
+            };
+            let reaction = super::reaction::window_reacts(
+                &mut layout,
+                &mut tracking,
+                &change,
+                asked.map(|a| a.action),
+            );
+            self.needs_redraw |= reaction.redraw;
+            if let (Some(reason), Some(asked)) = (reaction.refusal, asked) {
+                self.status_note = Some(crate::handlers::act_refusal(
+                    &self.action_catalog,
+                    asked.name,
+                    super::reaction::refusal_words(reason),
+                ));
             }
         }
     }
@@ -41,7 +74,7 @@ impl AppState {
     ///
     /// The context is built from the session and this window's view only, so the server's own
     /// state stays borrowable beside it.
-    pub(crate) fn run_on_server(&mut self, action: &crate::input::WmAction) {
+    pub(crate) fn run_on_server(&mut self, action: &crate::input::WmAction, name: &str) {
         let asker = crate::server::Asker {
             focused_pane: self.focused_pane,
         };
@@ -50,7 +83,7 @@ impl AppState {
             asker,
         };
         let changes = self.server.run(&mut cx, action);
-        self.apply(changes);
+        self.apply_answer(changes, Some(Asked { action, name }));
     }
 
     /// Point the toast stack's signal at what the server says is on show, if that changed.

@@ -11,7 +11,11 @@ use crate::args::{ArgSpec, sample_args};
 use crate::input::WmActionKind;
 
 /// `kind → side`, for every built-in.
-pub(crate) struct Sides(HashMap<WmActionKind, Side>);
+pub(crate) struct Sides {
+    sides: HashMap<WmActionKind, Side>,
+    /// The name each kind is first known by, for saying which action did something.
+    names: HashMap<WmActionKind, &'static str>,
+}
 
 impl Sides {
     /// Read the side of every built-in. Each descriptor is turned into its kind the way
@@ -20,6 +24,7 @@ impl Sides {
     /// registry cannot route one handler two ways.
     pub(crate) fn from_builtins() -> Self {
         let mut table: HashMap<WmActionKind, Side> = HashMap::new();
+        let mut names: HashMap<WmActionKind, &'static str> = HashMap::new();
         for d in builtins() {
             let args: Vec<ArgSpec> = d.args.iter().map(ArgSpec::from_descriptor).collect();
             let kind = crate::input::resolve_action(d.name, &sample_args(&args))
@@ -27,6 +32,7 @@ impl Sides {
                     unreachable!("built-in action {:?} builds from neither name nor arguments", d.name)
                 })
                 .kind();
+            names.entry(kind).or_insert(d.name);
             if let Some(earlier) = table.insert(kind, d.side) {
                 assert_eq!(
                     earlier, d.side,
@@ -35,11 +41,16 @@ impl Sides {
                 );
             }
         }
-        Self(table)
+        Self { sides: table, names }
     }
 
     /// The side of `kind`. `None` for a kind no built-in descriptor names.
     pub(crate) fn of(&self, kind: WmActionKind) -> Option<Side> {
-        self.0.get(&kind).copied()
+        self.sides.get(&kind).copied()
+    }
+
+    /// A name `kind` is known by.
+    pub(crate) fn name_of(&self, kind: WmActionKind) -> Option<&'static str> {
+        self.names.get(&kind).copied()
     }
 }

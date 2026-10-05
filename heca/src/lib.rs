@@ -43,10 +43,7 @@ use app::events::handle_window_event;
 pub(crate) use app::focus::switch_workspace_tracked;
 use app::interaction::dispatch_intent;
 use app::lifecycle::{handle_about_to_wait, poll_backends};
-pub(crate) use app::mutations::{
-    destroy_empty_workspace, move_column_to_workspace, move_pane_to_column,
-    move_pane_to_workspace_column,
-};
+pub(crate) use app::mutations::destroy_empty_workspace;
 use app::registry::{build_keymaps, build_registry};
 pub(crate) use app::render::update_session_viewport;
 pub(crate) use app::selection::{collect_all_pane_candidates, find_pane_location};

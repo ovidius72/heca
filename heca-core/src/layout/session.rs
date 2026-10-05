@@ -46,6 +46,17 @@ impl Session {
         id
     }
 
+    /// Where a tiled pane is: its workspace, column and row. `None` for a pane that is not in a
+    /// column (floating, or not here at all).
+    pub fn pane_location(&self, pane: PaneId) -> Option<(usize, usize, usize)> {
+        self.workspaces.iter().enumerate().find_map(|(ws, workspace)| {
+            workspace
+                .scrolling
+                .pane_indices(pane)
+                .map(|(col, row)| (ws, col, row))
+        })
+    }
+
     /// Create a new workspace and append it.
     pub fn add_workspace(&mut self) -> WorkspaceId {
         let id = WorkspaceId(self.next_id());

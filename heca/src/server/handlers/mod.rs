@@ -7,7 +7,14 @@
 mod layout;
 #[cfg(test)]
 mod layout_tests;
+mod move_column;
+#[cfg(test)]
+mod move_tests;
+mod move_pane;
 mod pane;
+mod swap;
+#[cfg(test)]
+mod testing;
 
 use super::{Change, ServerCx};
 use crate::input::{WmAction, WmActionKind};
@@ -45,6 +52,22 @@ pub(crate) fn handler_for(kind: WmActionKind) -> Option<ServerHandler> {
         K::ResizeTo => layout::resize_to,
         K::ResizeColumnBy => layout::resize_column_by,
         K::ResizePaneHeightBy => layout::resize_pane_height_by,
+        K::SwapLeft => swap::swap_left,
+        K::SwapRight => swap::swap_right,
+        K::SwapUp => swap::swap_up,
+        K::SwapDown => swap::swap_down,
+        K::Swap => swap::swap,
+        K::SwapColumns => swap::swap_columns,
+        K::MovePaneLeft => move_pane::move_pane_left,
+        K::MovePaneRight => move_pane::move_pane_right,
+        K::Move => move_pane::move_to_column_here,
+        K::MovePaneToWorkspace => move_pane::move_to_workspace,
+        K::MovePaneToColumn => move_pane::move_to_column,
+        K::MovePaneToNewColumn => move_pane::move_to_new_column,
+        K::MoveColumnUp => move_column::move_column_up,
+        K::MoveColumnDown => move_column::move_column_down,
+        K::MoveColumnToWorkspace => move_column::move_column_to_workspace,
+        K::MoveColumn => move_column::move_column,
         K::Float => pane::float,
         K::FloatAt => pane::float_at,
         _ => return None,

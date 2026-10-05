@@ -5,7 +5,7 @@
 
 use crate::app::terminal_host::notify_focus_changed;
 use crate::app_state::AppState;
-use heca_core::layout::{FocusDomain, PaneId, Session};
+use heca_core::layout::{PaneId, Session};
 
 /// Find which workspace contains a pane (by ID). Returns workspace index or None.
 pub(crate) fn find_pane_workspace(session: &Session, pane_id: PaneId) -> Option<usize> {
@@ -32,31 +32,7 @@ pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: PaneId) {
     }
 
     if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
-        // Find location first (immutable scan), then mutate.
-        let mut found = None;
-        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-            for (pi, pane) in col.panes.iter().enumerate() {
-                if pane.id == pane_id {
-                    found = Some((ci, pi));
-                    break;
-                }
-            }
-            if found.is_some() {
-                break;
-            }
-        }
-
-        if let Some((ci, pi)) = found {
-            ws.deactivate_floating_panes();
-            ws.focus_domain = FocusDomain::Tiled;
-            ws.scroll_mut().activate_column(ci);
-            if let Some(col) = ws.scrolling.columns.get_mut(ci) {
-                col.activate_pane(pi);
-            }
-        } else {
-            // Not in scrolling columns — check floating panes.
-            ws.activate_floating_pane(pane_id);
-        }
+        ws.activate_pane(pane_id);
     }
 
     // sync_focus reads the session's active pane, updates AppState, records history,

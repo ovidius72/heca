@@ -35,7 +35,7 @@ pub use mouse_state::*;
 pub use search::*;
 pub use state::*;
 pub use terminal_layers::*;
-pub(crate) use reaction::show_workspace;
+pub(crate) use reaction::{Tracking, show_workspace};
 
 #[cfg(test)]
 mod tests;

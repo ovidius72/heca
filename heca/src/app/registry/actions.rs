@@ -28,28 +28,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::OpenContextMenu, handle_open_context_menu);
     registry.register(WmActionKind::ScrollViewLeft, handle_scroll_view_left);
     registry.register(WmActionKind::ScrollViewRight, handle_scroll_view_right);
-    registry.register(WmActionKind::SwapLeft, handle_swap_left);
-    registry.register(WmActionKind::SwapRight, handle_swap_right);
-    registry.register(WmActionKind::SwapUp, handle_swap_up);
-    registry.register(WmActionKind::SwapDown, handle_swap_down);
-    registry.register(WmActionKind::MovePaneLeft, handle_move_pane_left);
-    registry.register(WmActionKind::MovePaneRight, handle_move_pane_right);
-    registry.register(WmActionKind::MoveColumnUp, handle_move_column_up);
-    registry.register(WmActionKind::MoveColumnDown, handle_move_column_down);
-    registry.register(WmActionKind::Swap, handle_swap_param);
-    registry.register(WmActionKind::Move, handle_move_param);
-    registry.register(
-        WmActionKind::MovePaneToWorkspace,
-        handle_move_pane_to_workspace,
-    );
-    registry.register(WmActionKind::MovePaneToColumn, handle_move_pane_to_column);
     registry.register(WmActionKind::PlacePane, handle_place_pane);
-    registry.register(
-        WmActionKind::MoveColumnToWorkspace,
-        handle_move_column_to_workspace,
-    );
-    registry.register(WmActionKind::MoveColumn, handle_move_column);
-    registry.register(WmActionKind::SwapColumns, handle_swap_columns);
 
     // ── Pane ──
     registry.register(WmActionKind::ClosePane, handle_close_pane);
@@ -69,10 +48,6 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(
         WmActionKind::MovePaneToColumnPick,
         handle_move_pane_to_column_pick,
-    );
-    registry.register(
-        WmActionKind::MovePaneToNewColumn,
-        handle_move_pane_to_new_column,
     );
     registry.register(WmActionKind::PaneTake, handle_pane_take);
     registry.register(WmActionKind::PaneTakeAndFocus, handle_pane_take_and_focus);

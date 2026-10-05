@@ -26,7 +26,7 @@ use std::time::Instant;
 use heca_config::programs::ProgramsConfig;
 
 pub(crate) use action::{NotificationSettings, ServerAction};
-pub(crate) use change::Change;
+pub(crate) use change::{Change, Refusal};
 pub(crate) use cx::{Asker, ServerCx};
 
 use crate::app::backend_store::BackendStore;

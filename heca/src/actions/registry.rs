@@ -172,7 +172,8 @@ impl ActionRegistry {
         // moved there; anything else runs here, as it always has.
         if self.sides.of(disc) == Some(super::Side::Server) && crate::server::ServerState::runs(disc)
         {
-            run_then_follow_up(state, |state| state.run_on_server(action));
+            let name = self.sides.name_of(disc).unwrap_or_default();
+            run_then_follow_up(state, |state| state.run_on_server(action, name));
             return;
         }
         if let Some(handler) = self.handlers.get(&disc) {

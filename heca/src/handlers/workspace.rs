@@ -136,20 +136,12 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
     // Remove the workspace
     state.layout_mut().remove_workspace(target_ws);
 
-    // Fix up tracking indices (same logic as destroy_empty_workspace)
-    if state.last_visited_ws_idx == Some(target_ws) {
-        state.last_visited_ws_idx = None;
-    } else if let Some(ref mut idx) = state.last_visited_ws_idx
-        && *idx > target_ws
-    {
-        *idx -= 1;
+    crate::app_state::Tracking {
+        last_visited_ws: &mut state.last_visited_ws_idx,
+        last_visited_pane_per_ws: &mut state.last_visited_pane_per_ws,
+        expose_cursor_per_ws: &mut state.expose_cursor_per_ws,
     }
-    if target_ws < state.last_visited_pane_per_ws.len() {
-        state.last_visited_pane_per_ws.remove(target_ws);
-    }
-    if target_ws < state.expose_cursor_per_ws.len() {
-        state.expose_cursor_per_ws.remove(target_ws);
-    }
+    .forget_workspace(target_ws);
 }
 
 /// Delete the "current" column (and all its panes) — the **focused pane's** column.
