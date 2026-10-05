@@ -23,7 +23,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`Tile`](#tile), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
-  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope)
+  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope), [`Keyed`](#keyed)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
   - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
   - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
@@ -4952,6 +4952,30 @@ Declaratively there is nothing to author: the ring is read off a live tree, so a
 that wants its container to show focus gets it for free — **heca wraps every mounted container
 itself**, together with its dock-pick keycap. See [chrome-and-ui.md](chrome-and-ui.md) → chrome
 keyboard focus.
+
+### Keyed
+
+A child that is **rebuilt only when its key changes**. Content that comes from state is often built
+every frame just to learn that nothing changed; `Keyed` makes that a non-event. The author sums up
+what the content *is* in a key and says it each frame; the build closure runs only when the key
+differs from the one already shown, so a frame in which nothing changed makes no widget at all.
+
+```rust
+let header = Keyed::new();                       // placed once, with whatever owns it
+// each frame, from whatever knows the facts:
+header.show(shape_key(&facts), || Some(Box::new(build_header(&facts))));
+header.texts(vec![("hdr.seg:location".into(), facts.cwd())]);
+```
+
+- `.show(key, build) -> bool` — `build` returns the content (`None` shows nothing) and is called only
+  on a new key; returns whether it built. The content arrives in the node's own layout pass, so the
+  frame that asked also draws it.
+- `.texts(Vec<(key, text)>)` — words, written by the `key` of the widget that shows each onto the tree
+  already there. They are not part of the key: a changed word moves that word and nothing else.
+- **A handle**, like a terminal: `Clone` gives another node for the same content, so the node a tree
+  holds and the one its owner keeps agree. A node placed anew holds nothing, so the next `show`
+  builds for it — a rebuilt parent gets its child back.
+- Host-only: it holds the caller's closures and state, so it is not described declaratively.
 
 ### Tooltip
 

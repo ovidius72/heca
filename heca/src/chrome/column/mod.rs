@@ -6,7 +6,6 @@
 
 mod model;
 mod shell;
-mod stale;
 
 pub(crate) use model::ColumnShellModel;
 pub(crate) use shell::{ColumnCallbacks, ColumnShell};
@@ -27,9 +26,9 @@ pub(crate) struct RetainedColumn {
     /// surface, so whoever offers it has to know which panes are in here without reading a key
     /// back out of the tree.
     pub(crate) panes: Vec<PaneId>,
-    /// **What each pane's header was made of when it was built** — its header key. A pane whose
-    /// header has since changed shape is built again (see [`stale`]).
-    pub(crate) header_keys: std::collections::HashMap<PaneId, String>,
+    /// **Each pane's header**, held by the column that holds the pane, for as long as the pane is
+    /// in it. The host tells each the facts; each builds its own tree only when its shape changes.
+    pub(crate) headers: std::collections::HashMap<PaneId, heca_grid_ui::widgets::Keyed>,
 }
 
 /// Drop every retained column — used when a config reload changes the theme baked into the trees.
@@ -123,14 +122,19 @@ mod offer_tests {
 
 /// Bring the retained column trees in line with the session: build the ones whose identity changed,
 /// place each at the rect the scrolling engine gave it, and prune the columns that are gone.
-pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
+pub(crate) fn sync_columns(
+    state: &mut crate::app_state::AppState,
+    headers: Option<
+        &std::collections::HashMap<PaneId, crate::chrome::pane_header::PaneHeaderInput>,
+    >,
+) {
     let cb = callbacks(state);
     let pane_cb = crate::chrome::pane::callbacks(state);
     let frames = crate::app::terminal_host::column_frames(state);
     // **The panes come from the same reading of the session the pane surface uses**, so a column
     // and the panes in it can never disagree about where anything is.
     let pane_models = crate::chrome::pane::pane_models(state);
-    let mut headers = crate::chrome::build_pane_headers(state);
+    let theme = crate::chrome::chrome_gui_theme(state);
     // What each pane runs: the terminal the app keeps for it, placed in the pane's content slot.
     let mut contents: std::collections::HashMap<PaneId, Box<dyn heca_grid_ui::Component>> =
         pane_models
@@ -143,17 +147,6 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
                 )
             })
             .collect();
-    // The words a pane shows change constantly; they are written onto the retained child every
-    // frame rather than rebuilt for (F003/P097/T500).
-    let header_keys: std::collections::HashMap<PaneId, String> = headers
-        .iter()
-        .map(|(id, (_, key, _))| (*id, key.clone()))
-        .collect();
-    let header_texts: std::collections::HashMap<PaneId, Vec<_>> = headers
-        .iter()
-        .map(|(id, (_, _, texts))| (*id, texts.clone()))
-        .collect();
-
     let mut seen: std::collections::HashSet<ColumnId> = std::collections::HashSet::new();
     for col in &frames {
         seen.insert(col.id);
@@ -182,21 +175,23 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
             .map(|c| c.key != key)
             .unwrap_or(true);
         if needs_build {
+            // A header for each pane, when the info bar is on: held by the column beside the pane.
+            let made: std::collections::HashMap<PaneId, heca_grid_ui::widgets::Keyed> = headers
+                .map(|_| {
+                    model
+                        .panes
+                        .iter()
+                        .map(|p| (p.pane_id, heca_grid_ui::widgets::Keyed::new()))
+                        .collect()
+                })
+                .unwrap_or_default();
             let root = ColumnShell {
                 model: &model,
                 cb: &cb,
                 pane_cb: &pane_cb,
-                headers: model
-                    .panes
+                headers: made
                     .iter()
-                    .filter_map(|p| {
-                        headers.remove(&p.pane_id).map(|(tree, _, _)| {
-                            (
-                                p.pane_id,
-                                Box::new(tree) as Box<dyn heca_grid_ui::Component>,
-                            )
-                        })
-                    })
+                    .map(|(id, h)| (*id, Box::new(h.clone()) as Box<dyn heca_grid_ui::Component>))
                     .collect(),
                 contents: model
                     .panes
@@ -211,38 +206,45 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
                     root,
                     key,
                     panes: model.panes.iter().map(|p| p.pane_id).collect(),
-                    header_keys: header_keys.clone(),
+                    headers: made,
                 },
             );
         }
 
         if let Some(retained) = state.columns.get_mut(&col.id) {
             retained.panes = model.panes.iter().map(|p| p.pane_id).collect();
-            // A pane whose header changed shape since it was built is built again; the rest keep
-            // the widget they had.
-            let stale = stale::stale_panes(&retained.header_keys, &header_keys);
-            stale::drop_panes(&mut retained.root, &stale);
-            retained.header_keys = header_keys.clone();
             // **The panes are reconciled, never rebuilt with the column.** A pane that is still
             // here keeps the widget it had — its letter, a gesture in flight, an animation — and
             // only one that arrived is built. Rebuilding them all would be the 100% CPU idle this
             // surface was warned about.
-            heca_grid_ui::reconcile::reconcile_children(
-                &mut retained.root,
-                &model.pane_keys(),
-                |key| {
-                    let pane = model
-                        .panes
-                        .iter()
-                        .find(|p| crate::chrome::pane_key(p.pane_id) == key)
-                        .expect("the wanted keys come from these panes");
-                    let header = headers
-                        .remove(&pane.pane_id)
-                        .map(|(tree, _, _)| Box::new(tree) as Box<dyn heca_grid_ui::Component>);
-                    let content = contents.remove(&pane.pane_id);
-                    shell::pane_child(pane, &model, &pane_cb, header, content)
-                },
-            );
+            let RetainedColumn {
+                root,
+                headers: kept,
+                ..
+            } = &mut *retained;
+            // The panes by the name each answers to, made once rather than searched for per child.
+            let by_key: std::collections::HashMap<String, &crate::chrome::pane::PaneShellModel> =
+                model
+                    .panes
+                    .iter()
+                    .map(|p| (crate::chrome::pane_key(p.pane_id), p))
+                    .collect();
+            heca_grid_ui::reconcile::reconcile_children(root, &model.pane_keys(), |key| {
+                // The wanted keys are these panes' own, so a missing one is not expected; if it
+                // ever happened it would be built as an empty box rather than panicking.
+                let Some(pane) = by_key.get(key).copied() else {
+                    return Box::new(heca_grid_ui::widgets::Flex::column());
+                };
+                let header = headers.map(|_| {
+                    let held = kept
+                        .entry(pane.pane_id)
+                        .or_insert_with(heca_grid_ui::widgets::Keyed::new);
+                    Box::new(held.clone()) as Box<dyn heca_grid_ui::Component>
+                });
+                let content = contents.remove(&pane.pane_id);
+                shell::pane_child(pane, &model, &pane_cb, header, content)
+            });
+            kept.retain(|id, _| model.panes.iter().any(|p| p.pane_id == *id));
             // Each pane sits where the layout engine put it, and says so itself — the rect is a
             // per-frame input, exactly as the column's own is. What focus changed and the words in
             // its header ride along the same way: written onto the retained child rather than
@@ -254,9 +256,6 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
                     continue;
                 };
                 let pane = pane.clone();
-                if let Some(texts) = header_texts.get(&pane.pane_id) {
-                    crate::chrome::pane_header::refresh_pane_header_text(child.as_ref(), texts);
-                }
                 crate::chrome::pane::shell::focus_state_to(child.as_mut(), &pane);
                 let l = &mut child.base_mut().style.layout;
                 l.placement = Some(heca_grid_ui::style::Placement {
@@ -266,6 +265,22 @@ pub(crate) fn sync_columns(state: &mut crate::app_state::AppState) {
                     height: heca_grid_ui::Length::Px(pane.h),
                 });
             }
+        }
+        // Each header is told what is true of its pane and builds its own tree only if its shape
+        // changed; the column keeps the pane's widget either way. Done before the layout below, so
+        // a tree that arrives is laid out in the same frame.
+        for pane in &model.panes {
+            if let (Some(input), Some(header)) = (
+                headers.and_then(|h| h.get(&pane.pane_id)),
+                state
+                    .columns
+                    .get(&col.id)
+                    .and_then(|c| c.headers.get(&pane.pane_id)),
+            ) {
+                crate::chrome::show_pane_header(state, &theme, input, header);
+            }
+        }
+        if let Some(retained) = state.columns.get_mut(&col.id) {
             // The rect is a **per-frame input**, written onto the retained tree rather than built
             // into it — so a scroll, a resize or a split moves the column without rebuilding the
             // widget and throwing away its signals.

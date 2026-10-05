@@ -36,6 +36,10 @@ pub(crate) struct RetainedPane {
     pub(crate) root: UiPane,
     /// The model key the tree was built from.
     pub(crate) key: String,
+    /// **The pane's header**, which the pane's shell holds for the pane's life. The host tells it
+    /// the facts; it builds its own tree only when its shape changes. `None` when the info bar is
+    /// disabled.
+    pub(crate) header: Option<heca_grid_ui::widgets::Keyed>,
 }
 
 /// Drop every retained pane shell — used when a config reload changes the theme or font baked into
@@ -121,7 +125,12 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
 ///
 /// Runs at the **top** of `render_frame`, before the `scene_view` borrow of `state.compositor`, so
 /// it can mutate `state.panes`; render then paints them read-only.
-pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
+pub(crate) fn sync_panes(
+    state: &mut crate::app_state::AppState,
+    headers: Option<
+        &std::collections::HashMap<PaneId, crate::chrome::pane_header::PaneHeaderInput>,
+    >,
+) {
     // **Only the panes no column holds.** A tiled pane is a child of its column now
     // (`chrome::column`), built, placed, focused and painted there — so building a second tree for
     // it here would be two widgets answering to one name, and two of everything the pane carries.
@@ -143,51 +152,50 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
         .filter(|m| !tiled.contains(&m.pane_id))
         .collect();
 
-    // What each pane wants along its top. Built here and handed down as a child — the shell has no
-    // idea what a terminal is, so the bar arrives as an ordinary widget like any other content.
-    let mut headers = crate::chrome::build_pane_headers(state);
-
     let cb = callbacks(state);
+    let theme = crate::chrome::chrome_gui_theme(state);
 
     // ── Phase 2: build (only when changed), lay out, position, prune ──
     let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
     for model in &models {
         seen.insert(model.pane_id);
-        let header = headers.remove(&model.pane_id);
-        // ONE key for the pane and what it carries, so they rebuild together or not at all. Two
-        // keys would let a bar go stale inside a pane that had no reason to rebuild.
-        let key = match &header {
-            Some((_, header_key, _)) => format!("{}|{header_key}", model.key()),
-            None => model.key(),
-        };
+        // The pane is rebuilt only for what the pane is: its header builds its own tree when its
+        // shape changes, so a pane never rebuilds because of it.
+        let key = model.key();
         let needs_build = state
             .panes
             .get(&model.pane_id)
             .map(|p| p.key != key)
             .unwrap_or(true);
-        let header_texts = header.as_ref().map(|(_, _, texts)| texts.clone());
         if needs_build {
             let content = Box::new(crate::chrome::terminal::view_of(state, model.pane_id))
                 as Box<dyn heca_grid_ui::Component>;
+            // What each pane wants along its top, placed as an ordinary child — the shell has no
+            // idea what a terminal is, so the bar arrives like any other content.
+            let header = headers.map(|_| heca_grid_ui::widgets::Keyed::new());
             let root = PaneShell {
                 model,
                 cb: &cb,
                 header: header
-                    .map(|(tree, _, _)| Box::new(tree) as Box<dyn heca_grid_ui::Component>),
+                    .as_ref()
+                    .map(|h| Box::new(h.clone()) as Box<dyn heca_grid_ui::Component>),
                 content: Some(content),
             }
             .build();
             state
                 .panes
-                .insert(model.pane_id, RetainedPane { root, key });
+                .insert(model.pane_id, RetainedPane { root, key, header });
         }
-        // **The words are a per-frame input**, written onto the retained tree exactly as the pane's
-        // rect is — so the program a pane shows, its branch and its working directory change
-        // without the bar being rebuilt (F003/P097/T500). Rebuilding for them blinked the buttons
-        // out and back twice per command, because a fresh widget paints nothing until the layout
-        // walk has given it a box.
-        if let (Some(texts), Some(retained)) = (&header_texts, state.panes.get(&model.pane_id)) {
-            crate::chrome::pane_header::refresh_pane_header_text(&retained.root, texts);
+        // Tell the header what is true of the pane now: it builds only if its shape changed, and it
+        // writes its own words, so nothing here touches the tree.
+        if let (Some(input), Some(header)) = (
+            headers.and_then(|h| h.get(&model.pane_id)),
+            state
+                .panes
+                .get(&model.pane_id)
+                .and_then(|p| p.header.as_ref()),
+        ) {
+            crate::chrome::show_pane_header(state, &theme, input, header);
         }
         if let Some(retained) = state.panes.get_mut(&model.pane_id) {
             // The pane's rect is a per-frame input, written onto the retained tree rather than
@@ -206,7 +214,7 @@ pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
     state.panes.retain(|id, _| seen.contains(id));
     // The columns are placed in the same pass, from the same geometry — so a column and the panes
     // in it can never be one frame out of step.
-    crate::chrome::sync_columns(state);
+    crate::chrome::sync_columns(state, headers);
     // A terminal is kept only for a pane that is shown.
     crate::chrome::terminal::retain_owned(state);
 }

@@ -104,7 +104,8 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
     // The retained per-pane shells — the frame, the pane's identity and its pick letter. Same
     // moment and same reason as the headers: built before the GPU borrow so render can paint them
     // read-only (F011/P094/T451).
-    crate::chrome::sync_panes(state);
+    let header_inputs = crate::chrome::pane_header_inputs(state);
+    crate::chrome::sync_panes(state, header_inputs.as_ref());
     // The terminals extensions declared since the last frame are started now, so the scenes
     // painted next already place them.
     crate::chrome::terminal::start_declared(state);

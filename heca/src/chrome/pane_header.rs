@@ -219,13 +219,6 @@ pub(crate) fn build_pane_info_bar(
     tag
 }
 
-/// **A freshly built header**: its tree, the identity that says when it must be rebuilt, and the
-/// words to write into it this frame — which are deliberately not part of that identity.
-pub(crate) type BuiltPaneHeader = (Surface, String, Vec<(String, String)>);
-
-/// One per pane that has a header.
-pub(crate) type BuiltPaneHeaders = std::collections::HashMap<PaneId, BuiltPaneHeader>;
-
 /// **What a chip's words are called**, so they can be rewritten in place.
 ///
 /// One derivation, read by the builder and by the update pass, so the two cannot address different
@@ -234,30 +227,6 @@ pub(crate) type BuiltPaneHeaders = std::collections::HashMap<PaneId, BuiltPaneHe
 /// happened to take that slot.
 fn segment_text_key(name: &str) -> String {
     format!("hdr.seg:{name}")
-}
-
-/// **Write the current words into a header that is already on screen** (F003/P097/T500).
-///
-/// The words a header shows — the foreground program, the working directory, the branch — are a
-/// *per-frame input*, not part of what the header is. This is the same rule the pane's own rect
-/// already follows: written onto the retained tree rather than built into it, so a change moves
-/// nothing else.
-///
-/// It matters because a rebuild is visible. A freshly built widget has no layout node until the
-/// walk reaches it, and nothing is painted before it has a box — so the frame after a rebuild
-/// draws nothing where the bar was. While these words were part of the header's identity, running
-/// one command rebuilt it twice (the command starting, and finishing), and the buttons blinked out
-/// and back both times (Antonio, driving, 2026-09-05).
-///
-/// A segment that has *appeared or gone* is a different matter and does rebuild: that is a change
-/// of shape, and it stays in the key.
-pub(crate) fn refresh_pane_header_text(
-    root: &dyn heca_grid_ui::Component,
-    texts: &[(String, String)],
-) {
-    for (name, text) in texts {
-        heca_grid_ui::set_text_by_key(root, &segment_text_key(name), text);
-    }
 }
 
 // ── In-pane info-bar header: segments (left) + interactive action buttons (right) ──
@@ -798,48 +767,39 @@ pub(crate) fn build_pane_header(
     )
 }
 
-/// Build/position the retained per-pane info-bar headers for every visible pane.
-/// Runs at the **top** of `render_frame` (before the `scene_view` borrow of
-/// `state.compositor`) so it can mutate `state.pane_headers`; render then paints
-/// them read-only and `mouse.rs` dispatches pointer events into them. Rebuilds a
-/// pane's tree only when its content key changes; re-lays-out + repositions every
-/// frame; prunes panes that disappeared.
-pub(crate) fn build_pane_headers(state: &crate::app_state::AppState) -> BuiltPaneHeaders {
-    let mut built = std::collections::HashMap::new();
-    // The chips to show, by name: the user's list, plus what other crates added while it is still
-    // the default (`PaneChips::shown`).
+/// What one pane's header needs to know, as plain data gathered from the session.
+pub(crate) struct PaneHeaderInput {
+    pane_id: PaneId,
+    ws_idx: usize,
+    col_idx: usize,
+    name: String,
+    custom_name: Option<String>,
+    runtime: Option<PaneRuntime>,
+    zoomed: bool,
+    floating: bool,
+    avail_w: f32,
+}
+
+/// **Read what every pane's header depends on**, once a frame. `None` when the info bar is
+/// disabled: no pane gets one.
+///
+/// This builds no widget. Each pane's header (a [`Keyed`](heca_grid_ui::widgets::Keyed) the pane
+/// holds) is told the result by [`show_pane_header`], and builds only if what it shows changed.
+pub(crate) fn pane_header_inputs(
+    state: &mut crate::app_state::AppState,
+) -> Option<std::collections::HashMap<PaneId, PaneHeaderInput>> {
     let segments = state
         .pane_chips
         .shown(&state.appearance.pane.title_segments);
-    // The buttons to show, by name: the user's list, plus what other crates added while it is still
-    // the default (`PaneButtons::shown`).
     let actions = state
         .pane_buttons
         .shown(&state.appearance.pane.title_actions);
     if segments.is_empty() && actions.is_empty() {
-        // Info bar disabled: no pane gets one.
-        return built;
-    }
-    let theme = chrome_gui_theme(state);
-    // The strip behind the bar, from the same token the host used to paint it with.
-    let band = crate::chrome::theme::top_bottom_pane_background_color(&state.theme);
-    let font = theme.font_size;
-
-    // Phase 1: gather per-pane inputs with only immutable borrows of `state`.
-    struct Input {
-        pane_id: PaneId,
-        ws_idx: usize,
-        col_idx: usize,
-        name: String,
-        custom_name: Option<String>,
-        runtime: Option<PaneRuntime>,
-        zoomed: bool,
-        floating: bool,
-        avail_w: f32,
+        return None;
     }
     let frames = crate::app::terminal_host::pane_outer_frames(state);
     let active_ws = state.session.active_workspace_idx;
-    let mut inputs = Vec::with_capacity(frames.len());
+    let mut inputs = std::collections::HashMap::with_capacity(frames.len());
     for (pane_id, _x, _y, w, _h) in frames {
         let (ws_idx, col_idx) = crate::find_pane_location(&state.session, pane_id)
             .map(|(ws, col, _)| (ws, col))
@@ -856,8 +816,8 @@ pub(crate) fn build_pane_headers(state: &crate::app_state::AppState) -> BuiltPan
                 )
             })
             .unwrap_or_else(|| (String::new(), None, None));
-        // Floating panes aren't in any column (`find_pane_location` returns None);
-        // detect them directly so the bar hides tiled-only buttons + flags float active.
+        // Floating panes aren't in any column (`find_pane_location` returns None); detect them
+        // directly so the bar hides tiled-only buttons + flags float active.
         let floating = state
             .session
             .active_workspace()
@@ -870,78 +830,93 @@ pub(crate) fn build_pane_headers(state: &crate::app_state::AppState) -> BuiltPan
                 .and_then(|ws| ws.scrolling.columns.get(col_idx))
                 .map(|c| c.is_zoomed() || c.is_full_width)
                 .unwrap_or(false);
-        inputs.push(Input {
+        inputs.insert(
             pane_id,
-            ws_idx,
-            col_idx,
-            name,
-            custom_name,
-            runtime,
-            zoomed,
-            floating,
-            // The pane's own width. The strip insets its content with its own padding, so nothing
-            // out here subtracts a margin from it any more.
-            avail_w: w.max(0.0),
-        });
-    }
-
-    // Phase 2: build one bar per pane. No key comparison and no pruning here — `sync_panes` folds
-    // this key into the pane's own, so a pane and the bar inside it rebuild together or not at all,
-    // and a bar disappears with the pane that held it.
-    for input in &inputs {
-        let facts = super::pane_items::PaneFacts::of(
-            input.pane_id,
-            &state.programs,
-            &input.name,
-            input.custom_name.as_deref(),
-            input.runtime.as_ref(),
+            PaneHeaderInput {
+                pane_id,
+                ws_idx,
+                col_idx,
+                name,
+                custom_name,
+                runtime,
+                zoomed,
+                floating,
+                // The pane's own width. The strip insets its content with its own padding, so
+                // nothing out here subtracts a margin from it.
+                avail_w: w.max(0.0),
+            },
         );
-        let content = PaneHeaderContent {
-            facts: &facts,
-            segments: &segments,
-            chips: &state.pane_chips,
-            actions: &actions,
-            ws_idx: input.ws_idx,
-            col_idx: input.col_idx,
-            zoomed: input.zoomed,
-            floating: input.floating,
-            shortcuts: &state.action_shortcuts,
-            catalog: &state.action_catalog,
-        };
-        let key = pane_header_key(&content, font, input.avail_w);
+    }
+    // An added chip's kept answers are for panes that are still there.
+    state
+        .pane_chips
+        .retain_panes(&inputs.keys().copied().collect());
+    Some(inputs)
+}
+
+/// **Tell a pane's header what is true of it now.** Cheap when nothing changed: the shape is summed
+/// up in a key, and the header builds a tree only when the key is not the one it already shows.
+pub(crate) fn show_pane_header(
+    state: &crate::app_state::AppState,
+    theme: &GuiTheme,
+    input: &PaneHeaderInput,
+    header: &heca_grid_ui::widgets::Keyed,
+) {
+    let segments = state
+        .pane_chips
+        .shown(&state.appearance.pane.title_segments);
+    let actions = state
+        .pane_buttons
+        .shown(&state.appearance.pane.title_actions);
+    let font = theme.font_size;
+    let facts = super::pane_items::PaneFacts::of(
+        input.pane_id,
+        &state.programs,
+        &input.name,
+        input.custom_name.as_deref(),
+        input.runtime.as_ref(),
+    );
+    let content = PaneHeaderContent {
+        facts: &facts,
+        segments: &segments,
+        chips: &state.pane_chips,
+        actions: &actions,
+        ws_idx: input.ws_idx,
+        col_idx: input.col_idx,
+        zoomed: input.zoomed,
+        floating: input.floating,
+        shortcuts: &state.action_shortcuts,
+        catalog: &state.action_catalog,
+    };
+    let key = pane_header_key(&content, font, input.avail_w);
+    // **The words travel beside the tree, not inside its identity**: they are written onto the tree
+    // by the key of the chip that shows each, so a command changing the program it shows moves the
+    // words and nothing else.
+    let words: Vec<_> = segment_items(
+        content.chips,
+        content.segments,
+        content.facts,
+        input.avail_w,
+        font,
+    )
+    .into_iter()
+    .map(|(name, _, text)| (segment_text_key(&name), text))
+    .collect();
+    header.texts(words);
+    header.show(key, || {
+        let band = crate::chrome::theme::top_bottom_pane_background_color(&state.theme);
         let ctx = PaneHeaderCtx {
             pane_id: input.pane_id,
             ws_idx: input.ws_idx,
             col_idx: input.col_idx,
             event_proxy: state.event_proxy.clone(),
         };
-        if let Some(root) = build_pane_header(&content, &theme, band, font, input.avail_w, ctx) {
-            // The identity rule's warning half (F003/P082/T444). This tree is where it was actually
-            // broken: zooming changed what the bar rendered, and the buttons' hint letters moved
-            // under Antonio while he was driving (F011/P094/T451). Each carries a key naming
-            // which pane's control it is, and this is what says so if that ever goes.
-            super::identity::report_ambiguous_widgets("pane-header", &root);
-            // **The words travel beside the tree, not inside its identity.** Whoever holds the
-            // retained header writes these in each frame, so a command changing the program it
-            // shows moves the words and nothing else (F003/P097/T500).
-            let texts: Vec<_> = segment_items(
-                content.chips,
-                content.segments,
-                content.facts,
-                input.avail_w,
-                font,
-            )
-            .into_iter()
-            .map(|(name, _, text)| (name, text))
-            .collect();
-            built.insert(input.pane_id, (root, key, texts));
-        }
-    }
-    // An added chip's kept answers are for panes that are still there.
-    state
-        .pane_chips
-        .retain_panes(&inputs.iter().map(|i| i.pane_id).collect());
-    built
+        let root = build_pane_header(&content, theme, band, font, input.avail_w, ctx)?;
+        // The identity rule's warning half: each control carries a key naming which pane's
+        // control it is, and this says so if that ever goes.
+        super::identity::report_ambiguous_widgets("pane-header", &root);
+        Some(Box::new(root) as Box<dyn Component>)
+    });
 }
 
 #[cfg(test)]
