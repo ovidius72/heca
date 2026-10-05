@@ -29,8 +29,26 @@ impl AppState {
                     self.sync_toasts();
                     self.needs_redraw = true;
                 }
+                crate::server::Change::LayoutChanged => self.needs_redraw = true,
             }
         }
+    }
+
+    /// **Run a built-in action on the server**, for this window, and react to what changed. Only
+    /// for an action the server runs ([`ServerState::runs`](crate::server::ServerState::runs)).
+    ///
+    /// The context is built from the session and this window's view only, so the server's own
+    /// state stays borrowable beside it.
+    pub(crate) fn run_on_server(&mut self, action: &crate::input::WmAction) {
+        let asker = crate::server::Asker {
+            focused_pane: self.focused_pane,
+        };
+        let mut cx = crate::server::ServerCx {
+            layout: self.session.through_mut(&mut self.view),
+            asker,
+        };
+        let changes = self.server.run(&mut cx, action);
+        self.apply(changes);
     }
 
     /// Point the toast stack's signal at what the server says is on show, if that changed.

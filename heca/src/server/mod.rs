@@ -17,6 +17,8 @@
 
 mod action;
 mod change;
+mod cx;
+mod handlers;
 
 use std::rc::Rc;
 use std::time::Instant;
@@ -25,6 +27,7 @@ use heca_config::programs::ProgramsConfig;
 
 pub(crate) use action::{NotificationSettings, ServerAction};
 pub(crate) use change::Change;
+pub(crate) use cx::{Asker, ServerCx};
 
 use crate::app::backend_store::BackendStore;
 use crate::app::git_monitor::GitRuntimeCache;
@@ -87,6 +90,27 @@ impl ServerState {
             .then_some(Change::NotificationsChanged)
             .into_iter()
             .collect()
+    }
+
+    /// Whether the server runs this kind of action — it has been moved here from the window.
+    pub(crate) fn runs(kind: crate::input::WmActionKind) -> bool {
+        handlers::handler_for(kind).is_some()
+    }
+
+    /// **Run a built-in action on the server**, and say what changed. Only for a kind the server
+    /// [`runs`](Self::runs); anything else is a routing mistake, said out loud and ignored.
+    pub(crate) fn run(
+        &mut self,
+        cx: &mut ServerCx<'_>,
+        action: &crate::input::WmAction,
+    ) -> Vec<Change> {
+        match handlers::handler_for(action.kind()) {
+            Some(handler) => handler(cx, action),
+            None => {
+                debug_assert!(false, "{action:?} is not a server action");
+                Vec::new()
+            }
+        }
     }
 
     /// Let time pass: notifications past their deadline are dismissed. Called every turn of the

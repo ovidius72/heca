@@ -33,6 +33,8 @@ pub struct ActionRegistry {
     /// [`ActionCatalog`], next to the built-ins; only the handler lives here. One with no handler is declared but
     /// not runnable by the host — its owner is across the plugin boundary (plugin-08).
     dyn_handlers: HashMap<String, DynHandler>,
+    /// Which side each kind of built-in runs on — what `execute` routes by.
+    sides: super::sides::Sides,
 }
 
 /// The handler for a name-keyed action. Unlike [`ActionHandler`] (a bare `fn` pointer keyed by
@@ -127,6 +129,7 @@ impl ActionRegistry {
         Self {
             handlers: HashMap::new(),
             dyn_handlers: HashMap::new(),
+            sides: super::sides::Sides::from_builtins(),
         }
     }
 
@@ -165,6 +168,13 @@ impl ActionRegistry {
     /// In release builds, silently does nothing.
     pub fn execute(&self, action: &crate::input::WmAction, state: &mut crate::app_state::AppState) {
         let disc = action.kind();
+        // **Routed by the action's side**: a server action runs on the server when it has been
+        // moved there; anything else runs here, as it always has.
+        if self.sides.of(disc) == Some(super::Side::Server) && crate::server::ServerState::runs(disc)
+        {
+            run_then_follow_up(state, |state| state.run_on_server(action));
+            return;
+        }
         if let Some(handler) = self.handlers.get(&disc) {
             run_then_follow_up(state, |state| handler(state, action));
         } else {
@@ -178,6 +188,12 @@ impl ActionRegistry {
     pub fn has_handler(&self, action: &crate::input::WmAction) -> bool {
         let disc = action.kind();
         self.handlers.contains_key(&disc)
+    }
+
+    /// Whether a window handler is registered for this kind of action.
+    #[cfg(test)]
+    pub fn has_handler_for_kind(&self, kind: crate::input::WmActionKind) -> bool {
+        self.handlers.contains_key(&kind)
     }
 
     /// Whether the host can run the name-keyed action `id` — `false` for one that is only

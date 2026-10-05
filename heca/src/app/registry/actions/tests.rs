@@ -32,7 +32,10 @@ fn every_catalogued_action_has_a_handler() {
             continue;
         };
         // Overlay control is resolved by the dispatcher, never by a registered handler.
-        if !action.is_overlay_control() && !registry.has_handler(&action) {
+        if !action.is_overlay_control()
+            && !registry.has_handler(&action)
+            && !crate::server::ServerState::runs(action.kind())
+        {
             missing.push(descriptor.name);
         }
     }
@@ -98,4 +101,26 @@ fn chrome_container_placement_actions_have_handlers() {
         region: crate::chrome::RegionId::LeftSidebar,
         visible: crate::input::RegionVisibility::Show,
     }));
+}
+
+/// **An action that runs on the server has no window handler.** Two handlers for one kind would be
+/// two paths over the same input, and the registry would run only the one the routing picks —
+/// the other would rot unseen. A kind moves to the server by leaving here.
+#[test]
+fn a_server_action_has_no_window_handler() {
+    use crate::input::WmActionKind;
+    use strum::IntoEnumIterator;
+    let registry = build_registry();
+    let doubled: Vec<WmActionKind> = WmActionKind::iter()
+        .filter(|kind| crate::server::ServerState::runs(*kind))
+        .filter(|kind| registry.has_handler_for_kind(*kind))
+        .collect();
+    assert!(
+        doubled.is_empty(),
+        "these run on the server and still have a window handler: {doubled:?}"
+    );
+    assert!(
+        WmActionKind::iter().any(crate::server::ServerState::runs),
+        "no action runs on the server — the loop above checked nothing"
+    );
 }

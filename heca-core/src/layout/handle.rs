@@ -142,6 +142,12 @@ impl LayoutMut<'_> {
         self.workspace_mut(self.view.active_workspace)
     }
 
+    /// The next identity from the session's one counter — for the column a move may have to
+    /// create, allocated before the workspace is borrowed.
+    pub fn next_id(&mut self) -> u64 {
+        self.session.next_id()
+    }
+
     /// Create a new workspace and append it.
     pub fn add_workspace(&mut self) -> WorkspaceId {
         self.session.add_workspace()

@@ -5,45 +5,6 @@ use super::pick::{begin_pick, pane_candidates_with_stable_letters};
 use crate::app::interaction::focused_pane_id;
 use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
-use heca_core::layout::types::{Point, Rectangle, Size};
-
-/// Float the focused pane, or put it back into the tiling if it already floats. Where it floats and
-/// where it goes back are the workspace's to know ([`Workspace::float_tiled_pane`],
-/// [`Workspace::unfloat_pane`]).
-///
-/// [`Workspace::float_tiled_pane`]: heca_core::layout::Workspace::float_tiled_pane
-/// [`Workspace::unfloat_pane`]: heca_core::layout::Workspace::unfloat_pane
-pub fn handle_float(state: &mut AppState, _action: &WmAction) {
-    let Some(pane_id) = focused_pane_id(state) else {
-        return;
-    };
-    // Allocated before the workspace is borrowed; spent only if unfloating has to rebuild the
-    // column this pane came from. A derived id could collide with a column that still exists.
-    let new_column_id = heca_core::layout::ColumnId(state.session.next_id());
-    if let Some(mut ws) = state.layout_mut().active_workspace_mut()
-        && !ws.unfloat_pane(pane_id, new_column_id)
-    {
-        let rect = ws.default_float_rect();
-        ws.float_tiled_pane(pane_id, rect);
-    }
-}
-
-pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
-    let WmAction::FloatAt {
-        pane_id,
-        x,
-        y,
-        width,
-        height,
-    } = action
-    else {
-        return;
-    };
-    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
-        let rect = Rectangle::new(Point::new(*x, *y), Size::new(*width, *height));
-        ws.float_tiled_pane(*pane_id, rect);
-    }
-}
 
 /// Close the currently focused pane.
 ///

@@ -29,24 +29,6 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
     state.start_shell_in(backend_id, active_ws);
 }
 
-pub fn handle_resize_increase(state: &mut AppState, _action: &WmAction) {
-    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
-        ws.scroll_mut().resize_active_column(0.05);
-    }
-}
-
-pub fn handle_resize_decrease(state: &mut AppState, _action: &WmAction) {
-    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
-        ws.scroll_mut().resize_active_column(-0.05);
-    }
-}
-
-pub fn handle_zoom_column(state: &mut AppState, _action: &WmAction) {
-    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
-        ws.scroll_mut().toggle_active_column_zoom();
-    }
-}
-
 /// Zoom the column named by `(ws_idx, col_idx)` — [`WmAction::ZoomColumnAtIndex`].
 ///
 /// Zoom is a property of the *active* column, so naming another one means making it active first.
@@ -72,19 +54,8 @@ pub fn handle_zoom_column_at_index(state: &mut AppState, action: &WmAction) {
     } else {
         return;
     }
-    handle_zoom_column(state, &WmAction::ZoomColumn);
-}
-
-pub fn handle_pane_height_increase(state: &mut AppState, _action: &WmAction) {
-    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
-        ws.scroll_mut().resize_active_pane_height(40.0);
-    }
-}
-
-pub fn handle_pane_height_decrease(state: &mut AppState, _action: &WmAction) {
-    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
-        ws.scroll_mut().resize_active_pane_height(-40.0);
-    }
+    // Zoom is the server's: it changes the column, whichever window asked.
+    state.run_on_server(&WmAction::ZoomColumn);
 }
 
 pub fn handle_resize(state: &mut AppState, action: &WmAction) {

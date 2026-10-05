@@ -7,6 +7,14 @@ mod builtins;
 mod catalog;
 mod confirm;
 mod registry;
+mod sides;
+
+#[cfg(test)]
+pub(crate) use sides::Sides as SidesForTests;
+#[cfg(test)]
+pub(crate) fn sides_for_tests() -> SidesForTests {
+    sides::Sides::from_builtins()
+}
 #[cfg(test)]
 mod testing;
 

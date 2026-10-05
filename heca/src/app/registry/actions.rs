@@ -25,21 +25,10 @@ pub fn build_registry() -> ActionRegistry {
     // ── Layout ──
     registry.register(WmActionKind::SplitHorizontal, handle_split_horizontal);
     registry.register(WmActionKind::SplitVertical, handle_split_vertical);
-    registry.register(WmActionKind::ZoomColumn, handle_zoom_column);
     registry.register(WmActionKind::ZoomColumnAtIndex, handle_zoom_column_at_index);
     registry.register(WmActionKind::OpenContextMenu, handle_open_context_menu);
     registry.register(WmActionKind::ScrollViewLeft, handle_scroll_view_left);
     registry.register(WmActionKind::ScrollViewRight, handle_scroll_view_right);
-    registry.register(WmActionKind::ResizeIncrease, handle_resize_increase);
-    registry.register(WmActionKind::ResizeDecrease, handle_resize_decrease);
-    registry.register(
-        WmActionKind::PaneHeightIncrease,
-        handle_pane_height_increase,
-    );
-    registry.register(
-        WmActionKind::PaneHeightDecrease,
-        handle_pane_height_decrease,
-    );
     registry.register(WmActionKind::SwapLeft, handle_swap_left);
     registry.register(WmActionKind::SwapRight, handle_swap_right);
     registry.register(WmActionKind::SwapUp, handle_swap_up);
@@ -71,7 +60,6 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::ResizeTo, handle_resize_to);
 
     // ── Pane ──
-    registry.register(WmActionKind::Float, handle_float);
     registry.register(WmActionKind::ClosePane, handle_close_pane);
     registry.register(WmActionKind::PaneSelect, handle_pane_select);
     registry.register(WmActionKind::FollowLink, handle_follow_link);
@@ -114,7 +102,6 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::RenamePane, handle_rename_pane);
     registry.register(WmActionKind::RenameColumn, handle_rename_column);
     registry.register(WmActionKind::RenameColumnByIdx, handle_rename_column_by_idx);
-    registry.register(WmActionKind::FloatAt, handle_float_at);
     registry.register(WmActionKind::ClosePaneById, handle_close_pane_by_id);
     registry.register(WmActionKind::RenameTarget, handle_rename_target);
     registry.register(WmActionKind::RenamePaneById, handle_rename_pane_by_id);

@@ -9,4 +9,6 @@
 pub(crate) enum Change {
     /// The notifications on show, or when they expire, are different.
     NotificationsChanged,
+    /// The arrangement of panes or columns is different: a column was resized, a pane was moved.
+    LayoutChanged,
 }
