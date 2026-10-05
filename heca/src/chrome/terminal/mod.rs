@@ -166,49 +166,37 @@ pub(crate) fn retain_owned(state: &mut AppState) {
     state.terminals.retain(|id, _| backends.is_issued(*id));
 }
 
-/// **Where each terminal was drawn this frame**, read from the scenes the frame painted: a terminal
-/// paints one surface request at its own box, and the scene says where that box ended up — scrolled,
-/// clipped and placed like anything else. A terminal with no request was not on screen.
-///
-/// Said once a frame, straight after the scene is painted, so nothing reads a position from an
-/// earlier frame.
-pub(crate) fn place_from(state: &AppState, scenes: &[&heca_grid_ui::Scene]) {
-    let mut drawn: std::collections::HashMap<u64, heca_core::layout::Rectangle> =
-        std::collections::HashMap::new();
-    for scene in scenes {
-        for request in heca_renderer::scene::host_requests(scene) {
-            if let heca_grid_ui::scene::HostDraw::Surface { id } = request.draw {
-                drawn.insert(id, request.rect);
-            }
-        }
+/// **Where each terminal was drawn this frame**, as the flush met them: every scene the frame
+/// flushes — columns, floats, chrome, overlays — hands each terminal surface it reaches to
+/// [`record`](Self::record), with the rect the scene put it at (scrolled, clipped and placed like
+/// anything else). One funnel for every scene, so no scene can be missed.
+#[derive(Default)]
+pub(crate) struct Drawn(std::collections::HashMap<u64, heca_core::layout::Rectangle>);
+
+impl Drawn {
+    /// Note that the flush drew this surface.
+    pub(crate) fn record(&mut self, surface: &heca_grid_ui::SurfaceAt) {
+        self.0.insert(surface.id, surface.rect);
     }
-    for terminal in state.terminals.values() {
-        terminal.place(terminal.id().and_then(|id| drawn.get(&id.0).copied()));
+
+    /// **Tell every terminal where the frame drew it**, or that it did not: said once, after the
+    /// frame's last flush. What a pointer or a key is asked between frames reads this.
+    pub(crate) fn settle(self, state: &AppState) {
+        settle(state.terminals.values(), &self);
     }
 }
 
-/// **The box a pane's terminal fills**, and whether it was drawn: how much room the layout gave it
-/// (known for every terminal, on screen or not, so one scrolled out of view keeps its size), and
-/// where the last frame drew it.
-///
-/// A terminal that was not drawn has a box at the origin: enough to size its grid, and the caller
-/// is told not to draw it there.
-pub(crate) fn content_box(
-    state: &AppState,
-    id: TerminalId,
-) -> (Option<heca_core::layout::Rectangle>, bool) {
-    let Some(terminal) = state.terminals.get(&id) else {
-        return (None, false);
-    };
-    let Some(room) = terminal.room() else {
-        return (None, false);
-    };
-    let placed = terminal.placed();
-    let origin = placed.map_or(heca_core::layout::Point::new(0.0, 0.0), |r| r.loc);
-    (
-        Some(heca_core::layout::Rectangle::new(origin, room)),
-        placed.is_some(),
-    )
+fn settle<'a>(terminals: impl Iterator<Item = &'a Terminal>, drawn: &Drawn) {
+    for terminal in terminals {
+        terminal.place(terminal.id().and_then(|id| drawn.0.get(&id.0).copied()));
+    }
+}
+
+/// **The box a terminal fills**: how much room the layout gave it (known for every terminal, on
+/// screen or not, so one scrolled out of view keeps its size). Its size only — where it is drawn
+/// comes from the scene that draws it, at the moment it is drawn.
+pub(crate) fn room_of(state: &AppState, id: TerminalId) -> Option<heca_core::layout::Size> {
+    state.terminals.get(&id)?.room()
 }
 
 /// **Show each terminal how its viewport looks**, from the snapshots this frame prepared. Returns

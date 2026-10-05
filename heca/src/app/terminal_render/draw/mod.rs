@@ -77,24 +77,28 @@ pub(crate) fn draw_surface(
 ) {
     if let Some(terminal) = terminals.iter().find(|t| t.id.0 == surface.id) {
         let clip = surface.clip.filter(|_| target.follow_scene_clip);
-        draw_terminal(state, terminal, target, clip, encoder);
+        draw_terminal(state, terminal, surface.rect, target, clip, encoder);
     }
 }
 
 /// **Draw one terminal where the scene put it**: its retained texture, then its cursor and
 /// selection over it — or, for a terminal with no retained layer yet, the full render.
 ///
-/// A pane with nothing to draw (not on screen last frame, no snapshot yet) is skipped.
+/// `at` is where the scene put it. A terminal with nothing to draw (no room or no snapshot yet) is
+/// skipped.
 pub(crate) fn draw_terminal(
     state: &mut AppState,
     pane: &TerminalRenderState,
+    at: Rectangle,
     target: &TerminalTarget<'_>,
     clip: Option<Rectangle>,
     encoder: &mut wgpu::CommandEncoder,
 ) {
-    let (true, Some(_), Some(mount)) = (pane.drawn, pane.content_rect, pane.mount.as_ref()) else {
+    let (Some(room), Some(mount)) = (pane.content_rect, pane.mount.as_ref()) else {
         return;
     };
+    // Its size is what the layout gave it; its place is where the scene drew it.
+    let rect = Rectangle::new(at.loc, room.size);
     let surface_physical_size = state.window.inner_size();
     // Any terminal's, whoever owns it: the selection is a terminal's, asked of its id.
     let selection_overlay = selection_overlay_for_terminal(state, pane.id, &mount.snapshot);
@@ -121,13 +125,14 @@ pub(crate) fn draw_terminal(
             surface_physical_size.width as f32,
             surface_physical_size.height as f32,
         ),
-        mount,
+        rect,
         clip,
     ) {
         queue_terminal_dynamic_overlays(
             &mut state.text_renderer,
             &mut state.primitive_renderer,
             mount,
+            rect,
             selection_overlay,
             matches!(state.input_mode, InputMode::Selection),
         );
@@ -165,7 +170,10 @@ pub(crate) fn draw_terminal(
                     .unwrap_or(state.theme.accent)
                     .to_f32x4(),
             },
-            mount.clone(),
+            TerminalMount {
+                content_rect: rect,
+                ..mount.clone()
+            },
             selection_overlay,
         );
     }

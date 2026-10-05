@@ -11,6 +11,7 @@ use heca_grid_ui::scene::{DrawCommand, HostDraw, Scene};
 use heca_grid_ui::theme::Theme;
 
 mod controls;
+mod drawn;
 mod grid;
 mod handle;
 mod layout;

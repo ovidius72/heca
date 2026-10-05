@@ -63,12 +63,7 @@ pub(in crate::app) fn paint_scenes(state: &mut AppState, v: &FrameValues) -> Pan
             (id, frame)
         })
         .collect();
-    let scenes = PaneScenes { columns, floats };
-    let painted: Vec<&GuiScene> = std::iter::once(&scenes.columns)
-        .chain(scenes.floats.values())
-        .collect();
-    crate::chrome::terminal::place_from(state, &painted);
-    scenes
+    PaneScenes { columns, floats }
 }
 
 /// **Every terminal this frame draws**: the tiled panes', the floating panes', and those no pane

@@ -181,7 +181,7 @@ impl Frame {
             },
             &self.scene,
             &mut self.encoder,
-            &mut self.overlay_sink,
+            &mut self.flushed,
             &mut |state, at, encoder| draw_surface(state, tiled, at, &target, encoder),
         );
     }
@@ -296,7 +296,7 @@ impl Frame {
                 },
                 &self.scene,
                 &mut self.encoder,
-                &mut self.overlay_sink,
+                &mut self.flushed,
                 &mut |state, at, encoder| draw_surface(state, floating, at, &target, encoder),
             );
         }
@@ -385,7 +385,7 @@ impl Frame {
             &pass,
             &self.scene,
             &mut self.encoder,
-            &mut self.overlay_sink,
+            &mut self.flushed,
             &mut |state, at, encoder| draw_surface(state, docked, at, &target, encoder),
         );
         scene

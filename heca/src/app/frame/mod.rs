@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use heca_core::layout::{PaneId, Rectangle};
 use heca_grid_ui::Scene as GuiScene;
 
-use crate::app::scene_flush::{ChromePassOpts, flush_scene};
+use crate::app::scene_flush::{ChromePassOpts, Flushed, flush_scene};
 use crate::app::terminal_render::{
     TerminalRenderState, TerminalTarget, draw_surface, pane_scissor_rect,
 };
@@ -79,10 +79,10 @@ pub(super) struct Frame {
     /// Stencil buffer paired with the scene texture: holds the rounded content-clip mask written
     /// each frame so terminal content follows the pane's rounded border.
     stencil: wgpu::TextureView,
-    /// Overlay content (hover tooltips, popovers) from every surface — panes, floats, chrome — is
-    /// collected here and flushed once at the very end, above all bases (the surface-compositor top
-    /// band).
-    overlay_sink: Vec<GuiScene>,
+    /// What the flushes leave for the end: overlay content (hover tooltips, popovers) from every
+    /// surface — panes, floats, chrome — flushed once at the very end, above all bases (the
+    /// surface-compositor top band), and where each terminal was drawn.
+    flushed: Flushed,
 }
 
 /// **Before anything is drawn**: mount what widgets asked to open, bring the retained trees up to
@@ -187,7 +187,7 @@ impl Frame {
             encoder,
             scene: state.compositor.scene_view().clone(),
             stencil: state.compositor.stencil_view().clone(),
-            overlay_sink: Vec::new(),
+            flushed: Flushed::default(),
         })
     }
 
@@ -210,7 +210,7 @@ impl Frame {
     pub(super) fn finish(mut self, state: &mut AppState, docked: &[TerminalRenderState]) {
         let pass = self.pass();
         let target = docked_target(&self.scene, &self.v);
-        let overlays = std::mem::take(&mut self.overlay_sink);
+        let overlays = std::mem::take(&mut self.flushed.overlays);
         for segment in &overlays {
             flush_scene(
                 state,
@@ -218,10 +218,11 @@ impl Frame {
                 &pass,
                 &self.scene,
                 &mut self.encoder,
-                &mut Vec::new(),
+                &mut self.flushed,
                 &mut |state, at, encoder| draw_surface(state, docked, at, &target, encoder),
             );
         }
+        std::mem::take(&mut self.flushed.drawn).settle(state);
         state.compositor.blit(&self.view, &mut self.encoder);
         state.queue.submit(std::iter::once(self.encoder.finish()));
         self.surface_texture.present();

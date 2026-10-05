@@ -29,28 +29,27 @@ pub(crate) struct TerminalRenderState {
     pub(crate) y: f32,
     pub(crate) w: f32,
     pub(crate) h: f32,
+    /// The room its terminal was given, at the origin: its size is what is known before the scene
+    /// draws it; where it is comes with the surface the scene asks for.
     pub(crate) content_rect: Option<Rectangle>,
-    /// Whether the terminal was on screen last frame. One that was not is still sized and kept up
-    /// to date, but is not blitted: its box has no position to blit it at.
-    pub(crate) drawn: bool,
     pub(crate) mount: Option<TerminalMount>,
 }
 
 impl TerminalRenderState {
     /// **The pane as this frame draws it**, whether tiled or floating: its box `(x, y, w, h)`, how
-    /// much room its terminal was given and whether it was drawn last frame, and the snapshot to
-    /// draw. Also tells the chrome store the terminal's scroll position, so what shows it follows.
+    /// much room its terminal was given, and the snapshot to draw. Also tells the chrome store the terminal's scroll position, so what shows it follows.
     ///
     /// **The terminal's box is the terminal's own.** How much room it has comes from the layout,
-    /// for every pane whether or not it is on screen; where it was drawn comes from its surface
-    /// request, and a terminal with none was not on screen.
+    /// for every pane whether or not it is on screen; where it is drawn comes from the surface the
+    /// scene asks for, when the scene is flushed.
     pub(crate) fn collect(
         state: &mut AppState,
         id: TerminalId,
         pane: Option<PaneId>,
         (x, y, w, h): (f32, f32, f32, f32),
     ) -> Self {
-        let (content_rect, drawn) = crate::chrome::terminal::content_box(state, id);
+        let content_rect = crate::chrome::terminal::room_of(state, id)
+            .map(|room| Rectangle::new(heca_core::layout::Point::new(0.0, 0.0), room));
         let mount = content_rect.and_then(|content_rect| {
             crate::app::terminal_host::prepare_terminal_mount(
                 &mut state.backends,
@@ -75,7 +74,6 @@ impl TerminalRenderState {
             w,
             h,
             content_rect,
-            drawn,
             mount,
         }
     }

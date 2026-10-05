@@ -20,13 +20,23 @@ pub(super) struct ChromePassOpts {
     pub(super) glow_alpha_scale: f32,
 }
 
+/// What flushing scenes leaves for the end of the frame.
+#[derive(Default)]
+pub(super) struct Flushed {
+    /// The scenes' overlay segments, flushed once above every surface by [`flush_overlay_band`].
+    pub(super) overlays: Vec<heca_grid_ui::Scene>,
+    /// The terminal surfaces reached, and where.
+    pub(super) drawn: crate::chrome::terminal::Drawn,
+}
+
 /// What draws a terminal surface when the flush reaches it. Takes the state and the encoder because
 /// the surface needs both; the flush holds neither across the call.
 pub(super) type DrawSurface<'a> =
     dyn FnMut(&mut AppState, &heca_grid_ui::SurfaceAt, &mut wgpu::CommandEncoder) + 'a;
 
-/// **Flush `scene`'s base layer in scene order**, then hand its overlay segments to `overlay_sink`
-/// so they are flushed once, above every surface, by [`flush_overlay_band`].
+/// **Flush `scene`'s base layer in scene order**, noting each terminal surface reached in
+/// `out.drawn`, then hand its overlay segments to `out.overlays` so they are flushed once, above
+/// every surface.
 ///
 /// A scene with no surface is one flush — the same single pass it always was.
 pub(super) fn flush_scene(
@@ -35,7 +45,7 @@ pub(super) fn flush_scene(
     opts: &ChromePassOpts,
     view: &wgpu::TextureView,
     encoder: &mut wgpu::CommandEncoder,
-    overlay_sink: &mut Vec<heca_grid_ui::Scene>,
+    out: &mut Flushed,
     draw_surface: &mut DrawSurface<'_>,
 ) {
     for run in scene.base_runs() {
@@ -49,10 +59,11 @@ pub(super) fn flush_scene(
             encoder,
         );
         if let Some(surface) = run.then {
+            out.drawn.record(&surface);
             draw_surface(state, &surface, encoder);
         }
     }
-    overlay_sink.extend(scene.overlay_segments());
+    out.overlays.extend(scene.overlay_segments());
 }
 
 /// One rects-then-text pass over a base run.

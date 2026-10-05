@@ -15,13 +15,12 @@ pub(crate) fn blit_retained_terminal_layer(
     encoder: &mut wgpu::CommandEncoder,
     target: &TerminalTarget<'_>,
     viewport_px: (f32, f32),
-    mount: &TerminalMount,
+    rect: Rectangle,
     clip: Option<Rectangle>,
 ) -> bool {
     let Some(layer) = state.terminal_layers.get(&terminal) else {
         return false;
     };
-    let rect = mount.content_rect;
     // The part of the terminal that shows: all of it, or what its clip leaves. The texture is
     // cropped to match, so what shows is the same picture, not a squeezed one.
     let shown = match clip {
@@ -62,10 +61,11 @@ pub(crate) fn queue_terminal_dynamic_overlays(
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
     mount: &TerminalMount,
+    rect: Rectangle,
     selection_overlay: Option<SelectionOverlay>,
     hide_cursor: bool,
 ) {
-    let content_box = rect_to_text_box(mount.content_rect);
+    let content_box = rect_to_text_box(rect);
     let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
     if let Some(ref overlay) = selection_overlay {
         terminal_renderer.render_selection_overlay(
