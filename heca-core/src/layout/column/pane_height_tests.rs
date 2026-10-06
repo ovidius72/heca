@@ -28,7 +28,7 @@ fn panes_never_sum_to_more_than_the_column() {
     for fixed in [None, Some(600.0), Some(700.0), Some(60.0)] {
         let mut col = column_of(3);
         if let Some(h) = fixed {
-            col.panes[0].preferred_height = Some(h);
+            col.set_pane_height(0, h, working, gaps);
         }
         let heights = col.pane_heights(working, gaps);
         let total: f64 = heights.iter().sum();
@@ -46,7 +46,7 @@ fn panes_fill_the_column_they_are_given() {
     let working = 800.0;
     let gaps = 4.0;
     let mut col = column_of(3);
-    col.panes[0].preferred_height = Some(200.0);
+    col.set_pane_height(0, 200.0, working, gaps);
     let heights = col.pane_heights(working, gaps);
     let total: f64 = heights.iter().sum();
     let available = working - gaps * 4.0;
@@ -105,8 +105,8 @@ fn a_resize_leaves_every_other_pane_where_it_was() {
     // case: the third was then forced up to the column-wide floor, the heights summed past the
     // column, and the scale that keeps the column full pulled the two pinned panes off the
     // sizes the user had just set.
-    col.panes[0].preferred_height = Some(250.0);
-    col.panes[1].preferred_height = Some(MIN_PANE_HEIGHT);
+    col.set_pane_height(0, 250.0, working, gaps);
+    col.set_pane_height(1, MIN_PANE_HEIGHT, working, gaps);
     let heights = col.pane_heights(working, gaps);
 
     assert!(
@@ -134,4 +134,39 @@ fn a_short_column_shrinks_every_pane_rather_than_losing_one() {
         heights.iter().all(|h| *h > 0.0),
         "no pane collapses to nothing"
     );
+}
+
+/// **A dragged height is a proportion**: the same column at two window heights keeps the split
+/// the user dragged to, which a pixel height cannot.
+#[test]
+fn a_dragged_split_keeps_its_proportion_when_the_window_changes() {
+    let gaps = 4.0;
+    let mut col = column_of(2);
+    col.set_pane_height(0, 0.6 * (800.0 - gaps * 3.0), 800.0, gaps);
+    for working in [800.0, 400.0] {
+        let heights = col.pane_heights(working, gaps);
+        let ratio = heights[0] / heights.iter().sum::<f64>();
+        assert!((ratio - 0.6).abs() < 0.01, "at {working}px the split is {ratio}");
+    }
+}
+
+/// Setting a height with no room to measure against changes nothing.
+#[test]
+fn a_height_set_in_no_room_changes_nothing() {
+    let mut col = column_of(2);
+    col.set_pane_height(0, 100.0, 0.0, 4.0);
+    assert_eq!(col.panes[0].height_share, None);
+}
+
+/// A pane that arrives does not change the height another was dragged to (when they all fit): the
+/// share is re-expressed against the room the column has with the new pane in it.
+#[test]
+fn a_new_pane_leaves_a_dragged_height_in_pixels_where_it_was() {
+    let (working, gaps) = (800.0, 4.0);
+    let mut col = column_of(2);
+    col.set_pane_height(0, 300.0, working, gaps);
+    col.make_room_for_one_more(working, gaps);
+    col.add_pane_at(2, Pane::new(PaneId(9), "new"));
+    let heights = col.pane_heights(working, gaps);
+    assert!((heights[0] - 300.0).abs() < 0.5, "{}", heights[0]);
 }

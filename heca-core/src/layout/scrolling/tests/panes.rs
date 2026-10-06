@@ -44,11 +44,11 @@ fn resize_pane_height_sets_preferred_and_no_ops_single_pane() {
     space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
     // Single-pane column → no-op (the lone pane fills the column).
     space.m().resize_pane_height(0, 0, 30.0);
-    assert_eq!(space.columns[0].panes[0].preferred_height, None);
+    assert_eq!(space.columns[0].panes[0].height_share, None);
     // Stack a second pane, then the resize takes effect.
     space.m().add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), true);
     space.m().resize_pane_height(0, 0, 30.0);
-    assert!(space.columns[0].panes[0].preferred_height.is_some());
+    assert!(space.columns[0].panes[0].height_share.is_some());
     // Out-of-range column / pane index → no panic.
     space.m().resize_pane_height(9, 0, 30.0);
     space.m().resize_pane_height(0, 9, 30.0);

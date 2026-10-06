@@ -36,7 +36,7 @@ pub(crate) struct ExposePane {
     ///
     /// This is what makes a stack of unequal panes look unequal. The map divided every column
     /// evenly before, so a pane the user had dragged to twice its neighbour's height — its
-    /// `preferred_height` — was drawn as its twin, and the picture disagreed with the screen it is
+    /// `height_share` — was drawn as its twin, and the picture disagreed with the screen it is
     /// a picture of.
     pub(crate) height: f64,
 }
@@ -145,7 +145,7 @@ pub(crate) fn model(
                             active: pane_idx == col.active_pane_idx
                                 && col_idx == ws.scroll().active_column_idx(),
                             // The layout's resolved height, which already accounts for
-                            // `preferred_height`; a column with no room gives equal weights, which
+                            // `height_share`; a column with no room gives equal weights, which
                             // is exactly the even split.
                             height: heights
                                 .get(pane_idx)

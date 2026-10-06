@@ -107,11 +107,10 @@ pub(super) fn resize_to(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change>
             }
         }
         ResizeTarget::Pane => {
+            let working_height = ws.scroll().area().size.h;
+            let gaps = ws.scrolling.options.gaps;
             if let Some(col) = ws.scroll_mut().active_column_mut() {
-                let pane_idx = col.active_pane_idx;
-                if let Some(pane) = col.panes.get_mut(pane_idx) {
-                    pane.preferred_height = Some(*height);
-                }
+                col.set_pane_height(col.active_pane_idx, *height, working_height, gaps);
             }
         }
     })

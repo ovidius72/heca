@@ -1,6 +1,6 @@
 //! How tall each pane of a column is, and how a drag changes that.
 
-use super::Column;
+use super::{Column, Pane};
 use crate::layout::types::*;
 
 /// Minimum height (logical px) a pane may be shrunk to by a manual resize, so a
@@ -28,29 +28,49 @@ impl Column {
     /// as far as the column still allows.
     pub fn make_room_for_one_more(&mut self, working_height: f64, gaps: f64) {
         let after = self.panes.len() + 1;
+        let room_before = self.room(working_height, gaps);
         let available = working_height - gaps * (after as f64 + 1.0);
         let floor = MIN_PANE_HEIGHT.min(available / after as f64).max(1.0);
-        let pinned: f64 = self.panes.iter().filter_map(|p| p.preferred_height).sum();
+        let pixels = |pane: &Pane| pane.height_share.map(|share| share * room_before);
+        let pinned: f64 = self.panes.iter().filter_map(pixels).sum();
         // What the pinned panes may hold and still leave every other pane its floor.
-        let unpinned = self
-            .panes
-            .iter()
-            .filter(|p| p.preferred_height.is_none())
-            .count();
+        let unpinned = self.panes.iter().filter(|p| p.height_share.is_none()).count();
         let ceiling = available - floor * (unpinned + 1) as f64;
-        if pinned <= ceiling || pinned <= 0.0 {
-            return;
-        }
-        let scale = (ceiling / pinned).max(0.0);
+        let scale = match pinned <= ceiling || pinned <= 0.0 {
+            true => 1.0,
+            false => (ceiling / pinned).max(0.0),
+        };
+        // The heights the panes were dragged to stay what they are (scaled when they cannot all
+        // fit), re-expressed against the room the column has once the new pane is in it.
         for pane in &mut self.panes {
-            if let Some(h) = pane.preferred_height {
-                pane.preferred_height = Some((h * scale).max(floor));
+            if let Some(px) = pixels(pane) {
+                let px = if scale < 1.0 { (px * scale).max(floor) } else { px };
+                pane.height_share = Some(px / available);
             }
         }
     }
 
+    /// The room a column's panes share: its height less the gaps around and between them.
+    fn room(&self, working_height: f64, gaps: f64) -> f64 {
+        working_height - gaps * (self.panes.len() as f64 + 1.0)
+    }
+
+    /// Give pane `idx` a height of `height` logical px, as a share of the room this column has in
+    /// `working_height` — so it keeps its proportion when the window changes size. The one place
+    /// pixels become a share; nothing else is told how tall a pane is. Nothing happens when the
+    /// column has no room to measure against.
+    pub fn set_pane_height(&mut self, idx: usize, height: f64, working_height: f64, gaps: f64) {
+        let room = self.room(working_height, gaps);
+        if room <= 0.0 {
+            return;
+        }
+        if let Some(pane) = self.panes.get_mut(idx) {
+            pane.height_share = Some((height / room).clamp(f64::EPSILON, 1.0));
+        }
+    }
+
     /// **How tall each pane is** in a column given `working_height` of room — worked out from the
-    /// panes' preferred heights each time it is asked, so it is never out of date, and the shared
+    /// panes' height shares each time it is asked, so it is never out of date, and the shared
     /// content holds no window's pixels.
     ///
     /// This is NIRI's height distribution algorithm simplified.
@@ -76,7 +96,8 @@ impl Column {
 
         // First pass: assign fixed heights, count auto panes.
         for (i, pane) in self.panes.iter().enumerate() {
-            if let Some(fixed_h) = pane.preferred_height {
+            if let Some(share) = pane.height_share {
+                let fixed_h = share * available_height;
                 let h = fixed_h.clamp(min_h, height_left.max(min_h));
                 sizes[i].h = h;
                 height_left -= h;
@@ -97,7 +118,7 @@ impl Column {
             let auto_floor = min_h.min(per_auto).max(1.0);
             let auto_height = per_auto.max(auto_floor);
             for (i, pane) in self.panes.iter().enumerate() {
-                if pane.preferred_height.is_none() {
+                if pane.height_share.is_none() {
                     sizes[i].h = auto_height;
                 }
             }
@@ -109,7 +130,7 @@ impl Column {
         // It used to scale only *up*, to fill leftover space, and that left the overflowing case
         // unhandled: the per-pane floor above is worked out from `available / pane_count`, but the
         // auto panes are then floored at it against `height_left` — the room left after the *fixed*
-        // panes have taken theirs. With one pane resized (so carrying a `preferred_height`) and two
+        // panes have taken theirs. With one pane resized (so carrying a `height_share`) and two
         // sharing the rest, that floor could exceed what was left, the heights summed to more than
         // the column, and the last pane was pushed off the bottom of the screen.
         //
@@ -247,22 +268,16 @@ impl Column {
         } else {
             pane_idx - 1
         };
+        let room = self.room(working_height, gaps);
+        if room <= 0.0 {
+            return;
+        }
         let heights = self.pane_heights(working_height, gaps);
-        let height_of = |col: &Self, idx: usize| {
-            // The pane's **actual current** height, not a fixed 200px default: a pane that was
-            // still auto-sized (an even split) would jump to ~200px on the first drag delta
-            // otherwise. Falls back to 200px only when the column has no room to work out (a
-            // unit test with no size).
-            col.panes[idx].preferred_height.unwrap_or_else(|| {
-                heights
-                    .get(idx)
-                    .copied()
-                    .filter(|h| *h > 0.0)
-                    .unwrap_or(200.0)
-            })
-        };
-        let mine = height_of(self, pane_idx);
-        let theirs = height_of(self, other);
+        // The pane's **actual current** height in this window, so a pane that was still
+        // auto-sized (an even split) does not jump on the first drag delta.
+        let height_of = |idx: usize| heights.get(idx).copied().unwrap_or(0.0);
+        let mine = height_of(pane_idx);
+        let theirs = height_of(other);
         // How far the boundary may travel: I cannot shrink past the floor, and neither can they.
         // When both are already at it there is no room at all — stop rather than reaching past the
         // neighbour for space, which is the whole point of this function.
@@ -274,7 +289,7 @@ impl Column {
         if delta == 0.0 {
             return;
         }
-        self.panes[pane_idx].preferred_height = Some(mine + delta);
-        self.panes[other].preferred_height = Some(theirs - delta);
+        self.panes[pane_idx].height_share = Some((mine + delta) / room);
+        self.panes[other].height_share = Some((theirs - delta) / room);
     }
 }
