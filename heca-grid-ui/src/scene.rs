@@ -131,6 +131,24 @@ impl Scene {
         }
     }
 
+    /// Where the outline list stands now — taken before a widget paints, so what it asks to have
+    /// drawn over its children can be told apart from what an earlier widget asked for.
+    pub fn outline_mark(&self) -> usize {
+        self.outline.len()
+    }
+
+    /// **Land what a widget put in the outline, where its subtree ends** — over its children, and
+    /// under whatever is painted after it. Without this every frame in a window would be drawn after
+    /// every other widget: a pane's border over the sidebar beside it and over the float on top.
+    /// A piece is closed on itself, so it moves in place and keeps the clips it was begun in.
+    pub fn settle_outline(&mut self, mark: usize) {
+        if self.to_outline || self.to_overlay || self.outline.len() <= mark {
+            return;
+        }
+        let piece: Vec<DrawCommand> = self.outline.drain(mark..).collect();
+        self.commands.extend(piece);
+    }
+
     /// Close the piece [`begin_outline`](Scene::begin_outline) opened.
     pub fn end_outline(&mut self) {
         if self.outline_nested > 0 {

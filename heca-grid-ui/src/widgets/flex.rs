@@ -306,3 +306,5 @@ mod tests {
 
 #[cfg(test)]
 mod clip;
+#[cfg(test)]
+mod passthrough;

@@ -512,6 +512,11 @@ pub struct Base {
     /// What the cursor looks like while the pointer is over this widget — see
     /// [`cursor_at`](crate::cursor_at). `None` leaves it to what holds this widget.
     pub cursor: Option<crate::cursor::Cursor>,
+    /// Whether this widget's **own box** lets the pointer through to what is behind it, while what
+    /// it holds still answers (CSS `pointer-events: none` on a wrapper whose children opt back
+    /// in). A full-size container laid over other things would otherwise be what every press lands
+    /// on, wherever none of its children is.
+    pub pointer_passthrough: bool,
     /// **The context menu this widget carries**, built fresh each time it is triggered.
     ///
     /// A universal slot like [`key`](Self::key) and [`drag_source`](Self::drag_source), so
@@ -753,6 +758,7 @@ impl Base {
             clip_children: false,
             built_from: None,
             cursor: None,
+            pointer_passthrough: false,
             context_menu: None,
             surface: false,
             surface_slot: None,
@@ -1788,7 +1794,11 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
 
 /// The paint itself, once the inherited hue is in place — see [`paint_child`].
 fn paint_subtree(c: &dyn Component, cx: &mut PaintCx) {
+    // What the widget asks to have drawn over its children (a frame) is landed when its subtree is
+    // done, so it covers its own children and not what is painted after it.
+    let outline = cx.scene.outline_mark();
     c.paint(cx);
+    cx.scene.settle_outline(outline);
     crate::widgets::key_hint::paint_hint_label(c, cx);
     crate::widgets::tooltip::paint_tooltip(c, cx);
     paint_drag_feedback(c, cx);

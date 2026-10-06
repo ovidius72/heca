@@ -470,7 +470,7 @@ pub fn hit_test(root: &dyn Component, pos: Point) -> Option<Path> {
     if root.base().surface {
         return root.overlay_occludes(pos).then(Path::new);
     }
-    rect.contains(pos).then(Path::new)
+    (rect.contains(pos) && !root.base().pointer_passthrough).then(Path::new)
 }
 
 /// Hidden and invisible subtrees have stale bounds and take no input — the same filter paint,
