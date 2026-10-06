@@ -223,3 +223,25 @@ fn moving_a_columns_left_edge_trades_width_with_the_column_before_it() {
         "no edge to the left of the first column"
     );
 }
+
+/// **A slide belongs to the window that shows it**: swapping columns starts one in this window's
+/// view, so the columns are drawn away from where they rest; another window looking at the same
+/// content draws them at rest.
+#[test]
+fn a_move_slides_in_the_window_that_made_it_and_not_in_another() {
+    let mut space = space_with_columns(3);
+    let rest = |ref_: &ScrollingRef<'_>| -> Vec<f64> {
+        ref_.columns_with_positions()
+            .iter()
+            .map(|c| c.rect.loc.x - (ref_.column_x(c.idx) - ref_.view_pos()))
+            .collect()
+    };
+    let settled = space.r();
+    assert!(rest(&settled).iter().all(|d| d.abs() < 0.01), "nothing has moved yet");
+    assert!(space.m().swap_columns(0, 2));
+    assert!(rest(&space.r()).iter().any(|d| d.abs() > 0.01), "this window shows the move easing");
+
+    let other = ScrollView::new(Rectangle::from_size(Size::new(1000.0, 800.0)), 1.0);
+    let elsewhere = space.space.through(&other);
+    assert!(rest(&elsewhere).iter().all(|d| d.abs() < 0.01), "another window shows none");
+}

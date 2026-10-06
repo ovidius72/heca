@@ -36,6 +36,7 @@
 pub mod animation;
 pub mod column;
 pub mod floating;
+mod motion;
 mod handle;
 pub mod placement;
 pub mod scrolling;

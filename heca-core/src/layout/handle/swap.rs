@@ -153,10 +153,12 @@ impl WorkspaceMut<'_> {
         let up_offset = heights.get(upper).copied().unwrap_or(0.0) + gap;
         let down_offset = -(heights.get(lower).copied().unwrap_or(0.0) + gap);
 
-        column.panes[upper].animate_move_y_from(down_offset, AnimationConfig::default());
-        column.panes[lower].animate_move_y_from(up_offset, AnimationConfig::default());
+        let (upper_id, lower_id) = (column.panes[upper].id, column.panes[lower].id);
         column.panes.swap(upper, lower);
         column.active_pane_idx = new_active;
+        let mut scroll = self.scroll_mut();
+        scroll.slide_pane(upper_id, Point::new(0.0, down_offset), AnimationConfig::default());
+        scroll.slide_pane(lower_id, Point::new(0.0, up_offset), AnimationConfig::default());
         true
     }
 
@@ -243,7 +245,7 @@ fn put_over_placeholder(
 
 /// Animate a pane from `from` to where it is now, at most `slide` away.
 pub(super) fn slide_from(ws: &mut WorkspaceMut<'_>, pane: PaneId, from: Option<Rectangle>, slide: Point) {
-    let (Some(from), Some((col, row))) = (from, ws.scrolling.pane_indices(pane)) else {
+    let Some(from) = from else {
         return;
     };
     let Some(to) = rect_of(ws, pane) else {
@@ -251,6 +253,5 @@ pub(super) fn slide_from(ws: &mut WorkspaceMut<'_>, pane: PaneId, from: Option<R
     };
     let dx = (from.loc.x - to.loc.x).clamp(-slide.x, slide.x);
     let dy = (from.loc.y - to.loc.y).clamp(-slide.y, slide.y);
-    ws.scrolling.columns[col].panes[row]
-        .animate_move_from(Point::new(dx, dy), AnimationConfig::default());
+    ws.scroll_mut().slide_pane(pane, Point::new(dx, dy), AnimationConfig::default());
 }

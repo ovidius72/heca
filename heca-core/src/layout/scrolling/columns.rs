@@ -33,12 +33,12 @@ impl ScrollingMut<'_> {
         // Animate movement of other columns.
         let offset = self.reader().column_x(idx + 1) - self.reader().column_x(idx);
         if self.view.active_column <= idx {
-            for col in &mut self.space.columns[idx + 1..] {
-                col.animate_move_from(-offset, AnimationConfig::default());
+            for col in &self.space.columns[idx + 1..] {
+                self.view.motion.slide_column(col.id, -offset, AnimationConfig::default());
             }
         } else {
-            for col in &mut self.space.columns[..idx] {
-                col.animate_move_from(offset, AnimationConfig::default());
+            for col in &self.space.columns[..idx] {
+                self.view.motion.slide_column(col.id, offset, AnimationConfig::default());
             }
         }
 
@@ -121,12 +121,12 @@ impl ScrollingMut<'_> {
         // Animate column position changes.
         let offset = self.reader().column_x(col_idx + 1) - prev_next_x;
         if self.view.active_column <= col_idx {
-            for c in &mut self.space.columns[col_idx + 1..] {
-                c.animate_move_from(-offset, AnimationConfig::default());
+            for c in &self.space.columns[col_idx + 1..] {
+                self.view.motion.slide_column(c.id, -offset, AnimationConfig::default());
             }
         } else {
-            for c in &mut self.space.columns[..=col_idx] {
-                c.animate_move_from(offset, AnimationConfig::default());
+            for c in &self.space.columns[..=col_idx] {
+                self.view.motion.slide_column(c.id, offset, AnimationConfig::default());
             }
         }
     }
@@ -140,12 +140,12 @@ impl ScrollingMut<'_> {
         // Animate movement of remaining columns.
         let offset = self.reader().column_x(idx + 1) - self.reader().column_x(idx);
         if self.view.active_column <= idx {
-            for col in &mut self.space.columns[idx + 1..] {
-                col.animate_move_from(offset, AnimationConfig::default());
+            for col in &self.space.columns[idx + 1..] {
+                self.view.motion.slide_column(col.id, offset, AnimationConfig::default());
             }
         } else {
-            for col in &mut self.space.columns[..idx] {
-                col.animate_move_from(-offset, AnimationConfig::default());
+            for col in &self.space.columns[..idx] {
+                self.view.motion.slide_column(col.id, -offset, AnimationConfig::default());
             }
         }
 
@@ -322,13 +322,14 @@ impl ScrollingMut<'_> {
         let offset_y = old_pane_y - new_pane_y;
         let moved_pane = self.space.columns[self.view.active_column]
             .panes
-            .last_mut()
+            .last()
             .unwrap();
-        moved_pane.animate_move_from(Point::new(offset_x, offset_y), AnimationConfig::default());
+        let moved_id = moved_pane.id;
+        self.view.motion.slide_pane(moved_id, Point::new(offset_x, offset_y), AnimationConfig::default());
 
         // Animate all columns from their old positions.
         let new_xs: Vec<f64> = self.reader().column_xs().collect();
-        for (i, col) in self.space.columns.iter_mut().enumerate() {
+        for (i, col) in self.space.columns.iter().enumerate() {
             let old_x = old_xs
                 .iter()
                 .find(|(id, _)| *id == col.id)
@@ -336,7 +337,7 @@ impl ScrollingMut<'_> {
                 .unwrap_or(new_xs[i]);
             let diff = old_x - new_xs[i];
             if diff.abs() > 0.5 {
-                col.animate_move_from(diff, AnimationConfig::default());
+                self.view.motion.slide_column(col.id, diff, AnimationConfig::default());
             }
         }
 
@@ -397,13 +398,14 @@ impl ScrollingMut<'_> {
         let offset_y = old_pane_y - new_pane_y;
         let moved_pane = self.space.columns[self.view.active_column]
             .panes
-            .first_mut()
+            .first()
             .unwrap();
-        moved_pane.animate_move_from(Point::new(offset_x, offset_y), AnimationConfig::default());
+        let moved_id = moved_pane.id;
+        self.view.motion.slide_pane(moved_id, Point::new(offset_x, offset_y), AnimationConfig::default());
 
         // Animate all columns from their old positions.
         let new_xs: Vec<f64> = self.reader().column_xs().collect();
-        for (i, col) in self.space.columns.iter_mut().enumerate() {
+        for (i, col) in self.space.columns.iter().enumerate() {
             let old_x = old_xs
                 .iter()
                 .find(|(id, _)| *id == col.id)
@@ -411,7 +413,7 @@ impl ScrollingMut<'_> {
                 .unwrap_or(new_xs[i]);
             let diff = old_x - new_xs[i];
             if diff.abs() > 0.5 {
-                col.animate_move_from(diff, AnimationConfig::default());
+                self.view.motion.slide_column(col.id, diff, AnimationConfig::default());
             }
         }
 
@@ -485,7 +487,7 @@ impl ScrollingMut<'_> {
     /// shared by [`reorder_column`](Self::reorder_column) and [`swap_columns`](Self::swap_columns).
     fn animate_columns_from(&mut self, old_xs: &[(ColumnId, f64)]) {
         let new_xs: Vec<f64> = self.reader().column_xs().collect();
-        for (i, col) in self.space.columns.iter_mut().enumerate() {
+        for (i, col) in self.space.columns.iter().enumerate() {
             let old_x = old_xs
                 .iter()
                 .find(|(id, _)| *id == col.id)
@@ -493,7 +495,7 @@ impl ScrollingMut<'_> {
                 .unwrap_or(new_xs[i]);
             let diff = old_x - new_xs[i];
             if diff.abs() > 0.5 {
-                col.animate_move_from(diff, AnimationConfig::default());
+                self.view.motion.slide_column(col.id, diff, AnimationConfig::default());
             }
         }
     }

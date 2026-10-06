@@ -1,30 +1,7 @@
-//! A pane within a column: what it is, and how it animates when it moves.
+//! A pane within a column: what it is.
 
-use crate::layout::animation::{Animated, Animation, AnimationConfig};
 use crate::layout::types::*;
 use crate::runtime::{PaneClosePolicy, PaneRuntime};
-
-impl Pane {
-    /// Animate this pane moving vertically from an offset.
-    pub fn animate_move_y_from(&mut self, from_y: f64, config: AnimationConfig) {
-        self.move_offset.to_static();
-        self.move_offset = Animated::Animating {
-            animation: Animation::new(0.0, 1.0, config),
-            from: Point::new(0.0, from_y),
-            to: Point::new(0.0, 0.0),
-        };
-    }
-
-    /// Animate this pane moving from a 2D offset.
-    pub fn animate_move_from(&mut self, from: Point, config: AnimationConfig) {
-        self.move_offset.to_static();
-        self.move_offset = Animated::Animating {
-            animation: Animation::new(0.0, 1.0, config),
-            from,
-            to: Point::new(0.0, 0.0),
-        };
-    }
-}
 
 /// A pane within a column.
 ///
@@ -41,8 +18,6 @@ pub struct Pane {
     pub close_policy: PaneClosePolicy,
     /// Preferred fixed height (None = auto).
     pub preferred_height: Option<f64>,
-    /// Move animation offset (entry/exit animations).
-    pub move_offset: Animated<Point>,
     /// Offset applied during interactive move Starting phase (rubberband).
     /// Cleared on transition to Moving. Not used by entry/exit animations.
     pub interactive_move_offset: Point,
@@ -57,7 +32,6 @@ impl Pane {
             runtime: PaneRuntime::default(),
             close_policy: PaneClosePolicy::default(),
             preferred_height: None,
-            move_offset: Animated::Static(Point::default()),
             interactive_move_offset: Point::default(),
         }
     }

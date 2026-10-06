@@ -278,7 +278,7 @@ impl<'a> ScrollingRef<'a> {
             .iter()
             .enumerate()
             .map(|(col_idx, col)| {
-                let col_pos = Point::new(self.column_x(col_idx) + col.render_offset(), 0.0);
+                let col_pos = Point::new(self.column_x(col_idx) + self.view.motion.column_offset(col.id), 0.0);
                 let mut pane_y = self.view.area.loc.y + gaps;
                 let mut panes = Vec::with_capacity(col.panes.len());
                 let width = self.column_width(col_idx);
@@ -296,7 +296,7 @@ impl<'a> ScrollingRef<'a> {
                     // They are returned apart because a container places its children by the first
                     // and the child carries the second — the same split CSS makes between layout
                     // and `transform`.
-                    let pane_offset = pane.move_offset.current();
+                    let pane_offset = self.view.motion.pane_offset(pane.id);
                     let rubber = pane.interactive_move_offset;
                     let slot = view_off + col_pos + Point::new(0.0, pane_y);
                     let displacement =
@@ -346,6 +346,12 @@ impl std::ops::Deref for ScrollingMut<'_> {
 }
 
 impl ScrollingMut<'_> {
+    /// Slide a pane in from `from` to where it is now — how a window shows a pane that landed
+    /// somewhere new.
+    pub(crate) fn slide_pane(&mut self, id: PaneId, from: Point, config: AnimationConfig) {
+        self.view.motion.slide_pane(id, from, config);
+    }
+
     /// The same space, for the reads that only look.
     pub fn reader(&self) -> ScrollingRef<'_> {
         ScrollingRef {

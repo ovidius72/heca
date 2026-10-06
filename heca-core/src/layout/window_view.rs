@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 
 use super::animation::{Animated, SwipeTracker};
+use super::motion::Motion;
 use super::types::{Point, Rectangle, Size, WorkspaceId};
 use super::view_offset::ViewOffset;
 
@@ -48,6 +49,8 @@ pub struct ScrollView {
     pub(crate) area: Rectangle,
     /// Scale factor.
     pub(crate) scale: f64,
+    /// What is sliding in this workspace on this window's screen.
+    pub(crate) motion: Motion,
 }
 
 impl ScrollView {
@@ -59,6 +62,7 @@ impl ScrollView {
             activate_prev_on_removal: None,
             area,
             scale,
+            motion: Motion::default(),
         }
     }
 }

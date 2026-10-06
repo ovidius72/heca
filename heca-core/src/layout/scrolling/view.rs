@@ -1,6 +1,5 @@
 //! The view of a scrolling space: where it is looking, and the moves that change what it shows.
 
-use super::super::animation::Animated;
 use super::*;
 
 impl ScrollingRef<'_> {
@@ -116,13 +115,7 @@ impl ScrollingRef<'_> {
 
     /// Check if any animations are ongoing.
     pub fn are_animations_ongoing(&self) -> bool {
-        self.view.offset.is_animation_ongoing()
-            || self.space.columns.iter().any(|c| {
-                matches!(c.move_offset, Animated::Animating { .. })
-                    || c.panes.iter().any(|p| {
-                        matches!(p.move_offset, Animated::Animating { .. })
-                    })
-            })
+        self.view.offset.is_animation_ongoing() || self.view.motion.is_animating()
     }
 }
 
@@ -262,23 +255,11 @@ impl ScrollingMut<'_> {
             self.view.offset = ViewOffset::Static(anim.target());
         }
 
-        // Advance column animations.
-        for col in &mut self.space.columns {
-            if let Animated::Animating { ref animation, .. } = col.move_offset
-                && animation.is_done()
-            {
-                col.move_offset = Animated::Static(0.0);
-            }
-            // Advance pane Y-move animations.
-            for pane in &mut col.panes {
-                if let Animated::Animating { ref animation, .. } =
-                    pane.move_offset
-                    && animation.is_done()
-                {
-                    pane.move_offset =
-                        Animated::Static(Point::default());
-                }
-            }
-        }
+        // Forget the slides that finished, and those of columns and panes that are gone.
+        let space = &*self.space;
+        self.view.motion.advance(
+            |id| space.columns.iter().any(|c| c.id == id),
+            |id| space.columns.iter().any(|c| c.panes.iter().any(|p| p.id == id)),
+        );
     }
 }

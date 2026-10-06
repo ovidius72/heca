@@ -1,4 +1,3 @@
-use super::animation::{Animated, Animation, AnimationConfig};
 use super::types::*;
 
 mod heights;
@@ -32,8 +31,6 @@ pub struct Column {
     pub is_pending_fullscreen: bool,
     /// Whether this column is pending maximized.
     pub is_pending_maximized: bool,
-    /// Animation offset during column moves (e.g., when a column is added/removed nearby).
-    pub move_offset: Animated<f64>,
 }
 
 impl Column {
@@ -48,7 +45,6 @@ impl Column {
             is_full_width: false,
             is_pending_fullscreen: false,
             is_pending_maximized: false,
-            move_offset: Animated::Static(0.0),
         }
     }
 
@@ -161,21 +157,5 @@ impl Column {
             self.active_pane_idx -= 1;
         }
         Some(pane)
-    }
-
-    /// Get the render offset for this column (includes move animation).
-    pub fn render_offset(&self) -> f64 {
-        self.move_offset.current()
-    }
-
-    /// Animate this column moving from an offset.
-    pub fn animate_move_from(&mut self, from_x: f64, config: AnimationConfig) {
-        let current = self.move_offset.current();
-        let anim = Animation::new(from_x + current, 0.0, config);
-        self.move_offset = Animated::Animating {
-            animation: anim,
-            from: from_x + current,
-            to: 0.0,
-        };
     }
 }

@@ -30,7 +30,7 @@ impl ScrollingMut<'_> {
 
         // Animate columns to their new positions.
         let new_xs: Vec<f64> = self.reader().column_xs().collect();
-        for (i, col) in self.space.columns.iter_mut().enumerate() {
+        for (i, col) in self.space.columns.iter().enumerate() {
             let old_x = old_xs
                 .iter()
                 .find(|(id, _)| *id == col.id)
@@ -38,7 +38,7 @@ impl ScrollingMut<'_> {
                 .unwrap_or(new_xs[i]);
             let diff = old_x - new_xs[i];
             if diff.abs() > 0.5 {
-                col.animate_move_from(diff, AnimationConfig::default());
+                self.view.motion.slide_column(col.id, diff, AnimationConfig::default());
             }
         }
     }
