@@ -52,33 +52,42 @@ pub(crate) fn is_resizing(state: &AppState) -> bool {
     state.mouse.resize.is_some()
 }
 
-/// Cursor policy: pick the OS cursor for the current state and apply it to the
-/// window — but only when it changes (cursor-moved fires very often). While anything is being
-/// dragged → `Grabbing`; hovering something that says it can be dragged (a pane card, a column
-/// grip — asked of the tree via [`sidebar_drag_source`](crate::chrome::sidebar_drag_source)) →
-/// `Grab`; otherwise the default arrow. `heca-grid-ui` stays cursor-free (it only emits a
-/// `Scene`) — the OS cursor is a host concern. General by design: add text/resize
-/// cursors here as more affordances arrive.
+/// Cursor policy: ask the window tree what the pointer is over and apply it to the window — but only
+/// when it changes (cursor-moved fires very often). The widgets say what the cursor is
+/// (`heca_grid_ui::cursor_at`: grabbing while anything is dragged, a hand over what can be picked up,
+/// whatever a widget declared); this only turns the answer into the window's own icon. `heca-grid-ui`
+/// stays cursor-free (it only emits a `Scene`) — the OS cursor is a host concern.
 pub(crate) fn update_cursor(state: &mut AppState, pos: (f32, f32)) {
-    use winit::window::CursorIcon;
-    // The cursor only signals grabbable/grabbed (there is no "swap" cursor); the
-    // move-vs-swap distinction lives on the drag ghost + the on-target indicator.
-    let icon = if crate::chrome::drag_in_flight(state) {
-        CursorIcon::Grabbing
-    } else if let Some(resize_icon) = resize::cursor_for(state, pos) {
+    let icon = if let Some(resize_icon) = resize::cursor_for(state, pos) {
         // Active resize-drag → the drag axis; otherwise the divider under the cursor.
         resize_icon
-    } else if crate::chrome::sidebar_drag_source(state, pos).is_some() {
-        CursorIcon::Grab
     } else if link_hover(state, pos) {
         // Cmd held over a terminal hyperlink → signal the click-to-open affordance.
-        CursorIcon::Pointer
+        winit::window::CursorIcon::Pointer
     } else {
-        CursorIcon::Default
+        cursor_icon(heca_grid_ui::cursor_at(
+            &state.window_root,
+            heca_core::layout::types::Point::new(pos.0 as f64, pos.1 as f64),
+        ))
     };
     if state.current_cursor != icon {
         state.current_cursor = icon;
         state.window.set_cursor(icon);
+    }
+}
+
+/// The window's icon for a widget's cursor — the one place the two vocabularies meet.
+fn cursor_icon(cursor: heca_grid_ui::Cursor) -> winit::window::CursorIcon {
+    use heca_grid_ui::Cursor;
+    use winit::window::CursorIcon;
+    match cursor {
+        Cursor::Default => CursorIcon::Default,
+        Cursor::Pointer => CursorIcon::Pointer,
+        Cursor::Grab => CursorIcon::Grab,
+        Cursor::Grabbing => CursorIcon::Grabbing,
+        Cursor::Text => CursorIcon::Text,
+        Cursor::ResizeHorizontal => CursorIcon::EwResize,
+        Cursor::ResizeVertical => CursorIcon::NsResize,
     }
 }
 

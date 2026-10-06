@@ -34,6 +34,7 @@ pub mod animation;
 pub mod builders;
 pub mod color;
 pub mod component;
+pub mod cursor;
 pub mod drag;
 pub mod effects;
 pub mod event;
@@ -92,6 +93,7 @@ pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use layout::LayoutEngine;
 pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use nav::{child_name, collect_keys, identity_of, key_at, node_with_key, node_with_key_mut};
+pub use cursor::{Cursor, cursor_at};
 pub use pointer::{PointerState, clear_hover, dragging, hit_test};
 pub use scene::{
     BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, Scene, SurfaceAt, TextStyle,

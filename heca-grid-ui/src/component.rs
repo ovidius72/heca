@@ -509,6 +509,9 @@ pub struct Base {
     /// The version of what this child was built from, when a parent that keeps its children
     /// across passes built it from one — see [`reconcile_keyed`](crate::reconcile::reconcile_keyed).
     pub built_from: Option<String>,
+    /// What the cursor looks like while the pointer is over this widget — see
+    /// [`cursor_at`](crate::cursor_at). `None` leaves it to what holds this widget.
+    pub cursor: Option<crate::cursor::Cursor>,
     /// **The context menu this widget carries**, built fresh each time it is triggered.
     ///
     /// A universal slot like [`key`](Self::key) and [`drag_source`](Self::drag_source), so
@@ -749,6 +752,7 @@ impl Base {
             props: None,
             clip_children: false,
             built_from: None,
+            cursor: None,
             context_menu: None,
             surface: false,
             surface_slot: None,

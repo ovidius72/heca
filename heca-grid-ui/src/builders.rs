@@ -890,6 +890,14 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
+    /// **What the cursor looks like over this widget** (CSS `cursor`): the nearest widget that
+    /// declared one, on the way up from what the pointer is over, decides — see
+    /// [`cursor_at`](crate::cursor_at).
+    fn cursor(mut self, cursor: crate::cursor::Cursor) -> Self {
+        self.base_mut().cursor = Some(cursor);
+        self
+    }
+
     /// **Clip what this widget holds to its own box** (CSS `overflow: hidden`): a child that is
     /// placed or grows past the edge is not drawn there and cannot be hit there.
     fn clip_children(mut self, clip: bool) -> Self {

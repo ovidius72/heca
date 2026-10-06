@@ -773,19 +773,6 @@ fn seated(mount: &str, mut intent: Intent) -> Intent {
     intent
 }
 
-/// The pane a press at `pos` (logical window coords) would start dragging, found by
-/// hit-testing the **retained** chrome tree's real laid-out bounds (F4.5) — replaces
-/// the legacy fixed-row `sidebar_hit_test`. `None` off any pane card.
-pub(crate) fn sidebar_drag_source(
-    state: &crate::app_state::AppState,
-    pos: (f32, f32),
-) -> Option<ChromeDragItem> {
-    let tree = state.chrome_tree.as_ref()?;
-    let key =
-        heca_grid_ui::drag::source_at(&state.window_root, Point::new(pos.0 as f64, pos.1 as f64))?;
-    tree.drag_items.get(&key).cloned()
-}
-
 /// The deepest sidebar item (pane → column → workspace) under `pos`, regardless of
 /// drag semantics — used to anchor the right-click context menu on whatever the
 /// cursor is over. Unlike [`sidebar_drag_source`] this accepts every registered

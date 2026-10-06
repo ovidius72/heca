@@ -23,7 +23,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`Tile`](#tile), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
-  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope), [`Keyed`](#keyed), [Props](#props--new-facts-for-a-widget-that-is-already-there)
+  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope), [`Keyed`](#keyed), [Props](#props--new-facts-for-a-widget-that-is-already-there), [Cursor](#cursor--what-the-pointer-looks-like-over-a-widget)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
   - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
   - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
@@ -5003,6 +5003,23 @@ let took = workspace.set_props(&model);   // false = wrong type, or the widget t
   no table of what each was built from.
 - `.clip_children(true)` — CSS `overflow: hidden` on any widget: what it holds is not drawn or hit
   past its edge, and the engine does not squeeze it to fit.
+
+### Cursor — what the pointer looks like over a widget
+
+A widget says what the cursor is while the pointer is over it (CSS `cursor`); the tree answers:
+
+```rust
+Flex::row().cursor(Cursor::Pointer)               // a link-like area
+let cursor = cursor_at(&window_root, point);      // what the pointer is over, right now
+```
+
+- `.cursor(Cursor)` — `Default`, `Pointer`, `Grab`, `Grabbing`, `Text`, `ResizeHorizontal`,
+  `ResizeVertical`.
+- `cursor_at(root, point)` — `Grabbing` while a drag is in flight; otherwise the **nearest** widget
+  on the way up from what the hit test finds that declared one; a widget that can be dragged and
+  declared nothing is `Grab`; anything else is `Default`.
+- The host turns the answer into its window's icon, once, after each move. It keeps no list of what
+  is draggable, resizable or a link.
 
 ### Tooltip
 
