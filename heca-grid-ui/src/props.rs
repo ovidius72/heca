@@ -21,12 +21,14 @@ type Take = dyn FnMut(&dyn Any, &mut Base) -> bool;
 impl PropsSlot {
     /// A slot that takes values of type `T`.
     pub fn of<T: Any>(mut take: impl FnMut(&T, &mut Base) + 'static) -> Self {
-        Self(Box::new(move |props, base| match props.downcast_ref::<T>() {
-            Some(props) => {
-                take(props, base);
-                true
+        Self(Box::new(move |props, base| {
+            match props.downcast_ref::<T>() {
+                Some(props) => {
+                    take(props, base);
+                    true
+                }
+                None => false,
             }
-            None => false,
         }))
     }
 

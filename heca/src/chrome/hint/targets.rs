@@ -244,10 +244,20 @@ fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, 
     //    where a surface is seated, or keeps a second answer to what is in front. The first
     //    **modal** group is the active context and `resolve_hint_layers` stops there, which is what
     //    suppresses everything beneath an exposé.
+    // The panes are judged by their own frames below, so the window's walk leaves the workspace to
+    // them: a pane's targets would otherwise be collected twice, once at their path from the root
+    // and once at their path from the pane.
+    let workspace_at = state
+        .window_root
+        .base()
+        .children
+        .iter()
+        .position(|c| c.base().key.as_deref() == Some(crate::chrome::workspace::WORKSPACE_KEY));
     for group in heca_grid_ui::collect_hints_by_surface(&state.window_root) {
         let targets: Vec<(HintTarget, Rectangle)> = group
             .targets
             .iter()
+            .filter(|(path, _)| path.first() != workspace_at.as_ref())
             .map(|(path, bounds)| {
                 (
                     HintTarget::new(&HintSurface::Window, &state.window_root, path.clone()),

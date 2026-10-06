@@ -43,6 +43,8 @@ pub struct Pane {
     /// BORDER control still drives every pane). `Some(w)` lets one pane carry its
     /// own frame width independent of the theme (e.g. a self-themed sidebar shell).
     border_width: Option<f32>,
+    /// Blur what is drawn behind the pane, by this many logical px, before it draws.
+    frost: Option<f32>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -57,6 +59,7 @@ impl Pane {
             base,
             frame: FrameStyle::Bordered,
             border_width: None,
+            frost: None,
         }
     }
 
@@ -119,6 +122,14 @@ impl Pane {
         self
     }
 
+    /// **Frost the pane**: blur what is drawn behind it by `radius` logical px, in scene order, so
+    /// it blurs what lies under it and nothing of what comes after — its own content included.
+    #[heca_grid_ui_macros::prop]
+    pub fn frosted(mut self, radius: f32) -> Self {
+        self.frost = (radius > 0.0).then_some(radius);
+        self
+    }
+
     /// Override the [`FrameStyle::Bordered`] border width (logical px), independent
     /// of the theme. `None` (the default) keeps the live `theme.colors.border_width` so the
     /// global BORDER control drives the pane; `Some(w)` pins this pane's frame width
@@ -163,6 +174,9 @@ impl Component for Pane {
             .glow
             .or_else(|| cx.rest_glow(GLOW_RADIUS));
 
+        if let Some(frost) = self.frost {
+            cx.backdrop_blur(b, frost, radius, 1.0);
+        }
         // **The fill goes under the children; the frame goes over them.** A pane holds content that
         // paints after it (a terminal), so a border drawn here would sit beneath what it frames.
         // The frame — border, glow, brackets — is asked for now and painted after the children, by
@@ -235,3 +249,6 @@ impl Default for Pane {
 impl LayoutExt for Pane {}
 impl StyleExt for Pane {}
 impl Parent for Pane {}
+
+#[cfg(test)]
+mod tests;

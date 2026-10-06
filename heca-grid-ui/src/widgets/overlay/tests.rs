@@ -335,7 +335,10 @@ fn a_frosted_overlay_records_its_blur_in_the_base_band_over_what_it_occludes() {
     assert_eq!(
         base,
         vec![HostCmd {
-            draw: HostDraw::Backdrop { radius },
+            draw: HostDraw::Backdrop {
+                radius,
+                corner: 0.0
+            },
             rect: Rectangle::new(Point::new(0.0, 0.0), Size::new(800.0, 600.0)),
             alpha: 1.0,
         }],

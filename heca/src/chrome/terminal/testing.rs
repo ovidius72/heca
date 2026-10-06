@@ -65,3 +65,10 @@ pub(crate) fn recording() -> (
     };
     (seams, said)
 }
+
+/// A terminal that shows the process `id`, as the host makes one for a pane that is running.
+pub(crate) fn attached(id: u64) -> super::Terminal {
+    let terminal = super::Terminal::new();
+    terminal.attach(super::TerminalId(id));
+    terminal
+}

@@ -53,26 +53,6 @@ pub(crate) fn deliver_press_to_tree(
     }))
 }
 
-/// Give one key press to **the tree a terminal lives in**: its pane's own tree, or the window's for
-/// a terminal no pane owns. The same delivery as [`deliver_press_to_tree`], aimed at a tree the
-/// window's keyboard does not own yet (pane trees are not part of it).
-pub(crate) fn deliver_press_to_terminal_tree(
-    state: &mut AppState,
-    terminal: crate::chrome::terminal::TerminalId,
-    combo: &KeyCombo,
-    key_text: &str,
-) -> Option<Handled> {
-    let press = press_of(combo, key_text)?;
-    let pane = state.backends.pane_of(terminal);
-    // Keymap, pane trees and window tree are different fields: borrowed as they are, no copy.
-    Some(state.widget_keymap.deliver_press(&press, |ev| {
-        match pane.and_then(|pane| state.panes.get_mut(&pane)) {
-            Some(retained) => heca_grid_ui::dispatch(&mut retained.root, ev),
-            None => heca_grid_ui::dispatch(&mut state.window_root, ev),
-        }
-    }))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

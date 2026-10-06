@@ -70,19 +70,16 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let Some(v) = frame::begin(state) else {
         return;
     };
-    let mut scenes = frame::paint_scenes(state, &v);
+    let scene = frame::paint_window(state, &v);
     let terminals = frame::collect_panes(state, &v);
     frame::sync_terminal_layers(state, &v, &terminals);
     let Some(mut frame) = frame::Frame::open(state, v) else {
         return;
     };
     frame.clear_and_background(state);
-    frame.write_mask(state, &terminals.tiled);
-    frame.columns(state, &scenes, &terminals.tiled);
-    frame.floats(state, &mut scenes, &terminals.floating);
-    let chrome = frame.chrome(state, &terminals.docked);
-    frame.backdrops(state, &chrome);
-    frame.finish(state, &terminals.docked);
+    frame.write_mask(state, terminals.tiled.iter().chain(&terminals.floating));
+    frame.flush_window(state, &scene, &terminals);
+    frame.finish(state, &terminals);
 }
 
 /// Update session viewport to match current chrome/content area size.

@@ -11,13 +11,13 @@ pub(crate) use theme::{
 pub(crate) mod signals;
 pub(crate) use signals::{ChromeSignals, sync_chrome_signals, sync_chrome_state};
 pub(crate) mod column;
-pub(crate) use column::{RetainedColumn, clear_columns, offer_to_columns, sync_columns};
+pub(crate) use workspace::{clear_workspace, seat_workspace};
 pub(crate) mod startup_queue;
 pub(crate) use startup_queue::StartupQueue;
 pub(crate) mod pane;
-pub(crate) use pane::{RetainedPane, clear_panes, sync_panes};
 pub(crate) mod pane_header;
 pub(crate) mod terminal;
+pub(crate) mod workspace;
 pub(crate) use pane_header::{
     ActionShortcuts, HeaderEnv, PaneHeader, action_tooltip, home_relative_path,
     give_header_facts, pane_header_inputs, pane_info_view,
@@ -45,7 +45,7 @@ mod dispatch;
 mod focus;
 mod scene;
 pub(crate) use dispatch::{
-    cancel_every_tree, deliver, deliver_to_panes, dispatch_surface_pointer, drag_in_flight,
+    cancel_every_tree, deliver, dispatch_surface_pointer, drag_in_flight,
     drain_pending_drops, drain_pending_menus, next_redraw_across_trees,
     open_declared_menu_for_focus,
 };
@@ -511,9 +511,9 @@ pub(crate) const DOCK_PICK_SCOPE: &str = "dock.destination";
 /// `reload_config` — all of which happen while an overlay is open. None of them may take it with
 /// them.
 ///
-/// It goes **first**, so every surface placed beside it paints and hit-tests above it: child order
-/// is z-order in one tree, which is what replaces the layer stack's separate sort
-/// (`docs/surface-compositor.md` § 0.6).
+/// It goes **right after the workspace**, so it is drawn over the panes, and every surface placed
+/// beside it paints and hit-tests above it: child order is z-order in one tree, which is what
+/// replaces the layer stack's separate sort (`docs/surface-compositor.md` § 0.6).
 pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
     let chrome = Box::new(chrome.key(CHROME_KEY));
     let children = &mut root.base_mut().children;
@@ -522,7 +522,13 @@ pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
         .position(|c| c.base().key.as_deref() == Some(CHROME_KEY))
     {
         Some(at) => children[at] = chrome,
-        None => children.insert(0, chrome),
+        None => {
+            let after_workspace = children
+                .iter()
+                .position(|c| c.base().key.as_deref() == Some(workspace::WORKSPACE_KEY))
+                .map_or(0, |at| at + 1);
+            children.insert(after_workspace, chrome);
+        }
     }
 }
 
@@ -615,47 +621,18 @@ pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: Box<dyn Compone
 /// lives here rather than in a provider so the pane and every view of it read the SAME string
 /// instead of keeping two copies in step (it was defined twice before F011/P094/T451).
 ///
-/// **Every retained tree that holds panes**, wherever they live.
-///
-/// A tiled pane is a child of its column (`chrome::column`); a floating one belongs to no column
-/// and is the host's own. Anything that walks "all the panes" — delivering an event, ticking an
-/// animation, collecting pick targets, asking for the next wake — has to reach both, and asking
-/// that question in five places is five chances to add the second map to four of them.
-pub(crate) fn pane_roots(
-    state: &crate::app_state::AppState,
-) -> impl Iterator<Item = &dyn heca_grid_ui::Component> {
-    state
-        .panes
-        .values()
-        .map(|p| &p.root as &dyn heca_grid_ui::Component)
-        .chain(
-            state
-                .columns
-                .values()
-                .map(|c| &c.root as &dyn heca_grid_ui::Component),
-        )
-}
-
-/// The same trees, to write to — see [`pane_roots`].
-pub(crate) fn pane_roots_mut(
-    state: &mut crate::app_state::AppState,
-) -> impl Iterator<Item = &mut dyn heca_grid_ui::Component> {
-    state
-        .panes
-        .values_mut()
-        .map(|p| &mut p.root as &mut dyn heca_grid_ui::Component)
-        .chain(
-            state
-                .columns
-                .values_mut()
-                .map(|c| &mut c.root as &mut dyn heca_grid_ui::Component),
-        )
-}
-
 /// It is never a position and never a counter: a `PaneId` survives every tree rebuild, which is
 /// what lets a hint letter stay with the same pane between openings of the picker.
 pub(crate) fn pane_key(pane: heca_core::layout::PaneId) -> String {
     format!("pane:{}", pane.0)
+}
+
+/// The pane a `pane:<id>` key names — the inverse of [`pane_key`].
+pub(crate) fn pane_id_of_key(key: &str) -> Option<heca_core::layout::PaneId> {
+    key.strip_prefix("pane:")?
+        .parse()
+        .ok()
+        .map(heca_core::layout::PaneId)
 }
 
 /// `col:<id>` — a column. No workspace prefix: a [`ColumnId`](heca_core::layout::ColumnId) is

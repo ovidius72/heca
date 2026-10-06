@@ -398,7 +398,7 @@ fn a_surface_cuts_the_runs_and_the_outline_stays_after_it() {
     s.push(marker(3.0)); // the chip, over the terminal
     let runs = s.base_runs();
     assert_eq!(runs.len(), 2);
-    assert_eq!(runs[0].then.map(|at| at.id), Some(7));
+    assert_eq!(runs[0].surface().map(|at| at.id), Some(7));
     assert_eq!(
         runs[0].draws.iter().cloned().collect::<Vec<_>>(),
         vec![marker(1.0)]
@@ -452,20 +452,34 @@ fn a_surface_knows_every_clip_around_it() {
     s.push(clip(50.0));
     s.push(surface(2)); // clipped by the smaller of the two
     let runs = s.base_runs();
-    assert_eq!(runs[0].then.unwrap().clip, None);
+    assert_eq!(runs[0].surface().unwrap().clip, None);
     assert_eq!(
-        runs[1].then.unwrap().clip,
+        runs[1].surface().unwrap().clip,
         Some(Rectangle::new(Point::default(), Size::new(50.0, 50.0)))
     );
 }
 
+/// **A backdrop is a cut**: what it blurs is exactly the runs before it, and what is drawn after it
+/// is not in the blur.
 #[test]
-fn a_backdrop_is_not_a_cut() {
+fn a_backdrop_is_a_cut_between_what_it_blurs_and_what_is_over_it() {
     let mut s = Scene::new();
+    s.push(marker(1.0));
     s.push(DrawCommand::Host(HostCmd {
-        draw: HostDraw::Backdrop { radius: 4.0 },
+        draw: HostDraw::Backdrop {
+            radius: 4.0,
+            corner: 0.0,
+        },
         rect: Rectangle::new(Point::default(), Size::new(5.0, 5.0)),
-        alpha: 1.0,
+        alpha: 0.5,
     }));
-    assert_eq!(s.base_runs().len(), 1);
+    s.push(marker(2.0));
+    let runs = s.base_runs();
+    assert_eq!(runs.len(), 2);
+    assert!(matches!(
+        runs[0].then,
+        Some(crate::scene::HostWork::Backdrop(b)) if b.radius == 4.0 && b.alpha == 0.5
+    ));
+    assert_eq!(runs[0].draws.iter().cloned().collect::<Vec<_>>(), vec![marker(1.0)]);
+    assert_eq!(runs[1].draws.iter().cloned().collect::<Vec<_>>(), vec![marker(2.0)]);
 }

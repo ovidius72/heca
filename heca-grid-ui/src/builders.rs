@@ -890,6 +890,13 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
+    /// **Clip what this widget holds to its own box** (CSS `overflow: hidden`): a child that is
+    /// placed or grows past the edge is not drawn there and cannot be hit there.
+    fn clip_children(mut self, clip: bool) -> Self {
+        self.base_mut().clip_children = clip;
+        self
+    }
+
     /// **Take new props of type `T`** from whoever owns this widget: `f` runs with each value
     /// [`set_props`](crate::component::Component::set_props) hands over, and with the widget's own
     /// [`Base`](crate::component::Base) — so it can place and reconcile its own children. The facts

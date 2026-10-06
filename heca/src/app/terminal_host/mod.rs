@@ -13,7 +13,7 @@ mod selection;
 mod typing;
 mod wheel;
 
-pub(crate) use frames::{column_frames, pane_outer_frames};
+pub(crate) use frames::{column_frames, laid_out_pane_ids, pane_outer_frames};
 pub(crate) use hyperlinks::{
     cell_screen_pos, collect_link_hints, hyperlink_uri_at_position, hyperlink_uri_at_stable_cell,
 };

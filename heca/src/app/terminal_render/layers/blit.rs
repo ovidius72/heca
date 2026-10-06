@@ -52,6 +52,7 @@ pub(crate) fn blit_retained_terminal_layer(
         ),
         Some(uv),
         1.0,
+        0.0,
         target.stencil,
     );
     true

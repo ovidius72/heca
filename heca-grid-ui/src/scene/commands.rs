@@ -51,8 +51,10 @@ pub enum HostDraw {
         /// Opaque to this crate: the host maps it to whatever it rasterised.
         id: u64,
     },
-    /// **Blur whatever has been drawn behind me, here.** `radius` is in logical pixels.
-    Backdrop { radius: f32 },
+    /// **Blur whatever has been drawn behind me, here.** `radius` is the blur and `corner` is how
+    /// round the blurred box is — the corner radius of the widget that asked, so a frosted rounded
+    /// frame is not square under its own border. Both are in logical pixels.
+    Backdrop { radius: f32, corner: f32 },
 }
 
 /// A [`HostDraw`] and the box it applies to.

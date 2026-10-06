@@ -89,18 +89,6 @@ fn the_chrome_tree_gets_the_release_and_the_wheel_too() {
              welded to the cursor otherwise",
         ),
         (
-            "WindowEvent::MouseInput",
-            "crate::chrome::deliver_to_panes(",
-            "a pane's own tree carries its info bar now, so a bar button that captured a press has \
-             to learn the gesture ended",
-        ),
-        (
-            "WindowEvent::MouseWheel",
-            "crate::chrome::deliver_to_panes(",
-            "nothing in a header scrolls yet, and \"nothing needs it yet\" is the reasoning that \
-             produced every other missing kind",
-        ),
-        (
             "WindowEvent::MouseWheel",
             "crate::chrome::deliver(",
             "a scroll region in the sidebar scrolls on the wheel, and the terminal must not also \
@@ -182,18 +170,18 @@ fn the_mouse_layer_sends_a_release_for_every_press_it_sends() {
     }
 }
 
-/// **A right-click must reach the panes, not only the chrome.** ⚠️ Ran red against its own bug.
+/// **A right-click must reach the window tree, where the panes are.** ⚠️ Ran red against its own
+/// bug.
 ///
-/// A pane's widgets live in a tree of their own until the pane joins the one tree
-/// tree, and only *left* presses were ever handed to them. So a right-click never
-/// reached a pane at all — and the moment a pane started declaring its own menu, right-clicking one
-/// showed nothing whatsoever, while `prefix+>` still worked because the keyboard path resolves the
-/// pane a different way.
+/// A pane is in the same tree as the chrome, so a right-click handed to the tree reaches a pane
+/// like any other widget. A right-click that is not handed over never reaches a pane at all — and
+/// the moment a pane declares its own menu, right-clicking one shows nothing whatsoever, while
+/// `prefix+>` still works because the keyboard path resolves the pane a different way.
 ///
 /// A lint rather than a behaviour test, like its neighbours: what it guards is *absence*, and the
 /// suite was fully green with right-click menus completely dead.
 #[test]
-fn a_right_click_is_handed_to_the_panes_as_well_as_the_chrome() {
+fn a_right_click_is_handed_to_the_window_tree() {
     let src = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"))
         .expect("read the mouse layer");
 
@@ -210,12 +198,11 @@ fn a_right_click_is_handed_to_the_panes_as_well_as_the_chrome() {
             .map(|i| i + arm.len())
             .unwrap_or(body.len());
         assert!(
-            body[..end].contains("deliver_to_panes("),
-            "the mouse layer's `{arm}` arm hands the event to the chrome tree but not to the \
-             panes.\n\
-             A pane is dispatched separately until it joins the one tree, so a right-click that \
-             goes only to the chrome never reaches a pane — and the menu a pane declares about \
-             itself is then unreachable, with nothing failing anywhere.",
+            body[..end].contains("chrome::deliver("),
+            "the mouse layer's `{arm}` arm does not hand the event to the window tree.\n\
+             The panes are in it, so a right-click that is not handed over never reaches a pane — \
+             and the menu a pane declares about itself is then unreachable, with nothing failing \
+             anywhere.",
         );
     }
 }
@@ -244,12 +231,11 @@ fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
         "the button branch no longer ends the divider resize. It must: the press starts the \
              drag here, so the release has to end it here too, or the drag outlives the button.",
     );
-    // Searched FORWARD from where the resize ends, not from the top of the branch: the panes are
-    // given the press too, further up, and that call cannot swallow a release. What has to hold is
-    // that the swallowing call — the panes' answer to the release, which is where a terminal's
-    // scrollbar holding a thumb grab says so — comes after the resize has been told.
+    // Searched FORWARD from where the resize ends, not from the top of the branch. What has to hold
+    // is that the swallowing call — the window tree's answer to the release, which is where a
+    // terminal's scrollbar holding a thumb grab says so — comes after the resize has been told.
     assert!(
-        body[ends..].contains("crate::chrome::deliver_to_panes("),
+        body[ends..].contains("crate::chrome::deliver("),
         "the divider resize is ended AFTER the branch that can return early and swallow the \
          release.\nA resize that is never told the button came up keeps resizing on every cursor \
          move, with nothing held down, until the pane is gone.",

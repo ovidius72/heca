@@ -200,8 +200,8 @@ pub(crate) fn handle_keyboard_input(
         InputMode::HintPick { candidates } => {
             handle_hint_pick_mode(registry, state, &candidates, ctx);
         }
-        InputMode::Search { terminal } => {
-            handle_search_mode(state, terminal, ctx);
+        InputMode::Search { .. } => {
+            handle_search_mode(state, ctx);
         }
         InputMode::PaneSwap {
             candidates,
@@ -242,21 +242,12 @@ pub(crate) fn handle_keyboard_input(
     }
 }
 
-/// **A terminal's search field has the keyboard**, so what is typed goes into the terminal's own
-/// tree, where the field takes it through the same rule as every other field: text as text, the
-/// editing shortcuts as the intents they resolve to. Enter and Escape come back as the terminal's
-/// own messages (keep the matches, dismiss the search), which is also what leaves this mode.
-fn handle_search_mode(
-    state: &mut AppState,
-    terminal: crate::chrome::terminal::TerminalId,
-    ctx: KeyInputContext<'_>,
-) {
-    crate::app::tree_keys::deliver_press_to_terminal_tree(
-        state,
-        terminal,
-        ctx.event_combo,
-        ctx.key_text,
-    );
+/// **A terminal's search field has the keyboard**, so what is typed goes into the window tree,
+/// where the field takes it through the same rule as every other field: text as text, the editing
+/// shortcuts as the intents they resolve to. Enter and Escape come back as the terminal's own
+/// messages (keep the matches, dismiss the search), which is also what leaves this mode.
+fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
+    crate::app::tree_keys::deliver_press_to_tree(state, ctx.event_combo, ctx.key_text);
     state.needs_redraw = true;
 }
 

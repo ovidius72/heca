@@ -61,7 +61,17 @@ impl ColumnShellModel {
         )
     }
 
-    /// **Who the column's children are**, in order — the identity each pane answers to.
+    /// **Everything the column holds**, in order: its panes, then the offer of a new column when
+    /// there is one. What its children are reconciled against.
+    pub(crate) fn child_keys(&self) -> Vec<String> {
+        let mut keys = self.pane_keys();
+        if self.new_column_slot.is_some() {
+            keys.push(crate::chrome::NEW_COLUMN_KEY.to_string());
+        }
+        keys
+    }
+
+    /// **Who the column's panes are**, in order — the identity each pane answers to.
     ///
     /// This is what the children are reconciled against, so a pane that is still here keeps the
     /// widget it had: its letter, its gesture in flight, its animation. Deliberately not part of

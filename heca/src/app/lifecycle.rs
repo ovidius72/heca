@@ -185,12 +185,6 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     let mut chrome_animating = state.window_root.tick(dt);
     // The tree is the one truth about where the keyboard is; the store follows it.
     crate::app::tree_focus::settle_window_focus(state);
-    // Tick every pane's own tree, so its info bar's action buttons' press flash, hover animation
-    // and tooltip reveal advance (and a redraw is requested while they animate) instead of getting
-    // stuck. The bar is a child of its pane, so one tick reaches both.
-    for root in crate::chrome::pane_roots_mut(state) {
-        chrome_animating |= root.tick(dt);
-    }
     // Every surface — an overlay dialog, a plugin panel, the exposé — advanced in the walk above,
     // because it is a child of that tree. All that is left is to **retire the ones whose exit just
     // finished**, which is the registry's bookkeeping and not an animation pass: a surface that was

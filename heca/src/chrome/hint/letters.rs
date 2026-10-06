@@ -226,12 +226,14 @@ fn offer_in_every_tree(
     // The header is the same pane's other view and is asked the same question. It used to be asked
     // none at all, because the answer arrived as a set of pane *ids* and only the shell loop knew
     // what to do with it.
-    for (pane_id, shell) in state.panes.iter() {
-        offered |= heca_grid_ui::offer_hint_by_key(
-            &shell.root,
-            key,
-            for_view(HintSurface::Pane(*pane_id)),
-        );
+    for pane_id in crate::app::terminal_host::laid_out_pane_ids(state) {
+        if let Some(pane) = crate::chrome::workspace::pane_node(state, pane_id) {
+            offered |= heca_grid_ui::offer_hint_by_key(
+                pane,
+                key,
+                for_view(HintSurface::Pane(pane_id)),
+            );
+        }
     }
     // **The columns in the scrolling area** — a column and the tiled panes inside it. Drawn in the
     // content area, so neither is in the window root. Asked the same visibility question as every
@@ -240,7 +242,7 @@ fn offer_in_every_tree(
     // This used to be two paths — each tiled pane offered through its own surface, and then every
     // column offered again with no visibility check, which put the withdrawn letter straight back
     // (Antonio, driving, 2026-09-24). One path now (F003/P082/T474's node, one door).
-    offered |= crate::chrome::offer_to_columns(state, key, label.clone(), |pane| {
+    offered |= crate::chrome::workspace::offer_to_columns(state, key, label.clone(), |pane| {
         visible.surfaces.contains(&HintSurface::Pane(pane))
     });
     offered

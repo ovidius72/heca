@@ -15,8 +15,15 @@ fn a_widget_takes_the_props_it_declared_and_refuses_the_rest() {
     });
     assert!(widget.set_props(&7_u32), "the declared type is taken");
     assert!(!widget.set_props(&"seven"), "another type is refused");
-    assert_eq!(*seen.borrow(), vec![7], "only what was taken reached the handler");
-    assert!(!Flex::column().set_props(&7_u32), "a widget with no props refuses");
+    assert_eq!(
+        *seen.borrow(),
+        vec![7],
+        "only what was taken reached the handler"
+    );
+    assert!(
+        !Flex::column().set_props(&7_u32),
+        "a widget with no props refuses"
+    );
 }
 
 /// **A widget places its own children from its props**: the handler is given the widget's base, so
@@ -31,6 +38,9 @@ fn a_widget_builds_its_own_children_from_the_props_it_is_handed() {
     });
     assert!(widget.set_props(&3_usize));
     assert_eq!(widget.base().children.len(), 3);
-    assert!(widget.set_props(&1_usize), "the handler is kept for the next props");
+    assert!(
+        widget.set_props(&1_usize),
+        "the handler is kept for the next props"
+    );
     assert_eq!(widget.base().children.len(), 1);
 }

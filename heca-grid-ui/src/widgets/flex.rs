@@ -303,3 +303,6 @@ mod tests {
         assert_eq!(tall, mixed, "the row grew to fit a baseline shift");
     }
 }
+
+#[cfg(test)]
+mod clip;

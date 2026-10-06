@@ -102,6 +102,15 @@ impl PaneShell<'_> {
         if active {
             pane = pane.glow_with(to_gui_color(border_color), active_glow.0, active_glow.1);
         }
+        // A floating pane covers what is under it, in its own paint: a fill, or a blur of what lies
+        // beneath — no host step has to draw either between the panes.
+        if let Some(float) = self.model.float {
+            pane = if float.frost > 0.0 {
+                pane.frosted(float.frost)
+            } else {
+                pane.background(to_gui_color(float.background))
+            };
+        }
 
         // The pane's own identity, from the data — never a counter, never a position. A pane id is
         // stable across every rebuild, which is what lets a letter stay with the same pane between
@@ -240,19 +249,6 @@ pub(crate) fn focus_state_to(root: &mut dyn heca_grid_ui::Component, model: &Pan
     base.style.visual.accent = Some(color);
 }
 
-/// **Give the shell the rect the WM assigned it.** Size is a per-frame input, never part of the
-/// built tree: the layout engine owns a pane's geometry, and a zoom, a resize or a float must move
-/// the frame without rebuilding the widget and throwing away its signals.
-///
-/// Baking `Px(w)` into `build` instead is the regression this exists to stop — the tree kept the
-/// width it was first built at, so the border stayed put while the content moved (traced: asked
-/// 648 wide, got 380, every frame).
-pub(crate) fn size_to(root: &mut dyn heca_grid_ui::Component, w: f32, h: f32) {
-    let style = &mut root.base_mut().style.layout;
-    style.width = heca_grid_ui::Length::Px(w);
-    style.height = heca_grid_ui::Length::Px(h);
-}
-
 fn to_gui_color(color: [f32; 4]) -> heca_grid_ui::Color {
     heca_grid_ui::Color::new(
         (color[0] * 255.0) as u8,
@@ -265,9 +261,17 @@ fn to_gui_color(color: [f32; 4]) -> heca_grid_ui::Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::chrome::pane::testing::{model, recording_callbacks};
     use heca_grid_ui::Component;
     use heca_grid_ui::{LayoutEngine, Size};
+
+    /// Give a standalone pane the box a workspace would place it in.
+    fn size_to(root: &mut dyn heca_grid_ui::Component, w: f32, h: f32) {
+        let style = &mut root.base_mut().style.layout;
+        style.width = heca_grid_ui::Length::Px(w);
+        style.height = heca_grid_ui::Length::Px(h);
+    }
 
     /// **A second thing in the body is not mistaken for a header.**
     ///
@@ -508,12 +512,12 @@ mod tests {
         }
         .build();
 
-        super::size_to(&mut tree, 320.0, 728.0);
+        size_to(&mut tree, 320.0, 728.0);
         LayoutEngine::new().compute(&mut tree, Size::new(320.0, 728.0));
         assert!((tree.base().bounds.size.w - 320.0).abs() < 0.5);
 
         // …now zoom it. Same tree, no rebuild.
-        super::size_to(&mut tree, 648.0, 728.0);
+        size_to(&mut tree, 648.0, 728.0);
         LayoutEngine::new().compute(&mut tree, Size::new(648.0, 728.0));
         assert!(
             (tree.base().bounds.size.w - 648.0).abs() < 0.5,
@@ -538,7 +542,7 @@ mod tests {
                 content: None,
             }
             .build();
-            super::size_to(&mut tree, w, h);
+            size_to(&mut tree, w, h);
             LayoutEngine::new().compute(&mut tree, Size::new(w as f64, h as f64));
             let b = tree.base().bounds;
             // EXACT, not "within": the pane's rect is given by the WM layout engine, so the frame

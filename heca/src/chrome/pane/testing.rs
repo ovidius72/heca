@@ -23,6 +23,7 @@ pub(crate) fn model(pane_id: u64) -> PaneShellModel {
         content_inset: 6.0,
         accent: [0.1, 0.9, 0.8, 1.0],
         active_glow: (10.0, 0.55),
+        float: None,
     }
 }
 

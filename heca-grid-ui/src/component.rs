@@ -503,6 +503,12 @@ pub struct Base {
     /// What this widget does with the props its owner hands it — see [`crate::props`]. `None` for
     /// a widget that takes none.
     pub props: Option<crate::props::PropsSlot>,
+    /// Whether this widget **clips what it holds** to its own box — CSS `overflow: hidden`. A
+    /// child that is placed or grows past the edge is not drawn there and cannot be hit there.
+    pub clip_children: bool,
+    /// The version of what this child was built from, when a parent that keeps its children
+    /// across passes built it from one — see [`reconcile_keyed`](crate::reconcile::reconcile_keyed).
+    pub built_from: Option<String>,
     /// **The context menu this widget carries**, built fresh each time it is triggered.
     ///
     /// A universal slot like [`key`](Self::key) and [`drag_source`](Self::drag_source), so
@@ -741,6 +747,8 @@ impl Base {
             pointer: crate::pointer::PointerState::new(),
             handlers: None,
             props: None,
+            clip_children: false,
+            built_from: None,
             context_menu: None,
             surface: false,
             surface_slot: None,
@@ -1191,8 +1199,15 @@ pub trait Component {
             return;
         }
         cx.paint_base(self.base());
-        for child in &self.base().children {
-            paint_child(child.as_ref(), cx);
+        let paint_children = |cx: &mut PaintCx| {
+            for child in &self.base().children {
+                paint_child(child.as_ref(), cx);
+            }
+        };
+        if self.base().clip_children {
+            cx.with_clip(self.base().bounds, paint_children);
+        } else {
+            paint_children(cx);
         }
     }
 
@@ -1347,7 +1362,7 @@ pub trait Component {
     ///
     /// If you are adding a fourth walk over the tree, it asks this too.
     fn clips_children(&self) -> bool {
-        false
+        self.base().clip_children
     }
 
     /// **This component arranges its children as a grid** — its column and row tracks, and its
@@ -1982,10 +1997,13 @@ fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangl
     match cmd {
         DrawCommand::Host(h) => DrawCommand::Host(HostCmd {
             rect: place(h.rect),
-            // A blur radius is a distance, so it scales with everything else; a surface id and an
-            // alpha are not distances.
+            // A blur radius and a corner are distances, so they scale with everything else; a
+            // surface id and an alpha are not distances.
             draw: match h.draw {
-                HostDraw::Backdrop { radius } => HostDraw::Backdrop { radius: radius * k },
+                HostDraw::Backdrop { radius, corner } => HostDraw::Backdrop {
+                    radius: radius * k,
+                    corner: corner * k,
+                },
                 other => other,
             },
             ..h
@@ -2428,15 +2446,16 @@ impl<'a> PaintCx<'a> {
     /// **Blur whatever is already drawn behind this widget**, within `rect`.
     ///
     /// Recorded in scene order, so it blurs exactly what came before it and nothing of what comes
-    /// after. `alpha` fades the blurred copy — a surface arriving fades its backdrop in with itself,
+    /// after. `corner` rounds the blurred box to the corner radius of the widget that asks for it.
+    /// `alpha` fades the blurred copy — a surface arriving fades its backdrop in with itself,
     /// rather than holding the session out of focus and snapping sharp in one frame at the end.
-    pub fn backdrop_blur(&mut self, rect: Rectangle, radius: f32, alpha: f32) {
+    pub fn backdrop_blur(&mut self, rect: Rectangle, radius: f32, corner: f32, alpha: f32) {
         if radius <= 0.0 || alpha <= 0.0 || self.culled(rect) {
             return;
         }
         let rect = self.placed(rect);
         self.emit(DrawCommand::Host(HostCmd {
-            draw: HostDraw::Backdrop { radius },
+            draw: HostDraw::Backdrop { radius, corner },
             rect,
             alpha,
         }));

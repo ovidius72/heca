@@ -163,7 +163,7 @@ impl Component for Overlay {
                 false => panel,
             };
             cx.with_opacity(frame.opacity, |cx| {
-                cx.backdrop_blur(reach, frost_radius, 1.0);
+                cx.backdrop_blur(reach, frost_radius, 0.0, 1.0);
             });
         }
 

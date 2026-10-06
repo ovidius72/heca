@@ -68,7 +68,7 @@ fn a_backdrop_is_recorded_after_what_it_blurs_and_before_what_it_does_not() {
             0.0,
             None,
         );
-        cx.backdrop_blur(rect(0.0, 0.0, 800.0, 600.0), 12.0, 0.8);
+        cx.backdrop_blur(rect(0.0, 0.0, 800.0, 600.0), 12.0, 0.0, 0.8);
         cx.rect(
             rect(5.0, 5.0, 50.0, 50.0),
             theme.colors.background,
@@ -97,8 +97,8 @@ fn a_backdrop_with_no_strength_is_not_recorded_at_all() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.backdrop_blur(rect(0.0, 0.0, 800.0, 600.0), 0.0, 1.0);
-        cx.backdrop_blur(rect(0.0, 0.0, 800.0, 600.0), 12.0, 0.0);
+        cx.backdrop_blur(rect(0.0, 0.0, 800.0, 600.0), 0.0, 0.0, 1.0);
+        cx.backdrop_blur(rect(0.0, 0.0, 800.0, 600.0), 12.0, 0.0, 0.0);
     }
     assert!(host_cmds(&scene).is_empty());
 }
@@ -117,7 +117,7 @@ fn host_work_fades_with_the_opacity_of_whoever_asked_for_it() {
         let mut cx = PaintCx::new(&mut scene, &theme);
         cx.with_opacity(0.5, |cx| {
             cx.surface(rect(0.0, 0.0, 10.0, 10.0), 1);
-            cx.backdrop_blur(rect(0.0, 0.0, 10.0, 10.0), 8.0, 0.6);
+            cx.backdrop_blur(rect(0.0, 0.0, 10.0, 10.0), 8.0, 0.0, 0.6);
         });
     }
 
@@ -146,7 +146,7 @@ fn a_scaled_subtree_scales_the_blur_radius_and_leaves_the_rest_alone() {
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
         cx.with_scale(2.0, Point::new(0.0, 0.0), |cx| {
-            cx.backdrop_blur(rect(0.0, 0.0, 10.0, 10.0), 8.0, 0.5);
+            cx.backdrop_blur(rect(0.0, 0.0, 10.0, 10.0), 8.0, 0.0, 0.5);
             cx.surface(rect(0.0, 0.0, 10.0, 10.0), 3);
         });
     }
@@ -154,7 +154,7 @@ fn a_scaled_subtree_scales_the_blur_radius_and_leaves_the_rest_alone() {
     let cmds = host_cmds(&scene);
     assert_eq!(cmds.len(), 2);
     match cmds[0].draw {
-        HostDraw::Backdrop { radius } => {
+        HostDraw::Backdrop { radius, .. } => {
             assert!((radius - 16.0).abs() < 1e-6, "the radius scales: {radius}")
         }
         other => panic!("expected a backdrop, got {other:?}"),

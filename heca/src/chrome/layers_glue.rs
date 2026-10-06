@@ -74,7 +74,7 @@ mod tests {
             .iter()
             .filter_map(|c| match c {
                 DrawCommand::Host(h) => match h.draw {
-                    HostDraw::Backdrop { radius } => Some(radius),
+                    HostDraw::Backdrop { radius, .. } => Some(radius),
                     HostDraw::Surface { .. } => None,
                 },
                 _ => None,

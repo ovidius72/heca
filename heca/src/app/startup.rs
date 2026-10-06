@@ -487,8 +487,6 @@ pub(crate) async fn init_state(
         input_mode: InputMode::Normal,
         window_root: crate::chrome::new_window_root(),
         chrome_tree: None,
-        panes: std::collections::HashMap::new(),
-        columns: std::collections::HashMap::new(),
         terminals: std::collections::HashMap::new(),
         terminal_presses: Default::default(),
         frame_times: crate::app::frame_times::FrameTimes::from_env(),

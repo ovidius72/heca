@@ -12,7 +12,7 @@ pub(crate) use draw::{
     TerminalTarget, draw_surface, hyperlink_decor_from, terminal_font_families_from,
 };
 pub(crate) use layers::sync_retained_terminal_layers;
-pub(crate) use look::{paint_pane_frame, pane_scissor_rect};
+pub(crate) use look::pane_scissor_rect;
 
 use crate::app::terminal_host::TerminalMount;
 use crate::app_state::AppState;

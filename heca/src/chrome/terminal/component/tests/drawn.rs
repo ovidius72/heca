@@ -1,13 +1,13 @@
 //! Where a frame says a terminal was drawn: from the surfaces its scenes asked for, whichever scene
 //! held them.
 
-use crate::chrome::terminal::{Drawn, settle};
 use super::*;
+use crate::chrome::terminal::{Drawn, settle};
 
 /// What the flush does with a scene: note every terminal surface it reaches.
 fn flush(scene: &Scene, drawn: &mut Drawn) {
     for run in scene.base_runs() {
-        if let Some(surface) = run.then {
+        if let Some(surface) = run.surface() {
             drawn.record(&surface);
         }
     }
@@ -33,5 +33,9 @@ fn a_terminal_is_placed_where_the_scene_that_held_it_drew_it() {
     assert_eq!(pane.placed(), None, "no scene drew the other one");
 
     settle([&docked, &pane].into_iter(), &Drawn::default());
-    assert_eq!(docked.placed(), None, "a frame that did not draw it says so");
+    assert_eq!(
+        docked.placed(),
+        None,
+        "a frame that did not draw it says so"
+    );
 }

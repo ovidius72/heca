@@ -1,69 +1,75 @@
-//! **Preparing the panes**: their scenes, their render state and their terminals' textures.
+//! **Preparing the frame**: the window painted into a scene, and the terminals' render state and
+//! textures.
 
-use heca_core::layout::{PaneId, Rectangle};
-use heca_grid_ui::{
-    Point as GuiPoint, Rectangle as GuiRectangle, Scene as GuiScene, Size as GuiSize,
-};
+use heca_core::layout::PaneId;
+use heca_grid_ui::{Component, Scene as GuiScene};
 use heca_renderer::terminal::TerminalStyle;
 
-use super::{FrameTerminals, FrameValues, PaneScenes};
+use super::{FrameTerminals, FrameValues};
 use crate::app::terminal_render::{
-    TerminalRenderState, hyperlink_decor_from, paint_pane_frame, sync_retained_terminal_layers,
+    TerminalRenderState, hyperlink_decor_from, sync_retained_terminal_layers,
     terminal_font_families_from,
 };
 use crate::app_state::AppState;
 use crate::chrome::terminal::TerminalId;
 
-/// A scene that paints inside `area`: whatever `paint` draws is clipped to it.
-fn scene_clipped_to(area: Rectangle, paint: impl FnOnce(&mut GuiScene)) -> GuiScene {
-    let mut scene = GuiScene::new();
-    scene.push(heca_grid_ui::scene::DrawCommand::PushClip(
-        GuiRectangle::new(
-            GuiPoint::new(area.loc.x, area.loc.y),
-            GuiSize::new(area.size.w, area.size.h),
-        ),
-    ));
-    paint(&mut scene);
-    scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
-    scene
-}
+/// **Paint the window**: the workspace, the chrome and every surface, in one walk into one scene.
+///
+/// This lays the whole tree out and paints it, so every terminal's room is known for this frame and
+/// the host reads where each was drawn from the scene at the flush. The scene is flushed later,
+/// once.
+pub(in crate::app) fn paint_window(state: &mut AppState, v: &FrameValues) -> GuiScene {
+    // F4.1 — retained tree: rebuild the widget tree only when the chrome signature changes;
+    // otherwise re-layout + paint the kept tree (no per-frame signal churn, and a live tree to
+    // dispatch events into in F4.2).
+    let chrome_sig = crate::chrome::chrome_signature(state, v.chrome);
+    if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
+        let (chrome_root, signals, drag_items, intent_source) =
+            crate::chrome::build_chrome_root(state, v.chrome);
+        // **Seat the chrome subtree, keep the window root.** Every surface hangs beside the
+        // chrome rather than inside it, so a rebuild — a resize, a sidebar toggle, a theme
+        // reload — leaves them untouched.
+        crate::chrome::seat_chrome(&mut state.window_root, chrome_root);
+        state.chrome_tree = Some(crate::chrome::RetainedChrome {
+            sig: chrome_sig,
+            signals,
+            drag_items,
+            intent_source,
+        });
+    }
+    // Push value-state (selection + status) into the retained tree's bound signals so
+    // focus/mode changes update in place without a rebuild (the signature excludes them).
+    crate::chrome::sync_chrome_signals(state);
+    // **Flush signal-driven structure before this frame is laid out.**
+    //
+    // Wrappers like `Visibility` apply their `hidden` flip in `tick`, so a row revealed by a
+    // signal has no box until one runs. The frame pass already ticked, but that was before the
+    // store was brought up to date — and a pane's runtime now reaches its row through the row's
+    // own subscription, which fires during that update. Without this the reveal would land a
+    // frame late, and it used to be skipped entirely whenever the sync pass reported no change.
+    //
+    // Unconditional, because "did anything change" is no longer a question one return value
+    // can answer once rows subscribe for themselves. A tick with no time and nothing pending is
+    // a walk that finds nothing.
+    state.window_root.tick(0.0);
+    let (w, h) = (v.w, v.h);
+    let theme = crate::chrome::chrome_gui_theme(state);
+    let mut scene = crate::chrome::paint_chrome_root(&mut state.window_root, w, h, &theme);
+    // **A drag draws itself.** The insertion line, the swap outline and the picture of the
+    // thing under the pointer are painted by the widgets the drag passes through, inside
+    // `paint_child` — so nothing opts in, and a plugin's own row gets the same feedback
+    // (F003/P097/T496). The host pass that drew this for the left sidebar alone is gone.
+    // Follow-link keycaps (prefix+Shift+o) over the focused terminal's hyperlinks, painted
+    // into the chrome scene so they sit above pane content. terminal-task-18.
+    crate::chrome::paint_link_hints(state, &mut scene, w, h, &theme);
+    // Visual-bell flash over the content area (fades out). terminal-task-17.
+    crate::chrome::paint_bell_flash(state, &mut scene, v.pane_area, w, h, &theme);
 
-/// **Paint the columns, and each float's frame, before anything is measured against them.** A
-/// terminal paints one surface request at its own box, so these scenes are where every terminal's
-/// real position is — below its header, scrolled, clipped — and the host reads it from there
-/// instead of working it out from the pane's rect. The same scenes are flushed later; each is
-/// painted once.
-pub(in crate::app) fn paint_scenes(state: &mut AppState, v: &FrameValues) -> PaneScenes {
-    let columns = scene_clipped_to(v.pane_area, |scene| {
-        // **The columns' own letters ride in this scene too.** Through `paint_child`, never
-        // `paint`: `paint_child` is what draws a widget's hint letter after painting it.
-        let column_theme = crate::chrome::chrome_gui_theme(state);
-        let mut cx = heca_grid_ui::PaintCx::new(scene, &column_theme);
-        for column in state.columns.values() {
-            heca_grid_ui::paint_child(&column.root, &mut cx);
-        }
-    });
-    // **A floating pane's frame is painted early for the same reason**: its terminal says where it
-    // is in the scene its own frame paints into. Each is flushed in its own pass, between its
-    // backdrop and what goes over it.
-    let float_ids: Vec<PaneId> = state
-        .session
-        .active_workspace()
-        .map(|ws| {
-            ws.floating_panes
-                .iter()
-                .map(|float| float.pane.id)
-                .collect()
-        })
-        .unwrap_or_default();
-    let floats = float_ids
-        .into_iter()
-        .map(|id| {
-            let frame = scene_clipped_to(v.pane_area, |scene| paint_pane_frame(state, scene, id));
-            (id, frame)
-        })
-        .collect();
-    PaneScenes { columns, floats }
+    // The trees just built may have declared terminals: one more frame starts and draws them.
+    if crate::chrome::terminal::declared_waiting() {
+        state.mark_full_redraw();
+    }
+    scene
 }
 
 /// **Every terminal this frame draws**: the tiled panes', the floating panes', and those no pane

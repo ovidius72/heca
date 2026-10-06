@@ -222,17 +222,14 @@ pub fn on_mouse_input(
         // turns into a declared context menu (F004/P084/T395). Delivering only the press produced
         // no clicks at all, so no sidebar row opened a menu.
         (Btn::Right, Kind::Released) => {
-            // **Both trees, and both halves of the gesture.** A pane's widgets are dispatched
-            // separately from the chrome's until the pane joins the one tree
-            // tree, and only *left* presses were ever handed to them — so a
-            // right-click never reached a pane at all, and the menu a pane declares about itself
-            // could not be found.
+            // **Both halves of the gesture.** A pane is in the same tree as the chrome, so the
+            // release reaches it like any other widget — and a right-click opens the menu a pane
+            // declares about itself.
             //
             // The release matters as much as the press: `RightClick` is synthesised from the pair
             // on the same widget, so handing over only one half produces no click and no menu —
             // which is what `heca/tests/pointer_funnel.rs` exists to keep true.
-            let handled =
-                crate::chrome::deliver(state, ev) | crate::chrome::deliver_to_panes(state, ev);
+            let handled = crate::chrome::deliver(state, ev);
             state.needs_redraw |= handled;
             return None;
         }
@@ -256,8 +253,7 @@ pub fn on_mouse_input(
         // special case deletes the ordering it got wrong, which is the point: swapping two lines
         // would have left the next person the same trap.
         (Btn::Right, Kind::Pressed) => {
-            let handled =
-                crate::chrome::deliver(state, ev) | crate::chrome::deliver_to_panes(state, ev);
+            let handled = crate::chrome::deliver(state, ev);
             state.needs_redraw |= handled;
         }
         _ => {}

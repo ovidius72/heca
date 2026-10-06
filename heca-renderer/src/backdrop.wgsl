@@ -15,6 +15,10 @@ struct Params {
     // Multiplied into the sampled alpha (0 = invisible, 1 = full). Packed into a
     // full vec4 so the uniform layout matches Rust exactly.
     opacity_pad: vec4<f32>,
+    // The destination box in physical pixels: (x, y, w, h).
+    rect_px: vec4<f32>,
+    // x = the corner radius in physical pixels; the rest pads the layout.
+    corner_pad: vec4<f32>,
 };
 
 @group(0) @binding(0) var src_tex: texture_2d<f32>;
@@ -48,6 +52,14 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     var color = textureSample(src_tex, src_samp, in.uv);
-    color.a = color.a * p.opacity_pad.x;
+    // Round the box: the signed distance from this pixel to a rounded rectangle, one pixel of
+    // coverage across the edge. A zero corner is the plain rectangle.
+    let half = p.rect_px.zw * 0.5;
+    let centre = p.rect_px.xy + half;
+    let radius = min(p.corner_pad.x, min(half.x, half.y));
+    let d = abs(in.pos.xy - centre) - (half - vec2<f32>(radius, radius));
+    let dist = length(max(d, vec2<f32>(0.0, 0.0))) + min(max(d.x, d.y), 0.0) - radius;
+    let coverage = clamp(0.5 - dist, 0.0, 1.0);
+    color.a = color.a * p.opacity_pad.x * coverage;
     return color;
 }

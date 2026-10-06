@@ -92,7 +92,11 @@ pub(crate) fn give_header_facts(pane: &mut dyn Component, input: &PaneHeaderInpu
 
 /// **Tell a pane's header what is true of it now.** Cheap when nothing changed: the shape is summed
 /// up in a key, and the header builds a tree only when the key is not the one it already shows.
-fn show_pane_header(env: &HeaderEnv, input: &PaneHeaderInput, header: &heca_grid_ui::widgets::Keyed) {
+fn show_pane_header(
+    env: &HeaderEnv,
+    input: &PaneHeaderInput,
+    header: &heca_grid_ui::widgets::Keyed,
+) {
     let segments = env.chips.shown(&env.segment_names);
     let actions = env.buttons.shown(&env.action_names);
     let font = env.theme.font_size;

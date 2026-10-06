@@ -2,28 +2,26 @@
 //! each phase lives here as a function or a method of [`Frame`], named for what it does:
 //!
 //! 1. [`begin`] — what has to be true before anything is drawn, and the values every phase reads;
-//! 2. [`paint_scenes`] — the columns and each float painted into scenes, so every terminal's real
-//!    position is known; [`collect_panes`] and [`sync_terminal_layers`] bring the terminals up to date;
+//! 2. [`paint_window`] — the window (workspace, chrome and surfaces) laid out and painted into one
+//!    scene, so every terminal has its room; [`collect_panes`] and [`sync_terminal_layers`] bring
+//!    the terminals up to date;
 //! 3. [`Frame::open`] — the surface, the command encoder and the views the frame draws into;
-//! 4. [`Frame::clear_and_background`], [`Frame::write_mask`], [`Frame::columns`],
-//!    [`Frame::floats`], [`Frame::chrome`], [`Frame::backdrops`], [`Frame::finish`] — the passes.
+//! 4. [`Frame::clear_and_background`], [`Frame::write_mask`], [`Frame::flush_window`],
+//!    [`Frame::finish`] — the passes.
 
-use std::collections::HashMap;
-
-use heca_core::layout::{PaneId, Rectangle};
-use heca_grid_ui::Scene as GuiScene;
+use heca_core::layout::Rectangle;
 
 use crate::app::scene_flush::{ChromePassOpts, Flushed, flush_scene};
-use crate::app::terminal_render::{
-    TerminalRenderState, TerminalTarget, draw_surface, pane_scissor_rect,
-};
+use crate::app::terminal_render::{TerminalRenderState, pane_scissor_rect};
 use crate::app_state::AppState;
 use crate::chrome::ChromeConfig;
 
 mod draw;
+mod host_work;
 mod panes;
 
-pub(super) use panes::{collect_panes, paint_scenes, sync_terminal_layers};
+use host_work::{HostTargets, do_host_work};
+pub(super) use panes::{collect_panes, paint_window, sync_terminal_layers};
 
 /// What every phase of a frame reads, worked out once at the top.
 pub(super) struct FrameValues {
@@ -61,12 +59,6 @@ impl FrameTerminals {
     }
 }
 
-/// The columns and each float, painted into scenes before anything is measured against them.
-pub(super) struct PaneScenes {
-    columns: GuiScene,
-    floats: HashMap<PaneId, GuiScene>,
-}
-
 /// Everything the frame draws into.
 pub(super) struct Frame {
     v: FrameValues,
@@ -99,13 +91,11 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
     }
     state.needs_redraw = false;
     let _ = crate::chrome::sync_chrome_state(state);
-    // Build/position the retained per-pane info-bar headers *before* the GPU borrow below, so
-    // render can paint them read-only and `mouse.rs` can dispatch pointer events into them.
-    // The retained per-pane shells — the frame, the pane's identity and its pick letter. Same
-    // moment and same reason as the headers: built before the GPU borrow so render can paint them
-    // read-only (F011/P094/T451).
-    let header_inputs = crate::chrome::pane_header_inputs(state);
-    crate::chrome::sync_panes(state, header_inputs.as_ref());
+    // Tell the workspace what the columns and the floats are this frame: it keeps the panes that
+    // are still there, builds the ones that arrived and places each itself.
+    crate::chrome::seat_workspace(state);
+    // A terminal is kept only while something owns it: a pane that is shown, or a named terminal.
+    crate::chrome::terminal::retain_owned(state);
     // The terminals extensions declared since the last frame are started now, so the scenes
     // painted next already place them.
     crate::chrome::terminal::start_declared(state);
@@ -122,9 +112,8 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
     state.grid_renderer.begin_frame();
 
     // The three pane frame colours are **not** read here. A pane's frame colour is its own —
-    // written onto its retained shell by `chrome::sync_panes`, which is also where it becomes the
-    // hue the pane publishes to its contents. Reading them here meant the host decided how a widget
-    // looked.
+    // written onto the pane by the workspace, which is also where it becomes the hue the pane
+    // publishes to its contents. Reading them here meant the host decided how a widget looked.
     let ws_offset = state
         .session
         .workspace_geometries()
@@ -207,9 +196,9 @@ impl Frame {
     /// **The top band, then present**: every surface's overlay content (tooltips, popovers), above
     /// all bases, flushed segment by segment like any scene — so a terminal inside an overlay is
     /// drawn where its segment puts it — and the scene texture onto the screen.
-    pub(super) fn finish(mut self, state: &mut AppState, docked: &[TerminalRenderState]) {
+    pub(super) fn finish(mut self, state: &mut AppState, terminals: &FrameTerminals) {
         let pass = self.pass();
-        let target = docked_target(&self.scene, &self.v);
+        let targets = HostTargets::new(&self.scene, &self.stencil, &self.v);
         let overlays = std::mem::take(&mut self.flushed.overlays);
         for segment in &overlays {
             flush_scene(
@@ -219,24 +208,12 @@ impl Frame {
                 &self.scene,
                 &mut self.encoder,
                 &mut self.flushed,
-                &mut |state, at, encoder| draw_surface(state, docked, at, &target, encoder),
+                &mut |state, work, encoder| do_host_work(state, terminals, &targets, work, encoder),
             );
         }
         std::mem::take(&mut self.flushed.drawn).settle(state);
         state.compositor.blit(&self.view, &mut self.encoder);
         state.queue.submit(std::iter::once(self.encoder.finish()));
         self.surface_texture.present();
-    }
-}
-
-/// Where a terminal no pane owns is drawn: no mask, and clipped by what clips it in its scene.
-fn docked_target<'a>(scene: &'a wgpu::TextureView, v: &FrameValues) -> TerminalTarget<'a> {
-    TerminalTarget {
-        view: scene,
-        stencil: None,
-        scissor: None,
-        surface_alpha: v.surface_alpha,
-        content_clip: v.pane_area,
-        follow_scene_clip: true,
     }
 }

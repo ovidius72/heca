@@ -29,16 +29,17 @@ pub(super) struct Flushed {
     pub(super) drawn: crate::chrome::terminal::Drawn,
 }
 
-/// What draws a terminal surface when the flush reaches it. Takes the state and the encoder because
-/// the surface needs both; the flush holds neither across the call.
-pub(super) type DrawSurface<'a> =
-    dyn FnMut(&mut AppState, &heca_grid_ui::SurfaceAt, &mut wgpu::CommandEncoder) + 'a;
+/// What does a piece of host work when the flush reaches it — draws a terminal surface, or blurs
+/// what the runs before it drew. Takes the state and the encoder because the work needs both; the
+/// flush holds neither across the call.
+pub(super) type DoHostWork<'a> =
+    dyn FnMut(&mut AppState, &heca_grid_ui::HostWork, &mut wgpu::CommandEncoder) + 'a;
 
-/// **Flush `scene`'s base layer in scene order**, noting each terminal surface reached in
-/// `out.drawn`, then hand its overlay segments to `out.overlays` so they are flushed once, above
-/// every surface.
+/// **Flush `scene`'s base layer in scene order**, doing each piece of host work where the scene put
+/// it and noting each terminal surface reached in `out.drawn`, then hand its overlay segments to
+/// `out.overlays` so they are flushed once, above every surface.
 ///
-/// A scene with no surface is one flush — the same single pass it always was.
+/// A scene with no host work is one flush — the same single pass it always was.
 pub(super) fn flush_scene(
     state: &mut AppState,
     scene: &heca_grid_ui::Scene,
@@ -46,7 +47,7 @@ pub(super) fn flush_scene(
     view: &wgpu::TextureView,
     encoder: &mut wgpu::CommandEncoder,
     out: &mut Flushed,
-    draw_surface: &mut DrawSurface<'_>,
+    do_work: &mut DoHostWork<'_>,
 ) {
     for run in scene.base_runs() {
         flush_base(
@@ -58,9 +59,11 @@ pub(super) fn flush_scene(
             view,
             encoder,
         );
-        if let Some(surface) = run.then {
-            out.drawn.record(&surface);
-            draw_surface(state, &surface, encoder);
+        if let Some(work) = run.then {
+            if let heca_grid_ui::HostWork::Surface(surface) = &work {
+                out.drawn.record(surface);
+            }
+            do_work(state, &work, encoder);
         }
     }
     out.overlays.extend(scene.overlay_segments());

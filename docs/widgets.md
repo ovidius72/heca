@@ -23,7 +23,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`Tile`](#tile), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
-  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope), [`Keyed`](#keyed)
+  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope), [`Keyed`](#keyed), [Props](#props--new-facts-for-a-widget-that-is-already-there)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
   - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
   - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
@@ -2008,6 +2008,9 @@ bracketed surface sizes its reticle from the same per-surface width/radius via
   glow and brackets are drawn through [`PaintCx::outline`](#scene--drawcommand--paintcx-for-building-widgets), so a pane that holds a
   `Terminal` is not covered by it. Nothing for the author to do.
 - **Construct**: `Pane::new()` (column) / `Pane::row()`.
+- **Frosted**: `.frosted(radius)` blurs what is drawn behind the pane by `radius` logical px, in scene
+  order — it blurs what lies under it and nothing of what comes after, its own content included. A
+  floating pane that should show what is under it says this instead of filling itself.
 - **No built-in title.** The pane is a frame + child container only. The app's pane-info **header**
   is composed *inside* the pane top (see the showcase's in-pane info bar demo), so frame decoration
   and the header stay independent — composing widgets beats a bespoke border-straddling title that
@@ -4976,6 +4979,30 @@ header.texts(vec![("hdr.seg:location".into(), facts.cwd())]);
   holds and the one its owner keeps agree. A node placed anew holds nothing, so the next `show`
   builds for it — a rebuilt parent gets its child back.
 - Host-only: it holds the caller's closures and state, so it is not described declaratively.
+
+### Props — new facts for a widget that is already there
+
+A parent that holds a child across frames hands it new facts instead of rebuilding it. The child
+says what it takes, typed to the model it understands, and gets its own `Base` so it can place and
+reconcile its own children from what it is handed:
+
+```rust
+let workspace = Flex::column().clip_children(true)
+    .on_props(|model: &WorkspaceModel, base| { /* place base.children from model */ });
+// each frame, from whoever owns it:
+let took = workspace.set_props(&model);   // false = wrong type, or the widget takes none
+```
+
+- `.on_props::<T>(|props, base| ..)` — declare the props `T` this widget takes. One handler; the
+  last declared wins.
+- `Component::set_props(&dyn Any) -> bool` — hand it a value. A value of another type, or a widget
+  with no handler, is **refused** (`false`), never a silent no-op; report it.
+- `reconcile_keyed(&mut base, &[(name, version)], build)` — what a handler reconciles its keyed
+  children with: a child still wanted at the same version is kept as it is; one built from another
+  version is built afresh. The child carries its version (`Base::built_from`), so the parent keeps
+  no table of what each was built from.
+- `.clip_children(true)` — CSS `overflow: hidden` on any widget: what it holds is not drawn or hit
+  past its edge, and the engine does not squeeze it to fit.
 
 ### Tooltip
 

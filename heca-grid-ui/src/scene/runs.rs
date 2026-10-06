@@ -5,43 +5,50 @@ use super::{DrawCommand, HostCmd, HostDraw, Scene};
 use heca_core::layout::Rectangle;
 
 impl Scene {
-    /// **The base layer cut at every terminal surface**, so a host can draw each surface in scene
-    /// order: flush a run, put the surface where the scene put it, flush the next run over it.
+    /// **The base layer cut at every piece of host work**, so a host can do each in scene order:
+    /// flush a run, do the work where the scene put it, flush the next run over it. The work is a
+    /// terminal surface to draw or a backdrop to blur — a blur takes exactly what the runs before it
+    /// drew, and nothing after.
     ///
     /// Each run is **self-contained**: the clips open at a cut are closed at the end of the run and
     /// re-opened at the start of the next, so a run flushed on its own is clipped exactly as it was
     /// in place. The outline band stays last, so a frame drawn over its children lands over the
-    /// surface too. A scene with no surface is one run, equal to [`base_layer`](Scene::base_layer).
-    ///
-    /// Only [`HostDraw::Surface`] cuts. A backdrop is not a cut: it is performed between the base
-    /// flush and the overlay flush, as before.
+    /// surface too. A scene with no host work is one run, equal to
+    /// [`base_layer`](Scene::base_layer).
     pub fn base_runs(&self) -> Vec<BaseRun> {
         let mut runs = Vec::new();
         let mut open: Vec<Rectangle> = Vec::new();
         let mut draws = Scene::new();
         for cmd in self.commands.iter().chain(self.outline.iter()) {
             match cmd {
-                DrawCommand::Host(HostCmd {
-                    draw: HostDraw::Surface { id },
-                    rect,
-                    alpha,
-                }) => {
+                DrawCommand::Host(HostCmd { draw, rect, alpha }) => {
                     for _ in &open {
                         draws.commands.push(DrawCommand::PopClip);
                     }
-                    runs.push(BaseRun {
-                        draws: std::mem::take(&mut draws),
-                        then: Some(SurfaceAt {
-                            id: *id,
+                    let clip = open.iter().copied().reduce(|a, b| {
+                        a.intersection(b).unwrap_or(Rectangle::new(
+                            a.loc,
+                            heca_core::layout::Size::new(0.0, 0.0),
+                        ))
+                    });
+                    let work = match *draw {
+                        HostDraw::Surface { id } => HostWork::Surface(SurfaceAt {
+                            id,
                             rect: *rect,
                             alpha: *alpha,
-                            clip: open.iter().copied().reduce(|a, b| {
-                                a.intersection(b).unwrap_or(Rectangle::new(
-                                    a.loc,
-                                    heca_core::layout::Size::new(0.0, 0.0),
-                                ))
-                            }),
+                            clip,
                         }),
+                        HostDraw::Backdrop { radius, corner } => HostWork::Backdrop(BackdropAt {
+                            radius,
+                            corner,
+                            rect: *rect,
+                            alpha: *alpha,
+                            clip,
+                        }),
+                    };
+                    runs.push(BaseRun {
+                        draws: std::mem::take(&mut draws),
+                        then: Some(work),
                     });
                     for rect in &open {
                         draws.commands.push(DrawCommand::PushClip(*rect));
@@ -141,14 +148,46 @@ impl Scene {
     }
 }
 
-/// One stretch of a scene's base layer, and the terminal surface the scene puts after it — see
+/// One stretch of a scene's base layer, and the host work the scene puts after it — see
 /// [`Scene::base_runs`].
 #[derive(Debug, Clone)]
 pub struct BaseRun {
     /// What to flush first: ordinary rects and text, clipped as they were in the scene.
     pub draws: Scene,
-    /// The surface that goes over `draws`, or `None` for the last run.
-    pub then: Option<SurfaceAt>,
+    /// The work that goes over `draws`, or `None` for the last run.
+    pub then: Option<HostWork>,
+}
+
+impl BaseRun {
+    /// The terminal surface this run ends with, if it ends with one.
+    pub fn surface(&self) -> Option<SurfaceAt> {
+        match self.then {
+            Some(HostWork::Surface(at)) => Some(at),
+            _ => None,
+        }
+    }
+}
+
+/// What the host does between two runs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HostWork {
+    /// Draw a terminal surface here.
+    Surface(SurfaceAt),
+    /// Blur what the runs before drew, here.
+    Backdrop(BackdropAt),
+}
+
+/// Where the scene put a backdrop: how far to blur, its box, its opacity and what clips it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BackdropAt {
+    /// The blur radius, in logical pixels.
+    pub radius: f32,
+    /// How round the blurred box is, in logical pixels.
+    pub corner: f32,
+    pub rect: Rectangle,
+    pub alpha: f32,
+    /// Every clip open where the backdrop was recorded, intersected — `None` when nothing clips it.
+    pub clip: Option<Rectangle>,
 }
 
 /// Where the scene put a surface: the opaque id the widget gave it, its box, its opacity and what

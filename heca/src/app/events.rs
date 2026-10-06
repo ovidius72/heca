@@ -271,15 +271,6 @@ pub(crate) fn handle_window_event(
             if !mouse::is_resizing(state) {
                 crate::chrome::deliver(state, &moved);
             }
-            // The pane header and the pane viewport are their OWN retained trees, which a drag in
-            // the window root does not reach — so they are still told to stay dark while something
-            // is being carried, which is what keeps "nothing hovers under a drag" true for them.
-            if !crate::chrome::drag_in_flight(state) && !mouse::is_resizing(state) {
-                // Feed the move into the panes, so a header button's hover lights up and a
-                // terminal hears where the pointer is (it says so itself, and only for a move
-                // that landed on it, not on its chip or scrollbar).
-                crate::chrome::deliver_to_panes(state, &moved);
-            }
             // Cursor affordance: Grab over a draggable, Grabbing while dragging.
             mouse::update_cursor(state, pos);
             state.mark_full_redraw();
@@ -320,26 +311,10 @@ pub(crate) fn handle_window_event(
             if crate::chrome::dispatch_surface_pointer(state, &ev) {
                 return;
             }
-            // Pane info-bar action **buttons** intercept a plain left-press so a click
-            // hits the button (not the terminal). Only an actual button hit is
-            // consumed — a press on the empty header band falls through to the normal
-            // content/drag/resize paths (the lower pane's band sits on the divider, so
-            // consuming it would break divider/resize gestures). A modifier-held press
-            // also falls through (meta-drag).
-            if button == winit::event::MouseButton::Left
-                && button_state == ElementState::Pressed
-                && !mouse::interactive_move_modifier_held(state)
-                && crate::chrome::deliver_to_panes(state, &ev)
-            {
-                mouse::update_cursor(state, state.mouse.pos);
-                state.mark_full_redraw();
-                return;
-            }
             // Divider resize: a plain left-press on a column/pane divider starts a
             // resize-drag. Only an actual divider hit consumes — a miss falls
             // through to the normal content/drag paths. A modifier-held press
-            // (meta-drag) falls through. Checked after the header-button block
-            // because the lower pane's header band sits on top of the divider.
+            // (meta-drag) falls through.
             if button == winit::event::MouseButton::Left
                 && button_state == ElementState::Pressed
                 && !mouse::interactive_move_modifier_held(state)
@@ -367,8 +342,7 @@ pub(crate) fn handle_window_event(
                 // or not the cursor is still over it — that is what ends a scrollbar drag. The
                 // chrome tree is unconditional: it consumes nothing it did not start, and gating a
                 // release on position is precisely how a thumb ends up welded to the cursor.
-                crate::chrome::deliver(state, &ev);
-                if crate::chrome::deliver_to_panes(state, &ev) {
+                if crate::chrome::deliver(state, &ev) {
                     mouse::update_cursor(state, state.mouse.pos);
                     state.mark_full_redraw();
                     return;
@@ -400,9 +374,7 @@ pub(crate) fn handle_window_event(
             // The trees next. A hovered scroll region in the sidebar takes it; over a terminal, the
             // terminal does — it reads the wheel itself and says what it meant (zoom, scrollback,
             // or the program's own) to the one handler that knows the policy.
-            if crate::chrome::deliver(state, &wheel)
-                || crate::chrome::deliver_to_panes(state, &wheel)
-            {
+            if crate::chrome::deliver(state, &wheel) {
                 state.mark_full_redraw();
                 return;
             }

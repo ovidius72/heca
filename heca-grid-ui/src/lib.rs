@@ -93,7 +93,9 @@ pub use layout::LayoutEngine;
 pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use nav::{child_name, collect_keys, identity_of, key_at, node_with_key, node_with_key_mut};
 pub use pointer::{PointerState, clear_hover, dragging, hit_test};
-pub use scene::{BaseRun, DrawCommand, Escape, FontRole, Scene, SurfaceAt, TextStyle};
+pub use scene::{
+    BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, Scene, SurfaceAt, TextStyle,
+};
 pub mod prop;
 pub mod props;
 pub use heca_grid_ui_macros::{PropName, prop, props};

@@ -796,22 +796,6 @@ pub struct AppState {
     /// bookkeeping about it, so dropping it forces a rebuild without taking any surface with it.
     /// See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
-    /// **Retained per-pane shells**, keyed by pane — the frame around whatever app runs inside,
-    /// and the widget that carries the pane's identity and its pick letter. Built/positioned each
-    /// frame by `chrome::sync_panes`, painted through `heca_grid_ui::paint_child` (which is what
-    /// draws the letter).
-    ///
-    /// Retained rather than rebuilt in paint: the picker writes a letter into the tree when it
-    /// opens and reads it back a keystroke later, so a tree that does not outlive the frame cannot
-    /// carry one — which is why the pane letters used to be stamped by a host paint pass
-    /// (F011/P094/T451).
-    pub panes: HashMap<PaneId, crate::chrome::RetainedPane>,
-    /// **Retained per-column trees**, keyed by the column's own id — the box a column occupies in
-    /// the scrolling area, and the identity a pick addresses it by.
-    ///
-    /// The column is what OWNS `col:<id>`; the workspaces dock shows a view of it. Built and placed
-    /// each frame by `chrome::sync_columns` (F003/P082/T474).
-    pub columns: HashMap<heca_core::layout::ColumnId, crate::chrome::RetainedColumn>,
     /// The terminal each pane shows, by pane — the client's view of a running terminal process:
     /// what a window draws, and how much room it was given. Client state, like the retained trees.
     pub(crate) terminals:

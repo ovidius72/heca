@@ -56,7 +56,7 @@ pub(crate) struct ColumnShell<'a> {
 /// map and every walk: it arrives with the column and leaves with it.
 /// `share` is how wide it is as a share of that column: a slot, not a column — wide enough to aim at
 /// and to carry a letter, narrow enough to read as an opening.
-fn new_column_slot(cb: &ColumnCallbacks, share: f32) -> Box<dyn Component> {
+pub(crate) fn new_column_slot(cb: &ColumnCallbacks, share: f32) -> Box<dyn Component> {
     let slot = Flex::column()
         .key(crate::chrome::NEW_COLUMN_KEY)
         .at_rect(

@@ -1,279 +1,23 @@
-//! **The column surface** — one retained tree per column in the scrolling area.
+//! **The column** — a column in the scrolling area, built from a [`ColumnShellModel`] and held by
+//! the workspace.
 //!
-//! This file is the only one in the folder that may touch `AppState` (AGENTS.md § 0b-bis rule 4):
-//! it reduces the session to [`ColumnShellModel`]s and hands them down, so every component below is
-//! testable headless.
+//! This file is one of the few in the folder that may touch `AppState` (AGENTS.md § 0b-bis rule 4):
+//! it answers the questions about the session that a column's model is made from, so every
+//! component below is testable headless.
 
 mod model;
-mod shell;
+pub(crate) mod shell;
 
 pub(crate) use model::ColumnShellModel;
 pub(crate) use shell::{ColumnCallbacks, ColumnShell};
 
-use heca_core::layout::{ColumnId, PaneId};
-use heca_grid_ui::{Component, LayoutEngine, Size};
-
-/// A retained per-column tree.
-///
-/// Rebuilt only when [`ColumnShellModel::key`] changes; repositioned every frame by
-/// [`sync_columns`]; painted **through `heca_grid_ui::paint_child`**, which is what draws its
-/// letter.
-pub(crate) struct RetainedColumn {
-    pub(crate) root: heca_grid_ui::widgets::Flex,
-    /// The model key the tree was built from.
-    pub(crate) key: String,
-    /// **The panes this column holds**, in order. A pane's letter is offered against its own
-    /// surface, so whoever offers it has to know which panes are in here without reading a key
-    /// back out of the tree.
-    pub(crate) panes: Vec<PaneId>,
-}
-
-/// Drop every retained column — used when a config reload changes the theme baked into the trees.
-/// [`sync_columns`] rebuilds them next frame.
-pub(crate) fn clear_columns(state: &mut crate::app_state::AppState) {
-    state.columns.clear();
-}
-
-/// **Offer a letter to the column that answers to `key`** — the column itself, never what is around
-/// it.
-///
-/// A column is a third place a letter can land, beside the chrome tree and the pane trees: it is
-/// drawn in the content area, so it is not in the window root, and it is not a pane. Without this
-/// the pick lettered only the sidebar's view of each column.
-///
-/// **Only where it can be seen.** `seen` answers whether a pane's view is visible — the same
-/// question every other view's letter is asked. A column behind a sidebar used to be lettered
-/// regardless, so a pane under the sidebar drew its keycap on top of the sidebar (Antonio, driving,
-/// 2026-09-24): the pane path withdrew the letter and this path put it straight back.
-pub(crate) fn offer_to_columns(
-    state: &crate::app_state::AppState,
-    key: &str,
-    label: Option<String>,
-    seen: impl Fn(PaneId) -> bool,
-) -> bool {
-    let mut offered = false;
-    for col in state.columns.values() {
-        let label = if column_view_seen(&col.panes, key, &seen) {
-            label.clone()
-        } else {
-            // A withdrawal, never "leave whatever is there": a letter given while the column was
-            // visible must go when it is covered.
-            None
-        };
-        // **By key, into the tree** — the column names itself, and the offer of a new column beside
-        // it is a child. Matching only the root meant a target had to BE the tree it lived in.
-        offered |= heca_grid_ui::offer_hint_by_key(&col.root, key, label);
-    }
-    offered
-}
-
-/// **Can this column show the offer for `key`?** A pane it holds is judged by that pane's own view;
-/// anything else in the column — the column itself, the new-column slot beside it — by whether any
-/// of its panes can be seen.
-///
-/// Pure, so the rule is tested without a window.
-pub(crate) fn column_view_seen(panes: &[PaneId], key: &str, seen: impl Fn(PaneId) -> bool) -> bool {
-    match panes
-        .iter()
-        .find(|p| crate::providers::workspaces::pane_key(**p) == key)
-    {
-        Some(pane) => seen(*pane),
-        None => panes.iter().any(|p| seen(*p)),
-    }
-}
-
-#[cfg(test)]
-mod offer_tests {
-    use super::*;
-    use crate::providers::workspaces::{column_key, pane_key};
-
-    /// A pane behind the sidebar gets no letter; a visible one does — and a column is visible when
-    /// any pane in it is.
-    #[test]
-    fn a_column_shows_a_letter_only_where_it_can_be_seen() {
-        let (hidden, shown) = (PaneId(1), PaneId(2));
-        let seen = |p: PaneId| p == shown;
-
-        assert!(
-            !column_view_seen(&[hidden], &pane_key(hidden), seen),
-            "a covered pane"
-        );
-        assert!(
-            column_view_seen(&[shown], &pane_key(shown), seen),
-            "a visible pane"
-        );
-        assert!(
-            !column_view_seen(&[hidden, shown], &pane_key(hidden), seen),
-            "a covered pane in a column whose other pane shows — judged by its own view",
-        );
-        assert!(
-            column_view_seen(&[hidden, shown], &column_key(ColumnId(1)), seen),
-            "the column itself shows while any of its panes does",
-        );
-        assert!(
-            !column_view_seen(&[hidden], &column_key(ColumnId(1)), seen),
-            "a column entirely covered",
-        );
-    }
-}
-
-/// Bring the retained column trees in line with the session: build the ones whose identity changed,
-/// place each at the rect the scrolling engine gave it, and prune the columns that are gone.
-pub(crate) fn sync_columns(
-    state: &mut crate::app_state::AppState,
-    headers: Option<
-        &std::collections::HashMap<PaneId, crate::chrome::pane_header::PaneHeaderInput>,
-    >,
-) {
-    let cb = callbacks(state);
-    let pane_cb = crate::chrome::pane::callbacks(state);
-    let frames = crate::app::terminal_host::column_frames(state);
-    // **The panes come from the same reading of the session the pane surface uses**, so a column
-    // and the panes in it can never disagree about where anything is.
-    let pane_models = crate::chrome::pane::pane_models(state);
-    // What a header is built from, taken the first time a pane is built this frame.
-    let mut env: Option<std::rc::Rc<crate::chrome::HeaderEnv>> = None;
-    // What each pane runs: the terminal the app keeps for it, placed in the pane's content slot.
-    let mut contents: std::collections::HashMap<PaneId, Box<dyn heca_grid_ui::Component>> =
-        pane_models
-            .iter()
-            .map(|m| {
-                (
-                    m.pane_id,
-                    Box::new(crate::chrome::terminal::view_of(state, m.pane_id))
-                        as Box<dyn heca_grid_ui::Component>,
-                )
-            })
-            .collect();
-    let mut seen: std::collections::HashSet<ColumnId> = std::collections::HashSet::new();
-    for col in &frames {
-        seen.insert(col.id);
-        let model = ColumnShellModel {
-            col_id: col.id,
-            x: col.rect.loc.x as f32,
-            y: col.rect.loc.y as f32,
-            w: col.rect.size.w as f32,
-            h: col.rect.size.h as f32,
-            focus_pane: focus_pane_of(state, col),
-            // Only the column the picked pane is in offers a new one beside it.
-            new_column_slot: picking_from_column(state, col)
-                .then(|| state.appearance.effective_new_column_slot_share()),
-            // The panes this column holds, in the order the layout engine placed them.
-            panes: col
-                .panes
-                .iter()
-                .filter_map(|p| pane_models.iter().find(|m| m.pane_id == p.id).cloned())
-                .collect(),
-        };
-
-        let key = model.key();
-        let needs_build = state
-            .columns
-            .get(&col.id)
-            .map(|c| c.key != key)
-            .unwrap_or(true);
-        // A header is built from what is true now, taken when a pane is built: with the column, or
-        // when a pane arrives in it.
-        let arriving = state
-            .columns
-            .get(&col.id)
-            .is_none_or(|c| model.panes.iter().any(|p| !c.panes.contains(&p.pane_id)));
-        if headers.is_some() && (needs_build || arriving) {
-            env.get_or_insert_with(|| crate::chrome::HeaderEnv::of(state));
-        }
-        if needs_build {
-            let root = ColumnShell {
-                model: &model,
-                cb: &cb,
-                pane_cb: &pane_cb,
-                header_env: headers.and(env.clone()),
-                contents: model
-                    .panes
-                    .iter()
-                    .filter_map(|p| contents.remove(&p.pane_id).map(|c| (p.pane_id, c)))
-                    .collect(),
-            }
-            .build();
-            state.columns.insert(
-                col.id,
-                RetainedColumn {
-                    root,
-                    key,
-                    panes: model.panes.iter().map(|p| p.pane_id).collect(),
-                },
-            );
-        }
-
-        if let Some(retained) = state.columns.get_mut(&col.id) {
-            retained.panes = model.panes.iter().map(|p| p.pane_id).collect();
-            // **The panes are reconciled, never rebuilt with the column.** A pane that is still
-            // here keeps the widget it had — its letter, a gesture in flight, an animation — and
-            // only one that arrived is built. Rebuilding them all would be the 100% CPU idle this
-            // surface was warned about.
-            let RetainedColumn { root, .. } = &mut *retained;
-            // The panes by the name each answers to, made once rather than searched for per child.
-            let by_key: std::collections::HashMap<String, &crate::chrome::pane::PaneShellModel> =
-                model
-                    .panes
-                    .iter()
-                    .map(|p| (crate::chrome::pane_key(p.pane_id), p))
-                    .collect();
-            heca_grid_ui::reconcile::reconcile_children(root, &model.pane_keys(), |key| {
-                // The wanted keys are these panes' own, so a missing one is not expected; if it
-                // ever happened it would be built as an empty box rather than panicking.
-                let Some(pane) = by_key.get(key).copied() else {
-                    return Box::new(heca_grid_ui::widgets::Flex::column());
-                };
-                let header = headers
-                    .and(env.clone())
-                    .map(crate::chrome::PaneHeader::new);
-                let content = contents.remove(&pane.pane_id);
-                shell::pane_child(pane, &model, &pane_cb, header, content)
-            });
-            // Each pane sits where the layout engine put it, and says so itself — the rect is a
-            // per-frame input, exactly as the column's own is. What focus changed and the words in
-            // its header ride along the same way: written onto the retained child rather than
-            // rebuilt for, so a gesture in flight survives a focus change.
-            for child in retained.root.base_mut().children.iter_mut() {
-                let Some(pane) = model.panes.iter().find(|p| {
-                    child.base().key.as_deref() == Some(&crate::chrome::pane_key(p.pane_id))
-                }) else {
-                    continue;
-                };
-                let pane = pane.clone();
-                crate::chrome::pane::shell::focus_state_to(child.as_mut(), &pane);
-                // What is true of the pane now: its header builds only if its shape changed.
-                if let Some(input) = headers.and_then(|h| h.get(&pane.pane_id)) {
-                    crate::chrome::give_header_facts(child.as_mut(), input);
-                }
-                let l = &mut child.base_mut().style.layout;
-                l.placement = Some(heca_grid_ui::style::Placement {
-                    left: heca_grid_ui::Length::Px(pane.x - model.x),
-                    top: heca_grid_ui::Length::Px(pane.y - model.y),
-                    width: heca_grid_ui::Length::Px(pane.w),
-                    height: heca_grid_ui::Length::Px(pane.h),
-                });
-            }
-        }
-        if let Some(retained) = state.columns.get_mut(&col.id) {
-            // The rect is a **per-frame input**, written onto the retained tree rather than built
-            // into it — so a scroll, a resize or a split moves the column without rebuilding the
-            // widget and throwing away its signals.
-            LayoutEngine::new().compute(
-                &mut retained.root,
-                Size::new(model.w as f64, model.h as f64),
-            );
-            heca_grid_ui::shift_subtree(&mut retained.root, model.x as f64, model.y as f64);
-        }
-    }
-    state.columns.retain(|id, _| seen.contains(id));
-}
+use heca_core::layout::PaneId;
 
 /// **Is the pick asking where to put a pane that lives in THIS column?**
 ///
 /// The offer of a new column is drawn beside the column the pane is in, because that is where the
 /// new one goes — "you keep your place in the strip".
-fn picking_from_column(
+pub(crate) fn picking_from_column(
     state: &crate::app_state::AppState,
     col: &heca_core::layout::LaidOutColumn,
 ) -> bool {
@@ -295,7 +39,7 @@ fn offers_new_column(picking: Option<PaneId>, panes: impl IntoIterator<Item = Pa
 
 /// **Which pane a pick on this column goes to** — the active one when it is in this column, else
 /// the first. Where a column *is*, is the pane you would land on.
-fn focus_pane_of(
+pub(crate) fn focus_pane_of(
     state: &crate::app_state::AppState,
     col: &heca_core::layout::LaidOutColumn,
 ) -> Option<PaneId> {
@@ -342,6 +86,8 @@ pub(crate) fn callbacks(state: &crate::app_state::AppState) -> ColumnCallbacks {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use heca_core::layout::ColumnId;
+    use heca_grid_ui::Component;
 
     fn model(col_id: u64, focus: Option<u64>) -> ColumnShellModel {
         with_panes(col_id, focus, &[])

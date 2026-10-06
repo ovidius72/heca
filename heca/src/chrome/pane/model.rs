@@ -40,6 +40,18 @@ pub(crate) struct PaneShellModel {
     /// `active_glow_radius` / `active_glow_strength`. Carried here, like the accent, because the
     /// pane is painted with a doctored theme and must not read them from it.
     pub(crate) active_glow: (f32, f32),
+    /// What only a **floating** pane wears: it covers what is under it, so it fills itself or
+    /// frosts what lies beneath. `None` for a pane in a column.
+    pub(crate) float: Option<FloatLook>,
+}
+
+/// How a floating pane covers what is under it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct FloatLook {
+    /// The fill, when the pane is solid.
+    pub(crate) background: [f32; 4],
+    /// Blur what lies beneath by this many logical px instead of filling; `0.0` is solid.
+    pub(crate) frost: f32,
 }
 
 impl PaneShellModel {
@@ -60,8 +72,13 @@ impl PaneShellModel {
         // discarded, so the first right-click on an unfocused pane focused it and opened nothing
         //.
         format!(
-            "{}|{:?}|{}|{}|{}",
-            self.pane_id.0, self.frame, self.border_width, self.border_radius, self.content_inset,
+            "{}|{:?}|{}|{}|{}|{:?}",
+            self.pane_id.0,
+            self.frame,
+            self.border_width,
+            self.border_radius,
+            self.content_inset,
+            self.float,
         )
     }
 }
