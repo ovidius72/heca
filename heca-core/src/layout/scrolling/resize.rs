@@ -9,8 +9,6 @@ impl ScrollingMut<'_> {
         old_xs: &[(ColumnId, f64)],
         old_view_pos: f64,
     ) {
-        self.update_all_column_widths();
-
         // Preserve view position so layout stays visually fixed during width changes.
         let new_view_pos = self.reader().view_pos();
         let view_delta = old_view_pos - new_view_pos;
@@ -31,7 +29,7 @@ impl ScrollingMut<'_> {
         }
 
         // Animate columns to their new positions.
-        let new_xs: Vec<f64> = self.space.column_xs().collect();
+        let new_xs: Vec<f64> = self.reader().column_xs().collect();
         for (i, col) in self.space.columns.iter_mut().enumerate() {
             let old_x = old_xs
                 .iter()
@@ -57,7 +55,7 @@ impl ScrollingMut<'_> {
             return false;
         }
 
-        let old_xs = self.space.capture_column_positions();
+        let old_xs = self.reader().capture_column_positions();
         let old_view_pos = self.reader().view_pos();
 
         let column = &mut self.space.columns[idx];
@@ -126,7 +124,7 @@ impl ScrollingMut<'_> {
     /// Resize column `idx` by `delta` (a proportion delta for `Proportion` widths,
     /// or a fraction of the working width for `Fixed`). Mutates the column's
     /// **canonical** [`ColumnWidth`] — so the change persists through later
-    /// `update_all_column_widths` recomputes — and preserves the view position. Used
+    /// the layout recomputes — and preserves the view position. Used
     /// by the keyboard resize (active column), the mouse divider drag (any column),
     /// and RPC.
     pub fn resize_column(&mut self, idx: usize, delta: f64) {
@@ -139,7 +137,7 @@ impl ScrollingMut<'_> {
         // cursor, regardless of which column is active. Anchoring on the *active*
         // column (the old active-column recentre) made a left column
         // grow leftward when the right column was focused (the "wrong side" bug).
-        let old_rel = self.space.column_x(idx) - self.reader().view_pos();
+        let old_rel = self.reader().column_x(idx) - self.reader().view_pos();
 
         if let Some((_, new_width)) = self.reader().clamped_width(idx, delta) {
             let col = &mut self.space.columns[idx];
@@ -148,11 +146,10 @@ impl ScrollingMut<'_> {
             col.is_full_width = false;
         }
 
-        self.update_all_column_widths();
         // Restore the resized column's on-screen left edge by shifting the view by
         // the amount it moved. No active-column recenter / per-move animation —
         // those fight a smooth per-pixel drag.
-        let new_rel = self.space.column_x(idx) - self.reader().view_pos();
+        let new_rel = self.reader().column_x(idx) - self.reader().view_pos();
         self.view.offset.offset(new_rel - old_rel);
         // If the resize pushed the active column's far edge off-screen, scroll to
         // keep it reachable (#3) — only when resizing the active column, so a

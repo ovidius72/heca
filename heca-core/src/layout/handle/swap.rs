@@ -101,8 +101,6 @@ impl LayoutMut<'_> {
         let slide = self.slide();
         let old_a = self.workspace_mut(at.ws).and_then(|ws| rect_of(&ws, a));
         let old_b = self.workspace_mut(bt.ws).and_then(|ws| rect_of(&ws, b));
-        let area_a = self.reader().workspace(at.ws).map(|ws| ws.scroll().area());
-        let area_b = self.reader().workspace(bt.ws).map(|ws| ws.scroll().area());
 
         let Some(lifted_a) = self.workspace_mut(at.ws).and_then(|mut ws| lift(&mut ws, a)) else {
             return false;
@@ -112,11 +110,11 @@ impl LayoutMut<'_> {
         };
 
         if let Some(mut ws) = self.workspace_mut(bt.ws) {
-            land(&mut ws, lifted_a, bt, area_b);
+            land(&mut ws, lifted_a, bt);
             slide_from(&mut ws, a, old_a, slide);
         }
         if let Some(mut ws) = self.workspace_mut(at.ws) {
-            land(&mut ws, lifted_b, at, area_a);
+            land(&mut ws, lifted_b, at);
             slide_from(&mut ws, b, old_b, slide);
         }
         true
@@ -151,14 +149,14 @@ impl WorkspaceMut<'_> {
             i => i,
         };
         let (upper, lower) = (first.min(second), first.max(second));
-        let up_offset = column.pane_sizes.get(upper).map_or(0.0, |s| s.h) + gap;
-        let down_offset = -(column.pane_sizes.get(lower).map_or(0.0, |s| s.h) + gap);
+        let heights = column.pane_heights(height, gap);
+        let up_offset = heights.get(upper).copied().unwrap_or(0.0) + gap;
+        let down_offset = -(heights.get(lower).copied().unwrap_or(0.0) + gap);
 
         column.panes[upper].animate_move_y_from(down_offset, AnimationConfig::default());
         column.panes[lower].animate_move_y_from(up_offset, AnimationConfig::default());
         column.panes.swap(upper, lower);
         column.active_pane_idx = new_active;
-        column.compute_pane_sizes(height, gap);
         true
     }
 
@@ -207,15 +205,11 @@ fn lift(ws: &mut WorkspaceMut<'_>, pane: PaneId) -> Option<Lifted> {
 
 /// Put a lifted pane into `spot` of `ws`: back into its column when that still exists, or into a
 /// fresh column with the same identity when the swap had emptied it.
-fn land(ws: &mut WorkspaceMut<'_>, lifted: Lifted, spot: Spot, area: Option<Rectangle>) {
+fn land(ws: &mut WorkspaceMut<'_>, lifted: Lifted, spot: Spot) {
     let Lifted { pane, column_gone, column_id } = lifted;
     if column_gone {
         let at = spot.col.min(ws.scrolling.columns.len());
-        let gaps = ws.scrolling.options.gaps;
-        let mut column = ws.scrolling.new_column(column_id, pane);
-        if let Some(area) = area {
-            column.compute_pane_sizes(area.size.h, gaps);
-        }
+        let column = ws.scrolling.new_column(column_id, pane);
         ws.scroll_mut().add_column(Some(at), column, true);
         return;
     }
@@ -244,9 +238,6 @@ fn put_over_placeholder(
     let id = pane.id;
     ws.scrolling.columns[col].panes[row] = pane;
     ws.scrolling.columns[col].active_pane_idx = row;
-    let (height, gaps) = (ws.scroll().area().size.h, ws.scrolling.options.gaps);
-    ws.scrolling.columns[col].compute_pane_sizes(height, gaps);
-    ws.scroll_mut().update_all_column_widths();
     slide_from(ws, id, from, slide);
 }
 

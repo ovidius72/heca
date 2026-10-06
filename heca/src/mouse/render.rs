@@ -71,19 +71,14 @@ pub(crate) fn render_insert_hint(state: &mut AppState, pane_area: Rectangle) {
             let space_x = if col_idx == 0 {
                 0.0
             } else if col_idx < ws.scrolling.columns.len() {
-                let prev_x = ws.scrolling.column_x(col_idx - 1);
-                let prev_w = ws
-                    .scrolling
-                    .column_widths
-                    .get(col_idx - 1)
-                    .copied()
-                    .unwrap_or(0.0);
+                let prev_x = ws.scroll().column_x(col_idx - 1);
+                let prev_w = ws.scroll().column_width(col_idx - 1);
                 prev_x + prev_w + gaps * 0.5
             } else if ws.scrolling.columns.is_empty() {
                 0.0
             } else {
-                let last_x = ws.scrolling.column_x(ws.scrolling.columns.len() - 1);
-                let last_w = ws.scrolling.column_widths.last().copied().unwrap_or(0.0);
+                let last_x = ws.scroll().column_x(ws.scrolling.columns.len() - 1);
+                let last_w = ws.scroll().column_width(ws.scrolling.columns.len() - 1);
                 last_x + last_w - gaps * 0.5
             };
 
@@ -96,33 +91,29 @@ pub(crate) fn render_insert_hint(state: &mut AppState, pane_area: Rectangle) {
         PaneInsertTarget::InColumn { col_idx, pane_idx } => {
             let col_len = ws.scrolling.columns.len();
             let space_x = if col_idx < col_len {
-                ws.scrolling.column_x(col_idx)
+                ws.scroll().column_x(col_idx)
             } else if col_len == 0 {
                 0.0
             } else {
-                ws.scrolling.column_x(col_len - 1)
+                ws.scroll().column_x(col_len - 1)
             };
 
-            let col_w = ws
-                .scrolling
-                .column_widths
-                .get(col_idx)
-                .copied()
-                .unwrap_or(0.0);
+            let col_w = ws.scroll().column_width(col_idx);
 
             let space_y = if col_idx < ws.scrolling.columns.len() {
                 let col = &ws.scrolling.columns[col_idx];
                 if pane_idx == col.panes.len() && pane_idx > 0 {
                     let last_pane_idx = pane_idx - 1;
-                    let last_pane_y = ws.scrolling.pane_y_in_column(col_idx, last_pane_idx);
-                    let last_pane_h = col
-                        .pane_sizes
+                    let last_pane_y = ws.scroll().pane_y_in_column(col_idx, last_pane_idx);
+                    let last_pane_h = ws
+                        .scroll()
+                        .pane_heights(col_idx)
                         .get(last_pane_idx)
-                        .map(|s| s.h)
+                        .copied()
                         .unwrap_or(0.0);
                     last_pane_y + last_pane_h
                 } else {
-                    ws.scrolling.pane_y_in_column(col_idx, pane_idx)
+                    ws.scroll().pane_y_in_column(col_idx, pane_idx)
                 }
             } else {
                 0.0
@@ -238,20 +229,14 @@ fn render_swap_target_hint(state: &mut AppState, pane_area: Rectangle) {
         None => return,
     };
 
-    let col_x = ws.scrolling.column_x(col_idx) - ws.scroll().view_pos();
-    let pane_y = ws.scrolling.pane_y_in_column(col_idx, pane_idx);
-    let col_w = ws
-        .scrolling
-        .column_widths
-        .get(col_idx)
-        .copied()
-        .unwrap_or(0.0);
+    let col_x = ws.scroll().column_x(col_idx) - ws.scroll().view_pos();
+    let pane_y = ws.scroll().pane_y_in_column(col_idx, pane_idx);
+    let col_w = ws.scroll().column_width(col_idx);
     let pane_h = ws
-        .scrolling
-        .columns
-        .get(col_idx)
-        .and_then(|c| c.pane_sizes.get(pane_idx))
-        .map(|s| s.h)
+        .scroll()
+        .pane_heights(col_idx)
+        .get(pane_idx)
+        .copied()
         .unwrap_or(0.0);
 
     let rx = pa_x + col_x as f32;

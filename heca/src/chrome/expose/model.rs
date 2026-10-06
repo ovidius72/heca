@@ -30,8 +30,8 @@ pub(crate) struct ExposePane {
     /// backend never reported one. Plain text by the time it reaches a card: `register` resolves it
     /// from `AppState`, so the components below stay testable without a window.
     pub(crate) folder: Option<String>,
-    /// The pane's **resolved** height in layout pixels, read from `Column::pane_sizes` for the same
-    /// reason [`ExposeColumn::width`] is read from `column_widths`: the layout already decided it,
+    /// The pane's **resolved** height in layout pixels, asked of the layout for the same
+    /// reason [`ExposeColumn::width`] is: the layout already decided it,
     /// and a second calculation here would be a second answer that can disagree.
     ///
     /// This is what makes a stack of unequal panes look unequal. The map divided every column
@@ -46,7 +46,7 @@ pub(crate) struct ExposePane {
 pub(crate) struct ExposeColumn {
     pub(crate) col_idx: usize,
     /// The column's **resolved** width in layout pixels, read from
-    /// `ScrollingSpace::column_widths` rather than recomputed — the layout already decided it, and
+    /// the layout rather than recomputed — the layout already decided it, and
     /// a second calculation here would be a second answer that can disagree.
     pub(crate) width: f64,
     pub(crate) panes: Vec<ExposePane>,
@@ -122,15 +122,12 @@ pub(crate) fn model(
                 .columns
                 .iter()
                 .enumerate()
-                .map(|(col_idx, col)| ExposeColumn {
+                .map(|(col_idx, col)| {
+                    let heights = ws.scroll().pane_heights(col_idx);
+                    ExposeColumn {
                     col_idx,
-                    // The resolved width when the layout has one for this index; otherwise the
-                    // column's own minimum. A missing entry means the layout has not run yet.
-                    width: scrolling
-                        .column_widths
-                        .get(col_idx)
-                        .copied()
-                        .unwrap_or(heca_core::layout::scrolling::MIN_COLUMN_WIDTH),
+                    // The width the layout gives this column in this window.
+                    width: ws.scroll().column_width(col_idx),
                     panes: col
                         .panes
                         .iter()
@@ -148,16 +145,16 @@ pub(crate) fn model(
                             active: pane_idx == col.active_pane_idx
                                 && col_idx == ws.scroll().active_column_idx(),
                             // The layout's resolved height, which already accounts for
-                            // `preferred_height`. A missing entry means the layout has not run
-                            // yet, and equal weights are exactly the even split it falls back to.
-                            height: col
-                                .pane_sizes
+                            // `preferred_height`; a column with no room gives equal weights, which
+                            // is exactly the even split.
+                            height: heights
                                 .get(pane_idx)
-                                .map(|s| s.h)
+                                .copied()
                                 .filter(|h| *h > 0.0)
                                 .unwrap_or(1.0),
                         })
                         .collect(),
+                    }
                 })
                 .collect();
 
@@ -289,7 +286,7 @@ mod tests {
         // **Stand on a later column**, so `column_x(active)` is not zero and reading `view_offset`
         // raw gives a different answer from `view_pos()`. With the active column at 0 the two
         // coincide and the bug hides — which is exactly how it survived until it was on screen.
-        let anchor = s.session.workspaces[0].scrolling.column_x(1);
+        let anchor = s.l().workspace(0).map_or(0.0, |ws| ws.scroll().column_x(1));
         assert!(
             anchor > 0.0,
             "the second column starts somewhere other than 0: {anchor}"

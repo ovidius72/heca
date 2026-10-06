@@ -513,8 +513,7 @@ Session                          ← the CONTENT every window shares
 │       ├── scrolling: ScrollingSpace   ← horizontal COLUMNS (continuous scroll)
 │       │   ├── columns: Vec<Column>
 │       │   │   ├── width: ColumnWidth  ← Proportion | Fixed
-│       │   │   ├── panes: Vec<Pane>    ← vertical stack within column
-│       │   │   └── pane_sizes: Vec<Size>
+│       │   │   └── panes: Vec<Pane>    ← vertical stack within column
 │       │   └── options: LayoutOptions
 │       └── floating_panes: Vec<FloatingPane>
 └── options: LayoutOptions
@@ -1647,7 +1646,7 @@ Use for multi-step analysis, advisory review, or parallel implementation tasks.
 ### Don't
 
 - **Do NOT add a second WM layout engine.** The NIRI-inspired scrolling-column engine is canonical for arranging panes/columns. Old BSP code in `heca-core/src/pane.rs` is kept for reference only — do not wire it in. (Note: `taffy` in `heca-grid-ui` is *component-internal* widget layout — a different altitude — and does not count; it never positions panes/columns.)
-- **Do NOT call `update_all_column_widths()` more than necessary.** Prefer stored column widths.
+- **Do NOT store pixels in the content.** A column's width and a pane's height are derived from the content and the window's area when asked (`ScrollingRef::column_width`, `pane_heights`, `column_x`); nothing is cached, so nothing can be stale and two windows of different sizes can both be right.
 - **Do NOT use BSP tree concepts** (split direction, child ratios, etc.). NIRI layout is a flat column list with vertical pane stacks.
 - **Do NOT hardcode `ctrl=false` in prefix mode.** The prefix key is a mechanism, not a modifier eraser.
 - **Do NOT use the old `Rect` type** from `heca-core/src/types.rs`. Use `Rectangle` from `heca-core/src/layout/types.rs` for new code.
@@ -1826,7 +1825,6 @@ See `niri-compatibility-review.md` for full details. Key issues:
 | K3 | No prefix timeout | Medium | ✅ **FIXED** — 500ms auto-exit |
 | K4 | Shift+special-char bindings fail on some layouts | High | ✅ **FIXED** — `KeyCombo::parse()` maps shifted symbols |
 | K5 | Registry bypasses (direct function calls) | High | ✅ **FIXED** — all routing through `registry.execute()` |
-| L1 | `update_all_column_widths()` on every mutation | Critical | ✅ **FIXED** — removed from float/unfloat path |
 | L2 | Proportion widths not persistent | High | Open |
 | L4 | Focus up/down conflated with workspace switch | Medium | ✅ **FIXED** — `j/k` stay within workspace; `u/d` switch |
 | L6 | Tabbed display, maximize, fullscreen dead code | Medium | Open |

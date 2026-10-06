@@ -31,10 +31,6 @@ pub struct Column {
     pub is_pending_maximized: bool,
     /// Animation offset during column moves (e.g., when a column is added/removed nearby).
     pub move_offset: Animated<f64>,
-    /// Cached computed width (updated after resize).
-    pub computed_width: f64,
-    /// Cached pane sizes.
-    pub pane_sizes: Vec<Size>,
 }
 
 impl Column {
@@ -50,8 +46,6 @@ impl Column {
             is_pending_fullscreen: false,
             is_pending_maximized: false,
             move_offset: Animated::Static(0.0),
-            computed_width: 0.0,
-            pane_sizes: vec![],
         }
     }
 
@@ -150,7 +144,6 @@ impl Column {
         if idx <= self.active_pane_idx {
             self.active_pane_idx += 1;
         }
-        self.pane_sizes.clear(); // Invalidate cache
     }
 
     /// **Make room for a pane that is about to exist.**
@@ -164,7 +157,7 @@ impl Column {
     /// column found nothing: they always did.
     ///
     /// ⚠️ **This is the ADD, not the distribution.** It would be simpler to reserve a floor for
-    /// every pane inside `compute_pane_sizes`, and it is wrong there: that runs on every drag too,
+    /// every pane inside `pane_heights`, and it is wrong there: that runs on every drag too,
     /// and a boundary must move space between its own two panes and *nothing else* — held by
     /// `a_resize_leaves_every_other_pane_where_it_was`. Making room is something a new pane does,
     /// once, at the moment it arrives.
@@ -205,17 +198,18 @@ impl Column {
         } else if idx < self.active_pane_idx {
             self.active_pane_idx -= 1;
         }
-        self.pane_sizes.clear();
         Some(pane)
     }
 
-    /// Compute pane sizes within this column given the available height.
+    /// **How tall each pane is** in a column given `working_height` of room — worked out from the
+    /// panes' preferred heights each time it is asked, so it is never out of date, and the shared
+    /// content holds no window's pixels.
     ///
     /// This is NIRI's height distribution algorithm simplified.
-    pub fn compute_pane_sizes(&mut self, working_height: f64, gaps: f64) {
+    pub fn pane_heights(&self, working_height: f64, gaps: f64) -> Vec<f64> {
         let pane_count = self.panes.len();
         if pane_count == 0 {
-            return;
+            return Vec::new();
         }
 
         let total_gaps = gaps * (pane_count as f64 + 1.0);
@@ -284,13 +278,7 @@ impl Column {
             }
         }
 
-        // Set widths to column width.
-        let width = self.computed_width;
-        for size in &mut sizes {
-            size.w = width;
-        }
-
-        self.pane_sizes = sizes;
+        sizes.into_iter().map(|s| s.h).collect()
     }
 
     /// Get the render offset for this column (includes move animation).
@@ -379,7 +367,7 @@ impl Column {
     ///
     /// # A boundary moves space between its OWN two panes
     ///
-    /// This used to pin **one** pane and let [`compute_pane_sizes`](Self::compute_pane_sizes)
+    /// This used to pin **one** pane and let [`pane_heights`](Self::pane_heights)
     /// redistribute the remainder over every pane that was still auto-sized. With two panes the
     /// only auto pane *was* the neighbour, so it looked right. With three it was plainly wrong:
     /// dragging the top boundary took space from the bottom pane as well, which had nothing to do
@@ -416,15 +404,16 @@ impl Column {
         } else {
             pane_idx - 1
         };
+        let heights = self.pane_heights(working_height, gaps);
         let height_of = |col: &Self, idx: usize| {
             // The pane's **actual current** height, not a fixed 200px default: a pane that was
             // still auto-sized (an even split) would jump to ~200px on the first drag delta
-            // otherwise. Falls back to 200px only when no layout has been computed yet (a pure
-            // unit test).
+            // otherwise. Falls back to 200px only when the column has no room to work out (a
+            // unit test with no size).
             col.panes[idx].preferred_height.unwrap_or_else(|| {
-                col.pane_sizes
+                heights
                     .get(idx)
-                    .map(|s| s.h)
+                    .copied()
                     .filter(|h| *h > 0.0)
                     .unwrap_or(200.0)
             })
@@ -444,7 +433,6 @@ impl Column {
         }
         self.panes[pane_idx].preferred_height = Some(mine + delta);
         self.panes[other].preferred_height = Some(theirs - delta);
-        self.compute_pane_sizes(working_height, gaps);
     }
 
     /// Animate this column moving from an offset.
@@ -550,8 +538,8 @@ mod pane_height_tests {
             if let Some(h) = fixed {
                 col.panes[0].preferred_height = Some(h);
             }
-            col.compute_pane_sizes(working, gaps);
-            let total: f64 = col.pane_sizes.iter().map(|s| s.h).sum();
+            let heights = col.pane_heights(working, gaps);
+            let total: f64 = heights.iter().sum();
             let available = working - gaps * (col.panes.len() as f64 + 1.0);
             assert!(
                 total <= available + 0.5,
@@ -567,8 +555,8 @@ mod pane_height_tests {
         let gaps = 4.0;
         let mut col = column_of(3);
         col.panes[0].preferred_height = Some(200.0);
-        col.compute_pane_sizes(working, gaps);
-        let total: f64 = col.pane_sizes.iter().map(|s| s.h).sum();
+        let heights = col.pane_heights(working, gaps);
+        let total: f64 = heights.iter().sum();
         let available = working - gaps * 4.0;
         assert!((total - available).abs() < 0.5, "{total} of {available}");
     }
@@ -627,17 +615,17 @@ mod pane_height_tests {
         // sizes the user had just set.
         col.panes[0].preferred_height = Some(250.0);
         col.panes[1].preferred_height = Some(MIN_PANE_HEIGHT);
-        col.compute_pane_sizes(working, gaps);
+        let heights = col.pane_heights(working, gaps);
 
         assert!(
-            (col.pane_sizes[0].h - 250.0).abs() < 0.5,
+            (heights[0] - 250.0).abs() < 0.5,
             "a pinned pane keeps the height it was given (got {})",
-            col.pane_sizes[0].h
+            heights[0]
         );
         assert!(
-            (col.pane_sizes[1].h - MIN_PANE_HEIGHT).abs() < 0.5,
+            (heights[1] - MIN_PANE_HEIGHT).abs() < 0.5,
             "and so does the one on the other side of that boundary (got {})",
-            col.pane_sizes[1].h
+            heights[1]
         );
     }
 
@@ -645,13 +633,13 @@ mod pane_height_tests {
     /// the last pane out — which is what the floor's own note asks for.
     #[test]
     fn a_short_column_shrinks_every_pane_rather_than_losing_one() {
-        let mut col = column_of(5);
-        col.compute_pane_sizes(200.0, 2.0);
+        let col = column_of(5);
+        let heights = col.pane_heights(200.0, 2.0);
         let available = 200.0 - 2.0 * 6.0;
-        let total: f64 = col.pane_sizes.iter().map(|s| s.h).sum();
+        let total: f64 = heights.iter().sum();
         assert!(total <= available + 0.5, "{total} of {available}");
         assert!(
-            col.pane_sizes.iter().all(|s| s.h > 0.0),
+            heights.iter().all(|h| *h > 0.0),
             "no pane collapses to nothing"
         );
     }

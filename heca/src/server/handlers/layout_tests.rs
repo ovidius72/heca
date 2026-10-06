@@ -62,7 +62,9 @@ fn a_divider_drag_resizes_the_column_it_names() {
 fn a_divider_drag_between_stacked_panes_changes_their_heights() {
     let mut window = two_workspaces_of_two_columns();
     window.ws().scroll_mut().add_pane_to_column(0, None, Pane::new(PaneId(99), "x"), false);
-    let height = |w: &Windowed| w.session.workspaces[0].scrolling.columns[0].pane_sizes[0].h;
+    let height = |w: &Windowed| {
+        w.l().workspace(0).map_or(0.0, |ws| ws.scroll().pane_heights(0)[0])
+    };
     let before = height(&window);
     let changes = run(
         &mut window,
@@ -91,4 +93,24 @@ fn zooming_a_column_that_is_not_there_says_nothing() {
     let mut window = two_workspaces_of_two_columns();
     assert!(run(&mut window, WmAction::ZoomColumnAtIndex { ws_idx: 5, col_idx: 0 }).is_empty());
     assert!(run(&mut window, WmAction::ZoomColumnAtIndex { ws_idx: 0, col_idx: 9 }).is_empty());
+}
+
+/// `resize_to` on a pane moves the active pane towards that height (the column still fills exactly,
+/// so the others share the rest).
+#[test]
+fn resizing_a_pane_to_a_height_sets_it() {
+    let mut window = two_workspaces_of_two_columns();
+    let col = window.l().workspace(0).map_or(0, |ws| ws.scroll().active_column_idx());
+    window.ws().scroll_mut().add_pane_to_column(col, None, Pane::new(PaneId(99), "x"), false);
+    let height = |w: &Windowed, row: usize| {
+        w.l().workspace(0).map_or(0.0, |ws| ws.scroll().pane_heights(col)[row])
+    };
+    let active_row = window.session.workspaces[0].scrolling.columns[col].active_pane_idx;
+    let before = height(&window, active_row);
+    let changes = run(
+        &mut window,
+        WmAction::ResizeTo { target: ResizeTarget::Pane, width: 0.0, height: 250.0 },
+    );
+    assert_eq!(changes, [Change::LayoutChanged]);
+    assert!(height(&window, active_row) < before - 10.0, "the pane got shorter");
 }

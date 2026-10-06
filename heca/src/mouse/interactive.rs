@@ -165,8 +165,8 @@ pub(super) fn handle_interactive_move_drag(state: &mut AppState, pos: (f32, f32)
         && let Some(mut ws) = state.layout_mut().workspace_mut(active_ws)
         && let Some((ci, pi)) = super::find_pane_in_workspace(&ws, source_id)
     {
-        let col_x = ws.scrolling.column_x(ci) - ws.scroll().view_pos();
-        let pane_y = ws.scroll().area().loc.y + ws.scrolling.pane_y_in_column(ci, pi);
+        let col_x = ws.scroll().column_x(ci) - ws.scroll().view_pos();
+        let pane_y = ws.scroll().area().loc.y + ws.scroll().pane_y_in_column(ci, pi);
         ws.scrolling.columns[ci].panes[pi].interactive_move_offset = Point::new(
             pointer_in.0 as f64 - offset.0 as f64 - col_x,
             pointer_in.1 as f64 - offset.1 as f64 - pane_y,
@@ -178,7 +178,7 @@ pub(super) fn handle_interactive_move_drag(state: &mut AppState, pos: (f32, f32)
             (pointer_in.0 as f64) + ws.scroll().view_pos(),
             pointer_in.1 as f64,
         );
-        state.mouse.insert_hint = Some(ws.scrolling.insert_position(space));
+        state.mouse.insert_hint = Some(ws.scroll().insert_position(space));
     }
 }
 
@@ -214,8 +214,8 @@ fn transition_to_moving(state: &mut AppState, pane_id: PaneId, mouse_pos: (f32, 
             None => return,
         };
         ws.scrolling.columns[ci].panes[pi].interactive_move_offset = Point::default();
-        let col_x = ws.scrolling.column_x(ci);
-        let pane_y = ws.scrolling.pane_y_in_column(ci, pi);
+        let col_x = ws.scroll().column_x(ci);
+        let pane_y = ws.scroll().pane_y_in_column(ci, pi);
         (ci, pi, col_x, pane_y)
     };
 

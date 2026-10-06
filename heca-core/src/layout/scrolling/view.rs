@@ -9,7 +9,7 @@ impl ScrollingRef<'_> {
         if self.space.columns.is_empty() {
             return 0.0;
         }
-        self.space.column_x(self.view.active_column) + self.view.offset.current()
+        self.column_x(self.view.active_column) + self.view.offset.current()
     }
 
     /// Target view position.
@@ -17,7 +17,7 @@ impl ScrollingRef<'_> {
         if self.space.columns.is_empty() {
             return 0.0;
         }
-        self.space.column_x(self.view.active_column) + self.view.offset.target()
+        self.column_x(self.view.active_column) + self.view.offset.target()
     }
 
     /// Compute the view offset to fit a column into view.
@@ -42,10 +42,10 @@ impl ScrollingRef<'_> {
                 } else {
                     idx.saturating_sub(1)
                 };
-                let source_x = self.space.column_x(source_idx);
-                let source_w = self.space.column_widths.get(source_idx).copied().unwrap_or(0.0);
-                let target_x = self.space.column_x(idx);
-                let target_w = self.space.column_widths.get(idx).copied().unwrap_or(0.0);
+                let source_x = self.column_x(source_idx);
+                let source_w = self.column_width(source_idx);
+                let target_x = self.column_x(idx);
+                let target_w = self.column_width(idx);
 
                 let total_width = if source_x < target_x {
                     target_x - source_x + target_w
@@ -64,8 +64,8 @@ impl ScrollingRef<'_> {
     }
 
     fn compute_view_offset_fit(&self, idx: usize) -> f64 {
-        let col_x = self.space.column_x(idx);
-        let col_w = self.space.column_widths.get(idx).copied().unwrap_or(0.0);
+        let col_x = self.column_x(idx);
+        let col_w = self.column_width(idx);
         let mode = self
             .columns
             .get(idx)
@@ -93,7 +93,7 @@ impl ScrollingRef<'_> {
     }
 
     fn compute_view_offset_centered(&self, idx: usize) -> f64 {
-        let col_w = self.space.column_widths.get(idx).copied().unwrap_or(0.0);
+        let col_w = self.column_width(idx);
         let mode = self
             .columns
             .get(idx)
@@ -145,8 +145,8 @@ impl ScrollingMut<'_> {
         let new_offset = self.reader().compute_view_offset_for_column(idx, Some(prev_idx));
 
         // Offset the view to account for column position change.
-        let new_col_x = self.space.column_x(idx);
-        let old_col_x = self.space.column_x(prev_idx);
+        let new_col_x = self.reader().column_x(idx);
+        let old_col_x = self.reader().column_x(prev_idx);
         self.view.offset.offset(old_col_x - new_col_x);
 
         // Animate to new view offset.
@@ -191,8 +191,8 @@ impl ScrollingMut<'_> {
         }
         let vw = self.view.area.size.w;
         let last = self.space.columns.len() - 1;
-        let first_left = self.space.column_x(0);
-        let last_right = self.space.column_x(last) + self.space.column_widths.get(last).copied().unwrap_or(0.0);
+        let first_left = self.reader().column_x(0);
+        let last_right = self.reader().column_x(last) + self.reader().column_width(last);
         // Everything fits → nothing to scroll.
         if last_right - first_left <= vw {
             return;
@@ -201,7 +201,7 @@ impl ScrollingMut<'_> {
         let min_view = first_left; // column 0 left-aligned
         let max_view = last_right - vw; // last column right-aligned
         let new_view = (self.reader().view_pos() + delta).clamp(min_view, max_view);
-        let new_offset = new_view - self.space.column_x(self.view.active_column);
+        let new_offset = new_view - self.reader().column_x(self.view.active_column);
         self.view.offset = ViewOffset::Static(new_offset);
     }
 
@@ -213,9 +213,9 @@ impl ScrollingMut<'_> {
         let columns = &self.space.columns;
         let gaps = self.space.options.gaps;
         let active = self.view.active_column;
-        let total_w: f64 = self.space.column_widths.iter().sum();
+        let total_w: f64 = (0..self.space.columns.len()).map(|i| self.reader().column_width(i)).sum();
         let content_w = total_w + gaps * columns.len().max(1) as f64;
-        let before_w: f64 = self.space.column_widths.iter().take(active).sum();
+        let before_w: f64 = (0..active).map(|i| self.reader().column_width(i)).sum();
         // Left extent: reveal all columns before the active one.
         let min_view = -(before_w + active as f64 * gaps + gaps);
         // Right extent: the last content edge aligns with the right edge of the area.
@@ -247,7 +247,6 @@ impl ScrollingMut<'_> {
     /// Update the working area (e.g., on resize).
     pub fn update_working_area(&mut self, working_area: Rectangle) {
         self.view.area = working_area;
-        self.update_all_column_widths();
         if !self.space.columns.is_empty() && self.view.offset.is_static() {
             let offset = self.reader().compute_view_offset_for_column(self.view.active_column, None);
             self.view.offset = ViewOffset::Static(offset);

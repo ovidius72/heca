@@ -14,7 +14,7 @@ impl ScrollingMut<'_> {
     }
 
     /// Add a column at a specific index (None = after active column).
-    pub fn add_column(&mut self, idx: Option<usize>, mut column: Column, activate: bool) {
+    pub fn add_column(&mut self, idx: Option<usize>, column: Column, activate: bool) {
         let was_empty = self.space.columns.is_empty();
         let idx = idx.unwrap_or_else(|| {
             if was_empty {
@@ -24,11 +24,6 @@ impl ScrollingMut<'_> {
             }
         });
 
-        // Compute column width.
-        column.computed_width = column.resolve_width(self.view.area.size.w, self.space.options.gaps);
-        column.compute_pane_sizes(self.view.area.size.h, self.space.options.gaps);
-
-        self.space.column_widths.insert(idx, column.computed_width);
         self.space.columns.insert(idx, column);
 
         if !was_empty && idx <= self.view.active_column {
@@ -36,7 +31,7 @@ impl ScrollingMut<'_> {
         }
 
         // Animate movement of other columns.
-        let offset = self.space.column_x(idx + 1) - self.space.column_x(idx);
+        let offset = self.reader().column_x(idx + 1) - self.reader().column_x(idx);
         if self.view.active_column <= idx {
             for col in &mut self.space.columns[idx + 1..] {
                 col.animate_move_from(-offset, AnimationConfig::default());
@@ -64,7 +59,6 @@ impl ScrollingMut<'_> {
             self.view.activate_prev_on_removal = prev_offset;
         }
 
-        self.update_all_column_widths();
     }
 
     /// **Take a pane out of its column and give it one of its own, immediately to the right.**
@@ -106,7 +100,7 @@ impl ScrollingMut<'_> {
             return;
         }
 
-        let prev_next_x = self.space.column_x(col_idx + 1);
+        let prev_next_x = self.reader().column_x(col_idx + 1);
         let col = &mut self.space.columns[col_idx];
         let idx = pane_idx.unwrap_or(col.panes.len());
 
@@ -123,10 +117,9 @@ impl ScrollingMut<'_> {
         }
 
         // Recompute width since adding a pane may change it.
-        self.update_all_column_widths();
 
         // Animate column position changes.
-        let offset = self.space.column_x(col_idx + 1) - prev_next_x;
+        let offset = self.reader().column_x(col_idx + 1) - prev_next_x;
         if self.view.active_column <= col_idx {
             for c in &mut self.space.columns[col_idx + 1..] {
                 c.animate_move_from(-offset, AnimationConfig::default());
@@ -145,7 +138,7 @@ impl ScrollingMut<'_> {
         }
 
         // Animate movement of remaining columns.
-        let offset = self.space.column_x(idx + 1) - self.space.column_x(idx);
+        let offset = self.reader().column_x(idx + 1) - self.reader().column_x(idx);
         if self.view.active_column <= idx {
             for col in &mut self.space.columns[idx + 1..] {
                 col.animate_move_from(offset, AnimationConfig::default());
@@ -157,7 +150,6 @@ impl ScrollingMut<'_> {
         }
 
         let col = self.space.columns.remove(idx);
-        self.space.column_widths.remove(idx);
 
         if self.space.columns.is_empty() {
             self.view.active_column = 0;
@@ -194,29 +186,7 @@ impl ScrollingMut<'_> {
             return self.remove_column(col_idx).map(|mut c| c.panes.remove(0));
         }
 
-        let prev_width = self.space.columns[col_idx].computed_width;
-        let pane = {
-            let col = &mut self.space.columns[col_idx];
-            col.remove_pane(pane_idx)?
-        };
-
-        // Recompute sizes.
-        self.space.columns[col_idx].compute_pane_sizes(self.view.area.size.h, self.space.options.gaps);
-        self.update_all_column_widths();
-
-        // Animate column width changes.
-        let offset = prev_width - self.space.columns[col_idx].computed_width;
-        if offset != 0.0 {
-            if self.view.active_column <= col_idx {
-                for c in &mut self.space.columns[col_idx + 1..] {
-                    c.animate_move_from(offset, AnimationConfig::default());
-                }
-            } else {
-                for c in &mut self.space.columns[..=col_idx] {
-                    c.animate_move_from(-offset, AnimationConfig::default());
-                }
-            }
-        }
+        let pane = self.space.columns[col_idx].remove_pane(pane_idx)?;
 
         Some(pane)
     }
@@ -306,13 +276,14 @@ impl ScrollingMut<'_> {
 
         // Save old column positions and pane position before any changes.
         let old_xs: Vec<(ColumnId, f64)> = self
+            .reader()
             .column_xs()
             .zip(self.space.columns.iter())
             .map(|(x, c)| (c.id, x))
             .collect();
-        let old_source_col_x = self.space.column_x(source_col);
+        let old_source_col_x = self.reader().column_x(source_col);
         let old_pane_y =
-            self.space.pane_y_in_column(source_col, self.space.columns[source_col].active_pane_idx);
+            self.reader().pane_y_in_column(source_col, self.space.columns[source_col].active_pane_idx);
 
         let pane_idx = self.space.columns[source_col].active_pane_idx;
         let pane = self.space.columns[source_col].remove_pane(pane_idx);
@@ -340,11 +311,10 @@ impl ScrollingMut<'_> {
             self.view.active_column = target_col;
         }
 
-        self.update_all_column_widths();
 
         // Animate the moved pane from its old visual position to its new one.
-        let new_col_x = self.space.column_x(self.view.active_column);
-        let new_pane_y = self.space.pane_y_in_column(
+        let new_col_x = self.reader().column_x(self.view.active_column);
+        let new_pane_y = self.reader().pane_y_in_column(
             self.view.active_column,
             self.space.columns[self.view.active_column].panes.len() - 1,
         );
@@ -357,7 +327,7 @@ impl ScrollingMut<'_> {
         moved_pane.animate_move_from(Point::new(offset_x, offset_y), AnimationConfig::default());
 
         // Animate all columns from their old positions.
-        let new_xs: Vec<f64> = self.space.column_xs().collect();
+        let new_xs: Vec<f64> = self.reader().column_xs().collect();
         for (i, col) in self.space.columns.iter_mut().enumerate() {
             let old_x = old_xs
                 .iter()
@@ -383,12 +353,13 @@ impl ScrollingMut<'_> {
 
         // Save old column positions and pane position before any changes.
         let old_xs: Vec<(ColumnId, f64)> = self
+            .reader()
             .column_xs()
             .zip(self.space.columns.iter())
             .map(|(x, c)| (c.id, x))
             .collect();
-        let old_source_col_x = self.space.column_x(source_col);
-        let old_pane_y = self.space.pane_y_in_column(source_col, pane_idx);
+        let old_source_col_x = self.reader().column_x(source_col);
+        let old_pane_y = self.reader().pane_y_in_column(source_col, pane_idx);
 
         let pane = self.space.columns[source_col].remove_pane(pane_idx);
         let Some(pane) = pane else {
@@ -412,19 +383,16 @@ impl ScrollingMut<'_> {
                 insert_idx
             };
             self.space.columns.insert(insert_idx, new_col);
-            self.space.column_widths.insert(insert_idx, 0.0);
             self.view.active_column = insert_idx;
         } else {
             self.space.columns.insert(insert_idx, new_col);
-            self.space.column_widths.insert(insert_idx, 0.0);
             self.view.active_column = insert_idx;
         }
 
-        self.update_all_column_widths();
 
         // Animate the moved pane from its old visual position to its new one.
-        let new_col_x = self.space.column_x(self.view.active_column);
-        let new_pane_y = self.space.pane_y_in_column(self.view.active_column, 0);
+        let new_col_x = self.reader().column_x(self.view.active_column);
+        let new_pane_y = self.reader().pane_y_in_column(self.view.active_column, 0);
         let offset_x = old_source_col_x - new_col_x;
         let offset_y = old_pane_y - new_pane_y;
         let moved_pane = self.space.columns[self.view.active_column]
@@ -434,7 +402,7 @@ impl ScrollingMut<'_> {
         moved_pane.animate_move_from(Point::new(offset_x, offset_y), AnimationConfig::default());
 
         // Animate all columns from their old positions.
-        let new_xs: Vec<f64> = self.space.column_xs().collect();
+        let new_xs: Vec<f64> = self.reader().column_xs().collect();
         for (i, col) in self.space.columns.iter_mut().enumerate() {
             let old_x = old_xs
                 .iter()
@@ -471,6 +439,7 @@ impl ScrollingMut<'_> {
 
         // Save old column positions by ID (for the shift animation).
         let old_xs: Vec<(ColumnId, f64)> = self
+            .reader()
             .column_xs()
             .zip(self.space.columns.iter())
             .map(|(x, c)| (c.id, x))
@@ -479,9 +448,7 @@ impl ScrollingMut<'_> {
 
         // Remove from old position and insert at new position.
         let column = self.space.columns.remove(from);
-        let width = self.space.column_widths.remove(from);
         self.space.columns.insert(to, column);
-        self.space.column_widths.insert(to, width);
 
         // The moved column stays active. Update the index BEFORE computing positions.
         self.view.active_column = to;
@@ -491,7 +458,7 @@ impl ScrollingMut<'_> {
         let delta = old_view_pos - new_view_pos;
         self.view.offset.offset(delta);
 
-        self.space.animate_columns_from(&old_xs);
+        self.animate_columns_from(&old_xs);
         true
     }
 
@@ -504,23 +471,29 @@ impl ScrollingMut<'_> {
             return false;
         }
         let old_xs: Vec<(ColumnId, f64)> = self
+            .reader()
             .column_xs()
             .zip(self.space.columns.iter())
             .map(|(x, c)| (c.id, x))
             .collect();
         self.space.columns.swap(a, b);
-        self.space.column_widths.swap(a, b);
-        self.space.animate_columns_from(&old_xs);
+        self.animate_columns_from(&old_xs);
         true
     }
 
-    /// Update all column widths from their configurations.
-    pub fn update_all_column_widths(&mut self) {
+    /// Animate every column from its previous x (keyed by [`ColumnId`]) to its new laid-out x —
+    /// shared by [`reorder_column`](Self::reorder_column) and [`swap_columns`](Self::swap_columns).
+    fn animate_columns_from(&mut self, old_xs: &[(ColumnId, f64)]) {
+        let new_xs: Vec<f64> = self.reader().column_xs().collect();
         for (i, col) in self.space.columns.iter_mut().enumerate() {
-            col.computed_width = col.resolve_width(self.view.area.size.w, self.space.options.gaps);
-            col.compute_pane_sizes(self.view.area.size.h, self.space.options.gaps);
-            if let Some(width) = self.space.column_widths.get_mut(i) {
-                *width = col.computed_width;
+            let old_x = old_xs
+                .iter()
+                .find(|(id, _)| *id == col.id)
+                .map(|(_, x)| *x)
+                .unwrap_or(new_xs[i]);
+            let diff = old_x - new_xs[i];
+            if diff.abs() > 0.5 {
+                col.animate_move_from(diff, AnimationConfig::default());
             }
         }
     }

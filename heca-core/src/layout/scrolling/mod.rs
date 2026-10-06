@@ -29,8 +29,6 @@ enum Direction {
 pub struct ScrollingSpace {
     /// Columns of panes.
     pub columns: Vec<Column>,
-    /// Cached per-column data (computed widths).
-    pub column_widths: Vec<f64>,
     /// Layout options.
     pub options: LayoutOptions,
 }
@@ -53,7 +51,6 @@ impl ScrollingSpace {
     pub fn new(options: LayoutOptions) -> Self {
         Self {
             columns: Vec::new(),
-            column_widths: Vec::new(),
             options,
         }
     }
@@ -70,38 +67,6 @@ impl ScrollingSpace {
 
     pub fn is_empty(&self) -> bool {
         self.columns.is_empty()
-    }
-
-    /// X position of each column (cumulative, starting at 0).
-    fn column_xs(&self) -> impl Iterator<Item = f64> + '_ {
-        let gaps = self.options.gaps;
-        let mut x = 0.0;
-        let widths = self
-            .column_widths
-            .iter()
-            .copied()
-            .chain(std::iter::once(0.0));
-        widths.map(move |width| {
-            let rv = x;
-            x += width + gaps;
-            rv
-        })
-    }
-
-    /// X position of a specific column.
-    pub fn column_x(&self, idx: usize) -> f64 {
-        self.column_xs().nth(idx).unwrap_or(0.0)
-    }
-
-    /// Compute the Y offset of a pane within a column.
-    pub fn pane_y_in_column(&self, col_idx: usize, pane_idx: usize) -> f64 {
-        let col = &self.columns[col_idx];
-        let gaps = self.options.gaps;
-        let mut y = gaps;
-        for i in 0..pane_idx.min(col.pane_sizes.len()) {
-            y += col.pane_sizes[i].h + gaps;
-        }
-        y
     }
 
     /// A new column holding `pane`, at the layout's
@@ -125,29 +90,59 @@ impl ScrollingSpace {
             || (self.options.always_center_single_column && self.columns.len() <= 1)
     }
 
-    fn capture_column_positions(&self) -> Vec<(ColumnId, f64)> {
-        self.column_xs()
-            .zip(self.columns.iter())
-            .map(|(x, col)| (col.id, x))
-            .collect()
+}
+
+impl<'a> ScrollingRef<'a> {
+    /// **How wide column `idx` is on screen** — worked out from the column's width and the box it
+    /// is laid out in each time it is asked, so it is never out of date and the shared content
+    /// holds no window's pixels.
+    pub fn column_width(&self, idx: usize) -> f64 {
+        self.space.columns.get(idx).map_or(0.0, |column| {
+            column.resolve_width(self.view.area.size.w, self.space.options.gaps)
+        })
     }
 
-    /// Animate every column from its previous x (keyed by [`ColumnId`]) to its new
-    /// laid-out x — shared by [`ScrollingMut::reorder_column`] and
-    /// [`ScrollingMut::swap_columns`].
-    fn animate_columns_from(&mut self, old_xs: &[(ColumnId, f64)]) {
-        let new_xs: Vec<f64> = self.column_xs().collect();
-        for (i, col) in self.columns.iter_mut().enumerate() {
-            let old_x = old_xs
-                .iter()
-                .find(|(id, _)| *id == col.id)
-                .map(|(_, x)| *x)
-                .unwrap_or(new_xs[i]);
-            let diff = old_x - new_xs[i];
-            if diff.abs() > 0.5 {
-                col.animate_move_from(diff, AnimationConfig::default());
-            }
+    /// X position of each column (cumulative, starting at 0), and one past the last.
+    pub fn column_xs(&self) -> impl Iterator<Item = f64> + '_ {
+        let gaps = self.space.options.gaps;
+        let mut x = 0.0;
+        let widths = (0..self.space.columns.len())
+            .map(|idx| self.column_width(idx))
+            .chain(std::iter::once(0.0));
+        widths.map(move |width| {
+            let rv = x;
+            x += width + gaps;
+            rv
+        })
+    }
+
+    /// X position of a specific column.
+    pub fn column_x(&self, idx: usize) -> f64 {
+        self.column_xs().nth(idx).unwrap_or(0.0)
+    }
+
+    /// How tall each pane of column `col_idx` is.
+    pub fn pane_heights(&self, col_idx: usize) -> Vec<f64> {
+        self.space.columns.get(col_idx).map_or_else(Vec::new, |column| {
+            column.pane_heights(self.view.area.size.h, self.space.options.gaps)
+        })
+    }
+
+    /// Compute the Y offset of a pane within a column.
+    pub fn pane_y_in_column(&self, col_idx: usize, pane_idx: usize) -> f64 {
+        let gaps = self.space.options.gaps;
+        let mut y = gaps;
+        for height in self.pane_heights(col_idx).iter().take(pane_idx) {
+            y += height + gaps;
         }
+        y
+    }
+
+    pub(super) fn capture_column_positions(&self) -> Vec<(ColumnId, f64)> {
+        self.column_xs()
+            .zip(self.space.columns.iter())
+            .map(|(x, col)| (col.id, x))
+            .collect()
     }
 
     /// Compute the insert position for a point in space coordinates.
@@ -158,7 +153,7 @@ impl ScrollingSpace {
     /// 2. Find closest column gap vs closest tile gap.
     /// 3. Return whichever is closer.
     pub fn insert_position(&self, pos: Point) -> PaneInsertTarget {
-        let gaps = self.options.gaps;
+        let gaps = self.space.options.gaps;
         // pos is already in space coordinates (caller adds view_pos).
         let x = pos.x + gaps / 2.0;
         let y = pos.y + gaps / 2.0;
@@ -172,7 +167,7 @@ impl ScrollingSpace {
         let mut col_idx = 0usize;
         let mut found_col = false;
         for (i, col_x) in self.column_xs().enumerate() {
-            let col_w = self.column_widths.get(i).copied().unwrap_or(0.0);
+            let col_w = self.column_width(i);
             if x >= col_x && x < col_x + col_w {
                 col_idx = i;
                 found_col = true;
@@ -182,7 +177,7 @@ impl ScrollingSpace {
 
         // Past last column → NewColumn at end.
         if !found_col {
-            return PaneInsertTarget::NewColumn(self.columns.len());
+            return PaneInsertTarget::NewColumn(self.space.columns.len());
         }
 
         // Find closest column gap.
@@ -195,7 +190,7 @@ impl ScrollingSpace {
                 closest_col_gap_idx = i;
             }
             // Also check right edge of column (gap center after this column).
-            let col_w = self.column_widths.get(i).copied().unwrap_or(0.0);
+            let col_w = self.column_width(i);
             let right_x = col_x + col_w + gaps;
             let right_dist = (right_x - x).abs();
             if right_dist < closest_col_gap_dist {
@@ -205,30 +200,30 @@ impl ScrollingSpace {
         }
 
         // Find closest tile gap within the containing column.
-        let col = &self.columns[col_idx];
-        let _col_x = self.column_x(col_idx);
+        let col = &self.space.columns[col_idx];
+        let heights = self.pane_heights(col_idx);
         let mut tile_y = gaps;
         let mut closest_tile_idx = 0usize;
         let mut closest_tile_gap_dist = f64::MAX;
 
-        for (i, size) in col.pane_sizes.iter().enumerate() {
+        for (i, height) in heights.iter().enumerate() {
             let dist = (tile_y - y).abs();
             if dist < closest_tile_gap_dist {
                 closest_tile_gap_dist = dist;
                 closest_tile_idx = i;
             }
-            tile_y += size.h + gaps;
+            tile_y += height + gaps;
         }
         // Check bottom edge.
         let bottom_dist = (tile_y - y).abs();
         if bottom_dist < closest_tile_gap_dist {
             closest_tile_gap_dist = bottom_dist;
-            closest_tile_idx = col.pane_sizes.len();
+            closest_tile_idx = heights.len();
         }
 
         // Compare distances: column gap vs tile gap.
         if closest_col_gap_dist <= closest_tile_gap_dist {
-            PaneInsertTarget::NewColumn(closest_col_gap_idx.min(self.columns.len()))
+            PaneInsertTarget::NewColumn(closest_col_gap_idx.min(self.space.columns.len()))
         } else {
             PaneInsertTarget::InColumn {
                 col_idx,
@@ -236,9 +231,7 @@ impl ScrollingSpace {
             }
         }
     }
-}
 
-impl<'a> ScrollingRef<'a> {
     /// The box the columns are laid out in.
     pub fn area(&self) -> Rectangle {
         self.view.area
@@ -285,15 +278,18 @@ impl<'a> ScrollingRef<'a> {
             .iter()
             .enumerate()
             .map(|(col_idx, col)| {
-                let col_pos = Point::new(self.space.column_x(col_idx) + col.render_offset(), 0.0);
+                let col_pos = Point::new(self.column_x(col_idx) + col.render_offset(), 0.0);
                 let mut pane_y = self.view.area.loc.y + gaps;
                 let mut panes = Vec::with_capacity(col.panes.len());
+                let width = self.column_width(col_idx);
+                let heights = self.pane_heights(col_idx);
 
                 for (pane_idx, pane) in col.panes.iter().enumerate() {
-                    let size = col.pane_sizes.get(pane_idx).copied().unwrap_or(Size::new(
-                        col.computed_width,
-                        self.view.area.size.h / col.panes.len().max(1) as f64,
-                    ));
+                    let height = heights
+                        .get(pane_idx)
+                        .copied()
+                        .unwrap_or(self.view.area.size.h / col.panes.len().max(1) as f64);
+                    let size = Size::new(width, height);
 
                     // **Flow, then transform.** The slot is where the column stacks this pane; the
                     // displacement is the pane's own, from a move animation or a drag in flight.
@@ -323,7 +319,7 @@ impl<'a> ScrollingRef<'a> {
                         // of the working area — the box it would occupy the moment one arrives.
                         Rectangle::new(
                             view_off + col_pos + Point::new(0.0, self.view.area.loc.y + gaps),
-                            Size::new(col.computed_width, 0.0),
+                            Size::new(width, 0.0),
                         )
                     }),
                     panes,

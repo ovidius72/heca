@@ -104,18 +104,14 @@ pub(super) fn resize_to(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change>
         ResizeTarget::Column => {
             if let Some(col) = ws.scroll_mut().active_column_mut() {
                 col.width = ColumnWidth::Fixed(*width);
-                ws.scroll_mut().update_all_column_widths();
             }
         }
         ResizeTarget::Pane => {
-            let area_height = ws.scroll().area().size.h;
-            let gaps = ws.scrolling.options.gaps;
             if let Some(col) = ws.scroll_mut().active_column_mut() {
                 let pane_idx = col.active_pane_idx;
-                if let Some(size) = col.pane_sizes.get_mut(pane_idx) {
-                    size.h = *height;
+                if let Some(pane) = col.panes.get_mut(pane_idx) {
+                    pane.preferred_height = Some(*height);
                 }
-                col.compute_pane_sizes(area_height, gaps);
             }
         }
     })
