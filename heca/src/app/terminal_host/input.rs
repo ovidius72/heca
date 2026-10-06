@@ -144,7 +144,7 @@ fn on_move(
     cell: Option<Cell>,
     modifiers: heca_grid_ui::Modifiers,
 ) {
-    if window_gesture_has_it(state) || crate::mouse::is_resizing(state) {
+    if window_gesture_has_it(state) {
         return;
     }
     // A host selection drag follows the pointer, in the pane it started in. Over another pane, or

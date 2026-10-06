@@ -19,6 +19,8 @@ fn seams() -> WorkspaceSeams {
         },
         pane: recording_callbacks().0,
         header_env: None,
+        resize_column: Rc::new(|_, _| {}),
+        resize_pane: Rc::new(|_, _, _| {}),
     }
 }
 
@@ -56,6 +58,7 @@ fn model(columns: Vec<ColumnShellModel>, floats: Vec<PaneShellModel>) -> Workspa
         })
         .collect();
     WorkspaceModel {
+        working_width: 700.0,
         area: Rectangle::new(Point::new(40.0, 30.0), Size::new(700.0, 500.0)),
         columns,
         floats,
@@ -130,8 +133,8 @@ fn the_workspace_places_what_the_model_says() {
         .collect();
     assert_eq!(
         order,
-        ["col:1", "col:2", "pane:30"],
-        "columns, then floats: later is on top"
+        ["col:1", "col:2", "split:col:0", "split:pane:0:0", "pane:30"],
+        "columns, then the edges, then floats: later is on top"
     );
 }
 
@@ -167,7 +170,19 @@ fn panes_come_and_go_while_the_others_keep_their_widget() {
         first.base().children[0].base().style.layout.hidden,
         "pane 10 was not rebuilt"
     );
-    assert_eq!(ws.base().children.len(), 2, "the float left");
+    let held = |ws: &dyn Component| {
+        ws.base()
+            .children
+            .iter()
+            .filter(|c| {
+                c.base()
+                    .key
+                    .as_deref()
+                    .is_some_and(|k| !k.starts_with("split:"))
+            })
+            .count()
+    };
+    assert_eq!(held(ws.as_ref()), 2, "the float left");
 }
 
 /// A model of another type is refused rather than ignored.
@@ -275,4 +290,104 @@ fn a_floats_terminal_comes_after_the_tiled_ones_in_the_scene() {
         Some(&3),
         "the float is last, so it is on top: {order:?}"
     );
+}
+
+/// **The edges between columns and between stacked panes are the workspace's children**: after the
+/// columns and before the floats, so a float is over them — and dragging one tells the owner which
+/// column or pane to resize and by how much.
+#[test]
+fn dragging_an_edge_resizes_the_neighbours_it_sits_between() {
+    use heca_grid_ui::component::dispatch;
+    use heca_grid_ui::event::{Event, PointerButton};
+
+    let posted = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+    let mut seams = seams();
+    seams.resize_column = {
+        let posted = posted.clone();
+        Rc::new(move |col, share| posted.borrow_mut().push(format!("col {col} {share:.4}")))
+    };
+    seams.resize_pane = {
+        let posted = posted.clone();
+        Rc::new(move |col, pane, px| posted.borrow_mut().push(format!("pane {col}/{pane} {px}")))
+    };
+    let mut ws: Box<dyn Component> = Box::new(workspace(seams));
+    assert!(ws.set_props(&two_columns_and_a_float()));
+    let mut window = Flex::column().width(800.0).height(600.0);
+    window.base_mut().children.push(ws);
+    LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
+
+    // Order: columns, then the edges, then the float.
+    let order: Vec<String> = window.base().children[0]
+        .base()
+        .children
+        .iter()
+        .map(|c| c.base().key.clone().unwrap_or_default())
+        .collect();
+    assert_eq!(
+        order,
+        ["col:1", "col:2", "split:col:0", "split:pane:0:0", "pane:30"]
+    );
+
+    let at = |x: f64, y: f64| Point::new(x, y);
+    // The gap between the columns is x 340..350: drag it 10px right.
+    dispatch(
+        &mut window,
+        &Event::pointer_pressed(at(345.0, 400.0), PointerButton::Left),
+    );
+    dispatch(&mut window, &Event::pointer_moved(at(355.0, 400.0)));
+    dispatch(
+        &mut window,
+        &Event::pointer_released(at(355.0, 400.0), PointerButton::Left),
+    );
+    // The gap between the stacked panes of the first column is y 270..280: drag it 5px down.
+    dispatch(
+        &mut window,
+        &Event::pointer_pressed(at(60.0, 275.0), PointerButton::Left),
+    );
+    dispatch(&mut window, &Event::pointer_moved(at(60.0, 280.0)));
+    dispatch(
+        &mut window,
+        &Event::pointer_released(at(60.0, 280.0), PointerButton::Left),
+    );
+
+    assert_eq!(*posted.borrow(), ["col 0 0.0143", "pane 0/0 5"]);
+}
+
+/// **A press on a pane reaches the pane, with the chrome seated over it as the app seats it.**
+///
+/// The chrome root covers the whole window to hold the bars and sidebars, and it is later in the
+/// tree than the workspace, so it is what the pointer meets first. It must let the pointer through
+/// its own box, or every press in the content area lands on it and no pane is ever focused, no
+/// header button ever clicked (found driving the first one-tree build).
+#[test]
+fn a_press_on_a_pane_reaches_the_pane_under_the_chrome() {
+    use heca_grid_ui::component::dispatch;
+    use heca_grid_ui::event::{Event, PointerButton};
+
+    let focused = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+    let sink = focused.clone();
+    heca_grid_ui::intent::install_intent_sink(move |intent| {
+        sink.borrow_mut().push(format!(
+            "{}({:?})",
+            intent.action,
+            intent.args.get("pane_id").cloned()
+        ))
+    });
+
+    let mut window = crate::chrome::new_window_root();
+    let mut ws: Box<dyn Component> = Box::new(workspace(seams()));
+    assert!(ws.set_props(&two_columns_and_a_float()));
+    window.base_mut().children.push(ws);
+    crate::chrome::seat_chrome(
+        &mut window,
+        Flex::column()
+            .width(heca_grid_ui::Length::FULL)
+            .height(heca_grid_ui::Length::FULL),
+    );
+    LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
+
+    let at = Point::new(100.0, 100.0); // inside pane 10
+    dispatch(&mut window, &Event::pointer_pressed(at, PointerButton::Left));
+    dispatch(&mut window, &Event::pointer_released(at, PointerButton::Left));
+    assert_eq!(*focused.borrow(), ["focus_pane(Some(Int(10)))"]);
 }

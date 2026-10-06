@@ -25,6 +25,22 @@ pub(crate) fn seat_workspace(state: &mut AppState) {
                 column: crate::chrome::column::callbacks(state),
                 pane: crate::chrome::pane::callbacks(state),
                 header_env: info_bar.then(|| crate::chrome::HeaderEnv::of(state)),
+                resize_column: {
+                    let emit = resize_emitter(state);
+                    std::rc::Rc::new(move |col_idx, delta| {
+                        emit(crate::input::WmAction::ResizeColumnBy { col_idx, delta })
+                    })
+                },
+                resize_pane: {
+                    let emit = resize_emitter(state);
+                    std::rc::Rc::new(move |col_idx, pane_idx, delta| {
+                        emit(crate::input::WmAction::ResizePaneHeightBy {
+                            col_idx,
+                            pane_idx,
+                            delta,
+                        })
+                    })
+                },
             };
             state
                 .window_root
@@ -49,4 +65,19 @@ pub(crate) fn clear_workspace(state: &mut AppState) {
         .base_mut()
         .children
         .retain(|c| c.base().key.as_deref() != Some(WORKSPACE_KEY));
+}
+
+/// What posts a resize the way every action is posted: to the event loop, as a mouse gesture on the
+/// content, through the same interaction policy and follow-up a key press gets.
+fn resize_emitter(state: &AppState) -> impl Fn(crate::input::WmAction) + 'static {
+    let proxy = state.event_proxy.clone();
+    move |action| {
+        crate::chrome::ChromeIntentEmitter::new(
+            &proxy,
+            crate::app::interaction::InteractionSource::MouseContent,
+        )
+        .fire(crate::app::interaction::InteractionIntent::ActivateAction(
+            action,
+        ));
+    }
 }

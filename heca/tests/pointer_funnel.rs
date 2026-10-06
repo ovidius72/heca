@@ -207,41 +207,6 @@ fn a_right_click_is_handed_to_the_window_tree() {
     }
 }
 
-/// **A divider resize must end at the same level its press started it.**
-///
-/// The press starts the drag in the event loop (`mouse::resize::on_press`, before the general mouse
-/// path). The release used to end it two layers down, inside `mouse::on_mouse_input` — which sits
-/// *behind* an early return: if a terminal's scrollbar claimed the release (it answers one
-/// whenever it holds a thumb grab), the event loop returned and the resize was never told.
-///
-/// `state.mouse.resize` then stayed `Some`, and every later cursor move took the resize branch in
-/// `mouse::on_cursor_moved` **with no button held** — so the pane went on resizing itself, with the
-/// mouse just moving, until it was gone. Same family as the guards above: a gesture that outlives
-/// the release that ends it (F004/P084/T409).
-///
-/// A lint, because what it guards is *ordering*, and the failure is a state that persists rather
-/// than an event that is wrong.
-#[test]
-fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
-    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
-    let body = branch_body(&src, "WindowEvent::MouseInput")
-        .expect("the button branch is still a `WindowEvent::MouseInput` arm");
-
-    let ends = body.find("resize::on_release").expect(
-        "the button branch no longer ends the divider resize. It must: the press starts the \
-             drag here, so the release has to end it here too, or the drag outlives the button.",
-    );
-    // Searched FORWARD from where the resize ends, not from the top of the branch. What has to hold
-    // is that the swallowing call — the window tree's answer to the release, which is where a
-    // terminal's scrollbar holding a thumb grab says so — comes after the resize has been told.
-    assert!(
-        body[ends..].contains("crate::chrome::deliver("),
-        "the divider resize is ended AFTER the branch that can return early and swallow the \
-         release.\nA resize that is never told the button came up keeps resizing on every cursor \
-         move, with nothing held down, until the pane is gone.",
-    );
-}
-
 /// **A key release reaches the tree, or `on_key_up` is a builder nothing can fire.**
 ///
 /// The window loop returned at `event.state != ElementState::Pressed`, so `Event::Key { pressed:
@@ -299,10 +264,13 @@ fn the_move_that_drives_a_drag_is_not_withheld_while_dragging() {
 
     // Everything the call is nested inside: the last `if` opened before it still decides whether it
     // runs, so that is the condition to read.
-    let guard = body[..call]
-        .rfind("if ")
-        .map(|i| &body[i..call])
-        .unwrap_or("");
+    // Read as code: a comment above the call is not what decides whether it runs.
+    let code: String = body[..call]
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let guard = code.rfind("if ").map(|i| &code[i..]).unwrap_or("");
 
     assert!(
         !guard.contains("drag_in_flight"),

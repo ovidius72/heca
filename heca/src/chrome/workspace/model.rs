@@ -19,6 +19,8 @@ pub(crate) struct WorkspaceModel {
     pub(crate) area: Rectangle,
     /// The columns, left to right, each holding its panes' models.
     pub(crate) columns: Vec<ColumnShellModel>,
+    /// How wide the columns' working area is: a column edge moves a share of it.
+    pub(crate) working_width: f32,
     /// The floating panes, back to front.
     pub(crate) floats: Vec<PaneShellModel>,
     /// What each pane — tiled or floating — holds and says.

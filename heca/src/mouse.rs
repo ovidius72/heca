@@ -13,7 +13,6 @@ mod hit_test;
 mod interactive;
 pub(crate) mod release;
 mod render;
-pub(crate) mod resize;
 pub(crate) mod surface_left;
 
 use crate::app::interaction::InteractionSource;
@@ -37,19 +36,8 @@ pub(crate) fn dispatch_drop(state: &AppState, source: InteractionSource, action:
 /// Handle cursor movement. Returns a `WmAction` if one should be dispatched
 /// (e.g. focus-follows-mouse triggered), or `None` for internal state updates.
 pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
-    // A divider resize-drag takes priority over DnD/focus-follow: it emits a
-    // parameterized resize action for the caller to dispatch through the registry.
-    if state.mouse.resize.is_some() {
-        return resize::on_drag_move(state, pos);
-    }
     interactive::on_cursor_moved(state, pos);
     None
-}
-
-/// Whether a divider resize-drag is currently in flight. Callers gate the normal
-/// hover/forward paths on this (mirrors the `chrome::drag_in_flight` guard).
-pub(crate) fn is_resizing(state: &AppState) -> bool {
-    state.mouse.resize.is_some()
 }
 
 /// Cursor policy: ask the window tree what the pointer is over and apply it to the window — but only
@@ -58,10 +46,7 @@ pub(crate) fn is_resizing(state: &AppState) -> bool {
 /// whatever a widget declared); this only turns the answer into the window's own icon. `heca-grid-ui`
 /// stays cursor-free (it only emits a `Scene`) — the OS cursor is a host concern.
 pub(crate) fn update_cursor(state: &mut AppState, pos: (f32, f32)) {
-    let icon = if let Some(resize_icon) = resize::cursor_for(state, pos) {
-        // Active resize-drag → the drag axis; otherwise the divider under the cursor.
-        resize_icon
-    } else if link_hover(state, pos) {
+    let icon = if link_hover(state, pos) {
         // Cmd held over a terminal hyperlink → signal the click-to-open affordance.
         winit::window::CursorIcon::Pointer
     } else {
@@ -200,10 +185,6 @@ pub fn on_mouse_input(
             // right-clicking a pane never focused it.
         }
         (Btn::Left, Kind::Released) => {
-            // End a divider resize-drag first (left-button gap drag).
-            if resize::on_release(state) {
-                return None;
-            }
             // Check for interactive move release first.
             if let Some(InteractiveMovePhase::Starting { .. }) = state.mouse.interactive_move {
                 interactive::cancel_interactive_move(state);
@@ -217,14 +198,6 @@ pub fn on_mouse_input(
             // the release, ends the gesture and hands back a drop naming what it landed on, which
             // `chrome::drain_pending_drops` acts on. A release that crossed no threshold becomes a
             // click by the same pairing, which is what focuses the pane (F003/P097/T496).
-        }
-        // Right-button fallback for divider resize: hold right-button on a pane to
-        // resize along the nearer axis (for when the thin gap fights the terminal).
-        (Btn::Right, Kind::Pressed) if resize::on_right_press(state, pos) => {
-            return None;
-        }
-        (Btn::Right, Kind::Released) if resize::on_release(state) => {
-            return None;
         }
         // **The release is what makes it a click.** The framework pairs a press with a release on
         // the same widget and only then emits `RightClick` — which is what an unclaimed right-click

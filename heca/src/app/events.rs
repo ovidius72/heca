@@ -268,9 +268,7 @@ pub(crate) fn handle_window_event(
             // where it started — the one move that crosses the threshold gets through, and nothing
             // after it does. Hover is no reason either: the framework lights nothing under a drag
             // (guard `a_drag_in_flight_clears_hover`).
-            if !mouse::is_resizing(state) {
-                crate::chrome::deliver(state, &moved);
-            }
+            crate::chrome::deliver(state, &moved);
             // Cursor affordance: Grab over a draggable, Grabbing while dragging.
             mouse::update_cursor(state, pos);
             state.mark_full_redraw();
@@ -311,33 +309,7 @@ pub(crate) fn handle_window_event(
             if crate::chrome::dispatch_surface_pointer(state, &ev) {
                 return;
             }
-            // Divider resize: a plain left-press on a column/pane divider starts a
-            // resize-drag. Only an actual divider hit consumes — a miss falls
-            // through to the normal content/drag paths. A modifier-held press
-            // (meta-drag) falls through.
-            if button == winit::event::MouseButton::Left
-                && button_state == ElementState::Pressed
-                && !mouse::interactive_move_modifier_held(state)
-                && mouse::resize::on_press(state, state.mouse.pos)
-            {
-                mouse::update_cursor(state, state.mouse.pos);
-                state.mark_full_redraw();
-                return;
-            }
-            // Read before the release block below ends any resize drag, so a release that ended
-            // one is not also taken for the end of a selection.
-            let resize_before = mouse::is_resizing(state);
             if button == winit::event::MouseButton::Left && button_state == ElementState::Released {
-                // **The divider resize ends here, at the same level its press started it.** It used
-                // to end inside `mouse::on_mouse_input`, which sits behind the viewport
-                // early-return below — so a release that a pane's scrollbar happened to claim (it
-                // answers one whenever it holds a thumb grab) never reached the resize, and
-                // `state.mouse.resize` stayed `Some`. Every later cursor move then took the
-                // resize branch in `mouse::on_cursor_moved` with no button held, and the pane went
-                // on resizing itself until it was gone. A gesture must never outlive the release
-                // that ends it — the same rule that keeps a scrollbar thumb from welding to the
-                // cursor, one layer up (F004/P084/T409).
-                mouse::resize::on_release(state);
                 // Every retained tree that could have started a gesture gets the release, whether
                 // or not the cursor is still over it — that is what ends a scrollbar drag. The
                 // chrome tree is unconditional: it consumes nothing it did not start, and gating a
@@ -351,12 +323,8 @@ pub(crate) fn handle_window_event(
             if let Some((action, source)) = mouse::on_mouse_input(state, &ev) {
                 dispatch_action(state, registry, source, &action);
             }
-            // A host selection drag ends where the button does, wherever the pointer is. (A release
-            // that ended a divider resize was that gesture's, and is not this one's.)
-            if button == winit::event::MouseButton::Left
-                && button_state == ElementState::Released
-                && !resize_before
-            {
+            // A host selection drag ends where the button does, wherever the pointer is.
+            if button == winit::event::MouseButton::Left && button_state == ElementState::Released {
                 crate::app::terminal_host::on_left_release(state, registry);
             }
             // Snap the cursor on press/release (drag start → Grabbing, drop → Grab/Default)

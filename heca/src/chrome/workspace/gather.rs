@@ -73,8 +73,13 @@ pub(crate) fn gather(
             )
         })
         .collect();
+    let working_width = state
+        .session
+        .active_workspace()
+        .map_or(0.0, |ws| ws.scrolling.working_area.size.w as f32);
     WorkspaceModel {
         area,
+        working_width,
         columns,
         floats,
         panes,

@@ -8,6 +8,7 @@
 //! workspace keeps a child that is still there, builds one that arrived, drops one that left, and
 //! places each from the model's rects.
 
+mod dividers;
 mod find;
 mod gather;
 mod model;
@@ -18,13 +19,14 @@ pub(crate) use gather::gather;
 pub(crate) use model::{PaneEntry, WorkspaceModel};
 pub(crate) use seat::{clear_workspace, seat_workspace};
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use heca_core::layout::{PaneId, Rectangle};
 use heca_grid_ui::component::Base;
 use heca_grid_ui::style::Placement;
-use heca_grid_ui::widgets::Flex;
+use heca_grid_ui::widgets::{Flex, Splitter};
 use heca_grid_ui::{Component, ComponentExt, Length, reconcile};
 
 use crate::chrome::column::shell::new_column_slot;
@@ -43,18 +45,28 @@ pub(crate) struct WorkspaceSeams {
     pub(crate) pane: PaneCallbacks,
     /// What a pane's header is built from, when the info bar is on.
     pub(crate) header_env: Option<Rc<HeaderEnv>>,
+    /// What dragging the edge right of a column means: that column takes this share of the working
+    /// width more.
+    pub(crate) resize_column: Rc<dyn Fn(usize, f64)>,
+    /// What dragging the edge below a pane means: that pane takes this many px more height.
+    pub(crate) resize_pane: Rc<dyn Fn(usize, usize, f64)>,
 }
 
 /// A workspace that takes a [`WorkspaceModel`] as its props.
 pub(crate) fn workspace(seams: WorkspaceSeams) -> Flex {
+    // The working width the edges convert a drag by, kept where the edges can read it as it changes.
+    let working = Rc::new(Cell::new(0.0_f32));
     Flex::column()
         .key(WORKSPACE_KEY)
         .clip_children(true)
-        .on_props(move |model: &WorkspaceModel, base| place(&seams, model, base))
+        .on_props(move |model: &WorkspaceModel, base| {
+            working.set(model.working_width);
+            place(&seams, &working, model, base)
+        })
 }
 
 /// Bring the workspace's children in line with `model`, and put each where it says.
-fn place(seams: &WorkspaceSeams, model: &WorkspaceModel, base: &mut Base) {
+fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel, base: &mut Base) {
     let area = model.area;
     base.style.layout.placement = Some(Placement {
         left: Length::Px(area.loc.x as f32),
@@ -70,6 +82,9 @@ fn place(seams: &WorkspaceSeams, model: &WorkspaceModel, base: &mut Base) {
         .iter()
         .map(|c| (crate::chrome::column_key(c.col_id), c.key()))
         .collect();
+    // The edges come after the columns and before the floats: a float is over them.
+    let edges = dividers::edges(model);
+    wanted.extend(edges.iter().map(|(edge, _)| (edge.name(), String::new())));
     wanted.extend(
         model
             .floats
@@ -77,6 +92,9 @@ fn place(seams: &WorkspaceSeams, model: &WorkspaceModel, base: &mut Base) {
             .map(|p| (crate::chrome::pane_key(p.pane_id), p.key())),
     );
     reconcile::reconcile_keyed(base, &wanted, |name| {
+        if let Some((edge, _)) = edges.iter().find(|(edge, _)| edge.name() == name) {
+            return Box::new(build_edge(seams, working, *edge).key(name));
+        }
         match model
             .columns
             .iter()
@@ -100,7 +118,16 @@ fn place(seams: &WorkspaceSeams, model: &WorkspaceModel, base: &mut Base) {
         let Some(name) = child.base().identity().map(str::to_string) else {
             continue;
         };
-        if let Some(column) = model
+        if let Some((_, gap)) = edges.iter().find(|(edge, _)| edge.name() == name) {
+            place_at(
+                child.as_mut(),
+                area,
+                gap.loc.x as f32,
+                gap.loc.y as f32,
+                gap.size.w as f32,
+                gap.size.h as f32,
+            );
+        } else if let Some(column) = model
             .columns
             .iter()
             .find(|c| crate::chrome::column_key(c.col_id) == name)
@@ -113,6 +140,25 @@ fn place(seams: &WorkspaceSeams, model: &WorkspaceModel, base: &mut Base) {
         {
             give_pane(model, pane, child.as_mut());
             place_at(child.as_mut(), area, pane.x, pane.y, pane.w, pane.h);
+        }
+    }
+}
+
+/// The grab zone of one edge, which tells the seams how far it was dragged.
+fn build_edge(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, edge: dividers::Edge) -> Splitter {
+    match edge {
+        dividers::Edge::Column { col } => {
+            let (resize, working) = (seams.resize_column.clone(), working.clone());
+            Splitter::vertical().on_resize(move |px| {
+                let width = working.get();
+                if width > 0.0 {
+                    resize(col, (px / width) as f64);
+                }
+            })
+        }
+        dividers::Edge::Pane { col, pane } => {
+            let resize = seams.resize_pane.clone();
+            Splitter::horizontal().on_resize(move |px| resize(col, pane, px as f64))
         }
     }
 }

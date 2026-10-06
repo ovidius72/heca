@@ -114,7 +114,7 @@ pub use widgets::{
     Input, Item, ItemGroup, KeyCap, KeyHint, KeyHintGroup, KeycapVariant, Label, LabelSide,
     MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel, ProgressBar,
     RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion,
-    Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Tile, Toast, ToastAction,
+    Select, Separator, Spinner, Splitter, StatusDot, Surface, Tabs, Tag, Tile, Toast, ToastAction,
     ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
     container, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
 };
