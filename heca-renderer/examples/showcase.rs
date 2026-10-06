@@ -2148,16 +2148,15 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     Flex::row()
                         .gap(24.0)
                         .align("center")
-                        .child(
-                            FocusScope::new(
-                                Card::new("dock A").child(Label::new("has keyboard focus")),
-                            )
-                            .focus(signal(true)),
-                        )
-                        .child(
-                            FocusScope::new(Card::new("dock B").child(Label::new("does not")))
-                                .focus(signal(false)),
-                        ),
+                        .child({
+                            // The ring follows the keyboard: dock A holds it, so dock A is outlined.
+                            let card = Card::new("dock A").child(Label::new("has keyboard focus"));
+                            card.base().focus(true);
+                            FocusScope::new(card)
+                        })
+                        .child(FocusScope::new(
+                            Card::new("dock B").child(Label::new("does not")),
+                        )),
                 );
             // Prefix-as-symbol: the keybinding "prefix" is *displayed* as λ (a plain
             // Geist Mono glyph — no icon/Nerd font needed). The config/parse token
