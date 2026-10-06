@@ -3,46 +3,6 @@
 use super::*;
 
 impl ScrollingMut<'_> {
-    fn finish_column_width_change(
-        &mut self,
-        column: usize,
-        old_xs: &[(ColumnId, f64)],
-        old_view_pos: f64,
-    ) {
-        // Preserve view position so layout stays visually fixed during width changes.
-        let new_view_pos = self.reader().view_pos();
-        let view_delta = old_view_pos - new_view_pos;
-        self.view.offset.offset(view_delta);
-
-        // Ensure the changed column stays visible after the width change.
-        let target_offset = self.reader().compute_view_offset_for_column(column, None);
-        let pixel = 1.0 / self.view.scale;
-        let diff = target_offset - self.view.offset.target();
-        if diff.abs() < pixel {
-            self.view.offset.offset(diff);
-        } else {
-            self.view.offset = ViewOffset::Animation(Animation::new(
-                self.view.offset.current(),
-                target_offset,
-                AnimationConfig::default(),
-            ));
-        }
-
-        // Animate columns to their new positions.
-        let new_xs: Vec<f64> = self.reader().column_xs().collect();
-        for (i, col) in self.space.columns.iter().enumerate() {
-            let old_x = old_xs
-                .iter()
-                .find(|(id, _)| *id == col.id)
-                .map(|(_, x)| *x)
-                .unwrap_or(new_xs[i]);
-            let diff = old_x - new_xs[i];
-            if diff.abs() > 0.5 {
-                self.view.motion.slide_column(col.id, diff, AnimationConfig::default());
-            }
-        }
-    }
-
     /// Toggle the active column between viewport-wide zoom and its previous width.
     pub fn toggle_active_column_zoom(&mut self) -> bool {
         self.toggle_column_zoom(self.view.active_column)
@@ -55,12 +15,11 @@ impl ScrollingMut<'_> {
             return false;
         }
 
-        let old_xs = self.reader().capture_column_positions();
-        let old_view_pos = self.reader().view_pos();
-
-        self.space.zoom_column(idx);
-
-        self.finish_column_width_change(idx, &old_xs, old_view_pos);
+        let before = self.reader().positions();
+        let Some(effect) = self.space.zoom_column(idx) else {
+            return false;
+        };
+        self.view.react(&*self.space, effect, &before);
         true
     }
 
@@ -125,26 +84,12 @@ impl ScrollingMut<'_> {
             return;
         }
 
-        // Anchor on the **resized** column's left edge (its on-screen offset from
-        // the view) so its right edge — the divider being dragged — tracks the
-        // cursor, regardless of which column is active. Anchoring on the *active*
-        // column (the old active-column recentre) made a left column
-        // grow leftward when the right column was focused (the "wrong side" bug).
-        let old_rel = self.reader().column_x(idx) - self.reader().view_pos();
-
-        if let Some((_, new_width)) = self.reader().clamped_width(idx, delta) {
-            self.space.set_column_width(idx, new_width);
-        }
-
-        // Restore the resized column's on-screen left edge by shifting the view by
-        // the amount it moved. No active-column recenter / per-move animation —
-        // those fight a smooth per-pixel drag.
-        let new_rel = self.reader().column_x(idx) - self.reader().view_pos();
-        self.view.offset.offset(new_rel - old_rel);
-        // If the resize pushed the active column's far edge off-screen, scroll to
-        // keep it reachable (#3) — only when resizing the active column, so a
-        // divider drag on another column doesn't yank the view.
-        if idx == self.view.active_column {
+        let before = self.reader().positions();
+        if let Some((_, new_width)) = self.reader().clamped_width(idx, delta)
+            && let Some(effect) = self.space.set_column_width(idx, new_width)
+        {
+            self.view.react(&*self.space, effect, &before);
+        } else if idx == self.view.active_column {
             self.ensure_active_column_visible();
         }
     }

@@ -221,20 +221,7 @@ impl ScrollingMut<'_> {
     /// Align the view so the active column is fully visible.
     /// If the column is off-screen, animate the view to bring it into view.
     pub fn align_view_to_active_column(&mut self) {
-        let idx = self.view.active_column;
-        let target_offset = self.reader().compute_view_offset_for_column(idx, None);
-        let current_offset = self.view.offset.current();
-        let pixel = 1.0 / self.view.scale;
-        let diff = target_offset - current_offset;
-        if diff.abs() < pixel {
-            self.view.offset = ViewOffset::Static(target_offset);
-        } else {
-            self.view.offset = ViewOffset::Animation(Animation::new(
-                current_offset,
-                target_offset,
-                AnimationConfig::default(),
-            ));
-        }
+        self.view.align_to_active(&*self.space);
     }
 
     /// Update the working area (e.g., on resize).

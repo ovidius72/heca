@@ -24,23 +24,9 @@ impl ScrollingMut<'_> {
             }
         });
 
-        self.space.insert_column(idx, column);
-
-        if !was_empty && idx <= self.view.active_column {
-            self.view.active_column += 1;
-        }
-
-        // Animate movement of other columns.
-        let offset = self.reader().column_x(idx + 1) - self.reader().column_x(idx);
-        if self.view.active_column <= idx {
-            for col in &self.space.columns[idx + 1..] {
-                self.view.motion.slide_column(col.id, -offset, AnimationConfig::default());
-            }
-        } else {
-            for col in &self.space.columns[..idx] {
-                self.view.motion.slide_column(col.id, offset, AnimationConfig::default());
-            }
-        }
+        let before = self.reader().positions();
+        let effect = self.space.insert_column(idx, column);
+        self.view.react(&*self.space, effect, &before);
 
         if activate {
             if was_empty {
@@ -137,40 +123,9 @@ impl ScrollingMut<'_> {
             return None;
         }
 
-        // Animate movement of remaining columns.
-        let offset = self.reader().column_x(idx + 1) - self.reader().column_x(idx);
-        if self.view.active_column <= idx {
-            for col in &self.space.columns[idx + 1..] {
-                self.view.motion.slide_column(col.id, offset, AnimationConfig::default());
-            }
-        } else {
-            for col in &self.space.columns[..idx] {
-                self.view.motion.slide_column(col.id, -offset, AnimationConfig::default());
-            }
-        }
-
-        let (col, _) = self.space.take_column(idx)?;
-
-        if self.space.columns.is_empty() {
-            self.view.active_column = 0;
-            return Some(col);
-        }
-
-        if idx < self.view.active_column {
-            self.view.active_column -= 1;
-            self.view.activate_prev_on_removal = None;
-        } else if idx == self.view.active_column {
-            // Activate previous or next.
-            let new_idx = if self.view.activate_prev_on_removal.is_some() && idx > 0 {
-                idx - 1
-            } else {
-                idx.min(self.space.columns.len() - 1)
-            };
-            self.view.active_column = new_idx;
-            self.view.activate_prev_on_removal = None;
-            let offset = self.reader().compute_view_offset_for_column(new_idx, None);
-            self.view.offset = ViewOffset::Static(offset);
-        }
+        let before = self.reader().positions();
+        let (col, effect) = self.space.take_column(idx)?;
+        self.view.react(&*self.space, effect, &before);
 
         Some(col)
     }
@@ -439,27 +394,11 @@ impl ScrollingMut<'_> {
             return false;
         }
 
-        // Save old column positions by ID (for the shift animation).
-        let old_xs: Vec<(ColumnId, f64)> = self
-            .reader()
-            .column_xs()
-            .zip(self.space.columns.iter())
-            .map(|(x, c)| (c.id, x))
-            .collect();
-        let old_view_pos = self.reader().view_pos();
-
-        // Remove from old position and insert at new position.
-        self.space.move_column(from, to);
-
-        // The moved column stays active. Update the index BEFORE computing positions.
-        self.view.active_column = to;
-
-        // Preserve view position so the layout stays visually fixed.
-        let new_view_pos = self.reader().view_pos();
-        let delta = old_view_pos - new_view_pos;
-        self.view.offset.offset(delta);
-
-        self.animate_columns_from(&old_xs);
+        let before = self.reader().positions();
+        let Some(effect) = self.space.move_column(from, to) else {
+            return false;
+        };
+        self.view.react(&*self.space, effect, &before);
         true
     }
 
@@ -467,35 +406,11 @@ impl ScrollingMut<'_> {
     /// column keeps its panes), animating the shift. No-op if either index is out of
     /// range or `a == b`. Returns whether it swapped. (DnD column swap — F4.5.)
     pub fn swap_columns(&mut self, a: usize, b: usize) -> bool {
-        let len = self.space.columns.len();
-        if a >= len || b >= len || a == b {
+        let before = self.reader().positions();
+        let Some(effect) = self.space.swap_columns(a, b) else {
             return false;
-        }
-        let old_xs: Vec<(ColumnId, f64)> = self
-            .reader()
-            .column_xs()
-            .zip(self.space.columns.iter())
-            .map(|(x, c)| (c.id, x))
-            .collect();
-        self.space.swap_columns(a, b);
-        self.animate_columns_from(&old_xs);
+        };
+        self.view.react(&*self.space, effect, &before);
         true
-    }
-
-    /// Animate every column from its previous x (keyed by [`ColumnId`]) to its new laid-out x —
-    /// shared by [`reorder_column`](Self::reorder_column) and [`swap_columns`](Self::swap_columns).
-    fn animate_columns_from(&mut self, old_xs: &[(ColumnId, f64)]) {
-        let new_xs: Vec<f64> = self.reader().column_xs().collect();
-        for (i, col) in self.space.columns.iter().enumerate() {
-            let old_x = old_xs
-                .iter()
-                .find(|(id, _)| *id == col.id)
-                .map(|(_, x)| *x)
-                .unwrap_or(new_xs[i]);
-            let diff = old_x - new_xs[i];
-            if diff.abs() > 0.5 {
-                self.view.motion.slide_column(col.id, diff, AnimationConfig::default());
-            }
-        }
     }
 }

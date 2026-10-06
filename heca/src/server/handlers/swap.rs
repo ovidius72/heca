@@ -14,7 +14,6 @@ fn laid_out(changed: bool) -> Vec<Change> {
 pub(super) fn swap_left(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
     cx.change_asker_workspace(|mut ws| {
         ws.scroll_mut().move_column_left();
-        ws.scroll_mut().align_view_to_active_column();
     })
 }
 
@@ -22,7 +21,6 @@ pub(super) fn swap_left(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change
 pub(super) fn swap_right(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
     cx.change_asker_workspace(|mut ws| {
         ws.scroll_mut().move_column_right();
-        ws.scroll_mut().align_view_to_active_column();
     })
 }
 

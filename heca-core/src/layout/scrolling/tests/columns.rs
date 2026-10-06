@@ -263,7 +263,7 @@ fn the_content_changes_and_says_what_it_did_with_no_view() {
     assert_eq!(space.swap_columns(0, 0), None);
     assert_eq!(space.set_column_width(1, ColumnWidth::Fixed(300.0)), Some(ColumnEffect::Resized { idx: 1 }));
     assert_eq!(space.columns[1].width, ColumnWidth::Fixed(300.0));
-    assert_eq!(space.zoom_column(1), Some(ColumnEffect::Resized { idx: 1 }));
+    assert_eq!(space.zoom_column(1), Some(ColumnEffect::Zoomed { idx: 1 }));
     assert!(space.columns[1].is_zoomed());
     space.zoom_column(1);
     assert_eq!(space.columns[1].width, ColumnWidth::Fixed(300.0), "zoom restores the width");
@@ -284,4 +284,134 @@ fn positions_are_the_columns_x_by_identity_and_the_scroll() {
     assert_eq!(before.columns[0].1, 0.0);
     assert!(before.columns[1].1 > 0.0);
     assert_eq!(before.view_pos, space.r().view_pos());
+}
+
+/// What a window shows after a change, to compare two ways of getting there.
+fn shown(space: &Seen) -> (usize, f64, Vec<f64>) {
+    let r = space.r();
+    let xs = r.columns_with_positions().iter().map(|c| c.rect.loc.x).collect();
+    (r.active_column_idx(), r.view_pos(), xs)
+}
+
+/// **`react` alone does what the combined operation does**: the content changes with no view, the
+/// window reacts to the effect, and the window ends up where the one-call operation puts it.
+#[test]
+fn reacting_to_an_effect_alone_equals_the_combined_operation() {
+    type Op = fn(&mut Seen) -> bool;
+    type Content = fn(&mut ScrollingSpace) -> Option<ColumnEffect>;
+    let cases: [(&str, Op, Content); 5] = [
+        ("move", |s| s.m().reorder_column(0, 2), |c| c.move_column(0, 2)),
+        ("swap", |s| s.m().swap_columns(0, 2), |c| c.swap_columns(0, 2)),
+        ("zoom", |s| s.m().toggle_column_zoom(1), |c| c.zoom_column(1)),
+        ("resize", |s| { s.m().resize_column(1, 0.2); true }, |c| c.set_column_width(1, ColumnWidth::Proportion(0.7))),
+        ("remove", |s| s.m().remove_column(1).is_some(), |c| c.take_column(1).map(|(_, e)| e)),
+    ];
+    for (name, combined, content) in cases {
+        let mut whole = space_with_columns(3);
+        let mut apart = space_with_columns(3);
+        assert!(combined(&mut whole), "{name}");
+        let before = apart.r().positions();
+        let effect = content(&mut apart.space).expect("an effect");
+        apart.view.react(&apart.space, effect, &before);
+        assert_eq!(shown(&whole), shown(&apart), "{name}: the window ends up in the same place");
+    }
+}
+
+/// **Another window reacts for itself**: two windows on one content, each with its own active
+/// column; removing a column shifts each one's own, and neither is told what the other does.
+#[test]
+fn a_second_window_reacts_to_the_same_effect_on_its_own() {
+    let mut a = space_with_columns(3);
+    let mut b = space_with_columns(3);
+    a.m().activate_column(0);
+    b.m().activate_column(2);
+    let before_a = a.r().positions();
+    let before_b = b.r().positions();
+    let (_, effect) = a.space.take_column(0).expect("a column");
+    b.space = a.space.clone();
+    a.view.react(&a.space, effect, &before_a);
+    b.view.react(&b.space, effect, &before_b);
+    assert_eq!(a.r().active_column_idx(), 0, "the window that was on the removed column falls back");
+    assert_eq!(b.r().active_column_idx(), 1, "the window further along keeps its own column");
+}
+
+/// Three half-width columns overflow the 1000px window, with column 1 active and scrolled.
+fn scrolled() -> Seen {
+    let mut space = space_with_columns(3);
+    space.m().activate_column(1);
+    space
+}
+
+/// The screen x of the left edge of column `idx`, at rest.
+fn left_edge(space: &Seen, idx: usize) -> f64 {
+    space.r().column_x(idx) - space.r().view_pos()
+}
+
+/// A column put in before the active one pushes the active column's index along.
+#[test]
+fn a_column_inserted_before_the_active_one_shifts_its_index() {
+    let mut space = scrolled();
+    space.m().add_column(Some(0), test_column(9, ColumnWidth::Proportion(0.5)), false);
+    assert_eq!(space.r().active_column_idx(), 2);
+}
+
+/// A moved column stays active and the window stays over the same part of the strip.
+#[test]
+fn a_moved_column_stays_active_and_the_window_stays_over_the_same_strip() {
+    let mut space = scrolled();
+    let was = space.r().view_pos();
+    space.m().reorder_column(1, 2);
+    assert_eq!(space.r().active_column_idx(), 2);
+    assert!((space.r().view_pos() - was).abs() < 0.5, "{} vs {}", space.r().view_pos(), was);
+}
+
+/// Dragging a column's edge keeps its left edge where it was on screen.
+#[test]
+fn resizing_a_column_keeps_its_left_edge_where_it_was_on_screen() {
+    let mut space = scrolled();
+    let was = left_edge(&space, 0);
+    space.m().resize_column(0, 0.2);
+    assert!((left_edge(&space, 0) - was).abs() < 0.5);
+}
+
+/// A zoomed column ends up inside the window.
+#[test]
+fn a_zoomed_column_is_brought_into_the_window() {
+    let mut space = space_with_columns(4);
+    assert!(space.m().toggle_active_column_zoom());
+    let width = space.r().column_width(3);
+    let left = -space.view.offset.target();
+    assert!(left >= -0.5 && left + width <= 1000.0 + 0.5, "left {left}, width {width}");
+}
+
+/// Where the active column ends up on screen once the view has settled: its left edge, and its
+/// right edge.
+fn settled_edges(space: &Seen) -> (f64, f64) {
+    let r = space.r();
+    let left = -space.view.offset.target();
+    (left, left + r.column_width(r.active_column_idx()))
+}
+
+/// **A column you swap stays on screen**, at the edges of what is visible: the rightmost visible
+/// column moved left, and the leftmost moved right.
+#[test]
+fn a_swapped_column_is_kept_on_screen_at_the_edges() {
+    let vw = 1000.0;
+    for (start, step_left) in [(3usize, true), (0usize, false)] {
+        let mut space = space_with_columns(4);
+        space.m().activate_column(start);
+        for _ in 0..3 {
+            let moved = match step_left {
+                true => space.m().move_column_left(),
+                false => space.m().move_column_right(),
+            };
+            assert!(moved);
+            let (left, right) = settled_edges(&space);
+            assert!(
+                left >= -0.5 && right <= vw + 0.5,
+                "moving {}: the column is at {left}..{right} of {vw}",
+                if step_left { "left" } else { "right" }
+            );
+        }
+    }
 }
