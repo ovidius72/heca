@@ -312,3 +312,37 @@ fn a_pane_starts_below_the_panes_above_it() {
     assert_eq!(space.r().pane_y_in_column(0, 0), gaps);
     assert_eq!(space.r().pane_y_in_column(0, 1), gaps + heights[0] + gaps);
 }
+
+/// The bottom edge of the lowest pane of column 0, and of the area it is laid out in.
+fn bottoms(space: &Seen) -> (f64, f64) {
+    let r = space.r();
+    let columns = r.columns_with_positions();
+    let lowest = columns[0].panes.iter().map(|p| p.slot.loc.y + p.slot.size.h).fold(0.0, f64::max);
+    (lowest, r.area().loc.y + r.area().size.h)
+}
+
+/// **Every pane stays on screen** after heights are dragged and panes are swapped or moved: the
+/// column's heights always fill exactly the room it has.
+#[test]
+fn panes_stay_on_screen_after_a_resize_and_a_swap() {
+    let mut space = test_scrolling_space();
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+    for id in 2..=4 {
+        space.m().add_pane_to_column(0, None, Pane::new(PaneId(id), format!("p{id}")), true);
+    }
+    let (h, gaps) = (space.r().area().size.h, space.options.gaps);
+    let room = h - gaps * 5.0;
+    for step in 0..12 {
+        space.m().resize_pane_height(0, step % 3, if step % 2 == 0 { 70.0 } else { -45.0 });
+        let total: f64 = space.r().pane_heights(0).iter().sum();
+        assert!((total - room).abs() < 0.5, "step {step}: heights {total} vs room {room}");
+        let (lowest, bottom) = bottoms(&space);
+        assert!(lowest <= bottom - gaps + 0.5, "step {step}: lowest pane ends at {lowest} of {bottom}");
+        if let Some(column) = space.space.columns.get_mut(0) {
+            let n = column.panes.len();
+            column.panes.swap(step % n, (step + 1) % n);
+        }
+        let total: f64 = space.r().pane_heights(0).iter().sum();
+        assert!((total - room).abs() < 0.5, "after a swap at step {step}: {total} vs {room}");
+    }
+}

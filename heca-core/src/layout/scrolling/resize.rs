@@ -53,22 +53,12 @@ impl ScrollingMut<'_> {
     ///
     /// **No-op for the first column**, which has nothing to its left to trade with.
     pub fn move_active_column_left_boundary(&mut self, delta: f64) {
-        let Some(left) = self.view.active_column.checked_sub(1) else {
-            return;
-        };
         let active = self.view.active_column;
-        // What each side can actually take. The boundary moves by the smaller of the two, so
-        // neither column is asked for room it does not have.
-        let grow = self.reader().achievable_width_delta(left, delta);
-        let shrink = self.reader().achievable_width_delta(active, -delta);
-        let moved = if delta >= 0.0 {
-            grow.min(-shrink)
-        } else {
-            grow.max(-shrink)
-        };
-        if moved == 0.0 {
+        let Some(moved) = self.space.left_boundary_transfer(active, delta, self.view.area.size.w)
+        else {
             return;
-        }
+        };
+        let left = active - 1;
         self.resize_column(left, moved);
         self.resize_column(active, -moved);
     }
@@ -123,39 +113,6 @@ impl ScrollingRef<'_> {
     /// [`achievable_width_delta`](Self::achievable_width_delta) asks it in advance so a two-sided
     /// move can be clamped once.
     fn clamped_width(&self, idx: usize, delta: f64) -> Option<(ColumnWidth, ColumnWidth)> {
-        let col = self.space.columns.get(idx)?;
-        let working_w = self.view.area.size.w;
-        let gaps = self.space.options.gaps;
-        // A column may grow to fill the full visible width and shrink no smaller than
-        // MIN_COLUMN_WIDTH (so it never becomes a thin line).
-        let available_width = (working_w - gaps * 2.0).max(MIN_COLUMN_WIDTH);
-        // The proportion that resolves to MIN_COLUMN_WIDTH (see `Column::resolve_width`:
-        // width = (working_w - gaps) * p - gaps); `p = 1.0` fills the visible width.
-        let min_prop = ((MIN_COLUMN_WIDTH + gaps) / (working_w - gaps)).clamp(0.01, 1.0);
-        let base = if col.is_zoomed() {
-            ColumnWidth::Fixed(available_width)
-        } else {
-            col.width
-        };
-        let new = match base {
-            ColumnWidth::Proportion(p) => ColumnWidth::Proportion((p + delta).clamp(min_prop, 1.0)),
-            ColumnWidth::Fixed(w) => {
-                ColumnWidth::Fixed((w + delta * working_w).clamp(MIN_COLUMN_WIDTH, available_width))
-            }
-        };
-        Some((base, new))
-    }
-
-    /// **How much of `delta` column `idx` can actually take**, as a proportion delta — the same
-    /// clamp [`resize_column`](ScrollingMut::resize_column) applies, asked in advance.
-    ///
-    /// It exists so a two-sided move can be clamped **once** rather than applied twice and left
-    /// inconsistent when only one side hits its limit.
-    fn achievable_width_delta(&self, idx: usize, delta: f64) -> f64 {
-        match self.clamped_width(idx, delta) {
-            Some((ColumnWidth::Proportion(p), ColumnWidth::Proportion(n))) => n - p,
-            Some((ColumnWidth::Fixed(w), ColumnWidth::Fixed(n))) => (n - w) / self.view.area.size.w,
-            _ => 0.0,
-        }
+        self.space.clamped_width(idx, delta, self.view.area.size.w)
     }
 }

@@ -51,7 +51,9 @@ pub mod workspace;
 
 pub use column::{Column, Pane};
 pub use handle::{Added, Layout, LayoutMut, Moved, Removed};
-pub use scrolling::{LaidOutColumn, LaidOutPane, ScrollingMut, ScrollingRef, ScrollingSpace};
+pub use scrolling::{
+    ColumnEffect, LaidOutColumn, LaidOutPane, Positions, ScrollingMut, ScrollingRef, ScrollingSpace,
+};
 pub use session::Session;
 pub use shape::SessionShape;
 pub use types::*;

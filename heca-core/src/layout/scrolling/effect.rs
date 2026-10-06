@@ -47,6 +47,91 @@ impl ScrollingRef<'_> {
 }
 
 impl ScrollingSpace {
+    /// Column `idx`'s width before and after a resize by `delta`, clamped to what fits in a window
+    /// `working_width` wide: no narrower than [`MIN_COLUMN_WIDTH`], no wider than the window. `None`
+    /// when there is no such column.
+    pub fn clamped_width(
+        &self,
+        idx: usize,
+        delta: f64,
+        working_width: f64,
+    ) -> Option<(ColumnWidth, ColumnWidth)> {
+        let col = self.columns.get(idx)?;
+        let gaps = self.options.gaps;
+        let available_width = (working_width - gaps * 2.0).max(MIN_COLUMN_WIDTH);
+        // The proportion that resolves to MIN_COLUMN_WIDTH (see `Column::resolve_width`).
+        let min_prop = ((MIN_COLUMN_WIDTH + gaps) / (working_width - gaps)).clamp(0.01, 1.0);
+        let base = match col.is_zoomed() {
+            true => ColumnWidth::Fixed(available_width),
+            false => col.width,
+        };
+        let new = match base {
+            ColumnWidth::Proportion(p) => ColumnWidth::Proportion((p + delta).clamp(min_prop, 1.0)),
+            ColumnWidth::Fixed(w) => ColumnWidth::Fixed(
+                (w + delta * working_width).clamp(MIN_COLUMN_WIDTH, available_width),
+            ),
+        };
+        Some((base, new))
+    }
+
+    /// Resize column `idx` by `delta` (a proportion for `Proportion` widths, a fraction of the
+    /// window for `Fixed`), clamped to what fits in a window `working_width` wide.
+    pub fn resize_column_by(
+        &mut self,
+        idx: usize,
+        delta: f64,
+        working_width: f64,
+    ) -> Option<ColumnEffect> {
+        let (_, width) = self.clamped_width(idx, delta, working_width)?;
+        self.set_column_width(idx, width)
+    }
+
+    /// How much of `delta` column `idx` can take, as a proportion delta.
+    fn achievable_delta(&self, idx: usize, delta: f64, working_width: f64) -> f64 {
+        match self.clamped_width(idx, delta, working_width) {
+            Some((ColumnWidth::Proportion(p), ColumnWidth::Proportion(n))) => n - p,
+            Some((ColumnWidth::Fixed(w), ColumnWidth::Fixed(n))) => (n - w) / working_width,
+            _ => 0.0,
+        }
+    }
+
+    /// How much width the boundary to the left of column `idx` can move by when asked for
+    /// `delta` (positive is right): what both neighbours can give, clamped once by whichever runs
+    /// out first. `None` when there is nothing to trade with or nothing to move.
+    pub fn left_boundary_transfer(&self, idx: usize, delta: f64, working_width: f64) -> Option<f64> {
+        let left = idx.checked_sub(1)?;
+        let grow = self.achievable_delta(left, delta, working_width);
+        let shrink = self.achievable_delta(idx, -delta, working_width);
+        let moved = match delta >= 0.0 {
+            true => grow.min(-shrink),
+            false => grow.max(-shrink),
+        };
+        (moved != 0.0).then_some(moved)
+    }
+
+    /// Move the boundary to the left of column `idx` by `delta`: the column before it and this
+    /// one trade width. Says what changed.
+    pub fn move_left_boundary(
+        &mut self,
+        idx: usize,
+        delta: f64,
+        working_width: f64,
+    ) -> Vec<ColumnEffect> {
+        let (Some(moved), Some(left)) = (
+            self.left_boundary_transfer(idx, delta, working_width),
+            idx.checked_sub(1),
+        ) else {
+            return Vec::new();
+        };
+        [
+            self.resize_column_by(left, moved, working_width),
+            self.resize_column_by(idx, -moved, working_width),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+
     /// Put `column` at `idx` (the end when past it).
     pub fn insert_column(&mut self, idx: usize, column: Column) -> ColumnEffect {
         let idx = idx.min(self.columns.len());

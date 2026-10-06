@@ -8,7 +8,7 @@
 //! here to call.
 
 use heca_core::layout::{
-    Added, LayoutMut, Moved, PaneId, Removed, Session, WorkspaceMut,
+    Added, LayoutMut, Moved, PaneId, Removed, ScrollingSpace, Session, WorkspaceMut,
 };
 
 /// The session, moved by index and by id.
@@ -30,6 +30,12 @@ impl<'a> ServerLayout<'a> {
     /// The shared content, to read.
     pub(crate) fn session(&self) -> &Session {
         self.0.reader().session()
+    }
+
+    /// Workspace `idx`'s columns, to change with **no view**: the content and nothing a window
+    /// looks through. A change made here is shown to a window by the fact it reports.
+    pub(crate) fn columns_mut(&mut self, idx: usize) -> Option<&mut ScrollingSpace> {
+        self.0.columns_mut(idx)
     }
 
     /// Workspace `idx`, to change.

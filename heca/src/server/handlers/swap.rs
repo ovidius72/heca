@@ -10,18 +10,25 @@ fn laid_out(changed: bool) -> Vec<Change> {
     }
 }
 
-/// Move the active column one place left, and bring it into view.
-pub(super) fn swap_left(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_asker_workspace(|mut ws| {
-        ws.scroll_mut().move_column_left();
+/// Move the active column one place along; the window keeps it on screen.
+fn move_active_column(cx: &mut ServerCx<'_>, to: impl FnOnce(usize, usize) -> Option<usize>) -> Vec<Change> {
+    cx.change_asker_columns(|space, asker| {
+        let count = space.columns.len();
+        to(asker.column, count)
+            .and_then(|to| space.move_column(asker.column, to))
+            .into_iter()
+            .collect()
     })
 }
 
-/// Move the active column one place right, and bring it into view.
+/// Move the active column one place left.
+pub(super) fn swap_left(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
+    move_active_column(cx, |at, _| at.checked_sub(1))
+}
+
+/// Move the active column one place right.
 pub(super) fn swap_right(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_asker_workspace(|mut ws| {
-        ws.scroll_mut().move_column_right();
-    })
+    move_active_column(cx, |at, count| (at + 1 < count).then_some(at + 1))
 }
 
 /// Swap the active pane with the one above it.

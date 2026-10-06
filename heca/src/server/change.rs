@@ -27,6 +27,11 @@ pub(crate) enum Change {
     },
     /// The pane is gone from the layout. Whatever ran in it is the window's to end.
     PaneRemoved { pane: heca_core::layout::PaneId },
+    /// A change to the columns of workspace `workspace`: each window shows it for itself.
+    ColumnsChanged {
+        workspace: usize,
+        effect: heca_core::layout::ColumnEffect,
+    },
     /// A column now sits at index `column` of workspace `workspace` (numbered as they are now).
     ColumnMoved { workspace: usize, column: usize },
     /// The workspace that was at `index` is gone; every later one is one lower.

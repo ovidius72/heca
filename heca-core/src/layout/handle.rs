@@ -57,6 +57,12 @@ impl Session {
 }
 
 impl<'a> Layout<'a> {
+    /// Where workspace `idx`'s columns are for this window, to hold against where they are after a
+    /// change ([`LayoutMut::show_column_change`]).
+    pub fn column_positions(&self, idx: usize) -> Option<super::scrolling::Positions> {
+        self.workspace(idx).map(|ws| ws.scroll().positions())
+    }
+
     /// The shared content.
     pub fn session(&self) -> &'a Session {
         self.session
@@ -122,6 +128,26 @@ impl<'a> Layout<'a> {
 }
 
 impl LayoutMut<'_> {
+    /// Workspace `idx`'s columns, to change **with no view**: what a server does. Show the change
+    /// to a window with [`show_column_change`](Self::show_column_change).
+    pub fn columns_mut(&mut self, idx: usize) -> Option<&mut super::ScrollingSpace> {
+        self.session.workspaces.get_mut(idx).map(|ws| &mut ws.scrolling)
+    }
+
+    /// **Show a change to workspace `idx`'s columns in this window**: the window's own reaction to
+    /// what the content did, given where things were before ([`Layout::column_positions`]).
+    pub fn show_column_change(
+        &mut self,
+        idx: usize,
+        effect: super::scrolling::ColumnEffect,
+        before: &super::scrolling::Positions,
+    ) {
+        let Some(ws) = self.session.workspaces.get(idx) else {
+            return;
+        };
+        self.view.scroll_mut(ws.id).react(&ws.scrolling, effect, before);
+    }
+
     /// The same layout, for the reads that only look.
     pub fn reader(&self) -> Layout<'_> {
         Layout {

@@ -2,7 +2,7 @@
 //! and one window's view of it.
 
 use heca_core::layout::testing::Windowed;
-use heca_core::layout::{ColumnWidth, Pane, PaneId};
+use heca_core::layout::{ColumnEffect, ColumnWidth, Pane, PaneId};
 
 use super::testing::{run, two_workspaces_of_two_columns};
 use crate::input::{ResizeEdge, ResizeTarget, WmAction};
@@ -26,7 +26,7 @@ fn resizing_the_active_column_changes_its_width() {
             edge: ResizeEdge::Auto,
         },
     );
-    assert_eq!(changes, [Change::LayoutChanged]);
+    assert_eq!(changes, [Change::ColumnsChanged { workspace: 0, effect: ColumnEffect::Resized { idx: 1 } }]);
     assert_ne!(width_of(&window, 0, 1), before);
     assert_eq!(width_of(&window, 0, 0), other, "the other column is untouched");
 }
@@ -43,7 +43,7 @@ fn resizing_a_column_to_a_width_makes_it_fixed() {
             height: 0.0,
         },
     );
-    assert_eq!(changes, [Change::LayoutChanged]);
+    assert_eq!(changes, [Change::ColumnsChanged { workspace: 0, effect: ColumnEffect::Resized { idx: 1 } }]);
     assert_eq!(width_of(&window, 0, 1), ColumnWidth::Fixed(333.0));
 }
 
@@ -53,7 +53,7 @@ fn a_divider_drag_resizes_the_column_it_names() {
     let mut window = two_workspaces_of_two_columns();
     let before = width_of(&window, 0, 0);
     let changes = run(&mut window, WmAction::ResizeColumnBy { col_idx: 0, delta: 0.1 });
-    assert_eq!(changes, [Change::LayoutChanged]);
+    assert_eq!(changes, [Change::ColumnsChanged { workspace: 0, effect: ColumnEffect::Resized { idx: 0 } }]);
     assert_ne!(width_of(&window, 0, 0), before);
 }
 
