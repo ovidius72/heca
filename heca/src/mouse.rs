@@ -151,12 +151,6 @@ pub fn on_mouse_input(
                 return None;
             }
 
-            // When a floating pane is modal, block all sidebar interaction.
-            // No clicks, no drags, no mode changes.
-            if crate::app::interaction::is_floating_domain(&state.session) {
-                return None;
-            }
-
             // First, and deliberately independent of whether a widget then consumes the press: a
             // click on a scrollbar thumb is still a click *in* that container and must focus it.
             // Each of the branches below returns early, so doing this later would mean repeating it

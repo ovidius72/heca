@@ -28,8 +28,12 @@ impl Edge {
     }
 }
 
-/// Every edge, with the window rect of the gap it sits in.
+/// Every edge, with the window rect of the gap it sits in. **None while a pane floats**: nothing is
+/// resized then, so there is no edge to grab and no resize cursor to show.
 pub(super) fn edges(model: &WorkspaceModel) -> Vec<(Edge, Rectangle)> {
+    if !model.floats.is_empty() {
+        return Vec::new();
+    }
     let rect = |x: f32, y: f32, w: f32, h: f32| {
         Rectangle::new(
             heca_core::layout::Point::new(x as f64, y as f64),

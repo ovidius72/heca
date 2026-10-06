@@ -66,6 +66,16 @@ fn model(columns: Vec<ColumnShellModel>, floats: Vec<PaneShellModel>) -> Workspa
     }
 }
 
+fn two_columns() -> WorkspaceModel {
+    model(
+        vec![
+            column(1, 40.0, &[(10, 0.0, 240.0), (11, 250.0, 240.0)]),
+            column(2, 350.0, &[(20, 0.0, 490.0)]),
+        ],
+        vec![],
+    )
+}
+
 fn two_columns_and_a_float() -> WorkspaceModel {
     model(
         vec![
@@ -133,8 +143,8 @@ fn the_workspace_places_what_the_model_says() {
         .collect();
     assert_eq!(
         order,
-        ["col:1", "col:2", "split:col:0", "split:pane:0:0", "pane:30"],
-        "columns, then the edges, then floats: later is on top"
+        ["col:1", "col:2", "pane:30"],
+        "columns, then floats: later is on top, and no edge is seated while one floats"
     );
 }
 
@@ -311,7 +321,7 @@ fn dragging_an_edge_resizes_the_neighbours_it_sits_between() {
         Rc::new(move |col, pane, px| posted.borrow_mut().push(format!("pane {col}/{pane} {px}")))
     };
     let mut ws: Box<dyn Component> = Box::new(workspace(seams));
-    assert!(ws.set_props(&two_columns_and_a_float()));
+    assert!(ws.set_props(&two_columns()));
     let mut window = Flex::column().width(800.0).height(600.0);
     window.base_mut().children.push(ws);
     LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
@@ -325,7 +335,7 @@ fn dragging_an_edge_resizes_the_neighbours_it_sits_between() {
         .collect();
     assert_eq!(
         order,
-        ["col:1", "col:2", "split:col:0", "split:pane:0:0", "pane:30"]
+        ["col:1", "col:2", "split:col:0", "split:pane:0:0"]
     );
 
     let at = |x: f64, y: f64| Point::new(x, y);
@@ -519,4 +529,67 @@ fn every_layout_container_over_the_panes_leaves_them_their_presses() {
         }
         assert_eq!(*clicks.borrow(), ["item", "focus_pane"], "inside a {name}");
     }
+}
+
+/// **While a pane floats, a press reaches the float and the edges between the columns do nothing.**
+///
+/// The host used to drop every press while a float was up, so the float itself could not be
+/// clicked. Presses go to the tree now: the float answers because it is in it, and no edge is
+/// seated, so the gap beside it neither resizes nor shows a resize cursor.
+#[test]
+fn a_float_answers_its_press_and_the_edges_beside_it_do_nothing() {
+    use heca_grid_ui::component::dispatch;
+    use heca_grid_ui::event::{Event, PointerButton};
+
+    let seen = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+    let sink = seen.clone();
+    heca_grid_ui::intent::install_intent_sink(move |intent| {
+        sink.borrow_mut().push(format!(
+            "{}({:?})",
+            intent.action,
+            intent.args.get("pane_id").cloned()
+        ))
+    });
+    let mut seams = seams();
+    seams.resize_column = {
+        let seen = seen.clone();
+        Rc::new(move |col, _| seen.borrow_mut().push(format!("resize col {col}")))
+    };
+    let mut window = crate::chrome::new_window_root();
+    let mut ws: Box<dyn Component> = Box::new(workspace(seams));
+    assert!(ws.set_props(&two_columns_and_a_float()));
+    window.base_mut().children.push(ws);
+    crate::chrome::seat_chrome(
+        &mut window,
+        Flex::column()
+            .width(heca_grid_ui::Length::FULL)
+            .height(heca_grid_ui::Length::FULL),
+    );
+    LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
+
+    // The gap between the columns (x 340..350) at a height the float does not cover.
+    let gap = Point::new(345.0, 400.0);
+    assert_eq!(
+        heca_grid_ui::cursor_at(&window, gap),
+        heca_grid_ui::Cursor::Default,
+        "no resize cursor while a pane floats"
+    );
+    dispatch(&mut window, &Event::pointer_pressed(gap, PointerButton::Left));
+    dispatch(&mut window, &Event::pointer_moved(Point::new(355.0, 400.0)));
+    dispatch(
+        &mut window,
+        &Event::pointer_released(Point::new(355.0, 400.0), PointerButton::Left),
+    );
+    assert!(
+        !seen.borrow().iter().any(|a| a.starts_with("resize")),
+        "{:?}",
+        seen.borrow()
+    );
+
+    // A press on the float itself (pane 30, x 200..450, y 100..300) reaches it.
+    seen.borrow_mut().clear();
+    let on_float = Point::new(300.0, 200.0);
+    dispatch(&mut window, &Event::pointer_pressed(on_float, PointerButton::Left));
+    dispatch(&mut window, &Event::pointer_released(on_float, PointerButton::Left));
+    assert_eq!(*seen.borrow(), ["focus_pane(Some(Int(30)))"]);
 }
