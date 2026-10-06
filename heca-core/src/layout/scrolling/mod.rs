@@ -7,6 +7,9 @@ use super::window_view::ScrollView;
 // Re-export PaneInsertTarget for convenience.
 pub use super::types::PaneInsertTarget;
 
+mod effect;
+pub use effect::{ColumnEffect, Positions};
+
 /// Minimum width (logical px) a column may be shrunk to by a manual resize, so a
 /// column never becomes a thin line.
 pub const MIN_COLUMN_WIDTH: f64 = 150.0;

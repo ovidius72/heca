@@ -58,14 +58,7 @@ impl ScrollingMut<'_> {
         let old_xs = self.reader().capture_column_positions();
         let old_view_pos = self.reader().view_pos();
 
-        let column = &mut self.space.columns[idx];
-        if column.is_zoomed() {
-            if let Some(previous_width) = column.zoom_restore_width.take() {
-                column.width = previous_width;
-            }
-        } else {
-            column.zoom_restore_width = Some(column.width);
-        }
+        self.space.zoom_column(idx);
 
         self.finish_column_width_change(idx, &old_xs, old_view_pos);
         true
@@ -140,10 +133,7 @@ impl ScrollingMut<'_> {
         let old_rel = self.reader().column_x(idx) - self.reader().view_pos();
 
         if let Some((_, new_width)) = self.reader().clamped_width(idx, delta) {
-            let col = &mut self.space.columns[idx];
-            col.width = new_width;
-            col.zoom_restore_width = None;
-            col.is_full_width = false;
+            self.space.set_column_width(idx, new_width);
         }
 
         // Restore the resized column's on-screen left edge by shifting the view by

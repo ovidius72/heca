@@ -245,3 +245,43 @@ fn a_move_slides_in_the_window_that_made_it_and_not_in_another() {
     let elsewhere = space.space.through(&other);
     assert!(rest(&elsewhere).iter().all(|d| d.abs() < 0.01), "another window shows none");
 }
+
+/// **The content changes with no view at all**: these run on a bare `ScrollingSpace`, which has
+/// nowhere to look and nothing to animate, and each says what it did.
+#[test]
+fn the_content_changes_and_says_what_it_did_with_no_view() {
+    let mut space = ScrollingSpace::new(LayoutOptions::default());
+    let column = |id| test_column(id, ColumnWidth::Proportion(0.5));
+    assert_eq!(space.insert_column(0, column(1)), ColumnEffect::Inserted { idx: 0 });
+    assert_eq!(space.insert_column(9, column(2)), ColumnEffect::Inserted { idx: 1 }, "past the end is the end");
+    space.insert_column(2, column(3));
+    assert_eq!(space.move_column(0, 9), Some(ColumnEffect::Moved { from: 0, to: 2 }));
+    assert_eq!(column_ids(&space), [2, 3, 1]);
+    assert_eq!(space.move_column(1, 1), None);
+    assert_eq!(space.swap_columns(0, 2), Some(ColumnEffect::Swapped { a: 0, b: 2 }));
+    assert_eq!(column_ids(&space), [1, 3, 2]);
+    assert_eq!(space.swap_columns(0, 0), None);
+    assert_eq!(space.set_column_width(1, ColumnWidth::Fixed(300.0)), Some(ColumnEffect::Resized { idx: 1 }));
+    assert_eq!(space.columns[1].width, ColumnWidth::Fixed(300.0));
+    assert_eq!(space.zoom_column(1), Some(ColumnEffect::Resized { idx: 1 }));
+    assert!(space.columns[1].is_zoomed());
+    space.zoom_column(1);
+    assert_eq!(space.columns[1].width, ColumnWidth::Fixed(300.0), "zoom restores the width");
+    space.zoom_column(1);
+    space.set_column_width(1, ColumnWidth::Fixed(200.0));
+    assert!(!space.columns[1].is_zoomed(), "a resize clears the zoom");
+    let (taken, effect) = space.take_column(0).expect("a column");
+    assert_eq!((taken.id.0, effect), (1, ColumnEffect::Removed { idx: 0 }));
+    assert_eq!(space.take_column(7).map(|_| ()), None);
+}
+
+/// The positions taken before a change are the columns' x by identity and the scroll.
+#[test]
+fn positions_are_the_columns_x_by_identity_and_the_scroll() {
+    let space = space_with_columns(3);
+    let before = space.r().positions();
+    assert_eq!(before.columns.len(), 3);
+    assert_eq!(before.columns[0].1, 0.0);
+    assert!(before.columns[1].1 > 0.0);
+    assert_eq!(before.view_pos, space.r().view_pos());
+}

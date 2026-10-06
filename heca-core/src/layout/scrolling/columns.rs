@@ -24,7 +24,7 @@ impl ScrollingMut<'_> {
             }
         });
 
-        self.space.columns.insert(idx, column);
+        self.space.insert_column(idx, column);
 
         if !was_empty && idx <= self.view.active_column {
             self.view.active_column += 1;
@@ -149,7 +149,7 @@ impl ScrollingMut<'_> {
             }
         }
 
-        let col = self.space.columns.remove(idx);
+        let (col, _) = self.space.take_column(idx)?;
 
         if self.space.columns.is_empty() {
             self.view.active_column = 0;
@@ -383,10 +383,10 @@ impl ScrollingMut<'_> {
             } else {
                 insert_idx
             };
-            self.space.columns.insert(insert_idx, new_col);
+            self.space.insert_column(insert_idx, new_col);
             self.view.active_column = insert_idx;
         } else {
-            self.space.columns.insert(insert_idx, new_col);
+            self.space.insert_column(insert_idx, new_col);
             self.view.active_column = insert_idx;
         }
 
@@ -449,8 +449,7 @@ impl ScrollingMut<'_> {
         let old_view_pos = self.reader().view_pos();
 
         // Remove from old position and insert at new position.
-        let column = self.space.columns.remove(from);
-        self.space.columns.insert(to, column);
+        self.space.move_column(from, to);
 
         // The moved column stays active. Update the index BEFORE computing positions.
         self.view.active_column = to;
@@ -478,7 +477,7 @@ impl ScrollingMut<'_> {
             .zip(self.space.columns.iter())
             .map(|(x, c)| (c.id, x))
             .collect();
-        self.space.columns.swap(a, b);
+        self.space.swap_columns(a, b);
         self.animate_columns_from(&old_xs);
         true
     }
