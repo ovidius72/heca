@@ -890,14 +890,6 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
-    /// **Let the pointer through this widget's own box** (CSS `pointer-events: none` on a wrapper):
-    /// what it holds still answers, but where none of its children is, the pointer reaches whatever
-    /// is behind it. For a container that covers other things only to hold something small.
-    fn pointer_passthrough(mut self, pass: bool) -> Self {
-        self.base_mut().pointer_passthrough = pass;
-        self
-    }
-
     /// **What the cursor looks like over this widget** (CSS `cursor`): the nearest widget that
     /// declared one, on the way up from what the pointer is over, decides — see
     /// [`cursor_at`](crate::cursor_at).

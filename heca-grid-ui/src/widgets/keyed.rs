@@ -53,7 +53,7 @@ pub struct Keyed {
 impl Keyed {
     /// Nothing built yet.
     pub fn new() -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         // A strip across the room it is given, as tall as what it holds.
         base.style.layout.direction = Direction::Column;
         base.style.layout.width = Length::Percent(1.0);

@@ -40,7 +40,7 @@ impl Grid {
     /// An empty grid (no tracks). Add tracks with `.template_row(..)` / `.template_column(..)`.
     pub fn new() -> Self {
         Self {
-            base: Base::new(),
+            base: Base::container(),
             columns: Vec::new(),
             rows: Vec::new(),
             areas: Vec::new(),

@@ -1134,19 +1134,21 @@ fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
     use heca_grid_ui::reactive::signal;
     use heca_grid_ui::style::Length;
     use heca_grid_ui::widgets::{KeyHintGroup, ToastStack};
-    use heca_grid_ui::builders::Parent;
+    use heca_grid_ui::builders::{ComponentExt, Parent};
     use heca_grid_ui::{LayoutEngine, LayoutExt};
 
     let viewport = Size::new(1280.0, 800.0);
     let mut window = crate::chrome::new_window_root();
-    // The chrome: a plain child of the window root, and the thing the pointer must reach. Its own
-    // box lets the pointer through, so what answers is the sidebar it holds.
+    // The chrome: a plain child of the window root, and the thing the pointer must reach. The
+    // sidebar it holds answers a click; the chrome's own box answers nothing.
     crate::chrome::seat_chrome(
         &mut window,
-        Flex::row()
-            .width(Length::FULL)
-            .height(Length::FULL)
-            .child(Flex::row().width(Length::FULL).height(Length::FULL)),
+        Flex::row().width(Length::FULL).height(Length::FULL).child(
+            Flex::row()
+                .width(Length::FULL)
+                .height(Length::FULL)
+                .on_click(|_| {}),
+        ),
     );
     // The stack, seated **exactly as the app seats it** — wrapped in its picker group, and empty,
     // as it is nearly always. The wrapper is the point: a first version of this guard placed a bare

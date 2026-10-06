@@ -506,17 +506,15 @@ pub struct Base {
     /// Whether this widget **clips what it holds** to its own box — CSS `overflow: hidden`. A
     /// child that is placed or grows past the edge is not drawn there and cannot be hit there.
     pub clip_children: bool,
+    /// Whether this widget **only arranges its children** — see [`Base::container`]. A layout-only
+    /// widget claims the pointer on its own box only where it declares or paints something.
+    pub layout_only: bool,
     /// The version of what this child was built from, when a parent that keeps its children
     /// across passes built it from one — see [`reconcile_keyed`](crate::reconcile::reconcile_keyed).
     pub built_from: Option<String>,
     /// What the cursor looks like while the pointer is over this widget — see
     /// [`cursor_at`](crate::cursor_at). `None` leaves it to what holds this widget.
     pub cursor: Option<crate::cursor::Cursor>,
-    /// Whether this widget's **own box** lets the pointer through to what is behind it, while what
-    /// it holds still answers (CSS `pointer-events: none` on a wrapper whose children opt back
-    /// in). A full-size container laid over other things would otherwise be what every press lands
-    /// on, wherever none of its children is.
-    pub pointer_passthrough: bool,
     /// **The context menu this widget carries**, built fresh each time it is triggered.
     ///
     /// A universal slot like [`key`](Self::key) and [`drag_source`](Self::drag_source), so
@@ -694,6 +692,26 @@ pub struct Base {
 }
 
 impl Base {
+    /// **Does this widget declare anything the pointer could mean on it?** A handler, a focus
+    /// stop, a drag or drop role, a cursor, a tooltip, a menu, a hint, or something painted (fill,
+    /// border, glow). A box with none of these is layout only: where no child is, nothing is under
+    /// the pointer but whatever is behind it.
+    pub fn answers_pointer(&self) -> bool {
+        let v = &self.style.visual;
+        self.handlers.is_some()
+            || self.focusable
+            || self.one_click_target
+            || self.draggable
+            || self.drop_target
+            || self.cursor.is_some()
+            || self.tooltip.is_some()
+            || self.context_menu.is_some()
+            || self.hint.is_some()
+            || v.fill.is_some()
+            || v.border.is_some()
+            || v.glow.is_some()
+    }
+
     /// **The name this widget declares itself by** — its [`key`](Self::key), or its
     /// [`scope_key`](Self::scope_key) when it names a region rather than a row.
     ///
@@ -720,6 +738,16 @@ impl Base {
     /// `key`-or-`scope_key` test by hand and drifts from the other.
     pub fn answers_to(&self, name: &str) -> bool {
         self.key.as_deref() == Some(name) || self.scope_key.as_deref() == Some(name)
+    }
+
+    /// A base for a widget whose whole job is **arranging children** (a row, a grid, a wrapper):
+    /// where none of its children is, the pointer goes to whatever is behind it, unless the widget
+    /// declares something or paints (see [`answers_pointer`](Self::answers_pointer)). Every layout
+    /// container starts here, so no author of one writes anything for it.
+    pub fn container() -> Self {
+        let mut base = Self::new();
+        base.layout_only = true;
+        base
     }
 
     /// A new base with default style and an empty child list.
@@ -752,13 +780,13 @@ impl Base {
             font: 15.0,
             root_font: 15.0,
             viewport: Size::new(f64::MAX, f64::MAX),
+            layout_only: false,
             pointer: crate::pointer::PointerState::new(),
             handlers: None,
             props: None,
             clip_children: false,
             built_from: None,
             cursor: None,
-            pointer_passthrough: false,
             context_menu: None,
             surface: false,
             surface_slot: None,
@@ -1167,6 +1195,15 @@ pub trait Component {
     /// `false`; see [`FocusManager`](crate::focus::FocusManager).
     fn overlay_active(&self) -> bool {
         false
+    }
+
+    /// Whether this widget's **own box** is something the pointer lands on, where none of its
+    /// children is. A leaf is what it draws, so it does. A layout-only widget ([`Base::container`])
+    /// does only where it declares something or paints, so a full-size layout box laid over other
+    /// things does not take every press that no child wants.
+    fn claims_pointer(&self) -> bool {
+        let base = self.base();
+        !base.layout_only || base.answers_pointer()
     }
 
     /// Whether this component's **overlay surface geometrically occludes** `pos`

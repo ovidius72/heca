@@ -515,9 +515,7 @@ pub(crate) const DOCK_PICK_SCOPE: &str = "dock.destination";
 /// beside it paints and hit-tests above it: child order is z-order in one tree, which is what
 /// replaces the layer stack's separate sort (`docs/surface-compositor.md` § 0.6).
 pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
-    // It covers the whole window to hold the bars and sidebars, so the pointer passes through its own
-    // box to the workspace behind it; what it holds still answers.
-    let chrome = Box::new(chrome.key(CHROME_KEY).pointer_passthrough(true));
+    let chrome = Box::new(chrome.key(CHROME_KEY));
     let children = &mut root.base_mut().children;
     match children
         .iter()

@@ -47,7 +47,7 @@ impl ItemGroup {
             .leading(chevron_label)
             .on_activate(move || expanded.set(!expanded.get_untracked()));
 
-        let mut base = Base::new();
+        let mut base = Base::container();
         base.style.layout.direction = Direction::Column;
         base.children.push(Box::new(header));
         Self {

@@ -29,7 +29,7 @@ pub struct Visibility {
 impl Visibility {
     /// Wrap `child` and show it initially when `visible` is `true`.
     pub fn new(child: impl Component + 'static, visible: bool) -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         let child: Box<dyn Component> = Box::new(child);
         // Transparent to layout as well as to paint: see `component::wrap_transparently`.
         crate::component::wrap_transparently(&mut base, child.as_ref());

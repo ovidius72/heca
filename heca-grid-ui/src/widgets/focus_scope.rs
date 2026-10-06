@@ -55,7 +55,7 @@ impl FocusScope {
     }
 
     fn wrap(child: Box<dyn Component>) -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         // Hug the child so the wrapper's bounds are the child's (the outline is drawn off them),
         // and use a column so a single child still stretches across the cross axis — the same
         // transparency `KeyHint` needs, for the same reason.

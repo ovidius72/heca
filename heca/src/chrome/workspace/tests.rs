@@ -391,3 +391,132 @@ fn a_press_on_a_pane_reaches_the_pane_under_the_chrome() {
     dispatch(&mut window, &Event::pointer_released(at, PointerButton::Left));
     assert_eq!(*focused.borrow(), ["focus_pane(Some(Int(10)))"]);
 }
+
+/// **Whatever a plugin puts anywhere is clicked where it is drawn, and a pane is clicked where
+/// nothing else is — with nobody setting anything.**
+///
+/// The chrome is built the way the app builds it: a window-sized column holding a top bar and a
+/// middle row with a painted dock on the right and an unpainted spacer that covers the panes. A
+/// plugin widget sits in the dock, another in an overlay seated over everything, each with only a
+/// click handler.
+#[test]
+fn a_plugin_widget_in_a_dock_or_an_overlay_and_a_pane_each_get_their_own_press() {
+    use heca_grid_ui::builders::{ComponentExt, Parent};
+    use heca_grid_ui::component::dispatch;
+    use heca_grid_ui::event::{Event, PointerButton};
+    use heca_grid_ui::{Color, Length};
+
+    let clicks = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+    let focused = clicks.clone();
+    heca_grid_ui::intent::install_intent_sink(move |intent| {
+        focused.borrow_mut().push(intent.action.to_string())
+    });
+    let dock_clicks = clicks.clone();
+    let overlay_clicks = clicks.clone();
+
+    let mut window = crate::chrome::new_window_root();
+    let mut ws: Box<dyn Component> = Box::new(workspace(seams()));
+    assert!(ws.set_props(&two_columns_and_a_float()));
+    window.base_mut().children.push(ws);
+
+    let mut dock = Flex::column()
+        .width(100.0)
+        .height(Length::FULL)
+        .child(Flex::row().at_rect(0.0, 70.0, 100.0, 40.0).on_click(move |_| dock_clicks.borrow_mut().push("dock".into())));
+    dock.base_mut().style.visual.fill = Some(Color::new(20, 20, 20, 255));
+    crate::chrome::seat_chrome(
+        &mut window,
+        Flex::column()
+            .width(Length::FULL)
+            .height(Length::FULL)
+            .child(Flex::row().width(Length::FULL).height(30.0))
+            .child(
+                Flex::row()
+                    .width(Length::FULL)
+                    .height(Length::FULL)
+                    .child(Flex::row().width(Length::FULL).height(Length::FULL))
+                    .child(dock),
+            ),
+    );
+    crate::chrome::place_surface(
+        &mut window,
+        "plugin.overlay",
+        Box::new(
+            Flex::row()
+                .width(Length::FULL)
+                .height(Length::FULL)
+                .child(Flex::row().at_rect(680.0, 300.0, 100.0, 40.0).on_click(move |_| overlay_clicks.borrow_mut().push("overlay".into()))),
+        ),
+    );
+    LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
+
+    let press = |window: &mut Flex, x: f64, y: f64| {
+        let at = Point::new(x, y);
+        dispatch(window, &Event::pointer_pressed(at, PointerButton::Left));
+        dispatch(window, &Event::pointer_released(at, PointerButton::Left));
+    };
+    press(&mut window, 740.0, 120.0);
+    press(&mut window, 720.0, 320.0);
+    press(&mut window, 100.0, 100.0);
+    assert_eq!(*clicks.borrow(), ["dock", "overlay", "focus_pane"]);
+}
+
+/// **Every layout container lets a press through where it covers nothing** — a plugin wraps its
+/// dock in a `Grid`, a `Surface`, and gets the same answer as with a `Flex`: the widget
+/// inside is clicked, and a pane behind the wrapper is clicked where the wrapper holds nothing.
+#[test]
+fn every_layout_container_over_the_panes_leaves_them_their_presses() {
+    use heca_grid_ui::builders::{ComponentExt, Parent};
+    use heca_grid_ui::component::dispatch;
+    use heca_grid_ui::event::{Event, PointerButton};
+    use heca_grid_ui::widgets::{Grid, KeyHintGroup, Surface, Visibility};
+    use heca_grid_ui::Length;
+
+    type Wrap = fn(Flex) -> Box<dyn Component>;
+    let wrappers: [(&str, Wrap); 5] = [
+        ("Flex", |inner| Box::new(inner)),
+        ("Grid", |inner| Box::new(Grid::new().width(Length::FULL).height(Length::FULL).child(inner))),
+        ("Surface", |inner| {
+            Box::new(Surface::column().width(Length::FULL).height(Length::FULL).child(inner))
+        }),
+        ("Visibility", |inner| Box::new(Visibility::new(inner, true))),
+        ("KeyHintGroup", |inner| Box::new(KeyHintGroup::new(inner))),
+    ];
+
+    for (name, wrap) in wrappers {
+        let clicks = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let sink = clicks.clone();
+        heca_grid_ui::intent::install_intent_sink(move |intent| {
+            sink.borrow_mut().push(intent.action.to_string())
+        });
+        let item_clicks = clicks.clone();
+
+        let mut window = crate::chrome::new_window_root();
+        let mut ws: Box<dyn Component> = Box::new(workspace(seams()));
+        assert!(ws.set_props(&two_columns_and_a_float()));
+        window.base_mut().children.push(ws);
+        let inner = Flex::row()
+            .width(Length::FULL)
+            .height(Length::FULL)
+            .child(
+                Flex::row()
+                    .at_rect(680.0, 300.0, 100.0, 40.0)
+                    .on_click(move |_| item_clicks.borrow_mut().push("item".into())),
+            );
+        crate::chrome::seat_chrome(
+            &mut window,
+            Flex::column()
+                .width(Length::FULL)
+                .height(Length::FULL)
+                .child(wrap(inner)),
+        );
+        LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
+
+        for (x, y) in [(720.0, 320.0), (100.0, 100.0)] {
+            let at = Point::new(x, y);
+            dispatch(&mut window, &Event::pointer_pressed(at, PointerButton::Left));
+            dispatch(&mut window, &Event::pointer_released(at, PointerButton::Left));
+        }
+        assert_eq!(*clicks.borrow(), ["item", "focus_pane"], "inside a {name}");
+    }
+}

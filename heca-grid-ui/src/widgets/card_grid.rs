@@ -102,7 +102,7 @@ pub struct CardGrid {
 impl CardGrid {
     /// An empty grid.
     pub fn new() -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         // Rows stack **vertically** — they are rows. Without saying so the default direction lays
         // them side by side, which turned a stack of workspaces into a line of them.
         base.style.layout.direction = crate::style::Direction::Column;
