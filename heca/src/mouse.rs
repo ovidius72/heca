@@ -46,15 +46,10 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
 /// whatever a widget declared); this only turns the answer into the window's own icon. `heca-grid-ui`
 /// stays cursor-free (it only emits a `Scene`) — the OS cursor is a host concern.
 pub(crate) fn update_cursor(state: &mut AppState, pos: (f32, f32)) {
-    let icon = if link_hover(state, pos) {
-        // Cmd held over a terminal hyperlink → signal the click-to-open affordance.
-        winit::window::CursorIcon::Pointer
-    } else {
-        cursor_icon(heca_grid_ui::cursor_at(
-            &state.window_root,
-            heca_core::layout::types::Point::new(pos.0 as f64, pos.1 as f64),
-        ))
-    };
+    let icon = cursor_icon(heca_grid_ui::cursor_at(
+        &state.window_root,
+        heca_core::layout::types::Point::new(pos.0 as f64, pos.1 as f64),
+    ));
     if state.current_cursor != icon {
         state.current_cursor = icon;
         state.window.set_cursor(icon);
@@ -74,17 +69,6 @@ fn cursor_icon(cursor: heca_grid_ui::Cursor) -> winit::window::CursorIcon {
         Cursor::ResizeHorizontal => CursorIcon::EwResize,
         Cursor::ResizeVertical => CursorIcon::NsResize,
     }
-}
-
-/// Whether the pointer is over a terminal hyperlink while the open modifier
-/// (Cmd, the interactive-move modifier) is held — the exact condition under
-/// which a left-click opens the link. Drives the pointer cursor affordance so
-/// the cue and the action stay in lockstep. terminal-task-18.
-fn link_hover(state: &AppState, pos: (f32, f32)) -> bool {
-    interactive_move_modifier_held(state)
-        && hit_test_pane(state, pos).is_some_and(|pane_id| {
-            crate::app::terminal_host::hyperlink_uri_at_position(state, pane_id, pos).is_some()
-        })
 }
 
 /// Logical-pixel center of the app window — the anchor for keyboard/RPC-opened menus so a menu
@@ -130,19 +114,6 @@ pub fn on_mouse_input(
     use heca_grid_ui::event::RawPointerKind as Kind;
     match (raw.button, raw.kind) {
         (Btn::Left, Kind::Pressed) => {
-            // Cmd+click on a terminal hyperlink → open it. Link-first: checked
-            // before the interactive-move gesture (Cmd is the move modifier), so
-            // a Cmd+click that lands on a link opens it and consumes the press,
-            // while a Cmd+click off any link falls through to interactive-move.
-            // terminal-task-18 (mouse open-link surface).
-            if interactive_move_modifier_held(state)
-                && let Some(pane_id) = hit_test_pane(state, pos)
-                && let Some(url) =
-                    crate::app::terminal_host::hyperlink_uri_at_position(state, pane_id, pos)
-            {
-                return Some((WmAction::OpenLink { url }, InteractionSource::MouseContent));
-            }
-
             // Meta+click on content pane → start drag from content.
             if interactive_move_modifier_held(state)
                 && let Some(pane_id) = hit_test_pane(state, pos)

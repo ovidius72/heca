@@ -5,6 +5,8 @@
 
 use std::cell::{Cell, RefCell};
 
+use heca_config::theme::ModifierKey;
+use heca_core::backend::HyperlinkSpan;
 use heca_core::layout::Rectangle;
 use heca_grid_ui::Size;
 
@@ -42,6 +44,15 @@ pub(super) struct Shared {
     pub(super) declared: RefCell<Option<Declared>>,
     /// Its search: whether the bar is open, the query, and the matches it was told to show.
     pub(super) search: SearchSlot,
+    /// The hyperlinks on screen this frame, as the backend captured them. **The one place** the
+    /// question "where are the links" is answered: a click, a menu and the follow-link letters all
+    /// ask the terminal.
+    pub(super) links: RefCell<Vec<HyperlinkSpan>>,
+    /// The stable row at the top of the screen and how many rows it shows — what turns a row the
+    /// selection keeps into a row on screen.
+    pub(super) view: Cell<(isize, usize)>,
+    /// The key that makes a press the window's and a click on a link open it.
+    pub(super) link_modifier: Cell<ModifierKey>,
 }
 
 /// **What an extension declared about a terminal it placed.** The name is the identity and never
@@ -89,6 +100,48 @@ impl Shared {
     /// Ask the owner to step to the next or previous match. `false` when nobody listens.
     pub(super) fn step(&self, forward: bool) -> bool {
         self.emit(TerminalInput::Search(Search::Step { forward }))
+    }
+
+    /// The target of the link covering cell `(row, col)`. A span's start is inclusive and its end
+    /// exclusive; capture never overlaps spans, so at most one matches.
+    pub(super) fn link_at(&self, row: usize, col: usize) -> Option<String> {
+        self.links
+            .borrow()
+            .iter()
+            .find(|span| span.row == row && col >= span.start_col && col < span.end_col)
+            .map(|span| span.uri.clone())
+    }
+
+    /// The target of the link under a pointer, if it is on one.
+    pub(super) fn link_under(&self, p: &heca_grid_ui::PointerEvent) -> Option<String> {
+        let cell = self.cell_at(p)?;
+        self.link_at(cell.row, cell.col)
+    }
+
+    /// Whether the key that makes a press the window's is held.
+    pub(super) fn reserved(&self, held: heca_grid_ui::Modifiers) -> bool {
+        crate::modifier::held(self.link_modifier.get(), held)
+    }
+
+    /// Whether a press carries the key that makes it the window's, on the terminal itself.
+    pub(super) fn held_for_window(&self, cx: &heca_grid_ui::event::EventCx<'_>) -> bool {
+        cx.pointer().is_some_and(|p| {
+            p.target_bounds == Some(self.bounds.get()) && self.reserved(p.modifiers)
+        })
+    }
+
+    /// A click on a link, with the window's key held: ask the host to open it.
+    pub(super) fn open_link(&self, cx: &mut heca_grid_ui::event::EventCx<'_>) {
+        let Some(p) = cx.pointer().copied() else {
+            return;
+        };
+        if p.target_bounds != Some(self.bounds.get()) || !self.reserved(p.modifiers) {
+            return;
+        }
+        if let Some(url) = self.link_under(&p) {
+            cx.dispatch(heca_view::Intent::new("open_link").arg("url", url.into()));
+            cx.stop_propagation();
+        }
     }
 
     /// The grid cell the pointer is on, if it is on the grid.

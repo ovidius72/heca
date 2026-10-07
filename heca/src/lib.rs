@@ -10,6 +10,7 @@ mod handlers;
 mod host;
 mod input;
 mod keymap;
+mod modifier;
 mod mouse;
 mod notification;
 mod project_trust;

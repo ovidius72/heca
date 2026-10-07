@@ -231,7 +231,9 @@ pub(crate) fn show_viewports<'a>(
             nominal_cell: pane.map_or(state.terminal_cell_size, |pane| {
                 state.pane_base_cell_size(pane)
             }),
+            open_link_modifier: state.interactive_move_modifier,
         });
+        terminal.show_links(&snapshot.hyperlinks);
     }
     changed
 }

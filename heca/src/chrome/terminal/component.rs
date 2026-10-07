@@ -47,6 +47,9 @@ impl Terminal {
             controls: RefCell::default(),
             declared: RefCell::new(None),
             search: SearchSlot::default(),
+            links: RefCell::default(),
+            view: Cell::new((0, 0)),
+            link_modifier: Cell::new(heca_config::theme::ModifierKey::default()),
         }))
     }
 
@@ -89,9 +92,14 @@ impl Terminal {
         // terminal itself is what they landed on: the chip and the scrollbar are its children, and
         // a press or a move on them is theirs. None of these takes the event — a window gesture (a
         // divider, a move modifier) decides about the same press on its own.
+        // **A press with the window's key held is the window's**: it starts a pane move, or — if it
+        // never travels — is a click that opens a link. The program is told neither half.
         .on(EventKind::PointerDown, {
             let me = me.clone();
             move |cx| {
+                if me.held_for_window(cx) {
+                    return;
+                }
                 me.pointer(cx, |p, cell| TerminalInput::Press {
                     button: p.button,
                     cell,
@@ -100,7 +108,11 @@ impl Terminal {
             }
         })
         .on(EventKind::PointerUp, {
+            let me = me.clone();
             move |cx| {
+                if me.held_for_window(cx) {
+                    return;
+                }
                 me.pointer(cx, |p, cell| TerminalInput::Release {
                     button: p.button,
                     cell,
@@ -108,6 +120,9 @@ impl Terminal {
                 })
             }
         })
+        // **Clicking a link with the window's key held opens it.** The framework tells a click from
+        // the start of a drag by how far the pointer travelled, so the same key serves both.
+        .on(EventKind::Click, move |cx| me.open_link(cx))
     }
 
     /// **A terminal an extension places by name** — the one every handle of that name shares, so a
@@ -202,6 +217,8 @@ impl Terminal {
     pub(crate) fn show(&self, viewport: &Viewport) -> bool {
         self.shared.cell.set(viewport.cell);
         self.shared.nominal.set(viewport.nominal_cell);
+        self.shared.link_modifier.set(viewport.open_link_modifier);
+        self.shared.view.set((viewport.top_stable_row, viewport.rows));
         let search = &self.shared.search;
         let highlights_changed = search.set_view(viewport.top_stable_row, viewport.rows)
             | search.set_look(viewport.match_alpha, viewport.current_match_alpha);
@@ -331,6 +348,37 @@ impl Terminal {
         ))
     }
 
+    /// **Say which hyperlinks are on screen** — the backend's capture for this frame.
+    pub(crate) fn show_links(&self, links: &[heca_core::backend::HyperlinkSpan]) {
+        let mut mine = self.shared.links.borrow_mut();
+        if mine.as_slice() != links {
+            *mine = links.to_vec();
+        }
+    }
+
+    /// Every link on screen, in the order the backend captured them.
+    pub(crate) fn links(&self) -> Vec<heca_core::backend::HyperlinkSpan> {
+        self.shared.links.borrow().clone()
+    }
+
+    /// The target of the link under `pos` (window coordinates), if the terminal was drawn and the
+    /// point is on one.
+    pub(crate) fn link_at(&self, pos: (f32, f32)) -> Option<String> {
+        let cell = self.cell_at(pos)?;
+        self.shared.link_at(cell.row, cell.col)
+    }
+
+    /// The target of the link at a **stable-row** cell — the rows a selection keeps — if that row is
+    /// on screen.
+    pub(crate) fn link_at_stable(&self, stable_row: isize, col: usize) -> Option<String> {
+        let (top, rows) = self.shared.view.get();
+        let row = stable_row - top;
+        if row < 0 || row >= rows as isize {
+            return None;
+        }
+        self.shared.link_at(row as usize, col)
+    }
+
     /// How much room the layout gave it the last time it was laid out.
     pub(crate) fn room(&self) -> Option<Size> {
         self.shared.size.get()
@@ -364,6 +412,13 @@ impl Component for Terminal {
     /// host into a texture it keeps (they are the hottest path in the app); all this says is which
     /// terminal and which box, and the host draws it there. The scrollback controls are drawn after
     /// it, in the same walk, so they are on top.
+    /// **A hand over a link while the window's key is held** — the moment a click would open it.
+    fn cursor_over(&self, point: Point) -> Option<heca_grid_ui::Cursor> {
+        (self.shared.reserved(heca_grid_ui::event::modifiers())
+            && self.link_at((point.x as f32, point.y as f32)).is_some())
+        .then_some(heca_grid_ui::Cursor::Pointer)
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         self.shared.bounds.set(self.base.bounds);
         if let Some(id) = self.shared.id.get() {

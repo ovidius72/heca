@@ -14,9 +14,7 @@ mod typing;
 mod wheel;
 
 pub(crate) use frames::{column_frames, laid_out_pane_ids, pane_outer_frames};
-pub(crate) use hyperlinks::{
-    cell_screen_pos, collect_link_hints, hyperlink_uri_at_position, hyperlink_uri_at_stable_cell,
-};
+pub(crate) use hyperlinks::{cell_screen_pos, collect_link_hints};
 pub(crate) use input::{HeardPresses, on_left_release, on_terminal_input};
 pub(crate) use search::{enter_scrollback_search, search_step};
 pub(crate) use selection::{

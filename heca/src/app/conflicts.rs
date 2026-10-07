@@ -190,8 +190,6 @@ pub(crate) fn settle_drag_modifiers(
     settings: &heca_config::settings::SettingsConfig,
     conflicts: &mut Conflicts,
 ) {
-    use heca_config::settings::ModifierKey;
-
     let start = settings.interactive_move_modifier;
     let swap = settings.swap_modifier;
     if start == swap {
@@ -205,12 +203,7 @@ pub(crate) fn settle_drag_modifiers(
         heca_grid_ui::drag::set_swap_rule(|_| false);
         return;
     }
-    heca_grid_ui::drag::set_swap_rule(move |m| match swap {
-        ModifierKey::Super => m.meta,
-        ModifierKey::Alt => m.alt,
-        ModifierKey::Ctrl => m.ctrl,
-        ModifierKey::Shift => m.shift,
-    });
+    heca_grid_ui::drag::set_swap_rule(move |m| crate::modifier::held(swap, m));
 }
 
 /// A combo as a user would write it in config — the form they have to search for to fix it.

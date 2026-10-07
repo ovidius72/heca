@@ -30,6 +30,7 @@ fn viewport() -> Viewport {
         match_alpha: 64,
         current_match_alpha: 150,
         nominal_cell: (10.0, 20.0),
+        open_link_modifier: heca_config::theme::ModifierKey::Super,
     }
 }
 
