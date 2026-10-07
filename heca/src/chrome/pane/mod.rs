@@ -93,6 +93,7 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
                 accent,
                 active_glow,
                 float: floating.contains(&pane_id).then_some(float_look),
+                move_modifier: state.interactive_move_modifier,
             }
         })
         .collect();

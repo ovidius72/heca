@@ -645,11 +645,21 @@ pub(crate) fn column_key(col_id: heca_core::layout::ColumnId) -> String {
     format!("col:{}", col_id.0)
 }
 
-/// `col:new` — **the slot for a column that does not exist yet.**
+/// What a pane says it is when it is carried, and what a place for a pane takes.
+pub(crate) const PANE_DRAG_KIND: &str = "pane";
+
+/// `slot:<n>` — **the place a new column would be made**, `n` columns from the left.
 ///
-/// A name, not an id, because there is nothing to have an id: it is the offer of a new column,
-/// shown only while a column pick is open and gone when it closes.
-pub(crate) const NEW_COLUMN_KEY: &str = "col:new";
+/// The workspace writes it and the drop reads it back, so what the name means lives in one place.
+pub(crate) fn slot_key(at: usize) -> String {
+    format!("slot:{at}")
+}
+
+/// The index a `slot:<n>` key names — the inverse of [`slot_key`].
+pub(crate) fn slot_of_key(key: &str) -> Option<usize> {
+    key.strip_prefix("slot:")?.parse().ok()
+}
+
 
 /// **What one of a pane's own controls is called** — `pane:7-zoom`.
 ///

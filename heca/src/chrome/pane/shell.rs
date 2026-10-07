@@ -117,7 +117,17 @@ impl PaneShell<'_> {
         // openings of the picker (F003/P082/T445).
         // **One pane, seen in several places.** The sidebar row and the exposé card show this
         // same pane and declare the same key, so the three of them wear one letter between them.
-        let pane = pane.key(crate::chrome::pane_key(pane_id));
+        let mut pane = pane.key(crate::chrome::pane_key(pane_id));
+        // **A tiled pane is carried by the window's key and lands beside another** — the framework
+        // runs the drag and paints what follows the pointer; a float is neither picked up nor
+        // dropped on, since it is over everything and moves where it was put.
+        if self.model.float.is_none() {
+            let key = self.model.move_modifier;
+            pane = pane
+                .draggable_as(crate::chrome::PANE_DRAG_KIND)
+                .draggable_when(move |held| crate::modifier::held(key, held))
+                .accepts_beside([crate::chrome::PANE_DRAG_KIND]);
+        }
 
         // **What a click on a pane means, said in one place, in the order it happens.**
         //

@@ -385,7 +385,7 @@ search_current_match_alpha = 150
 # drag_label_size_factor = 0.25   # the name drawn over a dragged pane: share of its shorter side …
 # drag_label_min_size    = 24.0   # … kept between this many px …
 # drag_label_max_size    = 72.0   # … and this many.
-# new_column_slot_share  = 0.18   # how wide the "new column" opening is, as a share of the column
+# new_column_slot_share  = 0.18   # how wide a place for a new column is (shown while a pane is carried or a column pick is open), as a share of the column beside it
 #
 # Info bar (segmented pill inside the pane top + action buttons on the right):
 # title_segments : left side, in order. [] hides it.

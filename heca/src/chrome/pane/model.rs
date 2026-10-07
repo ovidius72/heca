@@ -43,6 +43,8 @@ pub(crate) struct PaneShellModel {
     /// What only a **floating** pane wears: it covers what is under it, so it fills itself or
     /// frosts what lies beneath. `None` for a pane in a column.
     pub(crate) float: Option<FloatLook>,
+    /// The held key that picks a tiled pane up to move it — the user's interactive-move modifier.
+    pub(crate) move_modifier: heca_config::theme::ModifierKey,
 }
 
 /// How a floating pane covers what is under it.

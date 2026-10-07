@@ -81,15 +81,14 @@ fn wanted(mode: &InputMode) -> Vec<(Offer, char)> {
         );
     }
     if let Some(cands) = mode.col_candidates() {
-        out.extend(cands.iter().map(|(ch, target)| {
-            let key = match target {
-                crate::app_state::ColumnPickTarget::Existing { col_id, .. } => column_key(*col_id),
-                // The offer of a new column wears a letter like any other destination.
-                crate::app_state::ColumnPickTarget::New => {
-                    crate::chrome::NEW_COLUMN_KEY.to_string()
-                }
-            };
-            (Offer::ByKey(key), *ch)
+        // Only a column that exists is offered a letter here. A place for a new column draws its
+        // own letter: the workspace is handed the pick (`WorkspaceModel::pick`) and seats a place
+        // for each.
+        out.extend(cands.iter().filter_map(|(ch, target)| match target {
+            crate::app_state::ColumnPickTarget::Existing { col_id, .. } => {
+                Some((Offer::ByKey(column_key(*col_id)), *ch))
+            }
+            crate::app_state::ColumnPickTarget::NewColumn { .. } => None,
         }));
     }
     // A dock names itself with `scope_key` rather than `key` — a container's identity, not a
@@ -275,6 +274,34 @@ pub(crate) fn wanted_for_tests(mode: &InputMode) -> Vec<(Offer, char)> {
 mod tests {
     use super::*;
     use heca_core::layout::PaneId;
+
+    /// **A column pick offers a letter to the columns, and only the columns**: a place for a new
+    /// column draws its own letter, so a second one offered to a key nothing answers would be spent
+    /// on nothing.
+    #[test]
+    fn a_column_pick_offers_letters_to_columns_and_not_to_places() {
+        use crate::app_state::ColumnPickTarget;
+        use heca_core::layout::ColumnId;
+        let mode = InputMode::ColumnPick {
+            pane_id: PaneId(1),
+            candidates: vec![
+                (
+                    'a',
+                    ColumnPickTarget::Existing {
+                        ws_idx: 0,
+                        col_idx: 0,
+                        col_id: ColumnId(7),
+                    },
+                ),
+                ('b', ColumnPickTarget::NewColumn { gap: 1 }),
+            ],
+        };
+        let offered: Vec<_> = wanted(&mode)
+            .into_iter()
+            .map(|(offer, ch)| (matches!(offer, Offer::ByKey(ref k) if k == "col:7"), ch))
+            .collect();
+        assert_eq!(offered, [(true, 'a')]);
+    }
 
     /// **A view that cannot be seen has its letter taken BACK, not skipped** (F003/P082/T438).
     ///

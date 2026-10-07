@@ -63,9 +63,10 @@ pub enum ColumnPickTarget {
         col_idx: usize,
         col_id: heca_core::layout::ColumnId,
     },
-    /// **A new column, right of the one the pane is in now** — "you keep your place in the strip",
-    /// the same rule `move_pane_to_new_column` already follows.
-    New,
+    /// **A new column at gap `gap` of the active workspace** — the gap left of column `gap`,
+    /// counted with the pane still where it is. It is drawn as an empty place with its letter in
+    /// it, and picking it runs `place_pane` for that gap.
+    NewColumn { gap: usize },
 }
 
 #[derive(Clone, Debug, PartialEq)]

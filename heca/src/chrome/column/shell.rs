@@ -30,8 +30,6 @@ pub(crate) struct ColumnCallbacks {
     /// The keycap tint a column target wears — the theme token, so both views of a column agree
     /// and a theme reload moves them together.
     pub(crate) tint: heca_grid_ui::Color,
-    /// What picking the new-column offer does: make one and move the pane into it.
-    pub(crate) new_column: std::rc::Rc<dyn Fn()>,
 }
 
 /// The column shell component. Properties are struct fields and the constructor is a struct
@@ -47,32 +45,6 @@ pub(crate) struct ColumnShell<'a> {
     /// **What each pane runs**, by pane — the terminal today, anything else tomorrow. Carried down
     /// exactly as the header's environment is: the column does not know what it is.
     pub(crate) contents: HashMap<PaneId, Box<dyn Component>>,
-}
-
-/// **The offer of a new column**, drawn in the gap right of the column the picked pane is in.
-///
-/// It is a child of that column and placed outside its box, which `at_rect` allows — absolute
-/// placement is not clipped by a parent that does not clip. That is what keeps it out of every
-/// map and every walk: it arrives with the column and leaves with it.
-/// `share` is how wide it is as a share of that column: a slot, not a column — wide enough to aim at
-/// and to carry a letter, narrow enough to read as an opening.
-pub(crate) fn new_column_slot(cb: &ColumnCallbacks, share: f32) -> Box<dyn Component> {
-    let slot = Flex::column()
-        .key(crate::chrome::NEW_COLUMN_KEY)
-        .at_rect(
-            heca_grid_ui::Length::Percent(1.0),
-            0.0,
-            heca_grid_ui::Length::Percent(share),
-            heca_grid_ui::Length::Percent(1.0),
-        )
-        // What picking it means: make a column here and move the pane into it. The column asks;
-        // the core does.
-        .on_hint({
-            let make = cb.new_column.clone();
-            move || make()
-        })
-        .hint_color(cb.tint);
-    Box::new(slot)
 }
 
 /// **Build one pane, placed where the layout engine put it.**
@@ -131,7 +103,10 @@ impl ColumnShell<'_> {
         // **A column reads the same wherever you see it.** The sidebar's view tints its keycap
         // `success` so a column target is distinct from a pane's; this is the same target, so it
         // takes the same tint rather than the picker's default.
-        let column = column.hint_color(self.cb.tint);
+        // **Its letter sits in the middle** of the outline a column pick draws round it.
+        let column = column
+            .hint_color(self.cb.tint)
+            .hint_placement(heca_grid_ui::widgets::HintPlacement::Center);
 
         // The panes, each at the rect the layout engine gave it.
         let mut column = column;
@@ -142,10 +117,6 @@ impl ColumnShell<'_> {
                 .map(|env| crate::chrome::PaneHeader::new(env.clone()));
             let content = self.contents.remove(&pane.pane_id);
             column = column.child(pane_child(pane, self.model, self.pane_cb, header, content));
-        }
-        // Declared last so it draws over the gap rather than under the panes.
-        if let Some(share) = self.model.new_column_slot {
-            column = column.child(new_column_slot(self.cb, share));
         }
         column
     }

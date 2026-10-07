@@ -9,7 +9,7 @@ use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::chrome::ChromeDragItem;
 use crate::input::WmAction;
 use crate::providers::workspaces::WorkspaceRow;
-use heca_core::layout::{PaneId, Workspace};
+use heca_core::layout::PaneId;
 use heca_grid_ui::drag::DropSide;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -79,15 +79,6 @@ pub(crate) fn accept_drop(
     }
 }
 
-/// A copy of workspace `ws_idx` with `pane_id` already taken out — what `place_pane` counts its
-/// indices on, since it takes the pane out before placing it. Placing next to a card in the same
-/// column the pane came from would otherwise land one row off.
-fn without(state: &AppState, ws_idx: usize, pane_id: PaneId) -> Option<Workspace> {
-    let mut ws = state.session.workspaces.get(ws_idx)?.clone();
-    ws.take_pane(pane_id);
-    Some(ws)
-}
-
 /// The `place_pane` a drop on a sidebar row means: beside a pane card (above it on its top half),
 /// at the end of a column, in a new column at the end of a workspace, or — on a floating pane's
 /// card — at the end of the active column where it came from. `None` when there is nowhere to go.
@@ -104,7 +95,10 @@ fn place_on_row(
                 return None;
             }
             let (ws_idx, _, _) = crate::find_pane_location(&state.session, target)?;
-            let (col, row) = without(state, ws_idx, pane_id)?
+            let (col, row) = state
+                .session
+                .workspaces
+                .get(ws_idx)?
                 .scrolling
                 .pane_indices(target)?;
             let row = if side == DropSide::Before {
@@ -114,18 +108,15 @@ fn place_on_row(
             };
             (ws_idx, col, Some(row))
         }
-        WorkspaceRow::Workspace { ws_idx, .. } => (
-            ws_idx,
-            without(state, ws_idx, pane_id)?.scrolling.columns.len(),
-            None,
-        ),
+        // The end of the workspace: a gap past the last column clamps to it.
+        WorkspaceRow::Workspace { ws_idx, .. } => (ws_idx, usize::MAX, None),
         WorkspaceRow::Column { ws_idx, col_id, .. } => {
-            let ws = without(state, ws_idx, pane_id)?;
+            let ws = state.session.workspaces.get(ws_idx)?;
             let col = ws.scrolling.columns.iter().position(|c| c.id == col_id)?;
             (ws_idx, col, Some(usize::MAX))
         }
         WorkspaceRow::FloatingPane { .. } => {
-            let ws = without(state, original_ws, pane_id)?;
+            let ws = state.session.workspaces.get(original_ws)?;
             (
                 original_ws,
                 ws.scrolling.active_column_idx,

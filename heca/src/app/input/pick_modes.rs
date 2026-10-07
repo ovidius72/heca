@@ -211,6 +211,31 @@ pub(super) fn handle_workspace_pick_mode(
     state.needs_redraw = true;
 }
 
+/// **What picking a destination does to the captured pane**: stack it into a column that exists, or
+/// make a column of its own at a gap of the active workspace (counted with the pane where it is).
+fn column_pick_action(
+    target: crate::app_state::ColumnPickTarget,
+    pane_id: PaneId,
+    active_ws: usize,
+) -> WmAction {
+    use crate::app_state::ColumnPickTarget;
+    match target {
+        ColumnPickTarget::Existing {
+            ws_idx, col_idx, ..
+        } => WmAction::MovePaneToColumn {
+            pane_id,
+            ws_idx,
+            col_idx,
+        },
+        ColumnPickTarget::NewColumn { gap } => WmAction::PlacePane {
+            pane_id,
+            ws_idx: active_ws,
+            col_idx: gap,
+            pane_idx: None,
+        },
+    }
+}
+
 /// Resolve a [`InputMode::ColumnPick`] keypress: a matching candidate letter moves the
 /// captured pane into that column of the active workspace (stacking with its panes);
 /// any other key (e.g. Esc) exits the mode.
@@ -221,7 +246,6 @@ pub(super) fn handle_column_pick_mode(
     pane_id: PaneId,
     ctx: KeyInputContext<'_>,
 ) {
-    use crate::app_state::ColumnPickTarget;
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
@@ -232,16 +256,7 @@ pub(super) fn handle_column_pick_mode(
         // Each destination names the act that reaches it, so the letter runs the same action a
         // keybinding or an RPC call would — the pick is only how a keyboard supplies an argument it
         // cannot type.
-        let action = match *target {
-            ColumnPickTarget::Existing {
-                ws_idx, col_idx, ..
-            } => WmAction::MovePaneToColumn {
-                pane_id,
-                ws_idx,
-                col_idx,
-            },
-            ColumnPickTarget::New => WmAction::MovePaneToNewColumn,
-        };
+        let action = column_pick_action(*target, pane_id, state.session.active_workspace_idx);
         dispatch_action(state, registry, InteractionSource::Keyboard, &action);
     }
     state.needs_redraw = true;
@@ -276,4 +291,42 @@ pub(super) fn handle_dock_pick_mode(
         );
     }
     state.needs_redraw = true;
+}
+
+#[cfg(test)]
+mod column_pick_tests {
+    use super::*;
+    use crate::app_state::ColumnPickTarget;
+    use heca_core::layout::ColumnId;
+
+    /// A letter on a place for a new column makes the column at that gap of the workspace on screen;
+    /// a letter on a column stacks the pane into it.
+    #[test]
+    fn a_place_makes_a_column_at_its_gap_and_a_column_takes_the_pane() {
+        assert_eq!(
+            column_pick_action(ColumnPickTarget::NewColumn { gap: 2 }, PaneId(5), 1),
+            WmAction::PlacePane {
+                pane_id: PaneId(5),
+                ws_idx: 1,
+                col_idx: 2,
+                pane_idx: None,
+            }
+        );
+        assert_eq!(
+            column_pick_action(
+                ColumnPickTarget::Existing {
+                    ws_idx: 0,
+                    col_idx: 3,
+                    col_id: ColumnId(9),
+                },
+                PaneId(5),
+                1
+            ),
+            WmAction::MovePaneToColumn {
+                pane_id: PaneId(5),
+                ws_idx: 0,
+                col_idx: 3,
+            }
+        );
+    }
 }

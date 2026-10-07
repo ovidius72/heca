@@ -7,9 +7,9 @@ use std::collections::{HashMap, HashSet};
 
 use heca_core::layout::PaneId;
 
-use super::{PaneEntry, WorkspaceModel};
+use super::{PaneEntry, PickMark, WorkspaceModel};
 use crate::app_state::AppState;
-use crate::chrome::column::{ColumnShellModel, focus_pane_of, picking_from_column};
+use crate::chrome::column::{ColumnShellModel, focus_pane_of};
 use crate::chrome::pane::{PaneShellModel, pane_models};
 use crate::chrome::pane_header::PaneHeaderInput;
 
@@ -42,9 +42,6 @@ pub(crate) fn gather(
             w: col.rect.size.w as f32,
             h: col.rect.size.h as f32,
             focus_pane: focus_pane_of(state, col),
-            // Only the column the picked pane is in offers a new one beside it.
-            new_column_slot: picking_from_column(state, col)
-                .then(|| state.appearance.effective_new_column_slot_share()),
             // The panes this column holds, in the order the layout engine placed them.
             panes: col
                 .panes
@@ -77,11 +74,37 @@ pub(crate) fn gather(
         .session
         .active_workspace()
         .map_or(0.0, |ws| ws.scrolling.working_area.size.w as f32);
+    let pick = pick_marks(state);
     WorkspaceModel {
+        pick,
         area,
         working_width,
+        slot_share: state.appearance.effective_new_column_slot_share(),
         columns,
         floats,
         panes,
     }
+}
+
+/// What the open column pick is offering, as the workspace shows it. Nothing when no pick is open.
+fn pick_marks(state: &AppState) -> Vec<PickMark> {
+    use crate::app_state::ColumnPickTarget;
+    let Some(candidates) = state.input_mode.col_candidates() else {
+        return Vec::new();
+    };
+    candidates
+        .iter()
+        .filter_map(|(letter, target)| match *target {
+            ColumnPickTarget::NewColumn { gap } => Some(PickMark::Gap {
+                at: gap,
+                letter: *letter,
+            }),
+            ColumnPickTarget::Existing { ws_idx, col_id, .. }
+                if ws_idx == state.session.active_workspace_idx =>
+            {
+                Some(PickMark::Column(col_id))
+            }
+            ColumnPickTarget::Existing { .. } => None,
+        })
+        .collect()
 }

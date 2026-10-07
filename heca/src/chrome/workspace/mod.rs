@@ -13,10 +13,11 @@ mod find;
 mod gather;
 mod model;
 mod seat;
+mod slots;
 
 pub(crate) use find::{offer_to_columns, pane_node, pane_node_mut};
 pub(crate) use gather::gather;
-pub(crate) use model::{PaneEntry, WorkspaceModel};
+pub(crate) use model::{PaneEntry, PickMark, WorkspaceModel};
 pub(crate) use seat::{clear_workspace, seat_workspace};
 
 use std::cell::Cell;
@@ -26,10 +27,9 @@ use std::rc::Rc;
 use heca_core::layout::{PaneId, Rectangle};
 use heca_grid_ui::component::Base;
 use heca_grid_ui::style::Placement;
-use heca_grid_ui::widgets::{Flex, Splitter};
+use heca_grid_ui::widgets::{Flex, LandingSlot, Splitter};
 use heca_grid_ui::{Component, ComponentExt, Length, reconcile};
 
-use crate::chrome::column::shell::new_column_slot;
 use crate::chrome::column::{ColumnCallbacks, ColumnShell, ColumnShellModel};
 use crate::chrome::pane::shell::focus_state_to;
 use crate::chrome::pane::{PaneCallbacks, PaneShell, PaneShellModel};
@@ -85,6 +85,20 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
     // The edges come after the columns and before the floats: a float is over them.
     let edges = dividers::edges(model);
     wanted.extend(edges.iter().map(|(edge, _)| (edge.name(), String::new())));
+    // The places a carried pane can start a column, over the columns and under the floats. Each is
+    // hidden until a pane is picked up, and tells itself when that happens.
+    let slots = slots::slots(model);
+    wanted.extend(
+        slots
+            .iter()
+            .map(|(at, _)| (crate::chrome::slot_key(*at), String::new())),
+    );
+    // What an open column pick marks, over the places and under the floats: an outline round each
+    // column that can be picked, an empty place with its letter at each gap that can be.
+    wanted.extend(model.pick.iter().map(|mark| match mark {
+        PickMark::Gap { at, letter } => (pick_gap_key(*at), letter.to_string()),
+        PickMark::Column(col) => (pick_column_key(*col), String::new()),
+    }));
     wanted.extend(
         model
             .floats
@@ -92,8 +106,18 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
             .map(|p| (crate::chrome::pane_key(p.pane_id), p.key())),
     );
     reconcile::reconcile_keyed(base, &wanted, |name| {
+        if let Some(mark) = model.pick.iter().find(|m| pick_key(m) == name) {
+            return pick_mark(mark, name);
+        }
         if let Some((edge, _)) = edges.iter().find(|(edge, _)| edge.name() == name) {
             return Box::new(build_edge(seams, working, *edge).key(name));
+        }
+        if crate::chrome::slot_of_key(name).is_some() {
+            return Box::new(
+                LandingSlot::new()
+                    .while_dragging(crate::chrome::PANE_DRAG_KIND)
+                    .key(name),
+            );
         }
         match model
             .columns
@@ -118,7 +142,32 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
         let Some(name) = child.base().identity().map(str::to_string) else {
             continue;
         };
-        if let Some((_, gap)) = edges.iter().find(|(edge, _)| edge.name() == name) {
+        if let Some(rect) = model
+            .pick
+            .iter()
+            .find(|m| pick_key(m) == name)
+            .and_then(|mark| pick_rect(mark, model, &slots))
+        {
+            place_at(
+                child.as_mut(),
+                area,
+                rect.loc.x as f32,
+                rect.loc.y as f32,
+                rect.size.w as f32,
+                rect.size.h as f32,
+            );
+        } else if let Some((_, slot)) = crate::chrome::slot_of_key(&name)
+            .and_then(|at| slots.iter().find(|(s, _)| *s == at))
+        {
+            place_at(
+                child.as_mut(),
+                area,
+                slot.loc.x as f32,
+                slot.loc.y as f32,
+                slot.size.w as f32,
+                slot.size.h as f32,
+            );
+        } else if let Some((_, gap)) = edges.iter().find(|(edge, _)| edge.name() == name) {
             place_at(
                 child.as_mut(),
                 area,
@@ -141,6 +190,49 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
             give_pane(model, pane, child.as_mut());
             place_at(child.as_mut(), area, pane.x, pane.y, pane.w, pane.h);
         }
+    }
+}
+
+/// What a pick mark is called in the workspace.
+fn pick_key(mark: &PickMark) -> String {
+    match mark {
+        PickMark::Gap { at, .. } => pick_gap_key(*at),
+        PickMark::Column(col) => pick_column_key(*col),
+    }
+}
+
+fn pick_gap_key(at: usize) -> String {
+    format!("pick:gap:{at}")
+}
+
+fn pick_column_key(col: heca_core::layout::ColumnId) -> String {
+    format!("pick:col:{}", col.0)
+}
+
+/// A mark of the open pick, built: an empty place with its letter, or an outline round a column. It
+/// decorates — a press goes through to what is under it.
+fn pick_mark(mark: &PickMark, name: &str) -> Box<dyn Component> {
+    let slot = match mark {
+        PickMark::Gap { letter, .. } => LandingSlot::new().label(letter.to_string()),
+        PickMark::Column(_) => LandingSlot::new().filled(true),
+    };
+    Box::new(slot.pointer_transparent(true).key(name))
+}
+
+/// Where a pick mark sits, in window coordinates.
+fn pick_rect(
+    mark: &PickMark,
+    model: &WorkspaceModel,
+    slots: &[(usize, Rectangle)],
+) -> Option<Rectangle> {
+    match mark {
+        PickMark::Gap { at, .. } => slots.iter().find(|(s, _)| s == at).map(|(_, rect)| *rect),
+        PickMark::Column(col) => model.columns.iter().find(|c| c.col_id == *col).map(|c| {
+            Rectangle::new(
+                heca_core::layout::Point::new(f64::from(c.x), f64::from(c.y)),
+                heca_core::layout::Size::new(f64::from(c.w), f64::from(c.h)),
+            )
+        }),
     }
 }
 
@@ -230,11 +322,6 @@ fn place_column(
         .map(|p| (crate::chrome::pane_key(p.pane_id), p))
         .collect();
     reconcile::reconcile_children(child, &column.child_keys(), |key| {
-        if key == crate::chrome::NEW_COLUMN_KEY
-            && let Some(share) = column.new_column_slot
-        {
-            return new_column_slot(&seams.column, share);
-        }
         let Some(pane) = by_key.get(key).copied() else {
             return Box::new(Flex::column());
         };
