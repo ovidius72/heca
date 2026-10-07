@@ -58,7 +58,7 @@ pub(super) fn on_wheel(
         }
         return;
     }
-    if state.mouse.interactive_move.is_some() || crate::chrome::drag_in_flight(state) {
+    if crate::chrome::drag_in_flight(state) {
         return;
     }
     // The grid's lines run the other way round from the device's: positive `y` is content moving

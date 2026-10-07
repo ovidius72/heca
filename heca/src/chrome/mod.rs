@@ -783,26 +783,6 @@ fn seated(mount: &str, mut intent: Intent) -> Intent {
     intent
 }
 
-/// The deepest sidebar item (pane → column → workspace) under `pos`, regardless of
-/// drag semantics — used to anchor the right-click context menu on whatever the
-/// cursor is over. Unlike [`sidebar_drag_source`] this accepts every registered
-/// item (workspaces are drop-only, so they never appear as a drag source but must
-/// still be right-clickable). Resolves against the **expanded** grid sidebar's
-/// retained tree; the hand-drawn collapsed rail is not covered (it moves onto grid
-/// widgets in the collapsed-rail migration, `app-task-21`).
-pub(crate) fn sidebar_item_at(
-    state: &crate::app_state::AppState,
-    pos: (f32, f32),
-) -> Option<ChromeDragItem> {
-    let tree = state.chrome_tree.as_ref()?;
-    let hit = heca_grid_ui::drag::resolve_at_filtered(
-        &state.window_root,
-        Point::new(pos.0 as f64, pos.1 as f64),
-        &|_| true,
-    )?;
-    tree.drag_items.get(&hit.key).cloned()
-}
-
 /// **What a pane can be dropped onto**, as the workspaces component names it.
 ///
 /// One translation, so the two callers that need it — the pointer path and the drop the framework

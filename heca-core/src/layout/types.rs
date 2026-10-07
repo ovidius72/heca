@@ -240,11 +240,3 @@ pub enum CenterFocusedColumn {
     Always,
 }
 
-/// Drop target for interactive move.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PaneInsertTarget {
-    /// Insert as a new column at the given index.
-    NewColumn(usize),
-    /// Insert into an existing column at the given pane index.
-    InColumn { col_idx: usize, pane_idx: usize },
-}

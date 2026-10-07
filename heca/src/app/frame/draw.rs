@@ -1,13 +1,11 @@
 //! **The passes of a frame**, each a method of [`Frame`] named for what it draws.
 
-use heca_core::layout::Rectangle;
 
 use super::host_work::{HostTargets, do_host_work};
 use super::{Frame, FrameTerminals};
 use crate::app::scene_flush::flush_scene;
 use crate::app::terminal_render::TerminalRenderState;
 use crate::app_state::AppState;
-use crate::mouse;
 
 impl Frame {
     /// **Clear the scene, then lay the bottom layers**: the frosted z=0 background and the top bar.
@@ -173,14 +171,6 @@ impl Frame {
             &mut self.flushed,
             &mut |state, work, encoder| do_host_work(state, terminals, &targets, work, encoder),
         );
-        // The pane being moved with the mouse and the hint of where it would land are drawn
-        // straight to the screen, over the window.
-        let pane_area_rect = Rectangle::new(
-            heca_core::layout::Point::new(self.v.pane_area.loc.x, self.v.pane_area.loc.y),
-            heca_core::layout::Size::new(self.v.pane_area.size.w, self.v.pane_area.size.h),
-        );
-        mouse::render_detached_pane(state, pane_area_rect);
-        mouse::render_insert_hint(state, pane_area_rect);
         state
             .primitive_renderer
             .render(&state.device, &self.scene, &mut self.encoder);

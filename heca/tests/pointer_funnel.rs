@@ -288,10 +288,10 @@ fn the_move_that_drives_a_drag_is_not_withheld_while_dragging() {
 /// **The tree is told what is held before anyone is asked what it means.**
 ///
 /// The framework records the modifier state from the `ModifiersChanged` broadcast, and the app's
-/// own reaction to that same event asks it what a drag now means (`DropAction::held`). Reacting
-/// before announcing asks the question before the answer exists, so the answer is the *previous*
-/// one: a drag's move-versus-swap trails one event behind and flips when the key comes up instead
-/// of when it goes down.
+/// own reaction to that same event asks it what the pointer now means (the cursor over a link, a
+/// drag's move-versus-swap outline). Reacting before announcing asks the question before the
+/// answer exists, so the answer is the *previous* one: it trails one event behind and flips when
+/// the key comes up instead of when it goes down.
 ///
 /// A lint, like its neighbours, and for the same reason — what it guards is an *ordering*, and the
 /// symptom is a value that is merely stale rather than an event that is missing.
@@ -308,7 +308,7 @@ fn the_tree_learns_the_modifiers_before_the_app_reacts_to_them() {
         .find("heca_grid_ui::dispatch(")
         .expect("the modifiers branch no longer announces to the tree — move this guard with it");
     let reacted = body
-        .find("on_modifiers_changed")
+        .find("update_cursor")
         .expect("the modifiers branch no longer reacts — move this guard with it");
 
     assert!(

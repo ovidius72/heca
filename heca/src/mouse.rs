@@ -1,25 +1,19 @@
 //! Mouse interaction system.
 //!
-//! Focus-follows-mouse, click-to-focus, interactive move and edge scrolling. All WM actions (focus,
-//! sidebar clicks) are returned as `Option<WmAction>` for the caller to dispatch via
-//! `registry.execute()`.
+//! The pointer, as far as the host has to know it: where it is, what shape it takes, what a press
+//! means once the window tree has had it, and edge scrolling while something is carried.
 //!
-//! **Dragging a row is not here.** A row declares that it can be dragged and `heca-grid-ui` runs
-//! the gesture over the same tree it lays out and paints; the drop comes back through
-//! `chrome::drain_pending_drops`. What is left in this module is the content area's own gesture —
-//! interactive move, which detaches a pane — and divider resizing.
+//! **No gesture is here.** A pane, a column or a row declares that it can be dragged and
+//! `heca-grid-ui` runs the gesture over the same tree it lays out and paints; the drop comes back
+//! through `chrome::drain_pending_drops`.
 
-mod hit_test;
-mod interactive;
 pub(crate) mod release;
-mod render;
 pub(crate) mod surface_left;
 
 use crate::app::interaction::InteractionSource;
-use crate::app_state::{AppState, InteractiveMovePhase};
+use crate::app_state::AppState;
 use crate::chrome::ChromeConfig;
 use crate::input::WmAction;
-use heca_core::layout::PaneId;
 
 /// **A drop's action goes through the dispatcher**, like a click's.
 ///
@@ -36,7 +30,7 @@ pub(crate) fn dispatch_drop(state: &AppState, source: InteractionSource, action:
 /// Handle cursor movement. Returns a `WmAction` if one should be dispatched
 /// (e.g. focus-follows-mouse triggered), or `None` for internal state updates.
 pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
-    interactive::on_cursor_moved(state, pos);
+    state.mouse.pos = pos;
     None
 }
 
@@ -79,16 +73,6 @@ pub(crate) fn window_center_logical(state: &AppState) -> (f32, f32) {
     (phys.width as f32 / s / 2.0, phys.height as f32 / s / 2.0)
 }
 
-/// Sync the current drag mode with modifier state changes.
-///
-/// This keeps move/swap behavior live while the user presses or releases Shift.
-pub fn on_modifiers_changed(state: &mut AppState) {
-    interactive::sync_drag_swap_mode(state);
-    if crate::chrome::drag_in_flight(state) || state.mouse.interactive_move.is_some() {
-        interactive::on_cursor_moved(state, state.mouse.pos);
-    }
-}
-
 /// Check the focus-follows-mouse timer on every frame (even without cursor movement).
 /// Call from `about_to_wait` for frame-rate-independent debounce.
 /// Handle mouse button events. Returns a `WmAction` if one should be dispatched.
@@ -108,20 +92,10 @@ pub fn on_mouse_input(
     let heca_grid_ui::Event::Raw(raw) = ev else {
         return None;
     };
-    let pos = state.mouse.pos;
-
     use heca_grid_ui::PointerButton as Btn;
     use heca_grid_ui::event::RawPointerKind as Kind;
     match (raw.button, raw.kind) {
         (Btn::Left, Kind::Pressed) => {
-            // Meta+click on content pane → start drag from content.
-            if interactive_move_modifier_held(state)
-                && let Some(pane_id) = hit_test_pane(state, pos)
-            {
-                interactive::start_interactive_move(state, pane_id, pos);
-                return None;
-            }
-
             // First, and deliberately independent of whether a widget then consumes the press: a
             // click on a scrollbar thumb is still a click *in* that container and must focus it.
             // Each of the branches below returns early, so doing this later would mean repeating it
@@ -150,15 +124,6 @@ pub fn on_mouse_input(
             // right-clicking a pane never focused it.
         }
         (Btn::Left, Kind::Released) => {
-            // Check for interactive move release first.
-            if let Some(InteractiveMovePhase::Starting { .. }) = state.mouse.interactive_move {
-                interactive::cancel_interactive_move(state);
-                return None;
-            }
-            if let Some(InteractiveMovePhase::Moving { .. }) = state.mouse.interactive_move {
-                release::handle_interactive_move_release(state, pos);
-                return None;
-            }
             // **A dragged row's release is not handled here.** The framework pairs the press with
             // the release, ends the gesture and hands back a drop naming what it landed on, which
             // `chrome::drain_pending_drops` acts on. A release that crossed no threshold becomes a
@@ -216,16 +181,21 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
         return false;
     }
 
-    let is_dragging = matches!(
-        state.mouse.interactive_move,
-        Some(InteractiveMovePhase::Moving { .. }) | Some(InteractiveMovePhase::Starting { .. })
-    );
-    if !is_dragging {
+    let pane_area = ChromeConfig::of(state).content_rect();
+    // **Only a pane carried out of the content area scrolls it.** Dragging a row in a sidebar
+    // reaches those same screen edges and must not move the strip: the tree says where the carried
+    // widget came from, and nothing keeps a list of what can be dragged.
+    let carried_from_content = heca_grid_ui::dragged_bounds(&state.window_root).is_some_and(|b| {
+        pane_area.contains(heca_core::layout::types::Point::new(
+            b.loc.x + b.size.w / 2.0,
+            b.loc.y + b.size.h / 2.0,
+        ))
+    });
+    if !carried_from_content {
         return false;
     }
 
     let pos = state.mouse.pos;
-    let pane_area = ChromeConfig::of(state).content_rect();
 
     // During drag, scroll when near any edge:
     // - Absolute window edge (150px): covers sidebar area, fast (1000 px/s)
@@ -297,56 +267,6 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
     }
 
     true
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  Hit testing
-// ═══════════════════════════════════════════════════════════════════════════════
-
-pub(crate) use hit_test::{hit_test_pane, hit_test_pane_excluding};
-
-pub(crate) use render::{render_detached_pane, render_insert_hint};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  Helpers
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/// NIRI rubberband formula: `(1.0 - (1.0 / (x * c / d + 1.0))) * d`
-/// with `c = 1.0`, `d = 0.5`.
-fn rubberband(x: f32) -> f32 {
-    let c = 1.0;
-    let d = 0.5;
-    (1.0 - (1.0 / (x * c / d + 1.0))) * d
-}
-
-fn content_area_origin(state: &AppState) -> (f32, f32) {
-    let r = ChromeConfig::of(state).content_rect();
-    (r.loc.x as f32, r.loc.y as f32)
-}
-
-fn find_pane_in_workspace(
-    ws: &mut heca_core::layout::workspace::Workspace,
-    pane_id: PaneId,
-) -> Option<(usize, usize)> {
-    for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-        for (pi, pane) in col.panes.iter().enumerate() {
-            if pane.id == pane_id {
-                return Some((ci, pi));
-            }
-        }
-    }
-    None
-}
-
-/// Check if the configured interactive move modifier is currently held.
-pub(crate) fn interactive_move_modifier_held(state: &AppState) -> bool {
-    let modifiers = state.modifiers;
-    match state.interactive_move_modifier {
-        heca_config::theme::ModifierKey::Super => modifiers.super_key(),
-        heca_config::theme::ModifierKey::Alt => modifiers.alt_key(),
-        heca_config::theme::ModifierKey::Ctrl => modifiers.control_key(),
-        heca_config::theme::ModifierKey::Shift => modifiers.shift_key(),
-    }
 }
 
 #[cfg(test)]

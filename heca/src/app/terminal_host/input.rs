@@ -188,12 +188,10 @@ fn on_move(
     }
 }
 
-/// Has a window gesture taken the pointer — a move of a pane, a drag in flight, a menu or dialog
+/// Has a window gesture taken the pointer — a drag in flight, a menu or dialog
 /// that just opened? Then the program does not hear it.
 fn window_gesture_has_it(state: &AppState) -> bool {
-    state.mouse.interactive_move.is_some()
-        || crate::chrome::drag_in_flight(state)
-        || crate::chrome::top_modal(state).is_some()
+    crate::chrome::drag_in_flight(state) || crate::chrome::top_modal(state).is_some()
 }
 
 /// **The left button came up, anywhere.** (A release outside the window reaches no widget, because
