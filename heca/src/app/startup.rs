@@ -71,6 +71,10 @@ pub(crate) fn layout_options_from(
             .appearance
             .effective_pane_gap(&app_config.theme) as f64,
         always_center_single_column: app_config.config.settings.always_center_single_column,
+        column_focus: match app_config.config.settings.column_focus {
+            heca_config::settings::ColumnFocus::Last => heca_core::layout::types::ColumnFocus::Last,
+            heca_config::settings::ColumnFocus::Row => heca_core::layout::types::ColumnFocus::Row,
+        },
         // Clamped like niri's, so a typo in a config file cannot produce a map at 4000% or 0%.
         overview_zoom_from: app_config
             .config

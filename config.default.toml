@@ -84,6 +84,11 @@ overview_gap = 0.1
 # Clamped to 0.2..=4.0.
 overview_zoom_from = 0.8
 
+# Which pane focus lands on when it moves to the column on the left or right:
+#   "last" - the pane you last used in that column (default)
+#   "row"  - the pane in that column level with the one you leave
+column_focus = "last"
+
 # Modifier held to start an interactive pane drag with the mouse.
 # One of: "Super" (default) | "Alt" | "Ctrl" | "Shift".
 interactive_move_modifier = "Super"

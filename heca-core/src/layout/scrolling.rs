@@ -486,8 +486,40 @@ impl ScrollingSpace {
         if self.active_column_idx == 0 {
             return false;
         }
-        self.activate_column(self.active_column_idx - 1);
+        self.focus_column_beside(self.active_column_idx - 1);
         true
+    }
+
+    /// Focus the column `idx` next to the active one, landing on the pane the layout's
+    /// [`ColumnFocus`] rule names: the one last used there, or the one level with the pane left.
+    fn focus_column_beside(&mut self, idx: usize) {
+        if self.options.column_focus == ColumnFocus::Row
+            && let Some(row) = self.row_level_with_active(idx)
+        {
+            self.columns[idx].active_pane_idx = row;
+        }
+        self.activate_column(idx);
+    }
+
+    /// The pane of column `idx` whose vertical span overlaps the active pane's the most (the upper
+    /// one on a tie); the nearest one when none overlaps. `None` when there is no active pane.
+    fn row_level_with_active(&self, idx: usize) -> Option<usize> {
+        let from = self.active_column_idx;
+        let pane = self.columns.get(from)?.active_pane_idx;
+        let top = self.pane_y_in_column(from, pane);
+        let bottom = top + self.columns.get(from)?.pane_sizes.get(pane)?.h;
+        let target = self.columns.get(idx)?;
+        let mut best: Option<(usize, f64)> = None;
+        for row in 0..target.panes.len() {
+            let y = self.pane_y_in_column(idx, row);
+            let h = target.pane_sizes.get(row)?.h;
+            // Overlap, or minus the distance between the spans when they do not touch.
+            let overlap = (bottom.min(y + h) - top.max(y)).max(-(top - (y + h)).max(y - bottom).max(0.0));
+            if best.is_none_or(|(_, o)| overlap > o) {
+                best = Some((row, overlap));
+            }
+        }
+        best.map(|(row, _)| row)
     }
 
     /// Focus right (next column).
@@ -495,7 +527,7 @@ impl ScrollingSpace {
         if self.active_column_idx + 1 >= self.columns.len() {
             return false;
         }
-        self.activate_column(self.active_column_idx + 1);
+        self.focus_column_beside(self.active_column_idx + 1);
         true
     }
 
@@ -2110,5 +2142,59 @@ mod tests {
         assert_eq!(opened[0].panes[0].rect.size.w, closed[0].panes[0].rect.size.w, "widths are kept");
         assert!(opened[0].panes[0].rect.size.h < closed[0].panes[0].rect.size.h, "the open column's panes give height");
         assert_eq!(opened[1].panes[0].rect.size.h, closed[1].panes[0].rect.size.h, "other columns keep theirs");
+    }
+
+    /// A 2 × 2 strip, `[a][c]` over `[b][d]`: columns 1 and 2, panes (1, 2) and (3, 4).
+    fn two_by_two(focus: ColumnFocus) -> ScrollingSpace {
+        let mut space = space_with_columns(2);
+        space.options.column_focus = focus;
+        space.add_pane_to_column(0, None, Pane::new(PaneId(11), "b"), false);
+        space.add_pane_to_column(1, None, Pane::new(PaneId(12), "d"), false);
+        space.update_all_column_widths();
+        space
+    }
+
+    fn focused_pane(space: &ScrollingSpace) -> PaneId {
+        space.columns[space.active_column_idx]
+            .active_pane()
+            .expect("an active pane")
+            .id
+    }
+
+    /// **From c, left lands on the pane level with c under `row` and on the last-used pane under
+    /// `last`** — with b remembered as the last used in the left column.
+    #[test]
+    fn column_focus_row_lands_level_and_last_lands_on_the_remembered_pane() {
+        for (focus, want) in [(ColumnFocus::Last, PaneId(11)), (ColumnFocus::Row, PaneId(1))] {
+            let mut space = two_by_two(focus);
+            space.columns[0].active_pane_idx = 1; // b was the last used
+            space.active_column_idx = 1;
+            space.columns[1].active_pane_idx = 0; // we are on c
+            assert!(space.focus_left());
+            assert_eq!(focused_pane(&space), want, "{focus:?}");
+        }
+    }
+
+    /// Under `row` the way back is level too, and a stack of different heights picks the pane
+    /// with the larger overlap.
+    #[test]
+    fn column_focus_row_goes_back_level_and_follows_the_larger_overlap() {
+        let mut space = two_by_two(ColumnFocus::Row);
+        space.active_column_idx = 0;
+        space.columns[0].active_pane_idx = 1; // on b
+        assert!(space.focus_right());
+        assert_eq!(focused_pane(&space), PaneId(12), "b is level with d");
+
+        // The left column's second pane takes most of the height; from the right column's first
+        // pane the larger overlap is with the left column's tall pane.
+        let mut space = two_by_two(ColumnFocus::Row);
+        space.columns[0].pane_sizes[0].h = 100.0;
+        space.columns[0].pane_sizes[1].h = 600.0;
+        space.columns[1].pane_sizes[0].h = 350.0;
+        space.columns[1].pane_sizes[1].h = 350.0;
+        space.active_column_idx = 1;
+        space.columns[1].active_pane_idx = 0;
+        assert!(space.focus_left());
+        assert_eq!(focused_pane(&space), PaneId(11), "most of its span is level with b");
     }
 }

@@ -6,6 +6,17 @@ use serde::{Deserialize, Serialize};
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Modifier keys that can be used for mouse-driven interactive actions.
+/// Which pane focus lands on when it moves to the next column left or right.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ColumnFocus {
+    /// The pane last used in that column.
+    #[default]
+    Last,
+    /// The pane in that column level with the one you leave.
+    Row,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum ModifierKey {
@@ -346,6 +357,11 @@ pub struct SettingsConfig {
     /// pane, for the view to start scrolling. Only used with `auto_scroll_edge`. Default 80.
     #[serde(default = "default_edge_scroll_distance")]
     pub edge_scroll_distance: f32,
+    /// Which pane focus lands on when it moves to the column on the left or right: the one
+    /// last used in that column (`"last"`, the default), or the one level with the pane you leave
+    /// (`"row"`).
+    #[serde(default)]
+    pub column_focus: ColumnFocus,
     /// Modifier key that must be held to initiate an interactive pane drag with the mouse.
     #[serde(default)]
     pub interactive_move_modifier: ModifierKey,
@@ -489,6 +505,7 @@ impl Default for SettingsConfig {
             terminal_brights: None,
             auto_scroll_edge: default_auto_scroll_edge(),
             edge_scroll_distance: default_edge_scroll_distance(),
+            column_focus: ColumnFocus::default(),
             interactive_move_modifier: ModifierKey::default(),
             swap_modifier: default_swap_modifier(),
             always_center_single_column: default_always_center_single_column(),
@@ -536,6 +553,7 @@ mod tests {
         assert!(s.auto_scroll_edge);
         assert_eq!(s.edge_scroll_distance, 80.0);
         assert_eq!(s.interactive_move_modifier, ModifierKey::Super);
+        assert_eq!(s.column_focus, ColumnFocus::Last);
         assert_eq!(s.swap_modifier, ModifierKey::Shift);
         assert!(!s.always_center_single_column);
         assert!(s.shell_integration);
@@ -650,5 +668,16 @@ mod tests {
         let s: SettingsConfig = toml::from_str("mouse = false\n").unwrap();
         assert_eq!(s.notification_system.mode, NotificationSystem::App);
         assert_eq!(s.notification_system.auto_dismiss_ms, 4000);
+    }
+
+    /// `column_focus` reads as the two words a user writes, and a missing key keeps today's
+    /// behaviour.
+    #[test]
+    fn column_focus_reads_last_and_row_and_defaults_to_last() {
+        let read = |text: &str| toml::from_str::<SettingsConfig>(text).map(|s| s.column_focus);
+        assert_eq!(read("").ok(), Some(ColumnFocus::Last));
+        assert_eq!(read("column_focus = \"last\"").ok(), Some(ColumnFocus::Last));
+        assert_eq!(read("column_focus = \"row\"").ok(), Some(ColumnFocus::Row));
+        assert!(read("column_focus = \"diagonal\"").is_err());
     }
 }

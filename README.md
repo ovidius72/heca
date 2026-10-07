@@ -948,6 +948,7 @@ mouse = true                  # Enable mouse interactions
 focus_follows_mouse = true    # Focus pane on hover
 auto_scroll_edge = true       # Auto-scroll near edges
 edge_scroll_distance = 80.0   # How close (px) a dragged pane must come to the edge for that to start
+column_focus = "last"  # Pane focus lands on in the next column: "last" used there, or the one level with "row"
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
 pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`

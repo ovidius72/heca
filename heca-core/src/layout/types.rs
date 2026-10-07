@@ -174,9 +174,21 @@ impl Rectangle {
     }
 }
 
+/// Which pane focus lands on when it moves to the column on the left or right.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ColumnFocus {
+    /// The pane last used in that column.
+    #[default]
+    Last,
+    /// The pane in that column that overlaps the one being left the most.
+    Row,
+}
+
 /// Layout options derived from config.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayoutOptions {
+    /// Which pane focus lands on when it moves to the next column left or right.
+    pub column_focus: ColumnFocus,
     /// Gap between columns and panes in logical pixels.
     pub gaps: f64,
     /// Whether to center the focused column.
@@ -208,6 +220,7 @@ pub struct LayoutOptions {
 impl Default for LayoutOptions {
     fn default() -> Self {
         Self {
+            column_focus: ColumnFocus::Last,
             gaps: 8.0,
             center_focused_column: CenterFocusedColumn::Never,
             always_center_single_column: false,
