@@ -91,6 +91,19 @@ pub(crate) fn layout_options_from(
     }
 }
 
+/// **Give a running session new layout options** — the session's own and every workspace's, since
+/// each keeps a copy it lays out and moves focus by. Setting only the session's left existing
+/// workspaces on the options they were made with, so an edited setting did nothing until restart.
+pub(crate) fn apply_layout_options(
+    session: &mut Session,
+    options: heca_core::layout::types::LayoutOptions,
+) {
+    for ws in &mut session.workspaces {
+        ws.scrolling.options = options.clone();
+    }
+    session.options = options;
+}
+
 pub(crate) fn apply_window_vibrancy(
     window: &Window,
     appearance: &heca_config::appearance::AppearanceConfig,
@@ -617,5 +630,71 @@ mod tests {
         let second = session.next_id();
 
         assert!(second > first.0, "the counter must never reissue {first:?}");
+    }
+}
+
+#[cfg(test)]
+mod column_focus_tests {
+    use super::layout_options_from;
+    use heca_config::loader::AppConfig;
+    use heca_core::layout::types::{ColumnFocus, Size};
+    use heca_core::layout::{Pane, PaneId, Session, SessionId};
+
+    fn from_toml(text: &str) -> AppConfig {
+        // The same layering the loader does: the embedded defaults, the user's text over them.
+        let config = heca_config::loader::config_from_layers(text).expect("the config parses");
+        AppConfig {
+            config,
+            theme: Default::default(),
+        }
+    }
+
+    /// **A reload reaches the workspaces that already exist**: they keep their own copy of the
+    /// options, so the edited setting must be written to each, not only to the session.
+    #[test]
+    fn a_reload_changes_the_options_of_the_workspaces_that_already_exist() {
+        let mut session = Session::new(
+            SessionId(1),
+            Size::new(1000.0, 800.0),
+            1.0,
+            layout_options_from(&from_toml("")),
+        );
+        session.add_pane(Pane::new(PaneId(1), ""), None, true);
+        assert_eq!(session.workspaces[0].scrolling.options.column_focus, ColumnFocus::Last);
+        super::apply_layout_options(
+            &mut session,
+            layout_options_from(&from_toml("[settings]\ncolumn_focus = \"row\"")),
+        );
+        assert_eq!(session.workspaces[0].scrolling.options.column_focus, ColumnFocus::Row);
+        assert_eq!(session.options.column_focus, ColumnFocus::Row);
+    }
+
+    /// **`column_focus = "row"` in `[settings]` reaches the layout and decides where focus lands**,
+    /// from the config text to `Session::focus_left` — the call the key's handler makes.
+    #[test]
+    fn column_focus_from_the_config_text_decides_where_focus_lands() {
+        for (text, want) in [
+            ("", PaneId(11)),
+            ("[settings]\ncolumn_focus = \"last\"", PaneId(11)),
+            ("[settings]\ncolumn_focus = \"row\"", PaneId(1)),
+        ] {
+            let options = layout_options_from(&from_toml(text));
+            let mut session = Session::new(SessionId(1), Size::new(1000.0, 800.0), 1.0, options);
+            session.add_pane(Pane::new(PaneId(1), ""), None, true);
+            session.add_pane(Pane::new(PaneId(3), ""), None, true);
+            let ws = session.active_workspace_mut().unwrap();
+            ws.scrolling
+                .add_pane_to_column(0, Some(1), Pane::new(PaneId(11), ""), false);
+            ws.scrolling.update_all_column_widths();
+            ws.scrolling.columns[0].active_pane_idx = 1; // b was the last used on the left
+            ws.scrolling.active_column_idx = 1;
+            ws.scrolling.columns[1].active_pane_idx = 0;
+            assert!(session.focus_left());
+            let ws = session.active_workspace().unwrap();
+            let landed = ws.scrolling.columns[ws.scrolling.active_column_idx]
+                .active_pane()
+                .map(|p| p.id);
+            assert_eq!(landed, Some(want), "{text:?} ({:?})", ColumnFocus::Row);
+        }
     }
 }

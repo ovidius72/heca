@@ -90,6 +90,13 @@ pub fn deep_merge(base: toml::Value, over: toml::Value) -> toml::Value {
     }
 }
 
+/// **The configuration the embedded defaults and one user file's text make** — what the loader
+/// builds from disk, from a string: a test of "what does this config text do" needs no file.
+pub fn config_from_layers(user: &str) -> Result<Config, toml::de::Error> {
+    let user: toml::Value = toml::from_str(user)?;
+    deep_merge(embedded_base(), user).try_into()
+}
+
 /// Errors that can occur when loading the configuration file.
 #[derive(Debug)]
 #[non_exhaustive]

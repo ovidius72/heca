@@ -504,17 +504,17 @@ impl ScrollingSpace {
     /// The pane of column `idx` whose vertical span overlaps the active pane's the most (the upper
     /// one on a tie); the nearest one when none overlaps. `None` when there is no active pane.
     fn row_level_with_active(&self, idx: usize) -> Option<usize> {
-        let from = self.active_column_idx;
-        let pane = self.columns.get(from)?.active_pane_idx;
-        let top = self.pane_y_in_column(from, pane);
-        let bottom = top + self.columns.get(from)?.pane_sizes.get(pane)?.h;
-        let target = self.columns.get(idx)?;
+        // From the laid-out geometry — where each pane IS — not from sizes the layout may not have
+        // stored: a column whose panes were never sized still has the rects it is drawn at.
+        let laid = self.laid_out_columns(None);
+        let here = laid.get(self.active_column_idx)?;
+        let active = here.panes.get(self.columns.get(self.active_column_idx)?.active_pane_idx)?;
+        let (top, bottom) = (active.slot.loc.y, active.slot.loc.y + active.slot.size.h);
         let mut best: Option<(usize, f64)> = None;
-        for row in 0..target.panes.len() {
-            let y = self.pane_y_in_column(idx, row);
-            let h = target.pane_sizes.get(row)?.h;
+        for (row, pane) in laid.get(idx)?.panes.iter().enumerate() {
+            let (y, end) = (pane.slot.loc.y, pane.slot.loc.y + pane.slot.size.h);
             // Overlap, or minus the distance between the spans when they do not touch.
-            let overlap = (bottom.min(y + h) - top.max(y)).max(-(top - (y + h)).max(y - bottom).max(0.0));
+            let overlap = bottom.min(end) - top.max(y);
             if best.is_none_or(|(_, o)| overlap > o) {
                 best = Some((row, overlap));
             }
@@ -2196,5 +2196,20 @@ mod tests {
         space.columns[1].active_pane_idx = 0;
         assert!(space.focus_left());
         assert_eq!(focused_pane(&space), PaneId(11), "most of its span is level with b");
+    }
+
+    /// **Row focus reads where the panes are drawn, not sizes the layout may not have stored**: a
+    /// column whose `pane_sizes` were never filled still has a level pane.
+    #[test]
+    fn column_focus_row_works_without_stored_pane_sizes() {
+        let mut space = two_by_two(ColumnFocus::Row);
+        for col in &mut space.columns {
+            col.pane_sizes.clear();
+        }
+        space.active_column_idx = 1;
+        space.columns[0].active_pane_idx = 1;
+        space.columns[1].active_pane_idx = 0;
+        assert!(space.focus_left());
+        assert_eq!(focused_pane(&space), PaneId(1), "level with c, not the remembered b");
     }
 }
