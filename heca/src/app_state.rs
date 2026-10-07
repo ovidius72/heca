@@ -896,8 +896,6 @@ pub struct AppState {
     /// Which places a pane can be put are open as real space in this window's layout right now —
     /// see [`crate::app::places`].
     pub places_open: Option<heca_core::layout::PlacesOpen>,
-    /// The column a carried widget is over, as the workspace's columns heard it.
-    pub hovered_column: std::rc::Rc<std::cell::Cell<Option<heca_core::layout::ColumnId>>>,
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
     /// The configured prefix key combo (e.g. Ctrl+b).

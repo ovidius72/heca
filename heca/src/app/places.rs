@@ -1,6 +1,6 @@
 //! **Making room for where a pane can be put** — while a pane is carried out of the content area,
 //! or a column pick is open, the layout opens a place at every gap between columns, and for the
-//! rows of the column the pointer is over, as real space the columns slide apart to make.
+//! rows of every column, as real space the columns slide apart to make.
 //!
 //! Whether they are open is a fact about this window's view, so it is worked out here and handed to
 //! the layout read as an argument; the layout keeps nothing.
@@ -12,16 +12,17 @@ use heca_core::layout::{Place, PlacesOpen, RowsOpen};
 /// What should be open this frame, from what is being carried and where the pointer is.
 pub(crate) fn wanted(state: &AppState) -> Option<PlacesOpen> {
     let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
-    let carried = heca_grid_ui::dragged_bounds(&state.window_root).is_some_and(|b| {
-        pane_area.contains(Point::new(
-            b.loc.x + b.size.w / 2.0,
-            b.loc.y + b.size.h / 2.0,
-        ))
-    });
+    // Once open it stays open for as long as the drag lasts: where the carried pane sits moves
+    // with the layout the places change, so it must not decide again.
+    let carried = heca_grid_ui::dragging(&state.window_root)
+        && (state.places_open.is_some()
+            || heca_grid_ui::dragged_bounds(&state.window_root).is_some_and(|b| {
+                pane_area.contains(Point::new(
+                    b.loc.x + b.size.w / 2.0,
+                    b.loc.y + b.size.h / 2.0,
+                ))
+            }));
     let picking = matches!(state.input_mode, InputMode::ColumnPick { .. });
-    if !carried {
-        state.hovered_column.set(None);
-    }
     if !carried && !picking {
         return None;
     }
@@ -31,21 +32,14 @@ pub(crate) fn wanted(state: &AppState) -> Option<PlacesOpen> {
         .columns
         .get(scrolling.active_column_idx)
         .map_or(0.0, |c| c.computed_width);
-    let mut open = PlacesOpen {
+    let open = PlacesOpen {
         column_w: reference * f64::from(state.appearance.effective_new_column_slot_share()),
         row_h: scrolling.working_area.size.h
             * f64::from(state.appearance.effective_new_row_slot_share()),
-        rows: if picking { RowsOpen::All } else { RowsOpen::None },
+        // Every column opens its rows, whatever the pointer is over: the layout is a function of
+        // whether something is carried and nothing else, so it cannot change under a still pointer.
+        rows: RowsOpen::All,
     };
-    if carried {
-        // The rows of the column the carried widget is over, as the columns heard it — nothing
-        // here hit-tests the pointer.
-        open.rows = state
-            .hovered_column
-            .get()
-            .and_then(|id| scrolling.columns.iter().position(|c| c.id == id))
-            .map_or(RowsOpen::None, RowsOpen::Column);
-    }
     Some(open)
 }
 

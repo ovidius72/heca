@@ -31,7 +31,6 @@ pub(crate) fn seat_workspace(state: &mut AppState) {
                         emit(crate::input::WmAction::ResizeColumnBy { col_idx, delta })
                     })
                 },
-                hovered: state.hovered_column.clone(),
                 resize_pane: {
                     let emit = resize_emitter(state);
                     std::rc::Rc::new(move |col_idx, pane_idx, delta| {

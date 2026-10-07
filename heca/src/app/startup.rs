@@ -535,7 +535,6 @@ pub(crate) async fn init_state(
         confirm: app_config.config.confirm.clone(),
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
         places_open: None,
-        hovered_column: Default::default(),
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         prefix_timeout_ms: app_config.config.keys.prefix_timeout_ms,

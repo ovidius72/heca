@@ -229,35 +229,3 @@ fn the_window_key_opens_a_link_on_a_click_and_carries_the_pane_on_a_drag() {
         "it carries the pane to the place"
     );
 }
-
-/// **The column a carried widget is over comes from the columns hearing it, not from a hit test of
-/// the pointer**: drag-enter on a pane bubbles to its column, and the visit's end clears it.
-#[test]
-fn the_hovered_column_is_the_one_whose_pane_the_carry_is_over() {
-    use heca_grid_ui::component::dispatch;
-    use heca_grid_ui::event::{Event, PointerButton};
-
-    let hovered = Rc::new(std::cell::Cell::new(None));
-    let mut seams = seams();
-    seams.hovered = hovered.clone();
-    let mut window = crate::chrome::new_window_root();
-    let mut ws: Box<dyn Component> = Box::new(workspace(seams));
-    assert!(ws.set_props(&two_columns()));
-    window.base_mut().children.push(ws);
-    LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
-
-    let cmd = heca_grid_ui::Modifiers {
-        meta: true,
-        ..heca_grid_ui::Modifiers::default()
-    };
-    dispatch(&mut window, &Event::ModifiersChanged(cmd));
-    dispatch(&mut window, &Event::pointer_pressed(Point::new(100.0, 100.0), PointerButton::Left));
-    let mut over = |x: f64, y: f64| {
-        dispatch(&mut window, &Event::pointer_moved(Point::new(x, y)));
-        hovered.get()
-    };
-    assert_eq!(over(100.0, 400.0), Some(ColumnId(1)), "over column 1's second pane");
-    assert_eq!(over(400.0, 120.0), Some(ColumnId(2)), "over column 2's pane");
-    assert_eq!(over(100.0, 400.0), Some(ColumnId(1)), "and back");
-    dispatch(&mut window, &Event::pointer_released(Point::new(100.0, 400.0), PointerButton::Left));
-}

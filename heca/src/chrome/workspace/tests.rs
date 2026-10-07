@@ -20,7 +20,6 @@ fn seams() -> WorkspaceSeams {
         header_env: None,
         resize_column: Rc::new(|_, _| {}),
         resize_pane: Rc::new(|_, _, _| {}),
-        hovered: Rc::default(),
     }
 }
 
@@ -141,3 +140,4 @@ fn named<'a>(parent: &'a dyn Component, key: &str) -> &'a dyn Component {
 mod carry;
 mod placing;
 mod pointer;
+mod settle;

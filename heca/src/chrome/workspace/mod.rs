@@ -49,9 +49,6 @@ pub(crate) struct WorkspaceSeams {
     pub(crate) resize_column: Rc<dyn Fn(usize, f64)>,
     /// What dragging the edge below a pane means: that pane takes this many px more height.
     pub(crate) resize_pane: Rc<dyn Fn(usize, usize, f64)>,
-    /// **The column a carried widget is over**, as the columns hear it (drag enter and leave) —
-    /// kept where whoever lays the strip out can read it. Nothing hit-tests the pointer for it.
-    pub(crate) hovered: Rc<Cell<Option<heca_core::layout::ColumnId>>>,
 }
 
 /// A workspace that takes a [`WorkspaceModel`] as its props.
@@ -292,7 +289,6 @@ fn build_column(
                 .map(|e| (p.pane_id, Box::new(e.content.clone()) as Box<dyn Component>))
         })
         .collect();
-    let (col_id, entered, left) = (column.col_id, seams.hovered.clone(), seams.hovered.clone());
     Box::new(
         ColumnShell {
             model: column,
@@ -301,15 +297,7 @@ fn build_column(
             header_env: seams.header_env.clone(),
             contents,
         }
-        .build()
-        // A carried widget over one of this column's panes is over the column: the event
-        // bubbles up to it, so it hears both ends of the visit.
-        .on_drag_enter(move |_| entered.set(Some(col_id)))
-        .on_drag_leave(move |_| {
-            if left.get() == Some(col_id) {
-                left.set(None);
-            }
-        }),
+        .build(),
     )
 }
 
