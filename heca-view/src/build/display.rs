@@ -274,6 +274,10 @@ impl LandingSlot {
     pub fn filled(self, on: bool) -> Self {
         self.prop("filled", on)
     }
+    /// Draw a thin line along the middle instead of a filled place (a border a drop can land on).
+    pub fn edge(self, on: bool) -> Self {
+        self.prop("edge", on)
+    }
     /// Take drops of this kind, shown from the start.
     pub fn accepting(self, kind: impl Into<String>) -> Self {
         self.prop("accepting", PropValue::Text(kind.into()))

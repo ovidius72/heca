@@ -344,6 +344,13 @@ pub struct SettingsConfig {
     /// Optional terminal selection background override from `config.toml`.
     #[serde(default, alias = "terminal-selection-background")]
     pub terminal_selection_background: Option<Color>,
+    /// Optional override of the colour of the line a carried pane can be dropped on (default: the
+    /// theme's accent).
+    #[serde(default)]
+    pub drag_edge_color: Option<Color>,
+    /// Optional override of that line's thickness in logical px (default 3, half at rest).
+    #[serde(default)]
+    pub drag_edge_width: Option<f32>,
     /// Optional terminal ANSI `0..7` palette override from `config.toml`.
     #[serde(default, alias = "terminal-ansi")]
     pub terminal_ansi: Option<[Color; 8]>,
@@ -501,6 +508,8 @@ impl Default for SettingsConfig {
             terminal_cursor_border: None,
             terminal_selection_foreground: None,
             terminal_selection_background: None,
+            drag_edge_color: None,
+            drag_edge_width: None,
             terminal_ansi: None,
             terminal_brights: None,
             auto_scroll_edge: default_auto_scroll_edge(),

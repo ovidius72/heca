@@ -86,3 +86,53 @@ fn a_drop_on_the_slot_names_it() {
     release_at(&mut root, on_slot, PointerButton::Left);
     assert_eq!(*dropped.borrow(), [("src".to_string(), "slot:1".to_string())]);
 }
+
+/// An edge is a **line**, not a place: faint while a carry is on, bright and thicker while a drag is
+/// over it, drawn in the theme's colour — and the framework's whole-box wash is not laid over it.
+#[test]
+fn an_edge_is_a_faint_line_that_brightens_and_thickens_under_a_drag() {
+    let build = || {
+        let mut root = Flex::row()
+            .width(300.0)
+            .height(100.0)
+            .child(
+                Flex::row()
+                    .at_rect(0.0, 0.0, 50.0, 50.0)
+                    .key("src")
+                    .draggable_as("pane"),
+            )
+            .child(
+                LandingSlot::new()
+                    .edge(true)
+                    .accepting("pane")
+                    .key("row:0:1")
+                    .at_rect(100.0, 40.0, 150.0, 8.0),
+            );
+        LayoutEngine::new().compute(&mut root, Size::new(300.0, 100.0));
+        root
+    };
+    let theme = Theme::default();
+    let lines = |root: &Flex| -> Vec<(f64, u8)> {
+        paint_via_child(root, &theme)
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) if r.rect.size.w == 150.0 => Some((r.rect.size.h, r.fill.a)),
+                _ => None,
+            })
+            .collect()
+    };
+    // At rest (carry on, nothing over it): half the width, half the strength.
+    let mut root = build();
+    press_at(&mut root, Point::new(10.0, 10.0), PointerButton::Left);
+    let _ = heca_grid_ui::dispatch(&mut root, &Event::pointer_moved(Point::new(20.0, 20.0)));
+    let width = f64::from(theme.colors.drag_edge_width);
+    let rest = lines(&root);
+    assert_eq!(rest.len(), 1, "one line and no wash: {rest:?}");
+    assert_eq!(rest[0].0, width / 2.0);
+    // Over it: the full width, the full strength.
+    let _ = heca_grid_ui::dispatch(&mut root, &Event::pointer_moved(Point::new(150.0, 44.0)));
+    let near = lines(&root);
+    assert_eq!(near.len(), 1, "still one line and no wash: {near:?}");
+    assert_eq!(near[0].0, width);
+    assert!(near[0].1 > rest[0].1, "brighter: {near:?} vs {rest:?}");
+}

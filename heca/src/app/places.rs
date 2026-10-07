@@ -7,7 +7,7 @@
 
 use crate::app_state::{AppState, InputMode};
 use heca_core::layout::types::Point;
-use heca_core::layout::{Place, PlacesOpen, RowsOpen};
+use heca_core::layout::{Place, PlacesOpen};
 
 /// What should be open this frame, from what is being carried and where the pointer is.
 pub(crate) fn wanted(state: &AppState) -> Option<PlacesOpen> {
@@ -34,11 +34,6 @@ pub(crate) fn wanted(state: &AppState) -> Option<PlacesOpen> {
         .map_or(0.0, |c| c.computed_width);
     let open = PlacesOpen {
         column_w: reference * f64::from(state.appearance.effective_new_column_slot_share()),
-        row_h: scrolling.working_area.size.h
-            * f64::from(state.appearance.effective_new_row_slot_share()),
-        // Every column opens its rows, whatever the pointer is over: the layout is a function of
-        // whether something is carried and nothing else, so it cannot change under a still pointer.
-        rows: RowsOpen::All,
     };
     Some(open)
 }

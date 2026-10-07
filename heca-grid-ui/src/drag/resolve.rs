@@ -201,7 +201,8 @@ fn drop_at(
         && let Some(key) = drag_identity(root, node, path)
         && accept(&key)
     {
-        let bounds = node.base().bounds;
+        // A widget that reacts over more (or less) than it is drawn over says so, as in a click.
+        let bounds = node.hit_bounds().unwrap_or(node.base().bounds);
         if bounds.contains(point) {
             return Some(DropHit {
                 key,

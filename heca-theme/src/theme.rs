@@ -352,6 +352,13 @@ pub struct Theme {
     /// it is dragged — over everything, so what it is carried onto still shows through.
     #[serde(default = "default_drag_image_alpha")]
     pub drag_image_alpha: f32,
+    /// Colour of the **line a carried pane can be dropped on** — the border between two stacked
+    /// panes and the top and bottom of a column. `None` is the theme's accent.
+    #[serde(default)]
+    pub drag_edge_color: Option<Color>,
+    /// Thickness (logical px) of that line when a drag is over it; at rest it is half as thick.
+    #[serde(default = "default_drag_edge_width")]
+    pub drag_edge_width: f32,
     /// How big that picture is next to the widget it shows (`1.0` = life size), shrunk toward the
     /// point it was picked up by so it keeps following the pointer.
     #[serde(default = "default_drag_image_scale")]
@@ -607,6 +614,9 @@ fn default_icon_secondary_alpha() -> f32 {
 fn default_active_wash_alpha() -> f32 {
     0.11
 }
+fn default_drag_edge_width() -> f32 {
+    3.0
+}
 fn default_drag_image_alpha() -> f32 {
     0.6
 }
@@ -842,6 +852,8 @@ mod tests {
         let theme = Theme::default();
         assert_eq!(theme.active_glow_radius, 10.0);
         assert_eq!(theme.drag_image_alpha, 0.6);
+        assert_eq!(theme.drag_edge_width, 3.0);
+        assert_eq!(theme.drag_edge_color, None);
         assert_eq!(theme.drag_image_scale, 0.5);
         assert_eq!(theme.active_glow_strength, 0.55);
     }

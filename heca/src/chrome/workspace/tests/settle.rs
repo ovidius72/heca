@@ -3,7 +3,7 @@
 
 use super::*;
 use heca_core::layout::types::{LayoutOptions, Rectangle as Rect, Size as Sz};
-use heca_core::layout::{PlacesOpen, RowsOpen, Session, SessionId};
+use heca_core::layout::{PlacesOpen, Session, SessionId};
 
 /// Two columns, the first holding two panes (ids 1, 2), the second one (id 3).
 fn session() -> Session {
@@ -88,8 +88,6 @@ fn a_carry_has_one_layout_whatever_the_pointer_does() {
         let carried = heca_grid_ui::dragging(&window);
         let open = carried.then_some(PlacesOpen {
             column_w: 60.0,
-            row_h: 60.0,
-            rows: RowsOpen::All,
         });
         frames.push(render(&mut window, open));
         // Still, then across the other column and back: where the pointer is never decides it.

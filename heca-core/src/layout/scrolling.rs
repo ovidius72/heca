@@ -1200,7 +1200,7 @@ impl ScrollingSpace {
     }
 
     /// **The rects of the places `open` makes** — one per gap between columns and at each end, and
-    /// one above, between and below the panes of the columns `open.rows` names. Worked out
+    /// the border above, between and below the panes of every column. Worked out
     /// from the same layout as the columns, so none of them overlaps a pane or a column.
     pub fn places(&self, open: PlacesOpen) -> Vec<Place> {
         let columns = self.laid_out_columns(Some(open));
@@ -1226,23 +1226,34 @@ impl ScrollingSpace {
                 ),
             });
         }
-        for col in columns.iter().filter(|c| open.rows.includes(c.idx)) {
-            let width = col.rect.size.w;
-            let x = col.rect.loc.x;
-            let mut above = top;
-            for (row, pane) in col.panes.iter().enumerate() {
+        // The borders: a line along the top of each column, between each two stacked panes (in the
+        // middle of whatever gap there is, or exactly on the shared edge when there is none) and
+        // along the bottom. A line has no thickness here — it takes no room, so what is drawn on
+        // it and how far from it a pointer still counts is the caller's.
+        for col in columns.iter().filter(|c| !c.panes.is_empty()) {
+            let (x, width) = (col.rect.loc.x, col.rect.size.w);
+            let line = |y: f64| Rectangle::new(Point::new(x, y), Size::new(width, 0.0));
+            out.push(Place {
+                kind: PlaceKind::Row { col: col.idx, row: 0 },
+                rect: line(col.panes[0].slot.loc.y),
+            });
+            for (row, pair) in col.panes.windows(2).enumerate() {
+                let (above, below) = (pair[0].slot, pair[1].slot);
                 out.push(Place {
-                    kind: PlaceKind::Row { col: col.idx, row },
-                    rect: Rectangle::new(Point::new(x, above), Size::new(width, open.row_h)),
+                    kind: PlaceKind::Row {
+                        col: col.idx,
+                        row: row + 1,
+                    },
+                    rect: line((above.loc.y + above.size.h + below.loc.y) / 2.0),
                 });
-                above = pane.slot.loc.y + pane.slot.size.h + gaps;
             }
+            let last = col.panes[col.panes.len() - 1].slot;
             out.push(Place {
                 kind: PlaceKind::Row {
                     col: col.idx,
                     row: col.panes.len(),
                 },
-                rect: Rectangle::new(Point::new(x, above), Size::new(width, open.row_h)),
+                rect: line(last.loc.y + last.size.h),
             });
         }
         out
@@ -1261,27 +1272,14 @@ impl ScrollingSpace {
                 // places to its left, so a place covers nothing.
                 let slide = open.map_or(0.0, |o| (col_idx + 1) as f64 * o.column_w);
                 let col_pos = Point::new(self.column_x(col_idx) + col.render_offset() + slide, 0.0);
-                // In the column the rows are open for, a place above, between and below the panes
-                // takes its height from them: they keep their proportions in what is left.
-                let rows_open = open.filter(|o| o.rows.includes(col_idx));
-                let shrink = rows_open.map_or(1.0, |o| {
-                    let total: f64 = (0..col.panes.len())
-                        .map(|i| col.pane_sizes.get(i).map_or(0.0, |s| s.h))
-                        .sum();
-                    let taken = (col.panes.len() + 1) as f64 * (o.row_h + gaps);
-                    if total <= 0.0 { 1.0 } else { ((total - taken) / total).max(0.2) }
-                });
-                let mut pane_y = self.working_area.loc.y
-                    + gaps
-                    + rows_open.map_or(0.0, |o| o.row_h + gaps);
+                let mut pane_y = self.working_area.loc.y + gaps;
                 let mut panes = Vec::with_capacity(col.panes.len());
 
                 for (pane_idx, pane) in col.panes.iter().enumerate() {
-                    let mut size = col.pane_sizes.get(pane_idx).copied().unwrap_or(Size::new(
+                    let size = col.pane_sizes.get(pane_idx).copied().unwrap_or(Size::new(
                         col.computed_width,
                         self.working_area.size.h / col.panes.len().max(1) as f64,
                     ));
-                    size.h *= shrink;
 
                     // **Flow, then transform.** The slot is where the column stacks this pane; the
                     // displacement is the pane's own, from a move animation or a drag in flight.
@@ -1298,7 +1296,7 @@ impl ScrollingSpace {
                         displacement,
                     });
 
-                    pane_y += size.h + gaps + rows_open.map_or(0.0, |o| o.row_h + gaps);
+                    pane_y += size.h + gaps;
                 }
 
                 LaidOutColumn {
@@ -1319,37 +1317,13 @@ impl ScrollingSpace {
     }
 }
 
-/// **Which places are open as real space**, and how big, in logical px — asked of a layout read,
-/// never kept by the layout, because whether places are open is a fact about one window's view.
+/// **Which places are open**, in logical px — asked of a layout read, never kept by the layout,
+/// because whether places are open is a fact about one window's view.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlacesOpen {
-    /// The width of the place opened at each gap between columns and at both ends.
+    /// The width of the place opened at each gap between columns and at both ends. These are real
+    /// space: the columns slide apart to make it.
     pub column_w: f64,
-    /// The height of each place opened above, between and below the panes of those columns.
-    pub row_h: f64,
-    /// Which columns have their rows open.
-    pub rows: RowsOpen,
-}
-
-/// Which columns have a place opened above, between and below their panes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RowsOpen {
-    /// None: only the gaps between columns.
-    None,
-    /// One column — the one the pointer is over.
-    Column(usize),
-    /// Every column — what a keyboard pick offers.
-    All,
-}
-
-impl RowsOpen {
-    fn includes(self, col: usize) -> bool {
-        match self {
-            Self::None => false,
-            Self::Column(c) => c == col,
-            Self::All => true,
-        }
-    }
 }
 
 /// What a [`Place`] is a place for.
@@ -1357,7 +1331,8 @@ impl RowsOpen {
 pub enum PlaceKind {
     /// A new column at gap `i` (the gap left of column `i`; the last is the end).
     Gap(usize),
-    /// A row of column `col`: above pane `row`, or below the last when `row` is the pane count.
+    /// **The border** above pane `row` of column `col`, or below the last when `row` is the pane
+    /// count — a line of no thickness, so the place takes no room.
     Row { col: usize, row: usize },
 }
 
@@ -2076,12 +2051,8 @@ mod tests {
         space
     }
 
-    fn open(rows: RowsOpen) -> PlacesOpen {
-        PlacesOpen {
-            column_w: 40.0,
-            row_h: 20.0,
-            rows,
-        }
+    fn open() -> PlacesOpen {
+        PlacesOpen { column_w: 40.0 }
     }
 
     fn overlaps(a: Rectangle, b: Rectangle) -> bool {
@@ -2091,57 +2062,69 @@ mod tests {
             && b.loc.y < a.loc.y + a.size.h
     }
 
-    /// **Open places are space, not an overlay**: none of them overlaps a pane or a column, in the
-    /// strip and in the column whose rows are open.
+    /// **A gap place is space, not an overlay**: it overlaps no pane and no column.
     #[test]
-    fn an_open_place_overlaps_no_pane_and_no_column() {
-        for row_col in [RowsOpen::None, RowsOpen::Column(0), RowsOpen::Column(1), RowsOpen::All] {
-            let space = stacked();
-            let o = open(row_col);
-            let cols = space.columns_with_places_open(Some(o));
-            for place in space.places(o) {
-                for col in &cols {
-                    // A row place is *inside* its own column's box — between its panes.
-                    let own = matches!(place.kind, PlaceKind::Row { col: c, .. } if c == col.idx);
-                    assert!(own || !overlaps(place.rect, col.rect), "{place:?} over column {:?}", col.rect);
-                    for pane in &col.panes {
-                        assert!(!overlaps(place.rect, pane.rect), "{place:?} over {:?}", pane.rect);
-                    }
-                }
+    fn an_open_gap_overlaps_no_pane_and_no_column() {
+        let space = stacked();
+        let cols = space.columns_with_places_open(Some(open()));
+        for place in space.places(open()).into_iter().filter(|p| matches!(p.kind, PlaceKind::Gap(_))) {
+            for col in &cols {
+                assert!(!overlaps(place.rect, col.rect), "{place:?} over column {:?}", col.rect);
             }
         }
     }
 
-    /// A gap place at each gap and both ends; row places (one more than the panes) only in the
-    /// column named.
+    /// A gap place at each gap and both ends; a border at the top, between and bottom of every
+    /// column (the panes plus one), each of no thickness.
     #[test]
-    fn places_exist_for_each_gap_and_for_the_rows_of_the_named_column() {
+    fn places_exist_for_each_gap_and_for_every_border_of_every_column() {
         let space = stacked();
-        let kinds = |o: PlacesOpen| space.places(o).into_iter().map(|p| p.kind).collect::<Vec<_>>();
-        assert_eq!(
-            kinds(open(RowsOpen::None)),
-            [PlaceKind::Gap(0), PlaceKind::Gap(1), PlaceKind::Gap(2)]
-        );
-        let with_rows = kinds(open(RowsOpen::Column(0)));
-        assert_eq!(with_rows.len(), 3 + 3, "three gaps and three rows for a column of two panes");
-        for row in 0..=2 {
-            assert!(with_rows.contains(&PlaceKind::Row { col: 0, row }));
+        let places = space.places(open());
+        let kinds: Vec<_> = places.iter().map(|p| p.kind).collect();
+        for gap in 0..=2 {
+            assert!(kinds.contains(&PlaceKind::Gap(gap)));
         }
+        for (col, rows) in [(0, 3), (1, 2)] {
+            for row in 0..rows {
+                assert!(kinds.contains(&PlaceKind::Row { col, row }), "col {col} row {row}");
+            }
+        }
+        assert!(places
+            .iter()
+            .filter(|p| matches!(p.kind, PlaceKind::Row { .. }))
+            .all(|p| p.rect.size.h == 0.0));
     }
 
-    /// Opening makes room by sliding the columns right and shortening the panes of the open
-    /// column; closed, the layout is exactly what it always was.
+    /// **The border between two panes is on their shared edge, whatever the gap** — and opening
+    /// places changes no pane's size.
     #[test]
-    fn opening_places_slides_the_columns_and_closed_is_unchanged() {
+    fn a_border_sits_between_its_panes_and_opening_places_keeps_every_pane_size() {
         let space = stacked();
         let closed = space.columns_with_positions();
+        let opened = space.columns_with_places_open(Some(open()));
+        for (a, b) in closed.iter().zip(&opened) {
+            for (p, q) in a.panes.iter().zip(&b.panes) {
+                assert_eq!(p.rect.size, q.rect.size, "panes keep their size");
+            }
+        }
+        let between = space
+            .places(open())
+            .into_iter()
+            .find(|p| p.kind == PlaceKind::Row { col: 0, row: 1 })
+            .unwrap();
+        let (above, below) = (opened[0].panes[0].slot, opened[0].panes[1].slot);
+        assert!(between.rect.loc.y >= above.loc.y + above.size.h && between.rect.loc.y <= below.loc.y);
         assert_eq!(space.columns_with_places_open(None), closed);
-        let opened = space.columns_with_places_open(Some(open(RowsOpen::Column(0))));
+    }
+
+    /// Opening slides the columns right by the places to their left.
+    #[test]
+    fn opening_places_slides_the_columns() {
+        let space = stacked();
+        let closed = space.columns_with_positions();
+        let opened = space.columns_with_places_open(Some(open()));
         assert_eq!(opened[0].rect.loc.x, closed[0].rect.loc.x + 40.0);
         assert_eq!(opened[1].rect.loc.x, closed[1].rect.loc.x + 80.0);
-        assert_eq!(opened[0].panes[0].rect.size.w, closed[0].panes[0].rect.size.w, "widths are kept");
-        assert!(opened[0].panes[0].rect.size.h < closed[0].panes[0].rect.size.h, "the open column's panes give height");
-        assert_eq!(opened[1].panes[0].rect.size.h, closed[1].panes[0].rect.size.h, "other columns keep theirs");
     }
 
     /// A 2 × 2 strip, `[a][c]` over `[b][d]`: columns 1 and 2, panes (1, 2) and (3, 4).

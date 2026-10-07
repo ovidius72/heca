@@ -78,7 +78,7 @@ fn open_places() -> Vec<heca_core::layout::Place> {
         },
         Place {
             kind: PlaceKind::Row { col: 0, row: 1 },
-            rect: rect(40.0, 262.0, 300.0, 16.0),
+            rect: rect(40.0, 270.0, 300.0, 0.0),
         },
     ]
 }

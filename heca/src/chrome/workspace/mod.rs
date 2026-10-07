@@ -120,6 +120,7 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
             return Box::new(
                 LandingSlot::new()
                     .accepting(crate::chrome::PANE_DRAG_KIND)
+                    .edge(crate::chrome::row_of_key(name).is_some())
                     .key(name),
             );
         }
@@ -228,9 +229,8 @@ fn pick_column_key(col: heca_core::layout::ColumnId) -> String {
 /// decorates — a press goes through to what is under it.
 fn pick_mark(mark: &PickMark, name: &str) -> Box<dyn Component> {
     let slot = match mark {
-        PickMark::Gap { letter, .. } | PickMark::Row { letter, .. } => {
-            LandingSlot::new().label(letter.to_string())
-        }
+        PickMark::Gap { letter, .. } => LandingSlot::new().label(letter.to_string()),
+        PickMark::Row { letter, .. } => LandingSlot::new().edge(true).label(letter.to_string()),
         PickMark::Column(_) => LandingSlot::new().filled(true),
     };
     Box::new(slot.pointer_transparent(true).key(name))

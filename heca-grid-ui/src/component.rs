@@ -1206,6 +1206,12 @@ pub trait Component {
         false
     }
 
+    /// **Does this widget draw its own mark for a drag over it?** Then the framework does not wash
+    /// the whole box. A line along a border is one: the wash would cover the panes beside it.
+    fn paints_own_drag_feedback(&self) -> bool {
+        false
+    }
+
     /// **The cursor over `point`, when it depends on where the pointer is.** A widget with one
     /// cursor for its whole box declares it ([`cursor`](crate::builders::ComponentExt::cursor));
     /// one that changes across its box — a link inside a terminal, which only counts while a
@@ -1890,7 +1896,7 @@ fn paint_subtree(c: &dyn Component, cx: &mut PaintCx) {
 /// itself carries, so the outline never promises something the drop will not do.
 fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
     let b = c.base();
-    if b.pointer.is_drag_over() {
+    if b.pointer.is_drag_over() && !c.paints_own_drag_feedback() {
         let bounds = b.bounds;
         match crate::drag::DropAction::held() {
             crate::drag::DropAction::Swap => cx.swap_indicator(bounds),

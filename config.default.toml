@@ -93,6 +93,11 @@ column_focus = "last"
 # One of: "Super" (default) | "Alt" | "Ctrl" | "Shift".
 interactive_move_modifier = "Super"
 
+# The line a carried pane can be dropped on (between two stacked panes, top and bottom of a column).
+# drag_edge_color: unset = the theme's accent. drag_edge_width: px when a drag is over it (default 3).
+# drag_edge_color = "#7fd3ff"
+# drag_edge_width = 3.0
+
 # Auto-inject shell hooks that emit OSC 133 / OSC 7 for per-command status and
 # cwd updates. Disable to spawn a bare shell instead.
 shell_integration = true
@@ -390,7 +395,6 @@ search_current_match_alpha = 150
 # drag_label_size_factor = 0.25   # the name drawn over a dragged pane: share of its shorter side …
 # drag_label_min_size    = 24.0   # … kept between this many px …
 # drag_label_max_size    = 72.0   # … and this many.
-# new_row_slot_share     = 0.08   # how tall a place for a new row in a column is, as a share of the column's height
 # new_column_slot_share  = 0.18   # how wide a place for a new column is (shown while a pane is carried or a column pick is open), as a share of the column beside it
 #
 # Info bar (segmented pill inside the pane top + action buttons on the right):

@@ -367,6 +367,12 @@ fn apply_overrides(theme: &mut Theme, settings: &SettingsConfig) {
     if let Some(colors) = settings.terminal_ansi {
         theme.terminal_ansi = Some(colors);
     }
+    if let Some(color) = settings.drag_edge_color {
+        theme.drag_edge_color = Some(color);
+    }
+    if let Some(width) = settings.drag_edge_width {
+        theme.drag_edge_width = width.clamp(1.0, 12.0);
+    }
     if let Some(colors) = settings.terminal_brights {
         theme.terminal_brights = Some(colors);
     }

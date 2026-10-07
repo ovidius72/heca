@@ -38,7 +38,7 @@ fn an_open_pick_marks_the_workspace_and_the_marks_leave_with_it() {
     // The place is where the layout put it; the outline is the column's own box.
     assert_eq!(bounds(mark("pick:gap:1")), (318.0, 30.0, 54.0, 500.0));
     assert_eq!(bounds(mark("pick:col:2")), (350.0, 30.0, 300.0, 500.0));
-    assert_eq!(bounds(mark("pick:row:0:1")), (40.0, 262.0, 300.0, 16.0), "a row place too");
+    assert_eq!(bounds(mark("pick:row:0:1")), (40.0, 270.0, 300.0, 0.0), "a border is a line of no thickness; the slot widens its own zone");
     assert!(mark("pick:gap:1").base().pointer_transparent);
     let letters: Vec<String> = painted(ws.as_ref())
         .iter()
@@ -130,9 +130,11 @@ fn a_pane_carried_with_the_window_key_lands_on_a_place_the_layout_opened() {
     let (mut window, dropped) = carrying_window_of(model);
     drag(&mut window, from, gap, true);
     drag(&mut window, from, row, true);
+    // A pointer a little off the border still counts as on it — the zone is wider than the line.
+    drag(&mut window, from, Point::new(200.0, 272.5), true);
     assert_eq!(
         dropped.borrow().iter().map(|d| (d.0.as_str(), d.1.as_str())).collect::<Vec<_>>(),
-        [("pane:10", "slot:1"), ("pane:10", "row:0:1")]
+        [("pane:10", "slot:1"), ("pane:10", "row:0:1"), ("pane:10", "row:0:1")]
     );
 }
 
@@ -165,7 +167,7 @@ fn a_place_is_seated_at_the_box_the_layout_gave_it() {
     model.places = open_places();
     let (_window, ws) = laid_out(&model);
     assert_eq!(bounds(named(ws.as_ref(), "slot:1")), (318.0, 30.0, 54.0, 500.0));
-    assert_eq!(bounds(named(ws.as_ref(), "row:0:1")), (40.0, 262.0, 300.0, 16.0));
+    assert_eq!(bounds(named(ws.as_ref(), "row:0:1")), (40.0, 270.0, 300.0, 0.0));
 }
 
 /// **One key, two meanings, told apart by how far the pointer travels**: on a pane showing a link,
@@ -228,4 +230,16 @@ fn the_window_key_opens_a_link_on_a_click_and_carries_the_pane_on_a_drag() {
         [("pane:10", "slot:1")],
         "it carries the pane to the place"
     );
+}
+
+/// **A fresh tree laid out once already has a zone to hit**: the border's box has no thickness, and
+/// the slot's own reach — resolved at layout — makes it a target a step either side.
+#[test]
+fn a_border_has_a_reacting_zone_after_the_first_layout() {
+    let mut model = two_columns();
+    model.places = open_places();
+    let (_window, ws) = laid_out(&model);
+    let zone = named(ws.as_ref(), "row:0:1").hit_bounds().expect("it reacts");
+    assert!(zone.size.h > 0.0, "{zone:?}");
+    assert_eq!(zone.loc.y + zone.size.h / 2.0, 270.0, "centred on the border");
 }
