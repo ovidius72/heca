@@ -238,7 +238,7 @@ fn source_at_path(
         }
         path.pop();
     }
-    if node.is_drag_source() && node.base().bounds.contains(point) {
+    if node.may_start_drag() && node.base().bounds.contains(point) {
         return drag_identity(root, node, path);
     }
     None

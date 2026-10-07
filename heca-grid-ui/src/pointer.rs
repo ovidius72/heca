@@ -56,8 +56,8 @@ use std::time::Instant;
 
 mod drag;
 
-pub use drag::dragging;
-use drag::{clear_drag_over, drag_identity, dragging_path, drive_drag, finish_drag};
+pub use drag::{dragged_bounds, dragging};
+use drag::{announce, clear_drag_over, drag_identity, dragging_path, drive_drag, finish_drag};
 
 /// Longest gap between two presses still counted as one click run (seconds).
 ///
@@ -399,6 +399,18 @@ fn cancel(root: &mut dyn Component, raw: &RawPointer) {
     if let Some(path) = dragging_path(root) {
         let item = drag_identity(root, &path);
         clear_drag_over(root);
+        if let Some(item) = &item {
+            announce(
+                root,
+                &path,
+                &Event::DragSettled(DragEvent {
+                    item: item.clone(),
+                    pos: raw.pos,
+                    modifiers: raw.modifiers,
+                    side: DropSide::Onto,
+                }),
+            );
+        }
         if let Some(item) = item {
             let ev = Event::DragEnd(DragEvent {
                 item,

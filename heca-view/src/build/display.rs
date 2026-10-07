@@ -74,6 +74,16 @@ builder!(
     Separator => Separator
 );
 
+builder!(
+    /// The edge between two things that a drag moves.
+    Splitter => Splitter
+);
+
+builder!(
+    /// A place something can land.
+    LandingSlot => LandingSlot
+);
+
 impl Label {
     /// How the text sits in its box.
     pub fn align_text(self, a: ViewTextAlign) -> Self {
@@ -241,6 +251,32 @@ impl Toast {
     /// The label on its inline action.
     pub fn action_text(self, text: impl Into<String>) -> Self {
         self.prop("action_text", PropValue::Text(text.into()))
+    }
+}
+
+impl Splitter {
+    /// Which way the edge runs.
+    pub fn orientation(self, o: ViewOrientation) -> Self {
+        self.prop("orientation", o)
+    }
+    /// Draw a thin rule along the edge.
+    pub fn line(self, on: bool) -> Self {
+        self.prop("line", on)
+    }
+}
+
+impl LandingSlot {
+    /// The letter in the middle — the key that picks this place.
+    pub fn label(self, label: impl Into<String>) -> Self {
+        self.prop("label", PropValue::Text(label.into()))
+    }
+    /// Outline something already there instead of marking an empty place.
+    pub fn filled(self, on: bool) -> Self {
+        self.prop("filled", on)
+    }
+    /// Appear only while a drag of this kind is in flight, and accept it.
+    pub fn while_dragging(self, kind: impl Into<String>) -> Self {
+        self.prop("while_dragging", PropValue::Text(kind.into()))
     }
 }
 

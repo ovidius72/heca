@@ -12,6 +12,7 @@
 
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component};
+use crate::reactive::SignalGet;
 use crate::cursor::Cursor;
 use crate::event::{Event, Handled, PointerButton};
 use crate::style::Space;
@@ -35,21 +36,30 @@ pub struct Splitter {
     on_resize: Option<Box<Moved>>,
     /// How far the grab zone reaches past the box on each side.
     grab: Space,
+    /// Whether it draws a thin rule along the edge. Off by default: an edge laid over a gap that
+    /// something else already draws needs no line of its own.
+    line: bool,
 }
 
+#[heca_grid_ui_macros::props]
 impl Splitter {
     fn with(orientation: Orientation) -> Self {
-        let mut base = Base::new();
-        base.cursor = Some(match orientation {
-            Orientation::Vertical => Cursor::ResizeHorizontal,
-            Orientation::Horizontal => Cursor::ResizeVertical,
-        });
-        Self {
-            base,
+        let mut splitter = Self {
+            base: Base::new(),
             orientation,
             last: None,
             on_resize: None,
             grab: GRAB.into(),
+            line: false,
+        };
+        splitter.base.cursor = Some(splitter.resize_cursor());
+        splitter
+    }
+
+    fn resize_cursor(&self) -> Cursor {
+        match self.orientation {
+            Orientation::Vertical => Cursor::ResizeHorizontal,
+            Orientation::Horizontal => Cursor::ResizeVertical,
         }
     }
 
@@ -64,8 +74,27 @@ impl Splitter {
         Self::with(Orientation::Horizontal)
     }
 
+    /// Which way the edge runs — the builder behind [`vertical`](Self::vertical) /
+    /// [`horizontal`](Self::horizontal), so a described splitter can choose without two kinds.
+    #[heca_grid_ui_macros::prop]
+    pub fn orientation(mut self, orientation: Orientation) -> Self {
+        self.orientation = orientation;
+        self.base.cursor = Some(self.resize_cursor());
+        self
+    }
+
+    /// Draw a thin rule along the edge, in the theme's border colour.
+    #[heca_grid_ui_macros::prop]
+    pub fn line(mut self, line: bool) -> Self {
+        self.line = line;
+        self
+    }
+
     /// **Told how far it was dragged**, in logical px along the axis it moves, each time the
     /// pointer moves while it is held. What moving the edge means is the owner's.
+    #[heca_grid_ui_macros::host_only(
+        "takes a closure; a description says what a drag means with a `resize` intent"
+    )]
     pub fn on_resize(mut self, f: impl FnMut(f32) + 'static) -> Self {
         self.on_resize = Some(Box::new(f));
         self
@@ -73,6 +102,7 @@ impl Splitter {
 
     /// **How far the grab zone reaches past the box** on each side — a step of the theme's spacing
     /// (or pixels), so it scales with the font like every other space.
+    #[heca_grid_ui_macros::host_only("a spacing step or pixels, not a scalar a description carries")]
     pub fn grab(mut self, reach: impl Into<Space>) -> Self {
         self.grab = reach.into();
         self
@@ -108,6 +138,26 @@ impl Component for Splitter {
                 Size::new(b.size.w, b.size.h + 2.0 * outset),
             ),
         })
+    }
+
+    /// The rule along the edge, when it asked for one — centred in its box, one px across.
+    fn paint(&self, cx: &mut crate::component::PaintCx) {
+        if !self.line || !self.base.visible.get_untracked() {
+            return;
+        }
+        let b = self.base.bounds;
+        let rule = match self.orientation {
+            Orientation::Vertical => Rectangle::new(
+                Point::new(b.loc.x + (b.size.w - 1.0) / 2.0, b.loc.y),
+                Size::new(1.0, b.size.h),
+            ),
+            Orientation::Horizontal => Rectangle::new(
+                Point::new(b.loc.x, b.loc.y + (b.size.h - 1.0) / 2.0),
+                Size::new(b.size.w, 1.0),
+            ),
+        };
+        let color = cx.theme().colors.border;
+        cx.rect(rule, color, None, 0.0, None);
     }
 
     /// A press takes the edge and consumes it, which captures the pointer: every move and the

@@ -162,6 +162,8 @@ fn every_kind_has_a_builder_that_can_be_given_a_hint() {
             K::RailCell => RailCell::new().on_hint(Intent::new("pick")).into_node(),
             K::Item => Item::new().on_hint(Intent::new("pick")).into_node(),
             K::Separator => Separator::new().on_hint(Intent::new("pick")).into_node(),
+            K::Splitter => Splitter::new().on_hint(Intent::new("pick")).into_node(),
+            K::LandingSlot => LandingSlot::new().on_hint(Intent::new("pick")).into_node(),
             K::CardGrid => CardGrid::new().on_hint(Intent::new("pick")).into_node(),
             K::Spinner => Spinner::new().on_hint(Intent::new("pick")).into_node(),
             K::Progress => Progress::new().on_hint(Intent::new("pick")).into_node(),

@@ -32,6 +32,7 @@ mod item_group;
 pub(crate) mod key_hint;
 mod key_hint_group;
 mod label;
+mod landing_slot;
 mod marker_group;
 mod nf_icon;
 pub mod overlay;
@@ -86,6 +87,7 @@ pub use key_hint::{
 };
 pub use key_hint_group::{DEFAULT_LETTERS, KeyHintGroup};
 pub use label::{Ellipsis, Label};
+pub use landing_slot::LandingSlot;
 pub use marker_group::MarkerGroup;
 pub use nf_icon::{NfGlyph, NfIcon};
 pub use overlay::{

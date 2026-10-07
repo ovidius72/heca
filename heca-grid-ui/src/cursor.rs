@@ -5,6 +5,9 @@
 //! is over whatever the topmost-first hit test finds, and the **nearest** widget on the way up from
 //! there that declared one wins. A host turns the answer into whatever its window calls a cursor,
 //! once, after each move — it keeps no list of what is draggable, resizable or a link.
+//!
+//! A widget whose cursor depends on **where** the pointer is (a terminal's link, a text run) answers
+//! [`Component::cursor_over`](crate::component::Component::cursor_over) instead of declaring one.
 
 use crate::component::Component;
 use crate::pointer::hit_test;
@@ -44,7 +47,7 @@ pub fn cursor_at(root: &dyn Component, point: Point) -> Cursor {
     };
     let mut declared = None;
     let mut node = root;
-    if let Some(cursor) = node.base().cursor {
+    if let Some(cursor) = node.cursor_over(point).or(node.base().cursor) {
         declared = Some(cursor);
     }
     for step in path {
@@ -52,7 +55,7 @@ pub fn cursor_at(root: &dyn Component, point: Point) -> Cursor {
             break;
         };
         node = child.as_ref();
-        if let Some(cursor) = node.base().cursor {
+        if let Some(cursor) = node.cursor_over(point).or(node.base().cursor) {
             declared = Some(cursor);
         }
     }

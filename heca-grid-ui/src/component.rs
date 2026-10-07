@@ -303,6 +303,10 @@ pub struct Base {
     /// hate"*). A widget with no `key` is not a drag source, because there would be nothing to
     /// name what was picked up.
     pub draggable: bool,
+    /// **When a press may pick this widget up** — `None` is always. Set with
+    /// [`ComponentExt::draggable_when`](crate::builders::ComponentExt::draggable_when). Asked when a
+    /// drag would *start* only: one already in flight is never cancelled by the rule going false.
+    pub drag_gate: Option<std::rc::Rc<dyn Fn(Modifiers) -> bool>>,
     /// **What this widget is, when it is dragged** — an opaque word its component chose
     /// (`"pane"`, `"column"`, `"docker.container"`). Set with
     /// [`ComponentExt::draggable_as`](crate::builders::ComponentExt::draggable_as); `None` means it
@@ -771,6 +775,7 @@ impl Base {
             tab_index: None,
             children: Vec::new(),
             draggable: false,
+            drag_gate: None,
             drag_kind: None,
             drop_target: false,
             accepts: Vec::new(),
@@ -1197,6 +1202,15 @@ pub trait Component {
         false
     }
 
+    /// **The cursor over `point`, when it depends on where the pointer is.** A widget with one
+    /// cursor for its whole box declares it ([`cursor`](crate::builders::ComponentExt::cursor));
+    /// one that changes across its box — a link inside a terminal, which only counts while a
+    /// modifier is held — answers here. It wins over the declared one, and nearer widgets win over
+    /// farther. `None` leaves it to the declaration and to what holds this widget.
+    fn cursor_over(&self, _point: Point) -> Option<crate::cursor::Cursor> {
+        None
+    }
+
     /// Whether this widget's **own box** is something the pointer lands on, where none of its
     /// children is. A leaf is what it draws, so it does. A layout-only widget ([`Base::container`])
     /// does only where it declares something or paints, so a full-size layout box laid over other
@@ -1518,6 +1532,17 @@ pub trait Component {
     /// needed a name, and put an internal rule in front of the author (Antonio, 2026-09-01).
     fn is_drag_source(&self) -> bool {
         self.base().draggable
+    }
+
+    /// **Would a press now pick this widget up?** It is a drag source, and its rule (if it set one)
+    /// holds for what is held down right now.
+    fn may_start_drag(&self) -> bool {
+        self.is_drag_source()
+            && self
+                .base()
+                .drag_gate
+                .as_ref()
+                .is_none_or(|rule| rule(crate::event::modifiers()))
     }
 
     /// **Does this widget accept drops?** The same shape, reading

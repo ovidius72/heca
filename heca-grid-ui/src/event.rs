@@ -515,6 +515,13 @@ pub enum Event {
     DragLeave(DragEvent),
     /// The drag was released over this drop target.
     Drop(DragEvent),
+    /// **A drag this drop target accepts is now in flight** — told once, when it starts, to every
+    /// drop target whose [`accepts`](crate::builders::ComponentExt::accepts) takes what is being
+    /// carried, wherever it sits and whether or not it is shown. A target that only exists for the
+    /// length of a drag (a landing place) appears on this and goes on [`DragSettled`](Self::DragSettled).
+    DragInFlight(DragEvent),
+    /// **The drag that was in flight is over**, dropped or not — told to the same targets.
+    DragSettled(DragEvent),
 
     // ───────────────────────────── focus and lifetime ─────────────────────────────
     /// This widget gained keyboard focus. There was a `focused` **signal** and no event, so
@@ -622,7 +629,9 @@ impl Event {
             | Self::DragEnter(d)
             | Self::DragOver(d)
             | Self::DragLeave(d)
-            | Self::Drop(d) => Some(d.pos),
+            | Self::Drop(d)
+            | Self::DragInFlight(d)
+            | Self::DragSettled(d) => Some(d.pos),
             _ => None,
         }
     }
@@ -716,6 +725,8 @@ impl Event {
             Self::DragOver(_) => EventKind::DragOver,
             Self::DragLeave(_) => EventKind::DragLeave,
             Self::Drop(_) => EventKind::Drop,
+            Self::DragInFlight(_) => EventKind::DragInFlight,
+            Self::DragSettled(_) => EventKind::DragSettled,
             Self::Focus => EventKind::Focus,
             Self::Blur => EventKind::Blur,
             Self::Mount => EventKind::Mount,
@@ -751,7 +762,9 @@ impl Event {
             | Self::DragEnter(d)
             | Self::DragOver(d)
             | Self::DragLeave(d)
-            | Self::Drop(d) => Some(d),
+            | Self::Drop(d)
+            | Self::DragInFlight(d)
+            | Self::DragSettled(d) => Some(d),
             _ => None,
         }
     }
@@ -815,6 +828,8 @@ pub enum EventKind {
     DragOver,
     DragLeave,
     Drop,
+    DragInFlight,
+    DragSettled,
     Focus,
     Blur,
     Mount,

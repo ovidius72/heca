@@ -822,6 +822,16 @@ pub trait ComponentExt: Component + Sized {
         b.drag_kind = Some(kind.into());
         self
     }
+    /// **Make it draggable only while `rule` holds** for what is held down when the press moves
+    /// far enough to start a drag — `draggable_when(|m| m.meta)` is "Cmd+drag". Without the rule
+    /// the press stays whatever the widget's content makes of it (a terminal's selection).
+    ///
+    /// The rule is asked when a drag would start, never again: a drag in flight does not end
+    /// because the key came up.
+    fn draggable_when(mut self, rule: impl Fn(crate::event::Modifiers) -> bool + 'static) -> Self {
+        self.base_mut().drag_gate = Some(std::rc::Rc::new(rule));
+        self
+    }
     /// **This widget accepts drops**, identified the same way — by its
     /// [`key`](ComponentExt::key). A drag released over its bounds drops onto it, with the side
     /// (before / onto / after) computed from where in its bounds the pointer sits.
@@ -1119,6 +1129,16 @@ pub trait ComponentExt: Component + Sized {
     /// A drag left this drop target.
     fn on_drag_leave(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::DragLeave, f)
+    }
+
+    /// A drag this drop target accepts has started, anywhere in the window.
+    fn on_drag_in_flight(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragInFlight, f)
+    }
+
+    /// The drag this drop target was told about is over.
+    fn on_drag_settled(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragSettled, f)
     }
 
     /// A drag was released over this drop target.

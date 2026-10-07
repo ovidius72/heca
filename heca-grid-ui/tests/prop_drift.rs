@@ -19,10 +19,6 @@ use std::path::{Path, PathBuf};
 /// caused the original defect, which required someone to remember to *add* to it.
 const NO_SURFACE_REQUIRED: &[(&str, &str)] = &[
     (
-        "Splitter",
-        "host-only: its one builder takes a closure that says what moving the edge means",
-    ),
-    (
         "ScrollBar",
         "host-only: its state is live host signals, which static data cannot drive",
     ),

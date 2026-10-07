@@ -69,3 +69,42 @@ fn undeclared_is_an_arrow_and_a_draggable_is_a_hand() {
     assert_eq!(cursor_at(&root, Point::new(50.0, 50.0)), Cursor::Grab);
     assert_eq!(cursor_at(&root, Point::new(50.0, 150.0)), Cursor::Default);
 }
+
+/// A widget whose cursor depends on **where** the pointer is answers by point: the left half of it
+/// is a link, the right half is not — and its answer beats the cursor declared on what holds it.
+#[test]
+fn a_widget_can_answer_the_cursor_by_point() {
+    use crate::component::{Base, Component};
+
+    struct LeftHalfIsALink {
+        base: Base,
+    }
+    impl Component for LeftHalfIsALink {
+        fn base(&self) -> &Base {
+            &self.base
+        }
+        fn base_mut(&mut self) -> &mut Base {
+            &mut self.base
+        }
+        fn cursor_over(&self, point: Point) -> Option<Cursor> {
+            let b = self.base.bounds;
+            (point.x < b.loc.x + b.size.w / 2.0).then_some(Cursor::Pointer)
+        }
+    }
+    let mut link = LeftHalfIsALink { base: Base::new() };
+    link.base.style.layout.width = crate::Length::Px(100.0);
+    link.base.style.layout.height = crate::Length::Px(100.0);
+    let root = laid_out(
+        Flex::column()
+            .width(400.0)
+            .height(300.0)
+            .cursor(Cursor::Text)
+            .child(link),
+    );
+    assert_eq!(cursor_at(&root, Point::new(20.0, 50.0)), Cursor::Pointer);
+    assert_eq!(
+        cursor_at(&root, Point::new(80.0, 50.0)),
+        Cursor::Text,
+        "off the link it is the holder's"
+    );
+}

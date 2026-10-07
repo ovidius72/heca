@@ -94,7 +94,7 @@ pub use layout::LayoutEngine;
 pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use nav::{child_name, collect_keys, identity_of, key_at, node_with_key, node_with_key_mut};
 pub use cursor::{Cursor, cursor_at};
-pub use pointer::{PointerState, clear_hover, dragging, hit_test};
+pub use pointer::{PointerState, clear_hover, dragged_bounds, dragging, hit_test};
 pub use scene::{
     BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, Scene, SurfaceAt, TextStyle,
 };
@@ -112,7 +112,7 @@ pub use widgets::{
     Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame,
     DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement, Icon, IconButton,
     Input, Item, ItemGroup, KeyCap, KeyHint, KeyHintGroup, KeycapVariant, Label, LabelSide,
-    MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel, ProgressBar,
+    LandingSlot, MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel, ProgressBar,
     RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion,
     Select, Separator, Spinner, Splitter, StatusDot, Surface, Tabs, Tag, Tile, Toast, ToastAction,
     ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
@@ -148,7 +148,7 @@ pub mod prelude {
         ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container,
         ContextMenu, Dialog, DockFrame, DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid,
         HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, KeyHintGroup, Label,
-        LabelSide, MarkerGroup, MenuEntry, MenuItem, NfGlyph, NfIcon, Orientation, Pane,
+        LabelSide, LandingSlot, MarkerGroup, MenuEntry, MenuItem, NfGlyph, NfIcon, Orientation, Pane,
         ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo,
         ScrollRegion, Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Tile, Toast,
         ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip,

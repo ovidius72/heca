@@ -6,7 +6,9 @@ use super::*;
 /// A move while a press is live: start a drag once the pointer has travelled far enough, then keep
 /// the source and whatever it is over informed.
 pub(super) fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPointer) -> Handled {
-    let Some((source_path, item)) = drag_source_on(root, press) else {
+    // A drag already in flight is followed whatever the pick-up rule says now; only a new one asks.
+    let carried = dragging_path(root).and_then(|path| drag_identity(root, &path).map(|id| (path, id)));
+    let Some((source_path, item)) = carried.or_else(|| drag_source_on(root, press)) else {
         return Handled::No;
     };
     let dragging = node_at(root, &source_path).base().pointer.dragging.get();
@@ -28,6 +30,11 @@ pub(super) fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPoi
             .set(true);
         let ev = Event::DragStart(drag_event(&item, raw, DropSide::Onto));
         let _ = deliver_path(root, &source_path, &ev);
+        announce(
+            root,
+            &source_path,
+            &Event::DragInFlight(drag_event(&item, raw, DropSide::Onto)),
+        );
     }
 
     let kind = node_at(root, &source_path).base().drag_kind.clone();
@@ -90,9 +97,33 @@ pub(super) fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled
         .pointer
         .dragging
         .set(false);
+    announce(
+        root,
+        &source_path,
+        &Event::DragSettled(drag_event(&item, raw, DropSide::Onto)),
+    );
     let side = hit.as_ref().map_or(DropSide::Onto, |h| h.side);
     let ev = Event::DragEnd(drag_event(&item, raw, side));
     or(handled, deliver_path(root, &source_path, &ev))
+}
+
+/// **Tell every drop target that accepts what is being carried that a drag began or ended** —
+/// wherever it sits in the tree, shown or not, and only that target (nothing bubbles). The source
+/// itself is not told: it has its own events.
+pub(super) fn announce(root: &mut dyn Component, source: &[usize], ev: &Event) {
+    let kind = node_at(root, source).base().drag_kind.clone();
+    fn tell(node: &mut dyn Component, kind: Option<&str>, ev: &Event, here: &mut Path, source: &[usize]) {
+        if node.is_drop_target() && node.accepts_drag(kind) && here.as_slice() != source {
+            let _ = node.base_mut().run_handlers(ev);
+            let _ = node.on_event(ev);
+        }
+        for i in 0..node.base().children.len() {
+            here.push(i);
+            tell(node.base_mut().children[i].as_mut(), kind, ev, here, source);
+            here.pop();
+        }
+    }
+    tell(root, kind.as_deref(), ev, &mut Path::new(), source);
 }
 
 /// Move the "a drag is over me" flag to `now`, emitting enter/leave/over as it goes.
@@ -131,7 +162,7 @@ pub(super) fn drag_source_on(root: &dyn Component, press: &[usize]) -> Option<(P
     let mut node = root;
     let mut best: Option<(Path, String)> = None;
     let mut here = Path::new();
-    if let Some(id) = drag_identity(root, &here) {
+    if let Some(id) = startable_identity(root, &here) {
         best = Some((here.clone(), id));
     }
     for i in press {
@@ -140,7 +171,7 @@ pub(super) fn drag_source_on(root: &dyn Component, press: &[usize]) -> Option<(P
         };
         node = child.as_ref();
         here.push(*i);
-        if let Some(id) = drag_identity(root, &here) {
+        if let Some(id) = startable_identity(root, &here) {
             best = Some((here.clone(), id));
         }
     }
@@ -155,6 +186,13 @@ pub(super) fn drag_source_on(root: &dyn Component, press: &[usize]) -> Option<(P
 /// framework answers (F003/P097/T496).
 pub fn dragging(root: &dyn Component) -> bool {
     dragging_path(root).is_some()
+}
+
+/// **Where the widget being carried sits** — its own laid-out bounds, not the pointer's — or `None`
+/// when nothing is being dragged. What lets a host tell a drag that began in one region from one
+/// that began in another without keeping a list of what can be dragged.
+pub fn dragged_bounds(root: &dyn Component) -> Option<heca_core::layout::Rectangle> {
+    dragging_path(root).map(|path| bounds_at(root, &path))
 }
 
 /// The path to the widget currently dragging, if any.
@@ -180,6 +218,15 @@ pub(super) fn drag_identity(root: &dyn Component, path: &[usize]) -> Option<Stri
         .key
         .clone()
         .or_else(|| crate::nav::identity_of(root, path))
+}
+
+/// [`drag_identity`], but only for a widget whose pick-up rule holds right now — what a *new* drag
+/// asks. One in flight uses [`drag_identity`], which is never refused.
+fn startable_identity(root: &dyn Component, path: &[usize]) -> Option<String> {
+    node_at(root, path)
+        .may_start_drag()
+        .then(|| drag_identity(root, path))
+        .flatten()
 }
 
 pub(super) fn clear_drag_over(root: &dyn Component) {

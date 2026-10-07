@@ -296,6 +296,7 @@ chain fell silent the day one row forgot to declare its key. N copies of a rule 
 | `Scroll(PointerEvent)` | the wheel turned over this widget; deltas are in `delta_x`/`delta_y`. A region that cannot scroll the axis asked for declines and it bubbles outward — which is what makes nested scroll areas work with nothing declared. |
 | `DragStart` / `Drag` / `DragEnd` | a drag from this widget: it declared a [`draggable`](#dragext) id and the pointer passed the 8 px threshold while held. `DragEnd` always arrives, dropped or not. |
 | `DragEnter` / `DragOver` / `DragLeave` / `Drop` | a drag over this **drop target**; `DragEvent::side` (`Before`/`Onto`/`After`) follows the pointer, so an insertion marker tracks it for free. |
+| `DragInFlight` / `DragSettled` | a drag **this drop target accepts** (its `accepts` takes what is carried) began / ended — told to the target wherever it is, shown or not, and to nothing that bubbles. A target that exists only for a drag appears on the first and goes on the second. |
 | `Key { key, pressed }` | a key, delivered to the **focus owner** and then up its ancestors (see [the keyboard](#the-keyboard--delivery-follows-focus)). |
 | `TextInput(String)` | text the user **committed** — typed, pasted, or composed by an IME. Distinct from `Key`: `Shift+2` is `Char('2')` there and `"@"` here. A field types from this and from nothing else. |
 | `ModifiersChanged` | broadcast; observers return `Handled::No`. |
@@ -3776,6 +3777,26 @@ mode toggles.
 BadgeButton::accent("144 lines above").on_click(|| jump_to_live_bottom());
 ```
 
+### Splitter
+
+**The edge between two things that a drag moves.** A grab zone with the resize cursor that tells
+whoever placed it how far the pointer moved while it is held; it knows nothing of what the two
+neighbours are.
+
+```rust
+Splitter::vertical().on_resize(|px| /* the left thing grows by px */)   // an edge that runs up and down
+Splitter::horizontal().line(true)                                       // moves up and down, draws a rule
+```
+
+```rust
+// from a description (a plugin's panel): each report goes out as the intent, with `delta`
+Splitter::new().orientation(Vertical).line(true).on_resize(Intent::new("mypanel.resize"))
+```
+
+It paints nothing unless `line(true)`. Where it sits in the tree is where it is on screen: a widget
+laid over it covers it. `grab(..)` widens the zone past its box so a thin gap stays reachable at any
+zoom.
+
 ### StatusDot
 
 Tiny glowing status dot in a semantic color (display-only).
@@ -4215,6 +4236,22 @@ for &g in Glyph::ALL { /* Icon::new(g) … */ }
 > **Declarative note:** `glow` is not a `ViewNode` prop. It is a *rendering* decision the host
 > makes about a glyph standing alone versus one inside a lit control — a plugin describes what the
 > icon **is**, and the host decides how it is lit, the same split that keeps colors out of props.
+
+### LandingSlot
+
+A place something can land, outlined, with a letter in the middle when a key picks it. One widget for
+both ways of choosing a place: the empty places a carried thing could land, and the keyboard pick
+(existing things outlined with `.filled(true)`, plus empty places between them).
+
+```rust
+LandingSlot::new().label("b").while_dragging("pane").key("slot:1")   // appears only while a pane is carried
+LandingSlot::new().filled(true).label("a")                               // outlines what is already there
+```
+
+It fills the box it is given and computes no geometry. `while_dragging(kind)` accepts that kind and
+shows itself on `DragInFlight`, hides on `DragSettled` — nothing hands it a flag. It is a drop target
+like any other: the framework paints the line or outline while a drag is over it, and a drop names
+it by its key.
 
 ### Tag
 
@@ -5018,6 +5055,9 @@ let cursor = cursor_at(&window_root, point);      // what the pointer is over, r
 - `cursor_at(root, point)` — `Grabbing` while a drag is in flight; otherwise the **nearest** widget
   on the way up from what the hit test finds that declared one; a widget that can be dragged and
   declared nothing is `Grab`; anything else is `Default`.
+- A widget whose cursor depends on **where** the pointer is (a link inside a terminal) implements
+  `Component::cursor_over(point)` instead; it wins over the declared cursor, nearer widgets win
+  over farther.
 - The host turns the answer into its window's icon, once, after each move. It keeps no list of what
   is draggable, resizable or a link.
 
@@ -6871,6 +6911,10 @@ no extra layout nodes are added.
 Row::new().child(/* … */).draggable(DragItemId::new(i))   // a drag source
 Flex::column().drop_target(DragItemId::new(zone_id))       // a drop zone
 ```
+
+`.draggable_when(|m| m.meta)` makes a source pick up only while the rule holds when the press
+travels far enough to start a drag (Cmd+drag); a drag already in flight is never cancelled by the
+rule going false, and without the key the press stays whatever the widget's content makes of it.
 
 **2. Resolution over the laid-out tree.** Pure bounds walks replace hand-computed
 hit-testing — they read each widget's `Base.bounds` (filled by layout each frame):

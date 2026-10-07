@@ -20,6 +20,7 @@ with_event!(
     Checkbox { on_change => Change }
     Select { on_change => Change }
     Tabs { on_change => Change }
+    Splitter { on_resize => Resize }
     ItemGroup { on_toggle => Toggle }
     DockFrame { on_toggle => Toggle }
     Toast { on_action => Action, on_dismiss => Dismiss }
