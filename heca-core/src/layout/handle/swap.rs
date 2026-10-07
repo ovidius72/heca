@@ -128,37 +128,18 @@ impl LayoutMut<'_> {
 }
 
 impl WorkspaceMut<'_> {
-    /// Swap the pane in row `first` of column `col` with the one in row `second`, animating both
-    /// vertically. Answers `false` when there is nothing to swap.
+    /// Swap the pane in row `first` of column `col` with the one in row `second`, sliding both
+    /// from where they were. Answers `false` when there is nothing to swap.
     pub fn swap_in_column(&mut self, col: usize, first: usize, second: usize) -> bool {
-        if first == second {
+        let before = self.scroll().positions();
+        if self.scrolling.swap_panes_in_column(col, first, second).is_none() {
             return false;
         }
-        let gap = self.scrolling.options.gaps;
-        let height = self.scroll().area().size.h;
-        let Some(column) = self.scrolling.columns.get_mut(col) else {
-            return false;
-        };
-        if first >= column.panes.len() || second >= column.panes.len() {
-            return false;
-        }
-        // The active pane travels with the swap when it is one of the two.
-        let new_active = match column.active_pane_idx {
-            i if i == first => second,
-            i if i == second => first,
-            i => i,
-        };
-        let (upper, lower) = (first.min(second), first.max(second));
-        let heights = column.pane_heights(height, gap);
-        let up_offset = heights.get(upper).copied().unwrap_or(0.0) + gap;
-        let down_offset = -(heights.get(lower).copied().unwrap_or(0.0) + gap);
-
-        let (upper_id, lower_id) = (column.panes[upper].id, column.panes[lower].id);
-        column.panes.swap(upper, lower);
-        column.active_pane_idx = new_active;
-        let mut scroll = self.scroll_mut();
-        scroll.slide_pane(upper_id, Point::new(0.0, down_offset), AnimationConfig::default());
-        scroll.slide_pane(lower_id, Point::new(0.0, up_offset), AnimationConfig::default());
+        let swapped: Vec<PaneId> = [first, second]
+            .iter()
+            .filter_map(|&row| self.scrolling.columns[col].panes.get(row).map(|p| p.id))
+            .collect();
+        self.scroll_mut().slide_panes_from(&swapped, &before);
         true
     }
 

@@ -29,6 +29,8 @@ pub enum ColumnEffect {
 pub struct Positions {
     /// Each column's x by identity.
     pub columns: Vec<(ColumnId, f64)>,
+    /// Each pane's slot by identity: its column's x and its y within the column.
+    pub panes: Vec<(PaneId, Point)>,
     /// Where a column one past the last would start.
     pub end: f64,
     /// How far the view was scrolled.
@@ -40,9 +42,17 @@ impl ScrollingRef<'_> {
     pub fn positions(&self) -> Positions {
         Positions {
             columns: self.capture_column_positions(),
+            panes: self.capture_pane_positions(),
             end: self.column_x(self.space.columns.len()),
             view_pos: self.view_pos(),
         }
+    }
+}
+
+impl Positions {
+    /// Where pane `id` was stacked. `None` when it was not in a column.
+    pub fn pane(&self, id: PaneId) -> Option<Point> {
+        self.panes.iter().find_map(|(pane, at)| (*pane == id).then_some(*at))
     }
 }
 
@@ -308,7 +318,7 @@ impl ScrollView {
     }
 
     /// Slide every column from where it was to where it is now.
-    fn slide_to_new_positions(&mut self, space: &ScrollingSpace, before: &Positions) {
+    pub(super) fn slide_to_new_positions(&mut self, space: &ScrollingSpace, before: &Positions) {
         let now: Vec<f64> = space.through(self).column_xs().collect();
         for (i, column) in space.columns.iter().enumerate() {
             let was = before

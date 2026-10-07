@@ -321,6 +321,14 @@ fn bottoms(space: &Seen) -> (f64, f64) {
     (lowest, r.area().loc.y + r.area().size.h)
 }
 
+/// Where each of `panes` is drawn, slide included, rounded to a hundredth of a pixel.
+fn drawn_at(space: &Seen, panes: &[PaneId]) -> Vec<(i64, i64)> {
+    let drawn = space.r().panes_with_positions();
+    let at = |id: &PaneId| drawn.iter().find(|(p, _)| p == id).map(|(_, r)| r.loc);
+    let round = |v: f64| (v * 100.0).round() as i64;
+    panes.iter().filter_map(at).map(|loc| (round(loc.x), round(loc.y))).collect()
+}
+
 /// **Every pane stays on screen** after heights are dragged and panes are swapped or moved: the
 /// column's heights always fill exactly the room it has.
 #[test]
@@ -338,11 +346,17 @@ fn panes_stay_on_screen_after_a_resize_and_a_swap() {
         assert!((total - room).abs() < 0.5, "step {step}: heights {total} vs room {room}");
         let (lowest, bottom) = bottoms(&space);
         assert!(lowest <= bottom - gaps + 0.5, "step {step}: lowest pane ends at {lowest} of {bottom}");
-        if let Some(column) = space.space.columns.get_mut(0) {
-            let n = column.panes.len();
-            column.panes.swap(step % n, (step + 1) % n);
-        }
+        let before = space.r().positions();
+        let n = space.columns[0].panes.len();
+        let (a, b) = (step % n, (step + 1) % n);
+        let swapped = [space.columns[0].panes[a].id, space.columns[0].panes[b].id];
+        let was = drawn_at(&space, &swapped);
+        assert!(space.space.swap_panes_in_column(0, a, b).is_some());
+        space.m().slide_panes_from(&swapped, &before);
         let total: f64 = space.r().pane_heights(0).iter().sum();
         assert!((total - room).abs() < 0.5, "after a swap at step {step}: {total} vs {room}");
+        // Each swapped pane starts its slide where it was drawn, even mid-way through an earlier
+        // slide, so a swap never throws a pane off screen.
+        assert_eq!(drawn_at(&space, &swapped), was, "step {step}: a swapped pane jumped");
     }
 }

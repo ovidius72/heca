@@ -43,8 +43,11 @@ impl Motion {
         );
     }
 
-    /// Slide pane `id` from `from` to where it is, replacing a slide already under way.
+    /// Slide pane `id` from `from` to where it is, adding to a slide already under way so a
+    /// second move does not jump.
     pub(crate) fn slide_pane(&mut self, id: PaneId, from: Point, config: AnimationConfig) {
+        let current = self.pane_offset(id);
+        let from = Point::new(from.x + current.x, from.y + current.y);
         self.panes.insert(
             id,
             Animated::Animating {

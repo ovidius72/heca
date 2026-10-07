@@ -52,7 +52,8 @@ pub mod workspace;
 pub use column::{Column, Pane};
 pub use handle::{Added, Layout, LayoutMut, Moved, Removed};
 pub use scrolling::{
-    ColumnEffect, LaidOutColumn, LaidOutPane, Positions, ScrollingMut, ScrollingRef, ScrollingSpace,
+    ColumnEffect, LaidOutColumn, LaidOutPane, PaneEffect, Positions, ScrollingMut, ScrollingRef,
+    ScrollingSpace, SpaceEffect,
 };
 pub use session::Session;
 pub use shape::SessionShape;

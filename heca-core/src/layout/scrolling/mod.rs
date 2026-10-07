@@ -8,7 +8,9 @@ use super::window_view::ScrollView;
 pub use super::types::PaneInsertTarget;
 
 mod effect;
+mod pane_effect;
 pub use effect::{ColumnEffect, Positions};
+pub use pane_effect::{PaneEffect, SpaceEffect};
 
 /// Minimum width (logical px) a column may be shrunk to by a manual resize, so a
 /// column never becomes a thin line.

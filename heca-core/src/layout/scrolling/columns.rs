@@ -44,7 +44,6 @@ impl ScrollingMut<'_> {
             self.activate_column(idx);
             self.view.activate_prev_on_removal = prev_offset;
         }
-
     }
 
     /// **Take a pane out of its column and give it one of its own, immediately to the right.**
@@ -59,7 +58,7 @@ impl ScrollingMut<'_> {
     ///
     /// `new_id` is passed in rather than derived: an id taken from the pane could name a column
     /// that already exists, and two columns with one id are two rows the cursor, the hint letters
-    /// and a right-click cannot tell apart (F003/P082/T458).
+    /// and a right-click cannot tell apart.
     pub fn extract_pane_to_new_column(&mut self, pane_id: PaneId, new_id: ColumnId) -> bool {
         let Some((src_col, pane_idx)) = self.space.pane_indices(pane_id) else {
             return false;
@@ -87,22 +86,19 @@ impl ScrollingMut<'_> {
         }
 
         let prev_next_x = self.reader().column_x(col_idx + 1);
-        let col = &mut self.space.columns[col_idx];
-        let idx = pane_idx.unwrap_or(col.panes.len());
-
-        // **Room first.** A pane that is about to exist needs somewhere to be, and heights other
-        // panes were dragged to are preferences that give way to that.
-        col.make_room_for_one_more(self.view.area.size.h, self.space.options.gaps);
-        col.add_pane_at(idx, pane);
+        let height = self.view.area.size.h;
+        let Some(PaneEffect::Inserted { row, .. }) =
+            self.space.insert_pane(col_idx, pane_idx, pane, height)
+        else {
+            return;
+        };
 
         if activate {
-            col.activate_pane(idx);
+            self.space.columns[col_idx].activate_pane(row);
             if self.view.active_column != col_idx {
                 self.activate_column(col_idx);
             }
         }
-
-        // Recompute width since adding a pane may change it.
 
         // Animate column position changes.
         let offset = self.reader().column_x(col_idx + 1) - prev_next_x;
@@ -130,19 +126,13 @@ impl ScrollingMut<'_> {
         Some(col)
     }
 
-    /// Remove a pane from a column.
+    /// Remove a pane from a column. Removing its last pane removes the column.
     pub fn remove_pane(&mut self, col_idx: usize, pane_idx: usize) -> Option<Pane> {
-        if col_idx >= self.space.columns.len() {
-            return None;
+        let before = self.reader().positions();
+        let (pane, effect) = self.space.take_pane_from(col_idx, pane_idx)?;
+        if let SpaceEffect::Column(effect) = effect {
+            self.view.react(&*self.space, effect, &before);
         }
-
-        // If removing the last pane in a column, remove the whole column.
-        if self.space.columns[col_idx].panes.len() == 1 {
-            return self.remove_column(col_idx).map(|mut c| c.panes.remove(0));
-        }
-
-        let pane = self.space.columns[col_idx].remove_pane(pane_idx)?;
-
         Some(pane)
     }
 
@@ -225,154 +215,56 @@ impl ScrollingMut<'_> {
 
     fn move_active_pane_to_column(&mut self, target_col: usize) -> bool {
         let source_col = self.view.active_column;
-        if source_col == target_col {
-            return false;
-        }
-
-        // Save old column positions and pane position before any changes.
-        let old_xs: Vec<(ColumnId, f64)> = self
-            .reader()
-            .column_xs()
-            .zip(self.space.columns.iter())
-            .map(|(x, c)| (c.id, x))
-            .collect();
-        let old_source_col_x = self.reader().column_x(source_col);
-        let old_pane_y =
-            self.reader().pane_y_in_column(source_col, self.space.columns[source_col].active_pane_idx);
-
-        let pane_idx = self.space.columns[source_col].active_pane_idx;
-        let pane = self.space.columns[source_col].remove_pane(pane_idx);
-        let Some(pane) = pane else {
+        let Some(row) = self.space.columns.get(source_col).map(|c| c.active_pane_idx) else {
             return false;
         };
-
-        // If source column became empty, remove it.
-        if self.space.columns[source_col].is_empty() {
-            self.remove_column(source_col);
-            // Adjust target index if we removed a column before it.
-            let target_col = if target_col > source_col {
-                target_col - 1
-            } else {
-                target_col
-            };
-            let target = &mut self.space.columns[target_col];
-            target.add_pane_at(target.panes.len(), pane);
-            target.active_pane_idx = target.panes.len() - 1;
-            self.view.active_column = target_col;
-        } else {
-            let target = &mut self.space.columns[target_col];
-            target.add_pane_at(target.panes.len(), pane);
-            target.active_pane_idx = target.panes.len() - 1;
-            self.view.active_column = target_col;
-        }
-
-
-        // Animate the moved pane from its old visual position to its new one.
-        let new_col_x = self.reader().column_x(self.view.active_column);
-        let new_pane_y = self.reader().pane_y_in_column(
-            self.view.active_column,
-            self.space.columns[self.view.active_column].panes.len() - 1,
-        );
-        let offset_x = old_source_col_x - new_col_x;
-        let offset_y = old_pane_y - new_pane_y;
-        let moved_pane = self.space.columns[self.view.active_column]
-            .panes
-            .last()
-            .unwrap();
-        let moved_id = moved_pane.id;
-        self.view.motion.slide_pane(moved_id, Point::new(offset_x, offset_y), AnimationConfig::default());
-
-        // Animate all columns from their old positions.
-        let new_xs: Vec<f64> = self.reader().column_xs().collect();
-        for (i, col) in self.space.columns.iter().enumerate() {
-            let old_x = old_xs
-                .iter()
-                .find(|(id, _)| *id == col.id)
-                .map(|(_, x)| *x)
-                .unwrap_or(new_xs[i]);
-            let diff = old_x - new_xs[i];
-            if diff.abs() > 0.5 {
-                self.view.motion.slide_column(col.id, diff, AnimationConfig::default());
-            }
-        }
-
-        // Animate view to bring the active column into view.
-        self.align_view_to_active_column();
-        true
+        let before = self.reader().positions();
+        let height = self.view.area.size.h;
+        let Some(effects) = self.space.move_pane_between(source_col, row, target_col, height) else {
+            return false;
+        };
+        self.show_pane_landed(&effects, &before)
     }
 
     /// Create a new column to the left or right of the current column
     /// with the active pane moved into it.
     fn move_active_pane_to_new_column(&mut self, dir: Direction, new_column_id: ColumnId) -> bool {
         let source_col = self.view.active_column;
-        let pane_idx = self.space.columns[source_col].active_pane_idx;
-
-        // Save old column positions and pane position before any changes.
-        let old_xs: Vec<(ColumnId, f64)> = self
-            .reader()
-            .column_xs()
-            .zip(self.space.columns.iter())
-            .map(|(x, c)| (c.id, x))
-            .collect();
-        let old_source_col_x = self.reader().column_x(source_col);
-        let old_pane_y = self.reader().pane_y_in_column(source_col, pane_idx);
-
-        let pane = self.space.columns[source_col].remove_pane(pane_idx);
-        let Some(pane) = pane else {
+        let Some(row) = self.space.columns.get(source_col).map(|c| c.active_pane_idx) else {
             return false;
         };
-
-        let new_col = Column::new(new_column_id, pane, ColumnWidth::Proportion(0.5));
-
-        let insert_idx = match dir {
+        let at = match dir {
             Direction::Left => source_col,
             Direction::Right => source_col + 1,
         };
+        let before = self.reader().positions();
+        let Some(effects) = self.space.extract_pane(source_col, row, new_column_id, at) else {
+            return false;
+        };
+        self.show_pane_landed(&effects, &before)
+    }
 
-        // If source column became empty, remove it and adjust insert index.
-        let removed_source = self.space.columns[source_col].is_empty();
-        if removed_source {
-            self.remove_column(source_col);
-            let insert_idx = if dir == Direction::Right && insert_idx > source_col {
-                insert_idx - 1
-            } else {
-                insert_idx
-            };
-            self.space.insert_column(insert_idx, new_col);
-            self.view.active_column = insert_idx;
-        } else {
-            self.space.insert_column(insert_idx, new_col);
-            self.view.active_column = insert_idx;
-        }
-
-
-        // Animate the moved pane from its old visual position to its new one.
-        let new_col_x = self.reader().column_x(self.view.active_column);
-        let new_pane_y = self.reader().pane_y_in_column(self.view.active_column, 0);
-        let offset_x = old_source_col_x - new_col_x;
-        let offset_y = old_pane_y - new_pane_y;
-        let moved_pane = self.space.columns[self.view.active_column]
-            .panes
-            .first()
-            .unwrap();
-        let moved_id = moved_pane.id;
-        self.view.motion.slide_pane(moved_id, Point::new(offset_x, offset_y), AnimationConfig::default());
-
-        // Animate all columns from their old positions.
-        let new_xs: Vec<f64> = self.reader().column_xs().collect();
-        for (i, col) in self.space.columns.iter().enumerate() {
-            let old_x = old_xs
-                .iter()
-                .find(|(id, _)| *id == col.id)
-                .map(|(_, x)| *x)
-                .unwrap_or(new_xs[i]);
-            let diff = old_x - new_xs[i];
-            if diff.abs() > 0.5 {
-                self.view.motion.slide_column(col.id, diff, AnimationConfig::default());
-            }
-        }
-
-        // Animate view to bring the new active column into view.
+    /// Show the active pane's move to where `effects` say it landed: that column and pane become
+    /// active, the pane and every column slide from where they were, and the view follows.
+    fn show_pane_landed(&mut self, effects: &[SpaceEffect], before: &Positions) -> bool {
+        let landed = effects.iter().rev().find_map(|effect| match *effect {
+            SpaceEffect::Pane(PaneEffect::Inserted { col, row }) => Some((col, row)),
+            SpaceEffect::Column(ColumnEffect::Inserted { idx }) => Some((idx, 0)),
+            _ => None,
+        });
+        let Some((col, row)) = landed else {
+            return false;
+        };
+        let Some(column) = self.space.columns.get_mut(col) else {
+            return false;
+        };
+        let Some(moved) = column.panes.get(row).map(|pane| pane.id) else {
+            return false;
+        };
+        column.active_pane_idx = row;
+        self.view.active_column = col;
+        self.view.slide_panes_from(&*self.space, &[moved], before);
+        self.view.slide_to_new_positions(&*self.space, before);
         self.align_view_to_active_column();
         true
     }
@@ -384,7 +276,7 @@ impl ScrollingMut<'_> {
     /// Move the column at `from` to index `to` within this workspace, animating the
     /// shift and leaving the moved column **active**. `to` is clamped to the column
     /// range; no-op if `from` is out of range or `from == to`. Returns whether it
-    /// moved. The general primitive behind keyboard left/right *and* DnD reorder (F4.5).
+    /// moved. The one move behind keyboard left/right and a dragged reorder.
     pub fn reorder_column(&mut self, from: usize, to: usize) -> bool {
         if from >= self.space.columns.len() {
             return false;
@@ -404,7 +296,7 @@ impl ScrollingMut<'_> {
 
     /// Swap the columns at `a` and `b` within this workspace (positions only — each
     /// column keeps its panes), animating the shift. No-op if either index is out of
-    /// range or `a == b`. Returns whether it swapped. (DnD column swap — F4.5.)
+    /// range or `a == b`. Returns whether it swapped.
     pub fn swap_columns(&mut self, a: usize, b: usize) -> bool {
         let before = self.reader().positions();
         let Some(effect) = self.space.swap_columns(a, b) else {
