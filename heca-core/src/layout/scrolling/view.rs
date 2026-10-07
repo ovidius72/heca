@@ -123,60 +123,24 @@ impl ScrollingMut<'_> {
     /// Activate a column and animate the view to bring it into view.
     /// NIRI behavior: focus changes scroll the viewport.
     pub fn activate_column(&mut self, idx: usize) {
-        if idx >= self.space.columns.len() {
-            return;
-        }
-        if self.view.active_column == idx {
-            // Already the active column — but it may have been scrolled/resized
-            // out of view, so still re-fit it (#3: re-focusing a stranded column
-            // must reveal it instead of doing nothing).
-            self.ensure_active_column_visible();
-            return;
-        }
-
-        let prev_idx = self.view.active_column;
-        let new_offset = self.reader().compute_view_offset_for_column(idx, Some(prev_idx));
-
-        // Offset the view to account for column position change.
-        let new_col_x = self.reader().column_x(idx);
-        let old_col_x = self.reader().column_x(prev_idx);
-        self.view.offset.offset(old_col_x - new_col_x);
-
-        // Animate to new view offset.
-        let pixel = 1.0 / self.view.scale;
-        let to_diff = new_offset - self.view.offset.target();
-        if to_diff.abs() < pixel {
-            self.view.offset.offset(to_diff);
-        } else {
-            self.view.offset = ViewOffset::Animation(Animation::new(
-                self.view.offset.current(),
-                new_offset,
-                AnimationConfig::default(),
-            ));
-        }
-
-        self.view.active_column = idx;
-        self.view.activate_prev_on_removal = None;
+        self.view.activate_column(&*self.space, idx);
     }
 
     /// Scroll the view (statically) so the active column is on-screen. Mirrors the
     /// re-fit that [`update_working_area`](Self::update_working_area) does on a
     /// window resize — used after a manual column resize that pushes the active
     /// column's edge off the viewport, and when re-focusing an already-active
-    /// column that was scrolled out of view (#3). A column wider than the viewport
+    /// column that was scrolled out of view. A column wider than the viewport
     /// is left-aligned; use [`scroll_view`](Self::scroll_view) to pan across its
     /// overflow. No-op while a view animation/gesture is in flight.
     pub fn ensure_active_column_visible(&mut self) {
-        if !self.space.columns.is_empty() && self.view.offset.is_static() {
-            let offset = self.reader().compute_view_offset_for_column(self.view.active_column, None);
-            self.view.offset = ViewOffset::Static(offset);
-        }
+        self.view.ensure_active_column_visible(&*self.space);
     }
 
     /// Pan the view horizontally by `delta` logical px (positive = reveal content
     /// to the **right**), clamped to the content bounds so it never scrolls the
     /// whole layout off-screen. Lets the user reach column overflow / content
-    /// scrolled past an edge (#3). Snaps statically for responsiveness; no-op when
+    /// scrolled past an edge. Snaps statically for responsiveness; no-op when
     /// all columns already fit the viewport.
     pub fn scroll_view(&mut self, delta: f64) {
         if self.space.columns.is_empty() {
@@ -248,5 +212,56 @@ impl ScrollingMut<'_> {
             |id| space.columns.iter().any(|c| c.id == id),
             |id| space.columns.iter().any(|c| c.panes.iter().any(|p| p.id == id)),
         );
+    }
+}
+
+impl ScrollView {
+    /// Make column `idx` of `space` the active one, easing the view to bring it on screen. An
+    /// already-active column is re-fitted, so re-focusing one scrolled out of view reveals it.
+    pub(crate) fn activate_column(&mut self, space: &ScrollingSpace, idx: usize) {
+        if idx >= space.columns.len() {
+            return;
+        }
+        if self.active_column == idx {
+            self.ensure_active_column_visible(space);
+            return;
+        }
+
+        let prev_idx = self.active_column;
+        let (new_offset, new_col_x, old_col_x) = {
+            let now = space.through(self);
+            (
+                now.compute_view_offset_for_column(idx, Some(prev_idx)),
+                now.column_x(idx),
+                now.column_x(prev_idx),
+            )
+        };
+
+        // Offset the view to account for column position change.
+        self.offset.offset(old_col_x - new_col_x);
+
+        // Animate to new view offset.
+        let pixel = 1.0 / self.scale;
+        let to_diff = new_offset - self.offset.target();
+        if to_diff.abs() < pixel {
+            self.offset.offset(to_diff);
+        } else {
+            self.offset = ViewOffset::Animation(Animation::new(
+                self.offset.current(),
+                new_offset,
+                AnimationConfig::default(),
+            ));
+        }
+
+        self.active_column = idx;
+        self.activate_prev_on_removal = None;
+    }
+
+    /// Fit the active column on screen, statically. Nothing happens while the view is easing.
+    fn ensure_active_column_visible(&mut self, space: &ScrollingSpace) {
+        if !space.columns.is_empty() && self.offset.is_static() {
+            let offset = space.through(self).compute_view_offset_for_column(self.active_column, None);
+            self.offset = ViewOffset::Static(offset);
+        }
     }
 }

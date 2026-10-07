@@ -161,8 +161,8 @@ fn a_swapped_pane_slides_from_where_it_was() {
     let was = drawn(&space);
     let before = space.r().positions();
 
-    assert!(space.space.swap_panes_in_column(0, 0, 1).is_some());
-    space.m().slide_panes_from(&[PaneId(1), PaneId(2)], &before);
+    let effect = space.space.swap_panes_in_column(0, 0, 1).expect("both rows are there");
+    space.m().show(&[SpaceEffect::Pane(effect)], &before);
 
     let now = drawn(&space);
     for (id, rect) in was {

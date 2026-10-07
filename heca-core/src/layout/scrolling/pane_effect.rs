@@ -152,9 +152,62 @@ fn after_taking(taken: SpaceEffect, idx: usize) -> usize {
 }
 
 impl ScrollView {
+    /// **Show a change in this window**: what one effect did, or what several did together (a
+    /// move is a removal and an insertion). `space` is the content after the change; `before` is
+    /// [`ScrollingRef::positions`] taken before it. Which column and pane to follow is not
+    /// decided here: that is the window's own choice ([`follow`](Self::follow)).
+    pub fn react_to(&mut self, space: &ScrollingSpace, effects: &[SpaceEffect], before: &Positions) {
+        match effects {
+            [SpaceEffect::Column(effect)] => self.react(space, *effect, before),
+            [SpaceEffect::Pane(effect)] => self.react_to_pane(space, *effect, before),
+            _ => self.react_to_move(space, effects, before),
+        }
+    }
+
+    /// Make column `col` the active one and bring it on screen, as focusing it does.
+    pub fn follow(&mut self, space: &ScrollingSpace, col: usize) {
+        self.activate_column(space, col);
+    }
+
+    fn react_to_pane(&mut self, space: &ScrollingSpace, effect: PaneEffect, before: &Positions) {
+        let rows = match effect {
+            PaneEffect::Inserted { col, row } => vec![(col, row)],
+            PaneEffect::Removed { .. } => Vec::new(),
+            PaneEffect::Swapped { col, a, b } => vec![(col, a), (col, b)],
+        };
+        self.slide_panes_from(space, &pane_ids(space, &rows), before);
+        self.slide_to_new_positions(space, before);
+    }
+
+    /// Several effects at once: keep the active column on the column it was and the view where it
+    /// was, then slide every pane that arrived and every column from where it was.
+    fn react_to_move(&mut self, space: &ScrollingSpace, effects: &[SpaceEffect], before: &Positions) {
+        let mut arrived = Vec::new();
+        for effect in effects {
+            match *effect {
+                SpaceEffect::Column(ColumnEffect::Inserted { idx }) => {
+                    if idx <= self.active_column {
+                        self.active_column += 1;
+                    }
+                    arrived.push((idx, 0));
+                }
+                SpaceEffect::Column(ColumnEffect::Removed { idx }) if idx < self.active_column => {
+                    self.active_column -= 1;
+                }
+                SpaceEffect::Pane(PaneEffect::Inserted { col, row }) => arrived.push((col, row)),
+                _ => {}
+            }
+        }
+        self.active_column = self.active_column.min(space.columns.len().saturating_sub(1));
+        // The scroll is measured from the active column, which may now sit somewhere else.
+        self.keep_view_in_place(space, before);
+        self.slide_panes_from(space, &pane_ids(space, &arrived), before);
+        self.slide_to_new_positions(space, before);
+    }
+
     /// Slide each of `panes` from its slot in `before` to its slot now. A pane that was not in a
     /// column before, or has not moved, does not slide.
-    pub(crate) fn slide_panes_from(
+    fn slide_panes_from(
         &mut self,
         space: &ScrollingSpace,
         panes: &[PaneId],
@@ -172,9 +225,17 @@ impl ScrollView {
     }
 }
 
+/// The panes at these `(column, row)` places, skipping a place with none.
+fn pane_ids(space: &ScrollingSpace, places: &[(usize, usize)]) -> Vec<PaneId> {
+    places
+        .iter()
+        .filter_map(|&(col, row)| space.columns.get(col)?.panes.get(row).map(|p| p.id))
+        .collect()
+}
+
 impl ScrollingMut<'_> {
-    /// Slide each of `panes` in this window from where `before` had it to where it is now.
-    pub(crate) fn slide_panes_from(&mut self, panes: &[PaneId], before: &Positions) {
-        self.view.slide_panes_from(&*self.space, panes, before);
+    /// Show `effects` in this window, given where things were `before` them.
+    pub fn show(&mut self, effects: &[SpaceEffect], before: &Positions) {
+        self.view.react_to(&*self.space, effects, before);
     }
 }

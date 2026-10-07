@@ -85,31 +85,20 @@ impl ScrollingMut<'_> {
             return;
         }
 
-        let prev_next_x = self.reader().column_x(col_idx + 1);
+        let before = self.reader().positions();
         let height = self.view.area.size.h;
-        let Some(PaneEffect::Inserted { row, .. }) =
-            self.space.insert_pane(col_idx, pane_idx, pane, height)
-        else {
+        let Some(effect) = self.space.insert_pane(col_idx, pane_idx, pane, height) else {
             return;
         };
-
+        let PaneEffect::Inserted { row, .. } = effect else {
+            return;
+        };
         if activate {
             self.space.columns[col_idx].activate_pane(row);
-            if self.view.active_column != col_idx {
-                self.activate_column(col_idx);
-            }
         }
-
-        // Animate column position changes.
-        let offset = self.reader().column_x(col_idx + 1) - prev_next_x;
-        if self.view.active_column <= col_idx {
-            for c in &self.space.columns[col_idx + 1..] {
-                self.view.motion.slide_column(c.id, -offset, AnimationConfig::default());
-            }
-        } else {
-            for c in &self.space.columns[..=col_idx] {
-                self.view.motion.slide_column(c.id, offset, AnimationConfig::default());
-            }
+        self.show(&[SpaceEffect::Pane(effect)], &before);
+        if activate {
+            self.activate_column(col_idx);
         }
     }
 
@@ -130,9 +119,7 @@ impl ScrollingMut<'_> {
     pub fn remove_pane(&mut self, col_idx: usize, pane_idx: usize) -> Option<Pane> {
         let before = self.reader().positions();
         let (pane, effect) = self.space.take_pane_from(col_idx, pane_idx)?;
-        if let SpaceEffect::Column(effect) = effect {
-            self.view.react(&*self.space, effect, &before);
-        }
+        self.show(&[effect], &before);
         Some(pane)
     }
 
@@ -244,8 +231,8 @@ impl ScrollingMut<'_> {
         self.show_pane_landed(&effects, &before)
     }
 
-    /// Show the active pane's move to where `effects` say it landed: that column and pane become
-    /// active, the pane and every column slide from where they were, and the view follows.
+    /// Show the active pane's move to where `effects` say it landed, and follow it there: that
+    /// column and pane become the active ones.
     fn show_pane_landed(&mut self, effects: &[SpaceEffect], before: &Positions) -> bool {
         let landed = effects.iter().rev().find_map(|effect| match *effect {
             SpaceEffect::Pane(PaneEffect::Inserted { col, row }) => Some((col, row)),
@@ -258,14 +245,9 @@ impl ScrollingMut<'_> {
         let Some(column) = self.space.columns.get_mut(col) else {
             return false;
         };
-        let Some(moved) = column.panes.get(row).map(|pane| pane.id) else {
-            return false;
-        };
         column.active_pane_idx = row;
-        self.view.active_column = col;
-        self.view.slide_panes_from(&*self.space, &[moved], before);
-        self.view.slide_to_new_positions(&*self.space, before);
-        self.align_view_to_active_column();
+        self.show(effects, before);
+        self.view.follow(&*self.space, col);
         true
     }
 

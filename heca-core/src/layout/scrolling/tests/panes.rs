@@ -351,8 +351,8 @@ fn panes_stay_on_screen_after_a_resize_and_a_swap() {
         let (a, b) = (step % n, (step + 1) % n);
         let swapped = [space.columns[0].panes[a].id, space.columns[0].panes[b].id];
         let was = drawn_at(&space, &swapped);
-        assert!(space.space.swap_panes_in_column(0, a, b).is_some());
-        space.m().slide_panes_from(&swapped, &before);
+        let effect = space.space.swap_panes_in_column(0, a, b).expect("rows a and b are there");
+        space.m().show(&[SpaceEffect::Pane(effect)], &before);
         let total: f64 = space.r().pane_heights(0).iter().sum();
         assert!((total - room).abs() < 0.5, "after a swap at step {step}: {total} vs {room}");
         // Each swapped pane starts its slide where it was drawn, even mid-way through an earlier

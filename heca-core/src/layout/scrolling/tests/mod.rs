@@ -40,5 +40,6 @@ pub(super) fn column_ids(space: &ScrollingSpace) -> Vec<u64> {
 mod columns;
 mod laid_out;
 mod pane_effect;
+mod pane_react;
 mod panes;
 mod view;

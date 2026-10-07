@@ -3,7 +3,7 @@
 
 use crate::layout::animation::AnimationConfig;
 use crate::layout::types::{ColumnId, Point, Rectangle};
-use crate::layout::{LayoutMut, Pane, PaneId, WorkspaceMut};
+use crate::layout::{LayoutMut, Pane, PaneId, SpaceEffect, WorkspaceMut};
 
 /// Where a pane is: workspace, column, and row within the column.
 #[derive(Clone, Copy)]
@@ -132,14 +132,10 @@ impl WorkspaceMut<'_> {
     /// from where they were. Answers `false` when there is nothing to swap.
     pub fn swap_in_column(&mut self, col: usize, first: usize, second: usize) -> bool {
         let before = self.scroll().positions();
-        if self.scrolling.swap_panes_in_column(col, first, second).is_none() {
+        let Some(effect) = self.scrolling.swap_panes_in_column(col, first, second) else {
             return false;
-        }
-        let swapped: Vec<PaneId> = [first, second]
-            .iter()
-            .filter_map(|&row| self.scrolling.columns[col].panes.get(row).map(|p| p.id))
-            .collect();
-        self.scroll_mut().slide_panes_from(&swapped, &before);
+        };
+        self.scroll_mut().show(&[SpaceEffect::Pane(effect)], &before);
         true
     }
 

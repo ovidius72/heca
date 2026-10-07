@@ -289,6 +289,8 @@ impl ScrollView {
             };
             self.active_column = new_idx;
             self.activate_prev_on_removal = None;
+            // The scroll is measured from the active column, which is now another one.
+            self.keep_view_in_place(space, before);
             let fit = space.through(self).compute_view_offset_for_column(new_idx, None);
             self.offset = ViewOffset::Static(fit);
         }
@@ -312,7 +314,7 @@ impl ScrollView {
     }
 
     /// Shift the scroll by how far the strip moved under it, so the layout stays visually fixed.
-    fn keep_view_in_place(&mut self, space: &ScrollingSpace, before: &Positions) {
+    pub(super) fn keep_view_in_place(&mut self, space: &ScrollingSpace, before: &Positions) {
         let now = space.through(self).view_pos();
         self.offset.offset(before.view_pos - now);
     }

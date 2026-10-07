@@ -58,7 +58,7 @@ impl Session {
 
 impl<'a> Layout<'a> {
     /// Where workspace `idx`'s columns are for this window, to hold against where they are after a
-    /// change ([`LayoutMut::show_column_change`]).
+    /// change ([`LayoutMut::show_change`]).
     pub fn column_positions(&self, idx: usize) -> Option<super::scrolling::Positions> {
         self.workspace(idx).map(|ws| ws.scroll().positions())
     }
@@ -106,9 +106,7 @@ impl<'a> Layout<'a> {
     /// Workspace geometries for rendering.
     ///
     /// The active workspace at `(0, 0)`, the size of the viewport — and nothing else, because only
-    /// one workspace is on screen at a time. There used to be a second branch here that stacked
-    /// every workspace as a thumbnail for the overview; it went with the overview itself, which
-    /// nothing had been able to reach since the exposé became a layer (F003/P082/T422).
+    /// one workspace is on screen at a time.
     pub fn workspace_geometries(&self) -> Vec<(usize, Rectangle)> {
         if self.active_workspace().is_some() {
             vec![(
@@ -129,23 +127,24 @@ impl<'a> Layout<'a> {
 
 impl LayoutMut<'_> {
     /// Workspace `idx`'s columns, to change **with no view**: what a server does. Show the change
-    /// to a window with [`show_column_change`](Self::show_column_change).
+    /// to a window with [`show_change`](Self::show_change).
     pub fn columns_mut(&mut self, idx: usize) -> Option<&mut super::ScrollingSpace> {
         self.session.workspaces.get_mut(idx).map(|ws| &mut ws.scrolling)
     }
 
-    /// **Show a change to workspace `idx`'s columns in this window**: the window's own reaction to
-    /// what the content did, given where things were before ([`Layout::column_positions`]).
-    pub fn show_column_change(
+    /// **Show a change to workspace `idx`'s columns and panes in this window**: the window's own
+    /// reaction to what the content did, given where things were before
+    /// ([`Layout::column_positions`]).
+    pub fn show_change(
         &mut self,
         idx: usize,
-        effect: super::scrolling::ColumnEffect,
+        effects: &[super::scrolling::SpaceEffect],
         before: &super::scrolling::Positions,
     ) {
         let Some(ws) = self.session.workspaces.get(idx) else {
             return;
         };
-        self.view.scroll_mut(ws.id).react(&ws.scrolling, effect, before);
+        self.view.scroll_mut(ws.id).react_to(&ws.scrolling, effects, before);
     }
 
     /// The same layout, for the reads that only look.

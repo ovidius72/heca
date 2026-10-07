@@ -4,7 +4,7 @@
 //! The server reports past facts about the content ([`Change`]). Which workspace is shown, which
 //! column is active and where the window came from are the window's own decisions, made here once.
 
-use heca_core::layout::{LayoutMut, PaneId, Positions};
+use heca_core::layout::{LayoutMut, PaneId, Positions, SpaceEffect};
 
 use crate::input::WmAction;
 use crate::server::{Change, Refusal};
@@ -127,7 +127,7 @@ pub(crate) fn window_reacts(
             if let Some((asked_in, positions)) = before
                 && *asked_in == workspace
             {
-                layout.show_column_change(workspace, effect, positions);
+                layout.show_change(workspace, &[SpaceEffect::Column(effect)], positions);
             }
         }
         Change::ColumnZoomed { workspace, column } => {
