@@ -1134,7 +1134,7 @@ impl ScrollingSpace {
 
     /// Get all panes with their render positions.
     pub fn panes_with_positions(&self) -> Vec<(PaneId, Rectangle)> {
-        self.laid_out_columns()
+        self.laid_out_columns(None)
             .into_iter()
             .flat_map(|col| col.panes)
             .map(|p| (p.id, p.rect))
@@ -1148,11 +1148,76 @@ impl ScrollingSpace {
     /// out, and anything wanting a column's box had to rebuild the same arithmetic from
     /// [`column_x`](Self::column_x), the render offset, the view offset and the gaps.
     pub fn columns_with_positions(&self) -> Vec<LaidOutColumn> {
-        self.laid_out_columns()
+        self.laid_out_columns(None)
+    }
+
+    /// The same layout **with the places a pane can be put opened as real space** — see
+    /// [`PlacesOpen`]. `None` is exactly [`columns_with_positions`](Self::columns_with_positions).
+    pub fn columns_with_places_open(&self, open: Option<PlacesOpen>) -> Vec<LaidOutColumn> {
+        self.laid_out_columns(open)
+    }
+
+    /// Every pane's rect with the places `open` opened — [`panes_with_positions`](Self::panes_with_positions)
+    /// for a layout read with space made for them.
+    pub fn panes_with_places_open(&self, open: Option<PlacesOpen>) -> Vec<(PaneId, Rectangle)> {
+        self.laid_out_columns(open)
+            .into_iter()
+            .flat_map(|col| col.panes)
+            .map(|p| (p.id, p.rect))
+            .collect()
+    }
+
+    /// **The rects of the places `open` makes** — one per gap between columns and at each end, and
+    /// one above, between and below the panes of the columns `open.rows` names. Worked out
+    /// from the same layout as the columns, so none of them overlaps a pane or a column.
+    pub fn places(&self, open: PlacesOpen) -> Vec<Place> {
+        let columns = self.laid_out_columns(Some(open));
+        let gaps = self.options.gaps;
+        let top = self.working_area.loc.y + gaps;
+        let height = (self.working_area.size.h - 2.0 * gaps).max(0.0);
+        let mut out = Vec::new();
+        for (i, col) in columns.iter().enumerate() {
+            out.push(Place {
+                kind: PlaceKind::Gap(i),
+                rect: Rectangle::new(
+                    Point::new(col.rect.loc.x - open.column_w, top),
+                    Size::new(open.column_w, height),
+                ),
+            });
+        }
+        if let Some(last) = columns.last() {
+            out.push(Place {
+                kind: PlaceKind::Gap(columns.len()),
+                rect: Rectangle::new(
+                    Point::new(last.rect.loc.x + last.rect.size.w + gaps, top),
+                    Size::new(open.column_w, height),
+                ),
+            });
+        }
+        for col in columns.iter().filter(|c| open.rows.includes(c.idx)) {
+            let width = col.rect.size.w;
+            let x = col.rect.loc.x;
+            let mut above = top;
+            for (row, pane) in col.panes.iter().enumerate() {
+                out.push(Place {
+                    kind: PlaceKind::Row { col: col.idx, row },
+                    rect: Rectangle::new(Point::new(x, above), Size::new(width, open.row_h)),
+                });
+                above = pane.slot.loc.y + pane.slot.size.h + gaps;
+            }
+            out.push(Place {
+                kind: PlaceKind::Row {
+                    col: col.idx,
+                    row: col.panes.len(),
+                },
+                rect: Rectangle::new(Point::new(x, above), Size::new(width, open.row_h)),
+            });
+        }
+        out
     }
 
     /// The one walk both public views are built on.
-    fn laid_out_columns(&self) -> Vec<LaidOutColumn> {
+    fn laid_out_columns(&self, open: Option<PlacesOpen>) -> Vec<LaidOutColumn> {
         let view_off = Point::new(-self.view_pos(), 0.0);
         let gaps = self.options.gaps;
 
@@ -1160,15 +1225,31 @@ impl ScrollingSpace {
             .iter()
             .enumerate()
             .map(|(col_idx, col)| {
-                let col_pos = Point::new(self.column_x(col_idx) + col.render_offset(), 0.0);
-                let mut pane_y = self.working_area.loc.y + gaps;
+                // **An open place is space the columns make**: each column slides right by the
+                // places to its left, so a place covers nothing.
+                let slide = open.map_or(0.0, |o| (col_idx + 1) as f64 * o.column_w);
+                let col_pos = Point::new(self.column_x(col_idx) + col.render_offset() + slide, 0.0);
+                // In the column the rows are open for, a place above, between and below the panes
+                // takes its height from them: they keep their proportions in what is left.
+                let rows_open = open.filter(|o| o.rows.includes(col_idx));
+                let shrink = rows_open.map_or(1.0, |o| {
+                    let total: f64 = (0..col.panes.len())
+                        .map(|i| col.pane_sizes.get(i).map_or(0.0, |s| s.h))
+                        .sum();
+                    let taken = (col.panes.len() + 1) as f64 * (o.row_h + gaps);
+                    if total <= 0.0 { 1.0 } else { ((total - taken) / total).max(0.2) }
+                });
+                let mut pane_y = self.working_area.loc.y
+                    + gaps
+                    + rows_open.map_or(0.0, |o| o.row_h + gaps);
                 let mut panes = Vec::with_capacity(col.panes.len());
 
                 for (pane_idx, pane) in col.panes.iter().enumerate() {
-                    let size = col.pane_sizes.get(pane_idx).copied().unwrap_or(Size::new(
+                    let mut size = col.pane_sizes.get(pane_idx).copied().unwrap_or(Size::new(
                         col.computed_width,
                         self.working_area.size.h / col.panes.len().max(1) as f64,
                     ));
+                    size.h *= shrink;
 
                     // **Flow, then transform.** The slot is where the column stacks this pane; the
                     // displacement is the pane's own, from a move animation or a drag in flight.
@@ -1185,7 +1266,7 @@ impl ScrollingSpace {
                         displacement,
                     });
 
-                    pane_y += size.h + gaps;
+                    pane_y += size.h + gaps + rows_open.map_or(0.0, |o| o.row_h + gaps);
                 }
 
                 LaidOutColumn {
@@ -1204,6 +1285,55 @@ impl ScrollingSpace {
             })
             .collect()
     }
+}
+
+/// **Which places are open as real space**, and how big, in logical px — asked of a layout read,
+/// never kept by the layout, because whether places are open is a fact about one window's view.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlacesOpen {
+    /// The width of the place opened at each gap between columns and at both ends.
+    pub column_w: f64,
+    /// The height of each place opened above, between and below the panes of those columns.
+    pub row_h: f64,
+    /// Which columns have their rows open.
+    pub rows: RowsOpen,
+}
+
+/// Which columns have a place opened above, between and below their panes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowsOpen {
+    /// None: only the gaps between columns.
+    None,
+    /// One column — the one the pointer is over.
+    Column(usize),
+    /// Every column — what a keyboard pick offers.
+    All,
+}
+
+impl RowsOpen {
+    fn includes(self, col: usize) -> bool {
+        match self {
+            Self::None => false,
+            Self::Column(c) => c == col,
+            Self::All => true,
+        }
+    }
+}
+
+/// What a [`Place`] is a place for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlaceKind {
+    /// A new column at gap `i` (the gap left of column `i`; the last is the end).
+    Gap(usize),
+    /// A row of column `col`: above pane `row`, or below the last when `row` is the pane count.
+    Row { col: usize, row: usize },
+}
+
+/// One open place and the box it fills.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Place {
+    pub kind: PlaceKind,
+    pub rect: Rectangle,
 }
 
 /// **One column as it is laid out on screen**, and the panes stacked inside it.
@@ -1905,5 +2035,80 @@ mod tests {
         let pinned = heights(&space);
         space.columns[0].move_active_pane_top_boundary(40.0, h, gaps);
         assert_eq!(heights(&space), pinned, "no edge above the first pane");
+    }
+
+    /// A two-column space whose first column holds two panes: `[a][c]` over `[b]`.
+    fn stacked() -> ScrollingSpace {
+        let mut space = space_with_columns(2);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(99), "b"), false);
+        space
+    }
+
+    fn open(rows: RowsOpen) -> PlacesOpen {
+        PlacesOpen {
+            column_w: 40.0,
+            row_h: 20.0,
+            rows,
+        }
+    }
+
+    fn overlaps(a: Rectangle, b: Rectangle) -> bool {
+        a.loc.x < b.loc.x + b.size.w
+            && b.loc.x < a.loc.x + a.size.w
+            && a.loc.y < b.loc.y + b.size.h
+            && b.loc.y < a.loc.y + a.size.h
+    }
+
+    /// **Open places are space, not an overlay**: none of them overlaps a pane or a column, in the
+    /// strip and in the column whose rows are open.
+    #[test]
+    fn an_open_place_overlaps_no_pane_and_no_column() {
+        for row_col in [RowsOpen::None, RowsOpen::Column(0), RowsOpen::Column(1), RowsOpen::All] {
+            let space = stacked();
+            let o = open(row_col);
+            let cols = space.columns_with_places_open(Some(o));
+            for place in space.places(o) {
+                for col in &cols {
+                    // A row place is *inside* its own column's box — between its panes.
+                    let own = matches!(place.kind, PlaceKind::Row { col: c, .. } if c == col.idx);
+                    assert!(own || !overlaps(place.rect, col.rect), "{place:?} over column {:?}", col.rect);
+                    for pane in &col.panes {
+                        assert!(!overlaps(place.rect, pane.rect), "{place:?} over {:?}", pane.rect);
+                    }
+                }
+            }
+        }
+    }
+
+    /// A gap place at each gap and both ends; row places (one more than the panes) only in the
+    /// column named.
+    #[test]
+    fn places_exist_for_each_gap_and_for_the_rows_of_the_named_column() {
+        let space = stacked();
+        let kinds = |o: PlacesOpen| space.places(o).into_iter().map(|p| p.kind).collect::<Vec<_>>();
+        assert_eq!(
+            kinds(open(RowsOpen::None)),
+            [PlaceKind::Gap(0), PlaceKind::Gap(1), PlaceKind::Gap(2)]
+        );
+        let with_rows = kinds(open(RowsOpen::Column(0)));
+        assert_eq!(with_rows.len(), 3 + 3, "three gaps and three rows for a column of two panes");
+        for row in 0..=2 {
+            assert!(with_rows.contains(&PlaceKind::Row { col: 0, row }));
+        }
+    }
+
+    /// Opening makes room by sliding the columns right and shortening the panes of the open
+    /// column; closed, the layout is exactly what it always was.
+    #[test]
+    fn opening_places_slides_the_columns_and_closed_is_unchanged() {
+        let space = stacked();
+        let closed = space.columns_with_positions();
+        assert_eq!(space.columns_with_places_open(None), closed);
+        let opened = space.columns_with_places_open(Some(open(RowsOpen::Column(0))));
+        assert_eq!(opened[0].rect.loc.x, closed[0].rect.loc.x + 40.0);
+        assert_eq!(opened[1].rect.loc.x, closed[1].rect.loc.x + 80.0);
+        assert_eq!(opened[0].panes[0].rect.size.w, closed[0].panes[0].rect.size.w, "widths are kept");
+        assert!(opened[0].panes[0].rect.size.h < closed[0].panes[0].rect.size.h, "the open column's panes give height");
+        assert_eq!(opened[1].panes[0].rect.size.h, closed[1].panes[0].rect.size.h, "other columns keep theirs");
     }
 }

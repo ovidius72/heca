@@ -268,8 +268,17 @@ pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction)
         .active_workspace()
         .map(|ws| ws.new_column_gaps(pane_id))
         .unwrap_or_default();
-    let candidates =
-        crate::app::selection::collect_column_candidates(&state.session, here, &new_gaps);
+    let new_rows = state
+        .session
+        .active_workspace()
+        .map(|ws| ws.new_row_places(pane_id))
+        .unwrap_or_default();
+    let candidates = crate::app::selection::collect_column_candidates(
+        &state.session,
+        here,
+        &new_gaps,
+        &new_rows,
+    );
     begin_pick(
         state,
         InputMode::ColumnPick {

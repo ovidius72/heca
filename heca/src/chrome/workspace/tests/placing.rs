@@ -31,7 +31,7 @@ fn the_workspace_places_what_the_model_says() {
         .collect();
     assert_eq!(
         order,
-        ["col:1", "col:2", "slot:0", "slot:1", "slot:2", "pane:30"],
+        ["col:1", "col:2", "pane:30"],
         "columns, the places for a new column, then floats: later is on top, and no edge is seated \
          while one floats"
     );

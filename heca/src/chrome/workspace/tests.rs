@@ -20,6 +20,7 @@ fn seams() -> WorkspaceSeams {
         header_env: None,
         resize_column: Rc::new(|_, _| {}),
         resize_pane: Rc::new(|_, _, _| {}),
+        hovered: Rc::default(),
     }
 }
 
@@ -57,13 +58,30 @@ fn model(columns: Vec<ColumnShellModel>, floats: Vec<PaneShellModel>) -> Workspa
         .collect();
     WorkspaceModel {
         working_width: 700.0,
-        slot_share: 0.18,
+        places: vec![],
         pick: vec![],
         area: Rectangle::new(Point::new(40.0, 30.0), Size::new(700.0, 500.0)),
         columns,
         floats,
         panes,
     }
+}
+
+/// The places the layout would open for a carried pane in [`two_columns`]: the gap between the
+/// columns and the row between the first column's two panes — each with the box the layout gives.
+fn open_places() -> Vec<heca_core::layout::Place> {
+    use heca_core::layout::{Place, PlaceKind};
+    let rect = |x: f64, y: f64, w: f64, h: f64| Rectangle::new(Point::new(x, y), Size::new(w, h));
+    vec![
+        Place {
+            kind: PlaceKind::Gap(1),
+            rect: rect(318.0, 30.0, 54.0, 500.0),
+        },
+        Place {
+            kind: PlaceKind::Row { col: 0, row: 1 },
+            rect: rect(40.0, 262.0, 300.0, 16.0),
+        },
+    ]
 }
 
 fn two_columns() -> WorkspaceModel {

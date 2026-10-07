@@ -55,6 +55,15 @@ impl LandingSlot {
         self
     }
 
+    /// **Take drops of `kind`**, for a place that is only there for the length of a drag — the
+    /// owner seats it when places open, so it is shown from the start.
+    #[heca_grid_ui_macros::prop]
+    pub fn accepting(mut self, kind: impl Into<String>) -> Self {
+        self.base.drop_target = true;
+        self.base.accepts = vec![kind.into()];
+        self
+    }
+
     /// **Exist only while a drag of `kind` is in flight.** It accepts that kind, is hidden until the
     /// drag begins and hidden again when it ends — told by the framework, so nothing hands it a
     /// flag.

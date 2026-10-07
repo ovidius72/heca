@@ -67,6 +67,9 @@ pub enum ColumnPickTarget {
     /// counted with the pane still where it is. It is drawn as an empty place with its letter in
     /// it, and picking it runs `place_pane` for that gap.
     NewColumn { gap: usize },
+    /// **A new row at row `row` of column `col`**, counted with the pane still where it is — an
+    /// empty place between, above or below the panes of a column.
+    NewRow { col: usize, row: usize },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -890,6 +893,11 @@ pub struct AppState {
     pub confirm: heca_config::confirm::ConfirmConfig,
     /// Modifier key for interactive pane drag.
     pub interactive_move_modifier: heca_config::theme::ModifierKey,
+    /// Which places a pane can be put are open as real space in this window's layout right now —
+    /// see [`crate::app::places`].
+    pub places_open: Option<heca_core::layout::PlacesOpen>,
+    /// The column a carried widget is over, as the workspace's columns heard it.
+    pub hovered_column: std::rc::Rc<std::cell::Cell<Option<heca_core::layout::ColumnId>>>,
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
     /// The configured prefix key combo (e.g. Ctrl+b).

@@ -14,20 +14,31 @@ fn an_open_pick_marks_the_workspace_and_the_marks_leave_with_it() {
             .collect()
     };
     let mut open = two_columns();
+    open.places = open_places();
     open.pick = vec![
         PickMark::Gap { at: 1, letter: 'b' },
         PickMark::Column(ColumnId(2)),
+        PickMark::Row {
+            col: 0,
+            row: 1,
+            letter: 'c',
+        },
     ];
     let (_window, mut ws) = laid_out(&open);
     let marked = keys(ws.as_ref());
     assert!(
-        marked.ends_with(&["pick:gap:1".to_string(), "pick:col:2".to_string()]),
+        marked.ends_with(&[
+            "pick:gap:1".to_string(),
+            "pick:col:2".to_string(),
+            "pick:row:0:1".to_string()
+        ]),
         "over the columns and the places: {marked:?}"
     );
     let mark = |key: &str| named(ws.as_ref(), key);
-    // The place is where the slot for that gap is; the outline is the column's own box.
-    assert_eq!(bounds(mark("pick:gap:1")), bounds(mark("slot:1")));
+    // The place is where the layout put it; the outline is the column's own box.
+    assert_eq!(bounds(mark("pick:gap:1")), (318.0, 30.0, 54.0, 500.0));
     assert_eq!(bounds(mark("pick:col:2")), (350.0, 30.0, 300.0, 500.0));
+    assert_eq!(bounds(mark("pick:row:0:1")), (40.0, 262.0, 300.0, 16.0), "a row place too");
     assert!(mark("pick:gap:1").base().pointer_transparent);
     let letters: Vec<String> = painted(ws.as_ref())
         .iter()
@@ -37,11 +48,19 @@ fn an_open_pick_marks_the_workspace_and_the_marks_leave_with_it() {
         })
         .collect();
     assert_eq!(letters, ["b"], "the letter is in the place");
+    let rows: Vec<String> = painted(ws.as_ref())
+        .iter()
+        .filter_map(|c| match c {
+            heca_grid_ui::DrawCommand::Text(t) if t.text == "c" => Some(t.text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(rows, ["c"], "and in the row place");
 
     assert!(ws.set_props(&two_columns()));
     assert_eq!(
         keys(ws.as_ref()),
-        ["col:1", "col:2", "split:col:0", "split:pane:0:0", "slot:0", "slot:1", "slot:2"],
+        ["col:1", "col:2", "split:col:0", "split:pane:0:0"],
         "the marks left with the pick, and nothing else was rebuilt"
     );
 }
@@ -94,33 +113,26 @@ fn drag(window: &mut Flex, from: Point, to: Point, key_held: bool) {
     dispatch(window, &Event::pointer_released(to, PointerButton::Left));
 }
 
-/// **Carry a pane with the window's key and drop it on the place between two columns**: the places
-/// are not there until a pane is picked up, and the drop names the one it landed on.
+/// **Carry a pane with the window's key and drop it on a place the layout opened**: a gap between
+/// two columns, or a row between two panes. Nothing is there to land on while no place is open.
 #[test]
-fn a_pane_carried_with_the_window_key_lands_on_the_place_between_two_columns() {
-    let (mut window, dropped) = carrying_window();
-    // Nothing to aim at until a pane is carried: the gap is the edge between the columns.
+fn a_pane_carried_with_the_window_key_lands_on_a_place_the_layout_opened() {
     let gap = Point::new(345.0, 100.0);
-    let key_at = |window: &Flex, p| {
-        heca_grid_ui::hit_test(window, p).map(|path| {
-            let mut node: &dyn Component = window;
-            for i in path {
-                node = node.base().children[i].as_ref();
-            }
-            node.base().key.clone().unwrap_or_default()
-        })
-    };
-    assert_eq!(key_at(&window, gap).as_deref(), Some("split:col:0"));
+    let row = Point::new(200.0, 270.0);
+    let from = Point::new(100.0, 100.0);
 
-    drag(&mut window, Point::new(100.0, 100.0), gap, true);
+    let (mut closed, dropped) = carrying_window();
+    drag(&mut closed, from, gap, true);
+    assert!(dropped.borrow().is_empty(), "no place is open: {:?}", dropped.borrow());
+
+    let mut model = two_columns();
+    model.places = open_places();
+    let (mut window, dropped) = carrying_window_of(model);
+    drag(&mut window, from, gap, true);
+    drag(&mut window, from, row, true);
     assert_eq!(
         dropped.borrow().iter().map(|d| (d.0.as_str(), d.1.as_str())).collect::<Vec<_>>(),
-        [("pane:10", "slot:1")]
-    );
-    assert_eq!(
-        key_at(&window, gap).as_deref(),
-        Some("split:col:0"),
-        "and the place is gone once the carrying is over"
+        [("pane:10", "slot:1"), ("pane:10", "row:0:1")]
     );
 }
 
@@ -146,18 +158,14 @@ fn a_pane_carried_onto_another_names_it_and_the_half_it_landed_in() {
     );
 }
 
-/// **Each place for a new column is as wide as the configured share of the column beside it**,
-/// centred on its gap — and at the two ends kept inside the content area, so none is half clipped.
+/// **A place is seated at the box the layout gave it** — the workspace computes none of it.
 #[test]
-fn the_places_for_a_new_column_sit_in_the_gaps_and_inside_the_content_area() {
-    let (_window, ws) = laid_out(&two_columns());
-    let at = |key: &str| bounds(named(ws.as_ref(), key));
-    // 0.18 of a 300 wide column is 54: centred on x 345 between the columns …
-    assert_eq!(at("slot:1"), (318.0, 30.0, 54.0, 500.0));
-    // … pushed in from the left edge of the content area (x 40) and from the right end of the last
-    // column.
-    assert_eq!(at("slot:0"), (40.0, 30.0, 54.0, 500.0));
-    assert_eq!(at("slot:2"), (623.0, 30.0, 54.0, 500.0));
+fn a_place_is_seated_at_the_box_the_layout_gave_it() {
+    let mut model = two_columns();
+    model.places = open_places();
+    let (_window, ws) = laid_out(&model);
+    assert_eq!(bounds(named(ws.as_ref(), "slot:1")), (318.0, 30.0, 54.0, 500.0));
+    assert_eq!(bounds(named(ws.as_ref(), "row:0:1")), (40.0, 262.0, 300.0, 16.0));
 }
 
 /// **One key, two meanings, told apart by how far the pointer travels**: on a pane showing a link,
@@ -169,7 +177,8 @@ fn the_window_key_opens_a_link_on_a_click_and_carries_the_pane_on_a_drag() {
     use heca_grid_ui::event::{Event, PointerButton};
 
     // Every cell of pane 10's terminal is a link, so the click lands on one wherever it is.
-    let model = two_columns();
+    let mut model = two_columns();
+    model.places = open_places();
     let terminal = model.panes[&PaneId(10)].content.clone();
     terminal.show(&crate::chrome::terminal::Viewport {
         rows: 12,
@@ -219,4 +228,36 @@ fn the_window_key_opens_a_link_on_a_click_and_carries_the_pane_on_a_drag() {
         [("pane:10", "slot:1")],
         "it carries the pane to the place"
     );
+}
+
+/// **The column a carried widget is over comes from the columns hearing it, not from a hit test of
+/// the pointer**: drag-enter on a pane bubbles to its column, and the visit's end clears it.
+#[test]
+fn the_hovered_column_is_the_one_whose_pane_the_carry_is_over() {
+    use heca_grid_ui::component::dispatch;
+    use heca_grid_ui::event::{Event, PointerButton};
+
+    let hovered = Rc::new(std::cell::Cell::new(None));
+    let mut seams = seams();
+    seams.hovered = hovered.clone();
+    let mut window = crate::chrome::new_window_root();
+    let mut ws: Box<dyn Component> = Box::new(workspace(seams));
+    assert!(ws.set_props(&two_columns()));
+    window.base_mut().children.push(ws);
+    LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
+
+    let cmd = heca_grid_ui::Modifiers {
+        meta: true,
+        ..heca_grid_ui::Modifiers::default()
+    };
+    dispatch(&mut window, &Event::ModifiersChanged(cmd));
+    dispatch(&mut window, &Event::pointer_pressed(Point::new(100.0, 100.0), PointerButton::Left));
+    let mut over = |x: f64, y: f64| {
+        dispatch(&mut window, &Event::pointer_moved(Point::new(x, y)));
+        hovered.get()
+    };
+    assert_eq!(over(100.0, 400.0), Some(ColumnId(1)), "over column 1's second pane");
+    assert_eq!(over(400.0, 120.0), Some(ColumnId(2)), "over column 2's pane");
+    assert_eq!(over(100.0, 400.0), Some(ColumnId(1)), "and back");
+    dispatch(&mut window, &Event::pointer_released(Point::new(100.0, 400.0), PointerButton::Left));
 }

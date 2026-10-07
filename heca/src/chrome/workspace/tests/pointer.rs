@@ -37,10 +37,7 @@ fn dragging_an_edge_resizes_the_neighbours_it_sits_between() {
             "col:1",
             "col:2",
             "split:col:0",
-            "split:pane:0:0",
-            "slot:0",
-            "slot:1",
-            "slot:2"
+            "split:pane:0:0"
         ]
     );
 

@@ -8,6 +8,7 @@ pub mod backend_store;
 pub(crate) mod cli;
 pub(crate) mod conflicts;
 pub mod events;
+pub mod places;
 pub mod focus;
 pub(crate) mod frame;
 pub(crate) mod frame_reasons;

@@ -10,15 +10,20 @@ use heca_core::layout::PaneId;
 /// about a pane read one walk.
 ///
 /// Floating panes are **not** here: they belong to no column.
-pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutColumn> {
+/// **Where the layout's own coordinates start on the window** — the content area plus the
+/// workspace's offset. The one place that shift is worked out, for columns, panes and places alike.
+pub(crate) fn layout_origin(state: &AppState) -> (f64, f64) {
     let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
-    let ws_offset = state
+    let offset = state
         .session
         .workspace_geometries()
         .first()
-        .map(|(_, rect)| (rect.loc.x, rect.loc.y))
-        .unwrap_or((0.0, 0.0));
-    let (dx, dy) = (pane_area.loc.x + ws_offset.0, pane_area.loc.y + ws_offset.1);
+        .map_or((0.0, 0.0), |(_, rect)| (rect.loc.x, rect.loc.y));
+    (pane_area.loc.x + offset.0, pane_area.loc.y + offset.1)
+}
+
+pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutColumn> {
+    let (dx, dy) = layout_origin(state);
     let Some(ws) = state.session.active_workspace() else {
         return Vec::new();
     };
@@ -29,7 +34,7 @@ pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutC
         )
     };
     ws.scrolling
-        .columns_with_positions()
+        .columns_with_places_open(state.places_open)
         .into_iter()
         .map(|mut col| {
             col.rect = shift(col.rect);
@@ -59,7 +64,7 @@ pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32,
     let Some(ws) = state.session.active_workspace() else {
         return frames;
     };
-    for (pane_id, rect) in ws.scrolling.panes_with_positions() {
+    for (pane_id, rect) in ws.scrolling.panes_with_places_open(state.places_open) {
         let x = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
         let y = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         frames.push((pane_id, x, y, rect.size.w as f32, rect.size.h as f32));

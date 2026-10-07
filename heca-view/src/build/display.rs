@@ -274,6 +274,10 @@ impl LandingSlot {
     pub fn filled(self, on: bool) -> Self {
         self.prop("filled", on)
     }
+    /// Take drops of this kind, shown from the start.
+    pub fn accepting(self, kind: impl Into<String>) -> Self {
+        self.prop("accepting", PropValue::Text(kind.into()))
+    }
     /// Appear only while a drag of this kind is in flight, and accept it.
     pub fn while_dragging(self, kind: impl Into<String>) -> Self {
         self.prop("while_dragging", PropValue::Text(kind.into()))

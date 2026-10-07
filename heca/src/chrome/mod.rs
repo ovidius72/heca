@@ -655,6 +655,18 @@ pub(crate) fn slot_key(at: usize) -> String {
     format!("slot:{at}")
 }
 
+/// `row:<col>:<row>` — **the place a pane would be put at row `row` of column `col`**, counted with
+/// the pane where it is.
+pub(crate) fn row_key(col: usize, row: usize) -> String {
+    format!("row:{col}:{row}")
+}
+
+/// The column and row a `row:<col>:<row>` key names — the inverse of [`row_key`].
+pub(crate) fn row_of_key(key: &str) -> Option<(usize, usize)> {
+    let (col, row) = key.strip_prefix("row:")?.split_once(':')?;
+    Some((col.parse().ok()?, row.parse().ok()?))
+}
+
 /// The index a `slot:<n>` key names — the inverse of [`slot_key`].
 pub(crate) fn slot_of_key(key: &str) -> Option<usize> {
     key.strip_prefix("slot:")?.parse().ok()

@@ -88,7 +88,8 @@ fn wanted(mode: &InputMode) -> Vec<(Offer, char)> {
             crate::app_state::ColumnPickTarget::Existing { col_id, .. } => {
                 Some((Offer::ByKey(column_key(*col_id)), *ch))
             }
-            crate::app_state::ColumnPickTarget::NewColumn { .. } => None,
+            crate::app_state::ColumnPickTarget::NewColumn { .. }
+            | crate::app_state::ColumnPickTarget::NewRow { .. } => None,
         }));
     }
     // A dock names itself with `scope_key` rather than `key` — a container's identity, not a

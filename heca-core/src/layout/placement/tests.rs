@@ -157,3 +157,11 @@ fn a_place_past_the_end_clamps_to_it() {
     let last = ws.scrolling.columns.len() - 1;
     assert_eq!(ws.scrolling.pane_indices(PaneId(1)), Some((last, 0)));
 }
+
+#[test]
+fn the_rows_that_change_the_strip_leave_out_the_two_beside_the_pane() {
+    let s = strip(&[&[1, 2], &[3]]);
+    let ws = s.active_workspace().unwrap();
+    // Pane 1 is row 0 of column 0: rows 0 and 1 of that column put it back where it is.
+    assert_eq!(ws.new_row_places(PaneId(1)), [(0, 2), (1, 0), (1, 1)]);
+}

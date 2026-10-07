@@ -113,6 +113,7 @@ pub(crate) fn collect_column_candidates(
     session: &Session,
     except: Option<heca_core::layout::ColumnId>,
     new_gaps: &[usize],
+    new_rows: &[(usize, usize)],
 ) -> Vec<(char, crate::app_state::ColumnPickTarget)> {
     use crate::app_state::ColumnPickTarget;
     session
@@ -142,6 +143,12 @@ pub(crate) fn collect_column_candidates(
             new_gaps
                 .iter()
                 .map(|&gap| ColumnPickTarget::NewColumn { gap }),
+        )
+        // …and the places for a new row, after the gaps, for the same reason.
+        .chain(
+            new_rows
+                .iter()
+                .map(|&(col, row)| ColumnPickTarget::NewRow { col, row }),
         )
         .zip(heca_grid_ui::widgets::DEFAULT_LETTERS.chars())
         .map(|(target, ch)| (ch, target))
@@ -212,11 +219,11 @@ mod tests {
     fn the_column_you_are_in_is_never_a_destination() {
         // Three panes, each opened as its own column.
         let session = make_session_with_panes(3);
-        let all = collect_column_candidates(&session, None, &[]);
+        let all = collect_column_candidates(&session, None, &[], &[]);
         assert_eq!(all.len(), 3);
 
         let here = column_of_pane(&session, PaneId(2)).expect("pane 2 is in a column");
-        let others = collect_column_candidates(&session, Some(here), &[]);
+        let others = collect_column_candidates(&session, Some(here), &[], &[]);
         assert_eq!(others.len(), 2, "the column you are in is gone");
         assert!(
             !others.iter().any(|(_, target)| matches!(
@@ -233,7 +240,7 @@ mod tests {
     fn the_places_for_a_new_column_come_after_the_ones_that_exist() {
         use crate::app_state::ColumnPickTarget;
         let session = make_session_with_panes(3);
-        let with_places = collect_column_candidates(&session, None, &[0, 1, 3]);
+        let with_places = collect_column_candidates(&session, None, &[0, 1, 3], &[]);
         assert_eq!(with_places.len(), 6, "three columns and three places");
         let places: Vec<_> = with_places[3..].iter().map(|(_, t)| *t).collect();
         assert_eq!(
@@ -246,11 +253,28 @@ mod tests {
             "only the gaps the workspace named, in order, after the columns"
         );
         let existing: Vec<char> = with_places[..3].iter().map(|(c, _)| *c).collect();
-        let without: Vec<char> = collect_column_candidates(&session, None, &[])
+        let without: Vec<char> = collect_column_candidates(&session, None, &[], &[])
             .iter()
             .map(|(c, _)| *c)
             .collect();
         assert_eq!(existing, without, "no column's letter moved to make room");
+    }
+
+    /// The places for a new row come after the places for a new column.
+    #[test]
+    fn the_places_for_a_new_row_come_after_the_places_for_a_new_column() {
+        use crate::app_state::ColumnPickTarget;
+        let session = make_session_with_panes(2);
+        let all = collect_column_candidates(&session, None, &[0], &[(0, 1), (1, 0)]);
+        let tail: Vec<_> = all[2..].iter().map(|(_, t)| *t).collect();
+        assert_eq!(
+            tail,
+            [
+                ColumnPickTarget::NewColumn { gap: 0 },
+                ColumnPickTarget::NewRow { col: 0, row: 1 },
+                ColumnPickTarget::NewRow { col: 1, row: 0 },
+            ]
+        );
     }
 
     /// With one column there is nowhere to move to, so the pick has nothing to offer — which
@@ -259,7 +283,7 @@ mod tests {
     fn a_single_column_offers_no_destination_at_all() {
         let session = make_session_with_panes(1);
         let here = column_of_pane(&session, PaneId(1)).expect("pane 1 is in a column");
-        assert!(collect_column_candidates(&session, Some(here), &[]).is_empty());
+        assert!(collect_column_candidates(&session, Some(here), &[], &[]).is_empty());
     }
 
     #[test]

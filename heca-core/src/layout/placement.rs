@@ -78,6 +78,23 @@ impl Workspace {
             .collect()
     }
 
+    /// **The rows where putting this pane would change the strip**, as `(column, row)` — above
+    /// each pane and below the last of every column, counted with the pane where it is, except the
+    /// two beside the pane itself in its own column (they put it back where it is).
+    pub fn new_row_places(&self, pane_id: PaneId) -> Vec<(usize, usize)> {
+        let own = self.scrolling.pane_indices(pane_id);
+        let mut out = Vec::new();
+        for (col, column) in self.scrolling.columns.iter().enumerate() {
+            for row in 0..=column.panes.len() {
+                let beside = matches!(own, Some((c, r)) if c == col && (row == r || row == r + 1));
+                if !beside {
+                    out.push((col, row));
+                }
+            }
+        }
+        out
+    }
+
     /// Put `pane` at row `row` of column `col` — or, with no row (or no such column), in a new
     /// column `new_column_id` at `col`. Indices past the end clamp to it. The pane is focused, in
     /// the tiling.

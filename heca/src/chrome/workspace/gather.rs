@@ -79,7 +79,7 @@ pub(crate) fn gather(
         pick,
         area,
         working_width,
-        slot_share: state.appearance.effective_new_column_slot_share(),
+        places: crate::app::places::open_places(state),
         columns,
         floats,
         panes,
@@ -97,6 +97,11 @@ fn pick_marks(state: &AppState) -> Vec<PickMark> {
         .filter_map(|(letter, target)| match *target {
             ColumnPickTarget::NewColumn { gap } => Some(PickMark::Gap {
                 at: gap,
+                letter: *letter,
+            }),
+            ColumnPickTarget::NewRow { col, row } => Some(PickMark::Row {
+                col,
+                row,
                 letter: *letter,
             }),
             ColumnPickTarget::Existing { ws_idx, col_id, .. }

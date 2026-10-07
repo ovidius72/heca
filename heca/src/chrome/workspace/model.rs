@@ -23,9 +23,9 @@ pub(crate) struct WorkspaceModel {
     pub(crate) working_width: f32,
     /// The floating panes, back to front.
     pub(crate) floats: Vec<PaneShellModel>,
-    /// How wide a place for a new column is, as a share of the column beside it
-    /// (`new_column_slot_share`).
-    pub(crate) slot_share: f32,
+    /// The places a pane can be put that are open as real space this frame, each with the box the
+    /// layout gave it (window coordinates) — empty when none are open.
+    pub(crate) places: Vec<heca_core::layout::Place>,
     /// What each pane — tiled or floating — holds and says.
     pub(crate) panes: HashMap<PaneId, PaneEntry>,
     /// **Where a keyboard pick is offering to put the pane**, while one is open: each place for a
@@ -39,6 +39,12 @@ pub(crate) struct WorkspaceModel {
 pub(crate) enum PickMark {
     /// An empty place for a new column at gap `at`, wearing the letter that picks it.
     Gap { at: usize, letter: char },
+    /// An empty place at row `row` of column `col`, wearing the letter that picks it.
+    Row {
+        col: usize,
+        row: usize,
+        letter: char,
+    },
     /// A column that can be picked. Its letter is the one the hint system offers it, drawn in the
     /// middle of its outline.
     Column(heca_core::layout::ColumnId),

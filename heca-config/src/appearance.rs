@@ -201,6 +201,10 @@ const DEFAULT_DRAG_LABEL_MAX_SIZE: f32 = 72.0;
 /// `new_column_slot_share` is unset.
 const DEFAULT_NEW_COLUMN_SLOT_SHARE: f32 = 0.18;
 
+/// How tall the place for a new row is inside a column, as a share of its height, when
+/// `new_row_slot_share` is unset.
+const DEFAULT_NEW_ROW_SLOT_SHARE: f32 = 0.08;
+
 /// Peak opacity (0..=255) of the visual-bell flash when `bell_flash_alpha` is unset.
 fn default_terminal_bell_flash_alpha() -> u8 {
     56
@@ -396,6 +400,10 @@ pub struct PaneAppearance {
     /// (`0.0..=1.0`). `None` → 0.18.
     #[serde(default)]
     pub new_column_slot_share: Option<f32>,
+    /// How tall the place for a new row inside a column is, as a share of the column's height
+    /// (`0.0..=1.0`). `None` → 0.08.
+    #[serde(default)]
+    pub new_row_slot_share: Option<f32>,
     /// Info-bar chips (left), by **name**, in order. Empty hides the left side. See
     /// [`default_pane_title_segments`]. A name nothing provides is reported and skipped.
     #[serde(default = "default_pane_title_segments")]
@@ -422,6 +430,7 @@ impl Default for PaneAppearance {
             drag_label_min_size: None,
             drag_label_max_size: None,
             new_column_slot_share: None,
+            new_row_slot_share: None,
             title_segments: default_pane_title_segments(),
             title_actions: default_pane_title_actions(),
         }
@@ -941,6 +950,14 @@ impl AppearanceConfig {
             .clamp(0.0, 1.0)
     }
 
+    /// How tall the place for a new row is, as a share (`0.0..=1.0`) of the column's height.
+    pub fn effective_new_row_slot_share(&self) -> f32 {
+        self.pane
+            .new_row_slot_share
+            .unwrap_or(DEFAULT_NEW_ROW_SLOT_SHARE)
+            .clamp(0.0, 1.0)
+    }
+
     // ── Border style / affordance resolvers ──
 
     /// Effective terminal-pane frame style. Config override → [`BorderStyle::Bordered`]
@@ -1044,6 +1061,7 @@ mod tests {
         assert_eq!(cfg.effective_top_bar_height(), 32.0);
         assert_eq!(cfg.effective_bottom_bar_height(), 24.0);
         assert_eq!(cfg.effective_new_column_slot_share(), 0.18);
+        assert_eq!(cfg.effective_new_row_slot_share(), 0.08);
         // A big pane: a quarter of the shorter side, capped at 72. A small one: floored at 24.
         assert_eq!(cfg.effective_drag_label_size(1000.0), 72.0);
         assert_eq!(cfg.effective_drag_label_size(200.0), 50.0);

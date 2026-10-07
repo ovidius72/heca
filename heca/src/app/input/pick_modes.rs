@@ -233,6 +233,12 @@ fn column_pick_action(
             col_idx: gap,
             pane_idx: None,
         },
+        ColumnPickTarget::NewRow { col, row } => WmAction::PlacePane {
+            pane_id,
+            ws_idx: active_ws,
+            col_idx: col,
+            pane_idx: Some(row),
+        },
     }
 }
 
@@ -310,6 +316,15 @@ mod column_pick_tests {
                 ws_idx: 1,
                 col_idx: 2,
                 pane_idx: None,
+            }
+        );
+        assert_eq!(
+            column_pick_action(ColumnPickTarget::NewRow { col: 1, row: 2 }, PaneId(5), 1),
+            WmAction::PlacePane {
+                pane_id: PaneId(5),
+                ws_idx: 1,
+                col_idx: 1,
+                pane_idx: Some(2),
             }
         );
         assert_eq!(

@@ -93,6 +93,7 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
     let _ = crate::chrome::sync_chrome_state(state);
     // Tell the workspace what the columns and the floats are this frame: it keeps the panes that
     // are still there, builds the ones that arrived and places each itself.
+    crate::app::places::sync(state);
     crate::chrome::seat_workspace(state);
     // A terminal is kept only while something owns it: a pane that is shown, or a named terminal.
     crate::chrome::terminal::retain_owned(state);

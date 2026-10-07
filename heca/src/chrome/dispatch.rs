@@ -127,6 +127,27 @@ pub(crate) fn drain_pending_menus(state: &mut crate::app_state::AppState) {
     }
 }
 
+/// **What dropping a pane on a place means**: `place_pane` at that gap (a new column) or that row
+/// of a column, counted with the pane where it is. `None` when the target is not a place or the
+/// source is not a pane.
+fn place_drop(source: &str, target: &str, active_ws: usize) -> Option<crate::input::WmAction> {
+    let pane_id = crate::chrome::pane_id_of_key(source)?;
+    let (col_idx, pane_idx) = match (
+        crate::chrome::slot_of_key(target),
+        crate::chrome::row_of_key(target),
+    ) {
+        (Some(gap), _) => (gap, None),
+        (_, Some((col, row))) => (col, Some(row)),
+        _ => return None,
+    };
+    Some(crate::input::WmAction::PlacePane {
+        pane_id,
+        ws_idx: active_ws,
+        col_idx,
+        pane_idx,
+    })
+}
+
 /// What a name in a drop means: what the chrome tree recorded for it, or — for a pane, which the
 /// workspace seats whether or not the sidebar has a row for it — the pane its key names.
 fn drag_item_named(state: &crate::app_state::AppState, name: &str) -> Option<ChromeDragItem> {
@@ -148,21 +169,23 @@ fn drag_item_named(state: &crate::app_state::AppState, name: &str) -> Option<Chr
 pub(crate) fn drain_pending_drops(state: &mut crate::app_state::AppState) {
     let queued: Vec<_> = state.pending_drops.borrow_mut().drain(..).collect();
     for dropped in queued {
-        // **A place for a new column** is named by the workspace that seats it, and a pane carried
-        // to it makes the column there.
-        if let Some(at) = crate::chrome::slot_of_key(&dropped.target) {
-            if let Some(pane_id) = crate::chrome::pane_id_of_key(&dropped.source) {
-                crate::mouse::dispatch_drop(
-                    state,
-                    crate::app::interaction::InteractionSource::MouseContent,
-                    crate::input::WmAction::PlacePane {
-                        pane_id,
-                        ws_idx: state.session.active_workspace_idx,
-                        col_idx: at,
-                        pane_idx: None,
-                    },
-                );
-            }
+        // **A place** — a gap for a new column, or a row of a column — is named by the workspace
+        // that seats it, and a pane carried to it is put there.
+        if let Some(action) = place_drop(
+            &dropped.source,
+            &dropped.target,
+            state.session.active_workspace_idx,
+        ) {
+            crate::mouse::dispatch_drop(
+                state,
+                crate::app::interaction::InteractionSource::MouseContent,
+                action,
+            );
+            continue;
+        }
+        if crate::chrome::slot_of_key(&dropped.target).is_some()
+            || crate::chrome::row_of_key(&dropped.target).is_some()
+        {
             continue;
         }
         let (Some(source), Some(target)) = (
@@ -304,5 +327,30 @@ mod surface_pointer_tests {
 
         assert!(!owned);
         assert!(hovered(window.base().children[0].as_ref()));
+    }
+}
+
+#[cfg(test)]
+mod place_drop_tests {
+    use super::place_drop;
+    use crate::input::WmAction;
+    use heca_core::layout::PaneId;
+
+    fn place(col_idx: usize, pane_idx: Option<usize>) -> Option<WmAction> {
+        Some(WmAction::PlacePane {
+            pane_id: PaneId(7),
+            ws_idx: 2,
+            col_idx,
+            pane_idx,
+        })
+    }
+
+    /// A gap makes a column there; a row puts the pane at that row; anything else is not a place.
+    #[test]
+    fn a_gap_makes_a_column_and_a_row_puts_the_pane_at_that_row() {
+        assert_eq!(place_drop("pane:7", "slot:3", 2), place(3, None));
+        assert_eq!(place_drop("pane:7", "row:1:2", 2), place(1, Some(2)));
+        assert_eq!(place_drop("pane:7", "pane:8", 2), None);
+        assert_eq!(place_drop("col:7", "slot:3", 2), None, "only a pane is put");
     }
 }

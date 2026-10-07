@@ -13,7 +13,6 @@ mod find;
 mod gather;
 mod model;
 mod seat;
-mod slots;
 
 pub(crate) use find::{offer_to_columns, pane_node, pane_node_mut};
 pub(crate) use gather::gather;
@@ -50,6 +49,9 @@ pub(crate) struct WorkspaceSeams {
     pub(crate) resize_column: Rc<dyn Fn(usize, f64)>,
     /// What dragging the edge below a pane means: that pane takes this many px more height.
     pub(crate) resize_pane: Rc<dyn Fn(usize, usize, f64)>,
+    /// **The column a carried widget is over**, as the columns hear it (drag enter and leave) —
+    /// kept where whoever lays the strip out can read it. Nothing hit-tests the pointer for it.
+    pub(crate) hovered: Rc<Cell<Option<heca_core::layout::ColumnId>>>,
 }
 
 /// A workspace that takes a [`WorkspaceModel`] as its props.
@@ -87,16 +89,21 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
     wanted.extend(edges.iter().map(|(edge, _)| (edge.name(), String::new())));
     // The places a carried pane can start a column, over the columns and under the floats. Each is
     // hidden until a pane is picked up, and tells itself when that happens.
-    let slots = slots::slots(model);
-    wanted.extend(
-        slots
-            .iter()
-            .map(|(at, _)| (crate::chrome::slot_key(*at), String::new())),
-    );
+    // The places a carried pane can be put, over the columns and under the floats — laid out by
+    // the layout itself, so each is real space. A keyboard pick marks them with letters instead.
+    if model.pick.is_empty() {
+        wanted.extend(
+            model
+                .places
+                .iter()
+                .map(|p| (place_key(p.kind), String::new())),
+        );
+    }
     // What an open column pick marks, over the places and under the floats: an outline round each
     // column that can be picked, an empty place with its letter at each gap that can be.
     wanted.extend(model.pick.iter().map(|mark| match mark {
         PickMark::Gap { at, letter } => (pick_gap_key(*at), letter.to_string()),
+        PickMark::Row { col, row, letter } => (pick_row_key(*col, *row), letter.to_string()),
         PickMark::Column(col) => (pick_column_key(*col), String::new()),
     }));
     wanted.extend(
@@ -112,10 +119,10 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
         if let Some((edge, _)) = edges.iter().find(|(edge, _)| edge.name() == name) {
             return Box::new(build_edge(seams, working, *edge).key(name));
         }
-        if crate::chrome::slot_of_key(name).is_some() {
+        if crate::chrome::slot_of_key(name).is_some() || crate::chrome::row_of_key(name).is_some() {
             return Box::new(
                 LandingSlot::new()
-                    .while_dragging(crate::chrome::PANE_DRAG_KIND)
+                    .accepting(crate::chrome::PANE_DRAG_KIND)
                     .key(name),
             );
         }
@@ -146,7 +153,7 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
             .pick
             .iter()
             .find(|m| pick_key(m) == name)
-            .and_then(|mark| pick_rect(mark, model, &slots))
+            .and_then(|mark| pick_rect(mark, model))
         {
             place_at(
                 child.as_mut(),
@@ -156,16 +163,14 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
                 rect.size.w as f32,
                 rect.size.h as f32,
             );
-        } else if let Some((_, slot)) = crate::chrome::slot_of_key(&name)
-            .and_then(|at| slots.iter().find(|(s, _)| *s == at))
-        {
+        } else if let Some(place) = model.places.iter().find(|p| place_key(p.kind) == name) {
             place_at(
                 child.as_mut(),
                 area,
-                slot.loc.x as f32,
-                slot.loc.y as f32,
-                slot.size.w as f32,
-                slot.size.h as f32,
+                place.rect.loc.x as f32,
+                place.rect.loc.y as f32,
+                place.rect.size.w as f32,
+                place.rect.size.h as f32,
             );
         } else if let Some((_, gap)) = edges.iter().find(|(edge, _)| edge.name() == name) {
             place_at(
@@ -197,7 +202,20 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
 fn pick_key(mark: &PickMark) -> String {
     match mark {
         PickMark::Gap { at, .. } => pick_gap_key(*at),
+        PickMark::Row { col, row, .. } => pick_row_key(*col, *row),
         PickMark::Column(col) => pick_column_key(*col),
+    }
+}
+
+fn pick_row_key(col: usize, row: usize) -> String {
+    format!("pick:row:{col}:{row}")
+}
+
+/// What a place is called in the workspace — what a drop on it names.
+fn place_key(kind: heca_core::layout::PlaceKind) -> String {
+    match kind {
+        heca_core::layout::PlaceKind::Gap(at) => crate::chrome::slot_key(at),
+        heca_core::layout::PlaceKind::Row { col, row } => crate::chrome::row_key(col, row),
     }
 }
 
@@ -213,20 +231,23 @@ fn pick_column_key(col: heca_core::layout::ColumnId) -> String {
 /// decorates — a press goes through to what is under it.
 fn pick_mark(mark: &PickMark, name: &str) -> Box<dyn Component> {
     let slot = match mark {
-        PickMark::Gap { letter, .. } => LandingSlot::new().label(letter.to_string()),
+        PickMark::Gap { letter, .. } | PickMark::Row { letter, .. } => {
+            LandingSlot::new().label(letter.to_string())
+        }
         PickMark::Column(_) => LandingSlot::new().filled(true),
     };
     Box::new(slot.pointer_transparent(true).key(name))
 }
 
 /// Where a pick mark sits, in window coordinates.
-fn pick_rect(
-    mark: &PickMark,
-    model: &WorkspaceModel,
-    slots: &[(usize, Rectangle)],
-) -> Option<Rectangle> {
+fn pick_rect(mark: &PickMark, model: &WorkspaceModel) -> Option<Rectangle> {
+    let place = |kind| model.places.iter().find(|p| p.kind == kind).map(|p| p.rect);
     match mark {
-        PickMark::Gap { at, .. } => slots.iter().find(|(s, _)| s == at).map(|(_, rect)| *rect),
+        PickMark::Gap { at, .. } => place(heca_core::layout::PlaceKind::Gap(*at)),
+        PickMark::Row { col, row, .. } => place(heca_core::layout::PlaceKind::Row {
+            col: *col,
+            row: *row,
+        }),
         PickMark::Column(col) => model.columns.iter().find(|c| c.col_id == *col).map(|c| {
             Rectangle::new(
                 heca_core::layout::Point::new(f64::from(c.x), f64::from(c.y)),
@@ -271,6 +292,7 @@ fn build_column(
                 .map(|e| (p.pane_id, Box::new(e.content.clone()) as Box<dyn Component>))
         })
         .collect();
+    let (col_id, entered, left) = (column.col_id, seams.hovered.clone(), seams.hovered.clone());
     Box::new(
         ColumnShell {
             model: column,
@@ -279,7 +301,15 @@ fn build_column(
             header_env: seams.header_env.clone(),
             contents,
         }
-        .build(),
+        .build()
+        // A carried widget over one of this column's panes is over the column: the event
+        // bubbles up to it, so it hears both ends of the visit.
+        .on_drag_enter(move |_| entered.set(Some(col_id)))
+        .on_drag_leave(move |_| {
+            if left.get() == Some(col_id) {
+                left.set(None);
+            }
+        }),
     )
 }
 
