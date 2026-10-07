@@ -860,6 +860,8 @@ show_focus_border = true   # draw the focus ring at all
 # Sidebar highlight alphas (0.0–1.0; optional, shown with their defaults)
 active_wash_alpha = 0.11          # Accent wash over the active workspace
 card_background_alpha = 0.02      # Resting background tint of each pane card
+drag_image_alpha = 0.6            # Opacity of the picture of a pane that follows the pointer while it is carried
+drag_image_scale = 0.5            # Its size next to the pane (1.0 = life size)
 
 [shadow]
 color = "#000000"

@@ -47,6 +47,7 @@ fn a_surface_is_recorded_with_its_box_and_nothing_about_the_gpu() {
             draw: HostDraw::Surface { id: 7 },
             rect: rect(10.0, 20.0, 300.0, 200.0),
             alpha: 1.0,
+            echo: false,
         }],
     );
 }

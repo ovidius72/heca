@@ -316,6 +316,9 @@ pub struct Base {
     /// plugin cannot join, and the same shape a row already uses to say what its right-click menu
     /// is about.
     pub drag_kind: Option<String>,
+    /// **Show a picture of this widget under the pointer while it is carried**, instead of the
+    /// small chip. See [`ComponentExt::drag_image`](crate::builders::ComponentExt::drag_image).
+    pub drag_image: bool,
     /// This widget **accepts drops**, identified the same way — by its [`key`](Self::key).
     /// Universal opt-in via [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target);
     /// resolved generically by [`drag::resolve_at`](crate::drag::resolve_at).
@@ -777,6 +780,7 @@ impl Base {
             draggable: false,
             drag_gate: None,
             drag_kind: None,
+            drag_image: false,
             drop_target: false,
             accepts: Vec::new(),
             accepts_onto: true,
@@ -1907,6 +1911,10 @@ fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
             cx.theme().colors.border_radius,
             None,
         );
+        if b.drag_image {
+            paint_drag_image(c, cx);
+            return;
+        }
         // A picture of what was picked up, offset off the cursor and vertically centred on it, in
         // the overlay band so nothing this widget sits inside can clip it.
         let at = b.pointer.drag_pos();
@@ -1919,6 +1927,42 @@ fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
         );
         cx.drag_ghost(rect, &text, crate::drag::DropAction::held().is_swap());
     }
+}
+
+/// **The picture of a carried widget**: the widget painted as it is — terminal surface and all — in
+/// the top layer, faded and shrunk by the theme's tokens, with the point that was grabbed kept under
+/// the pointer. Painted as an echo, so the host does not take its surfaces for where they live.
+fn paint_drag_image(c: &dyn Component, cx: &mut PaintCx) {
+    let b = c.base();
+    let (alpha, scale) = {
+        let colors = &cx.theme().colors;
+        (colors.drag_image_alpha, colors.drag_image_scale)
+    };
+    let (pos, grab) = (b.pointer.drag_pos(), b.pointer.drag_origin());
+    let (dx, dy) = (pos.x - grab.x, pos.y - grab.y);
+    cx.with_overlay(|cx| {
+        cx.with_opacity(alpha, |cx| {
+            cx.with_translate(dx, dy, |cx| {
+                cx.with_scale(scale, pos, |cx| {
+                    cx.with_echo(|cx| {
+                        let outline = cx.scene.outline_mark();
+                        c.paint(cx);
+                        cx.scene.settle_outline(outline);
+                    });
+                });
+            });
+        });
+        if crate::drag::DropAction::held().is_swap() {
+            // The same double frame the chip wears: this is an exchange, not a move.
+            let k = f64::from(scale);
+            let at = |p: Point| Point::new(pos.x + (p.x + dx - pos.x) * k, pos.y + (p.y + dy - pos.y) * k);
+            let image = Rectangle::new(
+                at(b.bounds.loc),
+                heca_core::layout::Size::new(b.bounds.size.w * k, b.bounds.size.h * k),
+            );
+            cx.swap_indicator(image);
+        }
+    });
 }
 
 /// Translate a component's whole subtree by `(dx, dy)` — bounds only, no re-layout.
@@ -1989,6 +2033,9 @@ pub struct PaintCx<'a> {
     /// Alpha multiplier applied to every draw emitted through this context — see
     /// [`with_opacity`](Self::with_opacity). `1.0` normally: a widget paints at its own colours.
     opacity: f32,
+    /// Whether what is painted is **a picture of something that lives elsewhere** — see
+    /// [`with_echo`](Self::with_echo).
+    echo: bool,
     /// The active [scale](PaintCx::with_scale) — multiplicative, like `opacity`.
     scale: f32,
     /// The fixed point the scale shrinks toward, already in scene coordinates.
@@ -2181,6 +2228,7 @@ impl<'a> PaintCx<'a> {
             content_glow: None,
             offset: (0.0, 0.0),
             opacity: 1.0,
+            echo: false,
             scale: 1.0,
             scale_origin: Point::new(0.0, 0.0),
             clip: None,
@@ -2222,6 +2270,16 @@ impl<'a> PaintCx<'a> {
         self.opacity = previous * alpha.clamp(0.0, 1.0);
         f(self);
         self.opacity = previous;
+    }
+
+    /// Paint `f`'s subtree **as a picture of itself**, not as itself: the host work it records (a
+    /// terminal's surface) is marked an echo, so whoever asks where a surface was drawn is not told
+    /// the picture's place. What a carried widget's image under the pointer is painted with.
+    pub fn with_echo(&mut self, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = self.echo;
+        self.echo = true;
+        f(self);
+        self.echo = previous;
     }
 
     /// Paint `f`'s subtree **scaled** by `factor` about `origin` — the whole surface smaller or
@@ -2516,6 +2574,7 @@ impl<'a> PaintCx<'a> {
             draw: HostDraw::Surface { id },
             rect,
             alpha: 1.0,
+            echo: self.echo,
         }));
     }
 
@@ -2534,6 +2593,7 @@ impl<'a> PaintCx<'a> {
             draw: HostDraw::Backdrop { radius, corner },
             rect,
             alpha,
+            echo: self.echo,
         }));
     }
 

@@ -117,6 +117,9 @@ pub struct PointerState {
     /// picture that follows the cursor needs and layout cannot give: the source is still laid out
     /// where it was, and what follows the cursor is drawn somewhere else entirely.
     drag_pos: Cell<Point>,
+    /// **Where the press that became this drag began** — the point of the widget that was grabbed.
+    /// What a picture of the carried widget keeps under the pointer.
+    drag_origin: Cell<Point>,
 }
 
 impl PointerState {
@@ -132,6 +135,7 @@ impl PointerState {
             drag_over: Cell::new(false),
             drag_side: Cell::new(DropSide::Onto),
             drag_pos: Cell::new(Point::new(0.0, 0.0)),
+            drag_origin: Cell::new(Point::new(0.0, 0.0)),
         }
     }
 
@@ -175,6 +179,12 @@ impl PointerState {
     /// Where the pointer is — meaningful only while [`is_dragging`](Self::is_dragging).
     pub fn drag_pos(&self) -> Point {
         self.drag_pos.get()
+    }
+
+    /// Where the press that started the drag landed — meaningful only while
+    /// [`is_dragging`](Self::is_dragging).
+    pub fn drag_origin(&self) -> Point {
+        self.drag_origin.get()
     }
 }
 

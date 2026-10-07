@@ -126,6 +126,7 @@ impl PaneShell<'_> {
             pane = pane
                 .draggable_as(crate::chrome::PANE_DRAG_KIND)
                 .draggable_when(move |held| crate::modifier::held(key, held))
+                .drag_image()
                 .accepts_beside([crate::chrome::PANE_DRAG_KIND]);
         }
 

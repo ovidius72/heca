@@ -822,6 +822,14 @@ pub trait ComponentExt: Component + Sized {
         b.drag_kind = Some(kind.into());
         self
     }
+    /// **Carry a picture of this widget under the pointer** — the browser's `setDragImage` — instead
+    /// of the small title chip. The picture is the widget painted as it is, in the top layer, at
+    /// the theme's `drag_image_alpha` and `drag_image_scale`, with the point you grabbed kept
+    /// under the pointer. Nothing else about the drag changes.
+    fn drag_image(mut self) -> Self {
+        self.base_mut().drag_image = true;
+        self
+    }
     /// **Make it draggable only while `rule` holds** for what is held down when the press moves
     /// far enough to start a drag — `draggable_when(|m| m.meta)` is "Cmd+drag". Without the rule
     /// the press stays whatever the widget's content makes of it (a terminal's selection).

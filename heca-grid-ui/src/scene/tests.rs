@@ -368,6 +368,7 @@ fn surface(id: u64) -> DrawCommand {
         draw: HostDraw::Surface { id },
         rect: Rectangle::new(Point::default(), Size::new(5.0, 5.0)),
         alpha: 1.0,
+        echo: false,
     })
 }
 
@@ -472,6 +473,7 @@ fn a_backdrop_is_a_cut_between_what_it_blurs_and_what_is_over_it() {
         },
         rect: Rectangle::new(Point::default(), Size::new(5.0, 5.0)),
         alpha: 0.5,
+        echo: false,
     }));
     s.push(marker(2.0));
     let runs = s.base_runs();

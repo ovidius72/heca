@@ -21,7 +21,12 @@ impl Scene {
         let mut draws = Scene::new();
         for cmd in self.commands.iter().chain(self.outline.iter()) {
             match cmd {
-                DrawCommand::Host(HostCmd { draw, rect, alpha }) => {
+                DrawCommand::Host(HostCmd {
+                    draw,
+                    rect,
+                    alpha,
+                    echo,
+                }) => {
                     for _ in &open {
                         draws.commands.push(DrawCommand::PopClip);
                     }
@@ -37,6 +42,7 @@ impl Scene {
                             rect: *rect,
                             alpha: *alpha,
                             clip,
+                            echo: *echo,
                         }),
                         HostDraw::Backdrop { radius, corner } => HostWork::Backdrop(BackdropAt {
                             radius,
@@ -200,6 +206,9 @@ pub struct SurfaceAt {
     /// Every clip open where the surface was recorded, intersected — `None` when nothing clips it.
     /// An empty intersection is a zero-sized rect: nothing of it shows.
     pub clip: Option<Rectangle>,
+    /// A picture of the surface rather than the surface's own place — see
+    /// [`HostCmd::echo`](crate::scene::HostCmd::echo).
+    pub echo: bool,
 }
 
 /// One draw that fell outside the box it was measured against — see

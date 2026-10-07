@@ -458,3 +458,33 @@ fn a_focused_pane_still_glows() {
         "and a focused one does, without the tree being rebuilt to get it",
     );
 }
+
+/// **A tiled pane is carried by the window's key, as a picture of itself; a float is not carried at
+/// all** — it is over everything and moves where it was put.
+#[test]
+fn a_tiled_pane_is_carried_as_a_picture_and_a_float_is_not_carried() {
+    let (cb, _) = recording_callbacks();
+    let build = |m: &PaneShellModel| {
+        PaneShell {
+            model: m,
+            cb: &cb,
+            header: None,
+            content: None,
+        }
+        .build()
+    };
+    let tiled = build(&model(7));
+    assert!(tiled.base().draggable && tiled.base().drag_image);
+    assert_eq!(tiled.base().drag_kind.as_deref(), Some(crate::chrome::PANE_DRAG_KIND));
+    assert!(tiled.base().drag_gate.is_some(), "only while the window's key is held");
+
+    let float = PaneShellModel {
+        float: Some(crate::chrome::pane::FloatLook {
+            background: [0.0, 0.0, 0.0, 1.0],
+            frost: 0.0,
+        }),
+        ..model(8)
+    };
+    let float = build(&float);
+    assert!(!float.base().draggable && !float.base().drag_image);
+}

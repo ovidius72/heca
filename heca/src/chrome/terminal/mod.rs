@@ -176,7 +176,10 @@ pub(crate) struct Drawn(std::collections::HashMap<u64, heca_core::layout::Rectan
 impl Drawn {
     /// Note that the flush drew this surface.
     pub(crate) fn record(&mut self, surface: &heca_grid_ui::SurfaceAt) {
-        self.0.insert(surface.id, surface.rect);
+        // A picture of a terminal under a carried pane's pointer is not where the terminal is.
+        if !surface.echo {
+            self.0.insert(surface.id, surface.rect);
+        }
     }
 
     /// **Tell every terminal where the frame drew it**, or that it did not: said once, after the
@@ -236,4 +239,36 @@ pub(crate) fn show_viewports<'a>(
         terminal.show_links(&snapshot.hyperlinks);
     }
     changed
+}
+
+#[cfg(test)]
+mod drawn_tests {
+    use super::*;
+    use heca_core::layout::{Point, Rectangle, Size};
+
+    fn at(x: f64, echo: bool) -> heca_grid_ui::SurfaceAt {
+        heca_grid_ui::SurfaceAt {
+            id: 7,
+            rect: Rectangle::new(Point::new(x, 0.0), Size::new(10.0, 10.0)),
+            alpha: 1.0,
+            clip: None,
+            echo,
+        }
+    }
+
+    /// **A picture of a terminal is not where the terminal is.** A pane carried under the pointer
+    /// draws its terminal a second time; the place the terminal reports is the real one, whichever
+    /// the flush met last.
+    #[test]
+    fn a_picture_of_a_terminal_does_not_move_where_it_was_drawn() {
+        let mut drawn = Drawn::default();
+        drawn.record(&at(100.0, false));
+        drawn.record(&at(400.0, true));
+        assert_eq!(drawn.0.get(&7).map(|r| r.loc.x), Some(100.0));
+        // Whichever order the flush meets them in.
+        let mut drawn = Drawn::default();
+        drawn.record(&at(400.0, true));
+        drawn.record(&at(100.0, false));
+        assert_eq!(drawn.0.get(&7).map(|r| r.loc.x), Some(100.0));
+    }
 }

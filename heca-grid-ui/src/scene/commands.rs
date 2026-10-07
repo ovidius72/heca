@@ -68,6 +68,11 @@ pub struct HostCmd {
     /// fading overlay fades with it — and a frost fades in with the surface that asked for it,
     /// rather than holding the session out of focus and snapping sharp in one frame.
     pub alpha: f32,
+    /// Whether this is **a picture of something that lives elsewhere** — a carried widget's image
+    /// under the pointer — rather than the thing itself. The host draws it like any other, but it
+    /// is not where the thing *is*, so whoever asks "where was this drawn" must not count it. Set
+    /// by [`PaintCx::with_echo`](crate::PaintCx::with_echo).
+    pub echo: bool,
 }
 
 /// A filled/rounded rectangle.

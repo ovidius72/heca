@@ -6916,6 +6916,12 @@ Flex::column().drop_target(DragItemId::new(zone_id))       // a drop zone
 travels far enough to start a drag (Cmd+drag); a drag already in flight is never cancelled by the
 rule going false, and without the key the press stays whatever the widget's content makes of it.
 
+`.drag_image()` makes a source carry **a picture of itself** under the pointer instead of the small
+chip: the widget painted as it is (a terminal's surface included), in the top layer, at the theme's
+`drag_image_alpha` and shrunk by `drag_image_scale` toward the point that was grabbed. The picture's
+host work is marked an *echo*, so a terminal asked where it was drawn answers with its real place,
+not the picture's.
+
 **2. Resolution over the laid-out tree.** Pure bounds walks replace hand-computed
 hit-testing — they read each widget's `Base.bounds` (filled by layout each frame):
 

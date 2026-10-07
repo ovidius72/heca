@@ -28,6 +28,9 @@ pub(super) fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPoi
             .pointer
             .dragging
             .set(true);
+        if let Some((at, _)) = origin {
+            node_at(root, &source_path).base().pointer.drag_origin.set(at);
+        }
         let ev = Event::DragStart(drag_event(&item, raw, DropSide::Onto));
         let _ = deliver_path(root, &source_path, &ev);
         announce(
