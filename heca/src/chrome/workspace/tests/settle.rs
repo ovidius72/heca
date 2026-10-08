@@ -3,7 +3,7 @@
 
 use super::*;
 use heca_core::layout::types::{LayoutOptions, Rectangle as Rect, Size as Sz};
-use heca_core::layout::{PlacesOpen, Session, SessionId};
+use heca_core::layout::{Session, SessionId};
 
 /// Two columns, the first holding two panes (ids 1, 2), the second one (id 3).
 fn session() -> Session {
@@ -17,11 +17,11 @@ fn session() -> Session {
 }
 
 /// The model the host would hand the workspace for this layout.
-fn model_of(session: &Session, open: Option<PlacesOpen>) -> WorkspaceModel {
+fn model_of(session: &Session, open: bool) -> WorkspaceModel {
     let ws = session.active_workspace().unwrap();
     let columns: Vec<ColumnShellModel> = ws
         .scrolling
-        .columns_with_places_open(open)
+        .columns_with_positions()
         .into_iter()
         .map(|c| ColumnShellModel {
             col_id: c.id,
@@ -41,7 +41,7 @@ fn model_of(session: &Session, open: Option<PlacesOpen>) -> WorkspaceModel {
         .collect();
     let mut model = model(columns, vec![]);
     model.area = Rect::new(Point::new(0.0, 0.0), Sz::new(1000.0, 800.0));
-    model.places = open.map(|o| ws.scrolling.places(o)).unwrap_or_default();
+    model.places = if open { ws.scrolling.places() } else { Vec::new() };
     model
 }
 
@@ -70,14 +70,14 @@ fn a_carry_has_one_layout_whatever_the_pointer_does() {
     let mut window = crate::chrome::new_window_root();
     window.base_mut().children.push(Box::new(workspace(seams())));
     let mut frames = Vec::new();
-    let render = |window: &mut Flex, open: Option<PlacesOpen>| {
+    let render = |window: &mut Flex, open: bool| {
         let model = model_of(&session, open);
         assert!(window.base_mut().children[0].set_props(&model));
         LayoutEngine::new().compute(window, heca_grid_ui::Size::new(1000.0, 800.0));
         frame(window.base().children[0].as_ref())
     };
 
-    render(&mut window, None);
+    render(&mut window, false);
     let cmd = heca_grid_ui::Modifiers { meta: true, ..heca_grid_ui::Modifiers::default() };
     dispatch(&mut window, &Event::ModifiersChanged(cmd));
     dispatch(&mut window, &Event::pointer_pressed(Point::new(100.0, 120.0), PointerButton::Left));
@@ -86,9 +86,7 @@ fn a_carry_has_one_layout_whatever_the_pointer_does() {
     dispatch(&mut window, &Event::pointer_moved(rest));
     for _ in 0..12 {
         let carried = heca_grid_ui::dragging(&window);
-        let open = carried.then_some(PlacesOpen {
-            column_w: 60.0,
-        });
+        let open = carried;
         frames.push(render(&mut window, open));
         // Still, then across the other column and back: where the pointer is never decides it.
         let at = [rest, Point::new(600.0, 130.0), rest][frames.len() % 3];

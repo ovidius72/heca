@@ -893,9 +893,9 @@ pub struct AppState {
     pub confirm: heca_config::confirm::ConfirmConfig,
     /// Modifier key for interactive pane drag.
     pub interactive_move_modifier: heca_config::theme::ModifierKey,
-    /// Which places a pane can be put are open as real space in this window's layout right now —
-    /// see [`crate::app::places`].
-    pub places_open: Option<heca_core::layout::PlacesOpen>,
+    /// Whether the places a pane can be put are shown in this window right now — see
+    /// [`crate::app::places`].
+    pub places_open: bool,
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
     /// The configured prefix key combo (e.g. Ctrl+b).

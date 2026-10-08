@@ -34,7 +34,7 @@ pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutC
         )
     };
     ws.scrolling
-        .columns_with_places_open(state.places_open)
+        .columns_with_positions()
         .into_iter()
         .map(|mut col| {
             col.rect = shift(col.rect);
@@ -64,7 +64,7 @@ pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32,
     let Some(ws) = state.session.active_workspace() else {
         return frames;
     };
-    for (pane_id, rect) in ws.scrolling.panes_with_places_open(state.places_open) {
+    for (pane_id, rect) in ws.scrolling.panes_with_positions() {
         let x = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
         let y = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         frames.push((pane_id, x, y, rect.size.w as f32, rect.size.h as f32));

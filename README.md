@@ -1179,7 +1179,6 @@ title_actions = ["split", "close"]
 # drag_label_size_factor = 0.25
 # drag_label_min_size    = 24.0
 # drag_label_max_size    = 72.0
-# new_column_slot_share  = 0.18
 
 [appearance.sidebar]
 # Sidebar shell appearance (independent of the panes; all optional):

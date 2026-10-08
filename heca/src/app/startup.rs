@@ -547,7 +547,7 @@ pub(crate) async fn init_state(
         terminal_scroll_animations_enabled: app_config.config.settings.terminal_scroll_animations,
         confirm: app_config.config.confirm.clone(),
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
-        places_open: None,
+        places_open: false,
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         prefix_timeout_ms: app_config.config.keys.prefix_timeout_ms,
