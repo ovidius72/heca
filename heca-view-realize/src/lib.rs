@@ -4043,6 +4043,7 @@ mod tests {
             ("MenuItem", "not a widget: one entry of the above"),
             ("MenuEntry", "not a widget: one entry of the above"),
             ("MenuAnchor", "not a widget: where a menu opens"),
+            ("EdgeLine", "not a widget: where a landing slot's line runs inside its box"),
             ("Command", "not a widget: one entry of a command palette"),
             ("Tip", "not a widget: what a tooltip declaration carries"),
             ("Flex", "the arrangement: VStack/HStack are its names"),

@@ -37,9 +37,6 @@ pub(crate) fn open_places(state: &AppState) -> Vec<Place> {
     ws.scroll()
         .places()
         .into_iter()
-        .map(|mut p| {
-            p.rect.loc = Point::new(p.rect.loc.x + dx, p.rect.loc.y + dy);
-            p
-        })
+        .map(|p| p.moved_by(Point::new(dx, dy)))
         .collect()
 }

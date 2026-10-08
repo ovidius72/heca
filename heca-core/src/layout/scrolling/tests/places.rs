@@ -126,3 +126,55 @@ fn column_focus_row_goes_back_level_and_follows_the_larger_overlap() {
     assert!(space.m().focus_left());
     assert_eq!(focused_pane(&space), Some(PaneId(11)), "most of its span is level with b");
 }
+
+fn place(space: &Seen, kind: PlaceKind) -> Place {
+    space.r().places().into_iter().find(|p| p.kind == kind).expect("the place is there")
+}
+
+fn holds(zone: Rectangle, x: f64, y: f64) -> bool {
+    x >= zone.loc.x && x <= zone.loc.x + zone.size.w && y >= zone.loc.y && y <= zone.loc.y + zone.size.h
+}
+
+/// **The empty space beside the strip is the place at that end**: a drop right of the last column
+/// makes a new column there, however far right it lands.
+#[test]
+fn the_space_after_the_last_column_belongs_to_the_last_gap() {
+    let mut space = test_scrolling_space();
+    space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.3)), true);
+    let end = place(&space, PlaceKind::Gap(1));
+    let area = space.r().area();
+    let (right, middle) = (area.loc.x + area.size.w - 1.0, area.loc.y + area.size.h / 2.0);
+    assert!(holds(end.zone, right, middle), "{:?} misses the far right", end.zone);
+    assert!(holds(end.zone, end.rect.loc.x, middle), "and holds its own line");
+    assert_eq!(end.line_share(), 0.0, "the line is at the start of the space it takes");
+}
+
+/// The top border reaches up to the area's edge and a quarter into the first pane; the bottom one
+/// down to the edge and a quarter into the last. A border between two panes stays a line.
+#[test]
+fn the_top_and_bottom_borders_reach_the_area_edge_and_into_the_pane() {
+    let space = stacked();
+    let area = space.r().area();
+    let first = space.r().columns_with_positions()[0].panes[0].slot;
+    let top = place(&space, PlaceKind::Row { col: 0, row: 0 });
+    let x = first.loc.x + first.size.w / 2.0;
+    assert!(holds(top.zone, x, area.loc.y), "reaches the top of the area");
+    assert!(holds(top.zone, x, first.loc.y + first.size.h * space.options.drop_edge_reach - 1.0));
+    assert!(!holds(top.zone, x, first.loc.y + first.size.h / 2.0), "not half the pane");
+    let bottom = place(&space, PlaceKind::Row { col: 0, row: 2 });
+    assert!(holds(bottom.zone, x, area.loc.y + area.size.h), "reaches the bottom of the area");
+    let between = place(&space, PlaceKind::Row { col: 0, row: 1 });
+    assert_eq!(between.zone, between.rect);
+}
+
+/// **A place moves whole**: its line and its drop area together, so placing it in the window
+/// cannot leave the area behind.
+#[test]
+fn a_place_moves_its_line_and_its_drop_area_together() {
+    let space = stacked();
+    let end = place(&space, PlaceKind::Gap(2));
+    let moved = end.moved_by(Point::new(466.0, 90.0));
+    assert_eq!(moved.rect.loc, Point::new(end.rect.loc.x + 466.0, end.rect.loc.y + 90.0));
+    assert_eq!(moved.zone.loc, Point::new(end.zone.loc.x + 466.0, end.zone.loc.y + 90.0));
+    assert_eq!((moved.rect.size, moved.zone.size), (end.rect.size, end.zone.size));
+}

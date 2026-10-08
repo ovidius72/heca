@@ -127,6 +127,10 @@ pub struct SettingsConfig {
     /// `0` makes moves jump. Clamped to `0.0..=1.0`.
     #[serde(default = "default_move_slide_reach")]
     pub move_slide_reach: f64,
+    /// How far into the pane next to it the top and bottom border of a column take a dropped
+    /// pane, as a fraction of that pane's height. Clamped to `0.0..=0.5`.
+    #[serde(default = "default_drop_edge_reach")]
+    pub drop_edge_reach: f64,
     /// Auto-inject shell integration snippets for OSC 133/OSC 7 pane runtime signals.
     #[serde(default = "default_shell_integration")]
     pub shell_integration: bool,
@@ -257,6 +261,7 @@ impl Default for SettingsConfig {
             overview_gap: default_overview_gap(),
             float_size: default_float_size(),
             move_slide_reach: default_move_slide_reach(),
+            drop_edge_reach: default_drop_edge_reach(),
             shell_integration: default_shell_integration(),
             pane_renamed_add_process_name: default_pane_renamed_add_process_name(),
             pane_show_cwd: default_pane_show_cwd(),

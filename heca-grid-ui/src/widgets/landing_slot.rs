@@ -19,6 +19,16 @@ const LETTER_SCALE: f32 = 1.4;
 /// Alpha of the wash over an empty placeholder.
 const WASH: u8 = 28;
 
+/// **Where an edge's line runs inside its box**, as a share across it — so the box can be bigger
+/// than the line: the area a drop counts in, with the line at one side of it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EdgeLine {
+    /// Standing up, at this share of the box's width from its left.
+    Upright(f32),
+    /// Lying down, at this share of the box's height from its top.
+    Flat(f32),
+}
+
 /// A place something can land.
 pub struct LandingSlot {
     base: Base,
@@ -28,6 +38,8 @@ pub struct LandingSlot {
     edge: bool,
     /// How far an edge reacts past the line it draws, on each side.
     reach: Space,
+    /// Where the line runs in the box; along the box's longer side, in its middle, when unset.
+    line: Option<EdgeLine>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -43,6 +55,7 @@ impl LandingSlot {
             filled: false,
             edge: false,
             reach: Spacing::Xl.into(),
+            line: None,
         }
     }
 
@@ -70,6 +83,15 @@ impl LandingSlot {
     #[heca_grid_ui_macros::host_only("a spacing step or pixels, not a scalar a description carries")]
     pub fn reach(mut self, reach: impl Into<Space>) -> Self {
         self.reach = reach.into();
+        self
+    }
+
+    /// **Where the line runs inside the box** — for an edge whose box is the whole area a drop
+    /// counts in, with the line at one side of it. Unset, the line runs along the box's longer side,
+    /// in its middle, and the box is the line itself.
+    #[heca_grid_ui_macros::host_only("a position worked out by the host's layout each frame")]
+    pub fn line(mut self, line: EdgeLine) -> Self {
+        self.line = Some(line);
         self
     }
 
@@ -116,26 +138,16 @@ impl LandingSlot {
         };
         let color = if near { target } else { color.unwrap_or_else(|| cx.accent()) };
         let thickness = f64::from(if near { width } else { width / 2.0 });
-        let b = self.base.bounds;
-        let line = if self.upright() {
-            Rectangle::new(
-                Point::new(b.loc.x + (b.size.w - thickness) / 2.0, b.loc.y),
-                Size::new(thickness, b.size.h),
-            )
-        } else {
-            Rectangle::new(
-                Point::new(b.loc.x, b.loc.y + (b.size.h - thickness) / 2.0),
-                Size::new(b.size.w, thickness),
-            )
-        };
+        let line = self.line_rect(thickness);
         cx.with_opacity(if near { 1.0 } else { 0.5 }, |cx| {
             // Round ends, like the panes it runs between.
             cx.rect(line, color, None, (thickness / 2.0) as f32, None);
         });
         if let Some(letter) = &self.label {
             let side = f64::from(self.base.font) * 1.6;
+            let (cx_, cy_) = (line.loc.x + line.size.w / 2.0, line.loc.y + line.size.h / 2.0);
             let chip = Rectangle::new(
-                Point::new(b.loc.x + (b.size.w - side) / 2.0, b.loc.y + (b.size.h - side) / 2.0),
+                Point::new(cx_ - side / 2.0, cy_ - side / 2.0),
                 Size::new(side, side),
             );
             let bg = cx.theme().colors.background;
@@ -146,10 +158,31 @@ impl LandingSlot {
         }
     }
 
-    /// An edge runs along the longer side of its box: a border between two columns stands up, one
-    /// between two stacked panes lies down.
-    fn upright(&self) -> bool {
-        self.base.bounds.size.h > self.base.bounds.size.w
+    /// Where the line runs: as [`line`](Self::line) says, else along the box's longer side, in
+    /// its middle.
+    fn resolved_line(&self) -> EdgeLine {
+        let b = self.base.bounds;
+        self.line.unwrap_or(match b.size.h > b.size.w {
+            true => EdgeLine::Upright(0.5),
+            false => EdgeLine::Flat(0.5),
+        })
+    }
+
+    /// Where the line is drawn, `thickness` across: at the share [`line`](Self::line) names, or
+    /// along the longer side of the box in its middle — a border between two columns stands up,
+    /// one between two stacked panes lies down.
+    fn line_rect(&self, thickness: f64) -> Rectangle {
+        let b = self.base.bounds;
+        match self.resolved_line() {
+            EdgeLine::Upright(share) => Rectangle::new(
+                Point::new(b.loc.x + b.size.w * f64::from(share) - thickness / 2.0, b.loc.y),
+                Size::new(thickness, b.size.h),
+            ),
+            EdgeLine::Flat(share) => Rectangle::new(
+                Point::new(b.loc.x, b.loc.y + b.size.h * f64::from(share) - thickness / 2.0),
+                Size::new(b.size.w, thickness),
+            ),
+        }
     }
 }
 
@@ -167,25 +200,30 @@ impl Component for LandingSlot {
         &mut self.base
     }
 
-    /// An edge reacts over its line **and a little either side**: the box it is laid over is the
-    /// border itself, which may have no thickness at all.
+    /// An edge reacts over its box **and a little either side of its line**: the box may be the
+    /// border itself, of no thickness at all, or the whole area a drop counts in.
     fn hit_bounds(&self) -> Option<Rectangle> {
         let b = self.base.bounds;
         if !self.edge {
             return Some(b);
         }
         let reach = f64::from(self.reach.resolve(self.base.font));
-        Some(if self.upright() {
-            Rectangle::new(
-                Point::new(b.loc.x - reach, b.loc.y),
-                Size::new(b.size.w + 2.0 * reach, b.size.h),
-            )
-        } else {
-            Rectangle::new(
-                Point::new(b.loc.x, b.loc.y - reach),
-                Size::new(b.size.w, b.size.h + 2.0 * reach),
-            )
-        })
+        let line = self.line_rect(0.0);
+        let around = match self.resolved_line() {
+            EdgeLine::Upright(_) => Rectangle::new(
+                Point::new(line.loc.x - reach, line.loc.y),
+                Size::new(2.0 * reach, line.size.h),
+            ),
+            EdgeLine::Flat(_) => Rectangle::new(
+                Point::new(line.loc.x, line.loc.y - reach),
+                Size::new(line.size.w, 2.0 * reach),
+            ),
+        };
+        // The box, and the line with a little either side of it.
+        let (x, y) = (b.loc.x.min(around.loc.x), b.loc.y.min(around.loc.y));
+        let right = (b.loc.x + b.size.w).max(around.loc.x + around.size.w);
+        let bottom = (b.loc.y + b.size.h).max(around.loc.y + around.size.h);
+        Some(Rectangle::new(Point::new(x, y), Size::new(right - x, bottom - y)))
     }
 
     fn paints_own_drag_feedback(&self) -> bool {

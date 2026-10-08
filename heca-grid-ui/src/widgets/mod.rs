@@ -87,7 +87,7 @@ pub use key_hint::{
 };
 pub use key_hint_group::{DEFAULT_LETTERS, KeyHintGroup};
 pub use label::{Ellipsis, Label};
-pub use landing_slot::LandingSlot;
+pub use landing_slot::{EdgeLine, LandingSlot};
 pub use marker_group::MarkerGroup;
 pub use nf_icon::{NfGlyph, NfIcon};
 pub use overlay::{

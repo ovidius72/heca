@@ -75,6 +75,11 @@ pub(super) fn default_move_slide_reach() -> f64 {
     0.9
 }
 
+/// Default reach of a column's top and bottom drop border into the pane: a quarter of it.
+pub(super) fn default_drop_edge_reach() -> f64 {
+    0.25
+}
+
 pub(super) fn default_always_center_single_column() -> bool {
     false
 }

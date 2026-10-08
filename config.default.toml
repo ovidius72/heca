@@ -94,6 +94,10 @@ float_size = 0.95
 # the whole thing. 0 makes moves jump. Clamped to 0.0..=1.0.
 move_slide_reach = 0.9
 
+# How far into the pane next to it the top and bottom border of a column take a dropped
+# pane, as a fraction of that pane's height. Clamped to 0.0..=0.5.
+drop_edge_reach = 0.25
+
 # Which pane focus lands on when it moves to the column on the left or right:
 #   "last" - the pane you last used in that column (default)
 #   "row"  - the pane in that column level with the one you leave
