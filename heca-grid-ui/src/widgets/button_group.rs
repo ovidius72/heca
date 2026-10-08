@@ -149,12 +149,12 @@ impl ButtonGroup {
         // up with, so the whole cluster hung below the strip and took the picker's letters with it
         // (Antonio, driving, 2026-09-03).
         base.style.layout.justify = Justify::End;
-        // **A hairline between the buttons, from the theme's rhythm** — the container's own `gap`,
-        // like any row's, so the buttons neither touch (a destructive outline sat against its
-        // neighbour) nor read as separate controls. A caller changes it the way it changes any
-        // gap: `.gap(..)`. It is a step, so it scales with the font and UI zoom; it is not a pixel
-        // count written here.
-        base.style.layout.gap = crate::style::Space::Step(crate::style::Spacing::Hairline);
+        // **A little air between the buttons, from the theme's rhythm** — the container's own `gap`,
+        // like any row's, so the buttons visibly do not touch (a destructive outline sat against its
+        // neighbour, and a pixel of air did not read by eye) yet still belong together. A caller
+        // changes it the way it changes any gap: `.gap(..)`. It is a step, so it scales with the
+        // font and UI zoom; it is not a pixel count written here.
+        base.style.layout.gap = crate::style::Space::Step(crate::style::Spacing::Xs);
         let mut g = Self {
             base,
             display: Display::default(),

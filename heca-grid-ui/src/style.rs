@@ -108,10 +108,9 @@ impl WidgetSize {
 pub enum Spacing {
     None,
     /// **A hairline of air** — about a pixel at the usual font, and it still scales with it. The gap
-    /// between things that belong to one control (the buttons of a [`ButtonGroup`], segments of one
-    /// strip), where `Xs` reads as separate things.
-    ///
-    /// [`ButtonGroup`]: crate::widgets::ButtonGroup
+    /// between lines that belong to one block, such as the lines of text inside a card, where `Xs`
+    /// reads as separate things. Too thin to separate two bordered controls: a
+    /// [`ButtonGroup`](crate::widgets::ButtonGroup) uses `Xs`.
     Hairline,
     Xs,
     Sm,

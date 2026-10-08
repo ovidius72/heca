@@ -113,7 +113,7 @@ mod tests {
     use crate::chrome::{ChromeEvent, ChromeEventBus};
     use heca_core::backend::FakeBackend;
     use heca_core::layout::{
-        LayoutOptions, Pane, PaneId, Point, Session, SessionId, Size, workspace::FloatingPane,
+        LayoutOptions, Pane, PaneId, Point, Rectangle, Session, SessionId, Size,
     };
     use heca_core::runtime::{ContentKind, PaneClosePolicy, PaneRuntime, ProcessStatus};
     use std::cell::RefCell;
@@ -274,14 +274,11 @@ mod tests {
         let mut session = session_with_tiled_pane(PaneId(99));
         {
             let ws = session.active_workspace_mut().expect("workspace exists");
-            ws.floating_panes.push(FloatingPane {
-                pane: Pane::new(pid, "float"),
-                position: Point::new(10.0, 10.0),
-                size: Size::new(300.0, 200.0),
-                is_active: false,
-                original_column_idx: None,
-                original_pane_idx: None,
-            });
+            ws.add_floating_pane(
+                Pane::new(pid, "float"),
+                Rectangle::new(Point::new(10.0, 10.0), Size::new(300.0, 200.0)),
+                None,
+            );
         }
         let mut backends = BackendStore::new();
         let mut fake = FakeBackend::new(20, 6);

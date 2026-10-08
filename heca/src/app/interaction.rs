@@ -1377,7 +1377,6 @@ mod tests {
     use super::*;
     use heca_core::layout::column::Pane;
     use heca_core::layout::types::{Point, Rectangle};
-    use heca_core::layout::workspace::FloatingPane;
     use heca_core::layout::{LayoutOptions, PaneId, SessionId, Size};
 
     /// Helper to create a minimal Session for routing tests.
@@ -2187,14 +2186,11 @@ mod tests {
         let mut session = test_session();
         session.add_pane(Pane::new(PaneId(99), "float-99"), None, true);
         let ws = session.active_workspace_mut().unwrap();
-        ws.floating_panes.push(FloatingPane {
-            pane: Pane::new(PaneId(99), "float-99"),
-            position: Point::new(0.0, 0.0),
-            size: Size::new(200.0, 100.0),
-            is_active: true,
-            original_column_idx: None,
-            original_pane_idx: None,
-        });
+        ws.add_floating_pane(
+            Pane::new(PaneId(99), "float-99"),
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 100.0)),
+            None,
+        );
         ws.focus_domain = FocusDomain::Floating;
 
         // FocusPane targeting the active floating pane should be allowed from Keyboard.
@@ -2512,14 +2508,11 @@ mod tests {
             Point::new(0.0, 0.0),
             Size::new(1280.0, 800.0),
         ));
-        ws.floating_panes.push(FloatingPane {
-            pane: Pane::new(PaneId(99), "float-99"),
-            position: Point::new(50.0, 50.0),
-            size: Size::new(800.0, 600.0),
-            is_active: true,
-            original_column_idx: None,
-            original_pane_idx: None,
-        });
+        ws.add_floating_pane(
+            Pane::new(PaneId(99), "float-99"),
+            Rectangle::new(Point::new(50.0, 50.0), Size::new(800.0, 600.0)),
+            None,
+        );
         ws.focus_domain = FocusDomain::Floating;
 
         // The active floating pane (ID 99) can be focused from all sources.

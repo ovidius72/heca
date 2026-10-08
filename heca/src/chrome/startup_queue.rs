@@ -86,7 +86,11 @@ mod tests {
         assert_eq!(queue.add("first"), Ok(()));
         assert_eq!(queue.add("second"), Ok(()));
         assert_eq!(queue.take(), ["first", "second"]);
-        assert_eq!(queue.add("late"), Err("late"), "the refused item comes back");
+        assert_eq!(
+            queue.add("late"),
+            Err("late"),
+            "the refused item comes back"
+        );
         assert!(queue.peek(<[_]>::is_empty), "and was not kept");
     }
 

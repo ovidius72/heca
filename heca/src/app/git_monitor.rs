@@ -302,7 +302,7 @@ fn sync_one_pane_git<P: GitProvider>(
 mod tests {
     use super::{GitInfo, GitProvider, GitRuntimeCache, GitSnapshot, sync_pane_git_from_cwds_impl};
     use heca_core::layout::{
-        LayoutOptions, Pane, PaneId, Point, Session, SessionId, Size, workspace::FloatingPane,
+        LayoutOptions, Pane, PaneId, Point, Rectangle, Session, SessionId, Size,
     };
     use std::cell::Cell;
     use std::collections::HashMap;
@@ -442,18 +442,15 @@ mod tests {
         {
             let ws = session.active_workspace_mut().expect("workspace");
             ws.find_pane_mut(PaneId(10)).expect("pane").runtime.cwd = Some(repo_a.clone());
-            ws.floating_panes.push(FloatingPane {
-                pane: {
+            ws.add_floating_pane(
+                {
                     let mut pane = Pane::new(PaneId(20), "float");
                     pane.runtime.cwd = Some(repo_b.clone());
                     pane
                 },
-                position: Point::new(0.0, 0.0),
-                size: Size::new(100.0, 100.0),
-                is_active: false,
-                original_column_idx: None,
-                original_pane_idx: None,
-            });
+                Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0)),
+                None,
+            );
         }
 
         let info = GitInfo {
