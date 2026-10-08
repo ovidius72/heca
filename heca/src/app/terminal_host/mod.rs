@@ -70,14 +70,14 @@ pub(crate) fn notify_focus_changed(
 
     if let Some(prev) = prev
         && Some(prev) != next
-        && let Some(backend) = state.backends.get_mut(prev)
+        && let Some(backend) = state.server.backends.get_mut(prev)
     {
         backend.focus_changed(false);
     }
 
     if let Some(next) = next
         && Some(next) != prev
-        && let Some(backend) = state.backends.get_mut(next)
+        && let Some(backend) = state.server.backends.get_mut(next)
     {
         backend.focus_changed(true);
     }
@@ -87,7 +87,7 @@ pub(crate) fn notify_window_focus_changed(state: &mut AppState, focused: bool) {
     let Some(pane_id) = state.focused_pane else {
         return;
     };
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.server.backends.get_mut(pane_id) {
         backend.focus_changed(focused);
     }
 }

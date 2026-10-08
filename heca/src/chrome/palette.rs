@@ -174,18 +174,18 @@ pub(crate) const MODE_WORKSPACE: &str = "workspace";
 /// `custom_name` overriding it. Reading the field directly produced a pane list of blank rows while
 /// the sidebar beside it read `zsh` — the two names have to come from one place.
 pub(crate) fn pane_entries(
-    session: &heca_core::layout::Session,
+    layout: heca_core::layout::Layout<'_>,
     programs: &heca_config::programs::ProgramsConfig,
     last_focused: Option<heca_core::layout::PaneId>,
 ) -> Vec<PaletteEntry> {
     // The pane you are standing in: the active workspace's active pane. Only one row in the whole
     // list can be it, which is what makes the accent mean something.
-    let focused = session
+    let focused = layout
         .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
     let mut rows = Vec::new();
-    for (ws_idx, ws) in session.workspaces.iter().enumerate() {
+    for (ws_idx, ws) in layout.session().workspaces.iter().enumerate() {
         let ws_name = workspace_name(ws, ws_idx);
         for col in ws.scrolling.columns.iter() {
             for pane in col.panes.iter() {
@@ -229,10 +229,11 @@ pub(crate) fn pane_entries(
 
 /// Every workspace, as palette rows — pure, for the same reason as [`pane_entries`].
 pub(crate) fn workspace_entries(
-    session: &heca_core::layout::Session,
+    layout: heca_core::layout::Layout<'_>,
     last_visited: Option<usize>,
 ) -> Vec<PaletteEntry> {
-    session
+    layout
+        .session()
         .workspaces
         .iter()
         .enumerate()
@@ -245,7 +246,7 @@ pub(crate) fn workspace_entries(
             rank_id: ws.name.clone(),
             mode: Some(MODE_WORKSPACE.to_string()),
             pane: None,
-            current: ws_idx == session.active_workspace_idx,
+            current: ws_idx == layout.active_workspace_idx(),
             preselect: Some(ws_idx) == last_visited,
             label: workspace_name(ws, ws_idx),
             description: match ws.scrolling.columns.len() {
@@ -401,11 +402,11 @@ pub(crate) fn open_command_palette(
     let owners = owners(state);
     let mut rows = entries(&state.action_catalog, &owners, &state.action_shortcuts);
     rows.extend(pane_entries(
-        &state.session,
-        &state.programs,
+        state.layout(),
+        &state.server.programs,
         state.last_focused,
     ));
-    rows.extend(workspace_entries(&state.session, state.last_visited_ws_idx));
+    rows.extend(workspace_entries(state.layout(), state.last_visited_ws_idx));
     let mut palette = CommandPalette::new()
         .placeholder("Type a command…")
         // The sigil **is** the mode selector, so opening in a mode is opening with a prefilled
@@ -476,7 +477,7 @@ pub(crate) fn open_command_palette(
     // row and nothing else: rename a pane or start `nvim` in it and that row's text changes in
     // place, with no rebuild and no flash. The widget ranks off the same signals, so a row renamed
     // this way is also *found* by its new name and not the one it was built with.
-    let programs = state.programs.clone();
+    let programs = state.server.programs.clone();
     for (i, row) in rows.iter().enumerate() {
         let Some(pane) = row.pane else { continue };
         let Some((program, custom_name)) = state
@@ -615,25 +616,23 @@ mod tests {
     }
 
     /// A session with two named panes in one workspace, and a second, unnamed workspace.
-    fn session_with_panes() -> heca_core::layout::Session {
-        use heca_core::layout::{LayoutOptions, Pane, PaneId, Rectangle, SessionId, Size};
-        let viewport = Size::new(800.0, 600.0);
-        let mut session =
-            heca_core::layout::Session::new(SessionId(0), viewport, 1.0, LayoutOptions::default());
-        session.workspaces[0].name = Some("Editing".to_string());
+    fn session_with_panes() -> heca_core::layout::testing::Windowed {
+        use heca_core::layout::{Pane, PaneId, Size};
+        let mut session = heca_core::layout::testing::Windowed::new(Size::new(800.0, 600.0), 1.0);
+        session.session.workspaces[0].name = Some("Editing".to_string());
         // **The shape a running app actually has**: `title` empty, the name carried by the live
         // runtime. Reading `title` here produced a list of blank rows in the app while the sidebar
         // beside it read `zsh`, so the fixture has to be built this way or the test proves nothing.
         let mut running = Pane::new(PaneId(1), "");
         running.runtime.program = Some("zsh".to_string());
         running.runtime.cwd = Some(std::path::PathBuf::from("/tmp/project"));
-        session.add_pane(running, None, false);
+        session.m().add_pane(running, None, false);
         // A renamed pane: `custom_name` overrides the process-derived name everywhere it is shown.
         let mut renamed = Pane::new(PaneId(2), "");
         renamed.runtime.program = Some("zsh".to_string());
         renamed.custom_name = Some("logs".to_string());
-        session.add_pane(renamed, None, false);
-        session.add_workspace(Rectangle::from_size(viewport));
+        session.m().add_pane(renamed, None, false);
+        session.m().add_workspace();
         session
     }
 
@@ -644,7 +643,7 @@ mod tests {
     fn a_pane_row_is_ranked_by_its_display_name_not_its_id() {
         let session = session_with_panes();
         let rows = pane_entries(
-            &session,
+            session.l(),
             &heca_config::programs::ProgramsConfig::default(),
             None,
         );
@@ -691,7 +690,7 @@ mod tests {
         let session = session_with_panes();
 
         let panes = pane_entries(
-            &session,
+            session.l(),
             &heca_config::programs::ProgramsConfig::default(),
             None,
         );
@@ -702,7 +701,7 @@ mod tests {
             .collect();
         assert_eq!(current.len(), 1, "one pane is current, got {current:?}");
 
-        let workspaces = workspace_entries(&session, None);
+        let workspaces = workspace_entries(session.l(), None);
         assert!(find(&workspaces, "ws:0").current, "workspace 0 is active");
         assert!(!find(&workspaces, "ws:1").current, "and it is the only one");
     }
@@ -712,7 +711,7 @@ mod tests {
     #[test]
     fn only_a_named_workspace_carries_a_rank_id() {
         let session = session_with_panes();
-        let rows = workspace_entries(&session, None);
+        let rows = workspace_entries(session.l(), None);
 
         let named = find(&rows, "ws:0");
         assert_eq!(named.label, "Editing");

@@ -52,7 +52,7 @@ impl TerminalRenderState {
             .map(|room| Rectangle::new(heca_core::layout::Point::new(0.0, 0.0), room));
         let mount = content_rect.and_then(|content_rect| {
             crate::app::terminal_host::prepare_terminal_mount(
-                &mut state.backends,
+                &mut state.server.backends,
                 id,
                 content_rect,
                 state.scale_factor as f32,

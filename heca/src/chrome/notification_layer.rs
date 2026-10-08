@@ -53,7 +53,7 @@ pub(crate) fn surface_key() -> SurfaceKey {
 }
 
 /// Mount the toast stack once, at startup. Call after `AppState` exists (needs
-/// `state.notifications` / `state.notification_pick_open`).
+/// `state.server.notifications` / `state.notification_pick_open`).
 ///
 /// Wrapped in a [`KeyHintGroup`] bound to `state.notification_pick_open` (F009/T492's
 /// `notification.pick` action flips that signal) — an **additional**, precise picker over the
@@ -62,7 +62,7 @@ pub(crate) fn surface_key() -> SurfaceKey {
 pub(crate) fn mount_notification_stack(state: &mut AppState) {
     let emit = layer_emitter(&state.event_proxy, surface_key());
 
-    let stack = ToastStack::new(state.notifications.visible_toasts)
+    let stack = ToastStack::new(state.toasts)
         .position(ToastPosition::TopRight)
         // **A card must not retire under the pointer reaching for its button.** The stack reports
         // the hover and nothing more; the runtime owns what it costs and hands the time back.

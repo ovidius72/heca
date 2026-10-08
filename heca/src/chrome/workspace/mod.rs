@@ -93,7 +93,7 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
             model
                 .places
                 .iter()
-                .map(|p| (place_key(p.kind), String::new())),
+                .map(|p| (place_key(p.kind), line_version(p))),
         );
     }
     // What an open column pick marks, over the places and under the floats: an outline round each
@@ -117,12 +117,14 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
             return Box::new(build_edge(seams, working, *edge).key(name));
         }
         if crate::chrome::slot_of_key(name).is_some() || crate::chrome::row_of_key(name).is_some() {
-            return Box::new(
-                LandingSlot::new()
-                    .accepting(crate::chrome::PANE_DRAG_KIND)
-                    .edge(true)
-                    .key(name),
-            );
+            let slot = LandingSlot::new()
+                .accepting(crate::chrome::PANE_DRAG_KIND)
+                .edge(true);
+            let slot = match model.places.iter().find(|p| place_key(p.kind) == name) {
+                Some(place) => slot.line(edge_line(place)),
+                None => slot,
+            };
+            return Box::new(slot.key(name));
         }
         match model
             .columns
@@ -162,13 +164,14 @@ fn place(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, model: &WorkspaceModel
                 rect.size.h as f32,
             );
         } else if let Some(place) = model.places.iter().find(|p| place_key(p.kind) == name) {
+            // Laid over the whole area a drop on it counts in; the line is drawn where it says.
             place_at(
                 child.as_mut(),
                 area,
-                place.rect.loc.x as f32,
-                place.rect.loc.y as f32,
-                place.rect.size.w as f32,
-                place.rect.size.h as f32,
+                place.zone.loc.x as f32,
+                place.zone.loc.y as f32,
+                place.zone.size.w as f32,
+                place.zone.size.h as f32,
             );
         } else if let Some((_, gap)) = edges.iter().find(|(edge, _)| edge.name() == name) {
             place_at(
@@ -398,3 +401,18 @@ fn place_at(child: &mut dyn Component, origin: Rectangle, x: f32, y: f32, w: f32
 
 #[cfg(test)]
 mod tests;
+
+/// Where a place's line runs inside the area it is laid over.
+fn edge_line(place: &heca_core::layout::Place) -> heca_grid_ui::widgets::EdgeLine {
+    use heca_grid_ui::widgets::EdgeLine;
+    let share = place.line_share() as f32;
+    match place.upright() {
+        true => EdgeLine::Upright(share),
+        false => EdgeLine::Flat(share),
+    }
+}
+
+/// What a place is built from beyond its name: where its line runs. A change rebuilds it.
+fn line_version(place: &heca_core::layout::Place) -> String {
+    format!("{:?}", edge_line(place))
+}

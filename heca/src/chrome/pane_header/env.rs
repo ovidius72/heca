@@ -33,7 +33,7 @@ impl HeaderEnv {
             action_names: state.appearance.pane.title_actions.clone(),
             chips: state.pane_chips.clone(),
             buttons: state.pane_buttons.clone(),
-            programs: state.programs.clone(),
+            programs: state.server.programs.clone(),
             shortcuts: state.action_shortcuts.clone(),
             catalog: state.action_catalog.clone(),
             event_proxy: state.event_proxy.clone(),

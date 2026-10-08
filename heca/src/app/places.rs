@@ -30,16 +30,13 @@ pub(crate) fn sync(state: &mut AppState) {
 
 /// The open places, in window coordinates, with the box each fills.
 pub(crate) fn open_places(state: &AppState) -> Vec<Place> {
-    let (true, Some(ws)) = (state.places_open, state.session.active_workspace()) else {
+    let (true, Some(ws)) = (state.places_open, state.layout().active_workspace()) else {
         return Vec::new();
     };
     let (dx, dy) = crate::app::terminal_host::layout_origin(state);
-    ws.scrolling
+    ws.scroll()
         .places()
         .into_iter()
-        .map(|mut p| {
-            p.rect.loc = Point::new(p.rect.loc.x + dx, p.rect.loc.y + dy);
-            p
-        })
+        .map(|p| p.moved_by(Point::new(dx, dy)))
         .collect()
 }

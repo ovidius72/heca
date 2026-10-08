@@ -45,15 +45,15 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-    use crate::layout::types::{LayoutOptions, SessionId, Size};
-    use crate::layout::{Pane, PaneId, Session};
+    use crate::layout::testing::Windowed;
+    use crate::layout::types::Size;
+    use crate::layout::{Pane, PaneId};
 
     /// One workspace (the one `Session::new` makes) holding `n` panes, each in its own column.
-    fn session_with_panes(n: u64) -> Session {
-        let size = Size::new(1000.0, 800.0);
-        let mut s = Session::new(SessionId(1), size, 1.0, LayoutOptions::default());
+    fn session_with_panes(n: u64) -> Windowed {
+        let mut s = Windowed::new(Size::new(1000.0, 800.0), 1.0);
         for id in 0..n {
-            s.add_pane(Pane::new(PaneId(100 + id), ""), None, true);
+            s.m().add_pane(Pane::new(PaneId(100 + id), ""), None, true);
         }
         s
     }
@@ -61,24 +61,24 @@ mod tests {
     #[test]
     fn focus_moving_is_not_a_change_of_shape() {
         let mut s = session_with_panes(2);
-        let before = s.shape();
-        s.focus_left();
-        assert_eq!(s.shape(), before);
+        let before = s.session.shape();
+        s.m().focus_left();
+        assert_eq!(s.session.shape(), before);
     }
 
     #[test]
     fn a_pane_appearing_is_a_change_of_shape() {
         let mut s = session_with_panes(1);
-        let before = s.shape();
-        s.add_pane(Pane::new(PaneId(7), ""), None, true);
-        assert_ne!(s.shape(), before);
+        let before = s.session.shape();
+        s.m().add_pane(Pane::new(PaneId(7), ""), None, true);
+        assert_ne!(s.session.shape(), before);
     }
 
     #[test]
     fn two_columns_trading_places_is_a_change_of_shape() {
         let mut s = session_with_panes(2);
-        let before = s.shape();
-        s.workspaces[0].scrolling.columns.swap(0, 1);
-        assert_ne!(s.shape(), before);
+        let before = s.session.shape();
+        s.session.workspaces[0].scrolling.columns.swap(0, 1);
+        assert_ne!(s.session.shape(), before);
     }
 }

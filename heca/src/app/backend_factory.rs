@@ -108,15 +108,11 @@ pub(crate) fn launch(
 
 pub(crate) fn terminal_grid_for_workspace(state: &AppState, ws_idx: usize) -> (usize, usize) {
     state
-        .session
-        .workspaces
-        .get(ws_idx)
+        .layout()
+        .workspace(ws_idx)
         .map(|ws| {
-            estimate_terminal_grid(
-                ws.scrolling.working_area.size.w,
-                ws.scrolling.working_area.size.h,
-                state.terminal_cell_size,
-            )
+            let area = ws.scroll().area();
+            estimate_terminal_grid(area.size.w, area.size.h, state.terminal_cell_size)
         })
         .unwrap_or(FALLBACK_TERMINAL_GRID)
 }

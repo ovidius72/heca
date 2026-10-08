@@ -5,7 +5,7 @@
 
 use crate::app::terminal_host::notify_focus_changed;
 use crate::app_state::AppState;
-use heca_core::layout::{FocusDomain, PaneId, Session};
+use heca_core::layout::{PaneId, Session};
 
 /// Find which workspace contains a pane (by ID). Returns workspace index or None.
 pub(crate) fn find_pane_workspace(session: &Session, pane_id: PaneId) -> Option<usize> {
@@ -26,37 +26,13 @@ pub(crate) fn find_pane_workspace(session: &Session, pane_id: PaneId) -> Option<
 pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: PaneId) {
     // Switch workspace if the target pane is not in the current workspace.
     if let Some(target_ws) = find_pane_workspace(&state.session, pane_id)
-        && target_ws != state.session.active_workspace_idx
+        && target_ws != state.layout().active_workspace_idx()
     {
         switch_workspace_tracked(state, target_ws);
     }
 
-    if let Some(ws) = state.session.active_workspace_mut() {
-        // Find location first (immutable scan), then mutate.
-        let mut found = None;
-        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-            for (pi, pane) in col.panes.iter().enumerate() {
-                if pane.id == pane_id {
-                    found = Some((ci, pi));
-                    break;
-                }
-            }
-            if found.is_some() {
-                break;
-            }
-        }
-
-        if let Some((ci, pi)) = found {
-            ws.deactivate_floating_panes();
-            ws.focus_domain = FocusDomain::Tiled;
-            ws.scrolling.activate_column(ci);
-            if let Some(col) = ws.scrolling.columns.get_mut(ci) {
-                col.activate_pane(pi);
-            }
-        } else {
-            // Not in scrolling columns — check floating panes.
-            ws.activate_floating_pane(pane_id);
-        }
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
+        ws.activate_pane(pane_id);
     }
 
     // sync_focus reads the session's active pane, updates AppState, records history,
@@ -70,23 +46,17 @@ pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: PaneId) {
 /// same-workspace pane toggle (Prefix+i) and must not be overwritten by
 /// workspace switches.
 pub(crate) fn switch_workspace_tracked(state: &mut AppState, new_idx: usize) {
-    let current_ws = state.session.active_workspace_idx;
-    if current_ws == new_idx {
-        return;
-    }
-    state.last_visited_ws_idx = Some(current_ws);
-    state.session.switch_to_workspace(new_idx);
+    let mut layout = state.session.through_mut(&mut state.view);
+    crate::app_state::show_workspace(&mut layout, &mut state.last_visited_ws_idx, new_idx);
 }
 
 /// Sync `focused_pane` from session active state and rebuild dependent UI state.
 pub(crate) fn sync_focus(state: &mut AppState) {
     let prev_focused = state.focused_pane;
-    let prev_ws = state.session.active_workspace_idx;
+    let prev_ws = state.layout().active_workspace_idx();
 
     // Update focused_pane from session state.
-    state.focused_pane = state
-        .session
-        .active_workspace()
+    state.focused_pane = state.layout().active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
     // Project canonical WM focus onto the chrome's derived selection (write-via-action).
@@ -135,7 +105,7 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     notify_focus_changed(state, prev_focused, state.focused_pane);
 
     let focus_changed = prev_focused != state.focused_pane;
-    let current_ws = state.session.active_workspace_idx;
+    let current_ws = state.layout().active_workspace_idx();
 
     // Only record per-workspace data for same-workspace focus changes.
     // If prev_focused doesn't belong to current_ws, a workspace switch
@@ -191,7 +161,7 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .flatten();
     let global = state
         .last_visited_ws_idx
-        .and_then(|ws| state.session.workspaces.get(ws))
+        .and_then(|ws| state.layout().workspace(ws))
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
     let previous: Vec<Option<PaneId>> = [local, global]
@@ -211,7 +181,7 @@ pub(crate) fn sync_focus(state: &mut AppState) {
 
     // Sync sidebar tree from session state.
     state.chrome_state.workspaces.tree_mut().sync_from_session(
-        &state.session,
+        state.layout(),
         state.last_visited_ws_idx,
         state.focused_pane,
         &state.last_visited_pane_per_ws,

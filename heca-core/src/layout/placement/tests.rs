@@ -1,16 +1,12 @@
-use crate::layout::types::{LayoutOptions, SessionId, Size};
-use crate::layout::{ColumnId, FocusDomain, Pane, PaneId, Session};
+use crate::layout::testing::Windowed;
+use crate::layout::types::Size;
+use crate::layout::{ColumnId, FocusDomain, Pane, PaneId};
 
 /// One workspace, three panes, each in its own column: ids 1, 2, 3.
-fn session() -> Session {
-    let mut s = Session::new(
-        SessionId(1),
-        Size::new(1000.0, 800.0),
-        1.0,
-        LayoutOptions::default(),
-    );
+fn session() -> Windowed {
+    let mut s = Windowed::new(Size::new(1000.0, 800.0), 1.0);
     for i in 1..=3 {
-        s.add_pane(Pane::new(PaneId(i), ""), None, true);
+        s.m().add_pane(Pane::new(PaneId(i), ""), None, true);
     }
     s
 }
@@ -18,11 +14,11 @@ fn session() -> Session {
 #[test]
 fn a_pane_is_taken_from_its_column_or_from_the_floating_layer() {
     let mut s = session();
-    let ws = s.active_workspace_mut().unwrap();
+    let mut ws = s.ws();
     assert_eq!(ws.take_pane(PaneId(2)).map(|p| p.id), Some(PaneId(2)));
     assert!(ws.scrolling.pane_indices(PaneId(2)).is_none());
 
-    let rect = ws.default_float_rect();
+    let rect = ws.reader().default_float_rect();
     ws.add_floating_pane(Pane::new(PaneId(9), ""), rect, None);
     assert_eq!(ws.take_pane(PaneId(9)).map(|p| p.id), Some(PaneId(9)));
     assert!(ws.floating_panes.is_empty());
@@ -33,7 +29,7 @@ fn a_pane_is_taken_from_its_column_or_from_the_floating_layer() {
 #[test]
 fn a_pane_is_placed_at_a_row_of_a_column() {
     let mut s = session();
-    let ws = s.active_workspace_mut().unwrap();
+    let mut ws = s.ws();
     let pane = ws.take_pane(PaneId(3)).unwrap();
     ws.place_pane(pane, 0, Some(0), ColumnId(99));
     assert_eq!(ws.scrolling.pane_indices(PaneId(3)), Some((0, 0)));
@@ -43,7 +39,7 @@ fn a_pane_is_placed_at_a_row_of_a_column() {
 #[test]
 fn with_no_row_the_pane_gets_a_column_of_its_own() {
     let mut s = session();
-    let ws = s.active_workspace_mut().unwrap();
+    let mut ws = s.ws();
     let pane = ws.take_pane(PaneId(3)).unwrap();
     ws.place_pane(pane, 0, None, ColumnId(99));
     assert_eq!(ws.scrolling.columns[0].id, ColumnId(99));
@@ -52,31 +48,13 @@ fn with_no_row_the_pane_gets_a_column_of_its_own() {
 
 
 /// Columns by the panes they hold, for the tests that move a pane among them.
-fn strip(columns: &[&[u64]]) -> Session {
-    let mut s = Session::new(
-        SessionId(1),
-        Size::new(1000.0, 800.0),
-        1.0,
-        LayoutOptions::default(),
-    );
-    let ws = s.active_workspace_mut().unwrap();
-    for (i, panes) in columns.iter().enumerate() {
-        let column = ws
-            .scrolling
-            .new_column(ColumnId(i as u64 + 1), Pane::new(PaneId(panes[0]), ""));
-        ws.scrolling.add_column(Some(i), column, false);
-        for (row, id) in panes.iter().enumerate().skip(1) {
-            ws.scrolling
-                .add_pane_to_column(i, Some(row), Pane::new(PaneId(*id), ""), false);
-        }
-    }
-    s
+fn strip(columns: &[&[u64]]) -> Windowed {
+    Windowed::with_shape(&[columns])
 }
 
 /// The columns by the panes they hold, as a plain list.
-fn shape(s: &Session) -> Vec<Vec<u64>> {
-    s.active_workspace()
-        .unwrap()
+fn shape(s: &Windowed) -> Vec<Vec<u64>> {
+    s.session.workspaces[0]
         .scrolling
         .columns
         .iter()
@@ -84,8 +62,8 @@ fn shape(s: &Session) -> Vec<Vec<u64>> {
         .collect()
 }
 
-fn moved(s: &mut Session, pane: u64, col: usize, row: Option<usize>) -> Vec<Vec<u64>> {
-    let ws = s.active_workspace_mut().unwrap();
+fn moved(s: &mut Windowed, pane: u64, col: usize, row: Option<usize>) -> Vec<Vec<u64>> {
+    let mut ws = s.ws();
     assert!(ws.move_pane(PaneId(pane), col, row, ColumnId(99)));
     shape(s)
 }
@@ -142,16 +120,16 @@ fn a_target_column_right_of_the_one_the_pane_empties_is_one_nearer() {
 #[test]
 fn the_gaps_that_change_the_strip_leave_out_the_two_beside_a_lone_pane() {
     let s = strip(&[&[3], &[1], &[4]]);
-    let ws = s.active_workspace().unwrap();
+    let ws = &s.session.workspaces[0];
     assert_eq!(ws.new_column_gaps(PaneId(1)), [0, 3]);
     let s = strip(&[&[1, 2], &[3]]);
-    assert_eq!(s.active_workspace().unwrap().new_column_gaps(PaneId(1)), [0, 1, 2]);
+    assert_eq!(s.session.workspaces[0].new_column_gaps(PaneId(1)), [0, 1, 2]);
 }
 
 #[test]
 fn a_place_past_the_end_clamps_to_it() {
     let mut s = session();
-    let ws = s.active_workspace_mut().unwrap();
+    let mut ws = s.ws();
     let pane = ws.take_pane(PaneId(1)).unwrap();
     ws.place_pane(pane, 50, Some(50), ColumnId(99));
     let last = ws.scrolling.columns.len() - 1;
@@ -161,7 +139,7 @@ fn a_place_past_the_end_clamps_to_it() {
 #[test]
 fn the_rows_that_change_the_strip_leave_out_the_two_beside_the_pane() {
     let s = strip(&[&[1, 2], &[3]]);
-    let ws = s.active_workspace().unwrap();
+    let ws = &s.session.workspaces[0];
     // Pane 1 is row 0 of column 0: rows 0 and 1 of that column put it back where it is.
     assert_eq!(ws.new_row_places(PaneId(1)), [(0, 2), (1, 0), (1, 1)]);
 }

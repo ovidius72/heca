@@ -4,7 +4,8 @@
 //! possible at all (§ 0b) — these are the few values each of them needs, written once so a test
 //! reads as the thing it is asserting rather than as its setup.
 
-use heca_core::layout::{LayoutOptions, Pane, PaneId, Rectangle, Session, SessionId, Size};
+use heca_core::layout::testing::Windowed;
+use heca_core::layout::{Pane, PaneId, Size};
 use heca_grid_ui::Component;
 use heca_grid_ui::theme::Theme as GuiTheme;
 
@@ -12,13 +13,12 @@ use super::pane_card::{ExposeCallbacks, ExposeDeleteKeys};
 
 /// Two panes in one workspace, plus a second, empty workspace — the smallest session with
 /// something to compare.
-pub(super) fn session() -> Session {
-    let viewport = Size::new(800.0, 600.0);
-    let mut s = Session::new(SessionId(0), viewport, 1.0, LayoutOptions::default());
-    s.workspaces[0].name = Some("Editing".to_string());
-    s.add_pane(Pane::new(PaneId(1), "a"), None, false);
-    s.add_pane(Pane::new(PaneId(2), "b"), None, false);
-    s.add_workspace(Rectangle::from_size(viewport));
+pub(super) fn session() -> Windowed {
+    let mut s = Windowed::new(Size::new(800.0, 600.0), 1.0);
+    s.session.workspaces[0].name = Some("Editing".to_string());
+    s.m().add_pane(Pane::new(PaneId(1), "a"), None, false);
+    s.m().add_pane(Pane::new(PaneId(2), "b"), None, false);
+    s.m().add_workspace();
     s
 }
 

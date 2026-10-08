@@ -174,7 +174,7 @@ pub(crate) fn drain_pending_drops(state: &mut crate::app_state::AppState) {
         if let Some(action) = place_drop(
             &dropped.source,
             &dropped.target,
-            state.session.active_workspace_idx,
+            state.layout().active_workspace_idx(),
         ) {
             crate::mouse::dispatch_drop(
                 state,

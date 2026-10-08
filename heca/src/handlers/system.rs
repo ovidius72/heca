@@ -68,7 +68,7 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
         }
     }
 
-    let active_ws = state.session.active_workspace_idx;
+    let active_ws = state.layout().active_workspace_idx();
     let next_id = state.session.next_id();
 
     // Start the process before touching the layout — a spawn that fails (F009/P055/T225)
@@ -86,12 +86,12 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     pane.close_policy = *close_policy;
 
     if *float {
-        if let Some(ws) = state.session.active_workspace_mut() {
+        if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
             let rect = ws.default_float_rect();
             ws.add_floating_pane(pane, rect, None);
         }
     } else {
-        state.session.add_pane(pane, None, true);
+        state.layout_mut().add_pane(pane, None, true);
     }
 }
 
@@ -138,20 +138,18 @@ pub fn handle_notification_dismiss_one(state: &mut AppState, action: &WmAction) 
         return;
     };
     let id = crate::notification::NotificationId::from_raw(*notification_id);
-    state
-        .notifications
-        .dismiss_one(id, std::time::Instant::now());
+    state.ask_server(crate::server::ServerAction::DismissOne(id));
 }
 
 /// Dismiss every currently visible notification — no on-screen control; reachable from the
 /// command palette, a keybinding, and RPC.
 pub fn handle_notification_dismiss_all(state: &mut AppState, _action: &WmAction) {
-    state.notifications.dismiss_all(std::time::Instant::now());
+    state.ask_server(crate::server::ServerAction::DismissAll);
 }
 
 /// Dismiss the first eligible visible notification in stable toast order.
 pub fn handle_notification_dismiss_last(state: &mut AppState, _action: &WmAction) {
-    state.notifications.dismiss_last(std::time::Instant::now());
+    state.ask_server(crate::server::ServerAction::DismissLast);
 }
 
 /// Toggle the scoped picker over the visible toast actions/×, in addition to (never instead
@@ -175,10 +173,7 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
         return;
     };
     let id = crate::notification::NotificationId::from_raw(*notification_id);
-    let Some((intent, dismiss_after)) = state
-        .notifications
-        .action_and_dismiss_after_for_visible(id, key)
-    else {
+    let Some((intent, dismiss_after)) = state.server.toast_action(id, key) else {
         return;
     };
     // Fired **as the stack**, so the relayed intent is judged exactly as the click that asked for
@@ -189,9 +184,7 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
     );
     emit.fire(crate::app::interaction::InteractionIntent::View(intent));
     if dismiss_after {
-        state
-            .notifications
-            .dismiss_one(id, std::time::Instant::now());
+        state.ask_server(crate::server::ServerAction::DismissOne(id));
     }
 }
 

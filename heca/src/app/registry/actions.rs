@@ -25,54 +25,11 @@ pub fn build_registry() -> ActionRegistry {
     // ── Layout ──
     registry.register(WmActionKind::SplitHorizontal, handle_split_horizontal);
     registry.register(WmActionKind::SplitVertical, handle_split_vertical);
-    registry.register(WmActionKind::ZoomColumn, handle_zoom_column);
-    registry.register(WmActionKind::ZoomColumnAtIndex, handle_zoom_column_at_index);
     registry.register(WmActionKind::OpenContextMenu, handle_open_context_menu);
     registry.register(WmActionKind::ScrollViewLeft, handle_scroll_view_left);
     registry.register(WmActionKind::ScrollViewRight, handle_scroll_view_right);
-    registry.register(WmActionKind::ResizeIncrease, handle_resize_increase);
-    registry.register(WmActionKind::ResizeDecrease, handle_resize_decrease);
-    registry.register(
-        WmActionKind::PaneHeightIncrease,
-        handle_pane_height_increase,
-    );
-    registry.register(
-        WmActionKind::PaneHeightDecrease,
-        handle_pane_height_decrease,
-    );
-    registry.register(WmActionKind::SwapLeft, handle_swap_left);
-    registry.register(WmActionKind::SwapRight, handle_swap_right);
-    registry.register(WmActionKind::SwapUp, handle_swap_up);
-    registry.register(WmActionKind::SwapDown, handle_swap_down);
-    registry.register(WmActionKind::MovePaneLeft, handle_move_pane_left);
-    registry.register(WmActionKind::MovePaneRight, handle_move_pane_right);
-    registry.register(WmActionKind::MoveColumnUp, handle_move_column_up);
-    registry.register(WmActionKind::MoveColumnDown, handle_move_column_down);
-    registry.register(WmActionKind::Swap, handle_swap_param);
-    registry.register(WmActionKind::Move, handle_move_param);
-    registry.register(
-        WmActionKind::MovePaneToWorkspace,
-        handle_move_pane_to_workspace,
-    );
-    registry.register(WmActionKind::MovePaneToColumn, handle_move_pane_to_column);
-    registry.register(WmActionKind::PlacePane, handle_place_pane);
-    registry.register(
-        WmActionKind::MoveColumnToWorkspace,
-        handle_move_column_to_workspace,
-    );
-    registry.register(WmActionKind::MoveColumn, handle_move_column);
-    registry.register(WmActionKind::SwapColumns, handle_swap_columns);
-    registry.register(WmActionKind::Resize, handle_resize);
-    registry.register(WmActionKind::ResizeColumnBy, handle_resize_column_by);
-    registry.register(
-        WmActionKind::ResizePaneHeightBy,
-        handle_resize_pane_height_by,
-    );
-    registry.register(WmActionKind::ResizeTo, handle_resize_to);
 
     // ── Pane ──
-    registry.register(WmActionKind::Float, handle_float);
-    registry.register(WmActionKind::ClosePane, handle_close_pane);
     registry.register(WmActionKind::PaneSelect, handle_pane_select);
     registry.register(WmActionKind::FollowLink, handle_follow_link);
     registry.register(WmActionKind::HintPick, handle_hint_pick);
@@ -90,13 +47,8 @@ pub fn build_registry() -> ActionRegistry {
         WmActionKind::MovePaneToColumnPick,
         handle_move_pane_to_column_pick,
     );
-    registry.register(
-        WmActionKind::MovePaneToNewColumn,
-        handle_move_pane_to_new_column,
-    );
     registry.register(WmActionKind::PaneTake, handle_pane_take);
     registry.register(WmActionKind::PaneTakeAndFocus, handle_pane_take_and_focus);
-    registry.register(WmActionKind::TakePane, handle_take_pane);
     // Chrome container placement (plugin-02, §2.9).
     registry.register(
         WmActionKind::MoveContainerToRegion,
@@ -114,15 +66,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::RenamePane, handle_rename_pane);
     registry.register(WmActionKind::RenameColumn, handle_rename_column);
     registry.register(WmActionKind::RenameColumnByIdx, handle_rename_column_by_idx);
-    registry.register(WmActionKind::FloatAt, handle_float_at);
-    registry.register(WmActionKind::ClosePaneById, handle_close_pane_by_id);
-    registry.register(WmActionKind::RenameTarget, handle_rename_target);
     registry.register(WmActionKind::RenamePaneById, handle_rename_pane_by_id);
-    registry.register(WmActionKind::ResetPaneName, handle_reset_pane_name);
-    registry.register(
-        WmActionKind::ResetPaneNameById,
-        handle_reset_pane_name_by_id,
-    );
 
     // ── Workspace ──
     registry.register(WmActionKind::CreateWorkspace, handle_create_workspace);
@@ -130,14 +74,6 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(
         WmActionKind::RenameWorkspaceByIdx,
         handle_rename_workspace_by_idx,
-    );
-    registry.register(
-        WmActionKind::ResetWorkspaceName,
-        handle_reset_workspace_name,
-    );
-    registry.register(
-        WmActionKind::ResetWorkspaceNameByIdx,
-        handle_reset_workspace_name_by_idx,
     );
 
     // ── Sidebar / Chrome ──
@@ -222,15 +158,8 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::TerminalKill, handle_terminal_kill);
 
     // ── Sidebar-specific (parameterized) ──
-    registry.register(WmActionKind::AddPaneToColumn, handle_add_pane_to_column);
-    registry.register(
-        WmActionKind::AddColumnToWorkspace,
-        handle_add_column_to_workspace,
-    );
 
     // ── Destructive ──
-    registry.register(WmActionKind::DeleteColumn, handle_delete_column);
-    registry.register(WmActionKind::DeleteWorkspace, handle_delete_workspace);
     registry.register(
         WmActionKind::DeleteCurrentColumn,
         handle_delete_current_column,

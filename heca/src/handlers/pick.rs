@@ -220,13 +220,11 @@ pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
 /// workspace (shown as a `KeyHint` over its dock); the next keypress moves the active
 /// column into that workspace. Says so when there is no other workspace.
 pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAction) {
-    let ws_idx = state.session.active_workspace_idx;
-    let col_idx = state
-        .session
-        .active_workspace()
-        .map(|ws| ws.scrolling.active_column_idx)
+    let ws_idx = state.layout().active_workspace_idx();
+    let col_idx = state.layout().active_workspace()
+        .map(|ws| ws.scroll().active_column_idx())
         .unwrap_or(0);
-    let candidates = crate::app::selection::collect_workspace_candidates(&state.session);
+    let candidates = crate::app::selection::collect_workspace_candidates(state.layout());
     begin_pick(
         state,
         InputMode::WorkspacePick {
@@ -242,7 +240,7 @@ pub fn handle_move_pane_to_workspace_pick(state: &mut AppState, _action: &WmActi
     let Some(pane_id) = state.focused_pane else {
         return;
     };
-    let candidates = crate::app::selection::collect_workspace_candidates(&state.session);
+    let candidates = crate::app::selection::collect_workspace_candidates(state.layout());
     begin_pick(
         state,
         InputMode::WorkspacePick {
@@ -260,13 +258,11 @@ pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction)
     let here = crate::app::selection::column_of_pane(&state.session, pane_id);
     // **A place for a new column is offered only where it would change something**: the workspace
     // names those gaps, leaving out the two beside a pane that is alone where it is.
-    let new_gaps = state
-        .session
+    let new_gaps = state.layout()
         .active_workspace()
         .map(|ws| ws.new_column_gaps(pane_id))
         .unwrap_or_default();
-    let new_rows = state
-        .session
+    let new_rows = state.layout()
         .active_workspace()
         .map(|ws| ws.new_row_places(pane_id))
         .unwrap_or_default();

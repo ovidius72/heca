@@ -345,6 +345,7 @@ mod tests {
             draw: HostDraw::Surface { id: 1 },
             rect,
             alpha: 1.0,
+            echo: false,
         })
     }
 
@@ -389,6 +390,7 @@ mod tests {
             },
             rect: rect(0.0, 0.0, 10.0, 10.0),
             alpha: 1.0,
+            echo: false,
         }));
         scene.push(host(rect(0.0, 0.0, 10.0, 10.0)));
 

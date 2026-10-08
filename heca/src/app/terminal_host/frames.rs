@@ -14,8 +14,7 @@ use heca_core::layout::PaneId;
 /// workspace's offset. The one place that shift is worked out, for columns, panes and places alike.
 pub(crate) fn layout_origin(state: &AppState) -> (f64, f64) {
     let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
-    let offset = state
-        .session
+    let offset = state.layout()
         .workspace_geometries()
         .first()
         .map_or((0.0, 0.0), |(_, rect)| (rect.loc.x, rect.loc.y));
@@ -24,7 +23,7 @@ pub(crate) fn layout_origin(state: &AppState) -> (f64, f64) {
 
 pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutColumn> {
     let (dx, dy) = layout_origin(state);
-    let Some(ws) = state.session.active_workspace() else {
+    let Some(ws) = state.layout().active_workspace() else {
         return Vec::new();
     };
     let shift = |r: heca_core::layout::Rectangle| {
@@ -33,7 +32,7 @@ pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutC
             r.size,
         )
     };
-    ws.scrolling
+    ws.scroll()
         .columns_with_positions()
         .into_iter()
         .map(|mut col| {
@@ -54,17 +53,16 @@ pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutC
 /// `state.compositor`). Returns `(pane_id, x, y, w, h)` in logical px.
 pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32, f32)> {
     let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
-    let ws_offset = state
-        .session
+    let ws_offset = state.layout()
         .workspace_geometries()
         .first()
         .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
         .unwrap_or((0.0, 0.0));
     let mut frames = Vec::new();
-    let Some(ws) = state.session.active_workspace() else {
+    let Some(ws) = state.layout().active_workspace() else {
         return frames;
     };
-    for (pane_id, rect) in ws.scrolling.panes_with_positions() {
+    for (pane_id, rect) in ws.scroll().panes_with_positions() {
         let x = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
         let y = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         frames.push((pane_id, x, y, rect.size.w as f32, rect.size.h as f32));
@@ -86,7 +84,7 @@ pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32,
 /// **The panes of the active workspace in layout order** — tiled, column by column, then floating —
 /// with no geometry: a caller that needs *where* a pane is asks its terminal what it drew.
 pub(crate) fn laid_out_pane_ids(state: &AppState) -> Vec<PaneId> {
-    let Some(ws) = state.session.active_workspace() else {
+    let Some(ws) = state.layout().active_workspace() else {
         return Vec::new();
     };
     ws.scrolling

@@ -4254,6 +4254,25 @@ shows itself on `DragInFlight`, hides on `DragSettled` — nothing hands it a fl
 like any other: the framework paints the line or outline while a drag is over it, and a drop names
 it by its key.
 
+**As an edge** — `.edge(true)` — it is a line instead of a place: faint while a carry is on, bright
+and thicker in the theme's `drag_edge_target_color` while a drag is over it. It reacts over its box
+and `.reach(step)` (a spacing step or pixels, default `Spacing::Xl`) either side of its line, so a
+border of no thickness is still a target.
+
+`.line(EdgeLine)` says **where the line runs inside the box**, as a share across it —
+`EdgeLine::Upright(share)` from the left, `EdgeLine::Flat(share)` from the top. Unset, the line runs
+along the box's longer side in its middle, and the box is the line itself. Set, the box can be the
+whole area a drop counts in, with the line at one side of it: the space after the last column is one
+place, its border drawn at its left side.
+
+```rust
+LandingSlot::new().edge(true).accepting("pane").key("slot:3")                          // a border
+LandingSlot::new().edge(true).line(EdgeLine::Upright(0.0)).accepting("pane").key("slot:3") // a border and the space right of it
+```
+
+Host-only: `.reach` and `.line` are positions the host's layout works out each frame, not values a
+description carries.
+
 ### Tag
 
 A bordered metadata chip — git branch / path / filter, hue-configurable and domain-neutral.

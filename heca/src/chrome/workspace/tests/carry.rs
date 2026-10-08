@@ -170,6 +170,18 @@ fn a_place_is_seated_at_the_box_the_layout_gave_it() {
     assert_eq!(bounds(named(ws.as_ref(), "row:0:1")), (40.0, 270.0, 300.0, 0.0));
 }
 
+/// **A place whose drop area is bigger than its line is seated over the whole area** — the empty
+/// space beside the last column takes a drop anywhere in it.
+#[test]
+fn a_place_is_seated_over_the_area_a_drop_on_it_counts_in() {
+    let mut model = two_columns();
+    let mut places = open_places();
+    places[0].zone = Rectangle::new(Point::new(318.0, 30.0), Size::new(300.0, 500.0));
+    model.places = places;
+    let (_window, ws) = laid_out(&model);
+    assert_eq!(bounds(named(ws.as_ref(), "slot:1")), (318.0, 30.0, 300.0, 500.0));
+}
+
 /// **One key, two meanings, told apart by how far the pointer travels**: on a pane showing a link,
 /// the window's key and a click opens the link, and the same key and a drag carries the pane — the
 /// terminal under the pointer is told neither.

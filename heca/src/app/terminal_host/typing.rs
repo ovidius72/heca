@@ -51,7 +51,7 @@ pub(super) fn key_event(key: GridKey, modifiers: Modifiers) -> BackendKeyEvent {
 /// view snaps to the live bottom — typing is how you say you want to see where you are — and the
 /// frame is redrawn. Nothing happens for a terminal that no longer exists.
 fn type_into(state: &mut AppState, terminal: TerminalId, send: impl FnOnce(&mut dyn PaneBackend)) {
-    if let Some(backend) = state.backends.get_mut_by_id(terminal) {
+    if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
         backend.scroll_to_bottom();
         send(backend);
         state.needs_redraw = true;

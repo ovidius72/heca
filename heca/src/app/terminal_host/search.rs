@@ -53,6 +53,7 @@ pub(crate) fn enter_scrollback_search(state: &mut AppState) {
         return;
     };
     if state
+        .server
         .backends
         .get_by_id(terminal)
         .and_then(|b| b.terminal_snapshot())
@@ -94,7 +95,7 @@ fn tree_answers(state: &mut AppState, intent: WidgetIntent) -> bool {
 /// Re-run the search for `query` in `terminal`, refresh the match list, focus the match nearest
 /// at/above the caret (else the last), jump to it, and show the terminal what was found.
 fn run_search(state: &mut AppState, terminal: TerminalId, query: &str) {
-    let Some(backend) = state.backends.get_by_id(terminal) else {
+    let Some(backend) = state.server.backends.get_by_id(terminal) else {
         return;
     };
     let Some(cols) = backend.terminal_snapshot().map(|snap| snap.cols) else {
@@ -155,6 +156,7 @@ fn jump_to_current_match(state: &mut AppState, terminal: TerminalId) {
         .selection
         .set_caret(SelectionOwner(terminal), m.stable_row, m.start_col);
     if let Some(snapshot) = state
+        .server
         .backends
         .get_by_id(terminal)
         .and_then(|b| b.terminal_snapshot())

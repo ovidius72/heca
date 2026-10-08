@@ -144,7 +144,7 @@ pub(crate) fn handle_keyboard_input(
             }
 
             if let Some(pane_id) = state.focused_pane
-                && let Some(backend) = state.backends.get_mut(pane_id)
+                && let Some(backend) = state.server.backends.get_mut(pane_id)
             {
                 // Snap to live bottom when user sends keyboard input (Q5).
                 // Skip modifier-only keys (Shift, Ctrl, Alt alone) so that

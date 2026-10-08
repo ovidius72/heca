@@ -1,6 +1,7 @@
 //! The built-in System actions, in the order they are listed.
 
 use super::ActionDescriptor;
+use crate::actions::Side;
 use crate::args::{ArgDescriptor, ArgKind};
 use heca_grid_ui::Glyph;
 
@@ -8,6 +9,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // ── Font zoom ──
     ActionDescriptor {
         name: "app_font_increase",
+        side: Side::Client,
         label: "Increase App Font",
         description: "Increase the whole-app font: chrome/UI and every terminal pane.",
         icon: None,
@@ -15,6 +17,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "app_font_decrease",
+        side: Side::Client,
         label: "Decrease App Font",
         description: "Decrease the whole-app font: chrome/UI and every terminal pane.",
         icon: None,
@@ -22,6 +25,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "app_font_reset",
+        side: Side::Client,
         label: "Reset App Font",
         description: "Reset the whole-app font to the configured sizes.",
         icon: None,
@@ -29,6 +33,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "command_palette",
+        side: Side::Client,
         label: "Command Palette",
         description: "Search every action — the app's and every mounted component's — and run one.",
         icon: Some(Glyph::Search),
@@ -50,6 +55,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "reload_config",
+        side: Side::Client,
         label: "Reload Config",
         description: "Reload keymaps, theme, and settings from config.toml without restarting.",
         icon: Some(Glyph::Gear),
@@ -67,6 +73,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // labels and categories come with it, since metadata lives in one place per action.
     ActionDescriptor {
         name: "app_font_zoom",
+        side: Side::Client,
         label: "App Font Zoom",
         description: "Step the whole app's font size up, down, or back to the configured size.",
         icon: None,
@@ -78,6 +85,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "spawn_command",
+        side: Side::Server,
         label: "Spawn Command",
         description: "Open a new pane running a command.",
         icon: None,

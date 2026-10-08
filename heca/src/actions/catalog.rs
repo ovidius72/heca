@@ -49,6 +49,23 @@ impl ActionCategory {
 /// its own icon, which always wins.
 pub const GENERIC_ACTION_ICON: Glyph = Glyph::Circle;
 
+/// **Which side of the server/client split an action runs on** (F012).
+///
+/// An action that changes what every window shares — the panes, columns and workspaces, their
+/// names, the terminals behind them — is `Server`: it runs where that state is, whichever window
+/// asked. An action that only changes what *this window* shows or is doing — a menu, a mode, a
+/// dock, how far a view is scrolled — is `Client`. Declared on the action, with no default for a
+/// built-in: the sort is a decision about each one, and an omitted answer would put it on the
+/// side nobody chose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Side {
+    /// Runs on the server, for every window.
+    Server,
+    /// Runs in the window that asked.
+    Client,
+}
+
 /// Runtime metadata for **one action** — a built-in or a name-keyed one contributed by a provider
 /// or plugin. The single entry type of the [`ActionCatalog`]: built-in and plugin actions have the
 /// *same* shape, so every surface (icons, tooltips, command palette, RPC introspection) treats them
@@ -395,6 +412,10 @@ impl ActionCatalog {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ActionInfo {
     pub name: String,
+    /// Where a **built-in** runs: `server` changes what every window shares, `client` only this
+    /// window. `None` for a name-keyed action (a dock's or a plugin's): it has no side of its own —
+    /// it dispatches built-ins, and each one goes where it belongs.
+    pub side: Option<Side>,
     pub label: String,
     pub description: String,
     pub category: String,
@@ -416,6 +437,7 @@ impl ActionInfo {
     fn from_meta(m: &ActionMeta) -> Self {
         Self {
             name: m.name.clone(),
+            side: builtin_side(&m.name),
             label: m.label.clone(),
             description: m.description.clone(),
             category: m.category.label().to_string(),
@@ -430,6 +452,12 @@ impl ActionInfo {
                 .map(|c| c.config_name.clone()),
         }
     }
+}
+
+/// The side a **built-in** runs on, from its descriptor — the one place the side is declared.
+/// `None` for anything that is not a built-in.
+pub fn builtin_side(name: &str) -> Option<Side> {
+    builtins().find(|d| d.name == name).map(|d| d.side)
 }
 
 /// The interaction policy of a **built-in**, derived from the one authority:

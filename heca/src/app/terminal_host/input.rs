@@ -91,7 +91,7 @@ fn on_press(
         return;
     };
     let event = backend_mouse_event(BackendMouseEventKind::Press, button, cell, modifiers);
-    if let Some(backend) = state.backends.get_mut_by_id(terminal) {
+    if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
         let _ = backend.process_mouse_event(&event);
         // The release that pairs with this press is the program's to hear.
         state.terminal_presses.heard(terminal, button);
@@ -117,7 +117,7 @@ fn on_release(
         return;
     };
     let event = backend_mouse_event(BackendMouseEventKind::Release, button, cell, modifiers);
-    if let Some(backend) = state.backends.get_mut_by_id(terminal) {
+    if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
         let _ = backend.process_mouse_event(&event);
     }
 }
@@ -129,7 +129,7 @@ fn on_resize(
     terminal: crate::chrome::terminal::TerminalId,
     grid: crate::chrome::terminal::Grid,
 ) {
-    if let Some(backend) = state.backends.get_mut_by_id(terminal) {
+    if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
         backend.set_cell_size(grid.cell_w, grid.cell_h);
         backend.set_size(grid.cols, grid.rows);
         state.needs_redraw = true;
@@ -157,6 +157,7 @@ fn on_move(
             && owner == terminal
             && let Some(cell) = cell
             && let Some(snapshot) = state
+                .server
                 .backends
                 .get_by_id(terminal)
                 .and_then(|backend| backend.terminal_snapshot())
@@ -183,7 +184,7 @@ fn on_move(
         cell,
         modifiers,
     );
-    if let Some(backend) = state.backends.get_mut_by_id(terminal) {
+    if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
         let _ = backend.process_mouse_event(&event);
     }
 }
@@ -238,14 +239,14 @@ pub(crate) fn on_terminal_input(
     match input {
         TerminalInput::Resize(grid) => return on_resize(state, terminal, grid),
         TerminalInput::ScrollToBottom => {
-            if let Some(backend) = state.backends.get_mut_by_id(terminal) {
+            if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
                 backend.scroll_to_bottom_animated();
                 state.needs_redraw = true;
             }
             return;
         }
         TerminalInput::ScrollTo { rows } => {
-            if let Some(backend) = state.backends.get_mut_by_id(terminal) {
+            if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
                 crate::handlers::scroll_backend_to_offset(backend, rows);
                 state.needs_redraw = true;
             }
@@ -278,7 +279,7 @@ pub(crate) fn on_terminal_input(
     }
     // The pointer's buttons and moves are every terminal's; what only a pane has (its selection)
     // is asked of `pane`, which is `None` for a terminal no pane owns.
-    let pane = state.backends.pane_of(terminal);
+    let pane = state.server.backends.pane_of(terminal);
     match input {
         TerminalInput::Wheel { .. }
         | TerminalInput::Resize(_)

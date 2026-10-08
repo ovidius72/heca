@@ -30,9 +30,9 @@ fn target(
 
 fn target_of(state: &AppState, pane_id: Option<PaneId>, terminal: Option<u64>) -> Option<Target> {
     target(pane_id, terminal, state.focused_pane, |id| {
-        match state.backends.pane_of(id) {
+        match state.server.backends.pane_of(id) {
             Some(pane) => Some(Target::Pane(pane)),
-            None => state.backends.get_by_id(id).map(|_| Target::Unowned(id)),
+            None => state.server.backends.get_by_id(id).map(|_| Target::Unowned(id)),
         }
     })
 }
@@ -56,8 +56,8 @@ pub fn handle_terminal_run(state: &mut AppState, action: &WmAction) {
         bytes.push(b'\r');
     }
     let backend = match target {
-        Target::Pane(pane) => state.backends.get_mut(pane),
-        Target::Unowned(id) => state.backends.get_mut_by_id(id),
+        Target::Pane(pane) => state.server.backends.get_mut(pane),
+        Target::Unowned(id) => state.server.backends.get_mut_by_id(id),
     };
     if let Some(backend) = backend {
         backend.process_input(&bytes);
@@ -75,7 +75,7 @@ pub fn handle_terminal_kill(state: &mut AppState, action: &WmAction) {
             crate::app::mutations::close_pane_by_id_anywhere(state, pane);
         }
         Some(Target::Unowned(id)) => {
-            state.backends.kill(id);
+            state.server.backends.kill(id);
             state.mark_full_redraw();
         }
         None => {}

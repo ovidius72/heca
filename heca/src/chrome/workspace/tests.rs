@@ -75,10 +75,12 @@ fn open_places() -> Vec<heca_core::layout::Place> {
         Place {
             kind: PlaceKind::Gap(1),
             rect: rect(318.0, 30.0, 54.0, 500.0),
+            zone: rect(318.0, 30.0, 54.0, 500.0),
         },
         Place {
             kind: PlaceKind::Row { col: 0, row: 1 },
             rect: rect(40.0, 270.0, 300.0, 0.0),
+            zone: rect(40.0, 270.0, 300.0, 0.0),
         },
     ]
 }

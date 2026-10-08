@@ -12,7 +12,7 @@ use crate::chrome::ChromeConfig;
 use crate::keymap;
 use crate::pane_name;
 use heca_config::theme::AppConfig;
-use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
+use heca_core::layout::{Pane as LayoutPane, PaneId, Session, WindowView};
 use heca_grid_ui::install_frame_request;
 use heca_renderer::backdrop::Backdrop;
 use heca_renderer::background::BackgroundLayer;
@@ -25,10 +25,10 @@ use std::sync::Arc;
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::window::Window;
 
-fn add_initial_pane(session: &mut Session) -> PaneId {
+fn add_initial_pane(session: &mut Session, view: &mut WindowView) -> PaneId {
     let pane_id = PaneId(session.next_id());
     let pane = LayoutPane::new(pane_id, pane_name(pane_id));
-    session.add_pane(pane, None, true);
+    session.through_mut(view).add_pane(pane, None, true);
     pane_id
 }
 
@@ -82,6 +82,9 @@ pub(crate) fn layout_options_from(
             .overview_zoom_from
             .clamp(0.2, 4.0),
         overview_gap: app_config.config.settings.overview_gap.clamp(0.0, 1.0),
+        float_size: app_config.config.settings.float_size.clamp(0.1, 1.0),
+        move_slide_reach: app_config.config.settings.move_slide_reach.clamp(0.0, 1.0),
+        drop_edge_reach: app_config.config.settings.drop_edge_reach.clamp(0.0, 0.5),
         center_focused_column: match app_config.config.settings.center_focused_column {
             heca_config::settings::CenterFocusedColumn::Never => C::Never,
             heca_config::settings::CenterFocusedColumn::OnOverflow => C::OnOverflow,
@@ -89,19 +92,6 @@ pub(crate) fn layout_options_from(
         },
         ..Default::default()
     }
-}
-
-/// **Give a running session new layout options** — the session's own and every workspace's, since
-/// each keeps a copy it lays out and moves focus by. Setting only the session's left existing
-/// workspaces on the options they were made with, so an edited setting did nothing until restart.
-pub(crate) fn apply_layout_options(
-    session: &mut Session,
-    options: heca_core::layout::types::LayoutOptions,
-) {
-    for ws in &mut session.workspaces {
-        ws.scrolling.options = options.clone();
-    }
-    session.options = options;
 }
 
 pub(crate) fn apply_window_vibrancy(
@@ -361,14 +351,10 @@ pub(crate) async fn init_state(
 
     let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     let layout_options = layout_options_from(app_config);
-    let mut session = Session::new(
-        heca_core::layout::types::SessionId(1),
-        viewport_size,
-        scale_factor,
-        layout_options,
-    );
+    let mut session = Session::new(heca_core::layout::types::SessionId(1), layout_options);
+    let mut view = WindowView::new(viewport_size, scale_factor);
 
-    let pane_id = add_initial_pane(&mut session);
+    let pane_id = add_initial_pane(&mut session, &mut view);
 
     let mut backends = BackendStore::new();
     let (initial_cols, initial_rows) =
@@ -459,6 +445,25 @@ pub(crate) async fn init_state(
         }
     };
 
+    // What every window shares and none needs a window for. `[settings.notification_system]`
+    // config (F009/T186/T187/T191); the history depth of 50 is still a placeholder pending its own
+    // knob.
+    let server = crate::server::ServerState::new(
+        backends,
+        crate::notification::NotificationRuntime::with_capacity(
+            50,
+            std::time::Duration::from_millis(
+                app_config
+                    .config
+                    .settings
+                    .notification_system
+                    .auto_dismiss_ms,
+            ),
+            app_config.config.settings.notification_system.mode,
+            app_config.config.settings.notification_system.max_visible,
+        ),
+        app_config.config.programs.clone(),
+    );
     let mut state = Box::new(AppState {
         window,
         event_proxy,
@@ -476,11 +481,10 @@ pub(crate) async fn init_state(
         blur,
         backdrop,
         background,
-        git_runtime_cache: crate::app::git_monitor::GitRuntimeCache::default(),
+        server,
         session,
-        backends,
+        view,
         theme: app_config.theme.clone(),
-        programs: std::rc::Rc::new(app_config.config.programs.clone()),
         appearance,
         command_palette_size: app_config.config.settings.command_palette_size,
         // Loaded from disk when `[settings] search_history` allows it; a missing, corrupt or
@@ -557,22 +561,9 @@ pub(crate) async fn init_state(
         pending_reload: false,
         window_focused: true,
         current_cursor: winit::window::CursorIcon::Default,
-        // `[settings.notification_system]` config (F009/T186/T187/T191); the history depth
-        // of 50 is still a placeholder pending its own knob.
-        notifications: crate::notification::NotificationRuntime::with_capacity(
-            50,
-            std::time::Duration::from_millis(
-                app_config
-                    .config
-                    .settings
-                    .notification_system
-                    .auto_dismiss_ms,
-            ),
-            app_config.config.settings.notification_system.mode,
-            app_config.config.settings.notification_system.max_visible,
-        ),
         notification_pick_open: heca_grid_ui::reactive::signal(false),
         notification_hovered: heca_grid_ui::reactive::signal(false),
+        toasts: heca_grid_ui::reactive::signal(Vec::new()),
         notification_max_lines: heca_grid_ui::reactive::signal(
             app_config
                 .config
@@ -608,7 +599,7 @@ pub(crate) async fn init_state(
 mod tests {
     use super::add_initial_pane;
     use heca_core::layout::{
-        Session,
+        Session, WindowView,
         types::{LayoutOptions, SessionId, Size},
     };
 
@@ -619,14 +610,10 @@ mod tests {
     /// that it is a real identity rather than a number derived from the column count.
     #[test]
     fn initial_pane_consumes_session_id_counter() {
-        let mut session = Session::new(
-            SessionId(1),
-            Size::new(1280.0, 800.0),
-            1.0,
-            LayoutOptions::default(),
-        );
+        let mut session = Session::new(SessionId(1), LayoutOptions::default());
+        let mut view = WindowView::new(Size::new(1280.0, 800.0), 1.0);
 
-        let first = add_initial_pane(&mut session);
+        let first = add_initial_pane(&mut session, &mut view);
         let second = session.next_id();
 
         assert!(second > first.0, "the counter must never reissue {first:?}");
@@ -638,7 +625,8 @@ mod column_focus_tests {
     use super::layout_options_from;
     use heca_config::loader::AppConfig;
     use heca_core::layout::types::{ColumnFocus, Size};
-    use heca_core::layout::{Pane, PaneId, Session, SessionId};
+    use heca_core::layout::testing::Windowed;
+    use heca_core::layout::{Pane, PaneId};
 
     fn from_toml(text: &str) -> AppConfig {
         // The same layering the loader does: the embedded defaults, the user's text over them.
@@ -653,24 +641,17 @@ mod column_focus_tests {
     /// options, so the edited setting must be written to each, not only to the session.
     #[test]
     fn a_reload_changes_the_options_of_the_workspaces_that_already_exist() {
-        let mut session = Session::new(
-            SessionId(1),
-            Size::new(1000.0, 800.0),
-            1.0,
-            layout_options_from(&from_toml("")),
-        );
-        session.add_pane(Pane::new(PaneId(1), ""), None, true);
-        assert_eq!(session.workspaces[0].scrolling.options.column_focus, ColumnFocus::Last);
-        super::apply_layout_options(
-            &mut session,
-            layout_options_from(&from_toml("[settings]\ncolumn_focus = \"row\"")),
-        );
-        assert_eq!(session.workspaces[0].scrolling.options.column_focus, ColumnFocus::Row);
-        assert_eq!(session.options.column_focus, ColumnFocus::Row);
+        let mut window = Windowed::new(Size::new(1000.0, 800.0), 1.0);
+        window.session.set_options(layout_options_from(&from_toml("")));
+        window.m().add_pane(Pane::new(PaneId(1), ""), None, true);
+        assert_eq!(window.session.workspaces[0].scrolling.options.column_focus, ColumnFocus::Last);
+        window.session.set_options(layout_options_from(&from_toml("[settings]\ncolumn_focus = \"row\"")));
+        assert_eq!(window.session.workspaces[0].scrolling.options.column_focus, ColumnFocus::Row);
+        assert_eq!(window.session.options.column_focus, ColumnFocus::Row);
     }
 
     /// **`column_focus = "row"` in `[settings]` reaches the layout and decides where focus lands**,
-    /// from the config text to `Session::focus_left` — the call the key's handler makes.
+    /// from the config text to the window's focus move — the call the key's handler makes.
     #[test]
     fn column_focus_from_the_config_text_decides_where_focus_lands() {
         for (text, want) in [
@@ -678,22 +659,17 @@ mod column_focus_tests {
             ("[settings]\ncolumn_focus = \"last\"", PaneId(11)),
             ("[settings]\ncolumn_focus = \"row\"", PaneId(1)),
         ] {
-            let options = layout_options_from(&from_toml(text));
-            let mut session = Session::new(SessionId(1), Size::new(1000.0, 800.0), 1.0, options);
-            session.add_pane(Pane::new(PaneId(1), ""), None, true);
-            session.add_pane(Pane::new(PaneId(3), ""), None, true);
-            let ws = session.active_workspace_mut().unwrap();
-            ws.scrolling
-                .add_pane_to_column(0, Some(1), Pane::new(PaneId(11), ""), false);
-            ws.scrolling.update_all_column_widths();
+            let mut window = Windowed::new(Size::new(1000.0, 800.0), 1.0);
+            window.session.set_options(layout_options_from(&from_toml(text)));
+            window.m().add_pane(Pane::new(PaneId(1), ""), None, true);
+            window.m().add_pane(Pane::new(PaneId(3), ""), None, true);
+            let mut ws = window.ws();
+            ws.scroll_mut().add_pane_to_column(0, Some(1), Pane::new(PaneId(11), ""), false);
             ws.scrolling.columns[0].active_pane_idx = 1; // b was the last used on the left
-            ws.scrolling.active_column_idx = 1;
+            ws.scroll_mut().activate_column(1);
             ws.scrolling.columns[1].active_pane_idx = 0;
-            assert!(session.focus_left());
-            let ws = session.active_workspace().unwrap();
-            let landed = ws.scrolling.columns[ws.scrolling.active_column_idx]
-                .active_pane()
-                .map(|p| p.id);
+            assert!(window.m().focus_left());
+            let landed = window.l().active_workspace().and_then(|ws| ws.scroll().active_pane().map(|p| p.id));
             assert_eq!(landed, Some(want), "{text:?} ({:?})", ColumnFocus::Row);
         }
     }

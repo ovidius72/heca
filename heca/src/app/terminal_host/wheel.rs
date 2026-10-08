@@ -39,7 +39,7 @@ pub(super) fn on_wheel(
         // The zoom is a pane's: a terminal no pane owns is not zoomed by it, but the wheel is still
         // consumed.
         if y != 0.0
-            && let Some(pane_id) = state.backends.pane_of(terminal)
+            && let Some(pane_id) = state.server.backends.pane_of(terminal)
         {
             let step = if y < 0.0 {
                 FontZoomStep::In
@@ -83,6 +83,7 @@ pub(super) fn on_wheel(
     // the bottom; selection mode is entered with `enter_selection_mode`.
     let shift_held = modifiers.shift;
     let wants_mouse = state
+        .server
         .backends
         .get_by_id(terminal)
         .is_some_and(|b| b.is_mouse_grabbed());
@@ -104,6 +105,7 @@ pub(super) fn on_wheel(
     // preserved history while the alt screen is active, so host scrollback in
     // alt-screen TUIs is an inherent limitation (see README).
     let host_can_scroll = state
+        .server
         .backends
         .get_by_id(terminal)
         .and_then(|b| b.terminal_snapshot())
@@ -128,6 +130,7 @@ pub(super) fn on_wheel(
     let signed_notches = host_scroll_notches(
         delta,
         state
+            .server
             .backends
             .get_by_id(terminal)
             .map(|b| b.cell_size().1 as f64)
@@ -143,7 +146,7 @@ pub(super) fn on_wheel(
         -(total as i32)
     };
 
-    if let Some(backend) = state.backends.get_mut_by_id(terminal) {
+    if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
         backend.scroll_viewport(delta_i32);
     }
     state.needs_redraw = true;
@@ -176,7 +179,7 @@ fn forward_wheel_to_terminal(
     };
     for button in wheel_buttons(delta) {
         let event = backend_mouse_event(BackendMouseEventKind::Press, button, cell, modifiers);
-        if let Some(backend) = state.backends.get_mut_by_id(terminal) {
+        if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
             let _ = backend.process_mouse_event(&event);
         }
     }

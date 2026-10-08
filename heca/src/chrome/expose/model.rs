@@ -15,7 +15,7 @@
 //! clips — there is no image command) plus per-pane offscreen capture in `heca-renderer`. Nothing
 //! in the layout, the navigation or the layer changes when that lands: only what fills the box.
 
-use heca_core::layout::{PaneId, Session};
+use heca_core::layout::{Layout, PaneId};
 
 /// One pane in the overview — a box, positioned by its column.
 #[derive(Debug, Clone, PartialEq)]
@@ -30,13 +30,13 @@ pub(crate) struct ExposePane {
     /// backend never reported one. Plain text by the time it reaches a card: `register` resolves it
     /// from `AppState`, so the components below stay testable without a window.
     pub(crate) folder: Option<String>,
-    /// The pane's **resolved** height in layout pixels, read from `Column::pane_sizes` for the same
-    /// reason [`ExposeColumn::width`] is read from `column_widths`: the layout already decided it,
+    /// The pane's **resolved** height in layout pixels, asked of the layout for the same
+    /// reason [`ExposeColumn::width`] is: the layout already decided it,
     /// and a second calculation here would be a second answer that can disagree.
     ///
     /// This is what makes a stack of unequal panes look unequal. The map divided every column
     /// evenly before, so a pane the user had dragged to twice its neighbour's height — its
-    /// `preferred_height` — was drawn as its twin, and the picture disagreed with the screen it is
+    /// `height_share` — was drawn as its twin, and the picture disagreed with the screen it is
     /// a picture of.
     pub(crate) height: f64,
 }
@@ -46,7 +46,7 @@ pub(crate) struct ExposePane {
 pub(crate) struct ExposeColumn {
     pub(crate) col_idx: usize,
     /// The column's **resolved** width in layout pixels, read from
-    /// `ScrollingSpace::column_widths` rather than recomputed — the layout already decided it, and
+    /// the layout rather than recomputed — the layout already decided it, and
     /// a second calculation here would be a second answer that can disagree.
     pub(crate) width: f64,
     pub(crate) panes: Vec<ExposePane>,
@@ -109,13 +109,12 @@ pub(crate) struct ExposeWorkspace {
 /// pane_show_cwd` — read once by `register` and applied here, so a card is handed a folder or it is
 /// not, and no component below carries a flag it only passes on.
 pub(crate) fn model(
-    session: &Session,
+    layout: Layout<'_>,
     mut name_of: impl FnMut(&heca_core::layout::Pane) -> String,
     folders: bool,
 ) -> Vec<ExposeWorkspace> {
-    session
-        .workspaces
-        .iter()
+    layout
+        .workspaces()
         .enumerate()
         .map(|(ws_idx, ws)| {
             let scrolling = &ws.scrolling;
@@ -123,15 +122,12 @@ pub(crate) fn model(
                 .columns
                 .iter()
                 .enumerate()
-                .map(|(col_idx, col)| ExposeColumn {
+                .map(|(col_idx, col)| {
+                    let heights = ws.scroll().pane_heights(col_idx);
+                    ExposeColumn {
                     col_idx,
-                    // The resolved width when the layout has one for this index; otherwise the
-                    // column's own minimum. A missing entry means the layout has not run yet.
-                    width: scrolling
-                        .column_widths
-                        .get(col_idx)
-                        .copied()
-                        .unwrap_or(heca_core::layout::scrolling::MIN_COLUMN_WIDTH),
+                    // The width the layout gives this column in this window.
+                    width: ws.scroll().column_width(col_idx),
                     panes: col
                         .panes
                         .iter()
@@ -147,18 +143,18 @@ pub(crate) fn model(
                                 .flatten()
                                 .map(crate::chrome::home_relative_path),
                             active: pane_idx == col.active_pane_idx
-                                && col_idx == scrolling.active_column_idx,
+                                && col_idx == ws.scroll().active_column_idx(),
                             // The layout's resolved height, which already accounts for
-                            // `preferred_height`. A missing entry means the layout has not run
-                            // yet, and equal weights are exactly the even split it falls back to.
-                            height: col
-                                .pane_sizes
+                            // `height_share`; a column with no room gives equal weights, which
+                            // is exactly the even split.
+                            height: heights
                                 .get(pane_idx)
-                                .map(|s| s.h)
+                                .copied()
                                 .filter(|h| *h > 0.0)
                                 .unwrap_or(1.0),
                         })
                         .collect(),
+                    }
                 })
                 .collect();
 
@@ -168,8 +164,8 @@ pub(crate) fn model(
             // already spells as `view_pos()`. Read raw, the offset put the workspace rectangle at
             // the wrong place in every scrolled workspace — the map centred on a window that was
             // never where it said, and the pane you were on sat off the right edge.
-            let view_x = scrolling.view_pos();
-            let view_w = scrolling.working_area.size.w;
+            let view_x = ws.scroll().view_pos();
+            let view_w = ws.scroll().area().size.w;
 
             ExposeWorkspace {
                 ws_idx,
@@ -177,7 +173,7 @@ pub(crate) fn model(
                     .name
                     .clone()
                     .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1)),
-                active: ws_idx == session.active_workspace_idx,
+                active: ws_idx == layout.active_workspace_idx(),
                 floating: ws
                     .floating_panes
                     .iter()
@@ -199,7 +195,7 @@ pub(crate) fn model(
                     .collect(),
                 columns,
                 viewport: (view_x, view_w),
-                viewport_h: scrolling.working_area.size.h,
+                viewport_h: ws.scroll().area().size.h,
                 // A workspace with no columns is still a row, as wide as its viewport, so an empty
                 // workspace does not collapse to nothing and become unselectable.
                 strip_width: if strip > 0.0 { strip } else { view_w },
@@ -219,9 +215,9 @@ mod tests {
     #[test]
     fn a_row_carries_the_real_column_widths_and_the_strip_it_scrolls() {
         let s = session();
-        let rows = model(&s, |p| p.title.clone(), false);
+        let rows = model(s.l(), |p| p.title.clone(), false);
 
-        assert_eq!(rows.len(), s.workspaces.len(), "one row per workspace");
+        assert_eq!(rows.len(), s.session.workspaces.len(), "one row per workspace");
         assert_eq!(rows[0].name, "Editing");
         assert!(rows[0].active, "the first workspace is the active one");
         assert_eq!(rows[1].name, "Workspace 2");
@@ -254,13 +250,13 @@ mod tests {
     #[test]
     fn the_model_carries_the_resolved_pane_heights_not_an_even_split() {
         let mut s = session();
-        let ws = &mut s.workspaces[0];
-        ws.scrolling
+        let mut ws = s.ws();
+        ws.scroll_mut()
             .add_pane_to_column(0, None, Pane::new(PaneId(3), "c"), false);
-        let (h, gaps) = (ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
+        let (h, gaps) = (ws.scroll().area().size.h, ws.scrolling.options.gaps);
         ws.scrolling.columns[0].move_pane_boundary(0, 120.0, h, gaps);
 
-        let rows = model(&s, |p| p.title.clone(), false);
+        let rows = model(s.l(), |p| p.title.clone(), false);
         let stacked = &rows[0].columns[0].panes;
         assert_eq!(stacked.len(), 2, "two panes share the first column");
         assert!(
@@ -276,25 +272,23 @@ mod tests {
     fn a_floating_pane_is_offset_by_the_scroll_so_it_lands_where_it_looks() {
         use heca_core::layout::{Point, Rectangle};
         let mut s = session();
-        s.workspaces[0].add_floating_pane(
+        s.session.workspaces[0].add_floating_pane(
             Pane::new(PaneId(9), "float"),
             Rectangle::new(Point::new(40.0, 30.0), Size::new(200.0, 150.0)),
             None,
         );
-        s.workspaces[0].scrolling.view_offset =
-            heca_core::layout::view_offset::ViewOffset::Static(120.0);
+        s.scrolled(0, 120.0, 1);
 
         // **Stand on a later column**, so `column_x(active)` is not zero and reading `view_offset`
         // raw gives a different answer from `view_pos()`. With the active column at 0 the two
         // coincide and the bug hides — which is exactly how it survived until it was on screen.
-        s.workspaces[0].scrolling.active_column_idx = 1;
-        let anchor = s.workspaces[0].scrolling.column_x(1);
+        let anchor = s.l().workspace(0).map_or(0.0, |ws| ws.scroll().column_x(1));
         assert!(
             anchor > 0.0,
             "the second column starts somewhere other than 0: {anchor}"
         );
 
-        let rows = model(&s, |p| p.title.clone(), false);
+        let rows = model(s.l(), |p| p.title.clone(), false);
         let f = &rows[0].floating[0];
         assert_eq!(f.pane_id, PaneId(9));
         assert_eq!(

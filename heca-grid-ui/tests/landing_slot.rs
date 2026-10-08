@@ -136,3 +136,45 @@ fn an_edge_is_faint_at_rest_and_takes_the_insertion_colour_under_a_drag() {
     assert_eq!(near[0].0, width);
     assert_eq!(near[0].2, theme.colors.warning.with_alpha(near[0].1));
 }
+
+/// **An edge whose box is a whole area takes a drop anywhere in it, and draws its line where it is
+/// told** — the space beside the last column, with the border at its left side.
+#[test]
+fn an_edge_over_an_area_takes_a_drop_anywhere_in_it_and_draws_its_line_at_its_side() {
+    use heca_grid_ui::widgets::EdgeLine;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    let dropped = Rc::new(RefCell::new(Vec::new()));
+    let sink = dropped.clone();
+    heca_grid_ui::drag::install_drop_sink(move |d| {
+        sink.borrow_mut().push(d.target);
+    });
+    let mut root = Flex::row()
+        .width(400.0)
+        .height(100.0)
+        .child(Flex::row().at_rect(0.0, 0.0, 50.0, 50.0).key("src").draggable_as("pane"))
+        .child(
+            LandingSlot::new()
+                .edge(true)
+                .line(EdgeLine::Upright(0.0))
+                .accepting("pane")
+                .key("slot:end")
+                .at_rect(100.0, 0.0, 300.0, 100.0),
+        );
+    LayoutEngine::new().compute(&mut root, Size::new(400.0, 100.0));
+    press_at(&mut root, Point::new(10.0, 10.0), PointerButton::Left);
+    move_to(&mut root, Point::new(20.0, 20.0));
+    let theme = Theme::default();
+    let line_x: Vec<f64> = paint_via_child(&root, &theme)
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Rect(r) if r.rect.size.h == 100.0 => Some(r.rect.loc.x + r.rect.size.w / 2.0),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(line_x, [100.0], "the line runs along the left side of the area");
+    let far = Point::new(380.0, 70.0);
+    move_to(&mut root, far);
+    release_at(&mut root, far, PointerButton::Left);
+    assert_eq!(*dropped.borrow(), ["slot:end".to_string()], "a drop far from the line still lands");
+}

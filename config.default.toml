@@ -84,6 +84,20 @@ overview_gap = 0.1
 # Clamped to 0.2..=4.0.
 overview_zoom_from = 0.8
 
+# How much of the working area a pane takes when it floats with nowhere given, as a
+# fraction of each side, centred. 0.95 leaves a margin that shows it is floating.
+# Clamped to 0.1..=1.0.
+float_size = 0.95
+
+# How far a pane that moved or swapped animates in from, as a fraction of the window.
+# A pane that crossed the screen eases in from this far away instead of flying over
+# the whole thing. 0 makes moves jump. Clamped to 0.0..=1.0.
+move_slide_reach = 0.9
+
+# How far into the pane next to it the top and bottom border of a column take a dropped
+# pane, as a fraction of that pane's height. Clamped to 0.0..=0.5.
+drop_edge_reach = 0.25
+
 # Which pane focus lands on when it moves to the column on the left or right:
 #   "last" - the pane you last used in that column (default)
 #   "row"  - the pane in that column level with the one you leave

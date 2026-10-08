@@ -151,7 +151,7 @@ fn retain_live_terminal_layers(state: &mut AppState) {
             live_panes.insert(float.pane.id);
         }
     }
-    let backends = &state.backends;
+    let backends = &state.server.backends;
     state
         .terminal_layers
         .retain(|id, _| backends.is_issued(*id));

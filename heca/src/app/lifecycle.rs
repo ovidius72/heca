@@ -23,7 +23,7 @@ pub(crate) struct BackendPollResult {
 
 pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
     let mut result = BackendPollResult::default();
-    for backend in state.backends.values_mut() {
+    for backend in state.server.backends.values_mut() {
         let anim = backend.tick_animation();
         result.terminal_animating |= anim;
         if backend.update() {
@@ -40,7 +40,7 @@ pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
             crate::handlers::set_system_clipboard(&text);
         }
     }
-    let closing_panes = state.backends.pane_ids_to_close();
+    let closing_panes = state.server.backends.pane_ids_to_close();
     result.closed_any = !closing_panes.is_empty();
     for pane_id in closing_panes {
         close_pane_by_id_anywhere(state, pane_id);
@@ -176,7 +176,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.mark_full_redraw();
     }
 
-    state.session.advance_animations();
+    state.layout_mut().advance_animations();
     let dt = crate::chrome::FRAME_INTERVAL.as_secs_f32();
     // **Which surfaces are mid-exit, before anything advances.** The tick below is the one that
     // advances them — they are children of this tree — so the registry has to look either side of
@@ -208,13 +208,13 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     // hover; what it *means* is decided in the runtime, which is where the lifetime lives.
     let now = Instant::now();
     use heca_grid_ui::reactive::SignalGet;
-    let deadlines_moved = state
-        .notifications
-        .set_hovered(state.notification_hovered.get_untracked(), now);
-    let notifications_expired = state.notifications.expire_due(now);
-    if notifications_expired || deadlines_moved {
-        state.needs_redraw = true;
-    }
+    let hovered = state.notification_hovered.get_untracked();
+    let moved = state
+        .server
+        .execute(crate::server::ServerAction::Hover(hovered), now);
+    state.apply(moved);
+    let expired = state.server.tick(now);
+    state.apply(expired);
 
     let backend_poll = poll_backends(state);
     let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
@@ -258,7 +258,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         backend_closed: backend_poll.closed_any,
         chrome_runtime: chrome_runtime_changed,
         bell_flashing,
-        session_animating: state.session.are_animations_ongoing(),
+        session_animating: state.layout().are_animations_ongoing(),
         terminal_animating,
         image_animating,
         chrome_animating,
@@ -268,14 +268,11 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.window.request_redraw();
     }
 
-    let wake_animating = state.session.are_animations_ongoing()
+    let wake_animating = state.layout().are_animations_ongoing()
         || terminal_animating
         || image_animating
         || chrome_animating;
-    let toast_expiry = match state.notifications.is_hovered() {
-        true => None,
-        false => state.notifications.next_expiry(),
-    };
+    let toast_expiry = state.server.next_wake();
     let schedule = next_wake(
         Instant::now(),
         WakeRequests {

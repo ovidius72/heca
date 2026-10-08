@@ -13,4 +13,6 @@ use names::action_from_name;
 pub use vocabulary::{FontZoomStep, RegionVisibility, ResizeEdge, ResizeTarget, SpawnKind};
 
 #[cfg(test)]
+mod action_tests;
+#[cfg(test)]
 mod tests;

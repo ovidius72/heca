@@ -22,6 +22,7 @@ dirs = "6"
 strum = { version = "0.26", features = ["derive"] }
 
 [dev-dependencies]
+heca-core = { path = "../heca-core", features = ["testing"] }
 
 # OS backdrop blur / vibrancy (applied once after window creation, gated by
 # [appearance] vibrancy). On macOS we hand-roll the NSVisualEffectView so it

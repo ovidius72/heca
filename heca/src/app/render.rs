@@ -86,7 +86,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
 pub(crate) fn update_session_viewport(state: &mut AppState) {
     let pane_area = ChromeConfig::of(state).content_rect();
     let new_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
-    state.session.update_viewport(new_size);
+    state.layout_mut().update_viewport(new_size);
 }
 
 #[cfg(test)]

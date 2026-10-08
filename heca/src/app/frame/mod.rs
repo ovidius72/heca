@@ -115,8 +115,7 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
     // The three pane frame colours are **not** read here. A pane's frame colour is its own —
     // written onto the pane by the workspace, which is also where it becomes the hue the pane
     // publishes to its contents. Reading them here meant the host decided how a widget looked.
-    let ws_offset = state
-        .session
+    let ws_offset = state.layout()
         .workspace_geometries()
         .first()
         .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))

@@ -508,20 +508,34 @@ A keyboard-native workspace where every tool lives in a tiled, floating, or scra
 ## Architecture (NIRI Scrolling Layout)
 
 ```
-Session                          ← manages all workspaces + workspace switching
+Session                          ← the CONTENT every window shares
 ├── workspaces: Vec<Workspace>   ← arranged VERTICALLY (discrete switching)
 │   └── Workspace
 │       ├── scrolling: ScrollingSpace   ← horizontal COLUMNS (continuous scroll)
-│       │   ├── view_offset: ViewOffset ← animated horizontal scroll + snap
 │       │   ├── columns: Vec<Column>
 │       │   │   ├── width: ColumnWidth  ← Proportion | Fixed
-│       │   │   ├── panes: Vec<Pane>    ← vertical stack within column
-│       │   │   └── pane_sizes: Vec<Size>
-│       │   └── active_column_idx
+│       │   │   └── panes: Vec<Pane>    ← vertical stack within column
+│       │   └── options: LayoutOptions
 │       └── floating_panes: Vec<FloatingPane>
-├── workspace_switch: WorkspaceSwitch  ← animated vertical transitions
-└── active_workspace_idx
+└── options: LayoutOptions
+
+WindowView                       ← what ONE window sees of it (held by the client)
+├── active_workspace             ← which workspace is shown
+├── switch: WorkspaceSwitch      ← animated vertical transitions
+├── viewport, scale              ← the window's size
+└── scrolls: {WorkspaceId → ScrollView}
+        ScrollView { offset: ViewOffset, active_column, area, scale }
+                                 ← animated horizontal scroll + snap, per workspace
 ```
+
+**Anything that needs both goes through one door** — `Layout` (reads) and `LayoutMut` (moves),
+made with `session.through(&view)` / `session.through_mut(&mut view)`; in the app,
+`state.layout()` / `state.layout_mut()` (and `state.workspace_mut(idx)` to hold one workspace across
+statements). A caller says `layout.focus_right()` and the scroll that follows it moves in the
+window that asked; nobody passes a view along. `WorkspaceRef` / `WorkspaceMut` and
+`ScrollingRef` / `ScrollingMut` are the same idea one level down (`ws.scroll_mut().add_column(..)`).
+Tests hold the pair with `heca_core::layout::testing` (`Windowed`, `Shown`, `Seen`). F012, decision
+2c249a29: two windows on one session share the content and move independently.
 
 ### Layout Rules (from NIRI)
 
@@ -535,8 +549,8 @@ Session                          ← manages all workspaces + workspace switchin
 
 | Axis | Container | Scroll Type | Mechanism |
 |------|-----------|-------------|-----------|
-| **Horizontal** | `ScrollingSpace.columns` | Continuous scroll + snap | `ViewOffset` (animated `f64`) |
-| **Vertical** | `Session.workspaces` | Discrete switch + animation | `WorkspaceSwitch` (animated index) |
+| **Horizontal** | `ScrollingSpace.columns` | Continuous scroll + snap | `ScrollView.offset` (a `ViewOffset`, animated `f64`) |
+| **Vertical** | `Session.workspaces` | Discrete switch + animation | `WindowView.switch` (a `WorkspaceSwitch`, animated index) |
 
 ### Keybinding Style (tmux-style prefix)
 
@@ -1559,7 +1573,7 @@ myvim/
 ├── heca/                  ← Main binary (event loop, app state, rendering)
 │   ├── src/
 │   │   ├── main.rs        ← HecaApp, ApplicationHandler, render(), registry setup
-│   │   ├── app_state.rs   ← AppState, InputMode, DragState, SidebarState
+│   │   ├── app_state/     ← AppState (state.rs), InputMode (input_mode.rs), MouseState, the layout door (layout_door.rs)
 │   │   ├── input/         ← action.rs (WmAction + its derived WmActionKind), names.rs (action_from_name), build.rs (build_action), vocabulary.rs (argument word lists)
 │   │   ├── keymap.rs      ← KeymapRegistry, KeyCombo, event_combo_matches()
 │   │   ├── args.rs        ← The argument model (ArgDescriptor, ArgSpec, check_args) — actions and the CLI share it
@@ -1576,8 +1590,8 @@ myvim/
 │   │   │   ├── animation.rs  ← Animation, SwipeTracker, easing functions
 │   │   │   ├── view_offset.rs  ← ViewOffset (Static/Animation/Gesture)
 │   │   │   ├── column.rs  ← Column, Pane, height distribution
-│   │   │   ├── scrolling.rs  ← ScrollingSpace, focus, add/remove, view positions
-│   │   │   ├── workspace.rs  ← Workspace, FloatingPane
+│   │   │   ├── scrolling/    ← ScrollingSpace, focus, add/remove, view positions
+│   │   │   ├── workspace/    ← Workspace, FloatingPane
 │   │   │   └── session.rs ← Session, WorkspaceSwitch
 │   │   ├── backend/
 │   │   │   ├── mod.rs     ← PaneBackend trait, BackendRenderData
@@ -1675,7 +1689,7 @@ Use for multi-step analysis, advisory review, or parallel implementation tasks.
 ### Don't
 
 - **Do NOT add a second WM layout engine.** The NIRI-inspired scrolling-column engine is canonical for arranging panes/columns. Old BSP code in `heca-core/src/pane.rs` is kept for reference only — do not wire it in. (Note: `taffy` in `heca-grid-ui` is *component-internal* widget layout — a different altitude — and does not count; it never positions panes/columns.)
-- **Do NOT call `update_all_column_widths()` more than necessary.** Prefer stored column widths.
+- **Do NOT store pixels in the content.** A column's width and a pane's height are derived from the content and the window's area when asked (`ScrollingRef::column_width`, `pane_heights`, `column_x`); nothing is cached, so nothing can be stale and two windows of different sizes can both be right.
 - **Do NOT use BSP tree concepts** (split direction, child ratios, etc.). NIRI layout is a flat column list with vertical pane stacks.
 - **Do NOT hardcode `ctrl=false` in prefix mode.** The prefix key is a mechanism, not a modifier eraser.
 - **Do NOT use the old `Rect` type** from `heca-core/src/types.rs`. Use `Rectangle` from `heca-core/src/layout/types.rs` for new code.
@@ -1856,7 +1870,6 @@ See `niri-compatibility-review.md` for full details. Key issues:
 | K3 | No prefix timeout | Medium | ✅ **FIXED** — 500ms auto-exit |
 | K4 | Shift+special-char bindings fail on some layouts | High | ✅ **FIXED** — `KeyCombo::parse()` maps shifted symbols |
 | K5 | Registry bypasses (direct function calls) | High | ✅ **FIXED** — all routing through `registry.execute()` |
-| L1 | `update_all_column_widths()` on every mutation | Critical | ✅ **FIXED** — removed from float/unfloat path |
 | L2 | Proportion widths not persistent | High | Open |
 | L4 | Focus up/down conflated with workspace switch | Medium | ✅ **FIXED** — `j/k` stay within workspace; `u/d` switch |
 | L6 | Tabbed display, maximize, fullscreen dead code | Medium | Open |

@@ -94,10 +94,10 @@ fn place_on_row(
             (ws_idx, col, Some(usize::MAX))
         }
         WorkspaceRow::FloatingPane { .. } => {
-            let ws = state.session.workspaces.get(original_ws)?;
+            let ws = state.layout().workspace(original_ws)?;
             (
                 original_ws,
-                ws.scrolling.active_column_idx,
+                ws.scroll().active_column_idx(),
                 Some(usize::MAX),
             )
         }

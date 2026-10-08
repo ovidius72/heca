@@ -75,17 +75,16 @@ pub(in crate::app) fn paint_window(state: &mut AppState, v: &FrameValues) -> Gui
 /// **Every terminal this frame draws**: the tiled panes', the floating panes', and those no pane
 /// owns — a dock's, an overlay's — each with its snapshot.
 pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> FrameTerminals {
-    let pane_positions = state
-        .session
+    let pane_positions = state.layout()
         .active_workspace()
-        .map(|ws| ws.scrolling.panes_with_positions())
+        .map(|ws| ws.scroll().panes_with_positions())
         .unwrap_or_default();
     let tiled = pane_positions
         .iter()
         .map(|(pane_id, rect)| {
             let px = v.pane_area.loc.x as f32 + v.ws_offset.0 + rect.loc.x as f32;
             let py = v.pane_area.loc.y as f32 + v.ws_offset.1 + rect.loc.y as f32;
-            let id = state.backends.id_for(*pane_id);
+            let id = state.server.backends.id_for(*pane_id);
             TerminalRenderState::collect(
                 state,
                 id,
@@ -94,8 +93,7 @@ pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> Fr
             )
         })
         .collect();
-    let float_boxes: Vec<(PaneId, (f32, f32, f32, f32))> = state
-        .session
+    let float_boxes: Vec<(PaneId, (f32, f32, f32, f32))> = state.layout()
         .active_workspace()
         .map(|ws| {
             ws.floating_panes
@@ -114,7 +112,7 @@ pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> Fr
     let floating = float_boxes
         .into_iter()
         .map(|(pane_id, at)| {
-            let id = state.backends.id_for(pane_id);
+            let id = state.server.backends.id_for(pane_id);
             TerminalRenderState::collect(state, id, Some(pane_id), at)
         })
         .collect();
@@ -123,7 +121,7 @@ pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> Fr
         .terminals
         .keys()
         .copied()
-        .filter(|id| state.backends.pane_of(*id).is_none())
+        .filter(|id| state.server.backends.pane_of(*id).is_none())
         .collect();
     unowned.sort_by_key(|id| id.0);
     let docked = unowned

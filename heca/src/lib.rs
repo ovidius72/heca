@@ -17,6 +17,7 @@ mod project_trust;
 mod providers;
 mod rpc;
 mod search_state;
+mod server;
 mod shortcut;
 mod state_file;
 
@@ -44,10 +45,6 @@ use app::events::handle_window_event;
 pub(crate) use app::focus::switch_workspace_tracked;
 use app::interaction::dispatch_intent;
 use app::lifecycle::{handle_about_to_wait, poll_backends};
-pub(crate) use app::mutations::{
-    destroy_empty_workspace, move_column_to_workspace, move_pane_to_column,
-    move_pane_to_workspace_column,
-};
 use app::registry::{build_keymaps, build_registry};
 pub(crate) use app::render::update_session_viewport;
 pub(crate) use app::selection::{collect_all_pane_candidates, find_pane_location};
@@ -217,7 +214,7 @@ impl HecaApp {
             // them: a report taken before everything has bound is not a report.
             self.conflicts.report();
             state.theme = self.app_config.theme.clone();
-            state.programs = std::rc::Rc::new(self.app_config.config.programs.clone());
+            state.server.programs = std::rc::Rc::new(self.app_config.config.programs.clone());
             // Appearance: opacity re-reads every frame, so updating the snapshot
             // makes `transparency` (the amount) live-reload. The OS vibrancy
             // material is applied once at startup and NOT re-applied here — doing
@@ -236,10 +233,9 @@ impl HecaApp {
             // `center_focused_column` and pressing reload appeared to do nothing — the settings
             // were live in the file and dead in the app. One mapping,
             // `startup::layout_options_from`, shared by both paths so they cannot drift.
-            crate::app::startup::apply_layout_options(
-                &mut state.session,
-                crate::app::startup::layout_options_from(&self.app_config),
-            );
+            state
+                .session
+                .set_options(crate::app::startup::layout_options_from(&self.app_config));
             // Font config (families + sizes) is decoupled from the color theme;
             // reload it so `prefix+Shift+r` picks up `[font]` changes live.
             state.font_config = self.app_config.config.font.clone();
@@ -290,33 +286,18 @@ impl HecaApp {
                 .apply_visibility(&crate::chrome::shown_from_settings(
                     &self.app_config.config.settings,
                 ));
-            state
-                .notifications
-                .set_auto_dismiss(std::time::Duration::from_millis(
-                    self.app_config
-                        .config
-                        .settings
-                        .notification_system
-                        .auto_dismiss_ms,
-                ));
-            state
-                .notifications
-                .set_mode(self.app_config.config.settings.notification_system.mode);
             // Every setting in this table must be re-applied here. One that is only read at startup
             // is dead until someone remembers it — the defect `P031(F006)/T415` is filed against,
-            // and `max_visible` walked straight into it the day it was added (2026-08-31).
-            let max_visible = self
-                .app_config
-                .config
-                .settings
-                .notification_system
-                .max_visible;
-            if state
-                .notifications
-                .set_max_visible(max_visible, std::time::Instant::now())
-            {
-                state.needs_redraw = true;
-            }
+            // and `max_visible` walked straight into it the day it was added (2026-08-31). The
+            // notification settings go to the server whole, so none can be left out.
+            let notifications = &self.app_config.config.settings.notification_system;
+            state.ask_server(crate::server::ServerAction::Configure(
+                crate::server::NotificationSettings {
+                    auto_dismiss: std::time::Duration::from_millis(notifications.auto_dismiss_ms),
+                    mode: notifications.mode,
+                    max_visible: notifications.max_visible,
+                },
+            ));
             heca_grid_ui::reactive::SignalUpdate::set(
                 &state.notification_max_lines,
                 self.app_config
@@ -329,27 +310,16 @@ impl HecaApp {
             state.confirm = self.app_config.config.confirm.clone();
             let link_detection = self.app_config.config.appearance.terminal.link_detection;
             let palette_defaults = terminal_palette_defaults(&state.theme);
-            for backend in state.backends.values_mut() {
+            for backend in state.server.backends.values_mut() {
                 backend.set_scroll_animations_enabled(state.terminal_scroll_animations_enabled);
                 backend.set_link_detection(link_detection);
                 backend.reload_terminal_config(palette_defaults, state.terminal_scrollback_lines);
             }
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;
-            // Pane gap and chrome geometry changes must reflow the real viewport
+            // Layout options and chrome geometry changes must reflow the real viewport
             // path so cached column widths, pane sizes, and working areas stay
             // coherent after reload.
-            let pane_gap = self
-                .app_config
-                .config
-                .appearance
-                .effective_pane_gap(&self.app_config.theme) as f64;
-            if (state.session.options.gaps - pane_gap).abs() > f64::EPSILON {
-                state.session.options.gaps = pane_gap;
-                for ws in &mut state.session.workspaces {
-                    ws.scrolling.options.gaps = pane_gap;
-                }
-            }
             update_session_viewport(state);
             // Force a full chrome rebuild so STRUCTURAL config (border style, pane
             // info bar, etc.) re-applies — the chrome is otherwise only rebuilt when

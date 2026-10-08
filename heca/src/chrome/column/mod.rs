@@ -19,9 +19,7 @@ pub(crate) fn focus_pane_of(
     state: &crate::app_state::AppState,
     col: &heca_core::layout::LaidOutColumn,
 ) -> Option<PaneId> {
-    let active = state
-        .session
-        .active_workspace()
+    let active = state.layout().active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
     match active {

@@ -1,19 +1,51 @@
 //! **Putting a pane at an exact place** — and taking it out of wherever it was.
 //!
 //! What a drop means once the gesture has said where it landed, and what the `place_pane` action
-//! asks for (F003/P082/T509). The workspace owns it so no caller removes and re-inserts panes by
+//! asks for. The workspace owns it so no caller removes and re-inserts panes by
 //! hand, each deciding clamping and focus for itself.
 
 use super::column::Pane;
 use super::types::*;
-use super::workspace::{FocusDomain, Workspace};
+use super::workspace::{FocusDomain, Workspace, WorkspaceMut};
 
 impl Workspace {
+    /// **The gaps where a new column for this pane would change the strip** — counted with the pane
+    /// where it is. All of them, except the two beside a pane that is alone in its column: a column
+    /// made there puts it back where it is.
+    pub fn new_column_gaps(&self, pane_id: PaneId) -> Vec<usize> {
+        let columns = self.scrolling.columns.len();
+        let alone_at = self.scrolling.pane_indices(pane_id).and_then(|(col, _)| {
+            (self.scrolling.columns[col].panes.len() == 1).then_some(col)
+        });
+        (0..=columns)
+            .filter(|gap| alone_at.is_none_or(|own| *gap != own && *gap != own + 1))
+            .collect()
+    }
+
+    /// **The rows where putting this pane would change the strip**, as `(column, row)` — above
+    /// each pane and below the last of every column, counted with the pane where it is, except the
+    /// two beside the pane itself in its own column (they put it back where it is).
+    pub fn new_row_places(&self, pane_id: PaneId) -> Vec<(usize, usize)> {
+        let own = self.scrolling.pane_indices(pane_id);
+        let mut out = Vec::new();
+        for (col, column) in self.scrolling.columns.iter().enumerate() {
+            for row in 0..=column.panes.len() {
+                let beside = matches!(own, Some((c, r)) if c == col && (row == r || row == r + 1));
+                if !beside {
+                    out.push((col, row));
+                }
+            }
+        }
+        out
+    }
+}
+
+impl WorkspaceMut<'_> {
     /// Take pane `pane_id` out of this workspace, wherever it is: its column, or the floating
     /// layer. `None` when it is not here.
     pub fn take_pane(&mut self, pane_id: PaneId) -> Option<Pane> {
         if let Some((col, row)) = self.scrolling.pane_indices(pane_id) {
-            return self.scrolling.remove_pane(col, row);
+            return self.scroll_mut().remove_pane(col, row);
         }
         let idx = self
             .floating_panes
@@ -65,36 +97,6 @@ impl Workspace {
         true
     }
 
-    /// **The gaps where a new column for this pane would change the strip** — counted with the pane
-    /// where it is. All of them, except the two beside a pane that is alone in its column: a column
-    /// made there puts it back where it is.
-    pub fn new_column_gaps(&self, pane_id: PaneId) -> Vec<usize> {
-        let columns = self.scrolling.columns.len();
-        let alone_at = self.scrolling.pane_indices(pane_id).and_then(|(col, _)| {
-            (self.scrolling.columns[col].panes.len() == 1).then_some(col)
-        });
-        (0..=columns)
-            .filter(|gap| alone_at.is_none_or(|own| *gap != own && *gap != own + 1))
-            .collect()
-    }
-
-    /// **The rows where putting this pane would change the strip**, as `(column, row)` — above
-    /// each pane and below the last of every column, counted with the pane where it is, except the
-    /// two beside the pane itself in its own column (they put it back where it is).
-    pub fn new_row_places(&self, pane_id: PaneId) -> Vec<(usize, usize)> {
-        let own = self.scrolling.pane_indices(pane_id);
-        let mut out = Vec::new();
-        for (col, column) in self.scrolling.columns.iter().enumerate() {
-            for row in 0..=column.panes.len() {
-                let beside = matches!(own, Some((c, r)) if c == col && (row == r || row == r + 1));
-                if !beside {
-                    out.push((col, row));
-                }
-            }
-        }
-        out
-    }
-
     /// Put `pane` at row `row` of column `col` — or, with no row (or no such column), in a new
     /// column `new_column_id` at `col`. Indices past the end clamp to it. The pane is focused, in
     /// the tiling.
@@ -109,13 +111,12 @@ impl Workspace {
         match row {
             Some(row) if col < columns => {
                 let row = row.min(self.scrolling.columns[col].panes.len());
-                self.scrolling
+                self.scroll_mut()
                     .add_pane_to_column(col, Some(row), pane, true);
             }
             _ => {
-                let column = self.scrolling.new_column(new_column_id, pane);
-                self.scrolling
-                    .add_column(Some(col.min(columns)), column, true);
+                self.scroll_mut()
+                    .add_new_column(Some(col.min(columns)), new_column_id, pane, true);
             }
         }
         self.deactivate_floating_panes();

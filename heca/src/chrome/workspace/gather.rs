@@ -21,11 +21,10 @@ pub(crate) fn gather(
 ) -> WorkspaceModel {
     let area = crate::chrome::ChromeConfig::of(state).content_rect();
     let models = pane_models(state);
-    let tiled: HashSet<PaneId> = state
-        .session
+    let tiled: HashSet<PaneId> = state.layout()
         .active_workspace()
         .map(|ws| {
-            ws.scrolling
+            ws.scroll()
                 .panes_with_positions()
                 .into_iter()
                 .map(|(id, _)| id)
@@ -70,10 +69,9 @@ pub(crate) fn gather(
             )
         })
         .collect();
-    let working_width = state
-        .session
+    let working_width = state.layout()
         .active_workspace()
-        .map_or(0.0, |ws| ws.scrolling.working_area.size.w as f32);
+        .map_or(0.0, |ws| ws.scroll().area().size.w as f32);
     let pick = pick_marks(state);
     WorkspaceModel {
         pick,
@@ -105,7 +103,7 @@ fn pick_marks(state: &AppState) -> Vec<PickMark> {
                 letter: *letter,
             }),
             ColumnPickTarget::Existing { ws_idx, col_id, .. }
-                if ws_idx == state.session.active_workspace_idx =>
+                if ws_idx == state.layout().active_workspace_idx() =>
             {
                 Some(PickMark::Column(col_id))
             }

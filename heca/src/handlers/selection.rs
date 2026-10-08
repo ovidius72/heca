@@ -136,6 +136,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
 
         // Get the terminal snapshot for the owning pane.
         let snapshot = match state
+            .server
             .backends
             .get_by_id(terminal)
             .and_then(|b| b.terminal_snapshot())
@@ -149,6 +150,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
         // Fetch the selection rows by stable-row range so history rows are
         // copyable even when they are no longer in the visible viewport.
         let lines = state
+            .server
             .backends
             .get_by_id(terminal)
             .map(|b| b.lines_in_stable_range(start_stable, end_stable, snapshot.cols))
@@ -223,9 +225,7 @@ pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
     };
 
     // Find the active pane.
-    let pane_id = match state
-        .session
-        .active_workspace()
+    let pane_id = match state.layout().active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|pane| pane.id)
         .or(state.focused_pane)
@@ -235,7 +235,7 @@ pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
     };
 
     // Forward the text to the pane's backend (bracketed-paste aware).
-    if let Some(backend) = state.backends.get_mut(pane_id) {
+    if let Some(backend) = state.server.backends.get_mut(pane_id) {
         backend.paste(&text);
     }
 }

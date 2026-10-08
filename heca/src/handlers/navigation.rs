@@ -6,35 +6,35 @@ use crate::input::WmAction;
 use crate::switch_workspace_tracked;
 
 pub fn handle_focus_left(state: &mut AppState, _action: &WmAction) {
-    state.session.focus_left();
+    state.layout_mut().focus_left();
 }
 
 pub fn handle_focus_right(state: &mut AppState, _action: &WmAction) {
-    state.session.focus_right();
+    state.layout_mut().focus_right();
 }
 
 pub fn handle_focus_up(state: &mut AppState, _action: &WmAction) {
-    if let Some(ws) = state.session.active_workspace_mut() {
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
         ws.focus_up();
     }
 }
 
 pub fn handle_focus_down(state: &mut AppState, _action: &WmAction) {
-    if let Some(ws) = state.session.active_workspace_mut() {
+    if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
         ws.focus_down();
     }
 }
 
 pub fn handle_next_pane(state: &mut AppState, _action: &WmAction) {
-    state.session.focus_right();
+    state.layout_mut().focus_right();
 }
 
 pub fn handle_prev_pane(state: &mut AppState, _action: &WmAction) {
-    state.session.focus_left();
+    state.layout_mut().focus_left();
 }
 
 pub fn handle_workspace_next(state: &mut AppState, _action: &WmAction) {
-    let current_ws = state.session.active_workspace_idx;
+    let current_ws = state.layout().active_workspace_idx();
     let next = (current_ws + 1).min(state.session.workspaces.len().saturating_sub(1));
     if next != current_ws {
         switch_workspace_tracked(state, next);
@@ -42,7 +42,7 @@ pub fn handle_workspace_next(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_workspace_prev(state: &mut AppState, _action: &WmAction) {
-    let current_ws = state.session.active_workspace_idx;
+    let current_ws = state.layout().active_workspace_idx();
     let prev = current_ws.saturating_sub(1);
     if prev != current_ws {
         switch_workspace_tracked(state, prev);
@@ -50,7 +50,7 @@ pub fn handle_workspace_prev(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_focus_toggle_local(state: &mut AppState, _action: &WmAction) {
-    let ws_idx = state.session.active_workspace_idx;
+    let ws_idx = state.layout().active_workspace_idx();
     if let Some(prev_pane) = state
         .last_visited_pane_per_ws
         .get(ws_idx)
@@ -64,7 +64,7 @@ pub fn handle_focus_toggle_local(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_focus_toggle_global(state: &mut AppState, _action: &WmAction) {
     if let Some(prev_ws) = state.last_visited_ws_idx {
-        let current_ws = state.session.active_workspace_idx;
+        let current_ws = state.layout().active_workspace_idx();
         if prev_ws != current_ws {
             switch_workspace_tracked(state, prev_ws);
         }

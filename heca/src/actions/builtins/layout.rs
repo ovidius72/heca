@@ -1,12 +1,14 @@
 //! The built-in Layout actions, in the order they are listed.
 
 use super::ActionDescriptor;
+use crate::actions::Side;
 use crate::args::{ArgDescriptor, ArgKind};
 use heca_grid_ui::Glyph;
 
 pub(super) const ACTIONS: &[ActionDescriptor] = &[
     ActionDescriptor {
         name: "split_horizontal",
+        side: Side::Server,
         label: "New Column",
         description: "Create a new column to the right.",
         // New column opens to the right (see the description); ColumnsPlusLeft stays
@@ -16,6 +18,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "split_vertical",
+        side: Side::Server,
         label: "New Pane",
         description: "Add a new pane below the current one in the same column.",
         icon: Some(Glyph::SquareHalfBottom),
@@ -28,6 +31,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         // binding; the "+" button (`split` in `chrome/pane_items/buttons.rs`) names
         // `split_vertical` for its tooltip, so it still shows the `v` hint.
         name: "add_pane_to_column",
+        side: Side::Server,
         label: "Add Pane to Column",
         description: "Add a new pane to this column.",
         icon: Some(Glyph::FolderSimplePlus),
@@ -46,6 +50,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "zoom_column",
+        side: Side::Server,
         label: "Toggle Column Zoom",
         description: "Toggle the active column between viewport-wide zoom and its previous width.",
         icon: Some(Glyph::FrameCorners),
@@ -53,6 +58,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "open_context_menu",
+        side: Side::Client,
         label: "Open Context Menu",
         description: "Open the focused pane's context menu at the cursor.",
         icon: Some(Glyph::DotsThreeVertical),
@@ -60,6 +66,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scroll_view_left",
+        side: Side::Client,
         label: "Scroll View Left",
         description: "Pan the horizontal view left to reach off-screen / overflowing columns.",
         icon: None,
@@ -67,6 +74,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "scroll_view_right",
+        side: Side::Client,
         label: "Scroll View Right",
         description: "Pan the horizontal view right to reach off-screen / overflowing columns.",
         icon: None,
@@ -74,6 +82,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "resize_increase",
+        side: Side::Server,
         label: "Increase Column Width",
         description: "Widen the active column.",
         icon: Some(Glyph::Plus),
@@ -81,6 +90,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "resize_decrease",
+        side: Side::Server,
         label: "Decrease Column Width",
         description: "Narrow the active column.",
         icon: Some(Glyph::Minus),
@@ -88,6 +98,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "pane_height_increase",
+        side: Side::Server,
         label: "Increase Pane Height",
         description: "Tallens the active pane within its column.",
         icon: Some(Glyph::StackPlus),
@@ -95,6 +106,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "pane_height_decrease",
+        side: Side::Server,
         label: "Decrease Pane Height",
         description: "Shortens the active pane within its column.",
         icon: Some(Glyph::StackMinus),
@@ -103,6 +115,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // ── Font zoom ──
     ActionDescriptor {
         name: "swap_left",
+        side: Side::Server,
         label: "Swap Column Left",
         description: "Swap the active column with the one to its left.",
         icon: None,
@@ -110,6 +123,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "swap_right",
+        side: Side::Server,
         label: "Swap Column Right",
         description: "Swap the active column with the one to its right.",
         icon: None,
@@ -117,6 +131,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "swap_up",
+        side: Side::Server,
         label: "Swap Pane Up",
         description: "Swap the active pane with the one above.",
         icon: None,
@@ -124,6 +139,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "swap_down",
+        side: Side::Server,
         label: "Swap Pane Down",
         description: "Swap the active pane with the one below.",
         icon: None,
@@ -131,6 +147,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move_pane_left",
+        side: Side::Server,
         label: "Move Pane to Column Left",
         description: "Move the active pane into the column on the left.",
         icon: Some(Glyph::ArrowLineLeft),
@@ -142,6 +159,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move_pane_right",
+        side: Side::Server,
         label: "Move Pane to Column Right",
         description: "Move the active pane into the column on the right.",
         icon: Some(Glyph::ArrowLineRight),
@@ -153,6 +171,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "zoom_column_at_index",
+        side: Side::Server,
         label: "Zoom Column",
         description: "Toggle zoom on the named column, making it active first.",
         // Same glyph as `zoom_column`: one act, two ways of naming its target.
@@ -168,6 +187,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "delete_current_column",
+        side: Side::Client,
         label: "Delete Current Column",
         description: "Delete the focused pane's column (or the sidebar selection's) and all its panes, after asking.",
         icon: Some(Glyph::Trash),
@@ -175,6 +195,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "delete_column",
+        side: Side::Server,
         label: "Delete Column",
         description: "Delete the named column and all its panes.",
         icon: Some(Glyph::Trash),
@@ -189,6 +210,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move_pane_to_workspace_pick",
+        side: Side::Client,
         label: "Move Pane to Workspace",
         description: "Select a workspace to move the active pane to.",
         icon: None,
@@ -196,6 +218,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move_column_to_workspace_pick",
+        side: Side::Client,
         label: "Move Column to Workspace",
         description: "Select a workspace to move the active column to.",
         icon: None,
@@ -203,6 +226,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move_pane_to_column_pick",
+        side: Side::Client,
         label: "Move Pane to Column",
         description: "Select a column to move the active pane into.",
         icon: None,
@@ -210,6 +234,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move_pane_to_new_column",
+        side: Side::Server,
         label: "Move Pane to New Column",
         description: "Take the active pane out of its column into a new one beside it.",
         icon: None,
@@ -217,6 +242,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "rename_column",
+        side: Side::Client,
         label: "Rename Column",
         description: "Rename the active column.",
         icon: Some(Glyph::NotePencil),
@@ -227,6 +253,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // action-task-E went looking for actions the catalog could not see.
     ActionDescriptor {
         name: "move_column_up",
+        side: Side::Server,
         label: "Move Column to Workspace Above",
         description: "Move the focused column one position earlier.",
         icon: Some(Glyph::CaretUp),
@@ -234,6 +261,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move_column_down",
+        side: Side::Server,
         label: "Move Column to Workspace Below",
         description: "Move the focused column one position later.",
         icon: None,
@@ -251,6 +279,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     // labels and categories come with it, since metadata lives in one place per action.
     ActionDescriptor {
         name: "swap",
+        side: Side::Server,
         label: "Swap Panes",
         description: "Swap the positions of two panes.",
         icon: None,
@@ -265,6 +294,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move",
+        side: Side::Server,
         label: "Move Pane to Column",
         description: "Move a pane into another column of the current workspace.",
         icon: None,
@@ -279,6 +309,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move_pane_to_workspace",
+        side: Side::Server,
         label: "Move Pane to Workspace",
         description: "Move a pane into another workspace.",
         icon: None,
@@ -293,6 +324,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move_pane_to_column",
+        side: Side::Server,
         label: "Move Pane to Column in Workspace",
         description: "Move a pane into a specific column of a specific workspace.",
         icon: None,
@@ -308,6 +340,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "place_pane",
+        side: Side::Server,
         label: "Place Pane",
         description: "Put a pane at an exact place: a row of a column, or a new column of its own.",
         icon: None,
@@ -332,6 +365,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move_column",
+        side: Side::Server,
         label: "Move Column",
         description: "Move a column to another position, in this workspace or another one.",
         icon: None,
@@ -357,6 +391,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "swap_columns",
+        side: Side::Server,
         label: "Swap Columns",
         description: "Swap the positions of two columns.",
         icon: None,
@@ -369,6 +404,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "resize",
+        side: Side::Server,
         label: "Resize",
         description: "Move a boundary of the focused column or pane. The target decides the axis: a column is resized across, a pane down.",
         icon: None,
@@ -392,6 +428,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "resize_to",
+        side: Side::Server,
         label: "Resize To",
         description: "Resize the focused column or pane to an explicit size.",
         icon: None,
@@ -406,7 +443,24 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         ],
     },
     ActionDescriptor {
+        name: "rename_column_to",
+        side: Side::Server,
+        label: "Rename Column To",
+        description: "Set a column's name directly, without opening the rename prompt. An empty name clears it.",
+        icon: Some(Glyph::NotePencil),
+        args: &[
+            ArgDescriptor::required(
+                "ws_idx",
+                ArgKind::Int,
+                "Index of the workspace holding the column.",
+            ),
+            ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to rename."),
+            ArgDescriptor::required("name", ArgKind::Text, "The new name."),
+        ],
+    },
+    ActionDescriptor {
         name: "rename_column_by_idx",
+        side: Side::Client,
         label: "Rename Column",
         description: "Open the rename prompt for a specific column.",
         icon: Some(Glyph::NotePencil),
@@ -421,6 +475,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "take_pane",
+        side: Side::Server,
         label: "Take Pane",
         description: "Pull a pane out of wherever it is and into the focused column.",
         icon: None,
@@ -435,6 +490,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "add_column_to_workspace",
+        side: Side::Server,
         label: "Add Column to Workspace",
         description: "Add a column to a specific workspace.",
         icon: Some(Glyph::FolderSimplePlus),
@@ -446,6 +502,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "move_column_to_workspace",
+        side: Side::Server,
         label: "Move Column to Workspace",
         description: "Move a column into another workspace.",
         icon: None,
@@ -465,6 +522,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "resize_column_by",
+        side: Side::Server,
         label: "Resize Column By",
         description: "Change one column's width by a fraction of the working width. The mouse divider drag and RPC use this; the keyboard resize acts on the focused column.",
         icon: None,
@@ -479,6 +537,7 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
     },
     ActionDescriptor {
         name: "resize_pane_height_by",
+        side: Side::Server,
         label: "Resize Pane Height By",
         description: "Change one stacked pane's height by a number of logical pixels.",
         icon: None,

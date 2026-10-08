@@ -54,7 +54,7 @@ fn label_links(
 fn terminals_in_order(state: &AppState) -> Vec<crate::chrome::terminal::TerminalId> {
     let mut ordered: Vec<_> = laid_out_pane_ids(state)
         .into_iter()
-        .filter_map(|pane| state.backends.identity_of(pane))
+        .filter_map(|pane| state.server.backends.identity_of(pane))
         .collect();
     let mut rest: Vec<_> = state
         .terminals

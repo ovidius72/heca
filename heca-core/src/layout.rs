@@ -36,18 +36,28 @@
 pub mod animation;
 pub mod column;
 pub mod floating;
+mod motion;
+mod handle;
 pub mod placement;
 pub mod scrolling;
 pub mod session;
 pub mod shape;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 pub mod types;
 pub mod view_offset;
+pub mod window_view;
 pub mod workspace;
 
 pub use column::{Column, Pane};
-pub use scrolling::{LaidOutColumn, LaidOutPane, Place, PlaceKind, ScrollingSpace};
-pub use session::{Session, WorkspaceSwitch};
+pub use handle::{Added, Before, Layout, LayoutMut, Moved, Removed};
+pub use scrolling::{
+    ColumnEffect, Direction, LaidOutColumn, LaidOutPane, PaneEffect, Place, PlaceKind, Positions,
+    ScrollingMut, ScrollingRef, ScrollingSpace, SpaceEffect,
+};
+pub use session::Session;
 pub use shape::SessionShape;
 pub use types::*;
 pub use view_offset::ViewOffset;
-pub use workspace::{FocusDomain, Workspace};
+pub use window_view::{ScrollView, WindowView, WorkspaceSwitch};
+pub use workspace::{Detached, FocusDomain, Workspace, WorkspaceMut, WorkspaceRef};

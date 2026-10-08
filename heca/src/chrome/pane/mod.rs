@@ -56,13 +56,11 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
             0.0
         },
     };
-    let active_pane = state
-        .session
+    let active_pane = state.layout()
         .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
-    let floating: std::collections::HashSet<PaneId> = state
-        .session
+    let floating: std::collections::HashSet<PaneId> = state.layout()
         .active_workspace()
         .map(|ws| ws.floating_panes.iter().map(|f| f.pane.id).collect())
         .unwrap_or_default();

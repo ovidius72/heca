@@ -1544,16 +1544,16 @@ impl NotificationDraft {
 /// The host's notification runtime, kept on [`AppState`](crate::app_state::AppState) — T208.
 ///
 /// Owns the [`NotificationStore`] **and** the retained `Signal<Vec<ToastSpec>>` the mounted
-/// `ToastStack` layer reads (T203/T206). The signal lives here, not on `ChromeSignals`
-/// (F009/P060): the toast stack is an independently-mounted persistent layer, never part of
-/// `chrome_tree`, so it is never touched by `sync_chrome_signals` — a value parked there would
-/// look correct and quietly never update. [`sync_visible_toasts`](Self::sync_visible_toasts) is
+/// `ToastStack` layer reads (T203/T206), now as plain data (`visible_toasts`): the window owns the
+/// signal it draws from, and refreshes it when the server says the notifications changed. [`sync_visible_toasts`](Self::sync_visible_toasts) is
 /// the one place the signal is written, called after every store mutation that can change the
 /// visible set (push, dismiss, expire).
 pub struct NotificationRuntime {
     store: NotificationStore,
-    /// The retained projection `ToastStack` renders. Read-only outside this module.
-    pub visible_toasts: heca_grid_ui::reactive::Signal<Vec<ToastSpec>>,
+    /// The cards on show, as plain data — what [`visible_toasts`](Self::visible_toasts) hands a
+    /// window, kept to tell when the set changed. The store owns no signal: a window turns this list
+    /// into whatever it draws.
+    shown: Vec<ToastSpec>,
     /// The configured default auto-dismiss delay (`[settings.notification_system]
     /// auto_dismiss_ms`). Applied to every accepted draft whose lifecycle still
     /// auto-dismisses — a `.sticky()` draft, and one with its own explicit lifetime
@@ -1598,7 +1598,7 @@ impl NotificationRuntime {
     ) -> Self {
         Self {
             store: NotificationStore::with_capacity(history_limit, max_visible),
-            visible_toasts: heca_grid_ui::reactive::signal(Vec::new()),
+            shown: Vec::new(),
             auto_dismiss,
             mode,
             system_fallback_announced: false,
@@ -1782,13 +1782,18 @@ impl NotificationRuntime {
     /// Push the store's current visible projection into the retained signal, if it changed.
     /// Returns whether it did (callers use this to decide whether to request a redraw).
     fn sync_visible_toasts(&mut self) -> bool {
-        use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
         let next = self.store.visible_toasts();
-        if self.visible_toasts.get_untracked() == next {
+        if self.shown == next {
             return false;
         }
-        self.visible_toasts.set(next);
+        self.shown = next;
         true
+    }
+
+    /// **The cards on show**, in slot order — plain data a window draws from. Read it when the server
+    /// reports [`NotificationsChanged`](crate::server::Change::NotificationsChanged).
+    pub fn visible_toasts(&self) -> Vec<ToastSpec> {
+        self.shown.clone()
     }
 }
 
@@ -1925,20 +1930,9 @@ pub fn install_notification_sink(f: impl Fn(NotificationDraft) + 'static) {
 /// A producer never reaches `push` directly: this is what keeps the caller's clock and the
 /// store's internal verb off the public surface.
 pub(crate) fn raise(state: &mut crate::app_state::AppState, draft: NotificationDraft) {
-    // `[settings.notification_system] mode = "none"` — drop it here, before it reaches the
-    // store, so nothing queues and no timer is scheduled.
-    if state.notifications.suppressed() {
-        return;
-    }
-    let now = Instant::now();
-    // `mode = "system"` with no OS backend yet (F009/T222) — fall back to the in-app stack and
-    // say so once. Routed like any other in-app notification; when P063 installs the OS sink
-    // this branch stops firing and `raise` hands the draft there instead.
-    if let Some(notice) = state.notifications.system_fallback_notice() {
-        let _ = state.notifications.push(notice, now);
-    }
-    let _ = state.notifications.push(draft, now);
-    state.needs_redraw = true;
+    // The server drops it under `mode = "none"` and falls back to the in-app stack under `system`
+    // (F009/T222) — both are its rules, not the window's.
+    state.ask_server(crate::server::ServerAction::Raise(draft));
 }
 
 /// **The raise capability — the one public door.** A native producer and a plugin author type
@@ -3039,7 +3033,6 @@ mod tests {
         // clicking it archives the sticky failure toast; the reload it triggers then raises a
         // success with the SAME dedup key, which re-promotes to a fresh visible card rather
         // than mutating the archived one in place.
-        use heca_grid_ui::reactive::SignalGet;
         let now = Instant::now();
         let mut runtime = test_runtime(4000);
 
@@ -3049,7 +3042,7 @@ mod tests {
             .sticky()
             .draft;
         let fail_id = runtime.push(fail, now).unwrap().notification_id();
-        assert_eq!(runtime.visible_toasts.get_untracked().len(), 1);
+        assert_eq!(runtime.visible_toasts().len(), 1);
         assert_eq!(
             runtime.next_expiry(),
             None,
@@ -3059,7 +3052,7 @@ mod tests {
         // Retry's `dismiss_after`.
         runtime.dismiss_one(fail_id, now);
         assert!(
-            runtime.visible_toasts.get_untracked().is_empty(),
+            runtime.visible_toasts().is_empty(),
             "Retry cleared it"
         );
 
@@ -3068,7 +3061,7 @@ mod tests {
             .dedup_key("config-reload")
             .draft;
         runtime.push(ok, now).unwrap();
-        let v = runtime.visible_toasts.get_untracked();
+        let v = runtime.visible_toasts();
         assert_eq!(v.len(), 1, "a fresh success card is visible");
         assert_eq!(v[0].title, "Configuration reloaded");
         assert_eq!(v[0].severity, heca_grid_ui::widgets::ToastSeverity::Success);

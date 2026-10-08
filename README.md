@@ -950,6 +950,8 @@ auto_scroll_edge = true       # Auto-scroll near edges
 edge_scroll_distance = 80.0   # How close (px) a dragged pane must come to the edge for that to start
 column_focus = "last"  # Pane focus lands on in the next column: "last" used there, or the one level with "row"
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
+float_size = 0.95             # Share of the working area a pane takes when it floats with nowhere given
+move_slide_reach = 0.9        # How far (fraction of the window) a moved or swapped pane animates in from; 0 = jump
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
 pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`
 # pane_show_cwd is now [appearance.expose] show_cwd (still read; see below)

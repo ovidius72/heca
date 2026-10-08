@@ -2,25 +2,20 @@
 //! pointer is still or moving, so nothing can loop.
 
 use super::*;
-use heca_core::layout::types::{LayoutOptions, Rectangle as Rect, Size as Sz};
-use heca_core::layout::{Session, SessionId};
+use heca_core::layout::testing::Windowed;
+use heca_core::layout::types::{Rectangle as Rect, Size as Sz};
 
 /// Two columns, the first holding two panes (ids 1, 2), the second one (id 3).
-fn session() -> Session {
-    let mut s = Session::new(SessionId(1), Sz::new(1000.0, 800.0), 1.0, LayoutOptions::default());
-    s.add_pane(heca_core::layout::Pane::new(PaneId(1), ""), None, true);
-    s.add_pane(heca_core::layout::Pane::new(PaneId(3), ""), None, true);
-    let ws = s.active_workspace_mut().unwrap();
-    ws.scrolling
-        .add_pane_to_column(0, Some(1), heca_core::layout::Pane::new(PaneId(2), ""), false);
-    s
+fn session() -> Windowed {
+    Windowed::with_shape(&[&[&[1, 2], &[3]]])
 }
 
 /// The model the host would hand the workspace for this layout.
-fn model_of(session: &Session, open: bool) -> WorkspaceModel {
-    let ws = session.active_workspace().unwrap();
+fn model_of(session: &Windowed, open: bool) -> WorkspaceModel {
+    let layout = session.l();
+    let ws = layout.active_workspace().expect("a workspace");
     let columns: Vec<ColumnShellModel> = ws
-        .scrolling
+        .scroll()
         .columns_with_positions()
         .into_iter()
         .map(|c| ColumnShellModel {
@@ -41,7 +36,7 @@ fn model_of(session: &Session, open: bool) -> WorkspaceModel {
         .collect();
     let mut model = model(columns, vec![]);
     model.area = Rect::new(Point::new(0.0, 0.0), Sz::new(1000.0, 800.0));
-    model.places = if open { ws.scrolling.places() } else { Vec::new() };
+    model.places = if open { ws.scroll().places() } else { Vec::new() };
     model
 }
 

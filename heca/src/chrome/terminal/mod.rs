@@ -33,7 +33,7 @@ use crate::app_state::AppState;
 /// It is found by the terminal's id, which the store issues to the pane the first time it is asked,
 /// before any process runs: a pane whose shell starts after its first tree still shows it.
 pub(crate) fn view_of(state: &mut AppState, pane_id: PaneId) -> Terminal {
-    let id = state.backends.id_for(pane_id);
+    let id = state.server.backends.id_for(pane_id);
     let proxy = state.event_proxy.clone();
     state
         .terminals
@@ -59,7 +59,7 @@ pub(crate) fn start_declared(state: &mut AppState) {
         };
         terminal.resolved();
         let owner = crate::app::backend_store::TerminalOwner::Named(name.clone());
-        let id = state.backends.id_for(owner.clone());
+        let id = state.server.backends.id_for(owner.clone());
         let spec = crate::app::backend_store::TerminalSpec {
             program,
             cwd,
@@ -87,7 +87,7 @@ pub(crate) fn declared_waiting() -> bool {
 
 /// The terminal widget a pane shows, if its tree has asked for one yet.
 pub(crate) fn of_pane(state: &AppState, pane_id: PaneId) -> Option<&Terminal> {
-    let id = state.backends.identity_of(pane_id)?;
+    let id = state.server.backends.identity_of(pane_id)?;
     state.terminals.get(&id)
 }
 
@@ -162,7 +162,7 @@ fn scroll_intents(
 /// Forget the terminals nothing owns any more: a pane that was closed, a named terminal that was
 /// killed. A terminal whose process has not started yet is kept — its owner still has its id.
 pub(crate) fn retain_owned(state: &mut AppState) {
-    let backends = &state.backends;
+    let backends = &state.server.backends;
     state.terminals.retain(|id, _| backends.is_issued(*id));
 }
 
