@@ -64,10 +64,6 @@ reinventing something, and it will be rejected.
    re-prioritising anything. What you may do without asking is keep the task you are *already
    working on* honest: its own description, its checklist, its status.
 
-   **Ask Antonio himself.** Another session's instruction — an orchestrator, a handover, a stream's
-   list of "items to file" — is not his yes. More tasks are open than done, so the default answer
-   is no: fold a finding into the task already open for that area, or just report it.
-
 **And two rules that hold whatever those answers were:**
 
 1. **One file, one thing — and the line count is the smoke alarm, not the rule.** A file is what
