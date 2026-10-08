@@ -42,7 +42,7 @@ impl LandingSlot {
             label: None,
             filled: false,
             edge: false,
-            reach: Spacing::Xs.into(),
+            reach: Spacing::Xl.into(),
         }
     }
 
@@ -106,20 +106,31 @@ impl LandingSlot {
 impl LandingSlot {
     /// The line, and a chip with the letter on it when a pick gives it one.
     fn paint_edge(&self, cx: &mut PaintCx) {
-        let (width, color) = {
-            let colors = &cx.theme().colors;
-            (colors.drag_edge_width, colors.drag_edge_color)
-        };
-        let color = color.unwrap_or_else(|| cx.accent());
         let near = self.base.pointer.is_drag_over();
+        // Every place shows faintly in the edge colour; the one a drop would land on takes the
+        // target colour, so it stands apart from the rest.
+        let (width, color, target) = {
+            let colors = &cx.theme().colors;
+            let target = colors.drag_edge_target_color.unwrap_or(colors.warning);
+            (colors.drag_edge_width, colors.drag_edge_color, target)
+        };
+        let color = if near { target } else { color.unwrap_or_else(|| cx.accent()) };
         let thickness = f64::from(if near { width } else { width / 2.0 });
         let b = self.base.bounds;
-        let line = Rectangle::new(
-            Point::new(b.loc.x, b.loc.y + (b.size.h - thickness) / 2.0),
-            Size::new(b.size.w, thickness),
-        );
+        let line = if self.upright() {
+            Rectangle::new(
+                Point::new(b.loc.x + (b.size.w - thickness) / 2.0, b.loc.y),
+                Size::new(thickness, b.size.h),
+            )
+        } else {
+            Rectangle::new(
+                Point::new(b.loc.x, b.loc.y + (b.size.h - thickness) / 2.0),
+                Size::new(b.size.w, thickness),
+            )
+        };
         cx.with_opacity(if near { 1.0 } else { 0.5 }, |cx| {
-            cx.rect(line, color, None, 0.0, None);
+            // Round ends, like the panes it runs between.
+            cx.rect(line, color, None, (thickness / 2.0) as f32, None);
         });
         if let Some(letter) = &self.label {
             let side = f64::from(self.base.font) * 1.6;
@@ -133,6 +144,12 @@ impl LandingSlot {
                 cx.text(chip, letter, bg, self.base.font, TextAlign::Center, TextStyle::BOLD);
             });
         }
+    }
+
+    /// An edge runs along the longer side of its box: a border between two columns stands up, one
+    /// between two stacked panes lies down.
+    fn upright(&self) -> bool {
+        self.base.bounds.size.h > self.base.bounds.size.w
     }
 }
 
@@ -158,10 +175,17 @@ impl Component for LandingSlot {
             return Some(b);
         }
         let reach = f64::from(self.reach.resolve(self.base.font));
-        Some(Rectangle::new(
-            Point::new(b.loc.x, b.loc.y - reach),
-            Size::new(b.size.w, b.size.h + 2.0 * reach),
-        ))
+        Some(if self.upright() {
+            Rectangle::new(
+                Point::new(b.loc.x - reach, b.loc.y),
+                Size::new(b.size.w + 2.0 * reach, b.size.h),
+            )
+        } else {
+            Rectangle::new(
+                Point::new(b.loc.x, b.loc.y - reach),
+                Size::new(b.size.w, b.size.h + 2.0 * reach),
+            )
+        })
     }
 
     fn paints_own_drag_feedback(&self) -> bool {

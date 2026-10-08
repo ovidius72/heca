@@ -356,6 +356,10 @@ pub struct Theme {
     /// panes and the top and bottom of a column. `None` is the theme's accent.
     #[serde(default)]
     pub drag_edge_color: Option<Color>,
+    /// Colour of that line where a drop **would land now** (the one under the pointer), so it
+    /// stands apart from the rest. `None` is the theme's warning colour.
+    #[serde(default)]
+    pub drag_edge_target_color: Option<Color>,
     /// Thickness (logical px) of that line when a drag is over it; at rest it is half as thick.
     #[serde(default = "default_drag_edge_width")]
     pub drag_edge_width: f32,

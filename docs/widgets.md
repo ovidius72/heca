@@ -658,7 +658,7 @@ The builders, all of which take either kind:
 | written | means |
 |---|---|
 | `8` / `8.0` / `"8"` / `"8px"` | logical pixels, fixed whatever the font does |
-| `"sm"` / `Spacing::Sm` | a step of the theme's rhythm — `none` / `hairline` / `xs` / `sm` / `md` / `lg` |
+| `"sm"` / `Spacing::Sm` | a step of the theme's rhythm — `none` / `hairline` / `xs` / `sm` / `md` / `lg` / `xl` |
 
 **Prefer the step.** It is a fraction of the inherited font, resolved when the tree is laid out, so
 it scales with the font, the size variant and UI zoom. A pixel gap is tuned for one font size and
@@ -1827,7 +1827,7 @@ a parent that counts its children to tell them apart.
   `Start`/`Center`/`End`/`Stretch` — the default `Stretch` makes an `Auto`-sized child fill the
   cross axis; `.align_self(Align)` overrides it for one child).
 - **Gap between children**: `.gap(..)` takes **either** — `.gap(8)` for pixels, `.gap(Spacing::Sm)`
-  or `.gap("sm")` for a **font-relative theme token** (`None`/`Hairline`/`Xs`/`Sm`/`Md`/`Lg`), resolved from
+  or `.gap("sm")` for a **font-relative theme token** (`None`/`Hairline`/`Xs`/`Sm`/`Md`/`Lg`/`Xl`), resolved from
   the inherited font at layout so it scales with the font, size variant and UI zoom. **Prefer the
   token**; a raw px gap is tuned for one font size and wrong at every other. One builder, because
   two — `gap` and `gap_spacing` — meant the docs said *prefer the token* and the token was used 8

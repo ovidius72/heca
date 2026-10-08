@@ -90,7 +90,7 @@ fn a_drop_on_the_slot_names_it() {
 /// An edge is a **line**, not a place: faint while a carry is on, bright and thicker while a drag is
 /// over it, drawn in the theme's colour — and the framework's whole-box wash is not laid over it.
 #[test]
-fn an_edge_is_a_faint_line_that_brightens_and_thickens_under_a_drag() {
+fn an_edge_is_faint_at_rest_and_takes_the_insertion_colour_under_a_drag() {
     let build = || {
         let mut root = Flex::row()
             .width(300.0)
@@ -112,16 +112,16 @@ fn an_edge_is_a_faint_line_that_brightens_and_thickens_under_a_drag() {
         root
     };
     let theme = Theme::default();
-    let lines = |root: &Flex| -> Vec<(f64, u8)> {
+    let lines = |root: &Flex| -> Vec<(f64, u8, Color)> {
         paint_via_child(root, &theme)
             .iter()
             .filter_map(|c| match c {
-                DrawCommand::Rect(r) if r.rect.size.w == 150.0 => Some((r.rect.size.h, r.fill.a)),
+                DrawCommand::Rect(r) if r.rect.size.w == 150.0 => Some((r.rect.size.h, r.fill.a, r.fill)),
                 _ => None,
             })
             .collect()
     };
-    // At rest (carry on, nothing over it): half the width, half the strength.
+    // A carry is on but nothing is over it: a faint line at half the width.
     let mut root = build();
     press_at(&mut root, Point::new(10.0, 10.0), PointerButton::Left);
     let _ = heca_grid_ui::dispatch(&mut root, &Event::pointer_moved(Point::new(20.0, 20.0)));
@@ -129,10 +129,10 @@ fn an_edge_is_a_faint_line_that_brightens_and_thickens_under_a_drag() {
     let rest = lines(&root);
     assert_eq!(rest.len(), 1, "one line and no wash: {rest:?}");
     assert_eq!(rest[0].0, width / 2.0);
-    // Over it: the full width, the full strength.
+    // Over it: the full width, in the target colour, so it stands apart from the rest.
     let _ = heca_grid_ui::dispatch(&mut root, &Event::pointer_moved(Point::new(150.0, 44.0)));
     let near = lines(&root);
     assert_eq!(near.len(), 1, "still one line and no wash: {near:?}");
     assert_eq!(near[0].0, width);
-    assert!(near[0].1 > rest[0].1, "brighter: {near:?} vs {rest:?}");
+    assert_eq!(near[0].2, theme.colors.warning.with_alpha(near[0].1));
 }

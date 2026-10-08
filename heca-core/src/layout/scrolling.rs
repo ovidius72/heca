@@ -1208,22 +1208,20 @@ impl ScrollingSpace {
         let top = self.working_area.loc.y + gaps;
         let height = (self.working_area.size.h - 2.0 * gaps).max(0.0);
         let mut out = Vec::new();
+        // The borders between columns, drawn like the ones between panes: a standing line in the
+        // middle of the gap before each column, and one after the last. It takes no room.
+        let _ = open;
+        let upright = |x: f64| Rectangle::new(Point::new(x, top), Size::new(0.0, height));
         for (i, col) in columns.iter().enumerate() {
             out.push(Place {
                 kind: PlaceKind::Gap(i),
-                rect: Rectangle::new(
-                    Point::new(col.rect.loc.x - open.column_w, top),
-                    Size::new(open.column_w, height),
-                ),
+                rect: upright(col.rect.loc.x - gaps / 2.0),
             });
         }
         if let Some(last) = columns.last() {
             out.push(Place {
                 kind: PlaceKind::Gap(columns.len()),
-                rect: Rectangle::new(
-                    Point::new(last.rect.loc.x + last.rect.size.w + gaps, top),
-                    Size::new(open.column_w, height),
-                ),
+                rect: upright(last.rect.loc.x + last.rect.size.w + gaps / 2.0),
             });
         }
         // The borders: a line along the top of each column, between each two stacked panes (in the
@@ -1268,10 +1266,8 @@ impl ScrollingSpace {
             .iter()
             .enumerate()
             .map(|(col_idx, col)| {
-                // **An open place is space the columns make**: each column slides right by the
-                // places to its left, so a place covers nothing.
-                let slide = open.map_or(0.0, |o| (col_idx + 1) as f64 * o.column_w);
-                let col_pos = Point::new(self.column_x(col_idx) + col.render_offset() + slide, 0.0);
+                let _ = open;
+                let col_pos = Point::new(self.column_x(col_idx) + col.render_offset(), 0.0);
                 let mut pane_y = self.working_area.loc.y + gaps;
                 let mut panes = Vec::with_capacity(col.panes.len());
 
@@ -2117,14 +2113,23 @@ mod tests {
         assert_eq!(space.columns_with_places_open(None), closed);
     }
 
-    /// Opening slides the columns right by the places to their left.
+    /// Opening the places moves nothing: the columns stay where they are, and the place before
+    /// each column is a standing line in the middle of the gap, with no width.
     #[test]
-    fn opening_places_slides_the_columns() {
+    fn opening_places_moves_no_column() {
         let space = stacked();
         let closed = space.columns_with_positions();
         let opened = space.columns_with_places_open(Some(open()));
-        assert_eq!(opened[0].rect.loc.x, closed[0].rect.loc.x + 40.0);
-        assert_eq!(opened[1].rect.loc.x, closed[1].rect.loc.x + 80.0);
+        assert_eq!(opened[0].rect, closed[0].rect);
+        assert_eq!(opened[1].rect, closed[1].rect);
+        let gap = space
+            .places(open())
+            .into_iter()
+            .find(|p| p.kind == PlaceKind::Gap(1))
+            .map(|p| p.rect);
+        let gaps = space.options.gaps;
+        assert_eq!(gap.map(|r| r.size.w), Some(0.0));
+        assert_eq!(gap.map(|r| r.loc.x), Some(closed[1].rect.loc.x - gaps / 2.0));
     }
 
     /// A 2 × 2 strip, `[a][c]` over `[b][d]`: columns 1 and 2, panes (1, 2) and (3, 4).

@@ -348,6 +348,10 @@ pub struct SettingsConfig {
     /// theme's accent).
     #[serde(default)]
     pub drag_edge_color: Option<Color>,
+    /// Optional override of the colour of the line a drop would land on now (default: the theme's
+    /// warning colour).
+    #[serde(default)]
+    pub drag_edge_target_color: Option<Color>,
     /// Optional override of that line's thickness in logical px (default 3, half at rest).
     #[serde(default)]
     pub drag_edge_width: Option<f32>,
@@ -509,6 +513,7 @@ impl Default for SettingsConfig {
             terminal_selection_foreground: None,
             terminal_selection_background: None,
             drag_edge_color: None,
+            drag_edge_target_color: None,
             drag_edge_width: None,
             terminal_ansi: None,
             terminal_brights: None,
