@@ -1798,6 +1798,8 @@ ignores paths that belong to no crate (`docs/`, `.planner/`).
 
 Outstanding work lives in **the planner** (single source of truth). See it for priorities and status.
 
+**Never add a feature, phase or task without asking Antonio first** — see § 0, point 3.
+
 ---
 
 ## Known Issues (from code review)
