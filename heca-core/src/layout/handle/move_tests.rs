@@ -60,32 +60,6 @@ fn the_active_pane_swaps_up_and_down() {
 }
 
 #[test]
-fn a_pane_moves_to_another_column_and_the_emptied_one_goes() {
-    let mut w = window(&[&[&[1], &[2], &[3]]]);
-    let moved = w.m().move_pane_to_column(PaneId(1), 2);
-    assert_eq!(moved, Some(Moved { workspace: 0, column: 1, removed_workspace: None }));
-    assert_eq!(columns(&w, 0), [vec![2], vec![3, 1]]);
-}
-
-#[test]
-fn a_pane_moves_to_a_new_last_column() {
-    let mut w = window(&[&[&[1, 2], &[3]]]);
-    let moved = w.m().move_pane_to_column(PaneId(1), 2);
-    assert_eq!(moved.map(|m| m.column), Some(2));
-    assert_eq!(columns(&w, 0), [vec![2], vec![3], vec![1]]);
-    assert_eq!(w.m().move_pane_to_column(PaneId(1), 2), None, "already there");
-}
-
-#[test]
-fn a_pane_alone_in_its_column_does_not_move_to_a_new_one() {
-    let mut w = window(&[&[&[1, 2], &[3]]]);
-    assert_eq!(w.m().move_pane_to_new_column(PaneId(3)), None);
-    let moved = w.m().move_pane_to_new_column(PaneId(1));
-    assert_eq!(moved, Some(Moved { workspace: 0, column: 1, removed_workspace: None }));
-    assert_eq!(columns(&w, 0), [vec![2], vec![1], vec![3]]);
-}
-
-#[test]
 fn a_pane_leaving_its_last_place_removes_the_workspace_it_emptied() {
     let mut w = window(&[&[&[1]], &[&[2]], &[&[3]]]);
     let moved = w.m().move_pane_to_workspace(PaneId(1), 2, 0, false);

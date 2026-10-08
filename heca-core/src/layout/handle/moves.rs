@@ -41,46 +41,6 @@ impl LayoutMut<'_> {
         empty && self.session.workspaces.len() > 1 && self.remove_workspace(idx)
     }
 
-    /// Move a pane into column `dst_col` of its own workspace; `dst_col` equal to the number of
-    /// columns makes a new one at the end. `None` when nothing moves.
-    pub fn move_pane_to_column(&mut self, pane: PaneId, dst_col: usize) -> Option<Moved> {
-        let (ws_idx, src_col, row) = self.session.pane_location(pane)?;
-        let mut ws = self.workspace_mut(ws_idx)?;
-        let columns_before = ws.scrolling.columns.len();
-        if src_col == dst_col || dst_col > columns_before {
-            return None;
-        }
-        let moved = ws.scroll_mut().remove_pane(src_col, row)?;
-        // A source column that held only this pane is gone, which shifts the ones after it.
-        let columns_now = ws.scrolling.columns.len();
-        let dst = match columns_now < columns_before && src_col < dst_col {
-            true => dst_col - 1,
-            false => dst_col,
-        }
-        .min(columns_now);
-        match dst < columns_now {
-            true => ws.scroll_mut().add_pane_to_column(dst, None, moved, true),
-            false => {
-                let id = ColumnId(self.session.next_id());
-                let mut ws = self.workspace_mut(ws_idx)?;
-                ws.scroll_mut().add_new_column(Some(dst), id, moved, true);
-            }
-        }
-        Some(Moved { workspace: ws_idx, column: dst, removed_workspace: None })
-    }
-
-    /// Take a pane out of its column into a new one just right of it. `None` when it is already
-    /// alone in its column, because that would change nothing.
-    pub fn move_pane_to_new_column(&mut self, pane: PaneId) -> Option<Moved> {
-        let (ws_idx, col, _) = self.session.pane_location(pane)?;
-        let id = ColumnId(self.session.next_id());
-        let moved = self
-            .workspace_mut(ws_idx)?
-            .scroll_mut()
-            .extract_pane_to_new_column(pane, id);
-        moved.then_some(Moved { workspace: ws_idx, column: col + 1, removed_workspace: None })
-    }
-
     /// Move a pane to workspace `dst_ws`. With `join`, and a column at `dst_col`, it stacks into
     /// that column; otherwise it becomes a column of its own at `dst_col` (the end, when that is
     /// past the last). `None` when it is already in that workspace or not in a column.

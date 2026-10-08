@@ -25,7 +25,7 @@ mod input_mode;
 mod layout_door;
 mod metrics;
 mod mouse_state;
-mod reaction;
+pub(crate) mod reaction;
 mod search;
 mod state;
 mod terminal_layers;

@@ -5,7 +5,7 @@
 //! *what* changed, never what to do about it — the same rule events follow everywhere else.
 
 /// Something that changed in the state every window shares.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Change {
     /// The notifications on show, or when they expire, are different.
     NotificationsChanged,
@@ -27,10 +27,11 @@ pub(crate) enum Change {
     },
     /// The pane is gone from the layout. Whatever ran in it is the window's to end.
     PaneRemoved { pane: heca_core::layout::PaneId },
-    /// A change to the columns of workspace `workspace`: each window shows it for itself.
-    ColumnsChanged {
+    /// The columns or panes of workspace `workspace` changed, as `effects` say: each window shows
+    /// it for itself. Several effects are one change (a move is a removal and an insertion).
+    Arranged {
         workspace: usize,
-        effect: heca_core::layout::ColumnEffect,
+        effects: Vec<heca_core::layout::SpaceEffect>,
     },
     /// A column now sits at index `column` of workspace `workspace` (numbered as they are now).
     ColumnMoved { workspace: usize, column: usize },

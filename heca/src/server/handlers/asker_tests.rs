@@ -2,7 +2,7 @@
 //! a session and each shows its own workspace; a request carries its asker's place, and nothing
 //! here reads the view's.
 
-use heca_core::layout::{ColumnEffect, ColumnWidth, PaneId, Size};
+use heca_core::layout::{ColumnEffect, ColumnWidth, SpaceEffect, PaneId, Size};
 
 use super::testing::{run_as, two_workspaces_of_two_columns};
 use crate::input::WmAction;
@@ -26,7 +26,7 @@ fn a_resize_changes_the_workspace_the_asker_is_in() {
     let mut w = two_workspaces_of_two_columns();
     let (shown_before, asked_before) = (width(&w, 0, 0), width(&w, 1, 0));
     let changes = run_as(&mut w, in_workspace_1(), WmAction::ResizeIncrease);
-    assert_eq!(changes, [Change::ColumnsChanged { workspace: 1, effect: ColumnEffect::Resized { idx: 0 } }]);
+    assert_eq!(changes, [Change::Arranged { workspace: 1, effects: vec![SpaceEffect::Column(ColumnEffect::Resized { idx: 0 })] }]);
     assert_ne!(width(&w, 1, 0), asked_before, "the asker's workspace changed");
     assert_eq!(width(&w, 0, 0), shown_before, "the view's workspace did not");
 }
@@ -72,12 +72,16 @@ fn a_reset_clears_the_name_of_the_askers_workspace() {
     assert_eq!(w.session.workspaces[0].name.as_deref(), Some("a"));
 }
 
-/// With no pane named, the asker's workspace's active pane moves.
+/// With no pane named, the active pane of the asker's column moves — the column the asker says,
+/// not one a window's view has active.
 #[test]
-fn a_move_with_no_pane_named_moves_in_the_askers_workspace() {
+fn a_move_with_no_pane_named_moves_from_the_askers_column() {
     let mut w = two_workspaces_of_two_columns();
-    let changes = run_as(&mut w, in_workspace_1(), WmAction::MovePaneLeft { pane_id: None });
-    assert_eq!(changes, [Change::PaneMoved { pane: PaneId(12), workspace: 1, column: 0 }]);
+    let asker = Asker { column: 1, ..in_workspace_1() };
+    let changes = run_as(&mut w, asker, WmAction::MovePaneLeft { pane_id: None });
+    assert_eq!(changes.last(), Some(&Change::PaneMoved { pane: PaneId(12), workspace: 1, column: 0 }));
+    let in_first: Vec<_> = w.session.workspaces[1].scrolling.columns[0].panes.iter().map(|p| p.id).collect();
+    assert_eq!(in_first, [PaneId(11), PaneId(12)]);
 }
 
 /// A column moved to a workspace goes from the asker's workspace.
@@ -109,14 +113,14 @@ fn swap_left_moves_the_askers_column() {
     let asker = Asker { focused_pane: None, workspace: 0, column: 1, area: WINDOW };
     assert_eq!(
         run_as(&mut w, asker, WmAction::SwapLeft),
-        [Change::ColumnsChanged { workspace: 0, effect: ColumnEffect::Moved { from: 1, to: 0 } }]
+        [Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(ColumnEffect::Moved { from: 1, to: 0 })] }]
     );
     assert_eq!(w.session.workspaces[0].scrolling.columns[0].panes[0].id, PaneId(2));
     let first = Asker { column: 0, ..asker };
     assert!(run_as(&mut w, first, WmAction::SwapLeft).is_empty(), "nothing left of the first");
     assert_eq!(
         run_as(&mut w, first, WmAction::SwapRight),
-        [Change::ColumnsChanged { workspace: 0, effect: ColumnEffect::Moved { from: 0, to: 1 } }]
+        [Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(ColumnEffect::Moved { from: 0, to: 1 })] }]
     );
 }
 
@@ -127,10 +131,10 @@ fn swap_left_steps_one_place_and_resize_acts_on_the_askers_column() {
     let asker = Asker { focused_pane: None, workspace: 0, column: 2, area: WINDOW };
     assert_eq!(
         run_as(&mut w, asker, WmAction::SwapLeft),
-        [Change::ColumnsChanged { workspace: 0, effect: ColumnEffect::Moved { from: 2, to: 1 } }]
+        [Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(ColumnEffect::Moved { from: 2, to: 1 })] }]
     );
     assert_eq!(
         run_as(&mut w, asker, WmAction::ResizeIncrease),
-        [Change::ColumnsChanged { workspace: 0, effect: ColumnEffect::Resized { idx: 2 } }]
+        [Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(ColumnEffect::Resized { idx: 2 })] }]
     );
 }

@@ -57,10 +57,16 @@ impl Session {
 }
 
 impl<'a> Layout<'a> {
-    /// Where workspace `idx`'s columns are for this window, to hold against where they are after a
+    /// Where everything is in every workspace for this window, to hold against where it is after a
     /// change ([`LayoutMut::show_change`]).
-    pub fn column_positions(&self, idx: usize) -> Option<super::scrolling::Positions> {
-        self.workspace(idx).map(|ws| ws.scroll().positions())
+    pub fn before(&self) -> Before {
+        Before(
+            self.session
+                .workspaces
+                .iter()
+                .map(|ws| (ws.id, ws.scrolling.through(self.view.scroll(ws.id)).positions()))
+                .collect(),
+        )
     }
 
     /// The shared content.
@@ -133,18 +139,15 @@ impl LayoutMut<'_> {
     }
 
     /// **Show a change to workspace `idx`'s columns and panes in this window**: the window's own
-    /// reaction to what the content did, given where things were before
-    /// ([`Layout::column_positions`]).
-    pub fn show_change(
-        &mut self,
-        idx: usize,
-        effects: &[super::scrolling::SpaceEffect],
-        before: &super::scrolling::Positions,
-    ) {
+    /// reaction to what the content did, given where things were before ([`Layout::before`]). A
+    /// workspace the picture does not hold — one made by the change — has nothing to show.
+    pub fn show_change(&mut self, idx: usize, effects: &[super::scrolling::SpaceEffect], before: &Before) {
         let Some(ws) = self.session.workspaces.get(idx) else {
             return;
         };
-        self.view.scroll_mut(ws.id).react_to(&ws.scrolling, effects, before);
+        if let Some(positions) = before.of(ws.id) {
+            self.view.scroll_mut(ws.id).react_to(&ws.scrolling, effects, positions);
+        }
     }
 
     /// The same layout, for the reads that only look.
@@ -328,6 +331,18 @@ mod remove_tests;
 mod move_tests;
 mod swap;
 pub use moves::{Added, Moved};
+
+/// Where everything was in each workspace for one window, taken before a change, so the window
+/// can show the change from where it was ([`LayoutMut::show_change`]).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Before(Vec<(WorkspaceId, super::scrolling::Positions)>);
+
+impl Before {
+    /// Where things were in workspace `id`. `None` when it did not exist yet.
+    pub fn of(&self, id: WorkspaceId) -> Option<&super::scrolling::Positions> {
+        self.0.iter().find_map(|(ws, positions)| (*ws == id).then_some(positions))
+    }
+}
 pub use remove::Removed;
 #[cfg(test)]
 mod tests;

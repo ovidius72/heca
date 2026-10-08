@@ -7,8 +7,8 @@ use super::*;
 pub(crate) struct Asked<'a> {
     pub(crate) action: &'a crate::input::WmAction,
     pub(crate) name: &'a str,
-    /// Where the columns of the workspace this window was in were when it asked.
-    pub(crate) before: Option<&'a (usize, heca_core::layout::Positions)>,
+    /// Where everything was, in every workspace, for this window when it asked.
+    pub(crate) before: &'a heca_core::layout::Before,
 }
 
 impl AppState {
@@ -59,7 +59,7 @@ impl AppState {
                 &mut tracking,
                 &change,
                 asked.map(|a| a.action),
-                asked.and_then(|a| a.before),
+                asked.map(|a| a.before),
             );
             self.needs_redraw |= reaction.redraw;
             if reaction.names_changed {
@@ -89,16 +89,13 @@ impl AppState {
     /// state stays borrowable beside it.
     pub(crate) fn run_on_server(&mut self, action: &crate::input::WmAction, name: &str) {
         let asker = crate::server::Asker::seen_through(self.layout(), self.focused_pane);
-        let before = self
-            .layout()
-            .column_positions(asker.workspace)
-            .map(|positions| (asker.workspace, positions));
+        let before = self.layout().before();
         let mut cx = crate::server::ServerCx {
             layout: crate::server::ServerLayout::new(self.session.through_mut(&mut self.view)),
             asker,
         };
         let changes = self.server.run(&mut cx, action);
-        self.apply_answer(changes, Some(Asked { action, name, before: before.as_ref() }));
+        self.apply_answer(changes, Some(Asked { action, name, before: &before }));
     }
 
     /// Point the toast stack's signal at what the server says is on show, if that changed.

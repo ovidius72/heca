@@ -4,7 +4,7 @@
 //! The server reports past facts about the content ([`Change`]). Which workspace is shown, which
 //! column is active and where the window came from are the window's own decisions, made here once.
 
-use heca_core::layout::{LayoutMut, PaneId, Positions, SpaceEffect};
+use heca_core::layout::{Before, LayoutMut, PaneId};
 
 use crate::input::WmAction;
 use crate::server::{Change, Refusal};
@@ -90,6 +90,12 @@ fn follows_column(asked: Option<&WmAction>) -> bool {
     )
 }
 
+/// Whether the window that sent `asked` goes where the pane it moved went. A pane taken with
+/// `focus_after` off stays where it was focused; every other move is followed.
+fn follows_pane(asked: Option<&WmAction>) -> bool {
+    !matches!(asked, Some(WmAction::TakePane { focus_after: false, .. }))
+}
+
 /// The pane the action this window sent names as the one it acts on, when it names one.
 fn named_pane(asked: Option<&WmAction>) -> Option<PaneId> {
     match asked {
@@ -106,7 +112,7 @@ pub(crate) fn window_reacts(
     tracking: &mut Tracking<'_>,
     change: &Change,
     asked: Option<&WmAction>,
-    before: Option<&(usize, Positions)>,
+    before: Option<&Before>,
 ) -> Reaction {
     let mut reaction = Reaction { redraw: true, ..Reaction::default() };
     match *change {
@@ -121,13 +127,11 @@ pub(crate) fn window_reacts(
                 }
             }
         }
-        Change::ColumnsChanged { workspace, effect } => {
-            // Show the change the way this window sees it — only for the workspace it was looking
-            // at when it asked, where it took the picture of where things were.
-            if let Some((asked_in, positions)) = before
-                && *asked_in == workspace
-            {
-                layout.show_change(workspace, &[SpaceEffect::Column(effect)], positions);
+        Change::Arranged { workspace, ref effects } => {
+            // Shown from where this window had things when it asked. A window with no picture —
+            // the change answers another window — has nothing to slide from.
+            if let Some(before) = before {
+                layout.show_change(workspace, effects, before);
             }
         }
         Change::ColumnZoomed { workspace, column } => {
@@ -146,10 +150,15 @@ pub(crate) fn window_reacts(
         }
         Change::NamesChanged => reaction.names_changed = true,
         Change::PaneRemoved { pane } => reaction.stop_terminals.push(pane),
-        Change::PaneMoved { workspace, .. } => {
-            // A pane moved by this window is shown where it landed.
+        Change::PaneMoved { pane, workspace, .. } => {
+            // A pane moved by this window is shown where it landed, and focused there.
             if asked.is_some() {
                 show_workspace(layout, tracking.last_visited_ws, workspace);
+            }
+            if asked.is_some() && follows_pane(asked)
+                && let Some(mut ws) = layout.workspace_mut(workspace)
+            {
+                ws.activate_pane(pane);
             }
         }
         Change::ColumnMoved { workspace, .. } => {

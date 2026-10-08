@@ -4,41 +4,6 @@ use super::*;
 
 
 #[test]
-fn a_pane_is_extracted_into_a_new_column_beside_its_own() {
-    let mut space = space_with_columns(2);
-    space.m().add_pane_to_column(0, None, Pane::new(PaneId(99), "second"), false);
-    assert_eq!(space.columns[0].panes.len(), 2);
-
-    assert!(space.m().extract_pane_to_new_column(PaneId(99), ColumnId(500)));
-
-    assert_eq!(space.columns.len(), 3, "a column was created");
-    assert_eq!(space.columns[0].panes.len(), 1, "it left the one it was in");
-    assert_eq!(
-        space.columns[1]
-            .panes
-            .iter()
-            .map(|p| p.id)
-            .collect::<Vec<_>>(),
-        vec![PaneId(99)],
-        "and landed immediately to the right, alone",
-    );
-    assert_eq!(space.columns[1].id, ColumnId(500));
-}
-
-
-/// A pane already alone in its column stays put and says so: it would leave a column of one and
-/// land in a column of one, so nothing on screen would change.
-#[test]
-fn a_pane_alone_in_its_column_is_left_where_it_is() {
-    let mut space = space_with_columns(2);
-    let before = space.columns.len();
-
-    assert!(!space.m().extract_pane_to_new_column(PaneId(1), ColumnId(500)));
-    assert_eq!(space.columns.len(), before);
-}
-
-
-#[test]
 fn resize_pane_height_sets_preferred_and_no_ops_single_pane() {
     let mut space = test_scrolling_space();
     space.m().add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);

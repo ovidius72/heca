@@ -52,8 +52,6 @@ impl<'a> ServerLayout<'a> {
         fn remove_pane_anywhere(&mut self, pane: PaneId) -> Option<Removed>;
         fn remove_column_with_panes(&mut self, ws: usize, col: usize) -> Option<Removed>;
         fn remove_workspace_with_panes(&mut self, ws: usize) -> Option<Removed>;
-        fn move_pane_to_column(&mut self, pane: PaneId, dst_col: usize) -> Option<Moved>;
-        fn move_pane_to_new_column(&mut self, pane: PaneId) -> Option<Moved>;
         fn move_pane_to_workspace(
             &mut self,
             pane: PaneId,

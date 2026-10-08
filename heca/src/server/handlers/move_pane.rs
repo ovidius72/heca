@@ -1,6 +1,6 @@
 //! Moving a pane: to another column, another workspace, or a column of its own.
 
-use heca_core::layout::{ColumnId, Moved, PaneId};
+use heca_core::layout::{ColumnId, Direction, Moved, PaneId, SpaceEffect};
 
 use crate::input::WmAction;
 use crate::server::{Change, Refusal, ServerCx};
@@ -20,48 +20,80 @@ fn landed(pane: PaneId, moved: Option<Moved>) -> Vec<Change> {
     }
 }
 
-/// Move the active pane of the workspace `pane` is in — the asker's active one when no pane is
-/// named — one column along. `step` does it.
-fn move_along(
-    cx: &mut ServerCx<'_>,
-    pane: Option<PaneId>,
-    step: impl FnOnce(&mut heca_core::layout::WorkspaceMut<'_>, ColumnId) -> bool,
-) -> Vec<Change> {
-    let workspace = match pane {
-        Some(id) => cx.layout.session().pane_location(id).map(|(ws, ..)| ws),
-        None => Some(cx.asker.workspace),
+/// What a pane that moved within workspace `workspace` says: what changed there, then where it
+/// landed.
+fn moved_within(workspace: usize, pane: PaneId, effects: Vec<SpaceEffect>) -> Vec<Change> {
+    let landed = SpaceEffect::landing(&effects);
+    let mut changes = vec![Change::Arranged { workspace, effects }];
+    if let Some((column, _)) = landed {
+        changes.push(Change::PaneMoved { pane, workspace, column });
+    }
+    changes
+}
+
+/// Where a pane is — workspace, column, row — and which: `pane` when it is named, otherwise the
+/// active pane of the asker's column.
+fn spot(cx: &ServerCx<'_>, pane: Option<PaneId>) -> Option<(PaneId, usize, usize, usize)> {
+    let session = cx.layout.session();
+    match pane {
+        Some(id) => session.pane_location(id).map(|(ws, col, row)| (id, ws, col, row)),
+        None => {
+            let (ws, col) = (cx.asker.workspace, cx.asker.column);
+            let column = session.workspaces.get(ws)?.scrolling.columns.get(col)?;
+            let row = column.active_pane_idx;
+            column.panes.get(row).map(|p| (p.id, ws, col, row))
+        }
+    }
+}
+
+/// Move `pane` — the asker's active one when none is named — one column along `dir`.
+fn move_along(cx: &mut ServerCx<'_>, pane: Option<PaneId>, dir: Direction) -> Vec<Change> {
+    let Some((moving, workspace, col, row)) = spot(cx, pane) else {
+        return Vec::new();
     };
-    // Allocated before the workspace is borrowed; spent only if the move makes a column.
     let new_column = ColumnId(cx.layout.next_id());
-    let Some(mut ws) = workspace.and_then(|idx| cx.layout.workspace_mut(idx)) else {
+    let height = cx.asker.area.h;
+    let moved = cx.arrange(workspace, |space, _| {
+        space.move_pane_along(col, row, dir, new_column, height)
+    });
+    match moved {
+        Some(effects) => moved_within(workspace, moving, effects),
+        // Nothing moved, but a pane that was named is still the one the window asked about.
+        None => vec![Change::LayoutChanged],
+    }
+}
+
+/// Move `pane` into column `dst_col` of its own workspace; `dst_col` equal to the number of
+/// columns makes a new one at the end.
+fn move_within(cx: &mut ServerCx<'_>, pane: PaneId, dst_col: usize) -> Vec<Change> {
+    let Some((_, workspace, col, row)) = spot(cx, Some(pane)) else {
         return Vec::new();
     };
-    if let Some(id) = pane {
-        ws.activate_pane(id);
-    }
-    let Some(moving) = ws.active_pane().map(|p| p.id) else {
-        return Vec::new();
-    };
-    if !step(&mut ws, new_column) {
-        return vec![Change::LayoutChanged];
-    }
-    let column = ws.scroll().active_column_idx();
-    let workspace = workspace.unwrap_or_default();
-    vec![Change::PaneMoved { pane: moving, workspace, column }]
+    let new_column = ColumnId(cx.layout.next_id());
+    let height = cx.asker.area.h;
+    let moved = cx.arrange(workspace, |space, _| {
+        let count = space.columns.len();
+        match dst_col {
+            to if to == col || to > count => None,
+            to if to == count => space.extract_pane(col, row, new_column, to),
+            to => space.move_pane_between(col, row, to, height),
+        }
+    });
+    moved.map_or_else(Vec::new, |effects| moved_within(workspace, pane, effects))
 }
 
 pub(super) fn move_pane_left(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
     let WmAction::MovePaneLeft { pane_id } = action else {
         return Vec::new();
     };
-    move_along(cx, *pane_id, |ws, id| ws.scroll_mut().move_active_pane_left(id))
+    move_along(cx, *pane_id, Direction::Left)
 }
 
 pub(super) fn move_pane_right(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
     let WmAction::MovePaneRight { pane_id } = action else {
         return Vec::new();
     };
-    move_along(cx, *pane_id, |ws, id| ws.scroll_mut().move_active_pane_right(id))
+    move_along(cx, *pane_id, Direction::Right)
 }
 
 /// Move a pane into a column of its own workspace.
@@ -69,7 +101,7 @@ pub(super) fn move_to_column_here(cx: &mut ServerCx<'_>, action: &WmAction) -> V
     let WmAction::Move { pane_id, target_col } = action else {
         return Vec::new();
     };
-    landed(*pane_id, cx.layout.move_pane_to_column(*pane_id, *target_col))
+    move_within(cx, *pane_id, *target_col)
 }
 
 /// Move a pane to another workspace, as a column of its own.
@@ -96,23 +128,27 @@ pub(super) fn move_to_column(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Ch
     let Some((workspace, ..)) = cx.layout.session().pane_location(*pane_id) else {
         return Vec::new();
     };
-    let moved = match workspace == *ws_idx {
-        true => cx.layout.move_pane_to_column(*pane_id, *col_idx),
-        false => cx.layout.move_pane_to_workspace(*pane_id, *ws_idx, *col_idx, true),
-    };
-    landed(*pane_id, moved)
+    match workspace == *ws_idx {
+        true => move_within(cx, *pane_id, *col_idx),
+        false => landed(*pane_id, cx.layout.move_pane_to_workspace(*pane_id, *ws_idx, *col_idx, true)),
+    }
 }
 
 /// Take the asker's focused pane out of its column into a new one, right of it.
 pub(super) fn move_to_new_column(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    let Some(pane) = cx.asker.focused_pane else {
+    let Some((pane, workspace, col, row)) = cx.asker.focused_pane.and_then(|p| spot(cx, Some(p))) else {
         return Vec::new();
     };
-    if cx.layout.session().pane_location(pane).is_none() {
-        return Vec::new();
-    }
-    match cx.layout.move_pane_to_new_column(pane) {
-        Some(moved) => landed(pane, Some(moved)),
+    let new_column = ColumnId(cx.layout.next_id());
+    let moved = cx.arrange(workspace, |space, _| {
+        let alone = space.columns.get(col).is_none_or(|c| c.panes.len() <= 1);
+        match alone {
+            true => None,
+            false => space.extract_pane(col, row, new_column, col + 1),
+        }
+    });
+    match moved {
+        Some(effects) => moved_within(workspace, pane, effects),
         None => vec![Change::Refused(Refusal::OnlyPaneInColumn)],
     }
 }

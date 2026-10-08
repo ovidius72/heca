@@ -46,33 +46,6 @@ impl ScrollingMut<'_> {
         }
     }
 
-    /// **Take a pane out of its column and give it one of its own, immediately to the right.**
-    ///
-    /// Distinct from [`add_pane_to_column`](Self::add_pane_to_column), which puts a pane *into* a
-    /// column that exists. The nearest existing move only creates a column when the target is past
-    /// the end of the strip, so asked for a position between two columns it stacks into the
-    /// existing one instead — this always creates, which is the whole act.
-    ///
-    /// **A pane already alone in its column is left where it is** and this answers `false`: it
-    /// would leave a column of one and land in a column of one, so nothing on screen would change.
-    ///
-    /// `new_id` is passed in rather than derived: an id taken from the pane could name a column
-    /// that already exists, and two columns with one id are two rows the cursor, the hint letters
-    /// and a right-click cannot tell apart.
-    pub fn extract_pane_to_new_column(&mut self, pane_id: PaneId, new_id: ColumnId) -> bool {
-        let Some((src_col, pane_idx)) = self.space.pane_indices(pane_id) else {
-            return false;
-        };
-        if self.space.columns[src_col].panes.len() <= 1 {
-            return false;
-        }
-        let Some(pane) = self.remove_pane(src_col, pane_idx) else {
-            return false;
-        };
-        self.add_new_column(Some(src_col + 1), new_id, pane, true);
-        true
-    }
-
     /// Add a pane to a column.
     pub fn add_pane_to_column(
         &mut self,
@@ -160,72 +133,26 @@ impl ScrollingMut<'_> {
         true
     }
 
-    /// Move the active pane to the previous column (left).
-    /// If at first column and source has >1 pane, creates a new column to the left.
-    /// If at first column and source has 1 pane, does nothing.
+    /// Move the active pane to the previous column (left). At the first column, when the pane is
+    /// not alone in its column, it goes into a new column to the left; alone, nothing happens.
     pub fn move_active_pane_left(&mut self, new_column_id: ColumnId) -> bool {
-        if self.view.active_column == 0 {
-            // First column — create new column to the left if source has > 1 pane
-            let source_has_multiple = self
-                .columns
-                .get(self.view.active_column)
-                .map(|c| c.panes.len() > 1)
-                .unwrap_or(false);
-            if !source_has_multiple {
-                return false;
-            }
-            return self.move_active_pane_to_new_column(Direction::Left, new_column_id);
-        }
-        let target_col = self.view.active_column - 1;
-        self.move_active_pane_to_column(target_col)
+        self.move_active_pane_along(Direction::Left, new_column_id)
     }
 
-    /// Move the active pane to the next column (right).
-    /// If at last column and source has >1 pane, creates a new column to the right.
-    /// If at last column and source has 1 pane, does nothing.
+    /// Move the active pane to the next column (right). At the last column, when the pane is not
+    /// alone in its column, it goes into a new column to the right; alone, nothing happens.
     pub fn move_active_pane_right(&mut self, new_column_id: ColumnId) -> bool {
-        if self.view.active_column + 1 >= self.space.columns.len() {
-            // Last column — create new column to the right if source has > 1 pane
-            let source_has_multiple = self
-                .columns
-                .get(self.view.active_column)
-                .map(|c| c.panes.len() > 1)
-                .unwrap_or(false);
-            if !source_has_multiple {
-                return false;
-            }
-            return self.move_active_pane_to_new_column(Direction::Right, new_column_id);
-        }
-        let target_col = self.view.active_column + 1;
-        self.move_active_pane_to_column(target_col)
+        self.move_active_pane_along(Direction::Right, new_column_id)
     }
 
-    fn move_active_pane_to_column(&mut self, target_col: usize) -> bool {
-        let source_col = self.view.active_column;
-        let Some(row) = self.space.columns.get(source_col).map(|c| c.active_pane_idx) else {
+    fn move_active_pane_along(&mut self, dir: Direction, new_column_id: ColumnId) -> bool {
+        let col = self.view.active_column;
+        let Some(row) = self.space.columns.get(col).map(|c| c.active_pane_idx) else {
             return false;
         };
         let before = self.reader().positions();
         let height = self.view.area.size.h;
-        let Some(effects) = self.space.move_pane_between(source_col, row, target_col, height) else {
-            return false;
-        };
-        self.show_pane_landed(&effects, &before)
-    }
-
-    /// Create a new column to the left or right of the current column
-    /// with the active pane moved into it.
-    fn move_active_pane_to_new_column(&mut self, dir: Direction, new_column_id: ColumnId) -> bool {
-        let source_col = self.view.active_column;
-        let Some(row) = self.space.columns.get(source_col).map(|c| c.active_pane_idx) else {
-            return false;
-        };
-        let at = match dir {
-            Direction::Left => source_col,
-            Direction::Right => source_col + 1,
-        };
-        let before = self.reader().positions();
-        let Some(effects) = self.space.extract_pane(source_col, row, new_column_id, at) else {
+        let Some(effects) = self.space.move_pane_along(col, row, dir, new_column_id, height) else {
             return false;
         };
         self.show_pane_landed(&effects, &before)
@@ -234,12 +161,7 @@ impl ScrollingMut<'_> {
     /// Show the active pane's move to where `effects` say it landed, and follow it there: that
     /// column and pane become the active ones.
     fn show_pane_landed(&mut self, effects: &[SpaceEffect], before: &Positions) -> bool {
-        let landed = effects.iter().rev().find_map(|effect| match *effect {
-            SpaceEffect::Pane(PaneEffect::Inserted { col, row }) => Some((col, row)),
-            SpaceEffect::Column(ColumnEffect::Inserted { idx }) => Some((idx, 0)),
-            _ => None,
-        });
-        let Some((col, row)) = landed else {
+        let Some((col, row)) = SpaceEffect::landing(effects) else {
             return false;
         };
         let Some(column) = self.space.columns.get_mut(col) else {

@@ -4,7 +4,7 @@
 //! A move is a removal and an insertion; a window that finds the inserted pane in the
 //! before-picture ([`Positions::pane`]) knows it travelled and slides it from there.
 
-use super::{ColumnEffect, Positions, ScrollingMut, ScrollingRef, ScrollingSpace};
+use super::{ColumnEffect, Direction, Positions, ScrollingMut, ScrollingRef, ScrollingSpace};
 use crate::layout::animation::AnimationConfig;
 use crate::layout::column::Pane;
 use crate::layout::types::{ColumnId, PaneId, Point};
@@ -125,6 +125,34 @@ impl ScrollingSpace {
         Some(vec![taken, SpaceEffect::Column(self.insert_column(at, column))])
     }
 
+    /// Move the pane at row `row` of column `col` one column along `dir`: to the bottom of the
+    /// next column, or — at the edge, when it is not alone in its column — into a new column
+    /// `new_column` there. `None` when nothing moves.
+    pub fn move_pane_along(
+        &mut self,
+        col: usize,
+        row: usize,
+        dir: Direction,
+        new_column: ColumnId,
+        working_height: f64,
+    ) -> Option<Vec<SpaceEffect>> {
+        let count = self.columns.len();
+        let alone = self.columns.get(col)?.panes.len() <= 1;
+        let next = match dir {
+            Direction::Left => col.checked_sub(1),
+            Direction::Right => (col + 1 < count).then_some(col + 1),
+        };
+        let edge = match dir {
+            Direction::Left => col,
+            Direction::Right => col + 1,
+        };
+        match next {
+            Some(to) => self.move_pane_between(col, row, to, working_height),
+            None if !alone => self.extract_pane(col, row, new_column, edge),
+            None => None,
+        }
+    }
+
     /// Trade the panes at rows `a` and `b` of column `col`; the column's active pane travels with
     /// the swap when it is one of the two. `None` when either is not there or they are the same.
     pub fn swap_panes_in_column(&mut self, col: usize, a: usize, b: usize) -> Option<PaneEffect> {
@@ -148,6 +176,18 @@ fn after_taking(taken: SpaceEffect, idx: usize) -> usize {
     match taken {
         SpaceEffect::Column(ColumnEffect::Removed { idx: gone }) if gone < idx => idx - 1,
         _ => idx,
+    }
+}
+
+impl SpaceEffect {
+    /// Where the pane a move or an insertion put somewhere landed: its column and row, from the
+    /// last effect that placed one. `None` when none did.
+    pub fn landing(effects: &[SpaceEffect]) -> Option<(usize, usize)> {
+        effects.iter().rev().find_map(|effect| match *effect {
+            SpaceEffect::Pane(PaneEffect::Inserted { col, row }) => Some((col, row)),
+            SpaceEffect::Column(ColumnEffect::Inserted { idx }) => Some((idx, 0)),
+            _ => None,
+        })
     }
 }
 

@@ -50,9 +50,9 @@ pub mod window_view;
 pub mod workspace;
 
 pub use column::{Column, Pane};
-pub use handle::{Added, Layout, LayoutMut, Moved, Removed};
+pub use handle::{Added, Before, Layout, LayoutMut, Moved, Removed};
 pub use scrolling::{
-    ColumnEffect, LaidOutColumn, LaidOutPane, PaneEffect, Positions, ScrollingMut, ScrollingRef,
+    ColumnEffect, Direction, LaidOutColumn, LaidOutPane, PaneEffect, Positions, ScrollingMut, ScrollingRef,
     ScrollingSpace, SpaceEffect,
 };
 pub use session::Session;

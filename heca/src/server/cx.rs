@@ -1,6 +1,8 @@
 //! What a server handler is given: the shared content to change, and who asked.
 
-use heca_core::layout::{ColumnEffect, Layout, PaneId, ScrollingSpace, Size, WorkspaceMut};
+use heca_core::layout::{
+    ColumnEffect, Layout, PaneId, ScrollingSpace, Size, SpaceEffect, WorkspaceMut,
+};
 
 use super::{Change, ServerLayout};
 
@@ -78,7 +80,7 @@ impl ServerCx<'_> {
         };
         change(space, &asker)
             .into_iter()
-            .map(|effect| Change::ColumnsChanged { workspace, effect })
+            .map(|effect| Change::Arranged { workspace, effects: vec![SpaceEffect::Column(effect)] })
             .collect()
     }
 
@@ -96,5 +98,19 @@ impl ServerCx<'_> {
             }
             None => Vec::new(),
         }
+    }
+}
+
+impl ServerCx<'_> {
+    /// Change workspace `workspace`'s columns and panes with no view, and say what changed. `None`
+    /// when there is no such workspace or nothing changed.
+    pub(crate) fn arrange(
+        &mut self,
+        workspace: usize,
+        change: impl FnOnce(&mut ScrollingSpace, &Asker) -> Option<Vec<SpaceEffect>>,
+    ) -> Option<Vec<SpaceEffect>> {
+        let asker = self.asker;
+        let space = self.layout.columns_mut(workspace)?;
+        change(space, &asker).filter(|effects| !effects.is_empty())
     }
 }

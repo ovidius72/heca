@@ -1,5 +1,7 @@
 //! Swapping panes and columns: nothing is added or removed, two things trade places.
 
+use heca_core::layout::SpaceEffect;
+
 use crate::input::WmAction;
 use crate::server::{Change, ServerCx};
 
@@ -31,18 +33,27 @@ pub(super) fn swap_right(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Chang
     move_active_column(cx, |at, count| (at + 1 < count).then_some(at + 1))
 }
 
+/// Swap the active pane of the asker's column with the one `step` names, given its row and the
+/// number of panes.
+fn swap_active_pane(cx: &mut ServerCx<'_>, step: impl FnOnce(usize, usize) -> Option<usize>) -> Vec<Change> {
+    let (workspace, col) = (cx.asker.workspace, cx.asker.column);
+    let swapped = cx.arrange(workspace, |space, _| {
+        let column = space.columns.get(col)?;
+        let row = column.active_pane_idx;
+        let other = step(row, column.panes.len())?;
+        space.swap_panes_in_column(col, row, other).map(|effect| vec![SpaceEffect::Pane(effect)])
+    });
+    swapped.map_or_else(Vec::new, |effects| vec![Change::Arranged { workspace, effects }])
+}
+
 /// Swap the active pane with the one above it.
 pub(super) fn swap_up(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_asker_workspace(|mut ws| {
-        ws.swap_active_pane_up();
-    })
+    swap_active_pane(cx, |row, _| row.checked_sub(1))
 }
 
 /// Swap the active pane with the one below it.
 pub(super) fn swap_down(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    cx.change_asker_workspace(|mut ws| {
-        ws.swap_active_pane_down();
-    })
+    swap_active_pane(cx, |row, count| (row + 1 < count).then_some(row + 1))
 }
 
 /// Swap two panes, wherever they are.
