@@ -482,17 +482,14 @@ impl Component for Dialog {
         }
         let panel_bounds = self.panel_bounds();
         match ev {
-            // **Focus, then let the press through.** Capture runs before the target, so the
-            // click-to-focus decision is made here and the router still carries the press to
-            // whatever is under the cursor — this method no longer delivers anything itself.
-            // Trapped focus: a press on the panel *body* keeps the focused button's ring rather
-            // than clearing it, because focus is trapped inside a modal.
+            // **Let the press through.** Click-to-focus is the router's, once, for every tree — a
+            // press on the panel *body* keeps the focused button where it is, because a press on
+            // nothing focusable changes nothing. This method only decides what the scrim does.
             Event::PointerDown(p) => {
                 let panel = self.base.children[0].base_mut().children[0].as_mut();
                 if panel_bounds.contains(p.pos)
                     || crate::component::overlay_occluded_at(panel, p.pos)
                 {
-                    self.base.children[0].focus_at_trapped(p.pos);
                     Handled::No
                 } else if self.dismissible {
                     // Scrim / outside click dismisses only when dismissible.
@@ -636,14 +633,13 @@ mod tests {
 
     /// Buttons in the action row that currently hold focus (drives the focus ring).
     fn focused_buttons(d: &Dialog) -> Vec<usize> {
-        use crate::reactive::SignalGet;
         let panel = &d.base().children[0].base().children[0];
         let row = &panel.base().children[2];
         row.base()
             .children
             .iter()
             .enumerate()
-            .filter(|(_, b)| b.base().focused.get_untracked())
+            .filter(|(_, b)| b.base().is_focused())
             .map(|(i, _)| i)
             .collect()
     }
@@ -871,8 +867,6 @@ mod tests {
     /// behaviour is what broke the keyboard the last time it was done by halves.
     #[test]
     fn a_dialog_raised_by_its_handle_starts_where_it_said() {
-        use crate::reactive::SignalGet;
-
         let mut d = Dialog::new("Delete pane?")
             .body(Label::new("This action cannot be undone."))
             .action(Button::new("Cancel"))
@@ -885,7 +879,7 @@ mod tests {
         d.tick(0.016);
 
         fn focused(n: &dyn Component, out: &mut Vec<String>) {
-            if n.base().focused.get_untracked()
+            if n.base().is_focused()
                 && let Some(name) = n.text_summary()
             {
                 out.push(name);
@@ -938,7 +932,7 @@ mod tab_repro {
         );
 
         fn focused(n: &dyn Component, out: &mut Vec<String>) {
-            if crate::reactive::SignalGet::get_untracked(&n.base().focused)
+            if n.base().is_focused()
                 && let Some(name) = n.text_summary()
             {
                 out.push(name);

@@ -39,7 +39,7 @@ pub enum AppEvent {
     /// that holds the policy needing state (`terminal_host::on_terminal_input`). Not an action: a
     /// wheel turn is not something a user means to do.
     TerminalInput {
-        pane_id: heca_core::layout::PaneId,
+        terminal: crate::chrome::terminal::TerminalId,
         input: crate::chrome::terminal::TerminalInput,
     },
 }
@@ -84,7 +84,10 @@ pub(crate) fn handle_window_event(
         }
         WindowEvent::RedrawRequested => {
             state.needs_redraw = true;
+            state.frame_times.start();
             render_frame(state);
+            let passes = state.grid_renderer.passes() + state.text_renderer.passes();
+            state.frame_times.finish(passes);
         }
         WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
             state.scale_factor = scale_factor;
@@ -124,8 +127,7 @@ pub(crate) fn handle_window_event(
                         state.modifiers,
                     );
                     if let Some((key, _)) = crate::app::registry::combo_to_grid(&combo) {
-                        let keymap = state.widget_keymap.clone();
-                        let handled = keymap.deliver_release(key, |ev| {
+                        let handled = state.widget_keymap.deliver_release(key, |ev| {
                             heca_grid_ui::dispatch(&mut state.window_root, ev)
                         });
                         if matches!(handled, Handled::Yes) {
@@ -162,6 +164,9 @@ pub(crate) fn handle_window_event(
                     crate::app_state::InputMode::Prefix
                         | crate::app_state::InputMode::HintPick { .. }
                 );
+            // Whether the tree has already been offered this key (the layer branch below does it), so
+            // the key rules do not offer it a second time.
+            let mut offered_to_tree = false;
             if !picker_seq && layer_holds_keyboard(state) {
                 // Overlay key resolution via the single host-owned widget keymap
                 // (`widget-keys-config`). `Keymap::dispatch` delivers the raw key to the overlay
@@ -172,26 +177,20 @@ pub(crate) fn handle_window_event(
                 // Use the already-normalized `event_combo` (which carries the macOS
                 // physical-key fallback for `Ctrl+letter`, unlike the raw logical key) so vim
                 // `Ctrl+h/j/k/l` resolve to the right chord.
-                if let Some((combo_key, mods)) = crate::app::registry::combo_to_grid(&event_combo) {
+                if let Some(handled) =
+                    crate::app::tree_keys::deliver_press_to_tree(state, &event_combo, &key_text)
+                {
                     // **One call: the surface does not write the order.** Committed text, then the
                     // key, then the intents it resolves to — all inside `deliver_press`, so this
                     // surface and every other one feed a widget identically. Writing the sequence
                     // here is how the showcase came to have no `TextInput` step at all while the
                     // same `CommandPalette` typed fine in this app.
-                    let press = heca_grid_ui::KeyPress {
-                        key: combo_key,
-                        text: Some(key_text.to_string()),
-                        mods,
-                    };
-                    let keymap = state.widget_keymap.clone();
-                    let handled = keymap.deliver_press(&press, |ev| {
-                        heca_grid_ui::dispatch(&mut state.window_root, ev)
-                    });
                     // **A key the overlay ignored is not consumed by the overlay.** Returning
                     // regardless swallowed every binding an open surface had no use for — which is
                     // why `q`, catalogued and bound to `close_overlay` alongside `Escape`, did
                     // nothing while the map was up: `Escape` resolves to the `dismiss` widget
                     // intent and was handled here, `q` resolves to nothing and died here.
+                    offered_to_tree = true;
                     if matches!(handled, Handled::Yes) {
                         state.mark_full_redraw();
                         return;
@@ -214,6 +213,7 @@ pub(crate) fn handle_window_event(
                     is_prefix,
                     is_ctrl,
                     is_shift,
+                    offered_to_tree,
                 },
             );
         }
@@ -228,13 +228,10 @@ pub(crate) fn handle_window_event(
             // modifiers only when it happened to be the thing in front.
             //
             // ⚠️ **Told before anyone is asked.** The framework records what is held from this
-            // announcement, and the app's own reaction below asks it what a drag now means
-            // (`DropAction::held`). Reacting first asks the question before the answer has been
-            // given, so the drag's move-versus-swap trails one modifier event behind — flipping
-            // when the key comes UP rather than when it goes down (F003/P097/T496).
+            // announcement, and everything that reads it afterwards (the cursor below, a drag's
+            // move-versus-swap outline) must see the new answer, not the one before the change.
             let mods = grid_modifiers(state.modifiers);
             let _ = heca_grid_ui::dispatch(&mut state.window_root, &Event::ModifiersChanged(mods));
-            mouse::on_modifiers_changed(state);
             // Refresh the cursor affordance: pressing/releasing Cmd over a link
             // toggles the pointer cue even without pointer movement.
             mouse::update_cursor(state, state.mouse.pos);
@@ -268,18 +265,7 @@ pub(crate) fn handle_window_event(
             // where it started — the one move that crosses the threshold gets through, and nothing
             // after it does. Hover is no reason either: the framework lights nothing under a drag
             // (guard `a_drag_in_flight_clears_hover`).
-            if !mouse::is_resizing(state) {
-                crate::chrome::deliver(state, &moved);
-            }
-            // The pane header and the pane viewport are their OWN retained trees, which a drag in
-            // the window root does not reach — so they are still told to stay dark while something
-            // is being carried, which is what keeps "nothing hovers under a drag" true for them.
-            if !crate::chrome::drag_in_flight(state) && !mouse::is_resizing(state) {
-                // Feed the move into the panes, so a header button's hover lights up and a
-                // terminal hears where the pointer is (it says so itself, and only for a move
-                // that landed on it, not on its chip or scrollbar).
-                crate::chrome::deliver_to_panes(state, &moved);
-            }
+            crate::chrome::deliver(state, &moved);
             // Cursor affordance: Grab over a draggable, Grabbing while dragging.
             mouse::update_cursor(state, pos);
             state.mark_full_redraw();
@@ -320,55 +306,12 @@ pub(crate) fn handle_window_event(
             if crate::chrome::dispatch_surface_pointer(state, &ev) {
                 return;
             }
-            // Pane info-bar action **buttons** intercept a plain left-press so a click
-            // hits the button (not the terminal). Only an actual button hit is
-            // consumed — a press on the empty header band falls through to the normal
-            // content/drag/resize paths (the lower pane's band sits on the divider, so
-            // consuming it would break divider/resize gestures). A modifier-held press
-            // also falls through (meta-drag).
-            if button == winit::event::MouseButton::Left
-                && button_state == ElementState::Pressed
-                && !mouse::interactive_move_modifier_held(state)
-                && crate::chrome::deliver_to_panes(state, &ev)
-            {
-                mouse::update_cursor(state, state.mouse.pos);
-                state.mark_full_redraw();
-                return;
-            }
-            // Divider resize: a plain left-press on a column/pane divider starts a
-            // resize-drag. Only an actual divider hit consumes — a miss falls
-            // through to the normal content/drag paths. A modifier-held press
-            // (meta-drag) falls through. Checked after the header-button block
-            // because the lower pane's header band sits on top of the divider.
-            if button == winit::event::MouseButton::Left
-                && button_state == ElementState::Pressed
-                && !mouse::interactive_move_modifier_held(state)
-                && mouse::resize::on_press(state, state.mouse.pos)
-            {
-                mouse::update_cursor(state, state.mouse.pos);
-                state.mark_full_redraw();
-                return;
-            }
-            // Read before the release block below ends any resize drag, so a release that ended
-            // one is not also taken for the end of a selection.
-            let resize_before = mouse::is_resizing(state);
             if button == winit::event::MouseButton::Left && button_state == ElementState::Released {
-                // **The divider resize ends here, at the same level its press started it.** It used
-                // to end inside `mouse::on_mouse_input`, which sits behind the viewport
-                // early-return below — so a release that a pane's scrollbar happened to claim (it
-                // answers one whenever it holds a thumb grab) never reached the resize, and
-                // `state.mouse.resize` stayed `Some`. Every later cursor move then took the
-                // resize branch in `mouse::on_cursor_moved` with no button held, and the pane went
-                // on resizing itself until it was gone. A gesture must never outlive the release
-                // that ends it — the same rule that keeps a scrollbar thumb from welding to the
-                // cursor, one layer up (F004/P084/T409).
-                mouse::resize::on_release(state);
                 // Every retained tree that could have started a gesture gets the release, whether
                 // or not the cursor is still over it — that is what ends a scrollbar drag. The
                 // chrome tree is unconditional: it consumes nothing it did not start, and gating a
                 // release on position is precisely how a thumb ends up welded to the cursor.
-                crate::chrome::deliver(state, &ev);
-                if crate::chrome::deliver_to_panes(state, &ev) {
+                if crate::chrome::deliver(state, &ev) {
                     mouse::update_cursor(state, state.mouse.pos);
                     state.mark_full_redraw();
                     return;
@@ -377,12 +320,8 @@ pub(crate) fn handle_window_event(
             if let Some((action, source)) = mouse::on_mouse_input(state, &ev) {
                 dispatch_action(state, registry, source, &action);
             }
-            // A host selection drag ends where the button does, wherever the pointer is. (A release
-            // that ended a divider resize was that gesture's, and is not this one's.)
-            if button == winit::event::MouseButton::Left
-                && button_state == ElementState::Released
-                && !resize_before
-            {
+            // A host selection drag ends where the button does, wherever the pointer is.
+            if button == winit::event::MouseButton::Left && button_state == ElementState::Released {
                 crate::app::terminal_host::on_left_release(state, registry);
             }
             // Snap the cursor on press/release (drag start → Grabbing, drop → Grab/Default)
@@ -400,9 +339,7 @@ pub(crate) fn handle_window_event(
             // The trees next. A hovered scroll region in the sidebar takes it; over a terminal, the
             // terminal does — it reads the wheel itself and says what it meant (zoom, scrollback,
             // or the program's own) to the one handler that knows the policy.
-            if crate::chrome::deliver(state, &wheel)
-                || crate::chrome::deliver_to_panes(state, &wheel)
-            {
+            if crate::chrome::deliver(state, &wheel) {
                 state.mark_full_redraw();
                 return;
             }

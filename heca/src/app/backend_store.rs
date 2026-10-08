@@ -6,10 +6,12 @@
 //! readers that ask "the backend of this pane" keep their question while the identity underneath
 //! is the store's.
 //!
-//! **There is one door in: [`ensure`](BackendStore::ensure).** It starts a process or, if the pane
-//! already has one, keeps it. A process lives until its pane is closed ([`kill_for_pane`]) or heca
-//! ends — rebuilding a tree, or removing the component that shows it, never touches it. (The word
-//! is "terminal process", never "session": a session is an instance of heca, F012.)
+//! **There is one door in: [`ensure`](BackendStore::ensure).** It starts a process or, if its
+//! [`TerminalOwner`] already has one, keeps it. An owner is a pane, or a name an extension gave a
+//! terminal it placed (`demo.shell`). A process lives until its owner ends it ([`kill_for_pane`],
+//! [`kill`](BackendStore::kill)) or heca ends — rebuilding a tree, removing the component that
+//! shows it, or closing the dock it was in never touches it. (The word is "terminal process", never
+//! "session": a session is an instance of heca, F012.)
 
 use crate::chrome::terminal::TerminalId;
 use heca_core::backend::PaneBackend;
@@ -71,10 +73,32 @@ struct Process {
     spec: TerminalSpec,
 }
 
-/// The terminal processes, and which pane each was started for.
+/// **Who a terminal process was started for** — what [`ensure`](BackendStore::ensure) keeps one
+/// process per.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum TerminalOwner {
+    /// A pane: closing the pane ends it.
+    Pane(PaneId),
+    /// A terminal an extension placed, by its qualified name (`demo.shell`): the owner half comes
+    /// from the extension's handle, so two extensions cannot reach each other's. Nothing but an
+    /// explicit kill, or heca ending, stops it.
+    Named(String),
+}
+
+impl From<PaneId> for TerminalOwner {
+    fn from(pane: PaneId) -> Self {
+        Self::Pane(pane)
+    }
+}
+
+/// The terminal processes, and who each was started for.
+///
+/// **An id is the identity; a process is what runs behind it, and may not exist yet.** An owner is
+/// given its id the first time anyone asks ([`id_for`](BackendStore::id_for)), so the component that
+/// shows a terminal has a stable name from the frame it is built, before — or without — a process.
 pub struct BackendStore {
     processes: HashMap<TerminalId, Process>,
-    by_pane: HashMap<PaneId, TerminalId>,
+    by_owner: HashMap<TerminalOwner, TerminalId>,
     /// The next id to issue. Only ever goes up.
     next: u64,
 }
@@ -83,53 +107,77 @@ impl BackendStore {
     pub fn new() -> Self {
         Self {
             processes: HashMap::new(),
-            by_pane: HashMap::new(),
+            by_owner: HashMap::new(),
             next: 1,
         }
     }
 
-    /// **Start a terminal process for `pane`, or keep the one it has.** The only way a process
+    /// **The id of `owner`'s terminal**, issued the first time it is asked for and the same every
+    /// time after. Having an id is not having a process: that is [`ensure`](Self::ensure)'s.
+    pub(crate) fn id_for(&mut self, owner: impl Into<TerminalOwner>) -> TerminalId {
+        let next = &mut self.next;
+        *self.by_owner.entry(owner.into()).or_insert_with(|| {
+            let id = TerminalId(*next);
+            *next += 1;
+            id
+        })
+    }
+
+    /// **Start a terminal process for `owner`, or keep the one it has.** The only way a process
     /// begins.
     ///
-    /// `make` builds the process and is only called when one is needed, so a pane that already has
-    /// a terminal costs nothing here. A failed spawn leaves the store as it was.
+    /// `make` builds the process and is only called when one is needed, so an owner that already has
+    /// a terminal costs nothing here. A failed spawn leaves no process behind.
     pub(crate) fn ensure(
         &mut self,
-        pane: PaneId,
+        owner: impl Into<TerminalOwner>,
         spec: TerminalSpec,
         make: impl FnOnce(&TerminalSpec) -> Result<Box<dyn PaneBackend>, SpawnError>,
     ) -> Result<Ensured, SpawnError> {
-        if let Some(&id) = self.by_pane.get(&pane) {
-            let differs = self.processes.get(&id).is_some_and(|p| p.spec != spec);
-            return Ok(Ensured::Kept { id, differs });
+        let id = self.id_for(owner);
+        if let Some(running) = self.processes.get(&id) {
+            return Ok(Ensured::Kept {
+                id,
+                differs: running.spec != spec,
+            });
         }
         let backend = make(&spec)?;
-        let id = TerminalId(self.next);
-        self.next += 1;
         self.processes.insert(id, Process { backend, spec });
-        self.by_pane.insert(pane, id);
         Ok(Ensured::Spawned(id))
     }
 
-    /// The terminal process started for `pane`.
-    pub(crate) fn terminal_of(&self, pane: PaneId) -> Option<TerminalId> {
-        self.by_pane.get(&pane).copied()
+    /// The id issued to `pane`'s terminal, whether or not a process runs behind it yet.
+    pub(crate) fn identity_of(&self, pane: PaneId) -> Option<TerminalId> {
+        self.by_owner.get(&TerminalOwner::Pane(pane)).copied()
     }
 
-    /// The pane `id` was started for.
+    /// Whether `id` was issued to an owner that still exists.
+    pub(crate) fn is_issued(&self, id: TerminalId) -> bool {
+        self.by_owner.values().any(|issued| *issued == id)
+    }
+
+    /// The pane `id` was started for — `None` for a terminal no pane owns.
     pub(crate) fn pane_of(&self, id: TerminalId) -> Option<PaneId> {
-        self.by_pane
-            .iter()
-            .find_map(|(pane, t)| (*t == id).then_some(*pane))
+        self.by_owner.iter().find_map(|(owner, t)| match owner {
+            TerminalOwner::Pane(pane) if *t == id => Some(*pane),
+            _ => None,
+        })
     }
 
     /// **End the terminal process started for `pane`** — the pane was closed. The only way one ends
-    /// before heca does.
+    /// before heca does, besides [`kill`](Self::kill).
     pub fn kill_for_pane(&mut self, pane: PaneId) -> bool {
-        match self.by_pane.remove(&pane) {
+        match self.by_owner.remove(&TerminalOwner::Pane(pane)) {
             Some(id) => self.processes.remove(&id).is_some(),
             None => false,
         }
+    }
+
+    /// **End the terminal process `id`**, whoever owns it — an explicit kill. The id is retired
+    /// with it: asking for the owner's terminal again gives a new one.
+    pub(crate) fn kill(&mut self, id: TerminalId) -> bool {
+        self.by_owner.retain(|_, t| *t != id);
+        self.processes.remove(&id).is_some()
     }
 
     /// End the terminal processes of all of these panes — a column or a workspace was deleted.
@@ -141,14 +189,24 @@ impl BackendStore {
 
     /// Get a mutable reference to a pane's backend.
     pub fn get_mut(&mut self, pane: PaneId) -> Option<&mut dyn PaneBackend> {
-        let id = self.by_pane.get(&pane)?;
-        Some(self.processes.get_mut(id)?.backend.as_mut())
+        let id = *self.by_owner.get(&TerminalOwner::Pane(pane))?;
+        self.get_mut_by_id(id)
     }
 
     /// Get an immutable reference to a pane's backend.
     pub fn get(&self, pane: PaneId) -> Option<&dyn PaneBackend> {
-        let id = self.by_pane.get(&pane)?;
-        Some(self.processes.get(id)?.backend.as_ref())
+        let id = *self.by_owner.get(&TerminalOwner::Pane(pane))?;
+        self.get_by_id(id)
+    }
+
+    /// The backend of terminal `id`, whoever owns it.
+    pub(crate) fn get_mut_by_id(&mut self, id: TerminalId) -> Option<&mut dyn PaneBackend> {
+        Some(self.processes.get_mut(&id)?.backend.as_mut())
+    }
+
+    /// The backend of terminal `id`, whoever owns it.
+    pub(crate) fn get_by_id(&self, id: TerminalId) -> Option<&dyn PaneBackend> {
+        Some(self.processes.get(&id)?.backend.as_ref())
     }
 
     /// Iterate over all backends mutably (e.g. for per-frame polling).
@@ -158,13 +216,16 @@ impl BackendStore {
 
     /// Collect pane IDs whose backends have exited and should be closed.
     pub fn pane_ids_to_close(&self) -> Vec<PaneId> {
-        self.by_pane
+        self.by_owner
             .iter()
-            .filter_map(|(pane, id)| {
-                self.processes
+            .filter_map(|(owner, id)| match owner {
+                TerminalOwner::Pane(pane) => self
+                    .processes
                     .get(id)
                     .is_some_and(|p| p.backend.should_close())
-                    .then_some(*pane)
+                    .then_some(*pane),
+                // A named terminal's program ending closes no pane: there is none.
+                TerminalOwner::Named(_) => None,
             })
             .collect()
     }
@@ -210,7 +271,8 @@ mod tests {
             })
             .expect("keeps");
         assert_eq!(again, Ensured::Kept { id, differs: false });
-        assert_eq!(store.terminal_of(pane), Some(id));
+        assert_eq!(store.identity_of(pane), Some(id));
+        assert!(store.get(pane).is_some());
     }
 
     #[test]
@@ -235,12 +297,13 @@ mod tests {
             Err(SpawnError("no pty".into()))
         });
         assert_eq!(failed, Err(SpawnError("no pty".into())));
-        assert!(store.terminal_of(pane).is_none() && store.get(pane).is_none());
-        // And the next try starts fresh.
-        assert!(matches!(
+        assert!(store.get(pane).is_none());
+        let reserved = store.id_for(pane);
+        // And the next try starts fresh, under the id the pane already had.
+        assert_eq!(
             store.ensure(pane, spec(Program::Shell), fake),
-            Ok(Ensured::Spawned(_))
-        ));
+            Ok(Ensured::Spawned(reserved))
+        );
     }
 
     #[test]
@@ -249,7 +312,7 @@ mod tests {
         let (a, b) = (PaneId(1), PaneId(2));
         let first = store.ensure(a, spec(Program::Shell), fake).unwrap().id();
         assert!(store.kill_for_pane(a));
-        assert!(store.get(a).is_none() && store.terminal_of(a).is_none());
+        assert!(store.get(a).is_none() && store.identity_of(a).is_none());
         assert!(!store.kill_for_pane(a), "already gone");
         // A new terminal — even for the same pane — gets a new id.
         let second = store.ensure(a, spec(Program::Shell), fake).unwrap().id();
@@ -264,5 +327,69 @@ mod tests {
         let id = store.ensure(pane, spec(Program::Shell), fake).unwrap().id();
         assert_eq!(store.pane_of(id), Some(pane));
         assert!(store.get_mut(pane).is_some());
+    }
+
+    #[test]
+    fn an_owner_has_its_id_before_it_has_a_process() {
+        let mut store = BackendStore::new();
+        let pane = PaneId(3);
+        let id = store.id_for(pane);
+        assert_eq!(store.id_for(pane), id, "the same every time");
+        assert!(store.get(pane).is_none() && store.get_by_id(id).is_none());
+        let spawned = store.ensure(pane, spec(Program::Shell), fake).unwrap().id();
+        assert_eq!(
+            spawned, id,
+            "the process runs behind the id that was already issued"
+        );
+        assert_eq!(store.identity_of(pane), Some(id));
+        assert!(store.get(pane).is_some());
+    }
+
+    #[test]
+    fn a_named_terminal_is_one_process_that_no_pane_closing_touches() {
+        let mut store = BackendStore::new();
+        let named = TerminalOwner::Named("demo.shell".into());
+        let id = store
+            .ensure(named.clone(), spec(Program::Shell), fake)
+            .expect("spawns")
+            .id();
+        // Asked for again — a rebuilt dock, a reopened overlay — it is the same process.
+        let again = store
+            .ensure(named, spec(Program::Shell), |_| {
+                panic!("a named terminal that is running must not spawn another")
+            })
+            .expect("keeps");
+        assert_eq!(again, Ensured::Kept { id, differs: false });
+        assert!(store.get_by_id(id).is_some());
+        // A pane closing, even the first pane, is not its end; no pane owns it.
+        store.kill_for_pane(PaneId(1));
+        assert!(store.get_by_id(id).is_some());
+        assert_eq!(store.pane_of(id), None);
+        assert!(store.pane_ids_to_close().is_empty());
+        // Only an explicit kill ends it.
+        assert!(store.kill(id));
+        assert!(store.get_by_id(id).is_none());
+    }
+
+    #[test]
+    fn two_extensions_names_never_meet() {
+        let mut store = BackendStore::new();
+        let a = store
+            .ensure(
+                TerminalOwner::Named("a.shell".into()),
+                spec(Program::Shell),
+                fake,
+            )
+            .unwrap()
+            .id();
+        let b = store
+            .ensure(
+                TerminalOwner::Named("b.shell".into()),
+                spec(Program::Shell),
+                fake,
+            )
+            .unwrap()
+            .id();
+        assert_ne!(a, b);
     }
 }

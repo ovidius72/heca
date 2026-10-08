@@ -37,7 +37,7 @@ impl Flex {
     }
 
     fn with_direction(direction: Direction) -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         base.style.layout.direction = direction;
         Self { base }
     }
@@ -303,3 +303,8 @@ mod tests {
         assert_eq!(tall, mixed, "the row grew to fit a baseline shift");
     }
 }
+
+#[cfg(test)]
+mod clip;
+#[cfg(test)]
+mod passthrough;

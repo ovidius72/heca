@@ -2,8 +2,8 @@
 //! than by a key. Owns nothing about what a floor guarantees; it only asks [`super::floors`] to
 //! assert one.
 
-use super::binding::{Written, bind_with_conflict_tracking};
-use super::floors::assert_escape_floor;
+use super::binding::{Written, bind_with_conflict_tracking, unbind_and_deindex};
+use super::floors::assert_way_out;
 use super::names::action_ref_from_config;
 use crate::app::conflicts::Conflicts;
 use crate::keymap::{BindingIndex, KeyCombo, KeymapRegistry, WrittenKey};
@@ -41,6 +41,7 @@ pub fn build_modes(
             existing.trigger = user_mode.trigger.clone();
             existing.sticky = user_mode.sticky;
             existing.bindings.extend(user_mode.bindings.clone());
+            existing.unbind.extend(user_mode.unbind.clone());
         } else {
             merged_modes.insert(user_mode.name.clone(), user_mode.clone());
         }
@@ -72,7 +73,12 @@ pub fn build_modes(
                 );
             }
         }
-        assert_escape_floor(&mut mode_map, &mode_cfg.name, conflicts, index);
+        // Keys given up — the shipped ones included — go before the way out is checked, so that
+        // moving a floor's key is one block: bind the action elsewhere and unbind the old key.
+        for key_str in &mode_cfg.unbind {
+            unbind_and_deindex(&mut mode_map, &mode_cfg.name, &label, key_str.trim(), index);
+        }
+        assert_way_out(&mut mode_map, &mode_cfg.name, config, conflicts, index);
         mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
         // These two are **entered by focus, not by a key**: `sidebar` by `sidebar_focus` or a
         // click, `focus` by focusing a dock. A trigger would make them reachable as a plain
@@ -83,16 +89,6 @@ pub fn build_modes(
             let trigger_combo = WrittenKey::parse(&mode_cfg.trigger).combo;
             mode_triggers.insert(mode_cfg.name.clone(), (trigger_combo, mode_cfg.sticky));
         }
-    }
-
-    // The layer floor is not a `[[keys.mode]]` block anybody writes — a layer is entered by being
-    // shown, not by pressing something — so it is created here when no config declared it. A user
-    // who *does* write one gets extra keys for the front-most layer, with the floor re-asserted over
-    // them by the loop above.
-    if !mode_keymaps.contains_key(crate::app::input::LAYER_FLOOR) {
-        let mut floor = KeymapRegistry::new();
-        assert_escape_floor(&mut floor, crate::app::input::LAYER_FLOOR, conflicts, index);
-        mode_keymaps.insert(crate::app::input::LAYER_FLOOR.to_string(), floor);
     }
 
     (mode_keymaps, mode_triggers)
@@ -240,6 +236,7 @@ mod tests {
                     keys,
                     args: Default::default(),
                 }],
+                unbind: Vec::new(),
             });
             let (modes, _) =
                 build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
@@ -311,6 +308,7 @@ mod tests {
             trigger: "prefix+Shift+f".to_string(),
             sticky: true,
             bindings: Vec::new(),
+            unbind: Vec::new(),
         });
         let (_, mode_triggers) =
             build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
@@ -329,6 +327,7 @@ mod tests {
                 keys: BindingValue::Single("x".to_string()),
                 args: HashMap::new(),
             }],
+            unbind: Vec::new(),
         });
 
         let (mode_keymaps, mode_triggers) =

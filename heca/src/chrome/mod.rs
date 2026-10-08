@@ -11,15 +11,16 @@ pub(crate) use theme::{
 pub(crate) mod signals;
 pub(crate) use signals::{ChromeSignals, sync_chrome_signals, sync_chrome_state};
 pub(crate) mod column;
-pub(crate) use column::{RetainedColumn, clear_columns, offer_to_columns, sync_columns};
+pub(crate) use workspace::{clear_workspace, seat_workspace};
 pub(crate) mod startup_queue;
 pub(crate) use startup_queue::StartupQueue;
 pub(crate) mod pane;
-pub(crate) use pane::{RetainedPane, clear_panes, sync_panes};
 pub(crate) mod pane_header;
 pub(crate) mod terminal;
+pub(crate) mod workspace;
 pub(crate) use pane_header::{
-    ActionShortcuts, action_tooltip, build_pane_headers, home_relative_path, pane_info_view,
+    ActionShortcuts, HeaderEnv, PaneHeader, action_tooltip, home_relative_path,
+    give_header_facts, pane_header_inputs, pane_info_view,
 };
 pub(crate) mod drag;
 pub(crate) mod pane_items;
@@ -44,7 +45,7 @@ mod dispatch;
 mod focus;
 mod scene;
 pub(crate) use dispatch::{
-    cancel_every_tree, deliver, deliver_to_panes, dispatch_surface_pointer, drag_in_flight,
+    cancel_every_tree, deliver, dispatch_surface_pointer, drag_in_flight,
     drain_pending_drops, drain_pending_menus, next_redraw_across_trees,
     open_declared_menu_for_focus,
 };
@@ -52,12 +53,10 @@ pub(crate) use dispatch::{
 use scene::chrome_scene;
 #[allow(unused_imports)]
 use scene::{
-    ChromeFrame, build_region_content, build_sidebar_shell, pass_box_down, search_bar_tree,
-    search_field_slot, sidebar_toggle_button, with_flex,
+    ChromeFrame, build_region_content, build_sidebar_shell, pass_box_down, sidebar_toggle_button,
+    with_flex,
 };
-pub(crate) use scene::{
-    build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints, paint_search,
-};
+pub(crate) use scene::{build_chrome_root, paint_bell_flash, paint_chrome_root, paint_link_hints};
 mod layers_glue;
 pub(crate) use layers_glue::{rebuild_named_layer, register_named_layer};
 mod notification_layer;
@@ -512,9 +511,9 @@ pub(crate) const DOCK_PICK_SCOPE: &str = "dock.destination";
 /// `reload_config` — all of which happen while an overlay is open. None of them may take it with
 /// them.
 ///
-/// It goes **first**, so every surface placed beside it paints and hit-tests above it: child order
-/// is z-order in one tree, which is what replaces the layer stack's separate sort
-/// (`docs/surface-compositor.md` § 0.6).
+/// It goes **right after the workspace**, so it is drawn over the panes, and every surface placed
+/// beside it paints and hit-tests above it: child order is z-order in one tree, which is what
+/// replaces the layer stack's separate sort (`docs/surface-compositor.md` § 0.6).
 pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
     let chrome = Box::new(chrome.key(CHROME_KEY));
     let children = &mut root.base_mut().children;
@@ -523,7 +522,13 @@ pub(crate) fn seat_chrome(root: &mut Flex, chrome: Flex) {
         .position(|c| c.base().key.as_deref() == Some(CHROME_KEY))
     {
         Some(at) => children[at] = chrome,
-        None => children.insert(0, chrome),
+        None => {
+            let after_workspace = children
+                .iter()
+                .position(|c| c.base().key.as_deref() == Some(workspace::WORKSPACE_KEY))
+                .map_or(0, |at| at + 1);
+            children.insert(after_workspace, chrome);
+        }
     }
 }
 
@@ -616,47 +621,18 @@ pub(crate) fn place_surface(root: &mut Flex, key: &str, surface: Box<dyn Compone
 /// lives here rather than in a provider so the pane and every view of it read the SAME string
 /// instead of keeping two copies in step (it was defined twice before F011/P094/T451).
 ///
-/// **Every retained tree that holds panes**, wherever they live.
-///
-/// A tiled pane is a child of its column (`chrome::column`); a floating one belongs to no column
-/// and is the host's own. Anything that walks "all the panes" — delivering an event, ticking an
-/// animation, collecting pick targets, asking for the next wake — has to reach both, and asking
-/// that question in five places is five chances to add the second map to four of them.
-pub(crate) fn pane_roots(
-    state: &crate::app_state::AppState,
-) -> impl Iterator<Item = &dyn heca_grid_ui::Component> {
-    state
-        .panes
-        .values()
-        .map(|p| &p.root as &dyn heca_grid_ui::Component)
-        .chain(
-            state
-                .columns
-                .values()
-                .map(|c| &c.root as &dyn heca_grid_ui::Component),
-        )
-}
-
-/// The same trees, to write to — see [`pane_roots`].
-pub(crate) fn pane_roots_mut(
-    state: &mut crate::app_state::AppState,
-) -> impl Iterator<Item = &mut dyn heca_grid_ui::Component> {
-    state
-        .panes
-        .values_mut()
-        .map(|p| &mut p.root as &mut dyn heca_grid_ui::Component)
-        .chain(
-            state
-                .columns
-                .values_mut()
-                .map(|c| &mut c.root as &mut dyn heca_grid_ui::Component),
-        )
-}
-
 /// It is never a position and never a counter: a `PaneId` survives every tree rebuild, which is
 /// what lets a hint letter stay with the same pane between openings of the picker.
 pub(crate) fn pane_key(pane: heca_core::layout::PaneId) -> String {
     format!("pane:{}", pane.0)
+}
+
+/// The pane a `pane:<id>` key names — the inverse of [`pane_key`].
+pub(crate) fn pane_id_of_key(key: &str) -> Option<heca_core::layout::PaneId> {
+    key.strip_prefix("pane:")?
+        .parse()
+        .ok()
+        .map(heca_core::layout::PaneId)
 }
 
 /// `col:<id>` — a column. No workspace prefix: a [`ColumnId`](heca_core::layout::ColumnId) is
@@ -669,11 +645,33 @@ pub(crate) fn column_key(col_id: heca_core::layout::ColumnId) -> String {
     format!("col:{}", col_id.0)
 }
 
-/// `col:new` — **the slot for a column that does not exist yet.**
+/// What a pane says it is when it is carried, and what a place for a pane takes.
+pub(crate) const PANE_DRAG_KIND: &str = "pane";
+
+/// `slot:<n>` — **the place a new column would be made**, `n` columns from the left.
 ///
-/// A name, not an id, because there is nothing to have an id: it is the offer of a new column,
-/// shown only while a column pick is open and gone when it closes.
-pub(crate) const NEW_COLUMN_KEY: &str = "col:new";
+/// The workspace writes it and the drop reads it back, so what the name means lives in one place.
+pub(crate) fn slot_key(at: usize) -> String {
+    format!("slot:{at}")
+}
+
+/// `row:<col>:<row>` — **the place a pane would be put at row `row` of column `col`**, counted with
+/// the pane where it is.
+pub(crate) fn row_key(col: usize, row: usize) -> String {
+    format!("row:{col}:{row}")
+}
+
+/// The column and row a `row:<col>:<row>` key names — the inverse of [`row_key`].
+pub(crate) fn row_of_key(key: &str) -> Option<(usize, usize)> {
+    let (col, row) = key.strip_prefix("row:")?.split_once(':')?;
+    Some((col.parse().ok()?, row.parse().ok()?))
+}
+
+/// The index a `slot:<n>` key names — the inverse of [`slot_key`].
+pub(crate) fn slot_of_key(key: &str) -> Option<usize> {
+    key.strip_prefix("slot:")?.parse().ok()
+}
+
 
 /// **What one of a pane's own controls is called** — `pane:7-zoom`.
 ///
@@ -795,39 +793,6 @@ fn seated(mount: &str, mut intent: Intent) -> Intent {
         heca_view::PropValue::Text(mount.to_string()),
     );
     intent
-}
-
-/// The pane a press at `pos` (logical window coords) would start dragging, found by
-/// hit-testing the **retained** chrome tree's real laid-out bounds (F4.5) — replaces
-/// the legacy fixed-row `sidebar_hit_test`. `None` off any pane card.
-pub(crate) fn sidebar_drag_source(
-    state: &crate::app_state::AppState,
-    pos: (f32, f32),
-) -> Option<ChromeDragItem> {
-    let tree = state.chrome_tree.as_ref()?;
-    let key =
-        heca_grid_ui::drag::source_at(&state.window_root, Point::new(pos.0 as f64, pos.1 as f64))?;
-    tree.drag_items.get(&key).cloned()
-}
-
-/// The deepest sidebar item (pane → column → workspace) under `pos`, regardless of
-/// drag semantics — used to anchor the right-click context menu on whatever the
-/// cursor is over. Unlike [`sidebar_drag_source`] this accepts every registered
-/// item (workspaces are drop-only, so they never appear as a drag source but must
-/// still be right-clickable). Resolves against the **expanded** grid sidebar's
-/// retained tree; the hand-drawn collapsed rail is not covered (it moves onto grid
-/// widgets in the collapsed-rail migration, `app-task-21`).
-pub(crate) fn sidebar_item_at(
-    state: &crate::app_state::AppState,
-    pos: (f32, f32),
-) -> Option<ChromeDragItem> {
-    let tree = state.chrome_tree.as_ref()?;
-    let hit = heca_grid_ui::drag::resolve_at_filtered(
-        &state.window_root,
-        Point::new(pos.0 as f64, pos.1 as f64),
-        &|_| true,
-    )?;
-    tree.drag_items.get(&hit.key).cloned()
 }
 
 /// **What a pane can be dropped onto**, as the workspaces component names it.
@@ -1341,7 +1306,7 @@ mod tests {
             pass_box_down(body.as_mut());
             let mut picked = KeyHint::new(body);
             pass_box_down(&mut picked);
-            Box::new(FocusScope::new(picked).focus(signal(true)))
+            Box::new(FocusScope::new(picked))
         };
 
         let mut stack = Flex::column().gap(8.0).grow(1.0);
@@ -1396,8 +1361,7 @@ mod tests {
 
         let body: WidgetModel = Box::new(Flex::column().height(120.0));
         // What `focus_and_pick` does with `share = 0.0`: wrap, and touch no layout.
-        let wrapped: WidgetModel =
-            Box::new(FocusScope::new(KeyHint::new(body)).focus(signal(false)));
+        let wrapped: WidgetModel = Box::new(FocusScope::new(KeyHint::new(body)));
         let mut region = Flex::column().height(600.0).child(with_flex(wrapped, 0.0));
         LayoutEngine::new().compute(&mut region, CoreSize::new(300.0, 600.0));
 
@@ -1828,15 +1792,15 @@ mod tests {
             !outlined(&mut shell),
             "no dock has focus yet, so nothing is outlined",
         );
-        chrome.set_focused_container(Some("workspaces".into()));
+        assert!(heca_grid_ui::focus_scope(&mut shell, "workspaces"));
         assert!(
             outlined(&mut shell),
-            "the focused dock is outlined in the theme's focus colour — same tree, one signal",
+            "the dock the keyboard is in is outlined in the theme's focus colour — read off the tree",
         );
-        chrome.set_focused_container(Some("something-else".into()));
+        heca_grid_ui::release_scope(&mut shell, "workspaces");
         assert!(
             !outlined(&mut shell),
-            "and focus elsewhere takes the outline away",
+            "and the keyboard leaving it takes the outline away",
         );
     }
 
@@ -2346,95 +2310,5 @@ mod tests {
                 "a resize to {w} rebuilt the header instead of re-laying it out"
             );
         }
-    }
-}
-
-#[cfg(test)]
-mod search_bar_tests {
-    use super::*;
-
-    /// A pane deliberately far from the window origin: a bar placed relative to the
-    /// window instead of the pane lands nowhere near this rect.
-    fn pane() -> Rectangle {
-        Rectangle::new(Point::new(600.0, 100.0), Size::new(640.0, 1400.0))
-    }
-
-    fn viewport() -> Size {
-        Size::new(1900.0, 1600.0)
-    }
-
-    /// Lay the bar out for a query field of `field` size and return the bar's own
-    /// bounds — the row holding the field slot and the counter.
-    fn laid_out_bar_bounds(field: Size, count: Option<String>) -> Rectangle {
-        let theme = GuiTheme::default();
-        let mut root = search_bar_tree(field, count, pane(), &theme);
-        LayoutEngine::new()
-            .base_font(theme.font_size)
-            .compute(&mut root, viewport());
-        // root (pane box) -> row
-        root.base().children[0].base().bounds
-    }
-
-    /// A representative measured field size.
-    fn field(w: f64) -> Size {
-        Size::new(w, 22.0)
-    }
-
-    /// **Regression guard.** The bar is positioned purely by margins on its box, so
-    /// it must land inside the pane it belongs to. This caught the engine silently
-    /// dropping a root's margin, which drew the bar over the *sidebar* — a whole pane
-    /// away from the terminal it described.
-    #[test]
-    fn the_search_bar_lands_inside_its_pane() {
-        let b = laid_out_bar_bounds(field(120.0), Some("29/36".into()));
-        let p = pane();
-        assert!(
-            b.loc.x >= p.loc.x
-                && b.loc.y >= p.loc.y
-                && b.loc.x + b.size.w <= p.loc.x + p.size.w
-                && b.loc.y + b.size.h <= p.loc.y + p.size.h,
-            "bar at {:?} escaped its pane {p:?}",
-            b
-        );
-    }
-
-    /// It is anchored to the bottom-right specifically, not merely somewhere inside.
-    #[test]
-    fn the_search_bar_hugs_the_bottom_right_corner() {
-        let b = laid_out_bar_bounds(field(120.0), Some("29/36".into()));
-        let p = pane();
-        let right_gap = (p.loc.x + p.size.w) - (b.loc.x + b.size.w);
-        let bottom_gap = (p.loc.y + p.size.h) - (b.loc.y + b.size.h);
-        assert!(
-            right_gap < p.size.w / 2.0 && bottom_gap < p.size.h / 2.0,
-            "expected bottom-right; gaps were right={right_gap} bottom={bottom_gap}"
-        );
-    }
-
-    /// The bar is sized by the field the engine measured, not by arithmetic — the old
-    /// version clamped width to a hand-picked 120..480 range computed from a hardcoded
-    /// glyph advance ratio.
-    #[test]
-    fn a_wider_field_makes_a_wider_bar() {
-        let narrow = laid_out_bar_bounds(field(80.0), None).size.w;
-        let wide = laid_out_bar_bounds(field(300.0), None).size.w;
-        assert!(
-            wide > narrow,
-            "wide bar {wide} should exceed narrow {narrow}"
-        );
-    }
-
-    /// **The field must land in the slot the tree reserved**, or the caret and the
-    /// text would draw somewhere other than the bar the user sees.
-    #[test]
-    fn the_reserved_slot_matches_the_field_size() {
-        let theme = GuiTheme::default();
-        let f = field(140.0);
-        let mut root = search_bar_tree(f, Some("1/3".into()), pane(), &theme);
-        LayoutEngine::new()
-            .base_font(theme.font_size)
-            .compute(&mut root, viewport());
-        let slot = search_field_slot(&root).expect("the tree always reserves a slot");
-        assert_eq!((slot.size.w, slot.size.h), (f.w, f.h));
     }
 }

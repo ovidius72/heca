@@ -1,63 +1,11 @@
-//! What a release means, once the gesture that produced it has ended.
-//!
-//! Two of them: an interactive move (a pane carried out of the content area), and a column dropped
-//! on something — the latter reached from the drop the framework hands back, not from the pointer.
+//! What dropping a column means, once the gesture that produced it has ended — reached from the
+//! drop the framework hands back, not from the pointer.
 
 use crate::app::interaction::InteractionSource;
-use crate::app_state::{AppState, InteractiveMovePhase};
+use crate::app_state::AppState;
 use crate::chrome::ChromeDragItem;
 use crate::input::WmAction;
-use heca_core::layout::PaneId;
 use heca_grid_ui::drag::DropSide;
-
-/// Handle release during an active interactive move (content-area drag).
-///
-/// Dispatches between swap mode (swap with target) and move mode (reinsert at
-/// drop target), with sidebar drop as a fallback.
-pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f32)) {
-    let (swap, source_id) = match state.mouse.interactive_move {
-        Some(InteractiveMovePhase::Moving { swap, pane_id, .. }) => (swap, pane_id),
-        _ => return,
-    };
-
-    if swap {
-        // Swap mode: pane stays in layout. If the pointer is over
-        // a sidebar target, fall back to normal move semantics.
-        // Otherwise, swap with the content-area target pane.
-        super::interactive::reset_interactive_move_offset(state);
-        if let Some(target_id) =
-            super::hit_test::hit_test_pane_excluding(state, state.mouse.pos, Some(source_id))
-        {
-            super::dispatch_drop(
-                state,
-                InteractionSource::MouseContent,
-                WmAction::Swap {
-                    a_id: source_id,
-                    b_id: target_id,
-                },
-            );
-        } else if super::surface_left::handle_interactive_move_drop(state, pos) {
-            // Sidebar drop handled as a move.
-        } else if let Some(hint) = state.mouse.insert_hint.take() {
-            // Fallback: move semantics in the content area.
-            handle_content_move(state, source_id, hint);
-        } else {
-            super::interactive::cancel_interactive_move(state);
-        }
-    } else if super::surface_left::handle_interactive_move_drop(state, pos) {
-        // Sidebar drop handled.
-    } else if let Some(hint) = state.mouse.insert_hint.take() {
-        // Move mode: pane is still in layout. Remove it and
-        // re-insert at the drop target position.
-        super::interactive::reset_interactive_move_offset(state);
-        handle_content_move(state, source_id, hint);
-    } else {
-        super::interactive::cancel_interactive_move(state);
-    }
-
-    state.mouse.interactive_move = None;
-    state.mouse.insert_hint = None;
-}
 
 /// **What dropping a column means** — told what it landed on, rather than hunting for it under the
 /// pointer at the moment of release (F003/P097/T496). The rules are unchanged: onto another column
@@ -149,30 +97,6 @@ fn column_move_dst_idx(
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────
-
-/// Place a pane at the insert hint the drag showed, in the active workspace — posted as
-/// `place_pane`, which takes it out of where it was first, as the hint assumes.
-fn handle_content_move(
-    state: &mut AppState,
-    source_id: PaneId,
-    hint: heca_core::layout::types::PaneInsertTarget,
-) {
-    use heca_core::layout::types::PaneInsertTarget;
-    let (col_idx, pane_idx) = match hint {
-        PaneInsertTarget::NewColumn(col) => (col, None),
-        PaneInsertTarget::InColumn { col_idx, pane_idx } => (col_idx, Some(pane_idx)),
-    };
-    super::dispatch_drop(
-        state,
-        InteractionSource::MouseContent,
-        WmAction::PlacePane {
-            pane_id: source_id,
-            ws_idx: state.session.active_workspace_idx,
-            col_idx,
-            pane_idx,
-        },
-    );
-}
 
 #[cfg(test)]
 mod tests {

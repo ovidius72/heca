@@ -1,141 +1,168 @@
-//! **Scrollback search** — entering the query, running it, and stepping through the matches.
+//! **Scrollback search, host half** — finding the matches for what a terminal's field says, and
+//! stepping through them.
+//!
+//! The search itself is the terminal's: its bar is its own child, so it hears the field and says
+//! what the user did ([`Search`]). The host holds the process, so it is the one that can look
+//! through the scrollback — by the terminal's id, whether or not a pane owns it — and it hands the
+//! terminal what it found. The terminal keeps the matches and the current one, since it is what
+//! shows them: nothing here holds a copy.
 
 use super::selection::ensure_caret_visible;
 use crate::app::selection_model::SelectionOwner;
 use crate::app_state::{AppState, InputMode};
-use heca_grid_ui::Component as _;
-use heca_grid_ui::reactive::SignalUpdate as _;
+use crate::chrome::terminal::{Search, TerminalId};
+use heca_grid_ui::WidgetIntent;
 
-/// Enter scrollback-search query entry for the selection's (or focused) pane.
-/// No-op when there is no terminal-backed pane to search. terminal-task-19.
+/// **A terminal said something about its search.**
+pub(crate) fn on_search(state: &mut AppState, terminal: TerminalId, search: Search) {
+    match search {
+        Search::Editing(true) => {
+            state.input_mode = InputMode::Search { terminal };
+        }
+        Search::Editing(false) => leave_search_entry(state, terminal),
+        Search::Query(query) => run_search(state, terminal, &query),
+        Search::Step { forward } => step(state, terminal, forward),
+        Search::Close => leave_search_entry(state, terminal),
+    }
+    state.needs_redraw = true;
+}
+
+/// The field no longer has the keyboard: back to selection (where `n`/`N` step) when a selection is
+/// still there, else to plain typing. Another terminal's mode is not ours to leave.
+fn leave_search_entry(state: &mut AppState, terminal: TerminalId) {
+    if !matches!(state.input_mode, InputMode::Search { terminal: t } if t == terminal) {
+        return;
+    }
+    state.input_mode = if state.selection.owner().is_some() {
+        InputMode::Selection
+    } else {
+        InputMode::Normal
+    };
+}
+
+/// **Open the search of the terminal the keyboard is on** — the `search_scrollback` action.
+///
+/// A terminal that holds the keyboard in the window tree (a docked one) answers the intent itself:
+/// the host names nothing. Otherwise the terminal is the selection's, or the focused pane's — panes
+/// are not in the window's keyboard yet — and its own bar is opened by its handle.
 pub(crate) fn enter_scrollback_search(state: &mut AppState) {
-    let Some(pane_id) = state.search_target_pane() else {
+    if tree_answers(state, WidgetIntent::Find) {
+        return;
+    }
+    let Some(terminal) = state.search_target() else {
         return;
     };
     if state
         .backends
-        .get(pane_id)
+        .get_by_id(terminal)
         .and_then(|b| b.terminal_snapshot())
         .is_none()
     {
         return;
     }
-    // Re-entering search on a pane that already has one RESUMES it: the query, its
-    // matches and the caret are all still there. Inserting a fresh state here wiped
-    // whatever had been typed, so `/` after Enter was indistinguishable from having
-    // no way back into the field at all.
-    if let Some(existing) = state.searches.get(&pane_id) {
-        existing.input.borrow_mut().base_mut().focused.set(true);
-        state.input_mode = InputMode::Search;
-        state.needs_redraw = true;
+    let Some(handle) = state.terminals.get(&terminal) else {
         return;
-    }
-    state.searches.insert(
-        pane_id,
-        crate::app_state::SearchState {
-            // Focused so the caret shows and the field accepts editing keys.
-            input: std::cell::RefCell::new({
-                let mut field = heca_grid_ui::widgets::Input::new();
-                field.base_mut().focused.set(true);
-                field
-            }),
-            matches: Vec::new(),
-            current: None,
-        },
-    );
-    state.input_mode = InputMode::Search;
+    };
+    handle.find();
+    // Typing goes to the field from this key on, not from the frame that draws it.
+    state.input_mode = InputMode::Search { terminal };
     state.needs_redraw = true;
 }
 
-/// Re-run the search for the current query, refresh the match list, focus the match
-/// nearest at/above the caret (else the last), and jump to it.
-pub(crate) fn run_scrollback_search(state: &mut AppState) {
-    // The pane whose query the keyboard is editing — same resolution the search was
-    // started with, so edits land on the entry that exists.
-    let Some(pane_id) = state.search_target_pane() else {
-        return;
-    };
-    let Some(query) = state
-        .search_for(pane_id)
-        .map(|s| s.input.borrow().value_str())
-    else {
-        return;
-    };
-    let cols = match state
-        .backends
-        .get(pane_id)
-        .and_then(|b| b.terminal_snapshot())
-    {
-        Some(snap) => snap.cols,
-        None => return,
-    };
-    let caret_row = state.selection.cursor_cell().map(|(_, row, _)| row);
-    let matches = state
-        .backends
-        .get(pane_id)
-        .map(|b| b.search_scrollback(&query, cols))
-        .unwrap_or_default();
-    let current = if matches.is_empty() {
-        None
-    } else {
-        let caret = caret_row.unwrap_or(isize::MAX);
-        // Nearest match at/above the caret, else fall back to the last match.
-        Some(
-            matches
-                .iter()
-                .rposition(|m| m.stable_row <= caret)
-                .unwrap_or(matches.len() - 1),
-        )
-    };
-    if let Some(search) = state.searches.get_mut(&pane_id) {
-        search.matches = matches;
-        search.current = current;
-    }
-    jump_to_current_match(state);
-}
-
-/// Move the focused match by one (wrapping) and jump to it. `forward` = next match.
+/// Move to the next (`forward`) or previous match of the keyboard's search — `n` / `N`.
 pub(crate) fn search_step(state: &mut AppState, forward: bool) {
-    let stepped = state.active_search_mut().and_then(|search| {
-        let n = search.matches.len();
-        if n == 0 {
-            return None;
-        }
-        let cur = search.current.unwrap_or(0);
-        let next = if forward {
-            (cur + 1) % n
-        } else {
-            (cur + n - 1) % n
-        };
-        search.current = Some(next);
-        Some(())
-    });
-    if stepped.is_some() {
-        jump_to_current_match(state);
+    let intent = if forward {
+        WidgetIntent::FindNext
+    } else {
+        WidgetIntent::FindPrevious
+    };
+    if tree_answers(state, intent) {
+        return;
+    }
+    if let Some(terminal) = state.search_target() {
+        step(state, terminal, forward);
     }
 }
 
-/// Place the selection caret on the focused match's first cell and scroll it into
-/// view. No-op when no match is focused.
-fn jump_to_current_match(state: &mut AppState) {
-    let Some(pane_id) = state.search_target_pane() else {
+/// **Did a terminal that holds the keyboard in the window tree take this intent?** Only asked while
+/// the keyboard really is in the tree (a dock or a layer in front); the panes' keys are not.
+fn tree_answers(state: &mut AppState, intent: WidgetIntent) -> bool {
+    crate::app::input::focused_surface(state).delivers_to_tree()
+        && crate::chrome::deliver(state, &heca_grid_ui::Event::Widget(intent))
+}
+
+/// Re-run the search for `query` in `terminal`, refresh the match list, focus the match nearest
+/// at/above the caret (else the last), jump to it, and show the terminal what was found.
+fn run_search(state: &mut AppState, terminal: TerminalId, query: &str) {
+    let Some(backend) = state.backends.get_by_id(terminal) else {
         return;
     };
+    let Some(cols) = backend.terminal_snapshot().map(|snap| snap.cols) else {
+        return;
+    };
+    let matches = backend.search_scrollback(query, cols);
+    let caret_row = state.selection.cursor_cell().map(|(_, row, _)| row);
+    let current = nearest_at_or_above(&matches, caret_row);
+    // Handed over once, and the terminal is the one that keeps it.
+    if let Some(handle) = state.terminals.get(&terminal)
+        && handle.show_matches(matches, current)
+    {
+        state.needs_redraw = true;
+    }
+    jump_to_current_match(state, terminal);
+}
+
+/// The match nearest at/above `caret_row`, else the last one; `None` when there are none.
+fn nearest_at_or_above(
+    matches: &[heca_core::backend::SearchMatch],
+    caret_row: Option<isize>,
+) -> Option<usize> {
+    if matches.is_empty() {
+        return None;
+    }
+    let caret = caret_row.unwrap_or(isize::MAX);
+    Some(
+        matches
+            .iter()
+            .rposition(|m| m.stable_row <= caret)
+            .unwrap_or(matches.len() - 1),
+    )
+}
+
+/// Move the terminal's current match by one (wrapping) and jump to it.
+fn step(state: &mut AppState, terminal: TerminalId, forward: bool) {
+    let moved = state
+        .terminals
+        .get(&terminal)
+        .is_some_and(|handle| handle.step_match(forward));
+    if moved {
+        state.needs_redraw = true;
+        jump_to_current_match(state, terminal);
+    }
+}
+
+/// Place the selection caret on the focused match's first cell and scroll it into view. No-op
+/// when no match is focused.
+fn jump_to_current_match(state: &mut AppState, terminal: TerminalId) {
     let Some(m) = state
-        .search_for(pane_id)
-        .and_then(|s| s.current.and_then(|i| s.matches.get(i)).cloned())
+        .terminals
+        .get(&terminal)
+        .and_then(|handle| handle.current_match())
     else {
         return;
     };
     state
         .selection
-        .set_caret(SelectionOwner::Pane(pane_id), m.stable_row, m.start_col);
+        .set_caret(SelectionOwner(terminal), m.stable_row, m.start_col);
     if let Some(snapshot) = state
         .backends
-        .get(pane_id)
+        .get_by_id(terminal)
         .and_then(|b| b.terminal_snapshot())
     {
-        ensure_caret_visible(state, pane_id, m.stable_row, &snapshot);
+        ensure_caret_visible(state, terminal, m.stable_row, &snapshot);
     }
     state.needs_redraw = true;
 }
+
+#[cfg(test)]
+mod tests;

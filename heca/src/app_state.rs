@@ -63,9 +63,13 @@ pub enum ColumnPickTarget {
         col_idx: usize,
         col_id: heca_core::layout::ColumnId,
     },
-    /// **A new column, right of the one the pane is in now** — "you keep your place in the strip",
-    /// the same rule `move_pane_to_new_column` already follows.
-    New,
+    /// **A new column at gap `gap` of the active workspace** — the gap left of column `gap`,
+    /// counted with the pane still where it is. It is drawn as an empty place with its letter in
+    /// it, and picking it runs `place_pane` for that gap.
+    NewColumn { gap: usize },
+    /// **A new row at row `row` of column `col`**, counted with the pane still where it is — an
+    /// empty place between, above or below the panes of a column.
+    NewRow { col: usize, row: usize },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -143,11 +147,16 @@ pub enum InputMode {
     FollowLink {
         candidates: Vec<LinkHint>,
     },
-    /// Scrollback-search query entry (entered with `/` in selection mode). Typing
-    /// edits `AppState.search`'s query and re-runs the search live; Enter keeps the
-    /// matches (so `n`/`N` navigate in selection mode), Esc cancels. The query +
-    /// matches live in [`SearchState`], not here.
-    Search,
+    /// **A terminal's search field has the keyboard.** Typing goes into that terminal's own tree,
+    /// where its field edits the query and the search re-runs live; Enter keeps the matches (so
+    /// `n`/`N` navigate in selection mode), Esc cancels. The query lives in the terminal's field
+    /// and the matches in the terminal that shows them, not here.
+    ///
+    /// The terminal is named only because pane trees are not part of the window's keyboard yet —
+    /// a bridge, and not something a plugin sees. When they join it, this goes (T453).
+    Search {
+        terminal: crate::chrome::terminal::TerminalId,
+    },
     /// Dock (chrome container) letter pick, entered with a bare `focus_dock`: every dock on
     /// screen gets a letter (a `KeyHint` keycap over its body) and the next keypress gives it
     /// chrome **keyboard focus**. Candidates carry a **container id**, so the pick is
@@ -165,37 +174,14 @@ pub enum InputMode {
     },
 }
 
-/// Active scrollback search: the query, its matches across the searched pane's
-/// scrollback, and the currently-focused match. Lives on [`AppState`] so `n`/`N`
-/// navigation works after the query overlay closes back into selection mode.
-pub struct SearchState {
-    /// The query field — a **real [`Input`]**, so the whole editing model comes for
-    /// free and behaves exactly as every other text field in the app: selection,
-    /// caret motion, word/line delete (`Ctrl+u`, `Ctrl+w`, `Alt+Backspace`),
-    /// select-all, click-to-place-caret.
-    ///
-    /// It used to be a bare `String` that a hand-written key handler pushed
-    /// characters onto — it understood Backspace and nothing else, so every editing
-    /// shortcut silently did nothing here while working everywhere else.
-    ///
-    /// Driven manually (bounds + font set at paint) rather than living in the focus
-    /// tree, because the bar is drawn as an overlay on the chrome scene. This is the
-    /// same arrangement [`CommandPalette`]'s query line uses.
-    pub input: std::cell::RefCell<heca_grid_ui::widgets::Input>,
-    /// All matches, ascending by stable row / column.
-    pub matches: Vec<heca_core::backend::SearchMatch>,
-    /// Index into `matches` of the focused match, if any.
-    pub current: Option<usize>,
-}
-
-/// A single follow-link candidate: the letter to press, the pane it lives in, where
+/// A single follow-link candidate: the letter to press, the terminal it lives in, where
 /// to stamp its keycap (the link's first visible cell — `row` from the viewport top,
 /// `start_col` inclusive), and the URL to open. Built from `snapshot.hyperlinks`, so
 /// OSC 8 and auto-detected (linkify) links are followed identically.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinkHint {
     pub label: char,
-    pub pane_id: PaneId,
+    pub terminal: crate::chrome::terminal::TerminalId,
     pub row: usize,
     pub start_col: usize,
     pub url: String,
@@ -253,7 +239,7 @@ impl InputMode {
             | InputMode::Mode { .. }
             | InputMode::Selection
             | InputMode::ConfirmDelete
-            | InputMode::Search => false,
+            | InputMode::Search { .. } => false,
         }
     }
 
@@ -295,7 +281,7 @@ impl InputMode {
             | InputMode::Mode { .. }
             | InputMode::Selection
             | InputMode::ConfirmDelete
-            | InputMode::Search => None,
+            | InputMode::Search { .. } => None,
         }
     }
 
@@ -403,85 +389,10 @@ impl PickKind {
     }
 }
 
-/// State for the interactive content-area drag (pane moved by mouse).
-///
-/// This is the app's own gesture, and the only one left: a dragged ROW is the framework's, which
-/// runs it and hands back a drop. Interactive move stays here because it detaches a pane from the
-/// layout, shows a ghost pane following the cursor and computes an insert hint — content-area
-/// concepts a widget knows nothing about.
-#[derive(Clone, Debug)]
-pub enum InteractiveMovePhase {
-    /// Phase 1: rubberband — pane still in layout, waiting for threshold.
-    Starting {
-        pane_id: PaneId,
-        /// Workspace where the drag originated.
-        original_ws: usize,
-        start_mouse: (f32, f32),
-        threshold_sq: f32,
-        /// If true, drop performs a swap instead of a move.
-        swap: bool,
-    },
-    /// Phase 2: detached — pane follows pointer (move mode).
-    /// In swap mode, the pane stays in layout and only the insert hint is shown.
-    Moving {
-        pane_id: PaneId,
-        /// Workspace where the drag originated.
-        _original_ws: usize,
-        /// Mouse offset from pane top-left at grab time.
-        offset: (f32, f32),
-        /// If true, drop performs a swap instead of a move.
-        swap: bool,
-    },
-}
-
-/// A pane that has been removed from the layout for interactive move.
-#[derive(Clone, Debug)]
-pub struct DetachedPane {
-    pub pane: heca_core::layout::Pane,
-    pub render_pos: heca_core::layout::types::Point,
-    pub size: heca_core::layout::types::Size,
-    pub original_ws: usize,
-    pub _original_col: usize,
-    pub original_col_id: heca_core::layout::ColumnId,
-    pub original_pane: usize,
-}
-
-/// Which layout divider a mouse resize-drag is acting on.
-///
-/// Indices are into the **active workspace's** `scrolling.columns` (the same
-/// indices [`crate::find_pane_location`] returns), so they map straight onto
-/// [`heca_core::layout::scrolling::ScrollingSpace::resize_column`] /
-/// `resize_pane_height`. A resize-drag never leaves the active workspace.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ResizeDivider {
-    /// The vertical gap to the right of column `col` → resize that column's width.
-    Column { col: usize },
-    /// The horizontal gap below pane `pane` in column `col` → resize that pane's height.
-    Pane { col: usize, pane: usize },
-}
-
-/// An in-flight mouse resize-drag (drag a column/pane divider). Distinct from the
-/// DnD item-move surfaces: this mutates layout sizes, not pane positions.
-#[derive(Clone, Copy, Debug)]
-pub struct ResizeDrag {
-    pub divider: ResizeDivider,
-    /// Cursor position at the last applied delta; the next move resizes by the
-    /// incremental difference so the divider tracks the pointer.
-    pub last_pos: (f32, f32),
-}
-
 /// All mouse-related runtime state.
 #[derive(Clone, Debug)]
 pub struct MouseState {
     pub pos: (f32, f32),
-    /// In-flight column/pane divider resize-drag (`None` when not resizing).
-    pub resize: Option<ResizeDrag>,
-    /// Content-area interactive move state (separate from surface drags).
-    pub interactive_move: Option<InteractiveMovePhase>,
-    /// Pane being dragged (detached from layout).
-    pub detached_pane: Option<DetachedPane>,
-    /// Computed drop target during interactive move.
-    pub insert_hint: Option<heca_core::layout::types::PaneInsertTarget>,
     /// Last time edge scroll was processed (for frame-rate independence).
     pub last_edge_scroll_time: Option<std::time::Instant>,
 }
@@ -490,10 +401,6 @@ impl MouseState {
     pub fn new() -> Self {
         Self {
             pos: (0.0, 0.0),
-            resize: None,
-            interactive_move: None,
-            detached_pane: None,
-            insert_hint: None,
             last_edge_scroll_time: None,
         }
     }
@@ -704,7 +611,7 @@ pub struct AppState {
     pub image_renderer: ImageRenderer,
     pub grid_renderer: GridRenderer,
     pub compositor: Compositor,
-    pub terminal_layers: HashMap<PaneId, RetainedTerminalLayer>,
+    pub terminal_layers: HashMap<crate::chrome::terminal::TerminalId, RetainedTerminalLayer>,
     pub terminal_layer_scratch: RetainedTerminalScratch,
     /// In-app frosted-blur primitive (shared, compositor-owned).
     /// Produces a blurred copy of the scene texture once per frame, then many
@@ -814,28 +721,15 @@ pub struct AppState {
     /// bookkeeping about it, so dropping it forces a rebuild without taking any surface with it.
     /// See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
-    /// **Retained per-pane shells**, keyed by pane — the frame around whatever app runs inside,
-    /// and the widget that carries the pane's identity and its pick letter. Built/positioned each
-    /// frame by `chrome::sync_panes`, painted through `heca_grid_ui::paint_child` (which is what
-    /// draws the letter).
-    ///
-    /// Retained rather than rebuilt in paint: the picker writes a letter into the tree when it
-    /// opens and reads it back a keystroke later, so a tree that does not outlive the frame cannot
-    /// carry one — which is why the pane letters used to be stamped by a host paint pass
-    /// (F011/P094/T451).
-    pub panes: HashMap<PaneId, crate::chrome::RetainedPane>,
-    /// **Retained per-column trees**, keyed by the column's own id — the box a column occupies in
-    /// the scrolling area, and the identity a pick addresses it by.
-    ///
-    /// The column is what OWNS `col:<id>`; the workspaces dock shows a view of it. Built and placed
-    /// each frame by `chrome::sync_columns` (F003/P082/T474).
-    pub columns: HashMap<heca_core::layout::ColumnId, crate::chrome::RetainedColumn>,
     /// The terminal each pane shows, by pane — the client's view of a running terminal process:
     /// what a window draws, and how much room it was given. Client state, like the retained trees.
-    pub(crate) terminals: HashMap<heca_core::layout::PaneId, crate::chrome::terminal::Terminal>,
+    pub(crate) terminals:
+        HashMap<crate::chrome::terminal::TerminalId, crate::chrome::terminal::Terminal>,
     /// The buttons whose press a terminal's program has heard and whose release it has not — so a
     /// release is passed on only where its press was.
     pub(crate) terminal_presses: crate::app::terminal_host::HeardPresses,
+    /// The CPU cost of a frame, averaged and printed when `HECA_FRAME_TIMES` is set.
+    pub(crate) frame_times: crate::app::frame_times::FrameTimes,
     /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
     /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
     /// trees; this holds runtime-added layers that join the same surface stack. See
@@ -901,21 +795,6 @@ pub struct AppState {
     /// Same shape as [`bell_flash_until`](Self::bell_flash_until): a deadline the frame loop reads,
     /// never a per-widget timer the host would have to keep in step.
     pub widget_frame_due: Option<std::time::Instant>,
-    /// Active scrollback searches, **one per pane**. Drives each pane's query bar,
-    /// its match highlights, and `n`/`N` navigation. terminal-task-19.
-    ///
-    /// Per-pane rather than a single global search: with one shared slot, starting a
-    /// search in a second pane silently destroyed the first pane's — its bar and
-    /// highlights vanished and there was no way to get them back. Every pane now
-    /// keeps its own, and they all render at once.
-    ///
-    /// A `BTreeMap` so iteration order is stable — panes draw in a deterministic
-    /// order frame to frame rather than wandering with hash seeding.
-    ///
-    /// Reach it through [`search_for`](Self::search_for) /
-    /// [`focused_search`](Self::focused_search) and friends rather than indexing, so
-    /// "the search the keyboard is driving" has exactly one definition.
-    pub searches: std::collections::BTreeMap<PaneId, SearchState>,
     // (The right-click context menu + the destructive-confirm prompt are now host-owned overlay
     // layers in `chrome::overlay` — `open_dropdown` / `open_modal` — not bespoke fields here.)
     /// Most recently focused pane (for "go back" behavior).
@@ -1014,6 +893,9 @@ pub struct AppState {
     pub confirm: heca_config::confirm::ConfirmConfig,
     /// Modifier key for interactive pane drag.
     pub interactive_move_modifier: heca_config::theme::ModifierKey,
+    /// Whether the places a pane can be put are shown in this window right now — see
+    /// [`crate::app::places`].
+    pub places_open: bool,
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
     /// The configured prefix key combo (e.g. Ctrl+b).
@@ -1075,38 +957,19 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// The scrollback search for `pane`, if it has one.
-    pub fn search_for(&self, pane: PaneId) -> Option<&SearchState> {
-        self.searches.get(&pane)
-    }
-
-    /// The pane the keyboard's search acts on: the **selection's** pane if copy-mode
-    /// owns one, else the focused pane.
+    /// The terminal the keyboard's search acts on: the **selection's** terminal if copy-mode owns
+    /// one, else the focused pane's.
     ///
-    /// One definition, used by every search entry point — starting a search, editing
-    /// the query, stepping matches, cancelling. They must agree: a search started for
-    /// one pane while edits were applied to another would leave the query frozen,
-    /// because the keystrokes would land on an entry that does not exist. The old
-    /// single-search state avoided this by carrying its own `pane_id`; with per-pane
-    /// storage the resolution itself has to be shared.
-    pub fn search_target_pane(&self) -> Option<PaneId> {
+    /// One definition, used by every search entry point — starting a search, stepping matches,
+    /// cancelling. They must agree: a search started for one terminal while steps were applied to
+    /// another would find nothing to step.
+    pub fn search_target(&self) -> Option<crate::chrome::terminal::TerminalId> {
         match self.selection.owner() {
-            Some(crate::app::selection_model::SelectionOwner::Pane(id)) => Some(id),
-            _ => self.focused_pane,
+            Some(crate::app::selection_model::SelectionOwner(terminal)) => Some(terminal),
+            None => self.backends.identity_of(self.focused_pane?),
         }
     }
 
-    /// The search the keyboard is driving — see [`search_target_pane`](Self::search_target_pane).
-    pub fn active_search_mut(&mut self) -> Option<&mut SearchState> {
-        let pane = self.search_target_pane()?;
-        self.searches.get_mut(&pane)
-    }
-
-    /// Drop `pane`'s search, if any. Called when a pane closes so a dead pane cannot
-    /// leave a search behind that nothing can reach or clear.
-    pub fn clear_search(&mut self, pane: PaneId) {
-        self.searches.remove(&pane);
-    }
     pub fn mark_full_redraw(&mut self) {
         self.needs_redraw = true;
     }
@@ -1118,7 +981,7 @@ impl AppState {
     /// highlight the moment the overlay appears. It used to ask whether the app was in a mode; a
     /// container holding the keyboard is the thing that was always meant.
     pub fn container_cursor_visible(&self) -> bool {
-        self.chrome_state.focused_container().is_some()
+        crate::app::tree_focus::focused_dock(self).is_some()
     }
 
     /// Effective tab-bar (top bar) height: the default when shown, `0.0` when
@@ -1210,6 +1073,19 @@ impl AppState {
     /// plus the global zoom offset plus that pane's per-pane offset, clamped to the
     /// supported range. Both the PTY cell fit and the rendered glyph size derive
     /// from this single value so they never disagree.
+    /// The terminal font size for a terminal that may or may not belong to a pane: a pane has its own
+    /// zoom on top of the global one, any other terminal follows the global.
+    pub fn terminal_font_size(&self, pane: Option<PaneId>) -> f32 {
+        let pane_offset = pane
+            .and_then(|pane| self.pane_font_zoom.get(&pane))
+            .copied()
+            .unwrap_or(0.0);
+        (self.font_config.size.terminal + self.app_font_zoom + pane_offset).clamp(
+            crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MIN,
+            crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MAX,
+        )
+    }
+
     pub fn effective_terminal_font_size(&self, pane_id: PaneId) -> f32 {
         let pane_offset = self.pane_font_zoom.get(&pane_id).copied().unwrap_or(0.0);
         (self.font_config.size.terminal + self.app_font_zoom + pane_offset).clamp(
@@ -1320,7 +1196,13 @@ mod tests {
     #[test]
     fn a_mode_that_is_not_a_pick_has_no_count() {
         assert_eq!(InputMode::Normal.pick_candidate_count(), None);
-        assert_eq!(InputMode::Search.pick_candidate_count(), None);
+        assert_eq!(
+            InputMode::Search {
+                terminal: crate::chrome::terminal::TerminalId(1)
+            }
+            .pick_candidate_count(),
+            None
+        );
     }
 
     /// **Every pick names what it picks among**, so a refusal reads as a sentence rather than a

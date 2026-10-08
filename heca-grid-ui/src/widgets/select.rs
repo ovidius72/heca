@@ -856,8 +856,7 @@ impl Component for Select {
 
     fn on_blur(&mut self) {
         self.close();
-        self.base.focused.set(false);
-        self.base.focus_visible.set(false);
+        self.base.blur();
     }
 }
 

@@ -107,7 +107,7 @@ impl KeyHintGroup {
     }
 
     fn wrap(child: Box<dyn Component>) -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         // Hug the child and stay a column, so a stretching parent reaches the subtree unchanged —
         // the same transparency `KeyHint` and `FocusScope` need, for the same reason.
         base.style.layout.width = Length::Auto;
@@ -134,7 +134,7 @@ impl KeyHintGroup {
         // **Holding focus is the whole of taking the keyboard.** Keys are delivered down the focus
         // owner's chain, so an open picker is on the path and a closed one is not. There is no
         // gate to write and nothing to decline.
-        self.base.focused = open;
+        self.base.follow_focus_modal(open);
         self
     }
 
@@ -581,13 +581,10 @@ mod tests {
     #[test]
     fn the_declared_verb_also_takes_the_keyboard() {
         let g = KeyHintGroup::new(Flex::column()).opens_on("mypanel.pick");
-        assert!(
-            !g.base().focused.get_untracked(),
-            "closed, focus is elsewhere"
-        );
+        assert!(!crate::holds_keyboard(&g), "closed, focus is elsewhere");
         assert!(crate::fire_action(&g, "mypanel.pick"));
         assert!(
-            g.base().focused.get_untracked(),
+            crate::holds_keyboard(&g),
             "an open picker is the focus owner, or the letters it drew would go to the subtree",
         );
     }

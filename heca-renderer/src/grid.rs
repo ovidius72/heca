@@ -91,6 +91,8 @@ pub struct GridRenderer {
     /// allocating a fresh staging buffer — the per-frame allocation that caused
     /// frame-time spikes. Reset by [`begin_frame`](GridRenderer::begin_frame).
     frame_vtx: u32,
+    /// Render passes begun since [`begin_frame`](Self::begin_frame): what the frame-time log reports.
+    passes: u32,
     frame_idx: u32,
 }
 
@@ -271,14 +273,21 @@ impl GridRenderer {
             current_clip: None,
             damage: None,
             frame_vtx: 0,
+            passes: 0,
             frame_idx: 0,
         }
+    }
+
+    /// How many render passes this renderer has begun since [`begin_frame`](Self::begin_frame).
+    pub fn passes(&self) -> u32 {
+        self.passes
     }
 
     /// Reset the per-frame buffer write offsets. Call once at the start of each
     /// frame, before any `render` passes, so the frame's passes append to the
     /// persistent buffers instead of overwriting one another.
     pub fn begin_frame(&mut self) {
+        self.passes = 0;
         self.frame_vtx = 0;
         self.frame_idx = 0;
     }
@@ -394,6 +403,7 @@ impl GridRenderer {
         queue.write_buffer(&self.vertex_buffer, v_off, vertex_data);
         queue.write_buffer(&self.index_buffer, i_off, index_data);
 
+        self.passes += 1;
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("grid_render_pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {

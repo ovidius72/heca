@@ -112,6 +112,7 @@ mod button_ownership;
 mod capture;
 mod clicks;
 mod containers;
+mod drag;
 mod handlers;
 mod hover;
 mod wheel;

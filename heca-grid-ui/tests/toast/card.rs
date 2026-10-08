@@ -272,7 +272,7 @@ fn toast_focusable_only_when_clickable_and_enter_activates() {
     assert!(t.focusable(), "a clickable toast is focusable");
     // A raw key reaches only the widget that owns the keyboard — the assertion below already
     // says "focused", so make it so rather than relying on an unfocused widget taking Enter.
-    t.base_mut().focused.set(true);
+    t.base().focus(false);
     heca_grid_ui::dispatch(
         &mut t,
         &Event::Key {

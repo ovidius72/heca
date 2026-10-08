@@ -6,10 +6,12 @@ use crate::input::WmAction;
 use heca_core::layout::ColumnId;
 
 /// Take the pane out of wherever it is and put it where the action says
-/// ([`Workspace::take_pane`], [`Workspace::place_pane`]), sliding it from where it was when it
+/// ([`Workspace::move_pane`] within one workspace, [`Workspace::take_pane`] and
+/// [`Workspace::place_pane`] between two), sliding it from where it was when it
 /// stays on screen. Nothing happens when the destination workspace does not exist — checked before
 /// the pane is taken, so a bad index never loses it.
 ///
+/// [`Workspace::move_pane`]: heca_core::layout::Workspace::move_pane
 /// [`Workspace::take_pane`]: heca_core::layout::Workspace::take_pane
 /// [`Workspace::place_pane`]: heca_core::layout::Workspace::place_pane
 pub fn handle_place_pane(state: &mut AppState, action: &WmAction) {
@@ -31,12 +33,19 @@ pub fn handle_place_pane(state: &mut AppState, action: &WmAction) {
         return;
     };
     let before = pane_rect(state, src_ws, pane_id);
-    let Some(pane) = state.session.workspaces[src_ws].take_pane(pane_id) else {
-        return;
-    };
     let new_column_id = ColumnId(state.session.next_id());
-    let ws = &mut state.session.workspaces[ws_idx];
-    ws.place_pane(pane, col_idx, pane_idx, new_column_id);
+    if src_ws == ws_idx {
+        // Within one workspace the place is counted as it is now, with the pane still in it; the
+        // workspace works out what taking the pane out does to the numbers.
+        if !state.session.workspaces[ws_idx].move_pane(pane_id, col_idx, pane_idx, new_column_id) {
+            return;
+        }
+    } else {
+        let Some(pane) = state.session.workspaces[src_ws].take_pane(pane_id) else {
+            return;
+        };
+        state.session.workspaces[ws_idx].place_pane(pane, col_idx, pane_idx, new_column_id);
+    }
     if let (Some(from), true) = (before, src_ws == ws_idx)
         && let Some(to) = pane_rect(state, ws_idx, pane_id)
     {

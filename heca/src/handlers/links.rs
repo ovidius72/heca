@@ -76,9 +76,11 @@ pub fn handle_open_link_at_caret(state: &mut AppState, _action: &WmAction) {
     let Some((owner, stable_row, col)) = state.selection.cursor_cell() else {
         return;
     };
-    let SelectionOwner::Pane(pane_id) = owner;
-    let Some(url) =
-        crate::app::terminal_host::hyperlink_uri_at_stable_cell(state, pane_id, stable_row, col)
+    let SelectionOwner(terminal) = owner;
+    let Some(url) = state
+        .terminals
+        .get(&terminal)
+        .and_then(|t| t.link_at_stable(stable_row, col))
     else {
         return;
     };

@@ -53,6 +53,7 @@ fn main() {
 | an action | `pro.action("s")…run(f)` | server | policy defaults to `AlwaysAllowed` (refused while a floating pane is active); say `.policy(..)` otherwise; `.destructive()` asks first |
 | an overlay | `pro.layer("s").view(f)` | client | opened with `toggle_layer name=pro.s` from a key, menu, palette or RPC; built again each time it opens |
 | a pane header button | `pro.pane_button("s")` | client | runs the action `pro.s`; icon, words, tooltip and danger come from it; if it declares an integer `pane` argument (`heca::PANE_ARG`) it receives the pane's id |
+| a terminal | `pro.terminal("s")` | client | the terminal `pro.s` in any tree you build (a dock, an overlay): `.command(..)`, `.cwd(..)`, `.title(..)`; the same name is the same running process, and closing the dock never ends it |
 | a pane header chip | `pro.pane_chip("s", f)` | client | `f(&PaneFacts) -> Option<PaneChip>`; re-run when the pane's facts change |
 | a sidebar row line | `pro.pane_line("s", f)` | client | `f(&PaneFacts) -> Option<PaneLine>` |
 

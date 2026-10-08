@@ -1,57 +1,28 @@
-//! **The pane shell surface** — one retained component per pane, whatever is running inside it.
+//! **The pane** — a frame around whatever is running inside it, built from a [`PaneShellModel`] and
+//! held by the workspace.
 //!
-//! This file is the only one in the folder that may touch `AppState` (AGENTS.md § 0b-bis rule 4):
+//! This file is one of the few in the folder that may touch `AppState` (AGENTS.md § 0b-bis rule 4):
 //! it reduces the session to [`PaneShellModel`]s and hands them down, so every component below is
 //! testable headless.
 //!
-//! ## Why the tree is retained
-//!
 //! A pane's letter is drawn by the framework from `Base::hint_label`, which the host writes when
-//! the picker opens and reads back one keystroke later. A tree rebuilt inside the paint function —
-//! which is what `paint_terminal_pane_shell` did — is gone before either can happen, which is why
-//! the pane letters used to be stamped by a host paint pass instead. Retaining the tree is what
-//! makes the letter the pane's own.
-//!
-//! The rebuild cadence follows [`crate::chrome::sync_pane_headers`]: build only when the content
-//! key changes, re-lay-out and re-position every frame, prune panes that vanished.
+//! the picker opens and reads back one keystroke later, so the pane is built once and kept: the
+//! workspace rebuilds it only when its model's key changes and otherwise writes what changed (its
+//! focus, its rect, its header's words) onto the pane that is there.
 
 mod model;
 pub(crate) mod shell;
 #[cfg(test)]
 pub(crate) mod testing;
 
-pub(crate) use model::PaneShellModel;
+pub(crate) use model::{FloatLook, PaneShellModel};
 pub(crate) use shell::{PaneCallbacks, PaneShell};
 
 use heca_core::layout::PaneId;
-use heca_grid_ui::widgets::Pane as UiPane;
-use heca_grid_ui::{LayoutEngine, Size};
 
-/// A retained per-pane shell tree.
-///
-/// Rebuilt only when [`PaneShellModel::key`] changes, so the widget signals inside survive a
-/// re-layout; re-laid-out and repositioned every frame by [`sync_panes`]; painted **through
-/// `heca_grid_ui::paint_child`**, which is what draws its letter.
-pub(crate) struct RetainedPane {
-    pub(crate) root: UiPane,
-    /// The model key the tree was built from.
-    pub(crate) key: String,
-}
-
-/// Drop every retained pane shell — used when a config reload changes the theme or font baked into
-/// the trees. [`sync_panes`] rebuilds them next frame.
-///
-/// Nothing has to be released with them: a pane declares its pick **on itself**, so a tree that is
-/// gone simply has no declaration left. That is the whole reason the picker registers nothing.
-pub(crate) fn clear_panes(state: &mut crate::app_state::AppState) {
-    state.panes.clear();
-    crate::chrome::clear_columns(state);
-}
-
-/// **Every visible pane, reduced to plain data** — the gather half of [`sync_panes`], on its own
-/// so the column surface can build the panes it holds from the same models rather than a second
-/// reading of the session (AGENTS.md § 0b-bis rule 4: `mod.rs` gathers, everything below takes
-/// plain data).
+/// **Every visible pane, reduced to plain data** — one reading of the session, so a column and the
+/// panes in it can never disagree about where anything is (AGENTS.md § 0b-bis rule 4: `mod.rs`
+/// gathers, everything below takes plain data).
 pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellModel> {
     let frame_style = state.appearance.effective_pane_border_style();
     let border = state
@@ -75,6 +46,16 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
         state.theme.active_glow_strength,
     );
 
+    // A float covers what is under it: it fills itself, or frosts what lies beneath when the
+    // config asks for a see-through float with a blur.
+    let float_look = crate::chrome::pane::FloatLook {
+        background: state.theme.float_background.to_f32x4(),
+        frost: if state.terminal_floating_surface_opacity() < 1.0 {
+            state.appearance.terminal_floating_blur_radius()
+        } else {
+            0.0
+        },
+    };
     let active_pane = state
         .session
         .active_workspace()
@@ -111,105 +92,12 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
                 content_inset,
                 accent,
                 active_glow,
+                float: floating.contains(&pane_id).then_some(float_look),
+                move_modifier: state.interactive_move_modifier,
             }
         })
         .collect();
     models
-}
-
-/// Build, lay out and position the retained shell for every visible pane.
-///
-/// Runs at the **top** of `render_frame`, before the `scene_view` borrow of `state.compositor`, so
-/// it can mutate `state.panes`; render then paints them read-only.
-pub(crate) fn sync_panes(state: &mut crate::app_state::AppState) {
-    // **Only the panes no column holds.** A tiled pane is a child of its column now
-    // (`chrome::column`), built, placed, focused and painted there — so building a second tree for
-    // it here would be two widgets answering to one name, and two of everything the pane carries.
-    // A floating pane belongs to no column, so it is still the host's to place.
-    let tiled: std::collections::HashSet<PaneId> = state
-        .session
-        .active_workspace()
-        .map(|ws| {
-            ws.scrolling
-                .panes_with_positions()
-                .into_iter()
-                .map(|(id, _)| id)
-                .collect()
-        })
-        .unwrap_or_default();
-    let all = pane_models(state);
-    let shown: std::collections::HashSet<PaneId> = all.iter().map(|m| m.pane_id).collect();
-    let models: Vec<PaneShellModel> = all
-        .into_iter()
-        .filter(|m| !tiled.contains(&m.pane_id))
-        .collect();
-
-    // What each pane wants along its top. Built here and handed down as a child — the shell has no
-    // idea what a terminal is, so the bar arrives as an ordinary widget like any other content.
-    let mut headers = crate::chrome::build_pane_headers(state);
-
-    let cb = callbacks(state);
-
-    // ── Phase 2: build (only when changed), lay out, position, prune ──
-    let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
-    for model in &models {
-        seen.insert(model.pane_id);
-        let header = headers.remove(&model.pane_id);
-        // ONE key for the pane and what it carries, so they rebuild together or not at all. Two
-        // keys would let a bar go stale inside a pane that had no reason to rebuild.
-        let key = match &header {
-            Some((_, header_key, _)) => format!("{}|{header_key}", model.key()),
-            None => model.key(),
-        };
-        let needs_build = state
-            .panes
-            .get(&model.pane_id)
-            .map(|p| p.key != key)
-            .unwrap_or(true);
-        let header_texts = header.as_ref().map(|(_, _, texts)| texts.clone());
-        if needs_build {
-            let content = Box::new(crate::chrome::terminal::view_of(state, model.pane_id))
-                as Box<dyn heca_grid_ui::Component>;
-            let root = PaneShell {
-                model,
-                cb: &cb,
-                header: header
-                    .map(|(tree, _, _)| Box::new(tree) as Box<dyn heca_grid_ui::Component>),
-                content: Some(content),
-            }
-            .build();
-            state
-                .panes
-                .insert(model.pane_id, RetainedPane { root, key });
-        }
-        // **The words are a per-frame input**, written onto the retained tree exactly as the pane's
-        // rect is — so the program a pane shows, its branch and its working directory change
-        // without the bar being rebuilt (F003/P097/T500). Rebuilding for them blinked the buttons
-        // out and back twice per command, because a fresh widget paints nothing until the layout
-        // walk has given it a box.
-        if let (Some(texts), Some(retained)) = (&header_texts, state.panes.get(&model.pane_id)) {
-            crate::chrome::pane_header::refresh_pane_header_text(&retained.root, texts);
-        }
-        if let Some(retained) = state.panes.get_mut(&model.pane_id) {
-            // The pane's rect is a per-frame input, written onto the retained tree rather than
-            // built into it — so a zoom, a resize or a float moves the frame without rebuilding
-            // the widget and throwing away its signals.
-            shell::size_to(&mut retained.root, model.w, model.h);
-            // **What focus changed**, written on rather than rebuilt for — see `focus_state_to`.
-            shell::focus_state_to(&mut retained.root, model);
-            LayoutEngine::new().compute(
-                &mut retained.root,
-                Size::new(model.w as f64, model.h as f64),
-            );
-            heca_grid_ui::shift_subtree(&mut retained.root, model.x as f64, model.y as f64);
-        }
-    }
-    state.panes.retain(|id, _| seen.contains(id));
-    // The columns are placed in the same pass, from the same geometry — so a column and the panes
-    // in it can never be one frame out of step.
-    crate::chrome::sync_columns(state);
-    // A terminal is kept only for a pane that is shown.
-    crate::chrome::terminal::retain_only(state, &shown);
 }
 
 /// The app's edges, gathered once. A test calls this to get exactly the seams and nothing else

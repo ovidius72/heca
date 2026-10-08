@@ -116,6 +116,9 @@ pub enum Spacing {
     Sm,
     Md,
     Lg,
+    /// The widest step: room around a thin target the pointer has to find, such as the line a
+    /// carried pane is dropped on.
+    Xl,
 }
 
 /// **A space: a number of pixels, or a step of the theme's rhythm.**
@@ -185,6 +188,7 @@ impl std::str::FromStr for Space {
             "sm" => return Ok(Space::Step(Spacing::Sm)),
             "md" => return Ok(Space::Step(Spacing::Md)),
             "lg" => return Ok(Space::Step(Spacing::Lg)),
+            "xl" => return Ok(Space::Step(Spacing::Xl)),
             _ => {}
         }
         // `px` is optional and means the same as no suffix — the same rule `Length` follows.
@@ -292,6 +296,7 @@ impl Spacing {
             Spacing::Sm => 0.5,
             Spacing::Md => 0.85,
             Spacing::Lg => 1.25,
+            Spacing::Xl => 2.0,
         }
     }
 }

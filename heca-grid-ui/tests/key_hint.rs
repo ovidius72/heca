@@ -113,7 +113,7 @@ fn key_hint_is_transparent_to_focus_and_activation() {
     let mut focus = FocusManager::new();
     focus.advance(&mut wrapped, true);
     assert_eq!(
-        focus.focused(),
+        focus.focused(&mut wrapped),
         Some(0),
         "wrapped child is reachable by Tab"
     );

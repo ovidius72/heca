@@ -64,15 +64,23 @@
 #
 # One resolution order, for every key:
 #
-#   the focused surface's own [[keys.surface]] entry
-#     → the floor its kind is guaranteed
+#   a focused dock's reserved way-out key (Escape as shipped)
+#     → the focused widget and its ancestors (a terminal docked in the sidebar gets its PageUp)
+#     → the focused surface's own [[keys.surface]] entry
+#     → the rest of the floor its kind is guaranteed
 #     → the global [keys] map
 #     → then swallowed (a layer, a dock) or sent to the program in the pane (heca.panes)
 #
 # Nearest declaration wins, so a surface key shadows a global one with the same combo. This is why
 # `Escape` is never bound globally: a global one would outrank all three at once. The floors are a
-# layer closing itself, a dock handing the keyboard back, and `heca.panes` having none — so Escape
-# reaches the program in the pane, and vim still works.
+# layer closing itself and a dock handing the keyboard back — each a `[[keys.mode]]` block below,
+# bound to `Escape` as shipped — and `heca.panes` having none, so Escape reaches the program in the
+# pane, and vim still works.
+#
+# EVERY PANEL ALWAYS HAS A WAY OUT. Move it if you like (bind the action to another key and give
+# Escape up with `unbind = ["Escape"]` in the same block), but a config that leaves a floor with no
+# key — in the floor itself or behind the prefix — is refused for that floor, Escape is put back,
+# and the start-up report says so.
 #
 #
 # ── A TYPO IS NOT AN ERROR ─────────────────────────────────────────────────────
@@ -404,11 +412,11 @@ args   = { name = "heca.expose" }
 #                                #   back. `global_focus` is reserved: a component cannot have an
 #                                #   action of that name.
 #
-#   Escape                       # gives the keyboard back to the main region. Always bound, for
-#                                #   every container, and NOT removable — a dock that declares
-#                                #   nothing must still be leavable without the mouse. You can add
-#                                #   other ways out by binding `unfocus_dock`; you cannot take this
-#                                #   one away.
+#   Escape                       # gives the keyboard back to the main region (the `focus` block
+#                                #   below). Bound for every container as shipped, so a dock that
+#                                #   declares nothing is still leavable without the mouse. You can
+#                                #   move it: bind `unfocus_dock` elsewhere and `unbind` Escape —
+#                                #   but a config that leaves no way out is refused.
 #
 # Those two are what make the rule work: a container that declares nothing at all is still
 # reachable, scrollable and leavable, with no code written for it.
@@ -623,15 +631,16 @@ args = { target = "pane", amount = "-40" }
 # in the pane keeps them: `q` closes the map, and `:q` still quits vim. `Ctrl+q` is `quoted-insert`
 # in emacs and readline, which a global binding would shadow everywhere.
 #
-# `Escape` is asserted over whatever is written here and cannot be unbound — a surface must always
-# have a way out. Add further keys; you cannot remove that one.
+# `Escape` closes the layer as shipped. A surface must always have a way out: move this key if you
+# like (bind `close_overlay` elsewhere, then `unbind = ["Escape"]` in your own `layer` block), but a
+# config that leaves no key for it — here or behind the prefix — is refused and `Escape` is put back.
 [[keys.mode]]
 name = "layer"
 trigger = ""
 sticky = true
 [[keys.mode.bindings]]
 action = "close_overlay"
-keys = ["q", "Ctrl+q"]
+keys = ["Escape", "q", "Ctrl+q"]
 
 # ── focus ── (entered by focusing a DOCK — `focus_dock`, or a click; no trigger of its own)
 #
@@ -679,9 +688,14 @@ keys = "Alt+Home"
 [[keys.mode.bindings]]
 action = "scroll_to_right_edge"
 keys = "Alt+End"
-# NB: `Escape` → `unfocus_dock` is deliberately NOT listed here. Every container has it whatever
-# this block says (F003/P086/T363) — a line here would look editable and would not be. Bind
-# `unfocus_dock` to further keys if you want more ways out; Escape is the floor.
+# The way out. `Escape` hands the keyboard back to the panes, as shipped — and, like the layer
+# floor, it can be moved: bind `unfocus_dock` to another key (here, or `unfocus_dock = "prefix+…"`
+# in [keys]) and give Escape up with `unbind = ["Escape"]` in your own `focus` block. A config that
+# leaves no key for it is refused and Escape is put back. With Escape given up, it reaches whatever
+# is typed into inside the dock — a terminal, say — like any other key nobody claimed.
+[[keys.mode.bindings]]
+action = "unfocus_dock"
+keys = "Escape"
 
 # ── selection ── (entered via enter_selection_mode; no trigger of its own)
 [[keys.mode]]
@@ -828,8 +842,8 @@ zoom_selected     = "z"
 #   a layer   by its addressable name, the one `show_layer` / `hide_layer` take
 #   a dock    by its mount id, then by its kind
 #
-# Bind further keys to `close_overlay` / `unfocus_dock` if you want more ways out; the Escape floor
-# itself cannot be unbound.
+# Bind further keys to `close_overlay` / `unfocus_dock` if you want more ways out, or move the
+# default one (see the floors in the `[[keys.mode]]` blocks above).
 #
 # `heca.panes` ships with no bindings, and that absence is the feature: anything declared for it is
 # taken away from the program running in the pane. Declare it to give the scrolling area keys of its

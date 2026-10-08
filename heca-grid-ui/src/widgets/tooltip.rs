@@ -253,7 +253,7 @@ impl Tooltip {
     }
 
     fn wrap(child: Box<dyn Component>, tip: Tip) -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         // Hug the child so the wrapper's bounds match it — the anchor is the wrapper's box, and
         // hover is already true here whenever it is true on the child (the CSS rule: a control is
         // hovered when what is inside it is).

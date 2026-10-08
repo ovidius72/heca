@@ -10,6 +10,7 @@ mod handlers;
 mod host;
 mod input;
 mod keymap;
+mod modifier;
 mod mouse;
 mod notification;
 mod project_trust;
@@ -28,6 +29,7 @@ pub use args::{ArgKind, ArgSpec};
 // A dock: `regions(..).append(..)`, the `Provider` it takes, what its body is built from, and how
 // its widgets report what the user did (`fires`, `picks`).
 pub use chrome::pane_items::{PANE_ARG, PaneChip, PaneFacts, PaneLine};
+pub use chrome::terminal::Terminal;
 pub use chrome::{
     BuildCx, ChromeIntentEmitter, ContainerContribution, ContextMenuContribution, Contribution,
     PlaceDock, RegionId, RegionSet, fires, picks, regions,
@@ -234,7 +236,10 @@ impl HecaApp {
             // `center_focused_column` and pressing reload appeared to do nothing — the settings
             // were live in the file and dead in the app (Antonio, 2026-08-11). One mapping,
             // `startup::layout_options_from`, shared by both paths so they cannot drift.
-            state.session.options = crate::app::startup::layout_options_from(&self.app_config);
+            crate::app::startup::apply_layout_options(
+                &mut state.session,
+                crate::app::startup::layout_options_from(&self.app_config),
+            );
             // Font config (families + sizes) is decoupled from the color theme;
             // reload it so `prefix+Shift+r` picks up `[font]` changes live.
             state.font_config = self.app_config.config.font.clone();
@@ -248,16 +253,9 @@ impl HecaApp {
                 .set_font_family(self.app_config.config.font.family.ui_normal());
             refresh_terminal_cell_size(state);
             state.terminal_layers.clear();
-            // Retained pane headers bake theme colors / fonts into their tree at
-            // build time, and `pane_header_key` intentionally has no theme identity
-            // (themes only change on reload). Drop every header so `sync_pane_headers`
-            // rebuilds them against the new theme next frame. Mirrors
-            // `terminal_layers.clear()` and `chrome_tree = None`; without it, existing
-            // panes keep stale (faint) icon colors after a theme swap while
-            // freshly-created panes look correct.
-            crate::chrome::clear_panes(state);
-            // The pane shells bake the theme too, so they are invalidated with the headers.
-            crate::chrome::clear_panes(state);
+            // The pane shells and the headers they hold bake the theme, fonts and shortcuts at
+            // build, so a reload drops them all and the next frame rebuilds them.
+            crate::chrome::clear_workspace(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.widget_keymap =
                 crate::app::registry::build_widget_keymap(&self.app_config.config);
@@ -517,8 +515,13 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 state.mark_full_redraw();
                 state.window.request_redraw();
             }
-            AppEvent::TerminalInput { pane_id, input } => {
-                crate::app::terminal_host::on_terminal_input(state, &self.registry, pane_id, input);
+            AppEvent::TerminalInput { terminal, input } => {
+                crate::app::terminal_host::on_terminal_input(
+                    state,
+                    &self.registry,
+                    terminal,
+                    input,
+                );
                 state.mark_full_redraw();
                 state.window.request_redraw();
             }

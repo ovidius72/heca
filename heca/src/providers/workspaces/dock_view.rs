@@ -22,18 +22,12 @@ pub(crate) struct DockView<'a> {
     /// This placement's own scroll offset, keyed by mount id, so the same container placed twice
     /// keeps two positions.
     pub(crate) scroll: Signal<f32>,
-    /// Whether this placement holds chrome keyboard focus (F003/P011/T020).
-    pub(crate) focused: Signal<bool>,
 }
 
 impl DockView<'_> {
     /// Build the dock, returning the concrete widget so the region still sizes it.
     pub(crate) fn build(self, seams: &DockSeams<'_>, reg: &mut DockRegistries<'_>) -> ScrollRegion {
-        let DockView {
-            tree,
-            scroll,
-            focused,
-        } = self;
+        let DockView { tree, scroll } = self;
         let mut col = Flex::column().gap(Spacing::Sm).grow(1.0);
         for workspace in &tree.workspaces {
             col = col.child(WorkspaceFrame { workspace }.build(seams, reg));
@@ -56,11 +50,8 @@ impl DockView<'_> {
         // a restore from the user actually scrolling and never writes one back as the other.
         region.scroll_to(scroll.get_untracked());
         region
-            // Keyboard scroll intents act on the area the keyboard is aimed at, and every other area
-            // declines them — which is what makes the semantic `WidgetIntent::Scroll*` a *broadcast* the
-            // focused container answers rather than something the host has to route by hand
-            // (F003/P011/T012 consumes this; the gate itself belongs here, per placement).
-            .keyboard_target(focused)
+            // Keyboard scroll intents reach only the dock the keyboard is in — they follow focus, so
+            // this region needs no flag to say whether it is the one.
             .on_scroll(move |s| {
                 if s.event.is_some() {
                     scroll.set(s.offset_y);
@@ -111,7 +102,6 @@ mod tests {
             DockView {
                 tree: &tree,
                 scroll: heca_grid_ui::reactive::signal(0.0),
-                focused: heca_grid_ui::reactive::signal(false),
             }
             .build(&seams, &mut reg)
         };

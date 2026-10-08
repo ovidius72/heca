@@ -37,6 +37,10 @@ struct Params {
     uv_min: [f32; 2],
     uv_max: [f32; 2],
     opacity_pad: [f32; 4],
+    /// The destination box in physical pixels: `(x, y, w, h)`.
+    rect_px: [f32; 4],
+    /// `x` is the corner radius in physical pixels; the rest pads the layout.
+    corner_pad: [f32; 4],
 }
 
 /// Draws a (sub-region of a) texture into a destination rect, alpha-blended.
@@ -173,7 +177,8 @@ impl Backdrop {
         }
     }
 
-    /// Stamp a region of `src` into `dst` (physical px) on `target`, at `opacity`.
+    /// Stamp a region of `src` into `dst` (physical px) on `target`, at `opacity`, with the box
+    /// rounded to `corner_px` (`0.0` is square).
     ///
     /// `src_uv` selects the source region in UV space (0..1, origin top-left);
     /// `None` samples the **same screen location** as `dst` (frost what's directly
@@ -193,6 +198,7 @@ impl Backdrop {
         dst: RectPx,
         src_uv: Option<[f32; 4]>,
         opacity: f32,
+        corner_px: f32,
         stencil: Option<&wgpu::TextureView>,
     ) {
         let (vw, vh) = viewport_px;
@@ -213,6 +219,8 @@ impl Backdrop {
             uv_min: [uv[0], uv[1]],
             uv_max: [uv[2], uv[3]],
             opacity_pad: [opacity.clamp(0.0, 1.0), 0.0, 0.0, 0.0],
+            rect_px: [x, y, w, h],
+            corner_pad: [corner_px.max(0.0), 0.0, 0.0, 0.0],
         };
         // Per-draw uniform + bind group so multiple backdrops can be drawn in one
         // frame/encoder without clobbering each other (src view is caller-owned).

@@ -274,9 +274,6 @@ pub struct ScrollRegion {
     thumb_grab: Option<f64>,
     /// While dragging the horizontal thumb: the x-offset from the thumb's left.
     h_thumb_grab: Option<f64>,
-    /// Host-owned: whether this region takes keyboard scroll intents. See
-    /// [`keyboard_target`](ScrollRegion::keyboard_target). `None` ⇒ it does.
-    keyboard_target: Option<Signal<bool>>,
     /// Whether the cursor is over the vertical scrollbar thumb's grab lane. Drives
     /// the hover affordance (the thumb brightens, like [`MarkerGroup`](crate::widgets::MarkerGroup)'s
     /// grip bar).
@@ -364,7 +361,6 @@ impl ScrollRegion {
             applied_offset_x: 0.0,
             thumb_grab: None,
             h_thumb_grab: None,
-            keyboard_target: None,
             thumb_hovered: false,
             h_thumb_hovered: false,
             track_repeat: None,
@@ -622,39 +618,12 @@ impl ScrollRegion {
         self.fire(self.on_scroll.as_deref(), cause);
     }
 
-    /// Declare the gesture over and report it once. No-op when nothing was in flight.
-    /// Whether this region should take keyboard scroll intents right now.
-    ///
-    /// Host-owned, because *which* surface has the keyboard is the host's business and changes
-    /// without the tree being rebuilt. `None` means "yes" — a region with no host wiring behaves as
-    /// it always did, which is what a single-region app or an example wants. A host with several
-    /// regions in one tree binds the flag on **each** of them, so nothing depends on that default.
-    ///
-    /// This is what makes "scroll the focused surface" work without the host having to know where
-    /// the region sits in the tree (F003/P011/T012): the intent is dispatched into the whole tree
-    /// and every region that is not the target declines.
-    /// It binds [`Base::focused`] too, which is how the intent gets here at all: keyboard events
-    /// are delivered to the focus owner and the region it encloses, so a region that says the
-    /// keyboard is aimed at it *is* the owner, and one that says otherwise is not on the path.
-    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
-    pub fn keyboard_target(mut self, focused: Signal<bool>) -> Self {
-        self.keyboard_target = Some(focused);
-        self.base.focused = focused;
-        self
-    }
-
     /// Act on a keyboard scroll intent, or decline it.
     ///
     /// Declines (`Handled::No`) when the intent is not a scroll one, or when this region cannot
     /// scroll that axis at all — either the axis is disabled or the content fits. Declining is what
     /// lets a nested region, or the host, get a turn instead of the key dying here.
     fn scroll_intent(&mut self, intent: WidgetIntent, cause: &Event) -> Handled {
-        // Not the keyboard's target → not ours, so the event carries on to whichever region is.
-        if let Some(focused) = self.keyboard_target
-            && !focused.get_untracked()
-        {
-            return Handled::No;
-        }
         let vp = self.base.bounds;
         let (vertical, target) = match intent {
             WidgetIntent::ScrollPageUp => (
@@ -699,6 +668,7 @@ impl ScrollRegion {
         Handled::Yes
     }
 
+    /// Declare the gesture over and report it once. No-op when nothing was in flight.
     fn end_scroll(&mut self, cause: Option<&Event>) {
         if !self.scrolling {
             return;
@@ -1929,56 +1899,19 @@ mod tests {
         );
     }
 
-    /// A region that is not the keyboard's target declines, so the one that is can take it.
-    ///
-    /// This is how "scroll the focused surface" works without the host knowing where any region sits
-    /// in the tree: the intent goes into the whole tree and every region but the target refuses it.
-    /// Unset means "yes", so a single-region app or an example needs no wiring; a host with several
-    /// regions binds the flag on each of them and depends on no default.
-    #[test]
-    fn only_the_keyboard_target_takes_a_scroll_intent() {
-        let ev = Event::Widget(WidgetIntent::ScrollPageDown);
-
-        let mut unwired = region_with_children(&[100.0, 100.0, 100.0]);
-        assert_eq!(
-            unwired.scroll_intent(WidgetIntent::ScrollPageDown, &ev),
-            Handled::Yes
-        );
-
-        let focused = crate::reactive::signal(true);
-        let mut target = region_with_children(&[100.0, 100.0, 100.0]).keyboard_target(focused);
-        assert_eq!(
-            target.scroll_intent(WidgetIntent::ScrollPageDown, &ev),
-            Handled::Yes
-        );
-
-        // The same region, once the keyboard is somewhere else — it must not move.
-        focused.set(false);
-        let before = target.scroll_offset.get_untracked();
-        assert_eq!(
-            target.scroll_intent(WidgetIntent::ScrollPageDown, &ev),
-            Handled::No
-        );
-        assert_eq!(
-            target.scroll_offset.get_untracked(),
-            before,
-            "and it did not scroll"
-        );
-    }
-
     /// The intents reach the region through normal dispatch, after the children.
     ///
     /// The unit tests above call the handler directly; this one goes through `dispatch` to prove the
     /// wiring, since `on_event` (not `on_event_capture`) is what gives the innermost region the
     /// first refusal — the same order the wheel uses.
     ///
-    /// It says the keyboard is aimed here, because that is now the whole of how a keyboard event
+    /// It puts the keyboard here first, because that is the whole of how a keyboard event
     /// finds anything: an intent is delivered to the focus owner and the region it encloses, so a
     /// tree with nothing focused has nowhere to deliver one.
     #[test]
     fn a_scroll_intent_arrives_through_dispatch() {
-        let mut r = region_with_children(&[100.0, 100.0, 100.0])
-            .keyboard_target(crate::reactive::signal(true));
+        let mut r = region_with_children(&[100.0, 100.0, 100.0]);
+        r.base().focus(true);
         let handled =
             crate::component::dispatch(&mut r, &Event::Widget(WidgetIntent::ScrollPageDown));
         assert_eq!(handled, Handled::Yes);

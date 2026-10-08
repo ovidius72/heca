@@ -338,7 +338,7 @@ of it; `tests/pointer_routing.rs` + `tests/pointer_delivery.rs` hold it.
    that hands an event to `self.children`, means you are rebuilding the router. There is no
    container in the library that forwards events, and there must not be one.
 3. **Nothing focused ⇒ nothing delivered.** A surface that wants keys **holds focus**
-   (`Base::focused`, bound to its own open/keyboard-target signal). Do not add a predicate instead
+   (`Base::focused`, which it follows from its own open/keyboard-target signal with `Base::follow_focus`). Do not add a predicate instead
    — `routes_own_subtree`, `takes_raw_keys` and `takes_text_input` were exactly that and are
    **deleted**. Never reintroduce them.
 4. **Per-element handlers need that element to be the target.** A cursor inside a container
@@ -360,8 +360,9 @@ Whoever places it constructs it, puts it in the tree, and writes no routing, no 
 surface registration and no ordering.
 
 ```rust
+let demo = heca::extension("demo");   // the program says who it is, once
 Overlay::new().blocking(false).child(
-    Pane::new("editor").child(Terminal::new("shell"))
+    Pane::new("editor").child(demo.terminal("shell"))
 )
 ```
 
@@ -575,16 +576,31 @@ Ctrl+B → p    Command palette (backend ready, UI pending)
   **layer** (the exposé, a modal, a menu, a plugin's), a focused **dock**, and `heca.panes` (the
   scrolling area) — and exactly one holds the keyboard. One resolution order, for every key:
 
-  > the focused surface's own `[[keys.surface]]` entry → the **floor** its kind is guaranteed → the
-  > global `[keys]` map → then swallowed (layer, dock) or sent to the pane (`heca.panes`).
+  > a dock's **reserved way-out key** → the focused widget and its ancestors (**the tree**) → the
+  > surface's own `[[keys.surface]]` entry → the rest of its **floor** → the global `[keys]` map →
+  > then swallowed (layer, dock) or sent to the pane (`heca.panes`).
 
-  Nearest declaration wins, so a surface key shadows a global one. The floors are `Escape` and they
-  are not removable: a layer closes itself, a dock hands the keyboard back, and **the panes have
-  none** so `Escape` reaches the program in the pane and vim still works. That is why `Escape` must
-  **never** be a global binding — a global one outranks all three at once, which is exactly how
-  `close_overlay` came to eat it while a dock was focused, closing nothing because no overlay was
-  up. The rule lives in `app/input.rs::surface_action` (pure, unit-tested) with `focused_surface`
-  reducing `AppState` to it; the floors are asserted in `registry::assert_escape_floor`.
+  That is the DOM's order: a key goes to the focused widget first and bubbles up, and the surface's
+  keys are its handlers on the way — they act on what the tree did not take, so a program in a docked
+  terminal gets its PageUp and the sidebar's `j`/`k` (which a `Row` does not take) still reach the
+  dock. The one exception is the key that leaves the dock, answered before the tree like a browser's
+  reserved shortcuts, so a terminal that eats every key cannot trap you
+  (`input/surface.rs::way_out_action`). A layer is in the tree and is offered the key first.
+
+  Nearest declaration wins, so a surface key shadows a global one. **Every panel always has a way
+  out, and by default it is `Escape`.** The floors are the `[[keys.mode]]` blocks `layer`
+  (`close_overlay`: a layer closes itself) and `focus` (`unfocus_dock`: a dock hands the keyboard
+  back), each shipped bound to `Escape` in `keybindings.default.toml` and **movable**: bind the
+  action to another key and give `Escape` up with `unbind = ["Escape"]` in the same block. What is
+  guaranteed is that a floor is never left with no key — in the floor or behind the prefix; a
+  config that does is refused for that floor, `Escape` is put back and the start-up report says so
+  (`registry::floors::assert_way_out`). That is also why `Escape` must **never** be a global
+  binding — a global one outranks all three at once, which is exactly how `close_overlay` came to
+  eat it while a dock was focused, closing nothing because no overlay was up — and **the panes
+  have no floor**, so `Escape` reaches the program in the pane and vim still works. With the dock's
+  `Escape` given up it falls to whatever inside the dock holds the keyboard, like any unclaimed
+  key. The rule lives in `app/input/surface.rs::surface_action` (pure, unit-tested) with
+  `focused_surface` reducing `AppState` to it.
 - **The sidebar's own keys are SETTLED — do not casually re-decide them.**
   - Sidebar navigation is **selection-driven**.
   - `j`/`k` and `Up`/`Down` move the sidebar cursor **only**. Main scrolling/focus state does
@@ -1355,10 +1371,37 @@ Button::destructive("Delete")
   nothing delivered.** The focus walk takes the **topmost** claim (children last-first, like
   hit-testing), because an open layer and the button clicked before it both carry the flag.
 - **A surface that wants keys holds focus**, and a caller wires nothing:
-  `Overlay`/`ContextMenu`/`CommandPalette` bind `Base::focused` to their **open** signal;
-  `FocusScope` and `ScrollRegion` bind it to the host's keyboard-target signal — a dock binds the
-  same signal to both, so the wrapper draws the ring and the region answers the keys; `Select`
-  focuses itself when the list opens. **Do not add a predicate instead.**
+  `Overlay`/`ContextMenu`/`CommandPalette` follow their **open** signal into `Base::focused`;
+  `Select` focuses itself when the list opens. A dock is not told by a signal: the host gives it the
+  keyboard by name (`focus_scope`), `FocusScope` draws its ring while the keyboard is anywhere
+  inside it (`contains_keyboard`, CSS `:focus-within`), and a scroll intent reaches the dock because
+  intents enter the focused region. **Do not add a predicate instead.**
+- **`focused` means one thing — the widget the keyboard is aimed at, ONE per tree — and has one
+  door.** It is written only by `Base::focus(visible)` / `Base::blur()`, or by
+  `Base::follow_focus(signal)` / `follow_focus_modal(signal)` for a surface whose focus a host
+  decides (open), or the host calls `focus_scope`/`release_scope` for a named region. A widget never *is* the host's signal: aliasing it made
+  "this is open" and "the keyboard is here" the same value, and a click that blurred the widget
+  would have closed it. `heca/tests/focus_door.rs` fails on any other writer. A widget cannot blur
+  another (it holds no tree), so a request is *claimed* and `focus::settle` — run by the router
+  before it delivers a key or a press, and once a frame by the host (`settle_focus`) — makes it
+  true: the previous holder lets go. A **modal** (`follow_focus_modal`: Overlay, ContextMenu,
+  CommandPalette, the hint picker) remembers who held the keyboard when it opened and gives it
+  back on close; a **region** (`follow_focus`: a dock) takes it unless something inside already
+  has it, and returns to the control it held when it last let go. There is no "most recent wins":
+  there is one holder.
+- **The tree is the one truth about where the keyboard is, and nothing else keeps a copy.** The host
+  asks it (`app/tree_focus.rs::focused_dock`, which is `heca_grid_ui::page_scope`: the dock the
+  keyboard is in, looking through a dialog above it to where it returns) and moves it through the
+  same door (`focus_scope` / `release_scope`, **host-only**: they take a region name, which a plugin
+  never passes — a plugin calls a method on its own widget). The chrome store hears only an
+  announcement, once per change (`ContainerFocusChanged`), and the memory of which dock held it
+  last. Never add a flag, signal or store field that says where the keyboard is.
+- **A press focuses the deepest focusable under it, in every tree, with nothing declared** — the
+  browser's rule, done once in the pointer router (`focus::focus_on_press`). A press on nothing
+  focusable changes nothing; a press inside the widget that already holds the keyboard changes
+  nothing; otherwise the previous holder lets go. Do not add `focus_at`, a `.focus_on_press()`
+  builder or a trapped variant — the copies of this rule that lived in `Overlay` and `Dialog` are
+  deleted.
 - **Typed text is `Event::TextInput`, not a key.** A field types from it and from nothing else; a
   raw `GridKey::Char` is a shortcut. Do not re-introduce a host-side "deliver the real character"
   fixup — that patch existed only because a field rebuilt text from keys.

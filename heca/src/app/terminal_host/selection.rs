@@ -3,15 +3,20 @@
 
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
 use crate::app_state::{AppState, InputMode};
-use heca_core::layout::PaneId;
+use crate::chrome::terminal::TerminalId;
+
+/// The terminal the keyboard's selection acts on: the focused pane's.
+fn focused_terminal(state: &AppState) -> Option<TerminalId> {
+    state.backends.identity_of(state.focused_pane?)
+}
 
 pub(crate) fn enter_selection_mode_for_focused_terminal(state: &mut AppState) -> bool {
-    let Some(pane_id) = state.focused_pane else {
+    let Some(terminal) = focused_terminal(state) else {
         return false;
     };
     let Some(snapshot) = state
         .backends
-        .get(pane_id)
+        .get_by_id(terminal)
         .and_then(|backend| backend.terminal_snapshot())
     else {
         return false;
@@ -20,7 +25,7 @@ pub(crate) fn enter_selection_mode_for_focused_terminal(state: &mut AppState) ->
     // If a selection already exists for this pane, preserve it
     // (re-entering selection mode does not discard an existing selection).
     if let Some(active) = state.selection.active()
-        && active.owner == SelectionOwner::Pane(pane_id)
+        && active.owner == SelectionOwner(terminal)
         && matches!(active.region, SelectionRegion::HostGrid { .. })
     {
         state.input_mode = InputMode::Selection;
@@ -31,7 +36,7 @@ pub(crate) fn enter_selection_mode_for_focused_terminal(state: &mut AppState) ->
     // Place a caret at the terminal cursor position — do NOT start a selection.
     // The user begins selection explicitly with `v` or `Space`.
     state.selection.set_caret(
-        SelectionOwner::Pane(pane_id),
+        SelectionOwner(terminal),
         visible_row_to_stable_row(&snapshot, snapshot.cursor.row),
         snapshot.cursor.col,
     );
@@ -45,12 +50,12 @@ pub(crate) fn move_focused_terminal_selection(
     row_delta: isize,
     col_delta: isize,
 ) -> bool {
-    let Some(pane_id) = state.focused_pane else {
+    let Some(terminal) = focused_terminal(state) else {
         return false;
     };
     let Some(snapshot) = state
         .backends
-        .get(pane_id)
+        .get_by_id(terminal)
         .and_then(|backend| backend.terminal_snapshot())
     else {
         return false;
@@ -81,7 +86,7 @@ pub(crate) fn move_focused_terminal_selection(
             // Auto-scroll the viewport so the caret stays visible (tmux copy-mode
             // follows the cursor; Q4 stable-row coords). Scrolls only when the
             // caret moved outside the visible range.
-            ensure_caret_visible(state, pane_id, next_stable, &snapshot);
+            ensure_caret_visible(state, terminal, next_stable, &snapshot);
             state.needs_redraw = true;
             return true;
         }
@@ -91,7 +96,7 @@ pub(crate) fn move_focused_terminal_selection(
     // Handle active selection: update the focus end in stable-row space.
     let (anchor_stable_row, anchor_col, focus_stable_row, focus_col) =
         match state.selection.active() {
-            Some(active) if active.owner == SelectionOwner::Pane(pane_id) => match active.region {
+            Some(active) if active.owner == SelectionOwner(terminal) => match active.region {
                 SelectionRegion::HostGrid {
                     anchor_stable_row,
                     anchor_col,
@@ -119,7 +124,7 @@ pub(crate) fn move_focused_terminal_selection(
     let next_col = focus_col.saturating_add_signed(col_delta).min(max_col);
 
     state.selection.begin(
-        SelectionOwner::Pane(pane_id),
+        SelectionOwner(terminal),
         SelectionSource::KeyboardMode,
         SelectionRegion::HostGrid {
             anchor_stable_row,
@@ -131,7 +136,7 @@ pub(crate) fn move_focused_terminal_selection(
     state.selection.update_focus(next_stable, next_col);
     state.input_mode = InputMode::Selection;
     // Auto-scroll the viewport so the selection focus stays visible (Q4).
-    ensure_caret_visible(state, pane_id, next_stable, &snapshot);
+    ensure_caret_visible(state, terminal, next_stable, &snapshot);
     state.needs_redraw = true;
     true
 }
@@ -148,7 +153,7 @@ pub(crate) fn move_focused_terminal_selection(
 /// under rapid key presses (the animation re-targets from its previous target).
 pub(crate) fn ensure_caret_visible(
     state: &mut AppState,
-    pane_id: heca_core::layout::PaneId,
+    terminal: TerminalId,
     caret_stable_row: isize,
     snapshot: &heca_core::backend::TerminalSnapshot,
 ) {
@@ -159,13 +164,13 @@ pub(crate) fn ensure_caret_visible(
     if caret_stable_row < visible_top {
         // Caret moved above the visible top: scroll toward history (increase offset).
         let delta = (visible_top - caret_stable_row) as i32;
-        if let Some(backend) = state.backends.get_mut(pane_id) {
+        if let Some(backend) = state.backends.get_mut_by_id(terminal) {
             backend.scroll_viewport(delta);
         }
     } else if caret_stable_row >= visible_bottom_exclusive {
         // Caret moved below the visible bottom: scroll toward live bottom (decrease offset).
         let delta = (caret_stable_row - visible_bottom_exclusive + 1) as i32;
-        if let Some(backend) = state.backends.get_mut(pane_id) {
+        if let Some(backend) = state.backends.get_mut_by_id(terminal) {
             // Negative delta moves toward the live bottom.
             backend.scroll_viewport(-delta);
         }
@@ -175,21 +180,21 @@ pub(crate) fn ensure_caret_visible(
 
 pub(super) fn begin_terminal_selection_at(
     state: &mut AppState,
-    pane_id: PaneId,
+    terminal: TerminalId,
     row: usize,
     col: usize,
     source: SelectionSource,
 ) {
     let Some(snapshot) = state
         .backends
-        .get(pane_id)
+        .get_by_id(terminal)
         .and_then(|backend| backend.terminal_snapshot())
     else {
         return;
     };
     let stable_row = visible_row_to_stable_row(&snapshot, row);
     state.selection.begin(
-        SelectionOwner::Pane(pane_id),
+        SelectionOwner(terminal),
         source,
         SelectionRegion::HostGrid {
             anchor_stable_row: stable_row,

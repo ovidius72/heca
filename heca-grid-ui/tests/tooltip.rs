@@ -135,7 +135,7 @@ fn tooltip_is_transparent_to_child_events() {
     let mut focus = FocusManager::new();
     focus.advance(&mut tip, true);
     assert_eq!(
-        focus.focused(),
+        focus.focused(&mut tip),
         Some(0),
         "wrapped child is reachable by Tab"
     );

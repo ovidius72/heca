@@ -177,7 +177,7 @@ fn icon_button_activates_on_click_and_enter_only_when_wired() {
     click_at(&mut btn, center, PointerButton::Left);
     // A raw key reaches only the widget that owns the keyboard — focus it, as a real surface
     // would before sending one.
-    btn.base_mut().focused.set(true);
+    btn.base().focus(false);
     heca_grid_ui::dispatch(
         &mut btn,
         &Event::Key {
@@ -357,13 +357,13 @@ fn a_button_is_one_tab_stop_whatever_it_contains() {
 
     let mut focus = FocusManager::new();
     focus.advance(&mut ui, true);
-    let first = focus.focused();
+    let first = focus.focused(&mut ui);
     focus.advance(&mut ui, true);
-    let second = focus.focused();
+    let second = focus.focused(&mut ui);
     focus.advance(&mut ui, true);
 
     assert_eq!(
-        focus.focused(),
+        focus.focused(&mut ui),
         first,
         "exactly two focusables: focus wraps after the 2nd button"
     );

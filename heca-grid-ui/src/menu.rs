@@ -227,7 +227,7 @@ fn menu_on(
 /// The path to the focused widget, if one holds the keyboard.
 fn focused_path(root: &dyn Component) -> Option<Vec<usize>> {
     fn walk(node: &dyn Component, at: &mut Vec<usize>) -> bool {
-        if node.base().focused.get_untracked() {
+        if node.base().is_focused() {
             return true;
         }
         for (i, child) in node.base().children.iter().enumerate() {
@@ -254,5 +254,3 @@ fn node_bounds(root: &dyn Component, path: &[usize]) -> Rectangle {
     }
     node.base().bounds
 }
-
-use crate::reactive::SignalGet;

@@ -550,18 +550,19 @@ impl ContextMenu {
     /// so everything else about the panel's size is the layout engine's answer, but the box those
     /// children stack in is this widget's and must survive being cloned.
     ///
-    /// **Open is focused.** `open` is bound to [`Base::focused`], which is the whole of how the
-    /// menu hears the keyboard: keys and the intents they resolve to go to the focus owner and
-    /// bubble, so an open menu is on the path and a closed one is not. It replaces a declaration
-    /// that it took raw keys plus a catch-all that swallowed everything else while open — the pair
-    /// that ate every quick-pick letter.
+    /// **Open is focused.** The menu follows `open` into [`Base::focused`]
+    /// ([`Base::follow_focus_modal`]), which is the whole of how it hears the keyboard: keys and
+    /// the intents they resolve to go to the focus owner and bubble, so an open menu is on the
+    /// path and a closed one is not. It replaces a declaration that it took raw keys plus a
+    /// catch-all that swallowed everything else while open — the pair that ate every quick-pick
+    /// letter.
     fn panel_base(open: Signal<bool>) -> Base {
         let mut base = Base::new();
         base.style.layout.direction = Direction::Column;
         base.style.layout.padding = (PAD).into();
         base.style.layout.min_width = Some(Length::Px(MIN_W));
         base.style.layout.max_width = Some(Length::Px(MAX_W));
-        base.focused = open;
+        base.follow_focus_modal(open);
         // **A menu locks because it is a menu.** It demands a choice, so nothing behind it is
         // reachable while it is up — even though its panel is small. Without that, a prefix
         // sequence deliberately falling through the menu's key path reached the app and ran.

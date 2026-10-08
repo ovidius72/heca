@@ -104,13 +104,13 @@ fn dock_frame_collapsed_body_is_skipped_by_focus_traversal() {
     let mut focus = FocusManager::new();
     focus.advance(&mut dock, true);
     assert_eq!(
-        focus.focused(),
+        focus.focused(&mut dock),
         Some(0),
         "header toggle is first in tab order"
     );
     focus.advance(&mut dock, true);
     assert_eq!(
-        focus.focused(),
+        focus.focused(&mut dock),
         Some(1),
         "body row is tabbable while expanded"
     );
@@ -123,13 +123,13 @@ fn dock_frame_collapsed_body_is_skipped_by_focus_traversal() {
     let mut focus = FocusManager::new();
     focus.advance(&mut dock, true);
     assert_eq!(
-        focus.focused(),
+        focus.focused(&mut dock),
         Some(0),
         "only the header toggle is focusable when collapsed"
     );
     focus.advance(&mut dock, true);
     assert_eq!(
-        focus.focused(),
+        focus.focused(&mut dock),
         Some(0),
         "collapsed body row is not reachable by Tab"
     );

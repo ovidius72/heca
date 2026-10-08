@@ -655,12 +655,14 @@ argument is what makes the bare binding legal — an action with a *required* ar
 to a key at all.
 
 **Focus is visible, and the ring is the same one every control draws.** The host wraps each mounted
-container in a `FocusScope` (the generic grid-ui wrapper) bound to that placement's
-`keyboard_target` signal — which is also the **gate**: keys and widget intents enter a container's
-subtree only while it holds focus, and an unfocused one declines rather than consuming, so the host
-broadcasts one intent and the focused container answers. It is the **same signal** the container's own
-`ScrollRegion` binds as its keyboard target, so the ring and the keys cannot disagree about which dock
-has focus, and neither has to be told where the container sits in the tree.
+container in a `FocusScope` (the generic grid-ui wrapper) that names itself with `scope_key`. It
+draws the ring while the keyboard is anywhere inside it (`contains_keyboard`, CSS `:focus-within`),
+and keys and widget intents reach only the focused dock because they follow the tree's focus: an
+intent enters the focused region and whatever inside it owns the capability (a `ScrollRegion`)
+answers. The ring and the keys are the same fact — the tree's — so they cannot disagree, and nothing
+has to be told where the container sits. The host gives a dock the keyboard by name with
+`focus_scope` (and takes it back with `release_scope`); a dock asked for before its region was drawn
+is asked for again once the tree has it.
 
 **What a provider says about it.** `Provider::keyboard_navigable()` (default `false`) declares whether
 a dock does anything with focus *beyond scrolling* — its own cursor, its own selection.
@@ -759,8 +761,8 @@ HecaApp                                   # winit runtime — the outer shell
      ├── chrome_state: SharedChromeState[✓] # signal-backed DERIVED mirror:
      │    │                                 #   active_pane, per-ws collapse, pick,
      │    │                                 #   scroll, PaneRuntime (proc/status/cwd/git)
-     │    ├── focused_container           [✓] # chrome keyboard focus — a CONTAINER ID (§2.10)
-     │    ├── keyboard_target[mount]      [✓] #   derived: exactly one placement is true
+     │    ├── last_focused_container      [✓] # the dock that held the keyboard last (a memory; the
+     │    │                                   #   keyboard itself is the window tree's — §2.10)
      │    ├── container_scroll[mount]     [✓] # per-placement scroll offsets (T021)
      │    ├── dock_pick_candidates        [✓] # letter → container id while a dock pick is open
      │    └── events: ChromeEventBus    [✓] # string-named events + "*" catch-all

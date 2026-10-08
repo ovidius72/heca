@@ -335,9 +335,13 @@ fn a_frosted_overlay_records_its_blur_in_the_base_band_over_what_it_occludes() {
     assert_eq!(
         base,
         vec![HostCmd {
-            draw: HostDraw::Backdrop { radius },
+            draw: HostDraw::Backdrop {
+                radius,
+                corner: 0.0
+            },
             rect: Rectangle::new(Point::new(0.0, 0.0), Size::new(800.0, 600.0)),
             alpha: 1.0,
+            echo: false,
         }],
         "blocking, so it blurs the viewport it covers — and in the base band",
     );
@@ -539,13 +543,13 @@ fn a_surface_follows_a_signal_of_your_own() {
 
 /// **Taking the caller's signal rebinds the keyboard to it.**
 ///
-/// `base.focused` is bound to whichever signal says whether the surface is up — that binding is
+/// The keyboard follows whichever signal says whether the surface is up — that binding is
 /// the whole of how keys reach a panel. Adopting the caller's without rebinding would leave the
 /// keyboard following a signal nobody writes any more, so an overlay that was visibly open would
 /// answer nothing.
 #[test]
 fn following_your_signal_rebinds_the_keyboard_to_it() {
-    use crate::reactive::{SignalGet, SignalUpdate, signal};
+    use crate::reactive::{SignalUpdate, signal};
 
     let editing = signal(false);
     let o = Overlay::new()
@@ -554,7 +558,7 @@ fn following_your_signal_rebinds_the_keyboard_to_it() {
 
     editing.set(true);
     assert!(
-        o.base().focused.get_untracked(),
+        crate::holds_keyboard(&o),
         "an open surface holds the keyboard, whichever signal says it is open",
     );
 }
@@ -611,7 +615,7 @@ fn opening_by_flag_places_the_keyboard_the_same_as_opening_by_call() {
 #[test]
 fn following_your_own_signal_also_places_the_keyboard() {
     use crate::component::Component as _;
-    use crate::reactive::{SignalGet, SignalUpdate, signal};
+    use crate::reactive::{SignalUpdate, signal};
     use crate::widgets::Button;
 
     let editing = signal(false);

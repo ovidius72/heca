@@ -114,6 +114,14 @@ pub enum WidgetKind {
     Item,
     /// A thin themed divider line.
     Separator,
+    /// **The edge between two things that a drag moves** — `orientation` (`vertical`: it runs up
+    /// and down and moves left and right; `horizontal`: the other way) and `line` (draw a rule).
+    /// Dragging it sends the `resize` intent with `delta`, the px it moved since the last report;
+    /// what moving the edge means is the author's.
+    Splitter,
+    /// **A place something can land**, outlined, with a letter in the middle when a key picks it
+    /// (`label`, `filled`, and `while_dragging` — the kind of drag it appears for).
+    LandingSlot,
     /// **Something is happening and nobody knows for how long** — an indeterminate ring
     /// (F003/P097/T501).
     ///

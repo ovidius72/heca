@@ -138,6 +138,11 @@ pub enum GridKey {
     ArrowDown,
     Home,
     End,
+    PageUp,
+    PageDown,
+    Insert,
+    /// A function key, `1..=24`.
+    Function(u8),
 }
 
 impl GridKey {
@@ -150,7 +155,7 @@ impl GridKey {
     /// Aliases are accepted here so a caller normalises nothing.
     ///
     /// A single character is itself: `"a"` is [`Char('a')`](GridKey::Char). Anything longer that is
-    /// not named here is `None` — a function key, a dead key, a modifier on its own.
+    /// not named here is `None` — a dead key, a modifier on its own.
     ///
     /// ```
     /// use heca_grid_ui::GridKey;
@@ -160,7 +165,8 @@ impl GridKey {
     /// assert_eq!(GridKey::from_name("ArrowLeft"), Some(GridKey::ArrowLeft));
     /// assert_eq!(GridKey::from_name("left"), Some(GridKey::ArrowLeft));
     /// assert_eq!(GridKey::from_name("a"), Some(GridKey::Char('a')));
-    /// assert_eq!(GridKey::from_name("F5"), None);
+    /// assert_eq!(GridKey::from_name("F5"), Some(GridKey::Function(5)));
+    /// assert_eq!(GridKey::from_name("F99"), None);
     /// ```
     pub fn from_name(name: &str) -> Option<Self> {
         let lowered = name.to_lowercase();
@@ -177,7 +183,16 @@ impl GridKey {
             "arrowdown" | "down" => GridKey::ArrowDown,
             "home" => GridKey::Home,
             "end" => GridKey::End,
+            "pageup" => GridKey::PageUp,
+            "pagedown" => GridKey::PageDown,
+            "insert" => GridKey::Insert,
             s => {
+                // `f1` … `f24`: a function key is a letter and a number, not a character.
+                if let Some(n) = s.strip_prefix('f').and_then(|n| n.parse::<u8>().ok())
+                    && (1..=24).contains(&n)
+                {
+                    return Some(GridKey::Function(n));
+                }
                 let mut chars = s.chars();
                 match (chars.next(), chars.next()) {
                     (Some(c), None) => GridKey::Char(c),
@@ -500,6 +515,13 @@ pub enum Event {
     DragLeave(DragEvent),
     /// The drag was released over this drop target.
     Drop(DragEvent),
+    /// **A drag this drop target accepts is now in flight** — told once, when it starts, to every
+    /// drop target whose [`accepts`](crate::builders::ComponentExt::accepts) takes what is being
+    /// carried, wherever it sits and whether or not it is shown. A target that only exists for the
+    /// length of a drag (a landing place) appears on this and goes on [`DragSettled`](Self::DragSettled).
+    DragInFlight(DragEvent),
+    /// **The drag that was in flight is over**, dropped or not — told to the same targets.
+    DragSettled(DragEvent),
 
     // ───────────────────────────── focus and lifetime ─────────────────────────────
     /// This widget gained keyboard focus. There was a `focused` **signal** and no event, so
@@ -607,7 +629,9 @@ impl Event {
             | Self::DragEnter(d)
             | Self::DragOver(d)
             | Self::DragLeave(d)
-            | Self::Drop(d) => Some(d.pos),
+            | Self::Drop(d)
+            | Self::DragInFlight(d)
+            | Self::DragSettled(d) => Some(d.pos),
             _ => None,
         }
     }
@@ -701,6 +725,8 @@ impl Event {
             Self::DragOver(_) => EventKind::DragOver,
             Self::DragLeave(_) => EventKind::DragLeave,
             Self::Drop(_) => EventKind::Drop,
+            Self::DragInFlight(_) => EventKind::DragInFlight,
+            Self::DragSettled(_) => EventKind::DragSettled,
             Self::Focus => EventKind::Focus,
             Self::Blur => EventKind::Blur,
             Self::Mount => EventKind::Mount,
@@ -736,7 +762,9 @@ impl Event {
             | Self::DragEnter(d)
             | Self::DragOver(d)
             | Self::DragLeave(d)
-            | Self::Drop(d) => Some(d),
+            | Self::Drop(d)
+            | Self::DragInFlight(d)
+            | Self::DragSettled(d) => Some(d),
             _ => None,
         }
     }
@@ -800,6 +828,8 @@ pub enum EventKind {
     DragOver,
     DragLeave,
     Drop,
+    DragInFlight,
+    DragSettled,
     Focus,
     Blur,
     Mount,
@@ -835,6 +865,16 @@ pub enum WidgetIntent {
     /// A **newer** past query, and past the newest, the draft the walk interrupted.
     /// `menu_history_down`.
     MenuHistoryDown,
+    /// **Open this terminal's search** — whichever terminal holds the keyboard answers. `find`.
+    ///
+    /// Vocabulary for anything that has a body of text to look through: it names the capability
+    /// and leaves the key to the user (`[keys.widgets]`; unbound by default).
+    Find,
+    /// **The next match** of the search that is open. `find_next`.
+    FindNext,
+    /// **The previous match** of the search that is open. `find_previous`.
+    FindPrevious,
+
     /// Activate / commit / submit the current entry or primary action. `activate`.
     Activate,
     /// Dismiss / cancel / close the overlay. `dismiss`.

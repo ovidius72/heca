@@ -498,9 +498,6 @@ pub struct Pane {
     pub preferred_height: Option<f64>,
     /// Move animation offset (entry/exit animations).
     pub move_offset: Animated<Point>,
-    /// Offset applied during interactive move Starting phase (rubberband).
-    /// Cleared on transition to Moving. Not used by entry/exit animations.
-    pub interactive_move_offset: Point,
 }
 
 impl Pane {
@@ -513,7 +510,6 @@ impl Pane {
             close_policy: PaneClosePolicy::default(),
             preferred_height: None,
             move_offset: Animated::Static(Point::default()),
-            interactive_move_offset: Point::default(),
         }
     }
 }

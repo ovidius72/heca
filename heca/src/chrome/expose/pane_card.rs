@@ -162,7 +162,8 @@ impl PaneCard<'_> {
         // reaches — and what it does not take bubbles up to the `CardGrid` for the nav keys,
         // exactly as a browser's listbox option does (AGENTS § 0c). The cursor signal *is* the
         // focus signal, so there is nothing to keep in step.
-        card.base_mut().focused = card.nav_state();
+        let nav = card.nav_state();
+        card.base_mut().follow_focus(nav);
         let card = card
             .on_text_input(delete_keys(
                 self.cb.keys.clone(),
@@ -320,7 +321,7 @@ mod tests {
     use crate::chrome::expose::model::ExposePane;
     use crate::chrome::expose::testing::{actions, callbacks, lay_out, theme};
     use heca_grid_ui::event::Event;
-    use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
+    use heca_grid_ui::reactive::SignalUpdate;
 
     /// **A card keeps everything it draws inside itself**, at every width the map can squeeze it to
     /// (F003/P082/T438).
@@ -489,7 +490,7 @@ mod tests {
             active,
             height: 300.0,
         };
-        let (row, _cell) = PaneCard {
+        let (row, cell) = PaneCard {
             pane_id: pane.pane_id,
             folder: None,
             name: &pane.name,
@@ -503,9 +504,8 @@ mod tests {
         }
         .build();
         // The card's own cursor signal — the one the `GridCell` was handed, so lighting it here is
-        // exactly what the grid does when the cursor arrives. Read off the wrapped card rather than
-        // the `KeyHint` around it: the wrapper is transparent, and the signal belongs to the card.
-        let cursor = row.base().children[0].base().focused;
+        // exactly what the grid does when the cursor arrives.
+        let cursor = cell.selected();
         (lay_out(row, 200.0, 100.0), cursor, sink)
     }
 
@@ -550,10 +550,10 @@ mod tests {
             "the name sits in the middle: label {label:?} in card {card:?}",
         );
         // The signal the cell was handed is the card's own: lighting it focuses the card.
-        assert!(!cursor.get_untracked());
+        assert!(!root.base().is_focused());
         cursor.set(true);
         assert!(
-            root.base().children[0].base().focused.get_untracked(),
+            root.base().is_focused(),
             "the card the cursor is on is the card that holds the keyboard",
         );
     }

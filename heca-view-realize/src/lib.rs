@@ -45,8 +45,8 @@ use heca_grid_ui::widgets::{CardGrid, ContextMenu, GridCell, Menu, MenuItem};
 use heca_grid_ui::{
     Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component,
     DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, KeyHintGroup,
-    Label, LayoutExt, MarkerGroup, NfGlyph, NfIcon, Overlay, Panel, ProgressBar, PropInput,
-    RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, Spinner,
+    Label, LandingSlot, LayoutExt, MarkerGroup, NfGlyph, NfIcon, Overlay, Panel, ProgressBar, PropInput,
+    RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, Spinner, Splitter,
     StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastPosition, ToastSeverity, Toggle, Track,
     WidgetSize,
 };
@@ -706,6 +706,18 @@ fn realize_kind(
         // `orientation` and `length` both arrive through the generated surface, and the widget
         // recomputes both axes from the pair, so neither has to come first.
         WidgetKind::Separator => Box::new(with_props(Separator::horizontal(), node, theme)),
+        WidgetKind::LandingSlot => Box::new(with_props(LandingSlot::new(), node, theme)),
+        // The drag is the widget's; what it means is the author's, so each report goes out as the
+        // described intent with the distance travelled.
+        WidgetKind::Splitter => {
+            let mut splitter = with_props(Splitter::vertical(), node, theme);
+            if let Some(intent) = node.intent(ViewEvent::Resize) {
+                let (intent, emit) = (intent.clone(), emit.clone());
+                splitter = splitter
+                    .on_resize(move |delta| emit(intent.clone().arg("delta", delta.into())));
+            }
+            Box::new(splitter)
+        }
         WidgetKind::Gauge => Box::new(with_props(Gauge::new(), node, theme)),
         // **Nobody knows how long** — no properties of its own: it animates off the frame clock,
         // and its diameter is `width`/`height`, which the generic style merge already carries.
@@ -2380,6 +2392,12 @@ mod tests {
         );
         check("Select", <Select as SetProp>::PROP_NAMES, "Select");
         check("Separator", <Separator as SetProp>::PROP_NAMES, "Separator");
+        check("Splitter", <Splitter as SetProp>::PROP_NAMES, "Splitter");
+        check(
+            "LandingSlot",
+            <LandingSlot as SetProp>::PROP_NAMES,
+            "LandingSlot",
+        );
         check("Tabs", <Tabs as SetProp>::PROP_NAMES, "Tabs");
         check("Tag", <Tag as SetProp>::PROP_NAMES, "Tag");
         check("Toast", <Toast as SetProp>::PROP_NAMES, "Toast");
@@ -3933,6 +3951,13 @@ mod tests {
                 .prop("width", PropValue::Float(28.0))
                 .prop("height", PropValue::Float(28.0)),
             WidgetKind::StatusDot => node,
+            WidgetKind::Splitter => node
+                .prop("line", PropValue::Bool(true))
+                .prop("width", PropValue::Float(8.0))
+                .prop("height", PropValue::Float(120.0)),
+            WidgetKind::LandingSlot => node
+                .prop("label", PropValue::Text("a".into()))
+                .prop("filled", PropValue::Bool(true)),
 
             // A rule normally stretches to its container; as a root it has none, so give it a
             // span — and take the chance to drive both of its properties, in the order that would
@@ -4024,6 +4049,11 @@ mod tests {
             ("Container", "not a widget: a helper for building a `Flex`"),
             ("ScrollRegion", "described as `Scroll`"),
             ("ProgressBar", "described as `Progress`"),
+            // ── Native code composes these; a description has no use for them ──
+            (
+                "Keyed",
+                "a list that keeps its rows by name across rebuilds; a description already reconciles by key",
+            ),
             // ── Opened through the host API, not placed in a tree ──
             //
             // `docs/chrome-and-ui.md` § 3.5 is the agreed plugin contract: a plugin opens these
@@ -4973,7 +5003,6 @@ mod tests {
             .child(card("redis"));
 
         use heca_grid_ui::event::{Event, WidgetIntent};
-        use heca_grid_ui::reactive::SignalUpdate as _;
 
         let mut grid = realize(
             &node,
@@ -4983,7 +5012,7 @@ mod tests {
         );
         // Keys reach the focus owner and nowhere else, so a test that activates says who is
         // holding the keyboard — exactly as a real surface has to.
-        grid.base_mut().focused.set(true);
+        grid.base().focus(false);
         heca_grid_ui::dispatch(grid.as_mut(), &Event::Widget(WidgetIntent::Activate));
 
         assert_eq!(
@@ -5008,7 +5037,6 @@ mod tests {
     #[test]
     fn a_described_grid_walks_its_cards_the_way_it_draws_them() {
         use heca_grid_ui::event::{Event, WidgetIntent};
-        use heca_grid_ui::reactive::SignalUpdate as _;
 
         let card = |name: &str| {
             ViewNode::new(WidgetKind::Surface).child(ViewNode::new(WidgetKind::Label).text(name))
@@ -5027,7 +5055,7 @@ mod tests {
                 &emit,
                 &mut FormBindings::default(),
             );
-            grid.base_mut().focused.set(true);
+            grid.base().focus(false);
             for _ in 0..steps {
                 heca_grid_ui::dispatch(grid.as_mut(), &Event::Widget(WidgetIntent::ItemNext));
             }
@@ -5993,6 +6021,52 @@ mod tests {
             deaf.is_empty(),
             "these widgets cannot be shown or closed, so whoever holds one has to know which kind \
              it is before they can put it on screen: {deaf:#?}",
+        );
+    }
+
+    /// **A plugin's resizable split, end to end**: the drag is the widget's, and what it means goes
+    /// out as the intent the author named, carrying how far the edge moved.
+    #[test]
+    fn a_described_splitter_reports_its_drag_as_an_intent_with_the_distance() {
+        use heca_core::layout::Size;
+        use heca_grid_ui::{Event, LayoutEngine, Point, PointerButton};
+
+        let (emit, fired) = recording_emitter();
+        let node = ViewNode::new(WidgetKind::Splitter)
+            .prop("orientation", PropValue::Text("vertical".into()))
+            .prop("width", PropValue::Float(8.0))
+            .prop("height", PropValue::Float(100.0))
+            .on(ViewEvent::Resize, Intent::new("mypanel.resize"));
+        let mut widget = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut FormBindings::default(),
+        );
+        LayoutEngine::new().compute(widget.as_mut(), Size::new(200.0, 100.0));
+
+        let at = |x: f64| Point::new(x, 50.0);
+        heca_grid_ui::dispatch(widget.as_mut(), &Event::pointer_pressed(at(4.0), PointerButton::Left));
+        heca_grid_ui::dispatch(widget.as_mut(), &Event::pointer_moved(at(10.0)));
+        heca_grid_ui::dispatch(widget.as_mut(), &Event::pointer_moved(at(13.0)));
+        heca_grid_ui::dispatch(widget.as_mut(), &Event::pointer_released(at(13.0), PointerButton::Left));
+
+        let deltas: Vec<_> = fired
+            .borrow()
+            .iter()
+            .map(|i| (i.action.clone(), i.args.get("delta").cloned()))
+            .collect();
+        assert_eq!(
+            deltas,
+            [
+                ("mypanel.resize".to_string(), Some(PropValue::Float(6.0))),
+                ("mypanel.resize".to_string(), Some(PropValue::Float(3.0))),
+            ]
+        );
+        assert_eq!(
+            heca_grid_ui::cursor_at(widget.as_ref(), at(4.0)),
+            heca_grid_ui::Cursor::ResizeHorizontal,
+            "a vertical edge moves left and right"
         );
     }
 }

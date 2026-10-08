@@ -49,6 +49,9 @@ pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui:
         ("menu_down", WidgetIntent::MenuDown),
         ("menu_history_up", WidgetIntent::MenuHistoryUp),
         ("menu_history_down", WidgetIntent::MenuHistoryDown),
+        ("find", WidgetIntent::Find),
+        ("find_next", WidgetIntent::FindNext),
+        ("find_previous", WidgetIntent::FindPrevious),
         ("activate", WidgetIntent::Activate),
         ("dismiss", WidgetIntent::Dismiss),
     ];

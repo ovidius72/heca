@@ -1,13 +1,90 @@
-//! Keyboard focus traversal for a component tree.
+//! Keyboard focus for a component tree: who holds it, how it moves, and the one door it goes through.
 //!
-//! [`FocusManager`] tracks which focusable component (by depth-first z-order
-//! index) currently holds focus, moves focus on Tab/Shift+Tab (wrapping), and
-//! delivers key events to the focused component. Each component's focus state
-//! lives in `Base.focused`, so widgets can render a focus ring reactively.
+//! **There is one meaning of `focused`**, the browser's: the widget the keyboard is aimed at, and at
+//! most one per tree. It is written in exactly one place ([`door`]) and made single by [`settle`].
+//! Everything that moves focus goes through them: Tab ([`FocusManager::advance`]), a press
+//! ([`focus_on_press`], run by the pointer router for every tree), a surface opening
+//! ([`Base::follow_focus`]) and a host asking for a named control ([`FocusManager::focus_named`]).
+//!
+//! A widget does not ask for a press to be wired: put a focusable widget anywhere and clicking it
+//! focuses it, the way clicking an `<input>` does. Each component's focus state lives in
+//! `Base.focused`, so widgets can render a focus ring reactively.
+
+mod door;
+mod scope;
+mod settle;
+
+pub(crate) use door::FocusDoor;
+pub use scope::{contains_keyboard, focus_scope, page_scope, release_scope};
+pub(crate) use settle::{focus_on_press, holder_path, settle};
+
+/// **Make a tree's keyboard owner single, now.** Run by the router before it delivers a key or a
+/// press, so an event never sees a stale answer; a host also calls it once a frame, after the tree
+/// has ticked, so what it reads between events (which surface holds the keyboard, which ring to
+/// draw) is current too. Idempotent, and cheap when nothing is pending.
+pub fn settle_focus(root: &mut dyn Component) {
+    settle(root);
+}
+
+/// Who owns the keyboard in a tree, as far as a host cares: where, which named region it is in, and
+/// whether it is in a surface placed above the page.
+pub struct KeyboardOwner {
+    /// The path to the widget that holds it.
+    pub path: Vec<usize>,
+    /// The nearest enclosing region that named itself with [`scope_key`](crate::builders::ComponentExt::scope_key)
+    /// — a dock, say — or `None` when the owner is in no named region.
+    pub scope: Option<String>,
+    /// Whether the owner is inside a surface placed in the window root (a dialog, a menu, the
+    /// exposé) rather than in the page itself.
+    pub in_surface: bool,
+}
+
+/// **Where the keyboard is**, read off the tree — the host's one question, so it asks the tree
+/// rather than keeping a second record that can disagree with it.
+pub fn keyboard_owner(root: &dyn Component) -> Option<KeyboardOwner> {
+    let path = holder_path(root)?;
+    let mut scope = root.base().scope_key.clone();
+    let mut in_surface = root.base().surface_slot.is_some();
+    let mut node = root;
+    for &i in &path {
+        node = node.base().children[i].as_ref();
+        scope = node.base().scope_key.clone().or(scope);
+        in_surface |= node.base().surface_slot.is_some();
+    }
+    Some(KeyboardOwner {
+        path,
+        scope,
+        in_surface,
+    })
+}
 
 use crate::component::{Component, Event, GridKey, Handled};
 use crate::reactive::SignalGet;
-use heca_core::layout::Point;
+
+fn at<'a>(root: &'a dyn Component, path: &[usize]) -> &'a dyn Component {
+    path.iter()
+        .fold(root, |node, &i| node.base().children[i].as_ref())
+}
+
+fn at_mut<'a>(root: &'a mut dyn Component, path: &[usize]) -> &'a mut dyn Component {
+    path.iter()
+        .fold(root, |node, &i| node.base_mut().children[i].as_mut())
+}
+
+/// Give `c` the keyboard: its hook runs first, then the [`Event::Focus`] reaches the widget and its
+/// handlers. There was a `focused` signal and no event, so nothing could act on the moment focus
+/// arrived — select the text on focus, say. Delivered to the widget alone: focus did not happen *at*
+/// a place, so there is nothing for it to bubble through.
+fn focus_widget(c: &mut dyn Component, visible: bool) {
+    c.on_focus(visible);
+    fire(c, &Event::Focus);
+}
+
+/// Take the keyboard from `c`: its hook, then [`Event::Blur`] — commit an edit, close a dropdown.
+fn blur_widget(c: &mut dyn Component) {
+    c.on_blur();
+    fire(c, &Event::Blur);
+}
 
 /// Visit every focusable component depth-first, calling `f(index, component)`.
 ///
@@ -44,20 +121,31 @@ fn for_each_focusable(
     }
 }
 
-/// Tracks and moves keyboard focus across a component tree.
+/// Moves keyboard focus across a component tree.
+///
+/// It keeps **no position of its own**: where focus is, is read off the tree every time (the
+/// widget holding [`Base::focused`]), so a click, a surface opening and Tab can never disagree about
+/// where the keyboard is.
 #[derive(Default)]
-pub struct FocusManager {
-    focused: Option<usize>,
-}
+pub struct FocusManager;
 
 impl FocusManager {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
-    /// The current focus index, if any.
-    pub fn focused(&self) -> Option<usize> {
-        self.focused
+    /// The visit index (as used by [`apply`](Self::apply)) of the focusable that holds the keyboard
+    /// in `root`, if any.
+    pub fn focused(&self, root: &mut dyn Component) -> Option<usize> {
+        settle(root);
+        let mut holder = None;
+        let mut idx = 0;
+        for_each_focusable(root, &mut idx, &mut |i, c| {
+            if c.base().focused.get_untracked() {
+                holder = Some(i);
+            }
+        });
+        holder
     }
 
     /// The visit indices of all focusables in **Tab order**: those with an
@@ -81,12 +169,11 @@ impl FocusManager {
         let order = Self::tab_order(root);
         let n = order.len();
         if n == 0 {
-            self.focused = None;
             return;
         }
         // Current position within the Tab order (by visit index identity).
         let pos = self
-            .focused
+            .focused(root)
             .and_then(|f| order.iter().position(|&v| v == f));
         let next_pos = match pos {
             None => {
@@ -195,22 +282,6 @@ impl FocusManager {
         self.apply(root, None, false);
     }
 
-    /// Index of the top-most focusable component containing `pos` (last match
-    /// wins = top-most in z-order), or `None` if the point misses every focusable.
-    fn hit_test(root: &mut dyn Component, pos: Point) -> Option<usize> {
-        let mut hit = None;
-        let mut idx = 0;
-        for_each_focusable(root, &mut idx, &mut |i, c| {
-            if c.base().bounds.contains(pos) {
-                hit = Some(i);
-            }
-        });
-        hit
-    }
-
-    /// Focus the top-most focusable component containing `pos` (e.g. on a mouse
-    /// click); **clears** focus if the click misses every focusable. This is the
-    /// page-level "click empty space to blur" semantics.
     /// **Put the keyboard on the focusable called `name`.** Returns whether one was found.
     ///
     /// `name` is the control's declared `key` when it has one, and **the name it reads by** when it
@@ -246,67 +317,25 @@ impl FocusManager {
         }
     }
 
-    pub fn focus_at(&mut self, root: &mut dyn Component, pos: Point) {
-        let hit = Self::hit_test(root, pos);
-        self.apply(root, hit, false); // mouse focus → no ring (focus-visible)
-    }
-
-    /// Trapped-focus variant of [`focus_at`](Self::focus_at): a click that hits a
-    /// focusable moves focus to it, but a click that **misses** every focusable is
-    /// a **no-op for focus** — the current focus is kept, not cleared. Use this
-    /// where focus is trapped inside an overlay panel (a modal / dropdown): clicking
-    /// the panel *body* (not a control) must not blur the focused control.
-    pub fn focus_at_trapped(&mut self, root: &mut dyn Component, pos: Point) {
-        if let Some(hit) = Self::hit_test(root, pos) {
-            self.apply(root, Some(hit), false); // mouse focus → no ring (focus-visible)
-        }
-        // Miss inside a trapped panel → keep the current focus.
-    }
-
-    /// Route a **pointer/scroll** event through the tree with overlay-first dibs
-    /// and the manager's standard focus semantics, returning whether it was
-    /// consumed so the host can fall back (e.g. page-scroll on an unconsumed
+    /// Route a **pointer/scroll** event through the tree with overlay-first dibs, returning whether
+    /// it was consumed so the host can fall back (e.g. page-scroll on an unconsumed
     /// [`Event::Scroll`](crate::component::Event::Scroll)).
     ///
     /// - An open overlay gets first dibs (see [`offer_to_overlay`](Self::offer_to_overlay));
     ///   if it consumes, routing stops and returns `Handled::Yes`.
-    /// - [`Event::PointerPressed`](crate::component::Event::PointerPressed) focuses
-    ///   the clicked widget (clearing focus on a miss), then delivers the press.
-    /// - Any other event (pointer move, scroll, …) is delivered to the tree as-is.
+    /// - Everything else is delivered to the tree as-is. A press focuses what it landed on in the
+    ///   router itself ([`focus_on_press`]), so every tree does it, not only the ones a manager
+    ///   was asked to route.
     ///
     /// Key events are intentionally **not** routed here: the host owns key meaning
     /// (in the app, `config.toml` → keymap → action runs first), so it resolves its
     /// own bindings and uses [`offer_to_overlay`](Self::offer_to_overlay) +
     /// [`deliver_key`](Self::deliver_key) for the leftovers.
     pub fn dispatch(&mut self, root: &mut dyn Component, ev: &Event) -> Handled {
-        self.dispatch_inner(root, ev, false)
-    }
-
-    /// Trapped-focus variant of [`dispatch`](Self::dispatch): identical routing, but
-    /// a press that misses every focusable **keeps** the current focus instead of clearing it (see
-    /// [`focus_at_trapped`](Self::focus_at_trapped)). For modal/overlay panels that
-    /// trap focus — clicking the panel body must not blur the focused control.
-    pub fn dispatch_trapped(&mut self, root: &mut dyn Component, ev: &Event) -> Handled {
-        self.dispatch_inner(root, ev, true)
-    }
-
-    fn dispatch_inner(&mut self, root: &mut dyn Component, ev: &Event, trapped: bool) -> Handled {
         if self.offer_to_overlay(root, ev) == Handled::Yes {
             return Handled::Yes;
         }
-        // Click-to-focus reads the **raw** press: focus is decided before the tree is told
-        // anything, so a widget that consumes the press is still the widget that has the keyboard.
-        match ev {
-            Event::Raw(raw) if raw.kind == crate::event::RawPointerKind::Pressed => {
-                if trapped {
-                    self.focus_at_trapped(root, raw.pos);
-                } else {
-                    self.focus_at(root, raw.pos);
-                }
-                crate::component::dispatch(root, ev)
-            }
-            _ => crate::component::dispatch(root, ev),
-        }
+        crate::component::dispatch(root, ev)
     }
 
     /// Apply a target focus index across the tree. Fires `on_blur`/`on_focus`
@@ -323,14 +352,11 @@ impl FocusManager {
             let want = Some(i) == target;
             let has = c.base().focused.get_untracked();
             if want && !has {
-                c.on_focus(visible);
-                fire(c, &Event::Focus);
+                focus_widget(c, visible);
             } else if !want && has {
-                c.on_blur();
-                fire(c, &Event::Blur);
+                blur_widget(c);
             }
         });
-        self.focused = target;
     }
 }
 

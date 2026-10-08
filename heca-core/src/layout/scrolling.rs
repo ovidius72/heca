@@ -3,8 +3,6 @@ use super::column::{Column, Pane};
 use super::types::*;
 use super::view_offset::{ViewOffset, compute_new_view_offset};
 
-// Re-export PaneInsertTarget for convenience.
-pub use super::types::PaneInsertTarget;
 
 /// Minimum width (logical px) a column may be shrunk to by a manual resize, so a
 /// column never becomes a thin line.
@@ -488,8 +486,40 @@ impl ScrollingSpace {
         if self.active_column_idx == 0 {
             return false;
         }
-        self.activate_column(self.active_column_idx - 1);
+        self.focus_column_beside(self.active_column_idx - 1);
         true
+    }
+
+    /// Focus the column `idx` next to the active one, landing on the pane the layout's
+    /// [`ColumnFocus`] rule names: the one last used there, or the one level with the pane left.
+    fn focus_column_beside(&mut self, idx: usize) {
+        if self.options.column_focus == ColumnFocus::Row
+            && let Some(row) = self.row_level_with_active(idx)
+        {
+            self.columns[idx].active_pane_idx = row;
+        }
+        self.activate_column(idx);
+    }
+
+    /// The pane of column `idx` whose vertical span overlaps the active pane's the most (the upper
+    /// one on a tie); the nearest one when none overlaps. `None` when there is no active pane.
+    fn row_level_with_active(&self, idx: usize) -> Option<usize> {
+        // From the laid-out geometry — where each pane IS — not from sizes the layout may not have
+        // stored: a column whose panes were never sized still has the rects it is drawn at.
+        let laid = self.laid_out_columns();
+        let here = laid.get(self.active_column_idx)?;
+        let active = here.panes.get(self.columns.get(self.active_column_idx)?.active_pane_idx)?;
+        let (top, bottom) = (active.slot.loc.y, active.slot.loc.y + active.slot.size.h);
+        let mut best: Option<(usize, f64)> = None;
+        for (row, pane) in laid.get(idx)?.panes.iter().enumerate() {
+            let (y, end) = (pane.slot.loc.y, pane.slot.loc.y + pane.slot.size.h);
+            // Overlap, or minus the distance between the spans when they do not touch.
+            let overlap = bottom.min(end) - top.max(y);
+            if best.is_none_or(|(_, o)| overlap > o) {
+                best = Some((row, overlap));
+            }
+        }
+        best.map(|(row, _)| row)
     }
 
     /// Focus right (next column).
@@ -497,7 +527,7 @@ impl ScrollingSpace {
         if self.active_column_idx + 1 >= self.columns.len() {
             return false;
         }
-        self.activate_column(self.active_column_idx + 1);
+        self.focus_column_beside(self.active_column_idx + 1);
         true
     }
 
@@ -1134,93 +1164,6 @@ impl ScrollingSpace {
             })
     }
 
-    /// Compute the insert position for a point in space coordinates.
-    /// Used during interactive move to determine where to drop a pane.
-    ///
-    /// Algorithm (from NIRI's `scrolling.insert_position()`):
-    /// 1. Transform to space coords and aim for center of gaps.
-    /// 2. Find closest column gap vs closest tile gap.
-    /// 3. Return whichever is closer.
-    pub fn insert_position(&self, pos: Point) -> PaneInsertTarget {
-        let gaps = self.options.gaps;
-        // pos is already in space coordinates (caller adds view_pos).
-        let x = pos.x + gaps / 2.0;
-        let y = pos.y + gaps / 2.0;
-
-        // Before first column → NewColumn(0)
-        if x < 0.0 {
-            return PaneInsertTarget::NewColumn(0);
-        }
-
-        // Find the column containing x.
-        let mut col_idx = 0usize;
-        let mut found_col = false;
-        for (i, col_x) in self.column_xs().enumerate() {
-            let col_w = self.column_widths.get(i).copied().unwrap_or(0.0);
-            if x >= col_x && x < col_x + col_w {
-                col_idx = i;
-                found_col = true;
-                break;
-            }
-        }
-
-        // Past last column → NewColumn at end.
-        if !found_col {
-            return PaneInsertTarget::NewColumn(self.columns.len());
-        }
-
-        // Find closest column gap.
-        let mut closest_col_gap_idx = 0usize;
-        let mut closest_col_gap_dist = f64::MAX;
-        for (i, col_x) in self.column_xs().enumerate() {
-            let dist = (col_x - x).abs();
-            if dist < closest_col_gap_dist {
-                closest_col_gap_dist = dist;
-                closest_col_gap_idx = i;
-            }
-            // Also check right edge of column (gap center after this column).
-            let col_w = self.column_widths.get(i).copied().unwrap_or(0.0);
-            let right_x = col_x + col_w + gaps;
-            let right_dist = (right_x - x).abs();
-            if right_dist < closest_col_gap_dist {
-                closest_col_gap_dist = right_dist;
-                closest_col_gap_idx = i + 1;
-            }
-        }
-
-        // Find closest tile gap within the containing column.
-        let col = &self.columns[col_idx];
-        let _col_x = self.column_x(col_idx);
-        let mut tile_y = gaps;
-        let mut closest_tile_idx = 0usize;
-        let mut closest_tile_gap_dist = f64::MAX;
-
-        for (i, size) in col.pane_sizes.iter().enumerate() {
-            let dist = (tile_y - y).abs();
-            if dist < closest_tile_gap_dist {
-                closest_tile_gap_dist = dist;
-                closest_tile_idx = i;
-            }
-            tile_y += size.h + gaps;
-        }
-        // Check bottom edge.
-        let bottom_dist = (tile_y - y).abs();
-        if bottom_dist < closest_tile_gap_dist {
-            closest_tile_gap_dist = bottom_dist;
-            closest_tile_idx = col.pane_sizes.len();
-        }
-
-        // Compare distances: column gap vs tile gap.
-        if closest_col_gap_dist <= closest_tile_gap_dist {
-            PaneInsertTarget::NewColumn(closest_col_gap_idx.min(self.columns.len()))
-        } else {
-            PaneInsertTarget::InColumn {
-                col_idx,
-                pane_idx: closest_tile_idx.min(col.panes.len()),
-            }
-        }
-    }
-
     /// Get all panes with their render positions.
     pub fn panes_with_positions(&self) -> Vec<(PaneId, Rectangle)> {
         self.laid_out_columns()
@@ -1238,6 +1181,63 @@ impl ScrollingSpace {
     /// [`column_x`](Self::column_x), the render offset, the view offset and the gaps.
     pub fn columns_with_positions(&self) -> Vec<LaidOutColumn> {
         self.laid_out_columns()
+    }
+
+    /// **The places a pane can be put** — one per gap between columns and at each end, and
+    /// the border above, between and below the panes of every column. Worked out
+    /// from the same layout as the columns, so none of them overlaps a pane or a column.
+    pub fn places(&self) -> Vec<Place> {
+        let columns = self.laid_out_columns();
+        let gaps = self.options.gaps;
+        let top = self.working_area.loc.y + gaps;
+        let height = (self.working_area.size.h - 2.0 * gaps).max(0.0);
+        let mut out = Vec::new();
+        // The borders between columns, drawn like the ones between panes: a standing line in the
+        // middle of the gap before each column, and one after the last. It takes no room.
+        let upright = |x: f64| Rectangle::new(Point::new(x, top), Size::new(0.0, height));
+        for (i, col) in columns.iter().enumerate() {
+            out.push(Place {
+                kind: PlaceKind::Gap(i),
+                rect: upright(col.rect.loc.x - gaps / 2.0),
+            });
+        }
+        if let Some(last) = columns.last() {
+            out.push(Place {
+                kind: PlaceKind::Gap(columns.len()),
+                rect: upright(last.rect.loc.x + last.rect.size.w + gaps / 2.0),
+            });
+        }
+        // The borders: a line along the top of each column, between each two stacked panes (in the
+        // middle of whatever gap there is, or exactly on the shared edge when there is none) and
+        // along the bottom. A line has no thickness here — it takes no room, so what is drawn on
+        // it and how far from it a pointer still counts is the caller's.
+        for col in columns.iter().filter(|c| !c.panes.is_empty()) {
+            let (x, width) = (col.rect.loc.x, col.rect.size.w);
+            let line = |y: f64| Rectangle::new(Point::new(x, y), Size::new(width, 0.0));
+            out.push(Place {
+                kind: PlaceKind::Row { col: col.idx, row: 0 },
+                rect: line(col.panes[0].slot.loc.y),
+            });
+            for (row, pair) in col.panes.windows(2).enumerate() {
+                let (above, below) = (pair[0].slot, pair[1].slot);
+                out.push(Place {
+                    kind: PlaceKind::Row {
+                        col: col.idx,
+                        row: row + 1,
+                    },
+                    rect: line((above.loc.y + above.size.h + below.loc.y) / 2.0),
+                });
+            }
+            let last = col.panes[col.panes.len() - 1].slot;
+            out.push(Place {
+                kind: PlaceKind::Row {
+                    col: col.idx,
+                    row: col.panes.len(),
+                },
+                rect: line(last.loc.y + last.size.h),
+            });
+        }
+        out
     }
 
     /// The one walk both public views are built on.
@@ -1265,10 +1265,8 @@ impl ScrollingSpace {
                     // and the child carries the second — the same split CSS makes between layout
                     // and `transform`.
                     let pane_offset = pane.move_offset.current();
-                    let rubber = pane.interactive_move_offset;
                     let slot = view_off + col_pos + Point::new(0.0, pane_y);
-                    let displacement =
-                        Point::new(pane_offset.x + rubber.x, pane_offset.y + rubber.y);
+                    let displacement = Point::new(pane_offset.x, pane_offset.y);
                     panes.push(LaidOutPane {
                         id: pane.id,
                         rect: Rectangle::new(slot + displacement, size),
@@ -1295,6 +1293,23 @@ impl ScrollingSpace {
             })
             .collect()
     }
+}
+
+/// What a [`Place`] is a place for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlaceKind {
+    /// A new column at gap `i` (the gap left of column `i`; the last is the end).
+    Gap(usize),
+    /// **The border** above pane `row` of column `col`, or below the last when `row` is the pane
+    /// count — a line of no thickness, so the place takes no room.
+    Row { col: usize, row: usize },
+}
+
+/// One open place and the box it fills.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Place {
+    pub kind: PlaceKind,
+    pub rect: Rectangle,
 }
 
 /// **One column as it is laid out on screen**, and the panes stacked inside it.
@@ -1393,7 +1408,10 @@ mod tests {
         let mut space = space_with_columns(1);
         let before = space.columns_with_positions()[0].rect;
 
-        space.columns[0].panes[0].interactive_move_offset = Point::new(400.0, 90.0);
+        space.columns[0].panes[0].animate_move_from(
+            Point::new(400.0, 90.0),
+            super::AnimationConfig::default(),
+        );
         let after = &space.columns_with_positions()[0];
         let pane = after.panes[0];
 
@@ -1993,5 +2011,154 @@ mod tests {
         let pinned = heights(&space);
         space.columns[0].move_active_pane_top_boundary(40.0, h, gaps);
         assert_eq!(heights(&space), pinned, "no edge above the first pane");
+    }
+
+    /// A two-column space whose first column holds two panes: `[a][c]` over `[b]`.
+    fn stacked() -> ScrollingSpace {
+        let mut space = space_with_columns(2);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(99), "b"), false);
+        space
+    }
+
+    fn overlaps(a: Rectangle, b: Rectangle) -> bool {
+        a.loc.x < b.loc.x + b.size.w
+            && b.loc.x < a.loc.x + a.size.w
+            && a.loc.y < b.loc.y + b.size.h
+            && b.loc.y < a.loc.y + a.size.h
+    }
+
+    /// **A gap place is space, not an overlay**: it overlaps no pane and no column.
+    #[test]
+    fn an_open_gap_overlaps_no_pane_and_no_column() {
+        let space = stacked();
+        let cols = space.columns_with_positions();
+        for place in space.places().into_iter().filter(|p| matches!(p.kind, PlaceKind::Gap(_))) {
+            for col in &cols {
+                assert!(!overlaps(place.rect, col.rect), "{place:?} over column {:?}", col.rect);
+            }
+        }
+    }
+
+    /// A gap place at each gap and both ends; a border at the top, between and bottom of every
+    /// column (the panes plus one), each of no thickness.
+    #[test]
+    fn places_exist_for_each_gap_and_for_every_border_of_every_column() {
+        let space = stacked();
+        let places = space.places();
+        let kinds: Vec<_> = places.iter().map(|p| p.kind).collect();
+        for gap in 0..=2 {
+            assert!(kinds.contains(&PlaceKind::Gap(gap)));
+        }
+        for (col, rows) in [(0, 3), (1, 2)] {
+            for row in 0..rows {
+                assert!(kinds.contains(&PlaceKind::Row { col, row }), "col {col} row {row}");
+            }
+        }
+        assert!(places
+            .iter()
+            .filter(|p| matches!(p.kind, PlaceKind::Row { .. }))
+            .all(|p| p.rect.size.h == 0.0));
+    }
+
+    /// **The border between two panes is on their shared edge, whatever the gap.**
+    #[test]
+    fn a_border_sits_between_its_panes() {
+        let space = stacked();
+        let opened = space.columns_with_positions();
+        let between = space
+            .places()
+            .into_iter()
+            .find(|p| p.kind == PlaceKind::Row { col: 0, row: 1 })
+            .unwrap();
+        let (above, below) = (opened[0].panes[0].slot, opened[0].panes[1].slot);
+        assert!(between.rect.loc.y >= above.loc.y + above.size.h && between.rect.loc.y <= below.loc.y);
+    }
+
+    /// Opening the places moves nothing: the columns stay where they are, and the place before
+    /// each column is a standing line in the middle of the gap, with no width.
+    #[test]
+    fn opening_places_moves_no_column() {
+        let space = stacked();
+        let closed = space.columns_with_positions();
+        let opened = space.columns_with_positions();
+        assert_eq!(opened[0].rect, closed[0].rect);
+        assert_eq!(opened[1].rect, closed[1].rect);
+        let gap = space
+            .places()
+            .into_iter()
+            .find(|p| p.kind == PlaceKind::Gap(1))
+            .map(|p| p.rect);
+        let gaps = space.options.gaps;
+        assert_eq!(gap.map(|r| r.size.w), Some(0.0));
+        assert_eq!(gap.map(|r| r.loc.x), Some(closed[1].rect.loc.x - gaps / 2.0));
+    }
+
+    /// A 2 × 2 strip, `[a][c]` over `[b][d]`: columns 1 and 2, panes (1, 2) and (3, 4).
+    fn two_by_two(focus: ColumnFocus) -> ScrollingSpace {
+        let mut space = space_with_columns(2);
+        space.options.column_focus = focus;
+        space.add_pane_to_column(0, None, Pane::new(PaneId(11), "b"), false);
+        space.add_pane_to_column(1, None, Pane::new(PaneId(12), "d"), false);
+        space.update_all_column_widths();
+        space
+    }
+
+    fn focused_pane(space: &ScrollingSpace) -> PaneId {
+        space.columns[space.active_column_idx]
+            .active_pane()
+            .expect("an active pane")
+            .id
+    }
+
+    /// **From c, left lands on the pane level with c under `row` and on the last-used pane under
+    /// `last`** — with b remembered as the last used in the left column.
+    #[test]
+    fn column_focus_row_lands_level_and_last_lands_on_the_remembered_pane() {
+        for (focus, want) in [(ColumnFocus::Last, PaneId(11)), (ColumnFocus::Row, PaneId(1))] {
+            let mut space = two_by_two(focus);
+            space.columns[0].active_pane_idx = 1; // b was the last used
+            space.active_column_idx = 1;
+            space.columns[1].active_pane_idx = 0; // we are on c
+            assert!(space.focus_left());
+            assert_eq!(focused_pane(&space), want, "{focus:?}");
+        }
+    }
+
+    /// Under `row` the way back is level too, and a stack of different heights picks the pane
+    /// with the larger overlap.
+    #[test]
+    fn column_focus_row_goes_back_level_and_follows_the_larger_overlap() {
+        let mut space = two_by_two(ColumnFocus::Row);
+        space.active_column_idx = 0;
+        space.columns[0].active_pane_idx = 1; // on b
+        assert!(space.focus_right());
+        assert_eq!(focused_pane(&space), PaneId(12), "b is level with d");
+
+        // The left column's second pane takes most of the height; from the right column's first
+        // pane the larger overlap is with the left column's tall pane.
+        let mut space = two_by_two(ColumnFocus::Row);
+        space.columns[0].pane_sizes[0].h = 100.0;
+        space.columns[0].pane_sizes[1].h = 600.0;
+        space.columns[1].pane_sizes[0].h = 350.0;
+        space.columns[1].pane_sizes[1].h = 350.0;
+        space.active_column_idx = 1;
+        space.columns[1].active_pane_idx = 0;
+        assert!(space.focus_left());
+        assert_eq!(focused_pane(&space), PaneId(11), "most of its span is level with b");
+    }
+
+    /// **Row focus reads where the panes are drawn, not sizes the layout may not have stored**: a
+    /// column whose `pane_sizes` were never filled still has a level pane.
+    #[test]
+    fn column_focus_row_works_without_stored_pane_sizes() {
+        let mut space = two_by_two(ColumnFocus::Row);
+        for col in &mut space.columns {
+            col.pane_sizes.clear();
+        }
+        space.active_column_idx = 1;
+        space.columns[0].active_pane_idx = 1;
+        space.columns[1].active_pane_idx = 0;
+        assert!(space.focus_left());
+        assert_eq!(focused_pane(&space), PaneId(1), "level with c, not the remembered b");
     }
 }

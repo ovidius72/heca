@@ -90,6 +90,13 @@ pub fn deep_merge(base: toml::Value, over: toml::Value) -> toml::Value {
     }
 }
 
+/// **The configuration the embedded defaults and one user file's text make** — what the loader
+/// builds from disk, from a string: a test of "what does this config text do" needs no file.
+pub fn config_from_layers(user: &str) -> Result<Config, toml::de::Error> {
+    let user: toml::Value = toml::from_str(user)?;
+    deep_merge(embedded_base(), user).try_into()
+}
+
 /// Errors that can occur when loading the configuration file.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -359,6 +366,15 @@ fn apply_overrides(theme: &mut Theme, settings: &SettingsConfig) {
     }
     if let Some(colors) = settings.terminal_ansi {
         theme.terminal_ansi = Some(colors);
+    }
+    if let Some(color) = settings.drag_edge_target_color {
+        theme.drag_edge_target_color = Some(color);
+    }
+    if let Some(color) = settings.drag_edge_color {
+        theme.drag_edge_color = Some(color);
+    }
+    if let Some(width) = settings.drag_edge_width {
+        theme.drag_edge_width = width.clamp(1.0, 12.0);
     }
     if let Some(colors) = settings.terminal_brights {
         theme.terminal_brights = Some(colors);

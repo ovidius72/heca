@@ -135,7 +135,7 @@ impl Component for BadgeButton {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let hovered = self.base.hovered() || self.base.focused.get_untracked();
+        let hovered = self.base.hovered() || self.base.focused_by_keyboard();
         let pill = self.base.bounds;
         let radius = (cx.theme().colors.border_radius * 2.0).min((pill.size.h / 2.0) as f32);
         let (muted, foreground, danger) = {
