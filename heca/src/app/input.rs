@@ -134,8 +134,7 @@ pub(crate) fn handle_keyboard_input(
             // not claim rather than forwarding it. A `j` leaking into a shell while the user is
             // driving a sidebar is the worse failure — and the focus ring plus the status bar are
             // what stop the swallowing being silent. Forwarding to the dock instead is how `j`/`k`
-            // went on moving the sidebar cursor underneath an open context menu (Antonio,
-            // 2026-08-10).
+            // went on moving the sidebar cursor underneath an open context menu.
             //
             // `state.focused_pane` is deliberately untouched: only the keyboard is redirected, so
             // `prefix+Enter` still splits the pane you last worked in.

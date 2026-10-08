@@ -1,10 +1,10 @@
 //! **A pane pick letters the pane's row in each dock, and nothing else in the sidebar.**
 //!
-//! Written while chasing a report (Antonio, driving, 2026-09-24): with two docks in the left sidebar,
-//! `prefix+q` drew a second keycap over the rule between them. This test showed the sidebar was NOT
-//! the source — the stray keycap belonged to a pane tile behind the sidebar, lettered through the
-//! column path with no visibility check (fixed in `column::offer_to_columns`, held by
-//! `column::offer_tests`). It stays as the guard that the sidebar half is right.
+//! Written while chasing a report: with two docks in the left sidebar, `prefix+q` drew a second
+//! keycap over the rule between them. This test showed the sidebar was NOT the source — the stray
+//! keycap belonged to a pane tile behind the sidebar, lettered through the column path with no
+//! visibility check (fixed in `column::offer_to_columns`, held by `column::offer_tests`). It stays
+//! as the guard that the sidebar half is right.
 
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::reactive::SignalGet;

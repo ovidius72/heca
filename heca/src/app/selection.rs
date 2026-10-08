@@ -45,8 +45,8 @@ pub(crate) fn has_pane_candidate_overflow(session: &Session) -> bool {
 /// That rule used to live in the letter layer instead, which meant the candidate list and the
 /// letters gave different answers: with a single pane open, `prefix+q` counted one candidate,
 /// entered the pick and announced itself in the bottom bar — and then the only letter was filtered
-/// away, so the prompt sat there over a screen with nothing to press (Antonio, driving). Whoever
-/// counts the candidates has to be the one who decides what a candidate is.
+/// away, so the prompt sat there over a screen with nothing to press. Whoever counts the candidates
+/// has to be the one who decides what a candidate is.
 pub(crate) fn collect_all_pane_candidates(
     session: &Session,
     except: Option<PaneId>,
@@ -209,8 +209,7 @@ mod tests {
         session
     }
 
-    /// **The column the pane is already in is not a destination** (Antonio, 2026-09-10: the letter
-    /// on the current column "is redundant").
+    /// **The column the pane is already in is not a destination**.
     ///
     /// Moving a pane into its own column does nothing, so a letter on it buys nothing. Excluded
     /// where the candidates are counted, not at the letter — the same rule that keeps the pane you
@@ -299,7 +298,7 @@ mod tests {
     /// The rule used to be applied by the letter layer instead, which meant a pick could be entered
     /// with a candidate that was never going to be lettered: with a single pane open, `prefix+q`
     /// counted one, entered the pick, put "pick a letter" in the bottom bar — and drew no letter
-    /// anywhere (Antonio, driving). Whoever counts has to decide.
+    /// anywhere. Whoever counts has to decide.
     #[test]
     fn the_pane_you_are_on_is_never_a_candidate() {
         let session = make_session_with_panes(3);

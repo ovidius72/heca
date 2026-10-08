@@ -50,7 +50,6 @@ use heca_core::layout::{Point, Rectangle, Size};
 // follow the font or the theme, and **nothing outside could match them** — so a surface composed
 // from `Overlay` + `Surface` + `Button`s, which is what a plugin writes, produced a dialog that
 // looked nothing like heca's own. Buttons flush together, no air between the body and the actions
-// (Antonio, driving, 2026-09-07, with the two side by side).
 //
 // One vocabulary, read by both, so the two cannot drift: change a step here and every dialog-shaped
 // surface follows, whoever built it.
@@ -910,7 +909,7 @@ mod tab_repro {
     /// **dialog** owned, while Tab was answered by the one the composed **overlay** owns — two
     /// positions over one panel. The first press moved the overlay's manager to *its* first
     /// control, which was the button the keyboard was already on, so nothing appeared to happen
-    /// and only the second press moved (Antonio, driving `prefix+x`, 2026-09-07).
+    /// and only the second press moved.
     ///
     /// One manager now, on the overlay, which is what holds the keyboard. The dialog keeps none
     /// and delegates all four operations — opening, Tab, arrow motion, and a click inside the

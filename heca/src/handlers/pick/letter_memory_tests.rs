@@ -16,9 +16,8 @@ fn a_first_pick_hands_out_the_alphabet_in_order() {
     assert_eq!(got, vec![Some('a'), Some('s'), Some('d')]);
 }
 
-/// ⭐ **The report.** Antonio, 2026-08-17: *"I want to expand a pane, prefix+/ and `k` appears on
-/// that icon… then I want to collapse. prefix+/ and `j` appears on that button, while I was
-/// expecting `k`."*
+/// ⭐ **The report.** Expanding a pane shows `k` on its button; collapsing it must show `k` again,
+/// not `j`.
 ///
 /// A target appearing **earlier in the tree** used to shift every letter after it, because the
 /// letter was the index. Now the newcomer takes a spare and everyone else keeps theirs.

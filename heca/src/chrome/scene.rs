@@ -317,7 +317,7 @@ pub(super) fn sidebar_toggle_button(
     // user every time they use the button, and the two buttons can even derive the *same* name at
     // once (left expanded and right collapsed are both `arrow_line_left`), at which point document
     // order decides which one wears the index. Either way the `prefix+/` letters moved on every
-    // pick (Antonio, driving, 2026-08-19). The action name is stable through both states.
+    // pick. The action name is stable through both states.
     let button = IconButton::new(Icon::new(glyph).color(color))
         .key(action_name)
         .size(WidgetSize::Small)

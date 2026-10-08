@@ -469,7 +469,7 @@ impl Overlay {
     /// there. Goes **through the focus manager**, which is the point: writing the control's
     /// `focused` signal by hand leaves the manager's own position unset, so the next Tab is spent
     /// moving to the first control instead of the next one and the first press appears to do
-    /// nothing (Antonio, driving, 2026-09-07).
+    /// nothing.
     fn place_default_focus(&mut self) {
         let Some(name) = self.default_focus.clone() else {
             return;

@@ -203,8 +203,8 @@ pub(super) fn begin_terminal_selection_at(
             focus_col: col,
         },
     );
-    // A mouse selection is a gesture, not a mode (Antonio, 2026-09-29): Shift+drag highlights,
-    // release copies, and the keyboard stays where it was. Selection mode is the keyboard's.
+    // A mouse selection is a gesture, not a mode: Shift+drag highlights, release copies, and the
+    // keyboard stays where it was. Selection mode is the keyboard's.
     state.needs_redraw = true;
 }
 

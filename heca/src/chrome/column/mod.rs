@@ -100,8 +100,8 @@ mod tests {
 
     /// **The column in the scrolling area owns its identity** (F003/P082/T474).
     ///
-    /// Antonio, driving 2026-08-24: *"prefix+shift+c works but shows letters only in the sidebar,
-    /// not in the scrolling area."* Nothing out here declared `col:<id>`, so the pick had nowhere to
+    /// `prefix+Shift+c` must letter columns in the scrolling area, not only in the sidebar. Nothing
+    /// out here declared `col:<id>`, so the pick had nowhere to
     /// put the letter and only the sidebar's view of the column wore one.
     #[test]
     fn a_column_declares_the_key_the_pick_addresses_it_by() {

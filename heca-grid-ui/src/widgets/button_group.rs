@@ -71,7 +71,7 @@ const OVERFLOW_LABEL: &str = "More actions";
 /// the room, the layout squeezed the ⋮ rather than pushing a button out of the box — so the group
 /// never saw an overflow, never moved anything into the menu, and the ⋮ absorbed the entire
 /// shortfall. Measured at four to eight pixels wide beside a twenty-four pixel sibling, and barely
-/// clickable (Antonio, driving, 2026-09-04). Stated here once so a future child cannot miss it.
+/// clickable. Stated here once so a future child cannot miss it.
 fn never_gives_way(button: Button) -> Button {
     button.shrink(0.0)
 }
@@ -147,7 +147,6 @@ impl ButtonGroup {
         // end-justified row needs no second box inside it — and a second box was actively harmful:
         // nested inside a grown parent it was placed against a height that was not the one it ended
         // up with, so the whole cluster hung below the strip and took the picker's letters with it
-        // (Antonio, driving, 2026-09-03).
         base.style.layout.justify = Justify::End;
         // **A little air between the buttons, from the theme's rhythm** — the container's own `gap`,
         // like any row's, so the buttons visibly do not touch (a destructive outline sat against its
@@ -211,7 +210,7 @@ impl ButtonGroup {
         // **Built in the mode it will be shown in.** Otherwise the first layout is of buttons with
         // their words, whatever the mode says, and the first decision is made from an arrangement
         // that was never going to be drawn — which is how a group pinned to icons collapsed itself
-        // on the strength of widths it would never have (Antonio, driving, 2026-09-03).
+        // on the strength of widths it would never have.
         let icons = !self.words.get();
         // **The button just added — not the last child**, which is the ⋮ and always will be. Aimed
         // at the wrong one, every button kept its words whatever the mode said, and the first
@@ -235,8 +234,7 @@ impl ButtonGroup {
         // **The ⋮ takes it too.** It is built in the constructor — before the group has been told
         // anything — so setting the variant only on later children left it the odd one out: a
         // `Primary` button among ghosts, drawing its glyph in the accent, which a pane dims when it
-        // is not the active one. Its dots were invisible on every inactive pane (Antonio, driving,
-        // 2026-09-03).
+        // is not the active one. Its dots were invisible on every inactive pane.
         let count = self.entries.len();
         if let Some(t) = self.base.children.get_mut(count) {
             t.set_variant(variant);
@@ -386,8 +384,7 @@ impl Component for ButtonGroup {
             fits = fits.saturating_sub(1);
         }
         // **And it takes them back when the room returns.** Giving way was one-way: a group that had
-        // collapsed stayed collapsed however wide the pane grew afterwards (Antonio, driving,
-        // 2026-09-03).
+        // collapsed stayed collapsed however wide the pane grew afterwards.
         //
         // One at a time, and only against **visible slack** — the gap the layout left between the
         // group's edge and the first thing in it. Asking for a button back costs more room than
@@ -492,12 +489,12 @@ impl ButtonGroup {
     /// ⚠️ Not created while deciding what fits: that happens *inside* the layout walk, so a widget
     /// added there has no bounds yet and the frame that paints next draws it at the window's origin
     /// — a small thing flickering in the corner of the scrolling area whenever the header was
-    /// rebuilt, which a resize does continuously (Antonio, driving, 2026-09-03).
+    /// rebuilt, which a resize does continuously.
     fn build_trigger(&mut self) {
         // ⚠️ **Built once, then shown or hidden.** Making a fresh one each time the arrangement
         // changed put a brand-new widget into the tree with no bounds yet, and the frame that
         // painted next drew it at the window's origin — a small thing flickering in the corner
-        // of the scrolling area while a divider was dragged (Antonio, driving, 2026-09-03).
+        // of the scrolling area while a divider was dragged.
         //
         // **A `Button`, and icon-only like its siblings.** It was an `IconButton` — a different
         // control with its own padding — and then a `Button` that still carried the horizontal
@@ -549,7 +546,7 @@ impl ButtonGroup {
                     // **The button's own closure, run here.** It used to write down which button was
                     // chosen and wait for the group to drain it on its next event — but the menu is in a
                     // layer, so no event reaches the group when a row is clicked, and the action sat
-                    // there for seconds until something unrelated wandered past (Antonio, 2026-09-03).
+                    // there for seconds until something unrelated wandered past.
                     if let Some(run) = run.as_ref() {
                         run();
                     }

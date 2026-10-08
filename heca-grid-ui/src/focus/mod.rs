@@ -210,7 +210,7 @@ impl FocusManager {
         // `CommandPalette` is focusable only while open, so opening one renumbers every index after
         // it: the host went on delivering to the widget that used to hold that number, and typing
         // in the palette did nothing at all while the same palette worked in an app that dispatched
-        // from the root (Antonio, 2026-08-10).
+        // from the root.
         //
         // `dispatch` routes a keyboard event to the focus owner and bubbles it, so this is the same
         // question asked once, and ancestors see the event on the way past as they should.
@@ -294,7 +294,6 @@ impl FocusManager {
     /// It goes **through the manager**, which is the point: setting a `focused` signal by hand
     /// leaves the manager's own position unset, so the next Tab is spent moving to the first
     /// control instead of the next one — the keyboard appears to do nothing on the first press
-    /// (Antonio, driving, 2026-09-07).
     ///
     /// A name that matches nothing leaves the keyboard alone rather than guessing: a stale name
     /// should not silently focus something else.

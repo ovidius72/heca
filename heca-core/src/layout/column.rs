@@ -159,9 +159,9 @@ impl Column {
     /// between them hold the whole of it, and a third arriving has nothing left: it was assigned a
     /// single pixel, and the pass that scales the column to fit shaved barely one per cent off the
     /// other two. The pane was there, in the column, and could not be seen — which is what
-    /// "splitting a third time pushes the last pane off the screen" actually was (Antonio, driving,
-    /// 2026-09-03/04). Nothing was pushed anywhere, so checking that the heights summed to the
-    /// column found nothing: they always did.
+    /// "splitting a third time pushes the last pane off the screen" actually was. Nothing was
+    /// pushed anywhere, so checking that the heights summed to the column found nothing: they
+    /// always did.
     ///
     /// ⚠️ **This is the ADD, not the distribution.** It would be simpler to reserve a floor for
     /// every pane inside `compute_pane_sizes`, and it is wrong there: that runs on every drag too,
@@ -250,7 +250,7 @@ impl Column {
             // the column — and once they did, the proportional scale below shrank every pane to
             // compensate, including the two the user had just pinned by dragging their boundary.
             // Which is the symptom: resizing the middle pane moved the bottom edge, and then at a
-            // certain point started moving the top one too (Antonio, driving, 2026-09-03).
+            // certain point started moving the top one too.
             let per_auto = (height_left / auto_count as f64).max(0.0);
             let auto_floor = min_h.min(per_auto).max(1.0);
             let auto_height = per_auto.max(auto_floor);
@@ -272,10 +272,10 @@ impl Column {
         // the column, and the last pane was pushed off the bottom of the screen.
         //
         // Which is why it only happened in the column that had been resized, and why the effective
-        // minimum differed between that column and a freshly created one (Antonio, driving,
-        // 2026-09-03). Scaling both ways makes "the panes exactly fill the column" true by
-        // construction rather than in one direction only; a column too small for every pane's floor
-        // degrades proportionally, which is what the floor's own note already asks for.
+        // minimum differed between that column and a freshly created one. Scaling both ways makes
+        // "the panes exactly fill the column" true by construction rather than in one direction
+        // only; a column too small for every pane's floor degrades proportionally, which is what
+        // the floor's own note already asks for.
         let total_pane_height: f64 = sizes.iter().map(|s| s.h).sum();
         if total_pane_height > 0.0 && available_height > 0.0 {
             let scale = available_height / total_pane_height;
@@ -344,9 +344,8 @@ impl Column {
     /// - a pane with a boundary **below** it grows by moving its **bottom** edge down;
     /// - the **last** pane has no boundary beneath it, so it grows by moving its **top** edge up.
     ///
-    /// Same key, same "grow me", opposite edge. Antonio, driving, 2026-08-11: *"prefix+r work fine
-    /// at the third one at the bottom. The center and the one at the top j and k act the
-    /// opposite."* This is a consequence of [`resize_pane_height`](Self::resize_pane_height)'s
+    /// Same key, same "grow me", opposite edge: on the bottom pane `j`/`k` seem to work, on the
+    /// middle and top panes they seem reversed. This is a consequence of [`resize_pane_height`](Self::resize_pane_height)'s
     /// local transfer (F004/P084/T413), not a regression it introduced: before it, a resize spread
     /// the change over every auto-sized pane, so no single divider visibly moved and the ambiguity
     /// did not read.
@@ -391,7 +390,7 @@ impl Column {
     /// ```
     ///
     /// — and the third collapsed to [`MIN_PANE_HEIGHT`], jammed against the bottom of the column,
-    /// which reads as having disappeared (Antonio, driving, 2026-08-11; F004/P084/T413).
+    /// which reads as having disappeared.
     ///
     /// So the transfer is explicit and local: **both** sides of the boundary are pinned, by equal
     /// and opposite amounts, and every other pane keeps exactly the height it had — there is no
@@ -536,7 +535,7 @@ mod pane_height_tests {
     /// worked out against the *whole* column rather than the room those fixed panes had left — so
     /// three panes in a resized column summed to more than the column and the last one was pushed
     /// off the bottom of the screen. It happened only in a column that had been resized, which is
-    /// exactly why a freshly created one looked fine (Antonio, driving, 2026-09-03).
+    /// exactly why a freshly created one looked fine.
     #[test]
     fn panes_never_sum_to_more_than_the_column() {
         let working = 800.0;
@@ -575,9 +574,8 @@ mod pane_height_tests {
     /// Dragging the middle pane's lower boundary moved the bottom edge, and then at a certain point
     /// started moving the *top* one too: the untouched panes were being forced above the room left
     /// to them, the heights summed past the column, and the proportional scale that keeps the column
-    /// full then shrank every pane — including the two the drag had just pinned (Antonio, driving,
-    /// 2026-09-03).
-    /// **A column is never narrower than its floor, whatever the window did** (F003/P082/T478).
+    /// full then shrank every pane — including the two the drag had just pinned. **A column is
+    /// never narrower than its floor, whatever the window did** (F003/P082/T478).
     ///
     /// `MIN_COLUMN_WIDTH` used to be enforced only by the resize handlers, which stop *you* dragging
     /// a column to nothing and stopped nothing else. Two sidebars in a narrow window squeezed the

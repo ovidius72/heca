@@ -299,9 +299,8 @@ pub struct Base {
     /// It used to carry an opaque id handed out by a host registry, and a closed list of which
     /// surfaces were allowed to drag at all. Both are gone: a row said who it was twice, and a
     /// plugin's row could say it neither time — it could not be added to a list that is an enum in
-    /// our source, so it could never be dragged (Antonio, 2026-09-01: *"hardcode smell?? what i
-    /// hate"*). A widget with no `key` is not a drag source, because there would be nothing to
-    /// name what was picked up.
+    /// our source, so it could never be dragged. A widget with no `key` is not a drag source,
+    /// because there would be nothing to name what was picked up.
     pub draggable: bool,
     /// **When a press may pick this widget up** — `None` is always. Set with
     /// [`ComponentExt::draggable_when`](crate::builders::ComponentExt::draggable_when). Asked when a
@@ -330,7 +329,7 @@ pub struct Base {
     /// A target that refuses is not offered: the walk skips it and keeps looking outward, so
     /// nothing is drawn over something that would then do nothing. That mismatch is what this
     /// exists to end — the line said yes and the release said no, because the drawing and the rule
-    /// lived in different places (Antonio, driving, 2026-09-01).
+    /// lived in different places.
     pub accepts: Vec<String>,
     /// **Can a thing be dropped *onto* this widget, or only beside it?**
     ///
@@ -342,9 +341,7 @@ pub struct Base {
     ///
     /// Set by [`accepts`](crate::builders::ComponentExt::accepts) and
     /// [`accepts_beside`](crate::builders::ComponentExt::accepts_beside). It exists because the
-    /// two are genuinely different and only the component knows which it is (Antonio, 2026-09-01:
-    /// *"a pane should be released above another pane because we want to move or swap; a column
-    /// above another column doesn't tell us if it is placed below or above"*).
+    /// two are genuinely different and only the component knows which it is.
     pub accepts_onto: bool,
     /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
     /// the right-click target and the drag are three readers of this one declaration.
@@ -377,9 +374,9 @@ pub struct Base {
     /// notification stack spans the window so a corner can mean the screen's corner, and a
     /// decorator wrapped around one hugs it and spans the window too. Left to the box, an empty
     /// invisible surface swallows every press in the application and nothing anywhere fails
-    /// (Antonio, driving, 2026-09-01). Fixing the widgets one at a time does not end it: the next
-    /// surface, or the next decorator over one, brings it back, and its author had no way to know
-    /// they were meant to think about it.
+    /// Fixing the widgets one at a time does not end it: the next surface, or the next decorator
+    /// over one, brings it back, and its author had no way to know they were meant to think about
+    /// it.
     ///
     /// A surface that *wants* to swallow says so where it already says it —
     /// [`overlay_occludes`](Component::overlay_occludes), which `Overlay::blocking(true)` answers
@@ -486,15 +483,14 @@ pub struct Base {
     /// to scale that. What a widget floats *beside* itself is different: a tooltip bubble is a small
     /// panel belonging to the surface, not a part of the control, so an emphasized button was
     /// getting an emphasized bubble — 1.25× the text of an identical tip on the button next to it
-    /// (Antonio, driving, 2026-09-03).
     pub root_font: f32,
     /// The **viewport the tree was laid out against**, written by the layout pass.
     ///
     /// A widget that draws a floating panel has to clamp it on screen, and it used to learn the
     /// viewport from `PaintCx` — one pass *after* the layout that placed the panel. So the first
     /// frame placed it against a stale size and the next one corrected it, and a context menu
-    /// visibly jumped after it appeared (Antonio, 2026-08-10). The engine already knows the size it
-    /// was told to compute against; this is that size, available at the moment placement happens.
+    /// visibly jumped after it appeared. The engine already knows the size it was told to compute
+    /// against; this is that size, available at the moment placement happens.
     pub viewport: Size,
     /// Hover, capture, click-run and drag state, kept by the pointer router (see
     /// [`crate::pointer`]). A widget reads `pointer.hovered`; nothing else here writes it.
@@ -869,8 +865,7 @@ impl Base {
             // draws from those bounds and so draws nothing — but an icon is a glyph at the font's
             // size, drawn wherever its box says it is, so a revealed button put its icon in the
             // corner of the screen for the frame before the next layout reached it. During a drag
-            // that is continuous, and it is red when the button is a destructive one (Antonio,
-            // driving, 2026-09-04).
+            // that is continuous, and it is red when the button is a destructive one.
             //
             // Clearing the layout node says the truth — nothing has placed this yet — and
             // [`paint_child`](crate::paint_child) already declines to draw what has never been
@@ -900,7 +895,6 @@ impl Base {
     /// played — several frames after the click that dismissed it. Nothing re-laid-out at that
     /// moment, so the cards below it kept their old positions until some unrelated click happened
     /// to trigger a layout, and the gap where the card had been simply sat there
-    /// (Antonio, driving the showcase, F003/P096).
     pub fn mark_needs_layout(&self) {
         self.needs_layout.set(true);
         request_frame();
@@ -973,7 +967,7 @@ impl Base {
     ///
     /// What that cost: the exposé's cards kept being offered letters by `prefix+/` after it had
     /// been opened once and closed — a full-window target sitting over everything you could
-    /// actually see (Antonio, driving, 2026-09-15).
+    /// actually see.
     ///
     /// It lives beside `close` because it is the other half of that rule, and splitting them is
     /// how they came to disagree: two widgets had hand-written `presence.tick` and neither ended
@@ -1539,7 +1533,7 @@ pub trait Component {
     /// did not** — the same string the keyboard cursor, the right-click target and a remembered
     /// hint letter are filed under ([`nav::identity_of`](crate::nav::identity_of)). Asking for the
     /// key here instead would make `.draggable()` silently do nothing on every widget that never
-    /// needed a name, and put an internal rule in front of the author (Antonio, 2026-09-01).
+    /// needed a name, and put an internal rule in front of the author.
     fn is_drag_source(&self) -> bool {
         self.base().draggable
     }
@@ -1834,7 +1828,7 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
     // it walks, so a widget the walk has never reached still holds `None` — it has no bounds, and
     // its default ones put it at the window's origin. Painting it draws it there for one frame: a
     // small thing flickering in the top-left corner of the scrolling area, which a resize produces
-    // continuously (Antonio, driving, 2026-09-03).
+    // continuously.
     //
     // A widget added *while* its tree is being laid out is exactly that case, and it happened three
     // separate times in one session — the ⋮ built inside the decision, the ⋮ rebuilt on each
@@ -1907,8 +1901,7 @@ fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
         // **What you are carrying is faded where it still sits.** Otherwise a container's highlight
         // is drawn around a source that looks untouched, and the two read as both being
         // highlighted — which is exactly the case of dropping a column into the workspace that
-        // holds it (Antonio, 2026-09-01). Faded here, outlined there, and the chip under the cursor
-        // says which is which.
+        // holds it. Faded here, outlined there, and the chip under the cursor says which is which.
         let bg = cx.theme().colors.background;
         cx.rect(
             b.bounds,
@@ -2072,9 +2065,9 @@ pub struct PaintCx<'a> {
 ///
 /// That is why the exposé's cards would not shrink with the window: each card asked for 100% of a
 /// wrapper that asked for 100% of nothing, so a card stayed as wide as the path inside it and every
-/// card's text ran across its neighbours (Antonio, driving, 2026-08-24). `expose/mod.rs` already
-/// carried a hand-written workaround — "the room the panel gives it has to be passed on
-/// deliberately" — which is one call site fixing a rule that belongs here.
+/// card's text ran across its neighbours. `expose/mod.rs` already carried a hand-written workaround
+/// — "the room the panel gives it has to be passed on deliberately" — which is one call site fixing
+/// a rule that belongs here.
 ///
 /// Adopting whatever the child declares keeps the chain unbroken, and a child that hugs still hugs,
 /// because then there is nothing to adopt.

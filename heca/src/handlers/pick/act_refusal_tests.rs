@@ -1,7 +1,6 @@
 use crate::actions::ActionCatalog;
 
-/// **A key that could not act names the act and why** (Antonio, 2026-09-10: with the pane alone
-/// in its column "it's not clear" that anything happened).
+/// **A key that could not act names the act and why**.
 ///
 /// The words come from the action's own catalog entry, so the bar names it exactly as the
 /// command palette and its tooltip do — one vocabulary, not a sentence written at the call site.

@@ -122,7 +122,7 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
     // bar's own width arithmetic; `Label` truncates itself (`Ellipsis::End` is its default), so
     // there is nothing left that needs re-running. Keying on it meant every step of a drag threw the
     // whole header away and built a new one — a burst of CPU and a visible flicker in the buttons
-    // (Antonio, driving, 2026-09-03). A resize now re-lays out the retained tree instead.
+    // A resize now re-lays out the retained tree instead.
     let _ = avail_w;
     let w_bucket = 0;
     // Tooltip hints for the configured actions (so a rebind rebuilds the tips).
@@ -198,11 +198,10 @@ pub(crate) fn build_pane_header(
         // narrow for its actions: the words come off first (they become what each button says on
         // hover), then whatever still does not fit moves into a menu behind a trailing ⋮. Before
         // this the cluster was a plain row of icon buttons, and a narrow pane squashed every one of
-        // them to a seven-pixel sliver while the title beside them ellipsed correctly (Antonio,
-        // driving, 2026-09-02).
-        // **Icons, always.** A pane's header is a strip, not a toolbar with room for words — the
-        // labels are still carried, and they are what each button says on hover and what its row
-        // reads once the group has to put it in the menu.
+        // them to a seven-pixel sliver while the title beside them ellipsed correctly. **Icons,
+        // always.** A pane's header is a strip, not a toolbar with room for words — the labels are
+        // still carried, and they are what each button says on hover and what its row reads once
+        // the group has to put it in the menu.
         let mut group = ButtonGroup::new()
             .size(WidgetSize::Header)
             .variant(ButtonVariant::Ghost)
@@ -267,16 +266,15 @@ pub(crate) fn build_pane_header(
             // moves when the content does: zooming changes what the cluster renders, so a button's
             // name or its index among identically-named siblings shifts, and the picker can no
             // longer tell it is the same button — so its letter changes under you
-            // (Antonio, driving, 2026-08-19). `docs/widgets.md` § Identity states the limit:
-            // derived identity is fine for a remembered letter until the label changes.
+            // `docs/widgets.md` § Identity states the limit: derived identity is fine for a
+            // remembered letter until the label changes.
             //
             // **Nothing is declared about picking.** These buttons used to repeat their own click
             // as a hint, purely to win back a letter the picker was withholding from anything
             // inside a pane. The picker counts things now, so a button gets its letter for being a
-            // button (Antonio, 2026-09-04: *"Users/Developers MUST not think where a widget is"*).
-            // **Named for which pane's control it is**, not for what it does. `zoom` is every
-            // pane's zoom; `pane:7-zoom` is this one's, so the picker can offer all of them at
-            // once. `target_identity` used to add the pane in front of it, which meant the name
+            // button. **Named for which pane's control it is**, not for what it does. `zoom` is
+            // every pane's zoom; `pane:7-zoom` is this one's, so the picker can offer all of them
+            // at once. `target_identity` used to add the pane in front of it, which meant the name
             // was only right while that prefixing lasted.
             let button = button.key(crate::chrome::pane_control_key(
                 ctx.pane_id,
@@ -319,8 +317,8 @@ pub(crate) fn build_pane_header(
     // Neither a width nor a height belongs here. It used to carry a pixel width left over from
     // being positioned by hand, and a height computed from the font is the same mistake one step
     // further on: a measurement standing in for "as tall as the space I am in"
-    // (Antonio, driving, 2026-09-02). The pane is a column of two — this bar at its natural height,
-    // the content taking everything left — so the bar is exactly as tall as what is in it.
+    // The pane is a column of two — this bar at its natural height, the content taking everything
+    // left — so the bar is exactly as tall as what is in it.
     let row = Flex::row()
         .width(Length::FULL)
         // **Air between the title and the actions**, as a token — it resolves against the inherited
@@ -330,7 +328,7 @@ pub(crate) fn build_pane_header(
         // host reserves `title_bar_reserve` at the pane top — the bar's content height plus this
         // margin twice over — so carrying the margin here is what makes the bar exactly fill the
         // strip that was reserved for it, instead of sitting at the top of it with dead space
-        // below (Antonio, driving, 2026-09-02).
+        // below.
         .align("center");
     let row = match (bar, buttons) {
         (Some(bar), Some(buttons)) => row.justify("space-between").child(bar).child(buttons),

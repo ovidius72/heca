@@ -110,16 +110,16 @@ impl PaneCard<'_> {
             // above a *blurred photograph of the session*, whose brightness nothing here decides.
             // At 2% the card contributed nothing, so what made it visible at all was the theme's
             // glow: grid_tron has one and its cards read; mocha sets `glow_size = "none"` and its
-            // cards vanished into the scrim, pale `foreground` text and all (Antonio, driving,
-            // 2026-08-13). An opaque `surface` is a box in every theme, and `foreground` on
-            // `surface` is legible by the palette's own construction.
+            // cards vanished into the scrim, pale `foreground` text and all. An opaque `surface` is
+            // a box in every theme, and `foreground` on `surface` is legible by the palette's own
+            // construction.
             .background(theme.colors.surface)
             .radius(theme.colors.control_radius())
             .padding(Spacing::Xs)
             // **The name sits in the middle of the card.** A card in the map is a picture of a
             // pane, not a row in a list: there is no column of names to align down, and a label
-            // against the left edge reads as the start of a list item (Antonio, driving,
-            // 2026-08-13). `Row` already centres on its cross axis; this is the main one.
+            // against the left edge reads as the start of a list item. `Row` already centres on its
+            // cross axis; this is the main one.
             .justify("center")
             // **The card fills the wrapper the parent sized.** `KeyHint` is transparent and hugs
             // its child, so the share or the rect the parent handed the wrapper has to be passed on
@@ -141,8 +141,8 @@ impl PaneCard<'_> {
         //
         // The two fills alone could not carry it: "selected" and "last visited" are one accent ramp
         // eight points apart, tuned for a sidebar ROW — and the same two lifts on a card the size of
-        // a pane read as one colour (Antonio, driving, 2026-08-21). Area changes how a lift reads,
-        // which the theme already knows: a workspace *frame* lifts 0.13 where a row lifts 0.42.
+        // a pane read as one colour. Area changes how a lift reads, which the theme already knows:
+        // a workspace *frame* lifts 0.13 where a row lifts 0.42.
         //
         // So the two states differ in **kind** rather than in strength — the same move `Row` makes
         // between its selected panel and its cursor ring. The current pane takes the accent edge and
@@ -238,9 +238,9 @@ impl PaneCard<'_> {
                 move || choose(id)
             })
             // **Top-left, inside the card.** `CenterRight` put the letter on the card's right
-            // border, where it reads as falling out of the box (Antonio, driving, 2026-08-14) —
-            // and it was invisible as a choice until now, because the deleted host pass drew every
-            // large target's cap in a top band and ignored what the widget declared.
+            // border, where it reads as falling out of the box — and it was invisible as a choice
+            // until now, because the deleted host pass drew every large target's cap in a top band
+            // and ignored what the widget declared.
             .hint_placement(HintPlacement::TopLeft);
         (card, cell)
     }
@@ -273,8 +273,7 @@ fn delete_keys(
         // `Event::Key` deliberately carries no modifiers (a chord is resolved in the keymap, so a
         // widget sees `Char('x')` with or without Shift); the case lives in the text the platform
         // committed, which is exactly what `TextInput` is for — `Shift+2` is `Char('2')` as a key
-        // and `"@"` as text. Reading the key made `X` do what `x` does (Antonio, driving,
-        // 2026-08-11).
+        // and `"@"` as text. Reading the key made `X` do what `x` does.
         let Event::TextInput(typed) = cx.event() else {
             return;
         };
@@ -296,7 +295,7 @@ fn delete_keys(
             // The shipped default is `r`, not `X`: `x` and `X` are the same *key* and only differ
             // as typed text, so the pair read as one gesture with a modifier that the key layer
             // cannot see. Three plain letters, one per thing — pane, column, workspace — is what a
-            // user can actually keep in their head (Antonio, 2026-08-11).
+            // user can actually keep in their head.
             delete(
                 "delete_column",
                 &[("ws_idx", ws_idx as i64), ("col_idx", col_idx as i64)],
@@ -679,7 +678,7 @@ mod tests {
     /// It used to be wrapped in a `KeyHint` — the shape from before `on_hint` moved onto every
     /// widget. The wrapper declared the pick and the card inside was actionable, so a picker saw
     /// two targets where the author had written one thing, and the exposé drew two keycaps on
-    /// every card under its own `s` picker (Antonio, driving, 2026-09-15).
+    /// every card under its own `s` picker.
     ///
     /// `KeyHint` is for a region that is not a widget you can put a builder on. A card is one.
     #[test]

@@ -23,7 +23,7 @@ pub(crate) fn skip(c: &dyn Component) -> bool {
 /// the answer is, and the framework already has a name for it — paint honours `clips_children`,
 /// input honours it (`pointer::hit_test`), and the picker was the one walk that never asked. Three
 /// letters were handed to rows past the fold and their keycaps painted over the top bar and the
-/// status bar (Antonio, driving, F003/P082/T438).
+/// status bar.
 ///
 /// **The same trade input makes**: a child placed deliberately *outside* its clipping ancestor — a
 /// dropdown panel extending past a scroll region — is judged by the clip like anything else. When
@@ -55,9 +55,9 @@ pub(crate) fn narrowed(clip: Option<Rectangle>, node: &dyn Component) -> Option<
 /// **Is this widget hidden by a clipping ancestor?**
 ///
 /// **Any overlap at all counts as visible**, so a row half past the fold keeps its letter — you can
-/// see it, so you can aim at it (Antonio, 2026-08-23: *"a half visible pane row should have the
-/// letter to peek"*). Its keycap is deliberately **not** clipped to match: the letter is drawn whole
-/// so it stays readable, which is the whole point of lettering a row you can only half see.
+/// see it, so you can aim at it. Its keycap is deliberately **not** clipped to match: the letter is
+/// drawn whole so it stays readable, which is the whole point of lettering a row you can only half
+/// see.
 pub(crate) fn out_of_view(node: &dyn Component, clip: Option<Rectangle>) -> bool {
     clip.is_some_and(|c| c.intersection(node.base().bounds).is_none())
 }
@@ -75,8 +75,8 @@ pub(crate) fn out_of_view(node: &dyn Component, clip: Option<Rectangle>) -> bool
 /// ⚠️ **A box with no geometry AT ALL has not been laid out yet** — no position and no size, which
 /// is what every widget's bounds are before the first layout pass. That is *"no answer yet"*, never
 /// *"invisible"*: a chrome tree is rebuilt with zero bounds and laid out afterwards, and judging it
-/// in between calls every row hidden and takes back its letter (Antonio, driving, 2026-08-24). A
-/// widget that is genuinely gone is hidden or invisible, which [`skip`] already catches.
+/// in between calls every row hidden and takes back its letter. A widget that is genuinely gone is
+/// hidden or invisible, which [`skip`] already catches.
 pub(crate) fn collapsed(node: &dyn Component) -> bool {
     let b = node.base().bounds;
     let unplaced = b.loc.x == 0.0 && b.loc.y == 0.0 && b.size.w == 0.0 && b.size.h == 0.0;
@@ -91,8 +91,7 @@ pub(crate) fn unseen(node: &dyn Component, clip: Option<Rectangle>) -> bool {
 }
 
 /// **Can the user act on this widget?** A click, a double click, or a key — the three ways a widget
-/// says "do something to me" (Antonio, 2026-08-17: *"if we have on_click, on_key_up,
-/// on_double_click also maybe it needs to be hintable"*).
+/// says "do something to me".
 ///
 /// **It reads one flag and not the handler list**, because the answer is not in the handler list:
 /// eight widgets — `Button`, `IconButton`, `BadgeButton`, `Toast`, `Choice`, `RailCell`, `Item`,
@@ -137,7 +136,7 @@ pub(crate) fn is_target_of(c: &dyn Component, scope: Option<&str>) -> bool {
 /// Keeping the two apart is what lets a target be taken out of `prefix+/` without also
 /// disappearing from the pick that owns it: the workspaces dock is a keyboard destination for
 /// `prefix+Shift+e` and nothing the ordinary picker should spend a letter on, and it could not be
-/// both until this was separated (Antonio, driving, 2026-09-14).
+/// both until this was separated.
 pub(crate) fn is_addressable(c: &dyn Component) -> bool {
     c.base().hintable && (c.base().hint.is_some() || actionable(c))
 }
@@ -195,7 +194,6 @@ pub fn collect_hints(root: &dyn Component) -> Vec<(Vec<usize>, Rectangle)> {
 /// sharing the predicate — but the walk stayed duplicated, so every rule the collector learned
 /// afterwards reached one picker and not the other. The wrapper rule was the next one: a surface's
 /// own picker lettered both a `KeyHint` wrapper and the widget inside it, two keycaps on one card
-/// (Antonio, driving the exposé, 2026-09-15).
 pub fn collect_hints_scoped(
     root: &dyn Component,
     scope: Option<&str>,
@@ -361,7 +359,7 @@ pub fn hint_targets_of(root: &dyn Component, identity: &str) -> Vec<Vec<usize>> 
 /// speaking for one card from a pane that merely contains buttons. It made a button's letter depend
 /// on what it had been put inside — so every button in a pane's bar had to repeat its own click as a
 /// hint to win its letter back, and the one control the bar builds for itself (the overflow `⋮`) had
-/// nobody to do that for it and silently wore none (Antonio, driving, 2026-09-04).
+/// nobody to do that for it and silently wore none.
 fn hints_into(
     node: &dyn Component,
     path: &mut Vec<usize>,

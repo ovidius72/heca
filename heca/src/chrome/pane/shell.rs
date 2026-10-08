@@ -1,10 +1,9 @@
 //! The pane shell — the frame around whatever app is running inside, and the one thing that
 //! carries the pane's identity and its pick letter.
 //!
-//! Antonio, 2026-08-18: *"the only responsibility of the pane is to draw the key hint letter, zoom
-//! in/out, float/unfloat, split/unsplit, remove"*, and *"terminal should not be responsible to
-//! render letters. They are programs that run inside pane. So pane is the container for every
-//! future app."*
+//! The pane's only jobs are its hint letter, zoom, float, split and remove. A terminal draws no
+//! letters: it is a program running inside the pane, and the pane is the container for every
+//! future app.
 //!
 //! So the shell owns **no content**. A terminal today, a browser or a Neovim GUI later, or a
 //! plugin's own tree — each is a child, and none of them has anything to do with the letter.

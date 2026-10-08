@@ -68,7 +68,7 @@ pub(super) fn component_action(
 /// short name the user wrote. Deriving it a second time is how the exposé's `x` / `r` / `d` stopped
 /// working the moment they moved into config: the cards looked up `delete_pane`, the index held
 /// `heca.expose.delete_pane`, the lookup came back empty, and the letters silently did nothing
-/// (Antonio, driving, 2026-08-12). One rule, both readers.
+/// One rule, both readers.
 pub(crate) fn surface_action_id(
     surface: &str,
     written: &str,
@@ -88,8 +88,8 @@ pub(crate) fn surface_action_id(
 /// exposé's `[[keys.surface]] delete_column = "r"` announce *"missing required argument 'ws_idx' …
 /// cannot be built and will do nothing when pressed"* at every startup — about `delete_column`,
 /// which was then **not** what got bound: the entry resolved to `heca.expose.delete_column`, whose
-/// arguments the map's own cards supply (Antonio, driving, 2026-08-12). A warning about a name the
-/// loader rejected is worse than no warning, because it sends the user to fix a line that is right.
+/// arguments the map's own cards supply. A warning about a name the loader rejected is worse than
+/// no warning, because it sends the user to fix a line that is right.
 pub(super) fn resolves_as_builtin(name: &str, args: &HashMap<String, String>) -> bool {
     resolve_action(name, args).is_some()
 }

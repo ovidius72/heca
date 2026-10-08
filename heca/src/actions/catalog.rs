@@ -356,7 +356,6 @@ impl ActionCatalog {
     /// danger hue. Declared once, in `builtin_confirm_specs`, rather than each surface deciding
     /// from the action's *name* — which is how a pane header came to have `matches!(action, Close)`
     /// written into it, a styling rule keyed to a name that no other surface would ever share
-    /// (Antonio, 2026-09-03).
     ///
     /// Same reasoning as [`icon`](Self::icon): every surface reads it from here instead of
     /// inventing its own, so a menu entry, a header button and the palette cannot drift.

@@ -29,8 +29,7 @@ impl std::str::FromStr for ResizeTarget {
 ///
 /// A pane has two horizontal edges and a resize has to move one of them. Until now it was always
 /// the one below (the one above for the last pane, which has nothing below it) — so `j`/`k` in
-/// resize mode could grow a pane downwards but never move its top edge (Antonio, 2026-09-03:
-/// *"so he can choose which edge moves"*).
+/// resize mode could grow a pane downwards but never move its top edge.
 ///
 /// It is an **argument on the existing `resize` action**, not four new actions. `resize_top` and
 /// friends would each re-state what `resize` already does and then diverge; one action with an edge

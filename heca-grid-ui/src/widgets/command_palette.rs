@@ -1181,8 +1181,8 @@ impl Component for CommandPalette {
         // when a host puts it in a column of overlays, as the showcase does — there its bounds are
         // whatever the flex gave it, the panel is computed against the wrong box, and every row's
         // text lands 76px above the row it belongs to while the icons and keycaps (painted from the
-        // panel, not placed) stay put (Antonio, driving, 2026-08-24). A widget must not infer the
-        // viewport from where it happens to be mounted; the framework already records it.
+        // panel, not placed) stay put. A widget must not infer the viewport from where it happens
+        // to be mounted; the framework already records it.
         let size = self.base.viewport;
         if size.w > 0.0 && size.h > 0.0 && size.w.is_finite() && size.h.is_finite() {
             self.viewport.set(size);

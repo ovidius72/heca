@@ -98,8 +98,7 @@ impl LayerRegistry {
     /// answers to which layer is in front**: painting used the band, input used insertion order,
     /// and nothing made them agree. A `Modal`-band dialog was drawn over the exposé while an
     /// `Overlay`-band map added after it quietly took the pointer, which is how a click on a
-    /// confirm dialog's "Close" reached the map behind it and deleted nothing (Antonio, driving,
-    /// 2026-08-11).
+    /// confirm dialog's "Close" reached the map behind it and deleted nothing.
     ///
     /// A component author never calls this and never declares anything for it: a layer says which
     /// **band** it belongs to, and that is the whole of what it has to know.

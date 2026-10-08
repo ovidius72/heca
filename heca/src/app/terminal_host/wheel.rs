@@ -79,9 +79,8 @@ pub(super) fn on_wheel(
     //   `terminal_mouse && grab`  → forward to terminal
     //   `!terminal_mouse`         → forward to terminal
     //
-    // The wheel only scrolls: it never switches to selection mode (Antonio, 2026-09-29 — a user who
-    // drives heca without the prefix would be left in a mode they never asked for). Typing snaps
-    // the view back to the bottom; selection mode is entered with `enter_selection_mode`.
+    // The wheel only scrolls: it never switches to selection mode. Typing snaps the view back to
+    // the bottom; selection mode is entered with `enter_selection_mode`.
     let shift_held = modifiers.shift;
     let wants_mouse = state
         .backends

@@ -343,7 +343,7 @@ impl ChromeIntentEmitter {
     /// have to ask the identical question, and they cannot while one of them invents an answer.
     /// The `prefix+/` picker asked as `Keyboard` while the chrome tree dispatches as
     /// `MouseLeftSidebar`, so the two disagreed about the domain — the picker offered letters in
-    /// `Container` that execution then refused in `Floating` (Antonio, driving 2026-08-21).
+    /// `Container` that execution then refused in `Floating`.
     pub(crate) fn source(&self) -> crate::app::interaction::InteractionSource {
         self.source
     }
@@ -464,8 +464,8 @@ pub(crate) struct RetainedChrome {
     /// identical question. The `prefix+/` picker judged its candidates as `Keyboard` while this
     /// tree dispatches as `MouseLeftSidebar`; the two resolved to different domains, so the picker
     /// offered letters in `Container` that execution then refused in `Floating` — a letter that did
-    /// nothing (Antonio, driving 2026-08-21). Guessing the source in the filter was the bug; there
-    /// is one authority and this is a copy of it, made at construction.
+    /// nothing. Guessing the source in the filter was the bug; there is one authority and this is a
+    /// copy of it, made at construction.
     pub(crate) intent_source: crate::app::interaction::InteractionSource,
 }
 
@@ -498,7 +498,7 @@ pub(crate) const COLUMN_PICK_SCOPE: &str = "column.destination";
 /// the whole dock actionable and therefore lettered. That letter is a *destination for the
 /// keyboard*, which `prefix+Shift+e` already offers on every dock — so in `prefix+/` it spent one
 /// of the 52 on something with its own binding, once per placement, while the rows inside it were
-/// the things you actually wanted to reach (Antonio, driving, 2026-09-14).
+/// the things you actually wanted to reach.
 ///
 /// Naming the scope keeps it out of `prefix+/`. The dock pick is unaffected: it addresses the
 /// container by key rather than collecting a set, exactly as the column pick does.
@@ -928,8 +928,7 @@ mod tests {
     /// document order. The left button took the name the right one had, and their remembered
     /// `prefix+/` letters swapped with it.
     ///
-    /// Antonio, driving, 2026-08-19: *"toggling the left sidebar the letter are a and s, toggling
-    /// again they get inverted s and a"*.
+    /// Toggling the left sidebar must not swap the two buttons' letters.
     ///
     /// Keyed by the action they run, both identities are stable through every combination of
     /// states — which is the whole point of a key: it comes from the data, not from the picture.
@@ -1809,8 +1808,7 @@ mod tests {
     /// The host wraps every mounted container in a focus scope that clicks to `FocusDock`. That
     /// makes the whole dock actionable, so the ordinary picker lettered it — a letter per
     /// *placement*, pointing at a keyboard destination `prefix+Shift+e` already offers on every
-    /// dock, while the rows inside it were the things worth reaching (Antonio, driving,
-    /// 2026-09-14: "hitting it selects the dockview").
+    /// dock, while the rows inside it were the things worth reaching.
     ///
     /// Naming its scope is what keeps it out. Its own pick still reaches it by name — that is
     /// `a_docks_pick_letter_is_stamped_over_it`, and the two must stay true together.
@@ -2215,8 +2213,7 @@ mod tests {
         // a per-frame input written into the retained tree, not part of what the header is. While
         // they were part of its identity, every command rebuilt the whole bar — twice, at the
         // command's start and finish — and a rebuilt widget paints nothing until the layout walk
-        // gives it a box, so the buttons blinked out and back both times (Antonio, driving,
-        // 2026-09-05).
+        // gives it a box, so the buttons blinked out and back both times.
         let mut other = runtime.clone();
         other.git = Some(GitInfo {
             branch: Some("dev".into()),
@@ -2289,8 +2286,8 @@ mod tests {
         // what the header is — the same rule the pane shell states for its own rect. The bar used to
         // re-run width arithmetic of its own, so a resize had to rebuild it; `Label` truncates
         // itself, so nothing does now. Keying on width meant every step of a drag threw the header
-        // away and built a new one: a burst of CPU and a visible flicker in the buttons (Antonio,
-        // driving, 2026-09-03). It re-lays out instead.
+        // away and built a new one: a burst of CPU and a visible flicker in the buttons. It re-lays
+        // out instead.
         for w in [120.0, 295.0, 1600.0] {
             assert_eq!(
                 base,

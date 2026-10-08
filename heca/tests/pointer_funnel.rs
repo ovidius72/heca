@@ -212,7 +212,6 @@ fn a_right_click_is_handed_to_the_window_tree() {
 /// The window loop returned at `event.state != ElementState::Pressed`, so `Event::Key { pressed:
 /// false }` did not exist in this app. A widget's release handler was therefore dead — the exposé's
 /// `x`/`X`/`d` did nothing on screen while a headless test that dispatched both halves passed
-/// (Antonio, driving, 2026-08-11).
 ///
 /// Exactly the shape of the pointer guards above: the funnel delivering only one half of a gesture,
 /// invisible to every behaviour test, because a test hands the tree both halves itself.
@@ -379,8 +378,8 @@ fn the_window_tree_has_one_door_and_not_a_function_per_kind() {
 /// The library has always had the answer (`Component::next_redraw`, folded down a whole tree and
 /// guarded by `a_pending_tooltip_asks_the_host_to_wake_for_it`). **The host simply never asked**, so
 /// a tooltip stayed hidden under a resting pointer and appeared the moment the mouse moved by a
-/// pixel — the nudge being what produced the frame (Antonio, driving, 2026-09-04). Only the showcase
-/// read it, which is why the widget's own tests were green throughout.
+/// pixel — the nudge being what produced the frame. Only the showcase read it, which is why the
+/// widget's own tests were green throughout.
 ///
 /// A lint, like the rest of this file: what it guards against is *absence*, and nothing fails when
 /// a question is not asked.

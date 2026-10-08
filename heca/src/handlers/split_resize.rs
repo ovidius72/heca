@@ -113,7 +113,6 @@ pub fn handle_resize(state: &mut AppState, action: &WmAction) {
         // `axis` argument saying so as well, and it could only ever repeat the target or name a
         // combination that silently did nothing (`column`+`y`, `pane`+`x`). A key that quietly does
         // nothing is worse than one that is refused, and the argument was never a choice
-        // (Antonio, 2026-09-04).
         match target {
             crate::input::ResizeTarget::Column => {
                 let delta_f = *amount / 1000.0;

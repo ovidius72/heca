@@ -37,7 +37,7 @@ fn the_anchor_is_read_from_the_event_that_asked_for_the_menu() {
 /// It happened: `Clone` rebuilt a bare `Base`, losing `Direction::Column` (whose default is `Row`),
 /// so declared menus laid their rows out **side by side** while the host's own dropdown stayed a
 /// vertical list. Two menus, one widget, two shapes on screen. Thirteen tests here passed, because
-/// none of them looked at where the rows ended up (Antonio, 2026-08-07, with screenshots).
+/// none of them looked at where the rows ended up.
 #[test]
 fn rows_stack_vertically() {
     let opened = recording_sink();
@@ -81,8 +81,8 @@ fn rows_stack_vertically() {
 
 /// **A menu is clamped on its very first frame.** Placement happens during layout, and the
 /// viewport used to be learned one pass later, from the paint — so a menu opened near an edge was
-/// drawn at the raw anchor and then jumped once it had been clamped (Antonio, 2026-08-10). The
-/// layout pass publishes the viewport it was given, so the first placement is the right one.
+/// drawn at the raw anchor and then jumped once it had been clamped. The layout pass publishes the
+/// viewport it was given, so the first placement is the right one.
 #[test]
 fn a_menu_near_the_edge_is_clamped_on_the_first_layout_pass() {
     let viewport = Size::new(400.0, 300.0);

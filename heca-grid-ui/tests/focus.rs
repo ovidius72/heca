@@ -304,7 +304,7 @@ fn a_raw_char_key_is_a_shortcut_not_text() {
 /// — the keyboard's case. What the mouse is on is visible by definition, and scrolling it moves it
 /// out from under the pointer that asked: clicking a row in a scrolled region focused it, the
 /// focus asked for a reveal, the region centred it, and the click was spent — only the second one
-/// did what you meant (Antonio, driving the showcase, F003/P096).
+/// did what you meant.
 #[test]
 fn a_click_does_not_ask_to_be_scrolled_into_view_but_the_keyboard_does() {
     use heca_grid_ui::{Component, FocusManager, Label, Parent as _, PointerButton};

@@ -239,7 +239,7 @@ pub(crate) fn drag_in_flight(state: &crate::app_state::AppState) -> bool {
 /// Until this existed the app never asked at all. The library had the answer and the wake was
 /// guarded (`a_pending_tooltip_asks_the_host_to_wake_for_it`), but only the showcase read it — so in
 /// heca a tooltip stayed hidden under a resting pointer and appeared the instant you nudged the
-/// mouse by a pixel, because the nudge was what produced the frame (Antonio, driving, 2026-09-04).
+/// mouse by a pixel, because the nudge was what produced the frame.
 pub(crate) fn next_redraw_across_trees(state: &crate::app_state::AppState) -> Option<f32> {
     state.window_root.next_redraw()
 }

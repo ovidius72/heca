@@ -234,7 +234,7 @@ impl HecaApp {
             // **The layout's own options too.** They were read once at startup and never again, so
             // editing `overview_gap`, `overview_zoom_from`, the pane gap or
             // `center_focused_column` and pressing reload appeared to do nothing — the settings
-            // were live in the file and dead in the app (Antonio, 2026-08-11). One mapping,
+            // were live in the file and dead in the app. One mapping,
             // `startup::layout_options_from`, shared by both paths so they cannot drift.
             crate::app::startup::apply_layout_options(
                 &mut state.session,

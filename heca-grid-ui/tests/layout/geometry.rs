@@ -183,8 +183,7 @@ fn a_hidden_wrapper_leaves_the_slot_to_the_visible_one() {
 /// there is a real defect, not a theoretical one: a widget added *while* its tree is being laid out
 /// (a button's words put back when a pane widens, an overflow trigger built inside the decision that
 /// needed it) was drawn in the top-left corner of the screen for the frame before the next layout
-/// reached it — a red flicker in the corner throughout a divider drag (Antonio, driving,
-/// 2026-09-03).
+/// reached it — a red flicker in the corner throughout a divider drag.
 ///
 /// The rule is in the one place every widget's paint passes through, so no widget opts in and none
 /// can forget it. The next layout gives the new child a box and it is drawn from then on.

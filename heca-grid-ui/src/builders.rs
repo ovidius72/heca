@@ -948,8 +948,7 @@ pub trait ComponentExt: Component + Sized {
         // the wrong place.
         //
         // Right-click and middle-click are deliberately absent: a right-click opens a context menu
-        // rather than doing the thing, so it should not spend one of the 52 letters (Antonio,
-        // 2026-08-17).
+        // rather than doing the thing, so it should not spend one of the 52 letters.
         use crate::event::EventKind as K;
         if matches!(kind, K::Click | K::DoubleClick | K::Key) {
             self.base_mut().activatable = true;

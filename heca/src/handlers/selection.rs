@@ -173,9 +173,9 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
     // Write to system clipboard.
     set_system_clipboard(&text);
 
-    // Copying ends the selection, however it was made (Antonio, 2026-09-29: `y` and a Shift+drag
-    // release must look the same). Outside selection mode — a mouse selection — that is all; inside
-    // it, the caret below stays where the selection ended so the keyboard can carry on.
+    // Copying ends the selection, however it was made. Outside selection mode — a mouse selection —
+    // that is all; inside it, the caret below stays where the selection ended so the keyboard can
+    // carry on.
     if !matches!(state.input_mode, InputMode::Selection) {
         state.selection.clear();
         return;

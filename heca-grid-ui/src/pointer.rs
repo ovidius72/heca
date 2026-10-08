@@ -234,9 +234,9 @@ fn route_move(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     // and a click would land here", which is false mid-drag: what a release will do is decided by
     // the drop rules, not by what happens to be beneath the cursor. Leaving it on lit a pane card
     // as a column was dragged across it, which reads as "you may drop here" — and the drop then
-    // went somewhere else entirely (Antonio, driving, 2026-09-01). Passing `None` also clears
-    // whatever was lit when the drag began. The drop mark stays: that one is drawn from the
-    // resolved target and is the only truthful feedback while a drag is in flight.
+    // went somewhere else entirely. Passing `None` also clears whatever was lit when the drag
+    // began. The drop mark stays: that one is drawn from the resolved target and is the only
+    // truthful feedback while a drag is in flight.
     let hover = match dragging_path(root).is_some() {
         true => None,
         false => target.as_deref(),

@@ -151,7 +151,7 @@ fn hovering_a_stacked_cards_action_lights_it_and_claims_the_move() {
 /// A repaint cannot fix a structural change: the siblings are still laid out around the shape the
 /// tree used to have. The stack drops a card only once its exit has played — several frames after
 /// the click — and nothing re-laid-out at that moment, so the cards below kept their old positions
-/// until an unrelated click happened to trigger a pass (Antonio, driving the showcase, F003/P096).
+/// until an unrelated click happened to trigger a pass.
 #[test]
 fn a_dismissed_card_asks_for_the_relayout_that_moves_the_others_up() {
     use heca_grid_ui::{ToastSpec, ToastStack};
