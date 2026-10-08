@@ -161,7 +161,7 @@ pub(crate) fn action_tooltip<C: Component + heca_grid_ui::ComponentExt + 'static
     // for a button, so it hands over the one it already built. A closure is opaque, and a host
     // cannot ask its policy about an opaque thing: the `prefix+/` picker therefore lettered the
     // sidebar toggles while a pane was floating, even though `sidebar_left` is `TiledOnly` and the
-    // click was already being refused (Antonio, driving 2026-08-21). The letter did nothing.
+    // click was already being refused. The letter did nothing.
     //
     // Naming it here rather than at each button is the whole point of this function: it is the one
     // place a chrome button's action name is known, which is why the tooltip and its live keybinding

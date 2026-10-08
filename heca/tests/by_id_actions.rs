@@ -9,8 +9,7 @@
 //!
 //! That is what happened: `handle_close_pane_by_id` looked in `active_workspace_mut()` alone, so
 //! deleting a pane from the exposé's first row worked and from its second row did nothing at all —
-//! no error, no log, the confirm dialog accepted and the pane still there (Antonio, driving,
-//! 2026-08-11).
+//! no error, no log, the confirm dialog accepted and the pane still there.
 //!
 //! A **lint**, because the thing it guards cannot be unit-tested: every one of these handlers takes
 //! `&mut AppState`, which needs a window, so there is no headless call to make. It reads the source

@@ -2277,9 +2277,8 @@ mod tests {
         snapshot.debug_assert_valid();
     }
 
-    /// **The cursor stays on the prompt when you scroll back** (Antonio, 2026-09-29: *"scroll brings
-    /// the cursor up and down and not at the prompt"*). It moves down with its text, and is hidden
-    /// once the prompt has scrolled out of view — never left behind on old output.
+    /// **The cursor stays on the prompt when you scroll back**. It moves down with its text, and is
+    /// hidden once the prompt has scrolled out of view — never left behind on old output.
     #[test]
     fn the_cursor_moves_with_its_prompt_when_the_view_is_scrolled_back() {
         let mut engine = viewport_engine(20, 4, 3500);

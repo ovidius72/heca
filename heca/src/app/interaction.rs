@@ -274,8 +274,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
     // being driven", and it is what permits a component's own cursor verbs
     // (`workspaces.delete_selected`, the `j`/`k` nav). While a menu, the palette or the exposé is
     // up, the keys belong to *it* — so a key it had no use for must not fall through and drive the
-    // dock underneath it. Antonio, 2026-08-10: right-clicking a sidebar row opened its menu and
-    // `j`/`k` went on moving the pane cursor behind it.
+    // dock underneath it: with a row's menu open, `j`/`k` must not move the pane cursor behind it.
     //
     // The layer used to swallow every key it did not want, by hand, which is the same rule written
     // in the wrong place: it also ate `q` and `Esc`, which are catalogued actions the host resolves
@@ -299,9 +298,8 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
 /// exactly where they disagree: the map declares `lock: false` because you can still see
 /// the panes through it, and that geometric truth was also, accidentally, saying "the base context
 /// is still live". So `prefix+j` moved the focused pane behind the map, `prefix+p` opened the
-/// palette over it, and `prefix+/` picked sidebar rows the user could not see (Antonio,
-/// 2026-08-12). §6's invariant names the shape of that bug: if you are special-casing a surface,
-/// the surface is mis-modelled.
+/// palette over it, and `prefix+/` picked sidebar rows the user could not see. §6's invariant names
+/// the shape of that bug: if you are special-casing a surface, the surface is mis-modelled.
 ///
 /// So the coarse question is asked coarsely. `modal` on a layer already answers it — it means
 /// "this layer takes the keyboard" (`layers.rs`) — and coverage goes back to meaning only what it
@@ -313,8 +311,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
 /// does — only [`InteractionSource::Surface`] separates them. They fall through and are judged like
 /// anyone else's, by the action's declared policy against the session's domain. That is not an
 /// allow-list: a plugin's layer is treated identically for whatever actions it declares, which is
-/// the point (Antonio: *"each overlay might use its own actions and keybindings so we risk blocking
-/// future actions"*).
+/// the point.
 fn base_context_is_dormant(
     active_context: Option<SurfaceKey>,
     content_covered: bool,
@@ -582,7 +579,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // cursor move was judged the container no longer held the keyboard and it was refused —
         // the click focused the pane but left the cursor behind, and arrowing afterwards resumed
         // from wherever it had been. A row should behave like a file manager's: click it, then go
-        // up and down from there (Antonio, driving, 2026-09-02).
+        // up and down from there.
         //
         // `Global`, not `AlwaysAllowed`: a floating pane is no reason to refuse moving a dock's
         // cursor, and `AlwaysAllowed` is refused while something covers the content.
@@ -1038,7 +1035,6 @@ pub(crate) fn dispatch_intent(
             // **Say WHAT was refused, not only who asked.** The source alone cannot be acted on: a
             // single click can send more than one intent, so identical lines may be different
             // refusals — and one of them being correct says nothing about the others
-            // (Antonio, driving, 2026-09-02).
             #[cfg(debug_assertions)]
             eprintln!("[heca] interaction: blocked {refused:?} from {source:?}");
         }
@@ -1547,7 +1543,7 @@ mod tests {
 
     /// **The chain a `prefix+/` candidate is judged by, end to end** (F003/P082/T432).
     ///
-    /// Antonio, driving 2026-08-18: with a floating pane active, `prefix+/` lettered every pane and
+    /// With a floating pane active, `prefix+/` lettered every pane and
     /// every sidebar row naming one, and pressing a letter did **nothing**. This is why — and now
     /// it is asked one moment earlier, so the letter is never offered.
     ///
@@ -1661,8 +1657,8 @@ mod tests {
 
     /// **The exposé's defect, as a rule.** The map declares `lock: false` — you can see
     /// the panes through it, and that is geometrically true — so the old gate said the base context
-    /// was still live and `prefix+j` drove the session behind it (Antonio, 2026-08-12). What makes
-    /// a context active is that it took the keyboard, not what it painted over.
+    /// was still live and `prefix+j` drove the session behind it. What makes a context active is
+    /// that it took the keyboard, not what it painted over.
     #[test]
     fn a_surface_that_took_the_keyboard_makes_the_base_context_dormant_even_if_it_covers_nothing() {
         assert!(base_context_is_dormant(

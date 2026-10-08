@@ -290,10 +290,9 @@ mod tests {
         );
         // **And neither is a way out of an overlay.** `close_overlay` shipped as a global `q` +
         // `Ctrl+q`, so both were taken from the program in the pane whether or not an overlay was
-        // up: `:q` in vim stopped at the colon, in every terminal (Antonio, driving, 2026-08-20).
-        // They live in the `layer` floor now, which is consulted only while a layer holds the
-        // keyboard — and `Ctrl+q` is `quoted-insert` in emacs and readline, so shadowing it
-        // globally was wrong twice over.
+        // up: `:q` in vim stopped at the colon, in every terminal. They live in the `layer` floor
+        // now, which is consulted only while a layer holds the keyboard — and `Ctrl+q` is
+        // `quoted-insert` in emacs and readline, so shadowing it globally was wrong twice over.
         for key in ["q", "Ctrl+q"] {
             assert_eq!(
                 keymaps

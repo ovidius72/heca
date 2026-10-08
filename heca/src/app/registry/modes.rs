@@ -222,7 +222,7 @@ mod tests {
     /// `keys` takes one combo, several comma-separated, or a list, and the three are the same
     /// binding. It was a bare `String` in `[[keys.mode.bindings]]` alone, so a mode block needed a
     /// repeated entry per key while `[keys]` beside it took a list — the same capability spelled
-    /// two ways in two tables (Antonio, 2026-08-21: *"why not `keys = ["q", "Ctrl+q"]`?"*).
+    /// two ways in two tables.
     #[test]
     fn a_binding_takes_one_key_a_list_or_a_comma_separated_string() {
         let mode_with = |keys: BindingValue| {

@@ -42,7 +42,7 @@ fn press_in_mode(mode: &str, combo: &KeyCombo, escape: bool, enter: bool) -> Mod
 
 /// **Cmd+V as the keyboard sends it** — built by the same function the app calls on a key
 /// press, not parsed from text. A mode used to rebuild the key without Cmd, so Cmd+V reached
-/// selection mode as a bare `v` and began a selection instead of pasting (Antonio, 2026-09-29).
+/// selection mode as a bare `v` and began a selection instead of pasting.
 #[test]
 fn cmd_v_as_pressed_pastes_in_selection_mode() {
     use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
@@ -61,9 +61,9 @@ fn cmd_v_as_pressed_pastes_in_selection_mode() {
     );
 }
 
-/// **A key a mode does not bind reaches the normal bindings** (Antonio, 2026-09-29: *"it seems
-/// we don't have paste"*) instead of being thrown away — so Cmd+V pastes in a mode that never
-/// mentions it, like resize, and a normal key such as `Shift+Home` still scrolls while selecting.
+/// **A key a mode does not bind reaches the normal bindings** instead of being thrown away — so
+/// Cmd+V pastes in a mode that never mentions it, like resize, and a normal key such as
+/// `Shift+Home` still scrolls while selecting.
 #[test]
 fn a_key_a_mode_does_not_bind_reaches_the_normal_bindings() {
     assert_eq!(
@@ -113,9 +113,8 @@ fn dock(mount: &str, kind: &str) -> FocusedSurface {
     }
 }
 
-/// **THE REGRESSION** (F003/P082/T428). Antonio, driving 2026-08-13: entering a sidebar pane
-/// list with `prefix+/` or `prefix+e`, *"I'm not able to exit without selecting anything. I
-/// should be able to do Esc and go back to normal in the scrolling area."*
+/// **THE REGRESSION**: after entering a sidebar pane list with `prefix+/` or `prefix+e`, `Esc`
+/// must leave it and hand the keyboard back to the scrolling area.
 ///
 /// The keymap and the floor were both correct the whole time; a **global** `Escape` bound to
 /// `close_overlay` resolved first and consumed the key, closing nothing because no overlay was
@@ -177,9 +176,8 @@ fn a_surfaces_own_keys_come_before_its_floor() {
 ///
 /// The global map is the fallback for what nothing in front claimed, so a key there is taken
 /// from the program in the pane whether or not an overlay is up. `close_overlay` shipped as a
-/// global `q`, and `:q` in vim stopped at the colon — in every terminal, always (Antonio,
-/// driving, 2026-08-20). Declared here it exists only while a layer holds the keyboard, which
-/// is the same thing tmux's key tables do.
+/// global `q`, and `:q` in vim stopped at the colon — in every terminal, always. Declared here it
+/// exists only while a layer holds the keyboard, which is the same thing tmux's key tables do.
 #[test]
 fn closing_an_overlay_is_a_layer_key_never_a_global_one() {
     let (modes, components) = defaults();

@@ -88,7 +88,7 @@ impl WorkspaceFrame<'_> {
         // both call `key`, and `key_at` — which is how a right-click finds out what it
         // landed on — reads exactly that. The workspace header pushed its key into the signal list
         // and never told the widget, so the hit-test found nothing there: right-clicking a pane or
-        // a column opened its menu, a workspace opened none (Antonio, 2026-08-05).
+        // a column opened its menu, a workspace opened none.
         dock = dock.key(workspace_key(ws_id));
         // The workspace row's own menu, declared like the other two. The bug in the comment above
         // is the reason this phase exists: a menu resolved from a *position* needs a declaration

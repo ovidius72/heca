@@ -8,7 +8,7 @@
 //!
 //! Nothing fails when that happens. The letters simply move under whoever is driving, and no test
 //! anywhere goes red — which is exactly how the pane-header buttons' letters came to shift while
-//! Antonio was using them (F011/P094/T451). So the rule is enforced by **reporting**, in the two
+//! they were being used. So the rule is enforced by **reporting**, in the two
 //! places a rule can be reported from:
 //!
 //! | half | what it looks at | who it is for |

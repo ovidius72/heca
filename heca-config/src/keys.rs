@@ -161,7 +161,7 @@ pub struct ModeBindingConfig {
     /// keys is one entry wherever it is written: `keys = ["q", "Ctrl+q"]` here reads exactly as it
     /// does in `[keys]` or `[[keys.surface]]`. It was a bare `String` until 2026-08-21, which meant
     /// a mode block needed a whole repeated `[[keys.mode.bindings]]` per key — the same capability
-    /// spelled two ways in two tables (Antonio: *"why not `keys = ["q", "Ctrl+q"]`?"*).
+    /// spelled two ways in two tables.
     #[serde(alias = "key")]
     pub keys: BindingValue,
     /// Arguments for parameterized actions.

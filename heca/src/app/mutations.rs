@@ -25,15 +25,15 @@ fn after_mutation_change_inner(state: &mut AppState, kind: MutationKind) {
             // and, since F003/P082/T420, **not the window changing shape either**.
             //
             // `Config` used to rebuild too, because the exposé resolved a zoom from the room it had
-            // when it was *built*, so an un-rebuilt layer kept the old window's zoom (Antonio,
-            // driving, 2026-08-12). That zoom is gone: the map is **shares** now, and a share
-            // re-lays-out for free at any size — there is nothing left for a rebuild to recompute.
+            // when it was *built*, so an un-rebuilt layer kept the old window's zoom. That zoom is
+            // gone: the map is **shares** now, and a share re-lays-out for free at any size — there
+            // is nothing left for a rebuild to recompute.
             //
             // Rebuilding on resize is not merely wasted work, it is destructive: a rebuild throws
             // the widget tree away, and with it everything living *in* the tree — every hint letter
             // currently offered, and the open state of a picker the user has up. Dragging the
             // window edge with the map open therefore blanked its letters on the first frame of the
-            // drag (Antonio, driving, 2026-08-24). A resize now re-lays-out what is already there.
+            // drag. A resize now re-lays-out what is already there.
             if matches!(kind, MutationKind::Layout) {
                 refresh_visible_layers(state);
             }
@@ -48,8 +48,7 @@ fn after_mutation_change_inner(state: &mut AppState, kind: MutationKind) {
 /// replaces a prop, never a child, so staying current means being rebuilt. Until now that happened
 /// only when a layer was *shown*, which is fine for opening it and wrong for everything that
 /// happens while it is open: deleting a pane from the exposé removed it from the session and left
-/// its card on screen, and only closing the map revealed that it had worked (Antonio, driving,
-/// 2026-08-11).
+/// its card on screen, and only closing the map revealed that it had worked.
 ///
 /// Here rather than in each handler, because "the map went stale" is not a property of any one
 /// action — it is a property of the session having changed, which is exactly what this hook means.

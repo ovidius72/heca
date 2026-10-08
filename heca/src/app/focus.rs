@@ -162,7 +162,7 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     // **And where back-and-forth would take you** — published AFTER the history above is written
     // for this focus change, not before it. Read a moment too early and the slot still holds the
     // previous change's answer, which right after a move is the pane you just arrived on: the mark
-    // then lands under the selection panel and is invisible (Antonio, driving, 2026-08-13).
+    // then lands under the selection panel and is invisible.
     //
     // The one field `prefix+i` itself reads — never a second history. A pane that has since closed
     // is no answer: leave the mark off rather than on a ghost.
@@ -170,12 +170,12 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     // **Every workspace's slot, not just this one.** The history above is only written for a
     // same-workspace move (`prev_ws == current_ws`), so after a jump the pane you would return to
     // lives in the workspace you came from — reading only the current slot marks nothing at all
-    // (Antonio, driving, 2026-08-13). The mark the sidebar shows is the one for the workspace it
-    // is drawing, so publish the whole set and let each row ask for its own.
-    // **Exactly the two panes a binding would take you to — no others.**
+    // The mark the sidebar shows is the one for the workspace it is drawing, so publish the whole
+    // set and let each row ask for its own. **Exactly the two panes a binding would take you to —
+    // no others.**
     //
     // Publishing every workspace's slot marked a pane in workspaces nothing would return you to,
-    // so most of the marks meant nothing (Antonio, driving, 2026-08-13).
+    // so most of the marks meant nothing.
     //
     // - **local** (`prefix+i`): this workspace's remembered pane.
     // - **global** (`prefix+Shift+i`): the last-visited workspace's **active** pane — what

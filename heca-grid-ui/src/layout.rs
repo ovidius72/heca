@@ -160,9 +160,7 @@ impl LayoutEngine {
         // it needs its scrollbar — and it says so from `on_layout`, which runs *after* the pass
         // that told it. Left to the host's own `needs_layout` check, that answer lands on the NEXT
         // frame, so the arrangement being replaced is painted once first. That is a visible flash,
-        // and no caller can prevent it or is even in a position to know about it (Antonio, driving,
-        // 2026-09-05: the pane header's buttons blinked on every command, on a focus change, on a
-        // split, and when the working directory was detected — four symptoms, one widget).
+        // and no caller can prevent it or is even in a position to know about it.
         //
         // So the pass repeats here until nothing asks again. The host's check still exists and is
         // still right: it catches a layout asked for by something *other* than a layout — a signal

@@ -18,8 +18,7 @@ use heca_grid_ui::widgets::{Ellipsis, Label};
 /// surface showing a name has to remember two things — `truncate`, and the shrinkability that makes
 /// the cut reachable. The exposé's cards did not: narrow the window until the cards are slivers and
 /// every name painted straight across its neighbours, three of them overlapping into one smear
-/// (Antonio, driving, 2026-08-24). Asking here means no surface has to ask, and a surface added
-/// tomorrow inherits it.
+/// Asking here means no surface has to ask, and a surface added tomorrow inherits it.
 ///
 /// Making the cut `Label`'s own default was tried and reverted the same day: a label that may
 /// shrink to nothing *does*, and a `Card`'s title vanished entirely. Cutting belongs to the kinds

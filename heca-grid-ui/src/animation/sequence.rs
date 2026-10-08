@@ -19,9 +19,8 @@ use super::{Animate, AnimationFrame};
 ///
 /// **Small.** At `0.66` the exposé held fully opaque for two thirds of its shrink and then dropped
 /// — movement with no dissolve, then dissolve with no movement, and the step between them read as
-/// a flash on the way out (Antonio, driving, 2026-08-19). The follower has to **ride** the lead,
-/// not follow it: one gesture, not two. A short lead-in is all that is wanted, so the surface is
-/// still solid as it starts to move.
+/// a flash on the way out. The follower has to **ride** the lead, not follow it: one gesture, not
+/// two. A short lead-in is all that is wanted, so the surface is still solid as it starts to move.
 ///
 /// # It is an animation itself
 ///

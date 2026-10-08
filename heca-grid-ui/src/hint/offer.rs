@@ -126,7 +126,7 @@ pub fn offer_hint(root: &dyn Component, path: &[usize], label: Option<String>) -
 ///
 /// So the search is: the named node's own hint, else the nearest one **beneath** it, else the
 /// nearest one **enclosing** it. Searching one direction only is why every sidebar row stayed dark
-/// under `prefix+q` while the docks lit correctly (Antonio, driving, 2026-08-14).
+/// under `prefix+q` while the docks lit correctly.
 pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>) -> bool {
     /// What a walk carries down: the nearest target above, the nearest declaration above, and the
     /// clip the ancestors impose.
@@ -310,7 +310,7 @@ pub fn clear_hints(root: &dyn Component) {
 /// The case it was written for: a pane's header shows the foreground program and whether the last
 /// command succeeded. Both change twice per command, and while they were part of the header's
 /// *identity* every command threw the whole header away and built a new one — the buttons blinked
-/// out and back twice, which is what a user sees as a flash (Antonio, driving, 2026-09-05).
+/// out and back twice, which is what a user sees as a flash.
 ///
 /// Addressed by the node's own declared key, exactly as [`offer_hint_by_key`] is, so there is
 /// nothing to register and nothing to release when the tree does change for a real reason.

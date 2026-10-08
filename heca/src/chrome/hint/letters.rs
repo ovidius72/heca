@@ -218,10 +218,10 @@ fn offer_in_every_tree(
     let mut offered = false;
     offered |= heca_grid_ui::offer_hint_by_key(&state.window_root, key, label.clone());
     // **A pane behind a sidebar loses its letter — the pane, not the pick.** Its keycap draws on
-    // the overlay layer, so it would land on top of the very thing covering it (Antonio, driving,
-    // 2026-08-19). Its sidebar row is a second view of the same pane and IS visible, so it still
-    // wears the letter and the pane stays reachable — which is why this filters the VIEW rather
-    // than the candidate. Visibility is asked of `resolve_hint_layers`, never re-derived here.
+    // the overlay layer, so it would land on top of the very thing covering it. Its sidebar row is
+    // a second view of the same pane and IS visible, so it still wears the letter and the pane
+    // stays reachable — which is why this filters the VIEW rather than the candidate. Visibility is
+    // asked of `resolve_hint_layers`, never re-derived here.
     //
     // The header is the same pane's other view and is asked the same question. It used to be asked
     // none at all, because the answer arrived as a set of pane *ids* and only the shell loop knew
@@ -241,7 +241,7 @@ fn offer_in_every_tree(
     //
     // This used to be two paths — each tiled pane offered through its own surface, and then every
     // column offered again with no visibility check, which put the withdrawn letter straight back
-    // (Antonio, driving, 2026-09-24). One path now (F003/P082/T474's node, one door).
+    // One path now (F003/P082/T474's node, one door).
     offered |= crate::chrome::workspace::offer_to_columns(state, key, label.clone(), |pane| {
         visible.surfaces.contains(&HintSurface::Pane(pane))
     });
@@ -258,8 +258,7 @@ fn offer_in_every_tree(
 ///
 /// Nothing on screen shows the difference while a picker opens and closes over a still layout,
 /// which is why it survived the fix that was supposed to cover it: **resizing the window** grows
-/// the panes until they slide under the sidebar, and the letters stayed behind (Antonio, driving,
-/// 2026-08-24).
+/// the panes until they slide under the sidebar, and the letters stayed behind.
 fn label_for(label: &Option<String>, visible: bool) -> Option<String> {
     label.clone().filter(|_| visible)
 }

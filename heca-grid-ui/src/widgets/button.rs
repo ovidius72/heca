@@ -480,7 +480,7 @@ impl Component for Button {
         // away.** A destructive button in a quiet row is the only framed one, and that is the
         // style speaking: danger is boxed. Handing it the row's chrome and leaving it only the hue
         // was tried and rejected — the variant is what the button looks like, not a colour a
-        // parent may restyle (Antonio, 2026-09-03).
+        // parent may restyle.
         if self.variant == ButtonVariant::default() {
             self.variant = variant;
         }
@@ -499,7 +499,7 @@ impl Component for Button {
             // passes taffy makes — it reported its full height and was then placed as though it had
             // almost none, so the button (and anything holding it) sat low and hung out of its row.
             // Reproduced with a plain `Flex` holding one icon-only button, which is how it was found
-            // (Antonio, driving, 2026-09-03). A child that is not there has no such disagreement.
+            // A child that is not there has no such disagreement.
             self.base.children.retain(|c| c.text_summary().is_none());
         } else if !self.label.is_empty() {
             self.base
@@ -558,7 +558,7 @@ impl Component for Button {
         // It belongs here rather than in whatever container happens to hold the button, so a plain
         // [`Flex`](crate::widgets::Flex) of icon buttons is right without its author knowing to ask
         // — which is how the defect arrived: a container told its own children not to give way and
-        // could not tell the one control it had built itself (Antonio, driving, 2026-09-04).
+        // could not tell the one control it had built itself.
         //
         // ⚠️ **It only ever tightens.** A container may have its own reason to hold a *worded*
         // button rigid — [`ButtonGroup`](crate::widgets::ButtonGroup) does, because a row that

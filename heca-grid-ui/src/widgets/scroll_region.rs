@@ -908,7 +908,7 @@ impl ScrollRegion {
             // one card to the middle can only push its neighbours off the edges — which is exactly
             // what an exposé must never do. The map showed a screen of empty space on the left with
             // the last column clipped on the right, because the cursor card was being centred in a
-            // strip that already fitted twice over (Antonio, with a screenshot, 2026-08-12).
+            // strip that already fitted twice over.
             //
             // When it **overflows** — only reachable here with `overscroll`, which has no ends to
             // clamp against — centre the cursor, because then there really is something off-screen
@@ -963,7 +963,7 @@ impl ScrollRegion {
         // **Overscroll is a cushion past the ends, and content that fits has no ends.** Applied
         // unconditionally it handed a full viewport of travel in each direction to a map with
         // nothing off screen, so the wheel carried the whole picture out of the window and there
-        // was no way back but the keyboard (Antonio, driving, 2026-08-12).
+        // was no way back but the keyboard.
         match self.overscroll && self.axes.is_vertical() && max > 0.0 {
             true => (-self.base.bounds.size.h, max + self.base.bounds.size.h),
             false => (0.0, max),
@@ -1723,7 +1723,7 @@ mod tests {
     /// **A wheel over content that fits does nothing.** `overscroll` exists so a map larger than
     /// the window can be pushed past its ends; applied to content with no ends it gave a full
     /// viewport of travel in each direction, and the wheel carried the whole exposé off screen
-    /// with no way back but the keyboard (Antonio, driving, 2026-08-12).
+    /// with no way back but the keyboard.
     #[test]
     fn overscroll_gives_no_travel_to_content_that_fits() {
         let mut r = region_with_children(&[40.0, 40.0]); // content 80, viewport 100
@@ -2268,8 +2268,7 @@ mod tests {
     /// the centring pad, so `max_offset` is `0` whenever it fits, and clamping the range to
     /// `[0, 0]` left it "frozen under the mouse".
     ///
-    /// Antonio, driving, reversed it: *"mouse wheel can still scroll even if there's no need and
-    /// put card off the screen"*. Freedom to scroll what is entirely visible is not responsiveness,
+    /// That is reversed: the wheel must not scroll content that already fits. Freedom to scroll what is entirely visible is not responsiveness,
     /// it is a way to lose the picture — and in the exposé it did exactly that, wheeling the whole
     /// map out of the window with no way back but the keyboard. Overscroll is a **cushion past the
     /// ends**; content that fits has no ends to cushion.

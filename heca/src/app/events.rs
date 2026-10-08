@@ -110,8 +110,8 @@ pub(crate) fn handle_window_event(
             // `Event::Key { pressed: false }` never existed in this app, so
             // `ComponentExt::on_key_up` was a builder nothing could ever fire — the exposé's
             // delete keys did nothing while a headless test that dispatched both halves passed
-            // (Antonio, driving, 2026-08-11). The same shape as the right-click that never opened
-            // a menu because the funnel delivered only presses.
+            // The same shape as the right-click that never opened a menu because the funnel
+            // delivered only presses.
             //
             // Only the key itself goes down this path — no text, no resolved intents — which is
             // `Keymap::deliver_release`'s whole contract; and none of the keymap machinery below

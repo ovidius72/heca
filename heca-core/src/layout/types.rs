@@ -231,9 +231,9 @@ impl Default for LayoutOptions {
             overview_gap: 0.1,
             // **Off by default: an exposé shows everything.** A floor sounds prudent and is not —
             // set to 140px it bound on an ordinary session of three workspaces, holding the zoom a
-            // hair above the vertical fit so two of the three rows fell off the bottom (Antonio,
-            // with a screenshot, 2026-08-12). Small cards are an honest picture of a large session;
-            // hiding two thirds of it is not. A user who would rather scroll than squint sets one.
+            // hair above the vertical fit so two of the three rows fell off the bottom. Small cards
+            // are an honest picture of a large session; hiding two thirds of it is not. A user who
+            // would rather scroll than squint sets one.
         }
     }
 }

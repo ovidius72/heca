@@ -60,7 +60,7 @@ fn choose_alpha_mode(
 /// Called at startup *and* on every `prefix+Shift+r`, because a setting the user can edit and only
 /// the startup path reads is a setting that silently does not reload: `overview_gap` and
 /// `overview_zoom_from` were both read once and never again, so changing them and
-/// reloading appeared to do nothing at all (Antonio, 2026-08-11).
+/// reloading appeared to do nothing at all.
 pub(crate) fn layout_options_from(
     app_config: &AppConfig,
 ) -> heca_core::layout::types::LayoutOptions {

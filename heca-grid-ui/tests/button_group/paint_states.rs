@@ -56,7 +56,7 @@ fn a_group_pinned_to_icons_never_renders_its_words() {
 
 /// **An icon-only button is square.** The horizontal room a button reserves is there for text, so
 /// one with none is too wide by exactly that much — which is what made a pane's header buttons look
-/// oversized (Antonio, driving, 2026-09-03).
+/// oversized.
 #[test]
 fn a_button_with_no_words_is_not_padded_for_them() {
     let wide = {
@@ -108,7 +108,7 @@ fn a_tooltip_does_not_inherit_an_emphasised_control_size() {
 /// passes the layout makes: it reported its full height and was then placed as though it had almost
 /// none, so it hung below its row and took the picker's letters with it. Found by reproducing it
 /// with a plain `Flex` holding one such button, which is why this guards the button rather than the
-/// group (Antonio, driving, 2026-09-03).
+/// group.
 #[test]
 fn an_icon_only_button_is_placed_where_its_row_puts_it() {
     use heca_grid_ui::Align;

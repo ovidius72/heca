@@ -789,8 +789,7 @@ pub struct AppState {
     /// happens on its own. The widget says how long it needs (`Component::next_redraw`, folded down
     /// a whole tree), the loop sleeps until then, and **this is what makes the loop actually draw
     /// when it gets there** — without it, waking finds every reason-to-draw false and goes straight
-    /// back to sleep, which is a tooltip that appears only when you nudge the mouse (Antonio,
-    /// driving, 2026-09-04).
+    /// back to sleep, which is a tooltip that appears only when you nudge the mouse.
     ///
     /// Same shape as [`bell_flash_until`](Self::bell_flash_until): a deadline the frame loop reads,
     /// never a per-widget timer the host would have to keep in step.
@@ -823,7 +822,7 @@ pub struct AppState {
     /// cursor back where it was. Its per-workspace memory above cannot answer that on its own: it
     /// is read at the *active* workspace's index, so a rebuild while the cursor sat in another
     /// row moved the highlight to the active row — which reads as the map jumping to a different
-    /// workspace the moment you delete a pane (Antonio, driving, 2026-08-11).
+    /// workspace the moment you delete a pane.
     ///
     /// Only consulted while the map is **already up**. Opening it fresh still starts at the
     /// workspace you are standing in, which is what the memory above is for.
@@ -844,9 +843,8 @@ pub struct AppState {
     /// on every pick from what is actually on screen, so a target that has gone releases its letter
     /// instead of holding one nobody can reach.
     ///
-    /// Antonio, driving, 2026-08-17: *"I want to expand a pane, prefix+/ and `k` appears on that
-    /// icon… then I want to collapse. prefix+/ and `j` appears on that button, while I was expecting
-    /// `k`."* The letter was the target's **index**, so anything appearing earlier in the tree
+    /// A button that turns into its opposite (expand, then collapse) must keep its letter. The
+    /// letter was the target's **index**, so anything appearing earlier in the tree
     /// shifted every letter after it.
     pub remembered_letters: std::collections::HashMap<String, char>,
     /// Whether mouse interactions are enabled.

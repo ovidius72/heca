@@ -63,7 +63,7 @@ pub struct Theme {
     /// Not derived from the widget the letter sits on. A size variant scales what a widget draws as
     /// its *own content*; a letter is chrome the framework stamps over it and belongs to the picker,
     /// which is app-wide. Read from the target instead, an emphasized header button wore a letter a
-    /// quarter larger than the pane's own, in the same picker (Antonio, driving, 2026-09-03).
+    /// quarter larger than the pane's own, in the same picker.
     ///
     /// Configurable as `[appearance] hint_font_size`.
     pub hint_font_size: f32,

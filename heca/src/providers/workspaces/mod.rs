@@ -176,7 +176,7 @@ impl Provider for WorkspacesContainerProvider {
         // `Global` is the one policy no domain refuses, so with a floating pane active the picker
         // offered a letter on every sidebar row naming a pane: pressing one moved the cursor while
         // the pane focus was refused underneath (`blocked intent from Provider`) — a letter that
-        // half worked, which is worse than one that does nothing (Antonio, driving 2026-08-21).
+        // half worked, which is worse than one that does nothing.
         //
         // This is the declaration telling the truth about itself, which is the *only* input the
         // picker's filter takes. That filter knows nothing about panes, rows or workspaces, and it
@@ -339,8 +339,7 @@ impl Provider for WorkspacesContainerProvider {
                 // not merely refrain from releasing it. Written as one rule for every caller: from
                 // `Space` the dock already has it and this is a no-op; from `prefix+/`, the palette
                 // or RPC the keyboard was elsewhere, and without this the cursor moved somewhere the
-                // user could not then drive with `j`/`k`. Antonio, 2026-08-10, driving the picker:
-                // *"it activates the pane but the keyboard goes to the terminal"*.
+                // user could not then drive with `j`/`k`.
                 //
                 // **Unguarded on purpose.** `focus_dock` only focuses — aimed at the dock that already
                 // holds the keyboard it changes nothing (the release is `toggle_dock`) — so there is
@@ -738,8 +737,7 @@ fn pane_row_press(pane_id: PaneId) -> Intent {
 /// A click on a row means *go there and leave*: `focus_pane` + the dock releasing the keyboard. A
 /// pick means *look at that one*, so it moves the cursor onto the picked row and brings its pane to
 /// the front **without leaving the dock** — this component's own `peek_selected`, aimed at a row by
-/// its nav key instead of the cursor. Antonio, 2026-08-07: *"i want it to focus the cursor in the
-/// hinted letter and is good if the pane gets active"*.
+/// its nav key instead of the cursor.
 ///
 /// Pointing one intent at both gestures is precisely the bug this replaces: commit `e712d70`
 /// (2026-07-30) made the row's hint target fire the row's *click*, and `prefix+/` on a sidebar row
@@ -932,9 +930,8 @@ mod tests {
     /// `key_at` — how a right-click finds out what it landed on — reads `Base::key` and
     /// nothing else. The workspace header pushed its key into the cursor-signal list and never told
     /// the widget, so the hit-test found nothing at that row: right-clicking a pane or a column
-    /// opened its menu and a workspace opened none (Antonio, 2026-08-05). Pushing the key to the
-    /// signals and declaring it on the widget are two different acts, and the projection tests
-    /// only ever checked the first.
+    /// opened its menu and a workspace opened none. Pushing the key to the signals and declaring it
+    /// on the widget are two different acts, and the projection tests only ever checked the first.
     ///
     /// Note what this test no longer needs: a `ChromeCtx`, and therefore a window. The dock is
     /// components now, so it is built from its seams (F006/P032/T429).
@@ -1276,8 +1273,7 @@ mod tests {
     /// **A hint takes the keyboard for the dock it is in.** Landing the cursor on a row is only
     /// worth anything if `j`/`k` then move it, so the verb asks for the dock — every time, for its
     /// own mount. Whether the dock already has the keyboard is the host's to know (it reads the
-    /// tree), and `focus_dock` aimed at a dock that has it changes nothing. Antonio, driving
-    /// `prefix+/` on 2026-08-10: *"it activates the pane but the keyboard goes to the terminal"*.
+    /// tree), and `focus_dock` aimed at a dock that has it changes nothing.
     #[test]
     fn a_hint_asks_for_the_keyboard_for_its_own_dock() {
         let p = WorkspacesContainerProvider::new("workspaces");
@@ -1519,8 +1515,7 @@ mod tests {
         }
     }
 
-    /// **No two pick targets in the sidebar answer to the same name** (Antonio, 2026-08-27:
-    /// `prefix+/`, Esc, `prefix+/` and the sidebar letters have moved, with nothing touched).
+    /// **No two pick targets in the sidebar answer to the same name**.
     ///
     /// A remembered letter is looked up by identity, so two targets sharing one identity both ask
     /// for the same letter. The first takes it, the second is refused and draws a fresh one — and

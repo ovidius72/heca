@@ -95,8 +95,7 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
 /// The whole point of a by-id action is that the caller names a pane the keyboard is not on: the
 /// sidebar, a context menu, the exposé and RPC all reach panes in other workspaces. This searched
 /// `active_workspace_mut()` alone, so every one of those silently did nothing off the current
-/// workspace — deleting from the exposé's first row worked and its second row did not (Antonio,
-/// driving, 2026-08-11).
+/// workspace — deleting from the exposé's first row worked and its second row did not.
 ///
 /// It is the same act [`close_pane_by_id_anywhere`](crate::app::mutations::close_pane_by_id_anywhere)
 /// already performed for a shell that exits on its own, which had the search right and the tidying

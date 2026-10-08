@@ -212,7 +212,7 @@ fn two_containers_claiming_one_global_focus_is_reported() {
 /// nothing else in this suite can see it. The exposé's `delete_column = "r"` printed *"missing
 /// required argument 'ws_idx' … cannot be built and will do nothing when pressed"* on every
 /// launch while working perfectly, because the probe that decides whether to qualify a name was
-/// reporting on the name it went on to reject (Antonio, driving, 2026-08-12).
+/// reporting on the name it went on to reject.
 #[test]
 fn no_shipped_surface_binding_reports_an_argument_problem() {
     let defaults = heca_config::theme::KeysConfig::default();

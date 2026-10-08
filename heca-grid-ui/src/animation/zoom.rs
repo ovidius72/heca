@@ -68,8 +68,8 @@ impl Zoom {
             // surface *is*, and one that has zoomed away is small — it has not come back. Resting
             // at `1.0` snapped the exposé's cards to full size for the last frames of an exit whose
             // dissolve was still running, which reads as a flash immediately before they vanish
-            // (Antonio, driving, 2026-08-19). `enter` and `cancel` both clear `leaving`, so this is
-            // only ever the completed-exit case.
+            // `enter` and `cancel` both clear `leaving`, so this is only ever the completed-exit
+            // case.
             return match self.leaving {
                 true => self.from,
                 false => 1.0,

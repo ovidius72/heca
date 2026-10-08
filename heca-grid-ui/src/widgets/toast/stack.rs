@@ -103,9 +103,9 @@ impl ToastStack {
         // then inherited that lie: it is what the pointer meets, what a wrapper hugs, and what a
         // parent reserves. The consequence was total and silent — every press anywhere in the app
         // hit-tested to an empty notification stack and the chrome beneath it stopped answering
-        // the mouse (Antonio, driving, 2026-09-01). Fixing the stack's own input surface was not
-        // enough, because the `KeyHintGroup` wrapped around it hugs the child and inherited the
-        // same window-sized box; the only fix that ends the family is for the box to be honest.
+        // the mouse. Fixing the stack's own input surface was not enough, because the
+        // `KeyHintGroup` wrapped around it hugs the child and inherited the same window-sized box;
+        // the only fix that ends the family is for the box to be honest.
         //
         // Anchoring does not need the box: `on_layout` reads the viewport the layout pass stamps
         // on every node and moves the finished group to its corner, and it computes that shift
@@ -486,7 +486,7 @@ impl Component for ToastStack {
     /// The box is therefore the wrong answer to *where can this be clicked*: taking the default put
     /// a window-sized target above the page, so **every press anywhere in the app landed on the
     /// stack** and the chrome beneath it — sidebar rows included — stopped answering the mouse
-    /// entirely, with nothing failing anywhere (Antonio, driving, 2026-09-01).
+    /// entirely, with nothing failing anywhere.
     ///
     /// So the input surface is the cards, and nothing when there are none. A widget whose box is
     /// bigger than what it draws owns this answer itself; `Overlay` states the same thing for its

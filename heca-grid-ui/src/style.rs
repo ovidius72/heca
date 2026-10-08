@@ -1477,7 +1477,7 @@ impl Layout {
             // widget had set on itself, which is how a context menu seated as a surface came to be
             // stretched down the whole window: the seat gives every surface the viewport, and a
             // menu is not a layer — it *is* its panel, so the box it drew and the box it could be
-            // clicked in both became the window (Antonio, driving, 2026-09-01).
+            // clicked in both became the window.
             size: {
                 let axis = |placed: Length, own: Length| match placed {
                     Length::Auto => own.to_taffy(),

@@ -225,11 +225,10 @@ pub struct Theme {
     ///
     /// The two used to be one colour, and they are drawn on the same rectangle, so the moment the
     /// cursor arrived on the selected row the pair became indistinguishable — in the exposé,
-    /// moving onto the focused pane left no way to tell where the focus was (Antonio, driving,
-    /// 2026-08-13). Trying a second *hue* for the cursor did not fix it either: in every shipped
-    /// theme `foreground`, `accent` and `glow` are one family (mocha and grid_tron both set
-    /// `glow = accent`; each foreground is a pale tint of it), so the two marks stayed variations
-    /// on each other.
+    /// moving onto the focused pane left no way to tell where the focus was. Trying a second *hue*
+    /// for the cursor did not fix it either: in every shipped theme `foreground`, `accent` and
+    /// `glow` are one family (mocha and grid_tron both set `glow = accent`; each foreground is a
+    /// pale tint of it), so the two marks stayed variations on each other.
     ///
     /// So they differ in **kind**, not in hue: selection is a **filled panel**, the cursor is a
     /// **glowing ring**. One can sit inside the other and both stay readable.
@@ -258,8 +257,8 @@ pub struct Theme {
     ///
     /// The third scale, because a card is neither: bigger than a row, so a row's tint shouts on it;
     /// far smaller than a workspace frame, so a frame's tint vanishes on it. Both were tried on the
-    /// map and both were wrong, in opposite directions (Antonio, driving, 2026-08-21). `None`
-    /// derives it — see [`effective_card_previous_background`](Self::effective_card_previous_background).
+    /// map and both were wrong, in opposite directions. `None` derives it — see
+    /// [`effective_card_previous_background`](Self::effective_card_previous_background).
     #[serde(default)]
     pub card_previous_background: Option<Color>,
     #[serde(default)]
@@ -874,7 +873,7 @@ mod tests {
         assert!((theme.control_radius() - 2.0).abs() < f32::EPSILON);
     }
 
-    /// **The picker's letters follow the theme, and a theme may pin them** (Antonio, 2026-09-09).
+    /// **The picker's letters follow the theme, and a theme may pin them**.
     ///
     /// Unset, they wear the accent — which is the colour they always had, so a theme that says
     /// nothing looks exactly as before. A theme that names one wins, and because it is a theme token

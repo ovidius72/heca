@@ -680,7 +680,7 @@ impl ScrollingSpace {
     ///
     /// Resizing only the column on the left is **not** this: that widens the neighbour and shoves
     /// the active column sideways without changing it at all — which is what the first version did,
-    /// and it reads as resizing the wrong column (Antonio, driving, 2026-09-04).
+    /// and it reads as resizing the wrong column.
     ///
     /// The transfer is clamped **once, by whichever side runs out first**, so the two can never
     /// disagree: if the neighbour cannot grow any further, the boundary simply stops.
@@ -1432,8 +1432,7 @@ mod tests {
     }
 
     /// **A pane leaves its column and gets one of its own, immediately to the right**
-    /// (F003/P082/T474 part B; Antonio, 2026-09-10 — right of the current one, not the end of the
-    /// strip, so you keep your place).
+    /// — right of the current one, not the end of the strip, so you keep your place.
     /// **A new column's width is the layout's to say.** It used to be chosen by each caller: most
     /// said 50%, but taking a pane into an empty workspace said 85% and two fallbacks did too, so
     /// the same act gave a different column depending on how it was reached (F003/P082/T509).
@@ -1871,7 +1870,7 @@ mod tests {
     /// whole column. Split again and there is nothing left — so the newcomer used to be assigned a
     /// single pixel, and the pass that scales everything to fit took barely one per cent off the
     /// other two. The pane existed, in the column, and could not be seen: what that looks like is
-    /// "the third pane went off the screen" (Antonio, driving, 2026-09-03/04).
+    /// "the third pane went off the screen".
     ///
     /// ⚠️ **Asserting that the heights sum to the column proves nothing here** — they always did,
     /// which is why an earlier look at this concluded the arithmetic was correct and stopped. The
@@ -1913,7 +1912,7 @@ mod tests {
     /// A column's left edge is the right edge of the column before it, so moving it takes width
     /// from one and gives it to the other — the active column's *far* edge does not budge. Resizing
     /// only the neighbour would widen it and push the active column sideways unchanged, which reads
-    /// as resizing the wrong column (Antonio, driving, 2026-09-04).
+    /// as resizing the wrong column.
     #[test]
     fn moving_a_columns_left_edge_trades_width_with_the_column_before_it() {
         let mut space = space_with_columns(3);

@@ -58,10 +58,9 @@ fn a_bar_is_built_from_what_the_chips_say() {
 /// **Which actions are destructive is the action's own declaration, not a surface's.**
 ///
 /// It was written into this file as a `matches!` on the close button — a styling rule keyed to a
-/// name, in a file that should know nothing about which acts cannot be undone (Antonio,
-/// 2026-09-03). Every surface that renders an action reads the same answer now, exactly as they
-/// already do for its icon and its label, so a header button, a menu entry and the palette
-/// cannot disagree about what is dangerous.
+/// name, in a file that should know nothing about which acts cannot be undone. Every surface that
+/// renders an action reads the same answer now, exactly as they already do for its icon and its
+/// label, so a header button, a menu entry and the palette cannot disagree about what is dangerous.
 #[test]
 fn a_headers_danger_hue_comes_from_the_action_not_from_its_name() {
     let catalog = crate::actions::ActionCatalog::with_builtins();

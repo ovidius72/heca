@@ -98,7 +98,7 @@ mod declarations {
     /// heca's case: a workspace dock names itself and declares its pick on the wrapper *outside*
     /// it, so the search went in and found the first pane row's declaration. Picking a workspace to
     /// move a pane into put the workspace's letter over a pane — blue and right-aligned instead of
-    /// orange on the workspace's own header (Antonio, driving, screenshot).
+    /// orange on the workspace's own header.
     #[test]
     fn a_letter_never_crosses_into_something_that_names_itself() {
         use crate::builders::ComponentExt;
@@ -130,8 +130,8 @@ mod declarations {
 
     /// **A container keeps its own letter whether it holds one thing or many.**
     ///
-    /// Found by Antonio driving `prefix+/` (screenshot): the workspaces dock wore a letter with two
-    /// workspaces in it and none with one. Nothing about the dock changed — only how many things
+    /// Under `prefix+/`, the workspaces dock wore a letter with two workspaces in it and none with
+    /// one. Nothing about the dock changed — only how many things
     /// were inside it.
     ///
     /// The cause was the rule that stops a wrapper and what it wraps both spending a letter. It
@@ -311,8 +311,7 @@ mod declarations {
     /// Where a widget sits must never decide what it can do (AGENTS § 0d). The picker used to break
     /// that: a container saying what picking *it* did switched off letters for everything beneath,
     /// so a button in a pane's bar had to repeat its own click as a hint to win one back, and the
-    /// control the bar builds for itself had nobody to do that and silently wore none (Antonio,
-    /// driving, 2026-09-04).
+    /// control the bar builds for itself had nobody to do that and silently wore none.
     #[test]
     fn a_button_inside_a_declaring_container_still_gets_its_own_letter() {
         use crate::widgets::Button;
@@ -616,8 +615,7 @@ mod offer_tests {
     /// **The same target shown twice must be lettered twice** — one pane listed in the left
     /// sidebar *and* the right one is two places you can pick it, and both wear the letter.
     ///
-    /// Antonio, driving, 2026-08-17: *"prefix+q, m, M, t, T show letters on the left sidebar but not
-    /// on the right one. WHY? they are the same component so nothing should be adapted."*
+    /// The same component in the left and the right sidebar wears letters in both.
     #[test]
     fn a_target_listed_in_two_places_is_lettered_in_both() {
         let tree = Flex::column()
@@ -711,8 +709,8 @@ mod clipped_away {
         );
     }
 
-    /// **A row you can half see keeps its letter**, so you can peek at it (Antonio, 2026-08-23:
-    /// *"a half visible pane row should have the letter to peek"*). Any overlap at all is visible.
+    /// **A row you can half see keeps its letter**, so you can peek at it. Any overlap at all is
+    /// visible.
     #[test]
     fn a_half_visible_row_keeps_its_letter() {
         let region = scrolled_sidebar();
@@ -1127,9 +1125,7 @@ mod visibility {
         );
     }
 
-    /// **A pane you cannot see is still pickable — through its other views** (Antonio, 2026-09-09:
-    /// *"a not visible pane on the scrolling area. Panes in sidebar and expose. Even if not visible
-    /// gets a letter to pick"*).
+    /// **A pane you cannot see is still pickable — through its other views**.
     ///
     /// One pane is shown in several places: its own view in the scrolling area, its row in the
     /// sidebar, its card in the exposé. They all name it. The visibility rule filters the **view**,

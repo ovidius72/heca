@@ -5,9 +5,8 @@
 //! you to aim at a target visible only in a dock you may have collapsed, and the columns you were
 //! actually looking at wore nothing (F003/P082/T474).
 //!
-//! It owns no content **yet**. Antonio, 2026-09-10: *"a pane should not only be positionable inside
-//! columns but also live elsewhere, like a div … in the future I'd like to have sticky columns and
-//! sticky panes."* That is where this goes — the panes become its children, so moving one between
+//! It owns no content **yet**. A pane should be placeable anywhere, like a div, and columns and
+//! panes may become sticky. That is where this goes — the panes become its children, so moving one between
 //! containers is a tree operation. Until then it is the box and the name, and the panes are still
 //! placed by the host.
 

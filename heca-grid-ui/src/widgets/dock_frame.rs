@@ -145,9 +145,8 @@ impl DockFrame {
         //
         // Folding a dock is a real act, so it earns one of the 52 — but it was wearing the default
         // cap in the default place: centred on the title, on top of whatever the dock's own author
-        // declared there (Antonio, driving, 2026-09-14 — two letters stacked on one workspace
-        // header). Top-left puts it over the chevron, which is the thing it operates, and that is
-        // geometry only this widget knows.
+        // declared there. Top-left puts it over the chevron, which is the thing it operates, and
+        // that is geometry only this widget knows.
         //
         // **What the letter MEANS is not this widget's to say** — accent, warning, success are a
         // vocabulary the app assigns, and a domain-neutral widget picking one of them is the
@@ -453,9 +452,9 @@ impl Component for DockFrame {
             // That token is tuned against a single row; over a whole frame the same value lifts
             // every row inside it, and the pane mark within — which is the same colour — then has
             // almost nothing left to say. The last-visited pane became indistinguishable from its
-            // siblings in exactly the workspace it was meant to be found in (Antonio, driving, both
-            // dark themes, 2026-08-13). So this is derived from `active_wash_alpha`, the theme's own
-            // answer for how faint a container hint is, and sits below it.
+            // siblings in exactly the workspace it was meant to be found in. So this is derived
+            // from `active_wash_alpha`, the theme's own answer for how faint a container hint is,
+            // and sits below it.
             cx.rect(
                 b,
                 cx.theme().colors.effective_workspace_previous_background(),
@@ -471,9 +470,8 @@ impl Component for DockFrame {
             // says *the current workspace*, a container hint, while a row's opaque panel says
             // *this item is selected*. Painting both at full strength made them cancel exactly —
             // the selected row inside the active frame became the same colour as the frame, and
-            // only the column's marker bar still said which row it was (Antonio, driving, with
-            // three themes, 2026-08-13). `active_wash_alpha` is the theme's own answer to how
-            // faint a container hint should be.
+            // only the column's marker bar still said which row it was. `active_wash_alpha` is the
+            // theme's own answer to how faint a container hint should be.
             cx.rect(
                 b,
                 cx.theme().colors.effective_workspace_active_background(),

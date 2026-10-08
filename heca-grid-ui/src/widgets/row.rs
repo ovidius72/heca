@@ -86,8 +86,8 @@ impl Row {
             // **No bar by default** — the same default `Item` has always had. Selected is now a
             // filled panel, which says it on its own; a bar beside it is a second mark for one
             // state, and where a container already draws its own (a `MarkerGroup` column in the
-            // sidebar) it came out as two lines side by side (Antonio, driving, 2026-08-13). A
-            // caller that genuinely wants one still asks: `.marker(ActiveMarker::Bar)`.
+            // sidebar) it came out as two lines side by side. A caller that genuinely wants one
+            // still asks: `.marker(ActiveMarker::Bar)`.
             marker: ActiveMarker::None,
             flash: Flash::new(),
             on_activate: None,
@@ -154,9 +154,8 @@ impl Row {
     /// One whose cursor also follows the mouse must, or three correct behaviours compose into a
     /// wrong one: hover moves the cursor here → this row asks to be visible → the region centres it
     /// → the card slides away from the pointer, possibly onto another card, which slides again
-    /// (Antonio, driving, 2026-08-12). [`CardGrid::reveal_state`](crate::widgets::CardGrid) is the
-    /// signal to pass: it is `true` while the keyboard moved the cursor and `false` while the mouse
-    /// did.
+    /// [`CardGrid::reveal_state`](crate::widgets::CardGrid) is the signal to pass: it is `true`
+    /// while the keyboard moved the cursor and `false` while the mouse did.
     #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn reveal_when(mut self, allowed: Signal<bool>) -> Self {
         self.reveal = Some(allowed);
@@ -331,10 +330,10 @@ impl Component for Row {
             //
             // The selection and the nav cursor are drawn on the same rectangle, so as long as both
             // were an accent fill plus an accent edge, the cursor arriving on the selected row
-            // erased the difference between them (Antonio, driving, 2026-08-13). Changing the
-            // cursor's *hue* did not fix it — every shipped theme's foreground, accent and glow
-            // are one family. So the two marks differ in **kind**: this is a panel, the cursor is a
-            // glowing ring, and one sits inside the other with both still readable.
+            // erased the difference between them. Changing the cursor's *hue* did not fix it —
+            // every shipped theme's foreground, accent and glow are one family. So the two marks
+            // differ in **kind**: this is a panel, the cursor is a glowing ring, and one sits
+            // inside the other with both still readable.
             //
             // The colour is the theme's, not the row's: `selected_background`, explicit in a theme
             // or derived from its surface and accent. A row that overrides `highlight` still gets
