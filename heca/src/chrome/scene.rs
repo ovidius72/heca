@@ -37,17 +37,17 @@ pub(super) fn with_flex(mut body: WidgetModel, parts: f32) -> WidgetModel {
     body
 }
 
-/// Wrap a container body in the two things the **host** owns about it: whether it holds chrome
-/// keyboard focus, and its letter while a dock pick is open (F003/P011/T020).
+/// Wrap a container body in the two things the **host** owns about it: the region it names itself
+/// as (so the keyboard can be given to it, and a press inside it resolves back to it), and its
+/// letter while a dock pick is open (F003/P011/T020).
 ///
-/// Both are host state, not container state — a container cannot know that it is the focused one, or
-/// which letter it was given among its siblings — so they are applied here rather than left to each
-/// provider to remember. Both wrappers are transparent: they hug the body and route events, focus and
-/// drag straight through, so the container behaves exactly as it does unwrapped.
+/// Both are host state, not container state — a container cannot know which letter it was given
+/// among its siblings — so they are applied here rather than left to each provider to remember. Both
+/// wrappers are transparent: they hug the body and route events, focus and drag straight through, so
+/// the container behaves exactly as it does unwrapped.
 ///
-/// The focus signal is the **same one** the container's own scroll area binds as its keyboard target
-/// (`StateView::container_keyboard_target`), so the ring and the keys can never disagree about which
-/// dock has focus.
+/// The focus ring is not wired: the region draws it itself while the keyboard is anywhere inside it
+/// (`FocusScope`), so the ring and the keys can never disagree about which dock has focus.
 fn focus_and_pick(
     mut body: WidgetModel,
     container: &str,
@@ -110,7 +110,6 @@ fn focus_and_pick(
             // lettered — but that is a keyboard destination `prefix+Shift+e` already offers, so in
             // `prefix+/` it was a letter per placement pointing at something with its own key.
             .hint_scope([crate::chrome::DOCK_PICK_SCOPE])
-            .focus(ctx.state().container_keyboard_target(container))
             // Still declared: `offer_hint_by_key` matches it so the DOCK PICK can letter this
             // container (`chrome/hint/letters.rs`). It is no longer read by any hit-test.
             .scope_key(container),
@@ -318,7 +317,7 @@ pub(super) fn sidebar_toggle_button(
     // user every time they use the button, and the two buttons can even derive the *same* name at
     // once (left expanded and right collapsed are both `arrow_line_left`), at which point document
     // order decides which one wears the index. Either way the `prefix+/` letters moved on every
-    // pick (Antonio, driving, 2026-08-19). The action name is stable through both states.
+    // pick. The action name is stable through both states.
     let button = IconButton::new(Icon::new(glyph).color(color))
         .key(action_name)
         .size(WidgetSize::Small)
@@ -480,7 +479,7 @@ pub(crate) fn paint_link_hints(
     for hint in candidates {
         let Some((x, y)) = crate::app::terminal_host::cell_screen_pos(
             state,
-            hint.pane_id,
+            hint.terminal,
             hint.row,
             hint.start_col,
         ) else {
@@ -499,207 +498,6 @@ pub(crate) fn paint_link_hints(
             heca_grid_ui::KeycapVariant::Filled,
         );
     }
-}
-
-/// Paint the scrollback-search overlay: a highlight rect over every visible match
-/// (the focused one bolder) plus a `/query` bar anchored to the searched pane's
-/// bottom-right. Drawn into the chrome scene (on top). No-op when no search is
-/// active. terminal-task-19.
-pub(crate) fn paint_search(
-    state: &crate::app_state::AppState,
-    scene: &mut Scene,
-    w: f32,
-    h: f32,
-    theme: &GuiTheme,
-) {
-    if state.searches.is_empty() {
-        return;
-    }
-    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    // Every pane that has a search draws its own highlights and bar. They are
-    // independent, so a search in one pane never disturbs another's.
-    for (&pane_id, search) in &state.searches {
-        paint_pane_search(
-            state,
-            &mut cx,
-            pane_id,
-            search,
-            theme,
-            Size::new(w as f64, h as f64),
-        );
-    }
-}
-
-/// Match highlights + query bar for one pane's search.
-fn paint_pane_search(
-    state: &crate::app_state::AppState,
-    cx: &mut PaintCx,
-    pane_id: PaneId,
-    search: &crate::app_state::SearchState,
-    theme: &GuiTheme,
-    viewport: Size,
-) {
-    let Some(snapshot) = state
-        .server
-        .backends
-        .get(pane_id)
-        .and_then(|b| b.terminal_snapshot())
-    else {
-        return;
-    };
-    let (cell_w, cell_h) = state
-        .server
-        .backends
-        .get(pane_id)
-        .map(|b| b.cell_size())
-        .unwrap_or((8.0, 16.0));
-    let top = snapshot.viewport_top_stable_row;
-    let rows = snapshot.rows as isize;
-
-    // Match highlights over the visible viewport.
-    for (i, m) in search.matches.iter().enumerate() {
-        let visible = m.stable_row - top;
-        if visible < 0 || visible >= rows {
-            continue;
-        }
-        let Some((x, y)) = crate::app::terminal_host::cell_screen_pos(
-            state,
-            pane_id,
-            visible as usize,
-            m.start_col,
-        ) else {
-            continue;
-        };
-        let width = m.end_col.saturating_sub(m.start_col) as f32 * cell_w;
-        let rect = Rectangle::new(
-            Point::new(x as f64, y as f64),
-            Size::new(width as f64, cell_h as f64),
-        );
-        let alpha = if Some(i) == search.current {
-            state.appearance.terminal.search_current_match_alpha
-        } else {
-            state.appearance.terminal.search_match_alpha
-        };
-        // A match highlight tracks terminal cells, not chrome, so it stays a painted
-        // rect rather than a widget — but its corner still comes from the theme.
-        cx.rect(
-            rect,
-            theme.colors.accent.with_alpha(alpha),
-            None,
-            theme.colors.control_radius(),
-            None,
-        );
-    }
-
-    paint_search_bar(state, cx, pane_id, search, theme, viewport);
-}
-
-/// Build the search bar's widget tree, positioned at `pane`'s bottom-right corner.
-///
-/// `field` is the size the query [`Input`] measured to — the tree reserves a slot of
-/// exactly that size and the caller paints the retained field into it. The size is
-/// measured by the layout engine, never derived from a character count.
-///
-/// Pure so it can be tested without a GPU or an `AppState`, which is how its
-/// placement is covered.
-pub(super) fn search_bar_tree(
-    field: Size,
-    count: Option<String>,
-    pane: Rectangle,
-    theme: &GuiTheme,
-) -> Flex {
-    // The query slot, then the match position as a separate chip so it reads as
-    // distinct information rather than as part of what was typed.
-    let mut row = Flex::row()
-        .align("center")
-        .gap(Spacing::Sm)
-        .child(Flex::row().width(field.w as f32).height(field.h as f32));
-    if let Some(count) = count {
-        row = row.child(Tag::new(count).color(theme.colors.accent));
-    }
-
-    // A box the size of the pane, offset to the pane's origin, with the bar pushed
-    // into its bottom-right corner. The engine does the positioning; nothing here
-    // measures text or computes a coordinate.
-    Flex::row()
-        .justify("end")
-        .align("end")
-        .width(pane.size.w as f32)
-        .height(pane.size.h as f32)
-        .margin_left(pane.loc.x as f32)
-        .margin_top(pane.loc.y as f32)
-        .padding(Spacing::Sm.scale() * theme.font_size)
-        .child(row)
-}
-
-/// The query field + match counter at the searched pane's bottom-right corner.
-///
-/// The query is a real [`Input`], so its caret, selection and the whole editing model
-/// are the library's rather than reimplemented here. It is retained in [`SearchState`]
-/// (a field must keep its caret across frames) and therefore cannot be moved into the
-/// per-frame tree — so the tree reserves a slot and the field is painted into it, the
-/// same arrangement [`CommandPalette`](heca_grid_ui::widgets::CommandPalette) uses for
-/// its own query line.
-fn paint_search_bar(
-    state: &crate::app_state::AppState,
-    cx: &mut PaintCx,
-    pane_id: PaneId,
-    search: &crate::app_state::SearchState,
-    theme: &GuiTheme,
-    viewport: Size,
-) {
-    let Some((_, px, py, pw, ph)) = crate::app::terminal_host::pane_outer_frames(state)
-        .into_iter()
-        .find(|(id, ..)| *id == pane_id)
-    else {
-        return;
-    };
-
-    let query = search.input.borrow().value_str();
-    let count = (!query.is_empty()).then(|| {
-        if search.matches.is_empty() {
-            "no matches".to_string()
-        } else {
-            let pos = search.current.map(|i| i + 1).unwrap_or(0);
-            format!("{}/{}", pos, search.matches.len())
-        }
-    });
-
-    // Measure the field on its own first: the engine sizes it, so the bar reserves
-    // exactly what it needs without anyone estimating a width from the query length.
-    let field_size = {
-        let mut field = search.input.borrow_mut();
-        LayoutEngine::new()
-            .base_font(theme.font_size)
-            .compute(&mut *field, viewport);
-        field.base().bounds.size
-    };
-
-    let pane = Rectangle::new(
-        Point::new(px as f64, py as f64),
-        Size::new(pw as f64, ph as f64),
-    );
-    let mut root = search_bar_tree(field_size, count, pane, theme);
-    LayoutEngine::new()
-        .base_font(theme.font_size)
-        .compute(&mut root, viewport);
-    heca_grid_ui::paint_child(&root, cx);
-
-    // Draw the retained field into the slot the tree reserved for it.
-    let Some(slot) = search_field_slot(&root) else {
-        return;
-    };
-    let mut field = search.input.borrow_mut();
-    field.base_mut().bounds = slot;
-    field.base_mut().font = theme.font_size;
-    field.paint(cx);
-}
-
-/// Bounds of the slot [`search_bar_tree`] reserved for the query field:
-/// pane box → row → first child.
-pub(super) fn search_field_slot(root: &Flex) -> Option<Rectangle> {
-    let row = root.base().children.first()?;
-    Some(row.base().children.first()?.base().bounds)
 }
 
 /// Test helper: build + layout + paint in one shot. Runtime uses the retained tree

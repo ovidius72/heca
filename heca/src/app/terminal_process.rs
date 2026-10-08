@@ -5,20 +5,30 @@
 //! "Terminal process", never "session": a session is an instance of heca (F012).
 
 use crate::app::backend_factory::{LaunchSettings, launch, terminal_grid_for_workspace};
-use crate::app::backend_store::{Ensured, Program, SpawnError, TerminalSpec};
+use crate::app::backend_store::{Ensured, Program, SpawnError, TerminalOwner, TerminalSpec};
 use crate::app_state::AppState;
 use crate::notification::Notification;
 use heca_core::layout::PaneId;
 use std::path::{Path, PathBuf};
 
 impl TerminalSpec {
-    /// The user's shell, sized for workspace `ws_idx`.
-    pub(crate) fn shell_in_workspace(state: &AppState, ws_idx: usize) -> Self {
+    /// `program` in `cwd`, sized for workspace `ws_idx`: the one place a spec's grid is chosen.
+    fn in_workspace(
+        state: &AppState,
+        ws_idx: usize,
+        program: Program,
+        cwd: Option<PathBuf>,
+    ) -> Self {
         Self {
-            program: Program::Shell,
-            cwd: None,
+            program,
+            cwd,
             grid: terminal_grid_for_workspace(state, ws_idx),
         }
+    }
+
+    /// The user's shell, sized for workspace `ws_idx`.
+    pub(crate) fn shell_in_workspace(state: &AppState, ws_idx: usize) -> Self {
+        Self::in_workspace(state, ws_idx, Program::Shell, None)
     }
 
     /// A command, sized for workspace `ws_idx`.
@@ -28,11 +38,12 @@ impl TerminalSpec {
         command: &str,
         cwd: Option<&str>,
     ) -> Self {
-        Self {
-            program: Program::Command(command.to_string()),
-            cwd: cwd.map(std::path::PathBuf::from),
-            grid: terminal_grid_for_workspace(state, ws_idx),
-        }
+        Self::in_workspace(
+            state,
+            ws_idx,
+            Program::Command(command.to_string()),
+            cwd.map(PathBuf::from),
+        )
     }
 }
 
@@ -54,9 +65,10 @@ impl AppState {
     /// user: it starts in the home folder, and the user is told once.
     pub(crate) fn start_terminal(
         &mut self,
-        pane: PaneId,
+        owner: impl Into<TerminalOwner>,
         mut spec: TerminalSpec,
     ) -> Result<Ensured, SpawnError> {
+        let owner = owner.into();
         if matches!(spec.program, Program::Shell) {
             let (cwd, missing) = shell_start_dir(spec.cwd.take(), |d| d.is_dir(), dirs::home_dir());
             spec.cwd = cwd;
@@ -70,11 +82,11 @@ impl AppState {
             }
         }
         let settings = LaunchSettings::of(self);
-        let ensured = ensure_with(&mut self.server.backends, pane, spec, &settings)?;
+        let ensured = ensure_with(&mut self.server.backends, owner.clone(), spec, &settings)?;
         if let Ensured::Kept { differs: true, .. } = ensured {
             Notification::warning("A terminal was already running for this pane")
                 .body("It keeps running as it was; the new program or folder was not applied.")
-                .dedup_key(format!("terminal.spec:{}", pane.0))
+                .dedup_key(format!("terminal.spec:{owner:?}"))
                 .send();
         }
         Ok(ensured)
@@ -99,11 +111,11 @@ fn shell_start_dir(
 /// The store's door, with the app's launch settings behind it.
 fn ensure_with(
     backends: &mut crate::app::backend_store::BackendStore,
-    pane: PaneId,
+    owner: TerminalOwner,
     spec: TerminalSpec,
     settings: &LaunchSettings,
 ) -> Result<Ensured, SpawnError> {
-    backends.ensure(pane, spec, |spec| launch(settings, spec))
+    backends.ensure(owner, spec, |spec| launch(settings, spec))
 }
 
 #[cfg(test)]

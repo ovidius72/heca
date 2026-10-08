@@ -12,8 +12,8 @@ use heca_grid_ui::widgets::{Flex, Overlay};
 ///
 /// The order is the test. When the registry ticked the trees *as well as* the tree ticking them,
 /// every surface advanced twice a frame and the finishing transition was consumed before the
-/// registry looked — the exposé stuck mid-fade and stayed modal (Antonio, driving, 2026-08-31).
-/// A test that called `reg.tick` alone could not see that, because it never ran the tree's walk.
+/// registry looked — the exposé stuck mid-fade and stayed modal. A test that called `reg.tick`
+/// alone could not see that, because it never ran the tree's walk.
 fn frame(reg: &mut LayerRegistry, window: &mut heca_grid_ui::widgets::Flex, dt: f32) -> bool {
     let leaving = reg.leaving_before_tick(window);
     let ticked = window.tick(dt);
@@ -130,8 +130,8 @@ fn removing_a_fading_layer_waits_for_the_fade() {
     // absence. Both effects report themselves done here, so without it nothing requests
     // another frame and the last frame actually drawn is the one before, still faintly there:
     // the map stayed on the glass at about a tenth opacity until some other input forced a
-    // repaint (Antonio, driving, 2026-08-19). This assertion used to read `!frame(&mut reg, &mut window, ..)`,
-    // which is that bug written down.
+    // repaint. This assertion used to read `!frame(&mut reg, &mut window,.)`, which is that bug
+    // written down.
     assert!(
         frame(&mut reg, &mut window, 0.05),
         "one more frame, to paint it gone"
@@ -833,8 +833,7 @@ fn the_active_context_follows_the_modal_surfaces() {
 /// top" means. Re-registering by removing and re-appending therefore promoted a layer above
 /// everything opened since — which is how deleting a pane from the exposé did nothing at all:
 /// the confirm dialog opened above the map, the session change rebuilt the map, the rebuild put
-/// it back on top of the dialog, and the click on "Close" went to the map (Antonio, driving,
-/// 2026-08-11).
+/// it back on top of the dialog, and the click on "Close" went to the map.
 #[test]
 fn re_registering_a_layer_does_not_promote_it_above_a_newer_one() {
     let mut reg = LayerRegistry::default();
@@ -1034,7 +1033,7 @@ fn a_key_dispatched_at_the_window_root_reaches_a_placed_surface() {
 /// Two things go wrong at once, and only one of them is visible: the panel is drawn floor to
 /// ceiling, **and** its hit area becomes the whole window — so with a menu open, every press
 /// anywhere lands on the menu instead of what is under the cursor, and a right-click elsewhere
-/// opens nothing (Antonio, driving, 2026-09-01).
+/// opens nothing.
 #[test]
 fn a_menu_seated_as_a_surface_keeps_its_own_height() {
     use heca_core::layout::Size;
@@ -1123,7 +1122,7 @@ fn a_layer_seated_as_a_surface_still_fills_the_window() {
 /// *screen's* corner — and it sits above the chrome, because child order is z-order. Take the
 /// default input surface and the consequence is total and silent: every press anywhere in the app
 /// hit-tests to the stack, so the chrome under it stops answering the mouse and a sidebar row can
-/// never be right-clicked (Antonio, driving, 2026-09-01).
+/// never be right-clicked.
 ///
 /// The guard is here, on the seating, rather than only in the widget: this is the arrangement that
 /// makes it dangerous — a window-sized node in front of everything — and any future surface seated
@@ -1134,14 +1133,21 @@ fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
     use heca_grid_ui::reactive::signal;
     use heca_grid_ui::style::Length;
     use heca_grid_ui::widgets::{KeyHintGroup, ToastStack};
+    use heca_grid_ui::builders::{ComponentExt, Parent};
     use heca_grid_ui::{LayoutEngine, LayoutExt};
 
     let viewport = Size::new(1280.0, 800.0);
     let mut window = crate::chrome::new_window_root();
-    // The chrome: a plain child of the window root, and the thing the pointer must reach.
+    // The chrome: a plain child of the window root, and the thing the pointer must reach. The
+    // sidebar it holds answers a click; the chrome's own box answers nothing.
     crate::chrome::seat_chrome(
         &mut window,
-        Flex::row().width(Length::FULL).height(Length::FULL),
+        Flex::row().width(Length::FULL).height(Length::FULL).child(
+            Flex::row()
+                .width(Length::FULL)
+                .height(Length::FULL)
+                .on_click(|_| {}),
+        ),
     );
     // The stack, seated **exactly as the app seats it** — wrapped in its picker group, and empty,
     // as it is nearly always. The wrapper is the point: a first version of this guard placed a bare
@@ -1165,7 +1171,7 @@ fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
     );
 }
 
-/// **A dismissed surface declares nothing** (F003/P097/T499, found by Antonio driving).
+/// **A dismissed surface declares nothing.**
 ///
 /// Hiding a surface calls `node.close()` and leaves it **seated** in the window root —
 /// `remove_surface` runs only when it is destroyed — so presence in the tree says nothing about

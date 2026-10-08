@@ -84,7 +84,9 @@ pub fn handle_scrollback_to_top(state: &mut AppState, _action: &WmAction) {
         } else {
             state.selection.update_focus(oldest, 0);
         }
-        ensure_caret_visible(state, pane_id, oldest, snapshot);
+        if let Some(terminal) = state.server.backends.identity_of(pane_id) {
+            ensure_caret_visible(state, terminal, oldest, snapshot);
+        }
     }
 }
 
@@ -129,8 +131,11 @@ pub fn handle_exit_scrollback(state: &mut AppState, _action: &WmAction) {
     state.selection.clear();
     // Leaving the copy-mode session also ends that pane's scrollback search; other
     // panes keep theirs.
-    if let Some(pane) = state.search_target_pane() {
-        state.clear_search(pane);
+    if let Some(terminal) = state.search_target() {
+        // Its bar closes with it: leaving copy-mode ends the search the terminal was showing.
+        if let Some(handle) = state.terminals.get(&terminal) {
+            handle.close_search();
+        }
     }
     if matches!(state.input_mode, InputMode::Selection) {
         state.input_mode = InputMode::Normal;
@@ -149,7 +154,7 @@ pub fn handle_exit_scrollback(state: &mut AppState, _action: &WmAction) {
 /// and its clamp, so the arithmetic lives in the widget, once, for every container that will ever
 /// nest one.
 fn scroll_focused_dock(state: &mut AppState, intent: heca_grid_ui::WidgetIntent) -> bool {
-    if state.chrome_state.focused_container().is_none() {
+    if crate::app::tree_focus::focused_dock(state).is_none() {
         return false;
     }
     crate::chrome::deliver(state, &heca_grid_ui::Event::Widget(intent));
@@ -249,14 +254,26 @@ pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) {
     };
     if let Some(pane_id) = state.focused_pane
         && let Some(backend) = state.server.backends.get_mut(pane_id)
-        && let Some(snapshot) = backend.terminal_snapshot()
     {
-        let max_offset = snapshot.scrollback_rows.saturating_sub(snapshot.rows);
-        let target = (*rows).min(max_offset);
-        let delta = target as i32 - snapshot.viewport_offset as i32;
-        if delta != 0 {
-            backend.scroll_viewport(delta);
-        }
+        scroll_backend_to_offset(backend, *rows);
+    }
+}
+
+/// **Scroll a terminal to `rows` above its live bottom**, never past the top of its history. The one
+/// place that does it: the action for the focused pane and a click on any terminal's scrollbar
+/// both come here.
+pub(crate) fn scroll_backend_to_offset(
+    backend: &mut dyn heca_core::backend::PaneBackend,
+    rows: usize,
+) {
+    let Some(snapshot) = backend.terminal_snapshot() else {
+        return;
+    };
+    let max_offset = snapshot.scrollback_rows.saturating_sub(snapshot.rows);
+    let target = rows.min(max_offset);
+    let delta = target as i32 - snapshot.viewport_offset as i32;
+    if delta != 0 {
+        backend.scroll_viewport(delta);
     }
 }
 

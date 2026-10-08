@@ -35,6 +35,21 @@ pub struct Workspace {
     pub focus_domain: FocusDomain,
 }
 
+/// **Where a floating pane came from**, so unfloating can put it back.
+///
+/// The column is remembered by **identity**, never by number: a number points at whatever column
+/// sits there now, and the column a pane floated out of vanishes when that pane was its last one,
+/// which slides the next column into its place. `position` is only for that case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FloatOrigin {
+    /// The column it floated out of.
+    pub column: ColumnId,
+    /// Where that column sat, used to make a new column in the same place if it is gone.
+    pub position: usize,
+    /// The pane's row within the column.
+    pub row: usize,
+}
+
 /// A floating pane with position and size.
 #[derive(Debug, Clone)]
 pub struct FloatingPane {
@@ -42,10 +57,8 @@ pub struct FloatingPane {
     pub position: Point,
     pub size: Size,
     pub is_active: bool,
-    /// Original column index when floated (for restore).
-    pub original_column_idx: Option<usize>,
-    /// Original pane index within the column when floated.
-    pub original_pane_idx: Option<usize>,
+    /// Where it floated out of; `None` for a pane that never tiled (one spawned floating).
+    pub origin: Option<FloatOrigin>,
 }
 
 impl Workspace {

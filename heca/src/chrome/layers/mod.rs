@@ -212,8 +212,7 @@ impl LayerRegistry {
         // That is how deleting a pane from the exposé did nothing: the confirm dialog opened above
         // the map, the map was rebuilt (the session had changed), and the rebuild put it back on
         // top of the dialog — so the click on "Close" was delivered to the map, the dialog never
-        // submitted, and the click landed on a card and moved the focus instead (Antonio, driving,
-        // 2026-08-11).
+        // submitted, and the click landed on a card and moved the focus instead.
         let previous = self
             .layers
             .iter()
@@ -221,8 +220,7 @@ impl LayerRegistry {
         // **It also keeps what it was doing**: whether it is up, and any animation in flight. The
         // replacement is a fresh `DynamicLayer`, which starts hidden — so without this a rebuild
         // looked like a first appearance and played the arrival again. `prefix+j` behind the exposé
-        // changed the focus, the map rebuilt, and it zoomed open on every keystroke (Antonio,
-        // driving, 2026-08-11).
+        // changed the focus, the map rebuilt, and it zoomed open on every keystroke.
         let carried = previous.map(|at| {
             let l = &self.layers[at];
             (
@@ -245,10 +243,10 @@ impl LayerRegistry {
                 // **The gesture carries on across a rebuild.** The replacement is a fresh tree,
                 // which starts closed and at rest — so without this a rebuild looked like a first
                 // appearance and played the arrival again: `prefix+j` behind the exposé changed
-                // the focus, the map rebuilt, and it zoomed open on every keystroke (Antonio,
-                // driving, 2026-08-11). Handing over the whole `Presence` carries the animation
-                // *in flight* as well as the fact that it is open, so a rebuild mid-arrival
-                // continues rather than restarting or snapping.
+                // the focus, the map rebuilt, and it zoomed open on every keystroke. Handing over
+                // the whole `Presence` carries the animation *in flight* as well as the fact that
+                // it is open, so a rebuild mid-arrival continues rather than restarting or
+                // snapping.
                 if let (Some(carried), Some(fresh)) = (
                     presence,
                     crate::chrome::surface_node_mut(window, id).and_then(|n| n.presence_mut()),
@@ -350,13 +348,13 @@ impl LayerRegistry {
     /// `window_root.tick`. A surface that was leaving then and is not leaving now has just finished
     /// its exit: it stops being visible, and one more frame is requested so its absence is painted.
     ///
-    /// ⚠️ **This used to tick the trees itself, and that was the bug** (Antonio, driving,
-    /// 2026-08-31). Once the surfaces became children of the window root they were advanced twice a
-    /// frame — once by the tree's walk, once here — and the registry read `was_leaving` *after* the
-    /// tree's tick had already consumed the transition. So on the frame an exit finished it saw
-    /// "was not leaving", never retired the surface, and never asked for the frame that paints it
-    /// gone: the exposé stuck at a tenth opacity until some other input forced a repaint, stayed
-    /// modal, and swallowed `ctrl+h/j/k/l` for ever after. **The tree ticks. This only reconciles.**
+    /// ⚠️ **This used to tick the trees itself, and that was the bug**. Once the surfaces became
+    /// children of the window root they were advanced twice a frame — once by the tree's walk, once
+    /// here — and the registry read `was_leaving` *after* the tree's tick had already consumed the
+    /// transition. So on the frame an exit finished it saw "was not leaving", never retired the
+    /// surface, and never asked for the frame that paints it gone: the exposé stuck at a tenth
+    /// opacity until some other input forced a repaint, stayed modal, and swallowed `ctrl+h/j/k/l`
+    /// for ever after. **The tree ticks. This only reconciles.**
     pub(crate) fn retire_finished_exits(
         &mut self,
         window: &mut heca_grid_ui::widgets::Flex,
@@ -375,7 +373,7 @@ impl LayerRegistry {
                 // **And ask for one more frame, to paint its absence.** Without it nothing requests
                 // another, and the last frame drawn is the one before — still faintly visible. The
                 // map stayed on the glass at about a tenth opacity until some other input forced a
-                // repaint (Antonio, driving, 2026-08-19).
+                // repaint.
                 changed = true;
             }
         }
@@ -459,7 +457,7 @@ impl LayerRegistry {
     /// It is [`DynamicLayer::is_active`] with [`is_leaving`](Self::is_leaving), which is the same
     /// pair [`content_covered`](Self::content_covered) asks — deliberately, so "is this surface in
     /// charge" has **one** answer. Writing the predicate out at the call site instead is what let a
-    /// hidden surface blank every letter in the app (Antonio, driving, 2026-09-04).
+    /// hidden surface blank every letter in the app.
     pub(crate) fn live_declaration_at(
         &self,
         window: &heca_grid_ui::widgets::Flex,
@@ -680,8 +678,7 @@ impl LayerRegistry {
     /// the exposé is both a keyboard owner and a *map of the panes*, so acting on the one you can
     /// see in it is the entire point. While `modal` implied coverage the map blocked every act on
     /// the pane it was built to let you choose, and no arrangement of intents could get past it
-    /// (Antonio, 2026-08-05: *"we have actions in ActionRegistry for all the methods we need — why
-    /// is this so difficult here?"*). It was not the actions; it was this.
+    /// It was not the actions; it was this.
     ///
     /// A `Modal`-band override used to force coverage on top of the declaration, because a call
     /// site passing `false` re-opened exactly one hole: the prefix sequence deliberately falls

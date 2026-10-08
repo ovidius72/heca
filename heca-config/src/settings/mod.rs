@@ -9,7 +9,7 @@ mod notifications;
 #[cfg(test)]
 mod tests;
 
-pub use enums::{CenterFocusedColumn, ModifierKey, PaletteSize, SearchCase};
+pub use enums::{CenterFocusedColumn, ColumnFocus, ModifierKey, PaletteSize, SearchCase};
 pub use notifications::{NotificationSystem, NotificationSystemConfig};
 
 use defaults::*;
@@ -65,6 +65,17 @@ pub struct SettingsConfig {
     /// Optional terminal selection background override from `config.toml`.
     #[serde(default, alias = "terminal-selection-background")]
     pub terminal_selection_background: Option<Color>,
+    /// Optional override of the colour of the line a carried pane can be dropped on (default: the
+    /// theme's accent).
+    #[serde(default)]
+    pub drag_edge_color: Option<Color>,
+    /// Optional override of the colour of the line a drop would land on now (default: the theme's
+    /// warning colour).
+    #[serde(default)]
+    pub drag_edge_target_color: Option<Color>,
+    /// Optional override of that line's thickness in logical px (default 3, half at rest).
+    #[serde(default)]
+    pub drag_edge_width: Option<f32>,
     /// Optional terminal ANSI `0..7` palette override from `config.toml`.
     #[serde(default, alias = "terminal-ansi")]
     pub terminal_ansi: Option<[Color; 8]>,
@@ -78,6 +89,11 @@ pub struct SettingsConfig {
     /// pane, for the view to start scrolling. Only used with `auto_scroll_edge`. Default 80.
     #[serde(default = "default_edge_scroll_distance")]
     pub edge_scroll_distance: f32,
+    /// Which pane focus lands on when it moves to the column on the left or right: the one
+    /// last used in that column (`"last"`, the default), or the one level with the pane you leave
+    /// (`"row"`).
+    #[serde(default)]
+    pub column_focus: ColumnFocus,
     /// Modifier key that must be held to initiate an interactive pane drag with the mouse.
     #[serde(default)]
     pub interactive_move_modifier: ModifierKey,
@@ -225,10 +241,14 @@ impl Default for SettingsConfig {
             terminal_cursor_border: None,
             terminal_selection_foreground: None,
             terminal_selection_background: None,
+            drag_edge_color: None,
+            drag_edge_target_color: None,
+            drag_edge_width: None,
             terminal_ansi: None,
             terminal_brights: None,
             auto_scroll_edge: default_auto_scroll_edge(),
             edge_scroll_distance: default_edge_scroll_distance(),
+            column_focus: ColumnFocus::default(),
             interactive_move_modifier: ModifierKey::default(),
             swap_modifier: default_swap_modifier(),
             always_center_single_column: default_always_center_single_column(),

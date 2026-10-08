@@ -22,7 +22,7 @@
 //! Written here rather than in each host because it was already written once by hand in
 //! `ToastStack`, and wanted again the moment a column had to hold its panes.
 
-use crate::component::Component;
+use crate::component::{Base, Component};
 use crate::nav::child_name;
 
 /// Reconcile `parent`'s children against `wanted`, in `wanted`'s order.
@@ -41,34 +41,88 @@ use crate::nav::child_name;
 pub fn reconcile_children(
     parent: &mut dyn Component,
     wanted: &[String],
-    mut build: impl FnMut(&str) -> Box<dyn Component>,
+    build: impl FnMut(&str) -> Box<dyn Component>,
 ) -> bool {
     // **Ask who each child is before moving any of them.** A derived identity is counted among the
     // siblings that share its name, so it is only meaningful while the tree still stands as it was.
     let names: Vec<Option<String>> = (0..parent.base().children.len())
         .map(|i| child_name(parent, i))
         .collect();
+    let wanted: Vec<(String, Option<String>)> =
+        wanted.iter().map(|name| (name.clone(), None)).collect();
+    reconcile_named(parent.base_mut(), names, &wanted, build)
+}
 
+/// [`reconcile_children`] for a widget that has only its own [`Base`] — a props handler places its
+/// own children from what it is handed (see [`props`](crate::props)) — and for children that are
+/// rebuilt when **what they were built from** changes.
+///
+/// Each wanted child is a `(name, version)`: a child that answers to the name and was built from
+/// the same version is kept as it is; one built from another version is dropped and built afresh.
+/// So a widget whose children come from a summary (a column from its model's key) keeps no table of
+/// what each was built from — the child carries it. Children are matched by the `key` they
+/// declared, so every one must declare it: it is what a widget that decides its own children writes
+/// anyway, and one that did not is rebuilt on every pass.
+pub fn reconcile_keyed(
+    base: &mut Base,
+    wanted: &[(String, String)],
+    mut build: impl FnMut(&str) -> Box<dyn Component>,
+) -> bool {
+    let names = base
+        .children
+        .iter()
+        .map(|c| c.base().identity().map(str::to_string))
+        .collect();
+    let wanted: Vec<(String, Option<String>)> = wanted
+        .iter()
+        .map(|(name, version)| (name.clone(), Some(version.clone())))
+        .collect();
+    reconcile_named(base, names, &wanted, |name| {
+        let mut child = build(name);
+        child.base_mut().built_from = wanted
+            .iter()
+            .find(|(n, _)| n == name)
+            .and_then(|(_, version)| version.clone());
+        child
+    })
+}
+
+/// The matching itself, given the name each current child answers to. A wanted entry that carries a
+/// version only matches a child built from that version.
+fn reconcile_named(
+    parent: &mut Base,
+    names: Vec<Option<String>>,
+    wanted: &[(String, Option<String>)],
+    mut build: impl FnMut(&str) -> Box<dyn Component>,
+) -> bool {
+    let versions: Vec<Option<String>> = parent
+        .children
+        .iter()
+        .map(|c| c.base().built_from.clone())
+        .collect();
     // Take the children out so each can be put back at most once — `Option` makes that true by
     // construction rather than by care.
-    let mut held: Vec<Option<Box<dyn Component>>> =
-        parent.base_mut().children.drain(..).map(Some).collect();
+    let mut held: Vec<Option<Box<dyn Component>>> = parent.children.drain(..).map(Some).collect();
     let mut changed = held.len() != wanted.len();
 
-    for (at, name) in wanted.iter().enumerate() {
-        let found = held
-            .iter()
-            .enumerate()
-            .position(|(i, c)| c.is_some() && names[i].as_deref() == Some(name.as_str()));
+    for (at, (name, version)) in wanted.iter().enumerate() {
+        let found = held.iter().enumerate().position(|(i, c)| {
+            c.is_some()
+                && names[i].as_deref() == Some(name.as_str())
+                && version
+                    .as_ref()
+                    .is_none_or(|v| versions[i].as_ref() == Some(v))
+        });
         match found {
             Some(i) => {
                 changed |= i != at;
-                let child = held[i].take().expect("a position only yields a live child");
-                parent.base_mut().children.push(child);
+                // `position` only yields a live child, so there is always one to put back.
+                if let Some(child) = held[i].take() {
+                    parent.children.push(child);
+                }
             }
             None => {
-                let child = build(name);
-                parent.base_mut().children.push(child);
+                parent.children.push(build(name));
                 changed = true;
             }
         }
@@ -103,6 +157,58 @@ mod tests {
         let w: Vec<String> = wanted.iter().map(|s| s.to_string()).collect();
         reconcile_children(&mut parent, &w, build);
         parent
+    }
+
+    /// **A widget with only its base reconciles its own keyed children**, keeping the ones still
+    /// wanted exactly as they are.
+    #[test]
+    fn a_widget_reconciles_its_own_keyed_children_from_its_base_alone() {
+        let wanted = |names: &[&str]| -> Vec<(String, String)> {
+            names
+                .iter()
+                .map(|s| (s.to_string(), "v1".to_string()))
+                .collect()
+        };
+        let mut parent = Flex::column();
+        reconcile_keyed(parent.base_mut(), &wanted(&["a", "b"]), build);
+        parent.base_mut().children[0].base_mut().set_hidden(true);
+        let changed = reconcile_keyed(parent.base_mut(), &wanted(&["a", "c"]), build);
+        assert!(changed);
+        assert_eq!(keys(&parent), ["a", "c"]);
+        assert!(
+            parent.base().children[0].base().style.layout.hidden,
+            "a was kept, not rebuilt"
+        );
+    }
+
+    /// **A child built from another version is rebuilt; one built from the same version is kept** —
+    /// the child carries what it was built from, so its parent keeps no table of it.
+    #[test]
+    fn a_keyed_child_is_rebuilt_only_when_its_version_changed() {
+        let want = |a: &str, b: &str| -> Vec<(String, String)> {
+            vec![("a".into(), a.into()), ("b".into(), b.into())]
+        };
+        let mut parent = Flex::column();
+        reconcile_keyed(parent.base_mut(), &want("1", "1"), build);
+        // Marks only these instances carry.
+        for child in parent.base_mut().children.iter_mut() {
+            child.base_mut().set_hidden(true);
+        }
+
+        let changed = reconcile_keyed(parent.base_mut(), &want("1", "2"), build);
+        assert!(changed);
+        let hidden = |i: usize| parent.base().children[i].base().style.layout.hidden;
+        assert!(hidden(0), "a, same version, is the same widget");
+        assert!(!hidden(1), "b, new version, was built afresh");
+        assert_eq!(
+            parent.base().children[1].base().built_from.as_deref(),
+            Some("2")
+        );
+
+        assert!(
+            !reconcile_keyed(parent.base_mut(), &want("1", "2"), build),
+            "nothing changed"
+        );
     }
 
     /// An empty parent builds everything asked for, in order.

@@ -21,6 +21,7 @@ fn test_settings_config_default_values() {
     assert!(s.auto_scroll_edge);
     assert_eq!(s.edge_scroll_distance, 80.0);
     assert_eq!(s.interactive_move_modifier, ModifierKey::Super);
+    assert_eq!(s.column_focus, ColumnFocus::Last);
     assert_eq!(s.swap_modifier, ModifierKey::Shift);
     assert!(!s.always_center_single_column);
     assert!(s.shell_integration);
@@ -135,4 +136,15 @@ fn test_notification_system_defaults_and_override() {
     let s: SettingsConfig = toml::from_str("mouse = false\n").unwrap();
     assert_eq!(s.notification_system.mode, NotificationSystem::App);
     assert_eq!(s.notification_system.auto_dismiss_ms, 4000);
+}
+
+/// `column_focus` reads as the two words a user writes, and a missing key keeps today's
+/// behaviour.
+#[test]
+fn column_focus_reads_last_and_row_and_defaults_to_last() {
+    let read = |text: &str| toml::from_str::<SettingsConfig>(text).map(|s| s.column_focus);
+    assert_eq!(read("").ok(), Some(ColumnFocus::Last));
+    assert_eq!(read("column_focus = \"last\"").ok(), Some(ColumnFocus::Last));
+    assert_eq!(read("column_focus = \"row\"").ok(), Some(ColumnFocus::Row));
+    assert!(read("column_focus = \"diagonal\"").is_err());
 }

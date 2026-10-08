@@ -41,5 +41,6 @@ mod columns;
 mod laid_out;
 mod pane_effect;
 mod pane_react;
+mod places;
 mod panes;
 mod view;

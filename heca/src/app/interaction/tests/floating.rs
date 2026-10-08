@@ -173,14 +173,11 @@ fn floating_focus_allows_active_floating_pane_via_keyboard() {
     let mut session = test_session();
     session.m().add_pane(Pane::new(PaneId(99), "float-99"), None, true);
     let mut ws = session.ws();
-    ws.floating_panes.push(FloatingPane {
-        pane: Pane::new(PaneId(99), "float-99"),
-        position: Point::new(0.0, 0.0),
-        size: Size::new(200.0, 100.0),
-        is_active: true,
-        original_column_idx: None,
-        original_pane_idx: None,
-    });
+    ws.add_floating_pane(
+        Pane::new(PaneId(99), "float-99"),
+        Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 100.0)),
+        None,
+    );
     ws.focus_domain = FocusDomain::Floating;
 
     // FocusPane targeting the active floating pane should be allowed from Keyboard.

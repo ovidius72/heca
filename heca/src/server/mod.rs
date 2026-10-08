@@ -200,7 +200,7 @@ mod tests {
         assert!(
             server
                 .backends
-                .terminal_of(heca_core::layout::PaneId(1))
+                .get(heca_core::layout::PaneId(1))
                 .is_none(),
             "no terminal process yet"
         );

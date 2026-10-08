@@ -107,8 +107,7 @@ pub(super) fn callbacks(
     // (`actions::builtin_confirm_specs`), so the central destructive gate raises the same prompt
     // the sidebar and a header button raise, and this surface neither asks for it nor can skip it.
     //
-    // Antonio, 2026-08-11: *"we have an actionRegistry and we MUST always reuse what we have… the
-    // only thing i expect is a developer to handle the on_key_up on each pane in the overlay"*.
+    // The card reuses the catalogued action; its only job is to handle the key on itself.
     let delete: DispatchAction = {
         let emit = emit.clone();
         std::rc::Rc::new(move |action: &str, args: &[(&str, i64)]| {
@@ -234,8 +233,8 @@ pub(crate) fn map(
             // **The map names how it comes and goes, exactly as a plugin's surface would.**
             //
             // It opens by pulling back, the way niri's overview does — the same session seen from
-            // further away, rather than a different picture arriving. Antonio: *"The animation in
-            // niri is zoom-in/out not fade."* Going, the shrink leads and the dissolve rides it,
+            // further away, rather than a different picture arriving: a zoom, not a fade. Going,
+            // the shrink leads and the dissolve rides it,
             // which is what `ZoomFade` **is**: the gesture is defined once, in the library, so no
             // surface composes it out of parts and none of them can drift.
             //
@@ -287,16 +286,13 @@ pub(crate) fn record_expose_cursor(state: &mut crate::app_state::AppState, pane_
 /// them as one is what this function exists to stop:
 ///
 /// - **Opening the map** — the cursor goes to the pane the session is focused on. The map is a
-///   picture of where you are, so it opens where you are. *(Antonio, driving the rebuilt map,
-///   2026-08-13: "when you open the exposé the focused pane in the exposé should be the same that
-///   is focused in the scrolling area."* This **reverses** the earlier rule, which preferred the
-///   remembered highlight as "the more specific answer": browse away, dismiss, and the next open
-///   started where you had browsed while the session was still on the pane you left — so the map
-///   drew its cursor on one card and its `active` styling on another.)
+///   picture of where you are, so it opens where you are. Preferring the remembered highlight
+///   instead would open the map where you last browsed while the session is on another pane, so
+///   its cursor and its `active` styling would sit on different cards.
 /// - **Rebuilding it while it is up** — the cursor stays exactly where it is. The layer is rebuilt
 ///   from scratch whenever the session changes underneath it, and a rebuild that moved the
 ///   highlight would fight the user: reading the *active workspace's* slot here is what made
-///   deleting a pane in one row jump the map to another (Antonio, driving, 2026-08-11).
+///   deleting a pane in one row jump the map to another.
 ///
 /// Pure, and takes the `Layout` rather than the `AppState` around it, so both answers are testable
 /// without a window — this resolution has now been got wrong three times.
@@ -500,8 +496,8 @@ mod tests {
     /// still came back **empty**, because the index records the qualified id
     /// (`heca.expose.delete_pane`) while the lookup asked for the short name. The letters silently
     /// did nothing and `x` fell through to the host, which reported an action it had never heard of
-    /// (Antonio, driving, 2026-08-12). Asserting the entry alone — which the test below does —
-    /// could not see it: both ends were right and the join was wrong.
+    /// Asserting the entry alone — which the test below does — could not see it: both ends were
+    /// right and the join was wrong.
     #[test]
     fn the_shipped_delete_letters_reach_the_cards() {
         let mut index = crate::keymap::BindingIndex::new();
@@ -688,7 +684,7 @@ mod tests {
 
     /// **The map opens on the pane the session is focused on** — not where it was last browsed.
     ///
-    /// Antonio, driving the rebuilt map, 2026-08-13: the exposé's cursor and the scrolling area's
+    /// The exposé's cursor and the scrolling area's
     /// focus must agree the moment it opens. They did not: the remembered highlight won on a fresh
     /// open too, so browsing away and dismissing left the next open showing its cursor on one card
     /// and its `active` styling on another.
@@ -729,7 +725,7 @@ mod tests {
 
     /// **A rebuild in a row other than the active workspace's stays in that row.** Reading the
     /// active workspace's slot here is what made deleting a pane in one row jump the map to
-    /// another (Antonio, driving, 2026-08-11).
+    /// another.
     #[test]
     fn a_rebuild_stays_in_the_row_the_cursor_is_in() {
         let mut s = session();

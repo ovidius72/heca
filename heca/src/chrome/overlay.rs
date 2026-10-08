@@ -454,7 +454,7 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     // **The same builder every declared menu uses.** A dropdown has no declaring widget — the host
     // builds the rows and anchors it — but *how a menu is built* must not depend on that, or the
     // two drift: they already had, one with quick-pick keycaps and one without, which is how the
-    // same menu came to have two shapes on screen (Antonio, 2026-08-07).
+    // same menu came to have two shapes on screen.
     let items =
         super::context_menu::menu_from_items("", "", "", spec.items, &state.action_catalog, &emit);
     let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
@@ -470,8 +470,7 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
         // its own `Intent` now (one builder for every menu), so nothing else resolves this overlay
         // — it used to be `SubmitOverlay`, intercepted by the completion below. Without this the
         // panel hid itself while the layer stayed registered: still modal, still holding the
-        // keyboard, so every keybinding was dead until `Escape` (Antonio, 2026-08-07 —
-        // "`prefix+>` then float/unfloat makes it unstable, keybindings don't work").
+        // keyboard, so every keybinding was dead until `Escape`.
         .after_select(move || emit_after.fire(close.clone()))
         .default_open(true);
 

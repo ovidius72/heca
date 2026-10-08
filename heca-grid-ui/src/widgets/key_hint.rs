@@ -540,9 +540,9 @@ fn keycap_rect(
 ///
 /// A row half past a sidebar's fold keeps its letter — you can see it, so you can aim at it — but
 /// the cap is placed relative to the row's *whole* box, so for a row that is nine tenths below the
-/// fold that lands on the dock's frame, outside the sidebar entirely (Antonio, driving, 2026-08-23:
-/// *"letter should not overlap the parent DockView"*). The renderer cannot stop it: the cap is drawn
-/// into the overlay band, which starts unclipped so a dropdown can escape a scroll region.
+/// fold that lands on the dock's frame, outside the sidebar entirely. The renderer cannot stop it:
+/// the cap is drawn into the overlay band, which starts unclipped so a dropdown can escape a scroll
+/// region.
 ///
 /// So it is nudged — never cut — into `permitted ∩ clip`, **the visible part of the area its
 /// placement is allowed to use**, not merely into the clip: pushing it anywhere in the viewport
@@ -589,14 +589,14 @@ fn fit_into_view(
 /// - **The viewport is the PAINT context's**, not `Base::viewport`. The latter is written per
 ///   *tree* by the layout pass, so inside a pane header it is the header's own box — a few dozen
 ///   pixels tall. Reading it there made every compact cap "not fit below", flip above, and get
-///   clipped by the pane frame (Antonio, driving, 2026-08-14).
+///   clipped by the pane frame.
 /// - **The cap is nudged, never cut.** A row half past a sidebar's fold is still a target — you can
-///   see it, so you can aim at it — and its letter is drawn **whole** so it stays readable (Antonio,
-///   2026-08-23: *"a half visible pane row should have the letter to peek"*). Clipping it would make
-///   it unreadable, so instead it is moved inside the visible part of its own row —
-///   [`fit_into_view`] — and dropped when that part is too small to hold it. What stops a cap for a
-///   row nobody can see at all is **candidacy**, one level up: [`hint::collect`](crate::hint) drops
-///   a target outside its clipping ancestors, so the letter is never handed out.
+///   see it, so you can aim at it — and its letter is drawn **whole** so it stays readable.
+///   Clipping it would make it unreadable, so instead it is moved inside the visible part of its
+///   own row — [`fit_into_view`] — and dropped when that part is too small to hold it. What stops a
+///   cap for a row nobody can see at all is **candidacy**, one level up:
+///   [`hint::collect`](crate::hint) drops a target outside its clipping ancestors, so the letter is
+///   never handed out.
 /// - **The placement says where the cap may live, not the target box.** [`keycap_rect`] returns the
 ///   permitted rect beside the cap, because a compact target's cap is placed *outside* it on
 ///   purpose. Re-deriving that from the bounds is what dragged every icon's caption back on top of
@@ -627,7 +627,7 @@ pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
     // theme, whose accent differs between the active pane and the rest. A letter is neither — it is
     // chrome the framework stamps over a target, and it belongs to the picker. Read from the target
     // instead, an emphasized header button wore a letter a quarter larger than the pane's own, and
-    // in a different colour, in the same picker (Antonio, driving, 2026-09-03).
+    // in a different colour, in the same picker.
     let picker_font = cx.theme().hint_font_size;
     // **Explicit colour, then the declared MEANING, then the picker's own token.** A widget
     // composing itself has no theme at build time, so a tone is the only thing it can say — and it
@@ -783,8 +783,7 @@ mod tests {
         assert_eq!(fitted, cap, "and the clamp leaves it there");
     }
 
-    /// **A letter stays readable whatever colour it is given** (Antonio, 2026-09-10: *"what if a
-    /// user set the same color of the text?"*).
+    /// **A letter stays readable whatever colour it is given**.
     ///
     /// `hint_color` is a colour the user picks, so the glyph cannot assume the chip is bright. The
     /// glyph was a constant — always the theme background — which is legible under a bright accent

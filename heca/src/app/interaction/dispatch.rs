@@ -149,7 +149,7 @@ pub(crate) fn dispatch_intent(
             // **Say WHAT was refused, not only who asked.** The source alone cannot be acted on: a
             // single click can send more than one intent, so identical lines may be different
             // refusals — and one of them being correct says nothing about the others
-            // (Antonio, driving, 2026-09-02).
+            //.
             #[cfg(debug_assertions)]
             eprintln!("[heca] interaction: blocked {refused:?} from {source:?}");
         }
@@ -180,7 +180,7 @@ pub(crate) fn focus_container_then_action(
         eprintln!("[heca] interaction: no container mounted as '{container}'");
         return IntentOutcome::NotRunnable;
     }
-    if state.chrome_state.focused_container().as_deref() != Some(container) {
+    if crate::app::tree_focus::focused_dock(state).as_deref() != Some(container) {
         dispatch_action(
             state,
             registry,

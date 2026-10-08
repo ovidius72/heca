@@ -5,9 +5,8 @@
 //! you to aim at a target visible only in a dock you may have collapsed, and the columns you were
 //! actually looking at wore nothing (F003/P082/T474).
 //!
-//! It owns no content **yet**. Antonio, 2026-09-10: *"a pane should not only be positionable inside
-//! columns but also live elsewhere, like a div … in the future I'd like to have sticky columns and
-//! sticky panes."* That is where this goes — the panes become its children, so moving one between
+//! It owns no content **yet**. A pane should be placeable anywhere, like a div, and columns and
+//! panes may become sticky. That is where this goes — the panes become its children, so moving one between
 //! containers is a tree operation. Until then it is the box and the name, and the panes are still
 //! placed by the host.
 
@@ -30,8 +29,6 @@ pub(crate) struct ColumnCallbacks {
     /// The keycap tint a column target wears — the theme token, so both views of a column agree
     /// and a theme reload moves them together.
     pub(crate) tint: heca_grid_ui::Color,
-    /// What picking the new-column offer does: make one and move the pane into it.
-    pub(crate) new_column: std::rc::Rc<dyn Fn()>,
 }
 
 /// The column shell component. Properties are struct fields and the constructor is a struct
@@ -41,38 +38,12 @@ pub(crate) struct ColumnShell<'a> {
     pub(crate) cb: &'a ColumnCallbacks,
     /// What each pane binds, travelling as one group exactly as the column's own seams do.
     pub(crate) pane_cb: &'a PaneCallbacks,
-    /// **What each pane wants along its top**, by pane. The column knows no more about a header
-    /// than the pane does — it carries them down and the pane decides what to do with one.
-    pub(crate) headers: HashMap<PaneId, Box<dyn Component>>,
+    /// **What a pane's header is built from**, when the info bar is on. The column hands it to each
+    /// pane it builds and knows no more about a header than that.
+    pub(crate) header_env: Option<std::rc::Rc<crate::chrome::HeaderEnv>>,
     /// **What each pane runs**, by pane — the terminal today, anything else tomorrow. Carried down
-    /// exactly as the headers are: the column does not know what it is.
+    /// exactly as the header's environment is: the column does not know what it is.
     pub(crate) contents: HashMap<PaneId, Box<dyn Component>>,
-}
-
-/// **The offer of a new column**, drawn in the gap right of the column the picked pane is in.
-///
-/// It is a child of that column and placed outside its box, which `at_rect` allows — absolute
-/// placement is not clipped by a parent that does not clip. That is what keeps it out of every
-/// map and every walk: it arrives with the column and leaves with it.
-/// `share` is how wide it is as a share of that column: a slot, not a column — wide enough to aim at
-/// and to carry a letter, narrow enough to read as an opening.
-fn new_column_slot(cb: &ColumnCallbacks, share: f32) -> Box<dyn Component> {
-    let slot = Flex::column()
-        .key(crate::chrome::NEW_COLUMN_KEY)
-        .at_rect(
-            heca_grid_ui::Length::Percent(1.0),
-            0.0,
-            heca_grid_ui::Length::Percent(share),
-            heca_grid_ui::Length::Percent(1.0),
-        )
-        // What picking it means: make a column here and move the pane into it. The column asks;
-        // the core does.
-        .on_hint({
-            let make = cb.new_column.clone();
-            move || make()
-        })
-        .hint_color(cb.tint);
-    Box::new(slot)
 }
 
 /// **Build one pane, placed where the layout engine put it.**
@@ -88,7 +59,7 @@ pub(crate) fn pane_child(
     model: &PaneShellModel,
     column: &ColumnShellModel,
     cb: &PaneCallbacks,
-    header: Option<Box<dyn Component>>,
+    header: Option<crate::chrome::PaneHeader>,
     content: Option<Box<dyn Component>>,
 ) -> Box<dyn Component> {
     let shell = PaneShell {
@@ -131,18 +102,20 @@ impl ColumnShell<'_> {
         // **A column reads the same wherever you see it.** The sidebar's view tints its keycap
         // `success` so a column target is distinct from a pane's; this is the same target, so it
         // takes the same tint rather than the picker's default.
-        let column = column.hint_color(self.cb.tint);
+        // **Its letter sits in the middle** of the outline a column pick draws round it.
+        let column = column
+            .hint_color(self.cb.tint)
+            .hint_placement(heca_grid_ui::widgets::HintPlacement::Center);
 
         // The panes, each at the rect the layout engine gave it.
         let mut column = column;
         for pane in &self.model.panes {
-            let header = self.headers.remove(&pane.pane_id);
+            let header = self
+                .header_env
+                .as_ref()
+                .map(|env| crate::chrome::PaneHeader::new(env.clone()));
             let content = self.contents.remove(&pane.pane_id);
             column = column.child(pane_child(pane, self.model, self.pane_cb, header, content));
-        }
-        // Declared last so it draws over the gap rather than under the panes.
-        if let Some(share) = self.model.new_column_slot {
-            column = column.child(new_column_slot(self.cb, share));
         }
         column
     }

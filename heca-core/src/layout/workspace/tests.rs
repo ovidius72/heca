@@ -49,14 +49,11 @@ fn workspace_with_pane(pane_id: u64) -> Shown {
 /// Helper: create a workspace with one tiled pane and one floating pane.
 fn workspace_with_floating_pane(pane_id: u64) -> Shown {
     let mut ws = workspace_with_pane(99); // one tiled pane
-    ws.floating_panes.push(FloatingPane {
-        pane: Pane::new(PaneId(pane_id), format!("float{}", pane_id)),
-        position: Point::new(50.0, 50.0),
-        size: Size::new(400.0, 300.0),
-        is_active: true,
-        original_column_idx: None,
-        original_pane_idx: None,
-    });
+    ws.add_floating_pane(
+        Pane::new(PaneId(pane_id), format!("float{}", pane_id)),
+        Rectangle::new(Point::new(50.0, 50.0), Size::new(400.0, 300.0)),
+        None,
+    );
     ws.focus_domain = FocusDomain::Floating;
     ws
 }
@@ -75,14 +72,11 @@ fn has_panes_true_when_tiled_panes_exist() {
 #[test]
 fn has_panes_true_when_only_floating_panes_exist() {
     let mut ws = Shown::new(Size::new(800.0, 600.0));
-    ws.floating_panes.push(FloatingPane {
-        pane: Pane::new(PaneId(1), "float1"),
-        position: Point::new(50.0, 50.0),
-        size: Size::new(400.0, 300.0),
-        is_active: true,
-        original_column_idx: None,
-        original_pane_idx: None,
-    });
+    ws.add_floating_pane(
+        Pane::new(PaneId(1), "float1"),
+        Rectangle::new(Point::new(50.0, 50.0), Size::new(400.0, 300.0)),
+        None,
+    );
     assert!(
         ws.has_panes(),
         "workspace with only floating pane should have_panes()"
@@ -129,14 +123,11 @@ fn remove_last_floating_pane_switches_domain_to_tiled() {
 fn remove_one_of_multiple_floating_panes_stays_in_floating_domain() {
     let mut ws = workspace_with_floating_pane(42);
     // Add a second floating pane
-    ws.floating_panes.push(FloatingPane {
-        pane: Pane::new(PaneId(43), "float43"),
-        position: Point::new(100.0, 100.0),
-        size: Size::new(300.0, 200.0),
-        is_active: false,
-        original_column_idx: None,
-        original_pane_idx: None,
-    });
+    ws.add_floating_pane(
+        Pane::new(PaneId(43), "float43"),
+        Rectangle::new(Point::new(100.0, 100.0), Size::new(300.0, 200.0)),
+        None,
+    );
 
     // Remove the first floating pane
     let idx = ws
@@ -198,14 +189,11 @@ fn remove_floating_pane_preserves_tiled_panes() {
 #[test]
 fn deactivate_floating_panes_clears_all_active_flags() {
     let mut ws = workspace_with_floating_pane(42);
-    ws.floating_panes.push(FloatingPane {
-        pane: Pane::new(PaneId(43), "float43"),
-        position: Point::new(100.0, 100.0),
-        size: Size::new(300.0, 200.0),
-        is_active: false,
-        original_column_idx: None,
-        original_pane_idx: None,
-    });
+    ws.add_floating_pane(
+        Pane::new(PaneId(43), "float43"),
+        Rectangle::new(Point::new(100.0, 100.0), Size::new(300.0, 200.0)),
+        None,
+    );
 
     ws.deactivate_floating_panes();
 

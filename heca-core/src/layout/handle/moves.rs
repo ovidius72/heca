@@ -209,7 +209,9 @@ impl LayoutMut<'_> {
     }
 
     /// Put a pane at row `row` of column `col` of workspace `dst_ws` — or, with no row, in a new
-    /// column there — sliding it from where it was when it stays in its workspace. Nothing
+    /// column at gap `col` there — sliding it from where it was when it stays in its workspace.
+    /// Within its own workspace the place is counted as the workspace is now, with the pane still
+    /// in it ([`WorkspaceMut::move_pane`](crate::layout::WorkspaceMut::move_pane)). Nothing
     /// happens, and the pane is not touched, when the workspace is not there or the pane is not
     /// anywhere.
     pub fn place_pane(
@@ -225,13 +227,20 @@ impl LayoutMut<'_> {
         let src_ws = self.session.workspace_holding(pane)?;
         let slide = self.slide();
         let from = self.workspace_mut(src_ws).and_then(|ws| rect_of(&ws, pane));
-        let taken = self.workspace_mut(src_ws)?.take_pane(pane)?;
         let new_column = ColumnId(self.session.next_id());
-        let mut ws = self.workspace_mut(dst_ws)?;
-        ws.place_pane(taken, col, row, new_column);
         if src_ws == dst_ws {
+            // Within one workspace the place is counted as it is now, with the pane still in it;
+            // the workspace works out what taking the pane out does to the numbers.
+            let mut ws = self.workspace_mut(dst_ws)?;
+            if !ws.move_pane(pane, col, row, new_column) {
+                return None;
+            }
             slide_from(&mut ws, pane, from, slide);
+        } else {
+            let taken = self.workspace_mut(src_ws)?.take_pane(pane)?;
+            self.workspace_mut(dst_ws)?.place_pane(taken, col, row, new_column);
         }
+        let ws = self.workspace_mut(dst_ws)?;
         let column = ws.scrolling.pane_indices(pane).map_or(0, |(c, _)| c);
         Some(Moved { workspace: dst_ws, column, removed_workspace: None })
     }

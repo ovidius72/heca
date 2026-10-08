@@ -189,17 +189,18 @@ fn default_font_zoom_bindings_resolve_without_collision() {
 }
 
 #[test]
-fn default_workspace_aliases_include_ctrl_p_and_ctrl_n() {
+fn default_workspace_switch_is_ctrl_p_and_ctrl_n_only() {
     let config = heca_config::theme::Config::default();
     let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
+    // One pair of keys per job: `prefix+u` / `prefix+d` are free for the user.
     assert_eq!(
         keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("u")),
-        Some(&WmAction::WorkspacePrev)
+        None
     );
     assert_eq!(
         keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("d")),
-        Some(&WmAction::WorkspaceNext)
+        None
     );
     assert_eq!(
         keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Ctrl+p")),

@@ -176,7 +176,7 @@ impl Provider for WorkspacesContainerProvider {
         // `Global` is the one policy no domain refuses, so with a floating pane active the picker
         // offered a letter on every sidebar row naming a pane: pressing one moved the cursor while
         // the pane focus was refused underneath (`blocked intent from Provider`) — a letter that
-        // half worked, which is worse than one that does nothing (Antonio, driving 2026-08-21).
+        // half worked, which is worse than one that does nothing.
         //
         // This is the declaration telling the truth about itself, which is the *only* input the
         // picker's filter takes. That filter knows nothing about panes, rows or workspaces, and it
@@ -339,19 +339,17 @@ impl Provider for WorkspacesContainerProvider {
                 // not merely refrain from releasing it. Written as one rule for every caller: from
                 // `Space` the dock already has it and this is a no-op; from `prefix+/`, the palette
                 // or RPC the keyboard was elsewhere, and without this the cursor moved somewhere the
-                // user could not then drive with `j`/`k`. Antonio, 2026-08-10, driving the picker:
-                // *"it activates the pane but the keyboard goes to the terminal"*.
+                // user could not then drive with `j`/`k`.
                 //
-                // **Guarded, because `focus_dock` aimed at the dock that already holds the keyboard
-                // is the way back out** (`handle_focus_dock`) — dispatching it unconditionally would
-                // make every hint from inside the dock release the keyboard instead.
-                if cx.state().focused_container().as_deref() != Some(cx.mount()) {
-                    let mount = cx.mount().to_string();
-                    cx.dispatch(
-                        "focus_dock",
-                        PropMap::from([("dock".to_string(), PropValue::Text(mount))]),
-                    );
-                }
+                // **Unguarded on purpose.** `focus_dock` only focuses — aimed at the dock that already
+                // holds the keyboard it changes nothing (the release is `toggle_dock`) — so there is
+                // no state to read first, and the keyboard is asked of the tree by the host, not
+                // remembered here.
+                let mount = cx.mount().to_string();
+                cx.dispatch(
+                    "focus_dock",
+                    PropMap::from([("dock".to_string(), PropValue::Text(mount))]),
+                );
                 self.activate(cx, Activate::AndStay)
             }
             CREATE_COLUMN => self.at_workspace(cx, "add_column_to_workspace"),
@@ -643,9 +641,6 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
     // This placement's own scroll offset, keyed by mount id: place the container twice and each
     // keeps its own position, while the workspaces it shows come from the shared store either way.
     let scroll = state.container_scroll(bx.container_id());
-    // …and whether this placement is the one the keyboard is aimed at (F003/P011/T020). Per mount for
-    // the same reason: only one of two placements can hold focus.
-    let focused = state.container_keyboard_target(bx.container_id());
     let ws_state = state.workspaces();
     // Read the id out before the registries are taken: `container_id()` borrows `bx`, and the two
     // registries below borrow it mutably.
@@ -678,7 +673,6 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
         DockView {
             tree: &tree,
             scroll,
-            focused,
         }
         .build(&seams, &mut reg),
     )
@@ -743,8 +737,7 @@ fn pane_row_press(pane_id: PaneId) -> Intent {
 /// A click on a row means *go there and leave*: `focus_pane` + the dock releasing the keyboard. A
 /// pick means *look at that one*, so it moves the cursor onto the picked row and brings its pane to
 /// the front **without leaving the dock** — this component's own `peek_selected`, aimed at a row by
-/// its nav key instead of the cursor. Antonio, 2026-08-07: *"i want it to focus the cursor in the
-/// hinted letter and is good if the pane gets active"*.
+/// its nav key instead of the cursor.
 ///
 /// Pointing one intent at both gestures is precisely the bug this replaces: commit `e712d70`
 /// (2026-07-30) made the row's hint target fire the row's *click*, and `prefix+/` on a sidebar row
@@ -937,9 +930,8 @@ mod tests {
     /// `key_at` — how a right-click finds out what it landed on — reads `Base::key` and
     /// nothing else. The workspace header pushed its key into the cursor-signal list and never told
     /// the widget, so the hit-test found nothing at that row: right-clicking a pane or a column
-    /// opened its menu and a workspace opened none (Antonio, 2026-08-05). Pushing the key to the
-    /// signals and declaring it on the widget are two different acts, and the projection tests
-    /// only ever checked the first.
+    /// opened its menu and a workspace opened none. Pushing the key to the signals and declaring it
+    /// on the widget are two different acts, and the projection tests only ever checked the first.
     ///
     /// Note what this test no longer needs: a `ChromeCtx`, and therefore a window. The dock is
     /// components now, so it is built from its seams (F006/P032/T429).
@@ -952,7 +944,6 @@ mod tests {
             DockView {
                 tree: &tree,
                 scroll: heca_grid_ui::reactive::signal(0.0),
-                focused: heca_grid_ui::reactive::signal(false),
             }
             .build(&seams, &mut reg)
         };
@@ -1027,12 +1018,11 @@ mod tests {
         tree
     }
 
-    /// A store whose model is the little tree above, with `mount` holding the keyboard.
-    fn store_with_tree(mount: &str) -> SharedChromeState {
+    /// A store whose model is the little tree above.
+    fn store_with_tree() -> SharedChromeState {
         let store = store();
         *store.workspaces.tree_mut() = tree();
         store.workspaces.tree_mut().sync_flat_items();
-        store.set_focused_container(Some(mount.to_string()));
         store
     }
 
@@ -1073,7 +1063,7 @@ mod tests {
 
     #[test]
     fn the_cursor_moves_over_the_components_own_rows() {
-        let store = store_with_tree("workspaces");
+        let store = store_with_tree();
         let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
@@ -1092,7 +1082,7 @@ mod tests {
     /// **this mount's** cursor, not a global one.
     #[test]
     fn moving_the_cursor_publishes_it_for_this_mount() {
-        let store = store_with_tree("workspaces");
+        let store = store_with_tree();
         let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
@@ -1114,7 +1104,7 @@ mod tests {
     /// asks only for the focus. Both go out as queued intents — a component never mutates app state.
     #[test]
     fn activating_a_row_asks_the_host_rather_than_acting() {
-        let store = store_with_tree("workspaces");
+        let store = store_with_tree();
         let p = WorkspacesContainerProvider::new("workspaces");
 
         let mut cx = ProviderCx::new("workspaces", store.clone());
@@ -1142,7 +1132,7 @@ mod tests {
     /// so an unknown key is a no-op rather than a guess.
     #[test]
     fn a_click_moves_the_cursor_so_stepping_continues_from_it() {
-        let store = store_with_tree("workspaces");
+        let store = store_with_tree();
         let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
@@ -1176,7 +1166,7 @@ mod tests {
 
     #[test]
     fn a_key_this_component_did_not_write_leaves_the_cursor_alone() {
-        let store = store_with_tree("workspaces");
+        let store = store_with_tree();
         let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
         let before = store.workspaces.tree().cursor;
@@ -1197,7 +1187,7 @@ mod tests {
     /// cannot be built without a window. The user drives that half in the app.
     #[test]
     fn hint_and_activate_differ_only_by_the_release_they_ask_for() {
-        let store = store_with_tree("workspaces");
+        let store = store_with_tree();
         let p = WorkspacesContainerProvider::new("workspaces");
 
         // Park the cursor on the pane: the workspace row takes the `focus_workspace` arm, which
@@ -1223,10 +1213,9 @@ mod tests {
             !hinted.contains(&"unfocus_dock".to_string()),
             "…and asks for no release, so j/k keep working: {hinted:?}",
         );
-        assert_eq!(
-            store.focused_container(),
-            Some("workspaces".to_string()),
-            "hint leaves the container holding the keyboard",
+        assert!(
+            hinted.contains(&"focus_dock".to_string()),
+            "…and keeps the keyboard in the dock, by asking for it (a no-op when it is there): {hinted:?}",
         );
 
         p.perform(ACTIVATE_SELECTED, &Intent::new(ACTIVATE_SELECTED), &mut cx);
@@ -1246,7 +1235,7 @@ mod tests {
     /// row's *click* instead — and that click leaves the sidebar.
     #[test]
     fn a_hint_can_be_aimed_at_a_row_by_key_and_moves_the_cursor_there() {
-        let store = store_with_tree("workspaces");
+        let store = store_with_tree();
         let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
@@ -1281,20 +1270,15 @@ mod tests {
         );
     }
 
-    /// **A hint from outside the dock takes the keyboard.** Landing the cursor on a row is only
-    /// worth anything if `j`/`k` then move it, so the verb asks for the dock — once, and only when
-    /// the dock does not already have it, because `focus_dock` aimed at the focused dock is the way
-    /// back out and would release instead. Antonio, driving `prefix+/` on 2026-08-10: *"it
-    /// activates the pane but the keyboard goes to the terminal"*.
+    /// **A hint takes the keyboard for the dock it is in.** Landing the cursor on a row is only
+    /// worth anything if `j`/`k` then move it, so the verb asks for the dock — every time, for its
+    /// own mount. Whether the dock already has the keyboard is the host's to know (it reads the
+    /// tree), and `focus_dock` aimed at a dock that has it changes nothing.
     #[test]
-    fn a_hint_from_outside_the_dock_asks_for_the_keyboard_and_from_inside_does_not() {
+    fn a_hint_asks_for_the_keyboard_for_its_own_dock() {
         let p = WorkspacesContainerProvider::new("workspaces");
-
-        // Nothing holds chrome focus (the keyboard is in a pane).
-        let away = store();
-        *away.workspaces.tree_mut() = tree();
-        away.workspaces.tree_mut().sync_flat_items();
-        let mut cx = ProviderCx::new("workspaces", away.clone());
+        let store = store_with_tree();
+        let mut cx = ProviderCx::new("workspaces", store.clone());
         p.perform(PEEK_SELECTED, &Intent::new(PEEK_SELECTED), &mut cx);
         let asked: Vec<crate::chrome::Intent> = cx.drain();
         let focus_dock = asked.iter().find(|i| i.action == "focus_dock");
@@ -1303,23 +1287,13 @@ mod tests {
             Some(Some(PropValue::Text("workspaces".to_string()))),
             "it asks for its own mount: {asked:?}",
         );
-
-        // The dock already holds it: asking again would toggle it off.
-        let held = store_with_tree("workspaces");
-        let mut cx = ProviderCx::new("workspaces", held.clone());
-        p.perform(PEEK_SELECTED, &Intent::new(PEEK_SELECTED), &mut cx);
-        let asked: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
-        assert!(
-            !asked.contains(&"focus_dock".to_string()),
-            "focus_dock aimed at the focused dock releases it: {asked:?}",
-        );
     }
 
     /// A key naming a row that is not there leaves the cursor alone rather than failing — a tree
     /// rebuilt under the letters is not an error.
     #[test]
     fn an_aimed_hint_with_a_stale_key_leaves_the_cursor_where_it_was() {
-        let store = store_with_tree("workspaces");
+        let store = store_with_tree();
         let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
         let before = store.workspaces.tree().cursor;
@@ -1388,7 +1362,7 @@ mod tests {
     /// app's `rename_pane` / `rename_workspace` keep meaning the focused pane / active workspace.
     #[test]
     fn rename_selected_targets_the_cursor_row_by_id() {
-        let store = store_with_tree("workspaces");
+        let store = store_with_tree();
         let p = WorkspacesContainerProvider::new("workspaces");
         let mut cx = ProviderCx::new("workspaces", store.clone());
         let intent = Intent::new(RENAME_SELECTED);
@@ -1410,7 +1384,7 @@ mod tests {
 
     #[test]
     fn an_action_this_component_does_not_own_declines() {
-        let store = store_with_tree("workspaces");
+        let store = store_with_tree();
         let mut cx = ProviderCx::new("workspaces", store);
         assert_eq!(
             WorkspacesContainerProvider::new("workspaces").perform(
@@ -1541,8 +1515,7 @@ mod tests {
         }
     }
 
-    /// **No two pick targets in the sidebar answer to the same name** (Antonio, 2026-08-27:
-    /// `prefix+/`, Esc, `prefix+/` and the sidebar letters have moved, with nothing touched).
+    /// **No two pick targets in the sidebar answer to the same name**.
     ///
     /// A remembered letter is looked up by identity, so two targets sharing one identity both ask
     /// for the same letter. The first takes it, the second is refused and draws a fresh one — and

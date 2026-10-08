@@ -294,8 +294,8 @@ of the **action**, not of the binding, because the same action is reached from a
 the palette, a button and RPC.
 
 A **way out** of a surface is declared once for every surface of that kind, not per surface: the
-`[[keys.mode]] name = "layer"` block is the floor every overlay answers (`Escape`, plus `q` and
-`Ctrl+q` as shipped), and `name = "focus"` is the same thing for a focused dock. Declared there they
+`[[keys.mode]] name = "layer"` block is the floor every overlay answers (`Escape`, `q` and
+`Ctrl+q` as shipped), and `name = "focus"` is the same thing for a focused dock (`Escape`). Declared there they
 exist **only while that kind of surface holds the keyboard**, so the program running in a pane keeps
 those keys — `:q` still quits vim, and `Ctrl+q` still reaches readline. That is what makes them
 different from the global `[keys]` map, which is consulted whether or not anything is in front.
@@ -375,9 +375,25 @@ A container does not have to declare anything to be usable:
   names the component and lands on the seating you were last in. Pressing it again while that
   container holds the keyboard gives it back. The name is reserved — a component cannot have an
   action called `global_focus`.
-- **`Escape`** — gives the keyboard back to the main region. Always bound, for every container, and
-  **not removable**. You can add other ways out by binding `unfocus_dock`; you cannot take this one
-  away, because a dock that declares nothing must still be leavable without the mouse.
+- **`Escape`** — gives the keyboard back to the main region. Bound for every container as shipped
+  (the `focus` block of `keybindings.default.toml`), so a dock that declares nothing is still
+  leavable without the mouse. **Every panel always has a way out, and by default it is `Escape`**:
+  to move it, bind `unfocus_dock` to another key (`unfocus_dock = "prefix+Escape"`, or in the block)
+  and give `Escape` up with `unbind`:
+
+  ```toml
+  [[keys.mode]]
+  name = "focus"
+  unbind = ["Escape"]
+  [[keys.mode.bindings]]
+  action = "unfocus_dock"
+  keys = "Ctrl+g"
+  ```
+
+  A config that leaves a floor with no key — in the block or behind the prefix — is refused for
+  that floor, `Escape` is put back, and the start-up report says so. With `Escape` given up, it
+  reaches whatever is typed into inside the dock (a terminal's program, say) like any key nobody
+  claimed. The same holds for overlays (`name = "layer"`, `close_overlay`).
 
 Two components asking for the same `global_focus` combo is reported at startup like any other
 collision.
@@ -844,6 +860,8 @@ show_focus_border = true   # draw the focus ring at all
 # Sidebar highlight alphas (0.0–1.0; optional, shown with their defaults)
 active_wash_alpha = 0.11          # Accent wash over the active workspace
 card_background_alpha = 0.02      # Resting background tint of each pane card
+drag_image_alpha = 0.6            # Opacity of the picture of a pane that follows the pointer while it is carried
+drag_image_scale = 0.5            # Its size next to the pane (1.0 = life size)
 
 [shadow]
 color = "#000000"
@@ -930,6 +948,7 @@ mouse = true                  # Enable mouse interactions
 focus_follows_mouse = true    # Focus pane on hover
 auto_scroll_edge = true       # Auto-scroll near edges
 edge_scroll_distance = 80.0   # How close (px) a dragged pane must come to the edge for that to start
+column_focus = "last"  # Pane focus lands on in the next column: "last" used there, or the one level with "row"
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 float_size = 0.95             # Share of the working area a pane takes when it floats with nowhere given
 move_slide_reach = 0.9        # How far (fraction of the window) a moved or swapped pane animates in from; 0 = jump
@@ -1162,7 +1181,6 @@ title_actions = ["split", "close"]
 # drag_label_size_factor = 0.25
 # drag_label_min_size    = 24.0
 # drag_label_max_size    = 72.0
-# new_column_slot_share  = 0.18
 
 [appearance.sidebar]
 # Sidebar shell appearance (independent of the panes; all optional):
@@ -1752,6 +1770,7 @@ is entered via actions, not a keybinding trigger.
 **Sticky vs Non-sticky modes:**
 
 - **Sticky** (`sticky = true`): Stay in mode until `Escape` or `Enter`. Resize mode is sticky.
+- **`unbind = ["…"]`**: keys to take out of the mode, the shipped ones included — a block's own bindings are added to the shipped ones, so this is how a key is given up. It is how the way out of a dock or an overlay is moved (see the `focus` and `layer` blocks): bind the action to another key, then unbind `Escape`.
 - **Non-sticky** (`sticky = false`, or chord): Execute one action then exit. Like `prefix+w` → `1` creates workspace 1.
 
 ### Binding Precedence
@@ -1938,6 +1957,24 @@ The agreed behavior for float toggling is:
 - `prefix+z` is reserved for **column zoom toggle**
 
 ---
+
+### Frame timing
+
+For tuning the render path, run heca with `HECA_FRAME_TIMES` set (any value):
+
+```sh
+HECA_FRAME_TIMES=1 cargo run --release -p heca
+```
+
+Every 120 frames that drew, it prints one line on stderr — the average time `render_frame` took on the
+CPU and the average number of render passes it began:
+
+```text
+[frame-times] 120 frames: 1.84 ms CPU, 9.0 render passes per frame (GPU time is not measured)
+```
+
+It is CPU time only: the GPU runs after the frame is submitted, so work moved from the CPU to the GPU
+looks like a win here. Off unless the variable is set.
 
 ## Architecture
 

@@ -107,6 +107,8 @@ use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetK
 /// | `Gauge` | `value` (Float) | — |
 /// | `StatusDot` | — | — |
 /// | `Separator` | `orientation` (`horizontal` \| `vertical`, default horizontal), `length` (Float px; omit to stretch) | — |
+/// | `Splitter` | `orientation` (`vertical` \| `horizontal`, default vertical), `line` (Bool) | `resize` (arg `delta`, Float px) |
+/// | `LandingSlot` | `label` (the letter), `filled` (Bool), `while_dragging` (the drag kind it appears for), `accepting` (the drag kind it takes), `edge` (Bool: a line, not a place) | — |
 /// | `Item` | `text` (label); **slots**: `leading` / `trailing` (no default slot) | `press` |
 /// | `DockFrame` | `text` (title), `expanded` / `frameless` / `active` / `nav_selected` (Bool); **slot**: `header`, else body (default) | `toggle` |
 /// | `Toast` | `text` (title), `severity`, `icon`, `body`, `action_text`, `dismissible` | `press` · `dismiss` · `action` |

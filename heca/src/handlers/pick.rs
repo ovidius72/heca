@@ -9,9 +9,7 @@ use heca_core::layout::PaneId;
 ///
 /// `collect_all_pane_candidates` orders the panes and applies the 52 cap; the letters it hands out
 /// are its *index*, which is the defect: anything appearing earlier in the list shifts every letter
-/// after it, so splitting a column renumbers panes you were aiming at. Antonio, driving,
-/// 2026-08-17: *"i want to expand a pane, prefix+/ and `k` appears on that icon... Then I want to
-/// collapse. prefix+/ and `j` appears on that button, while I was expecting `k`."*
+/// after it, so splitting a column renumbers panes you were aiming at.
 ///
 /// So the order comes from there and the LETTERS come from [`assign_letters`], keyed by the pane's
 /// own identity — the same function and the same remembered map `prefix+/` uses. One assignment
@@ -81,8 +79,7 @@ pub(crate) fn begin_pick(state: &mut AppState, mode: InputMode) {
 ///
 /// The sibling of [`pick_refusal`], for an action that is not a pick. Both exist for one reason: a
 /// key that cannot do its thing is a reply to what you pressed, and saying nothing is
-/// indistinguishable from a keypress that never registered (Antonio, 2026-09-10, on
-/// `move_pane_to_new_column` doing nothing for a pane already alone in its column).
+/// indistinguishable from a keypress that never registered.
 ///
 /// The label comes from the catalog, so the bar names the act exactly as the command palette and
 /// its tooltip do — one vocabulary, never a sentence written at the call site.
@@ -200,7 +197,7 @@ pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
     // **Merged, not rebuilt.** A target that is off screen keeps its letter for when it comes back:
     // zoom in far enough that only one pane is visible and the rest stop being targets
     // (`chrome::hint` counts a target only if it lies in the viewport), so rebuilding from what is
-    // on screen made every pane take a fresh letter on the way back (Antonio, driving, 2026-08-18).
+    // on screen made every pane take a fresh letter on the way back.
     //
     // A remembered entry for an absent target blocks nothing: the "already taken" set holds only the
     // letters handed out *this* round, so a present target always wins the letter it asks for.
@@ -259,12 +256,22 @@ pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction)
     };
     // The column this pane is already in is not a destination — moving it there does nothing.
     let here = crate::app::selection::column_of_pane(&state.session, pane_id);
-    // **A new column is offered only when it would change something.** A pane alone in its column
-    // moved into a fresh one leaves the strip exactly as it was, so it is not offered rather than
-    // refused after the letter is pressed — the rule Part B already settled.
-    let offer_new = crate::app::selection::column_of_pane_has_siblings(&state.session, pane_id);
-    let candidates =
-        crate::app::selection::collect_column_candidates(&state.session, here, offer_new);
+    // **A place for a new column is offered only where it would change something**: the workspace
+    // names those gaps, leaving out the two beside a pane that is alone where it is.
+    let new_gaps = state.layout()
+        .active_workspace()
+        .map(|ws| ws.new_column_gaps(pane_id))
+        .unwrap_or_default();
+    let new_rows = state.layout()
+        .active_workspace()
+        .map(|ws| ws.new_row_places(pane_id))
+        .unwrap_or_default();
+    let candidates = crate::app::selection::collect_column_candidates(
+        &state.session,
+        here,
+        &new_gaps,
+        &new_rows,
+    );
     begin_pick(
         state,
         InputMode::ColumnPick {

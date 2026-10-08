@@ -127,8 +127,8 @@ sidebar_expand_toggle = "prefix+Tab" # Expand/collapse sidebar tree
 
 ```toml
 [keys]
-workspace_prev = "prefix+u"   # Previous workspace
-workspace_next = "prefix+d"   # Next workspace
+workspace_prev = "prefix+Ctrl+p"   # Previous workspace
+workspace_next = "prefix+Ctrl+n"   # Next workspace
 ```
 
 ### Focus workspace by number (chord: prefix → w → digit)

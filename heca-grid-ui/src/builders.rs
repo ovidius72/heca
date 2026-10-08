@@ -822,6 +822,24 @@ pub trait ComponentExt: Component + Sized {
         b.drag_kind = Some(kind.into());
         self
     }
+    /// **Carry a picture of this widget under the pointer** — the browser's `setDragImage` — instead
+    /// of the small title chip. The picture is the widget painted as it is, in the top layer, at
+    /// the theme's `drag_image_alpha` and `drag_image_scale`, with the point you grabbed kept
+    /// under the pointer. Nothing else about the drag changes.
+    fn drag_image(mut self) -> Self {
+        self.base_mut().drag_image = true;
+        self
+    }
+    /// **Make it draggable only while `rule` holds** for what is held down when the press moves
+    /// far enough to start a drag — `draggable_when(|m| m.meta)` is "Cmd+drag". Without the rule
+    /// the press stays whatever the widget's content makes of it (a terminal's selection).
+    ///
+    /// The rule is asked when a drag would start, never again: a drag in flight does not end
+    /// because the key came up.
+    fn draggable_when(mut self, rule: impl Fn(crate::event::Modifiers) -> bool + 'static) -> Self {
+        self.base_mut().drag_gate = Some(std::rc::Rc::new(rule));
+        self
+    }
     /// **This widget accepts drops**, identified the same way — by its
     /// [`key`](ComponentExt::key). A drag released over its bounds drops onto it, with the side
     /// (before / onto / after) computed from where in its bounds the pointer sits.
@@ -890,6 +908,33 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
+    /// **What the cursor looks like over this widget** (CSS `cursor`): the nearest widget that
+    /// declared one, on the way up from what the pointer is over, decides — see
+    /// [`cursor_at`](crate::cursor_at).
+    fn cursor(mut self, cursor: crate::cursor::Cursor) -> Self {
+        self.base_mut().cursor = Some(cursor);
+        self
+    }
+
+    /// **Clip what this widget holds to its own box** (CSS `overflow: hidden`): a child that is
+    /// placed or grows past the edge is not drawn there and cannot be hit there.
+    fn clip_children(mut self, clip: bool) -> Self {
+        self.base_mut().clip_children = clip;
+        self
+    }
+
+    /// **Take new props of type `T`** from whoever owns this widget: `f` runs with each value
+    /// [`set_props`](crate::component::Component::set_props) hands over, and with the widget's own
+    /// [`Base`](crate::component::Base) — so it can place and reconcile its own children. The facts
+    /// a widget shows arrive here, so its owner never reaches inside it.
+    fn on_props<T: std::any::Any>(
+        mut self,
+        f: impl FnMut(&T, &mut crate::component::Base) + 'static,
+    ) -> Self {
+        self.base_mut().props = Some(crate::props::PropsSlot::of(f));
+        self
+    }
+
     /// Register `f` for `kind`. It receives an [`EventCx`](crate::event::EventCx) and consumes the
     /// event only if it calls [`stop_propagation`](crate::event::EventCx::stop_propagation).
     fn on(
@@ -903,8 +948,7 @@ pub trait ComponentExt: Component + Sized {
         // the wrong place.
         //
         // Right-click and middle-click are deliberately absent: a right-click opens a context menu
-        // rather than doing the thing, so it should not spend one of the 52 letters (Antonio,
-        // 2026-08-17).
+        // rather than doing the thing, so it should not spend one of the 52 letters.
         use crate::event::EventKind as K;
         if matches!(kind, K::Click | K::DoubleClick | K::Key) {
             self.base_mut().activatable = true;
@@ -1092,6 +1136,16 @@ pub trait ComponentExt: Component + Sized {
     /// A drag left this drop target.
     fn on_drag_leave(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.on(crate::event::EventKind::DragLeave, f)
+    }
+
+    /// A drag this drop target accepts has started, anywhere in the window.
+    fn on_drag_in_flight(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragInFlight, f)
+    }
+
+    /// The drag this drop target was told about is over.
+    fn on_drag_settled(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragSettled, f)
     }
 
     /// A drag was released over this drop target.

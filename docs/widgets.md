@@ -23,7 +23,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`ButtonGroup`](#buttongroup), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`Tile`](#tile), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
-  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope)
+  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope), [`Keyed`](#keyed), [Props](#props--new-facts-for-a-widget-that-is-already-there), [Cursor](#cursor--what-the-pointer-looks-like-over-a-widget)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
   - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
   - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
@@ -228,6 +228,7 @@ Event::Raw(RawPointer)                     ← the ONLY pointer event a host bui
        │
        ├─ hit_test ──────────► the target under the pointer, and the ancestors above it
        ├─ hover diff ────────► PointerEnter / PointerLeave
+       ├─ focus on press ────► the deepest focusable under it gets the keyboard (Focus / Blur)
        ├─ press+release ─────► PointerDown / PointerUp / Click / DoubleClick / RightClick / …
        ├─ drag threshold ────► DragStart / Drag / DragEnter / DragOver / DragLeave / Drop / DragEnd
        └─ delivery:
@@ -295,6 +296,7 @@ chain fell silent the day one row forgot to declare its key. N copies of a rule 
 | `Scroll(PointerEvent)` | the wheel turned over this widget; deltas are in `delta_x`/`delta_y`. A region that cannot scroll the axis asked for declines and it bubbles outward — which is what makes nested scroll areas work with nothing declared. |
 | `DragStart` / `Drag` / `DragEnd` | a drag from this widget: it declared a [`draggable`](#dragext) id and the pointer passed the 8 px threshold while held. `DragEnd` always arrives, dropped or not. |
 | `DragEnter` / `DragOver` / `DragLeave` / `Drop` | a drag over this **drop target**; `DragEvent::side` (`Before`/`Onto`/`After`) follows the pointer, so an insertion marker tracks it for free. |
+| `DragInFlight` / `DragSettled` | a drag **this drop target accepts** (its `accepts` takes what is carried) began / ended — told to the target wherever it is, shown or not, and to nothing that bubbles. A target that exists only for a drag appears on the first and goes on the second. |
 | `Key { key, pressed }` | a key, delivered to the **focus owner** and then up its ancestors (see [the keyboard](#the-keyboard--delivery-follows-focus)). |
 | `TextInput(String)` | text the user **committed** — typed, pasted, or composed by an IME. Distinct from `Key`: `Shift+2` is `Char('2')` there and `"@"` here. A field types from this and from nothing else. |
 | `ModifiersChanged` | broadcast; observers return `Handled::No`. |
@@ -429,12 +431,41 @@ A surface that wants keys must **hold focus**, which it already had to do to dra
 
 | widget | how it says the keyboard is here |
 |---|---|
-| `Input`, `Button`, `Row`, `Item`, `Choice`, `Tabs` | ordinary focus — a click or Tab, via `FocusManager` |
-| `Overlay`, `ContextMenu`, `CommandPalette` | `Base::focused` is bound to the **open** signal: open *is* focused |
+| `Input`, `Button`, `Row`, `Item`, `Choice`, `Tabs`, `Terminal` | ordinary focus — a **click** (the router focuses the deepest focusable under the press, in every tree, with nothing declared) or Tab |
+| `Overlay`, `ContextMenu`, `CommandPalette` | **follow** their open signal into `Base::focused` (`Base::follow_focus_modal`): open *is* focused, and closing gives the keyboard back to whoever held it |
 | `Select` | opening the list focuses it |
 | `Dialog` | its own `FocusManager` focuses a field or button, so text reaches the field and the dialog hears what the field declined on the way back up |
-| `FocusScope`, `ScrollRegion` | `Base::focused` is bound to the **host's** keyboard-target signal. A dock binds the **same** signal to both: the wrapper draws the ring, the region answers the keys |
+| `FocusScope` | holds nothing itself; draws its ring while the keyboard is **anywhere inside it** (`contains_keyboard`, CSS `:focus-within`). A host moves the keyboard into a named region with `focus_scope` (and out with `release_scope`) — host-only, because they take a name |
 | `CardGrid` | focusable in its constructor — it moves a cursor with the keyboard |
+
+**`focused` means one thing: the widget the keyboard is aimed at** — `document.activeElement`, **one
+per tree**. It is written in one place, `Base::focus(visible)` / `Base::blur()`; a surface whose focus
+a host decides calls `base.follow_focus(signal)` (a region: a dock) or `follow_focus_modal(signal)`
+(a surface that opens over the page) and keeps its **own** flag, catching up with the signal once a
+frame and whenever a key is about to be delivered. It never *is* the host's signal: that made "this
+is open" and "the keyboard is here" one value, and a click that blurred the widget would have closed
+it. `heca/tests/focus_door.rs` fails on any other writer.
+
+**A widget cannot blur another — it holds no tree — so it *claims*, and `settle` makes it true.** The
+router settles before it delivers a key or a press, and a host calls `settle_focus(root)` once a
+frame. The rules are the browser's:
+
+- a claim takes the keyboard and **the previous holder lets go**;
+- a **region** whose signal turns true takes it *unless something inside already has it* (a dock
+  told it holds the keyboard does not steal it from the terminal you just clicked in), and when it
+  lets go it remembers what inside held the keyboard, so taking it again goes back there;
+- a **modal** remembers who held the keyboard when it opened and **gives it back when it closes** —
+  if the keyboard was still its own to give.
+
+`FocusManager` keeps no position of its own, so a click, a surface opening and Tab never disagree
+about where the keyboard is. A host asks the tree where it is (`keyboard_owner`: the path, the named
+region it is in, whether a surface above the page holds it) instead of keeping a second record.
+
+**A press focuses the deepest focusable under it.** Nothing to declare: place a focusable widget
+anywhere and clicking it gives it the keyboard (no ring — it was the mouse), the way clicking an
+`<input>` does. A press on nothing focusable changes nothing; a press inside the widget that already
+holds the keyboard changes nothing and is not told it gained focus again; otherwise the widget that
+held it lets go. There is no `.focus_on_press()` and no trapped variant.
 
 Three predicates paid for this before: `takes_raw_keys` ("I take keys without being focused"),
 `takes_text_input` ("I may claim typed text") and `routes_own_subtree`. All three were questions a
@@ -627,7 +658,7 @@ The builders, all of which take either kind:
 | written | means |
 |---|---|
 | `8` / `8.0` / `"8"` / `"8px"` | logical pixels, fixed whatever the font does |
-| `"sm"` / `Spacing::Sm` | a step of the theme's rhythm — `none` / `hairline` / `xs` / `sm` / `md` / `lg` |
+| `"sm"` / `Spacing::Sm` | a step of the theme's rhythm — `none` / `hairline` / `xs` / `sm` / `md` / `lg` / `xl` |
 
 **Prefer the step.** It is a fraction of the inherited font, resolved when the tree is laid out, so
 it scales with the font, the size variant and UI zoom. A pixel gap is tuned for one font size and
@@ -635,8 +666,9 @@ wrong at every other. Use a number when you can say why this space should *not* 
 — a hairline rule, a scrollbar gutter, a value the window manager owns.
 
 `hairline` is about a pixel at the usual font (`0.08` of it, still rounded to a whole pixel) — the air
-between things that belong to **one control**: the buttons of a [`ButtonGroup`](#buttongroup), which is
-its default `gap`, so a destructive button's outline does not sit against its neighbour.
+between lines that belong to **one block**, such as the lines of text in a card. It is too thin to
+separate two bordered controls, so a [`ButtonGroup`](#buttongroup) uses `xs` (about three pixels) as its
+default `gap`: a destructive button's outline does not sit against its neighbour.
 
 Use the steps to **group**, which is what they are for: a tight `Xs` inside a label-and-control
 couple, a roomier `Md` between couples. That is a form layout with no arithmetic and no new widget.
@@ -1348,7 +1380,8 @@ a run's vertex count.
 | Can I turn it off? | Yes — `[appearance] show_focus_border = false` (config override → theme `show_focus_border` token, default `true`); live-reloads with `prefix+Shift+r`. |
 | How thick / what color? | `focus_border_width` (`[appearance]`, default 1.5 — independent of `border_width` so the ring survives borders-off) and the `focus_ring` theme token (unset ⇒ per-tone derivation via `effective_focus_ring()` / `focus_ring_tone()`). |
 | What does it wrap? | The **control**, not its label: `Checkbox` rings its box only; `Toggle` its track; list rows (`Row`/`Item`/`Choice`) ring their row as the selectable unit. |
-| What if the focused thing is an **area**, not a control? | Wrap it in [`FocusScope`](#focusscope) and drive it from a host signal — it gates the subtree's keys on that focus as well as drawing the ring. A control owns its focus so it draws its own ring; an area the keyboard is *aimed* at (a sidebar dock the scroll keys act on) has no owner in the tree — only the host knows which subtree holds it. Same outline, same theme tokens. |
+| What does a click do? | Focuses the deepest focusable under it **without** a ring (mouse focus). Enter/Space work and an `Input`'s caret shows; the ring waits for Tab or the arrows. |
+| What if the focused thing is an **area**, not a control? | Wrap it in [`FocusScope`](#focusscope) — it draws the ring while the keyboard is anywhere inside it, so there is nothing to wire and the ring cannot disagree with where the keys go. A control owns its focus so it draws its own ring; an area the keyboard is *in* (a sidebar dock the scroll keys act on) is outlined by its wrapper. Same outline, same theme tokens. |
 
 ### `Color`
 
@@ -1419,6 +1452,7 @@ stay DRY):
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
+| `.outline(\|cx\| …)` | Paint the closure **over this widget's children**. A widget paints first and its children after, so a frame drawn in `paint` sits *under* whatever the widget holds — a border under a terminal. Drawn here, it is recorded in the scene's **outline band**: after every base command, before the overlay band. The clips open around the call are re-opened for it (and closed after), so it is clipped exactly as it would have been in place — a pane scrolled inside a column keeps its border inside the column. **Inside an overlay or another outline it paints in place** (the overlay band is already on top). `Pane` uses it for its border, glow and brackets, so a pane holding a terminal frames it with nothing for the author to do; a custom widget writes `cx.outline(\|cx\| cx.rect(bounds, Color::TRANSPARENT, border, radius, glow))`. `Scene::base_layer()` returns the base commands then the outline. |
 | `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. Re-entrant: an overlay painted **inside** another overlay's paint (a `Select` in a `Dialog` body) records a **deeper segment**, and `Scene::overlay_segments()` yields segments depth-ordered — the nested panel composites above everything its parent draws, including what the parent paints *after* it. |
 | `.with_content_color(color, \|cx\| …)` | Paint the closure's subtree with `color` as the **inherited content color** — `color` inheritance in the CSS sense. A control that *composes* its content (`Button`, `Item`) cannot set its children's colors (they are `impl Component`, so it doesn't know their types, and the `Theme` is only reachable in `paint`), so it publishes one state-derived value per frame and the children pull it. Because the control repaints while its hover eases, **the content animates with no per-child wiring**. |
 | `.with_control_tone(color, \|cx\| …)` | The **chrome** counterpart of the line above: publish a hue that **controls** inside the closure derive their own chrome from — border, hover sweep, press flash, focus ring. A [`Button`](#button)/[`IconButton`](#iconbutton) resolves own `.tone(..)` → this → `theme.accent`. Separate from content colour on purpose: six widgets publish a content colour already, and widening that one channel to also re-tint every control would have changed all six at once. **Nothing publishes a tone by default**, so it is retro-compatible by construction. See [the two channels](#two-things-a-container-publishes-to-what-it-holds--content-colour-and-control-tone). |
@@ -1430,7 +1464,12 @@ stay DRY):
 
 `DrawCommand` variants: `Rect`, `Brackets`, `Text`, `Scanline`, `PushClip`/`PopClip`, `Host`.
 `Scene`: `new()`, `push`, `clear`, `len`, `is_empty`, `iter`, plus the overlay layer
-(`begin_overlay`/`end_overlay`, `base_layer`/`overlay_layer`).
+(`begin_overlay`/`end_overlay`, `base_layer`/`overlay_layer`), the outline band
+(`begin_outline`/`end_outline`, what `PaintCx::outline` records) and, for a host,
+`base_runs()`: the base layer (then the outline) cut at every `HostDraw::Surface`, as `BaseRun { draws, then }`.
+Flush `draws`, put the surface `then` names where the scene put it, flush the next run over it — so a
+terminal is covered by exactly what the scene draws after it. Every run is self-contained (clips open at a
+cut are closed at its end and re-opened at the start of the next); a scene with no surface is one run.
 
 #### `Host` — work only the host can do
 
@@ -1789,7 +1828,7 @@ a parent that counts its children to tell them apart.
   `Start`/`Center`/`End`/`Stretch` — the default `Stretch` makes an `Auto`-sized child fill the
   cross axis; `.align_self(Align)` overrides it for one child).
 - **Gap between children**: `.gap(..)` takes **either** — `.gap(8)` for pixels, `.gap(Spacing::Sm)`
-  or `.gap("sm")` for a **font-relative theme token** (`None`/`Hairline`/`Xs`/`Sm`/`Md`/`Lg`), resolved from
+  or `.gap("sm")` for a **font-relative theme token** (`None`/`Hairline`/`Xs`/`Sm`/`Md`/`Lg`/`Xl`), resolved from
   the inherited font at layout so it scales with the font, size variant and UI zoom. **Prefer the
   token**; a raw px gap is tuned for one font size and wrong at every other. One builder, because
   two — `gap` and `gap_spacing` — meant the docs said *prefer the token* and the token was used 8
@@ -1967,7 +2006,13 @@ appearance tables (`[appearance.pane]` / `[appearance.sidebar]`, each with
 bracketed surface sizes its reticle from the same per-surface width/radius via
 `bracket_frame_with`.
 
+- **The frame is painted over the children.** The fill goes under what the pane holds; the border,
+  glow and brackets are drawn through [`PaintCx::outline`](#scene--drawcommand--paintcx-for-building-widgets), so a pane that holds a
+  `Terminal` is not covered by it. Nothing for the author to do.
 - **Construct**: `Pane::new()` (column) / `Pane::row()`.
+- **Frosted**: `.frosted(radius)` blurs what is drawn behind the pane by `radius` logical px, in scene
+  order — it blurs what lies under it and nothing of what comes after, its own content included. A
+  floating pane that should show what is under it says this instead of filling itself.
 - **No built-in title.** The pane is a frame + child container only. The app's pane-info **header**
   is composed *inside* the pane top (see the showcase's in-pane info bar demo), so frame decoration
   and the header stay independent — composing widgets beats a bespoke border-straddling title that
@@ -1997,6 +2042,64 @@ Pane::new().bordered().background(theme.surface).border(theme.accent, 2.0).paddi
             ),
     );
 ```
+
+### Terminal
+
+A running shell or command, drawn where you place it — a dock, an overlay, a plugin's panel. It fills
+the box it is put in and sizes its own grid from that box; whoever places it writes no rect, no
+click handling and no drawing pass. It is a **host** widget (it needs the app's terminal processes),
+so a program built on heca reaches it through its extension handle, never by naming the owner half:
+
+```rust
+let demo = heca::extension("demo");
+Flex::column()
+    .child(Label::new("Notes"))
+    .child(demo.terminal("shell").title("Scratch shell").grow(1.0))   // the terminal demo.shell
+// a command instead of the user's shell, in a folder:
+demo.terminal("logs").command("tail -f app.log").cwd(dir)
+```
+
+| builder | meaning |
+|---|---|
+| `extension.terminal("short")` | the terminal `<extension>.<short>`. **The name is the identity and never changes.** Every call with the same name is the same terminal, so building the dock again or opening the overlay again shows the process that was already running |
+| `.command("…")` | run this under the user's shell instead of the shell itself. Fixed when it starts |
+| `.cwd(path)` | start in this folder. Fixed when it starts |
+| `.title("…")` | what the user reads; defaults to the name. The user can rename it like a pane |
+| `.run("ls")` | type a line into it and press Enter. Does nothing until it has started |
+| `.kill()` | end it — the one thing that does |
+| `.find()` / `.find_next()` / `.find_previous()` | open its search bar with the keyboard in the field / step to the next / previous match. Works wherever it is placed |
+| `.grow(..)` / `.width(..)` … | the layout builders every widget has |
+
+**Removing it never ends it.** Closing the dock, rebuilding the tree or hiding the overlay is like
+detaching: reopening shows the same terminal. Only an explicit kill (`.kill()`, or the `terminal_kill` action), or
+heca exiting, ends it; a killed one stays ended — its dock keeps showing the ended terminal, and the
+declared table keeps its entry, so asking for the same name again does not start another. A terminal
+in a pane is the pane's, and closing the pane ends it.
+
+**Wherever it is placed it is a terminal**: the wheel and the scrollbar work, and **a click gives it
+the keyboard**, like any focusable. Then it hears the pointer's moves (a program that tracks the
+mouse is not driven by a pointer merely passing over a panel; a pane's terminal follows the same
+rule by being the focused pane), and **what is typed reaches its program** — text as text, a key that
+is not text as the key with what was held (Ctrl+C is `c` and the Ctrl). Nothing is registered for
+that: the tree delivers the key to the widget that holds the keyboard, and the terminal takes it.
+
+In a dock the terminal gets the key first, as any focused widget does, and the dock's own keys (the
+sidebar's `j`/`k`/`Enter`, the `focus` floor's paging keys) act on what it did not take — so a vim in
+a docked terminal gets its PageUp. The one reserved key is the way out: `Escape` leaves the dock as
+shipped, ahead of the terminal, so it cannot trap you. Move it in the `focus` block (see the README)
+and `Escape` reaches the program like any other key. Selecting text and link hints
+for terminals no pane owns arrive with P094(F011)/T449 slice 5c.
+
+**It searches itself.** The search bar — a query field and a match counter — is a **child of the
+terminal**, drawn at its bottom-right corner by the same walk as the scrollback chip, so placing a
+terminal anywhere places its search with it and nothing is wired by whoever placed it. The terminal
+also paints the highlights on its matches (the current one bolder). The user opens it with the
+`search_scrollback` action; a terminal that holds the keyboard answers the `find` intent too, so
+`[keys.widgets] find = "ctrl+shift+f"` (also `find_next`, `find_previous`; unbound by default) opens
+the search of whichever terminal has the keyboard. While the field has the keyboard what is typed is
+the query, not the program's; **Enter** leaves the field and keeps the matches (`n`/`N` step), **Escape**
+dismisses the search. The terminal only says what the user did; the owner finds the matches (it holds
+the process) and shows them back, and an unchanged result asks for no frame.
 
 ### Grid
 
@@ -2353,16 +2456,15 @@ or the content fits — so a nested region or the host still gets a turn. Consum
 instead would make the key do nothing at all, silently. Handled after the children,
 like the wheel, so the innermost scrollable region wins.
 
-`keyboard_target(Signal<bool>)` says whether *this* region is the keyboard's
-target. Unset means yes, so a single-region app needs no wiring; a host with
-several regions in one tree binds it on each and depends on no default. That is how
-"scroll the focused surface" works without the host knowing where any region sits
-in the tree.
+A region needs no flag to say whether it is the one the keyboard is aimed at: a keyboard intent
+**enters the focused region**, so the dock the keyboard is in is the one whose `ScrollRegion` answers,
+and a region in another dock is never offered it. That is how "scroll the focused surface" works
+without the host knowing where any region sits in the tree.
 
-**In heca that signal *is* chrome keyboard focus.** Every mounted container binds it to
-"am I the focused dock" (`StateView::container_keyboard_target`, keyed by mount id), and
-the same signal drives the [`FocusScope`](#focusscope) the host wraps the container in — so
-what the ring shows and what the scroll keys reach cannot disagree. `focus_dock` moves it.
+**In heca the host moves the keyboard into a dock by name** (`focus_dock` →
+`heca_grid_ui::focus_scope`), and the [`FocusScope`](#focusscope) the host wraps the container in
+draws the ring while the keyboard is inside — so what the ring shows and what the scroll keys reach
+are the same fact, the tree's.
 
 ### Scrolling is composed — nest a scroll area where the scrolling belongs
 
@@ -2832,7 +2934,7 @@ Nothing is ever squashed, and nothing is ever silently unreachable.
 ButtonGroup::new()
     .size(WidgetSize::Header)                       // one size for every button in the group
     .variant(ButtonVariant::Ghost)                  // …and one variant
-    .gap(Spacing::Xs)                       // a token, never a pixel count (default: `Hairline`)
+    .gap(Spacing::Xs)                       // a token, never a pixel count (default: `Xs`)
     .child(Button::new("Split").icon(Glyph::Plus).on_click(split))
     .child(Button::new("Zoom").icon(Glyph::FrameCorners).on_click(zoom))
     .child(Button::new("Close").icon(Glyph::Minus).on_click(close))
@@ -3676,6 +3778,26 @@ mode toggles.
 BadgeButton::accent("144 lines above").on_click(|| jump_to_live_bottom());
 ```
 
+### Splitter
+
+**The edge between two things that a drag moves.** A grab zone with the resize cursor that tells
+whoever placed it how far the pointer moved while it is held; it knows nothing of what the two
+neighbours are.
+
+```rust
+Splitter::vertical().on_resize(|px| /* the left thing grows by px */)   // an edge that runs up and down
+Splitter::horizontal().line(true)                                       // moves up and down, draws a rule
+```
+
+```rust
+// from a description (a plugin's panel): each report goes out as the intent, with `delta`
+Splitter::new().orientation(Vertical).line(true).on_resize(Intent::new("mypanel.resize"))
+```
+
+It paints nothing unless `line(true)`. Where it sits in the tree is where it is on screen: a widget
+laid over it covers it. `grab(..)` widens the zone past its box so a thin gap stays reachable at any
+zoom.
+
 ### StatusDot
 
 Tiny glowing status dot in a semantic color (display-only).
@@ -4115,6 +4237,22 @@ for &g in Glyph::ALL { /* Icon::new(g) … */ }
 > **Declarative note:** `glow` is not a `ViewNode` prop. It is a *rendering* decision the host
 > makes about a glyph standing alone versus one inside a lit control — a plugin describes what the
 > icon **is**, and the host decides how it is lit, the same split that keeps colors out of props.
+
+### LandingSlot
+
+A place something can land, outlined, with a letter in the middle when a key picks it. One widget for
+both ways of choosing a place: the empty places a carried thing could land, and the keyboard pick
+(existing things outlined with `.filled(true)`, plus empty places between them).
+
+```rust
+LandingSlot::new().label("b").while_dragging("pane").key("slot:1")   // appears only while a pane is carried
+LandingSlot::new().filled(true).label("a")                               // outlines what is already there
+```
+
+It fills the box it is given and computes no geometry. `while_dragging(kind)` accepts that kind and
+shows itself on `DragInFlight`, hides on `DragSettled` — nothing hands it a flag. It is a drop target
+like any other: the framework paints the line or outline while a drag is over it, and a drop names
+it by its key.
 
 ### Tag
 
@@ -4803,67 +4941,126 @@ which is what lets a column wear a letter as a *destination* while staying out o
 
 ### FocusScope
 
-A **generic** transparent wrapper that makes its child subtree a **keyboard focus scope**: keys enter
-only while it holds focus, and it outlines itself while it does. Both from one host-owned
-`Signal<bool>`.
+A **generic** transparent wrapper that outlines its child while **the keyboard is anywhere inside
+it** — CSS `:focus-within`, read off the tree.
 
 Every focusable *control* already rings itself and answers for its own keys, because it owns its
 focus. `FocusScope` is for the other case: when the thing holding keyboard focus is **a whole area** —
-a sidebar dock the scroll keys act on, a panel a mode is aimed at — no single widget in the tree owns
-that focus, so none can answer for it. The host does, by flipping one signal (read-via-signals /
-write-via-actions), exactly as it drives [`KeyHint`](#keyhint).
+a sidebar dock the scroll keys act on, a panel a mode is aimed at — so the focus belongs to the
+subtree, not to one widget. The wrapper asks the tree one question, `contains_keyboard(self)`, and
+rings while the answer is yes. **There is no flag to set**: the ring reads the tree, and the tree is
+where keyboard focus lives, so the ring cannot say "the keys come here" while the keys go elsewhere.
 
-It adds exactly two things:
-
-1. **The gate.** `Event::Key` and `Event::Widget` enter the subtree only while the scope holds focus.
-   An unfocused scope neither reacts nor **consumes**: it declines, so the next sibling — the scope
-   that does hold focus — still gets its turn. That is what lets a host broadcast one semantic intent
-   (say `WidgetIntent::ScrollPageDown`) into a tree of scopes and have the right one answer, without
-   knowing where any of them sits. Consuming instead would mean the first scope in a region silently
-   ate everything.
-2. **The outline**, in place — no tree rebuild.
+How the keyboard gets there is the ordinary way: Tab, a press on something inside, or the host asking
+for the region by name — `heca_grid_ui::focus_scope(root, "name")` (and `release_scope` to take it
+back). Those two take a **name string**, which only the host knows (an action, an RPC line), so they
+are **for the host**; a plugin that wants its own region focused calls a method on the widget it
+built and never passes a name. Keys and intents follow the tree's focus too: an intent **enters the
+focused region** and whatever inside owns the capability (a `ScrollRegion`) answers, so a host
+sends one semantic intent (say `WidgetIntent::ScrollPageDown`) and only the dock the keyboard is in
+hears it.
 
 **The pointer is never gated.** Click, drag, hover and wheel reach an unfocused scope exactly as
 before: the mouse carries its own target, so it needs no focus to say where it meant — and a click on
 an unfocused dock is how you focus it. (`tests/pointer_delivery.rs` holds this to the whole pointer
 set, focused and unfocused.)
 
-The two halves share the signal on purpose: a ring that says "the keys come here" while the keys go
-elsewhere is worse than no ring.
-
 - **Construct**: `FocusScope::new(child)` — a widget or a
-  dynamically built subtree (a `realize`d tree, a provider's render seam).
+  dynamically built subtree (a `realize`d tree, a provider's render seam). Name it with
+  `.scope_key("id")` for the host to find it.
 - **Builders**:
-  - `.focus(Signal<bool>)` — the host-owned focus state. **Host-only** (a live signal, which static
-    data cannot drive). Default: an internal signal that is `false`, i.e. no outline.
   - `.radius(px)` — corner radius of the outline. Default: the theme's `control_radius()`.
   - `.color(Color)` — outline colour. Default: `effective_focus_ring()` (the `focus_ring` token, or
     the accent shifted toward `foreground`). Override to mark a *kind* of focus distinctly, the way
     `KeyHint::color` distinguishes kinds of pick target.
-- **Accessors**: `.focus_signal() -> Signal<bool>`.
-- **Routing**: none of its own. `.focus(sig)` binds that signal to `Base::focused`, and the
-  framework delivers keyboard events to the focus owner's chain — so an unfocused scope is simply
-  not on the path, and the focused one is, with nothing gated, declined or forwarded. It used to
-  claim `routes_own_subtree` and skip the walk per event kind; that predicate is gone.
+- **Reads (host)**: `contains_keyboard(node)` (is the keyboard inside this subtree), `page_scope(root)`
+  (the named region the keyboard is in on the page, looking through a dialog above it to where it
+  returns).
 - **Theme**: the outline is [`PaintCx::focus_ring`] — the same primitive every control's ring uses,
   at `focus_border_width`, offset outside the bounds like a CSS `outline`. A theme with
   `show_focus_border = false` hides this one too: whether focus outlines are drawn is the theme's
   decision, uniformly, not each caller's.
 
 ```rust
-// The host owns the signal; an action moves focus and the ring follows, with no rebuild.
-let focused = signal(false);
-let framed = FocusScope::new(my_container).focus(focused);
-// …later, from an action:
-focused.set(true);
+// Wrap an area; it outlines itself whenever the keyboard is inside it.
+let framed = FocusScope::new(my_container).scope_key("my-dock");
+// The host, from an action:
+heca_grid_ui::focus_scope(&mut window_root, "my-dock");
 ```
 
-Declaratively there is nothing to author: the whole widget is a live host signal, so a described
+Declaratively there is nothing to author: the ring is read off a live tree, so a described
 `FocusScope` would be a dead frame (the same reason [`ScrollBar`](#scrollbar) is host-only). A plugin
 that wants its container to show focus gets it for free — **heca wraps every mounted container
-itself**, together with its dock-pick keycap, and drives the ring from the same signal the
-container's scroll area binds as its keyboard target. See
-[chrome-and-ui.md](chrome-and-ui.md) → chrome keyboard focus.
+itself**, together with its dock-pick keycap. See [chrome-and-ui.md](chrome-and-ui.md) → chrome
+keyboard focus.
+
+### Keyed
+
+A child that is **rebuilt only when its key changes**. Content that comes from state is often built
+every frame just to learn that nothing changed; `Keyed` makes that a non-event. The author sums up
+what the content *is* in a key and says it each frame; the build closure runs only when the key
+differs from the one already shown, so a frame in which nothing changed makes no widget at all.
+
+```rust
+let header = Keyed::new();                       // placed once, with whatever owns it
+// each frame, from whatever knows the facts:
+header.show(shape_key(&facts), || Some(Box::new(build_header(&facts))));
+header.texts(vec![("hdr.seg:location".into(), facts.cwd())]);
+```
+
+- `.show(key, build) -> bool` — `build` returns the content (`None` shows nothing) and is called only
+  on a new key; returns whether it built. The content arrives in the node's own layout pass, so the
+  frame that asked also draws it.
+- `.texts(Vec<(key, text)>)` — words, written by the `key` of the widget that shows each onto the tree
+  already there. They are not part of the key: a changed word moves that word and nothing else.
+- **A handle**, like a terminal: `Clone` gives another node for the same content, so the node a tree
+  holds and the one its owner keeps agree. A node placed anew holds nothing, so the next `show`
+  builds for it — a rebuilt parent gets its child back.
+- Host-only: it holds the caller's closures and state, so it is not described declaratively.
+
+### Props — new facts for a widget that is already there
+
+A parent that holds a child across frames hands it new facts instead of rebuilding it. The child
+says what it takes, typed to the model it understands, and gets its own `Base` so it can place and
+reconcile its own children from what it is handed:
+
+```rust
+let workspace = Flex::column().clip_children(true)
+    .on_props(|model: &WorkspaceModel, base| { /* place base.children from model */ });
+// each frame, from whoever owns it:
+let took = workspace.set_props(&model);   // false = wrong type, or the widget takes none
+```
+
+- `.on_props::<T>(|props, base| ..)` — declare the props `T` this widget takes. One handler; the
+  last declared wins.
+- `Component::set_props(&dyn Any) -> bool` — hand it a value. A value of another type, or a widget
+  with no handler, is **refused** (`false`), never a silent no-op; report it.
+- `reconcile_keyed(&mut base, &[(name, version)], build)` — what a handler reconciles its keyed
+  children with: a child still wanted at the same version is kept as it is; one built from another
+  version is built afresh. The child carries its version (`Base::built_from`), so the parent keeps
+  no table of what each was built from.
+- `.clip_children(true)` — CSS `overflow: hidden` on any widget: what it holds is not drawn or hit
+  past its edge, and the engine does not squeeze it to fit.
+
+### Cursor — what the pointer looks like over a widget
+
+A widget says what the cursor is while the pointer is over it (CSS `cursor`); the tree answers:
+
+```rust
+Flex::row().cursor(Cursor::Pointer)               // a link-like area
+let cursor = cursor_at(&window_root, point);      // what the pointer is over, right now
+```
+
+- `.cursor(Cursor)` — `Default`, `Pointer`, `Grab`, `Grabbing`, `Text`, `ResizeHorizontal`,
+  `ResizeVertical`.
+- `cursor_at(root, point)` — `Grabbing` while a drag is in flight; otherwise the **nearest** widget
+  on the way up from what the hit test finds that declared one; a widget that can be dragged and
+  declared nothing is `Grab`; anything else is `Default`.
+- A widget whose cursor depends on **where** the pointer is (a link inside a terminal) implements
+  `Component::cursor_over(point)` instead; it wins over the declared cursor, nearer widgets win
+  over farther.
+- The host turns the answer into its window's icon, once, after each move. It keeps no list of what
+  is draggable, resizable or a link.
 
 ### Tooltip
 
@@ -6715,6 +6912,16 @@ no extra layout nodes are added.
 Row::new().child(/* … */).draggable(DragItemId::new(i))   // a drag source
 Flex::column().drop_target(DragItemId::new(zone_id))       // a drop zone
 ```
+
+`.draggable_when(|m| m.meta)` makes a source pick up only while the rule holds when the press
+travels far enough to start a drag (Cmd+drag); a drag already in flight is never cancelled by the
+rule going false, and without the key the press stays whatever the widget's content makes of it.
+
+`.drag_image()` makes a source carry **a picture of itself** under the pointer instead of the small
+chip: the widget painted as it is (a terminal's surface included), in the top layer, at the theme's
+`drag_image_alpha` and shrunk by `drag_image_scale` toward the point that was grabbed. The picture's
+host work is marked an *echo*, so a terminal asked where it was drawn answers with its real place,
+not the picture's.
 
 **2. Resolution over the laid-out tree.** Pure bounds walks replace hand-computed
 hit-testing — they read each widget's `Base.bounds` (filled by layout each frame):

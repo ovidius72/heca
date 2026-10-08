@@ -96,24 +96,6 @@ impl ScrollingMut<'_> {
         Some(pane)
     }
 
-    /// Focus left (previous column).
-    pub fn focus_left(&mut self) -> bool {
-        if self.view.active_column == 0 {
-            return false;
-        }
-        self.activate_column(self.view.active_column - 1);
-        true
-    }
-
-    /// Focus right (next column).
-    pub fn focus_right(&mut self) -> bool {
-        if self.view.active_column + 1 >= self.space.columns.len() {
-            return false;
-        }
-        self.activate_column(self.view.active_column + 1);
-        true
-    }
-
     /// Move the active column left.
     pub fn move_column_left(&mut self) -> bool {
         if self.view.active_column == 0 {

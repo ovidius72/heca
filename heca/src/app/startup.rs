@@ -60,7 +60,7 @@ fn choose_alpha_mode(
 /// Called at startup *and* on every `prefix+Shift+r`, because a setting the user can edit and only
 /// the startup path reads is a setting that silently does not reload: `overview_gap` and
 /// `overview_zoom_from` were both read once and never again, so changing them and
-/// reloading appeared to do nothing at all (Antonio, 2026-08-11).
+/// reloading appeared to do nothing at all.
 pub(crate) fn layout_options_from(
     app_config: &AppConfig,
 ) -> heca_core::layout::types::LayoutOptions {
@@ -71,6 +71,10 @@ pub(crate) fn layout_options_from(
             .appearance
             .effective_pane_gap(&app_config.theme) as f64,
         always_center_single_column: app_config.config.settings.always_center_single_column,
+        column_focus: match app_config.config.settings.column_focus {
+            heca_config::settings::ColumnFocus::Last => heca_core::layout::types::ColumnFocus::Last,
+            heca_config::settings::ColumnFocus::Row => heca_core::layout::types::ColumnFocus::Row,
+        },
         // Clamped like niri's, so a typo in a config file cannot produce a map at 4000% or 0%.
         overview_zoom_from: app_config
             .config
@@ -503,10 +507,9 @@ pub(crate) async fn init_state(
         input_mode: InputMode::Normal,
         window_root: crate::chrome::new_window_root(),
         chrome_tree: None,
-        panes: std::collections::HashMap::new(),
-        columns: std::collections::HashMap::new(),
         terminals: std::collections::HashMap::new(),
         terminal_presses: Default::default(),
+        frame_times: crate::app::frame_times::FrameTimes::from_env(),
         layers: crate::chrome::LayerRegistry::default(),
         added_layers: crate::entry::AddedLayers::default(),
         pane_buttons: crate::chrome::PaneButtons::from_startup(),
@@ -526,7 +529,6 @@ pub(crate) async fn init_state(
         selection: app_state::SelectionState::new(),
         bell_flash_until: None,
         widget_frame_due: None,
-        searches: std::collections::BTreeMap::new(),
         last_focused: None,
         last_visited_ws_idx: None,
         last_visited_pane_per_ws: vec![None; ws_count],
@@ -548,6 +550,7 @@ pub(crate) async fn init_state(
         terminal_scroll_animations_enabled: app_config.config.settings.terminal_scroll_animations,
         confirm: app_config.config.confirm.clone(),
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
+        places_open: false,
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         prefix_timeout_ms: app_config.config.keys.prefix_timeout_ms,
@@ -613,5 +616,60 @@ mod tests {
         let second = session.next_id();
 
         assert!(second > first.0, "the counter must never reissue {first:?}");
+    }
+}
+
+#[cfg(test)]
+mod column_focus_tests {
+    use super::layout_options_from;
+    use heca_config::loader::AppConfig;
+    use heca_core::layout::types::{ColumnFocus, Size};
+    use heca_core::layout::testing::Windowed;
+    use heca_core::layout::{Pane, PaneId};
+
+    fn from_toml(text: &str) -> AppConfig {
+        // The same layering the loader does: the embedded defaults, the user's text over them.
+        let config = heca_config::loader::config_from_layers(text).expect("the config parses");
+        AppConfig {
+            config,
+            theme: Default::default(),
+        }
+    }
+
+    /// **A reload reaches the workspaces that already exist**: they keep their own copy of the
+    /// options, so the edited setting must be written to each, not only to the session.
+    #[test]
+    fn a_reload_changes_the_options_of_the_workspaces_that_already_exist() {
+        let mut window = Windowed::new(Size::new(1000.0, 800.0), 1.0);
+        window.session.set_options(layout_options_from(&from_toml("")));
+        window.m().add_pane(Pane::new(PaneId(1), ""), None, true);
+        assert_eq!(window.session.workspaces[0].scrolling.options.column_focus, ColumnFocus::Last);
+        window.session.set_options(layout_options_from(&from_toml("[settings]\ncolumn_focus = \"row\"")));
+        assert_eq!(window.session.workspaces[0].scrolling.options.column_focus, ColumnFocus::Row);
+        assert_eq!(window.session.options.column_focus, ColumnFocus::Row);
+    }
+
+    /// **`column_focus = "row"` in `[settings]` reaches the layout and decides where focus lands**,
+    /// from the config text to the window's focus move — the call the key's handler makes.
+    #[test]
+    fn column_focus_from_the_config_text_decides_where_focus_lands() {
+        for (text, want) in [
+            ("", PaneId(11)),
+            ("[settings]\ncolumn_focus = \"last\"", PaneId(11)),
+            ("[settings]\ncolumn_focus = \"row\"", PaneId(1)),
+        ] {
+            let mut window = Windowed::new(Size::new(1000.0, 800.0), 1.0);
+            window.session.set_options(layout_options_from(&from_toml(text)));
+            window.m().add_pane(Pane::new(PaneId(1), ""), None, true);
+            window.m().add_pane(Pane::new(PaneId(3), ""), None, true);
+            let mut ws = window.ws();
+            ws.scroll_mut().add_pane_to_column(0, Some(1), Pane::new(PaneId(11), ""), false);
+            ws.scrolling.columns[0].active_pane_idx = 1; // b was the last used on the left
+            ws.scroll_mut().activate_column(1);
+            ws.scrolling.columns[1].active_pane_idx = 0;
+            assert!(window.m().focus_left());
+            let landed = window.l().active_workspace().and_then(|ws| ws.scroll().active_pane().map(|p| p.id));
+            assert_eq!(landed, Some(want), "{text:?} ({:?})", ColumnFocus::Row);
+        }
     }
 }

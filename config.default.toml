@@ -94,9 +94,21 @@ float_size = 0.95
 # the whole thing. 0 makes moves jump. Clamped to 0.0..=1.0.
 move_slide_reach = 0.9
 
+# Which pane focus lands on when it moves to the column on the left or right:
+#   "last" - the pane you last used in that column (default)
+#   "row"  - the pane in that column level with the one you leave
+column_focus = "last"
+
 # Modifier held to start an interactive pane drag with the mouse.
 # One of: "Super" (default) | "Alt" | "Ctrl" | "Shift".
 interactive_move_modifier = "Super"
+
+# The line a carried pane can be dropped on (between two stacked panes, top and bottom of a column).
+# drag_edge_color: unset = the theme's accent. drag_edge_width: px when a drag is over it (default 3).
+# drag_edge_color = "#7fd3ff"
+# drag_edge_target_color: the line a drop would land on now; unset = the theme's warning colour.
+# drag_edge_target_color = "#f9e2af"
+# drag_edge_width = 3.0
 
 # Auto-inject shell hooks that emit OSC 133 / OSC 7 for per-command status and
 # cwd updates. Disable to spawn a bare shell instead.
@@ -395,7 +407,6 @@ search_current_match_alpha = 150
 # drag_label_size_factor = 0.25   # the name drawn over a dragged pane: share of its shorter side …
 # drag_label_min_size    = 24.0   # … kept between this many px …
 # drag_label_max_size    = 72.0   # … and this many.
-# new_column_slot_share  = 0.18   # how wide the "new column" opening is, as a share of the column
 #
 # Info bar (segmented pill inside the pane top + action buttons on the right):
 # title_segments : left side, in order. [] hides it.

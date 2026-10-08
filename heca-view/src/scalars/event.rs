@@ -27,6 +27,9 @@ named_set! {
         Activate => "activate",
         /// A `CardGrid`'s cursor moved to another card — the card's `key` travels as the `key` arg.
         Move => "move",
+        /// A `Splitter`'s edge was dragged — the intent carries `delta`: how many px it moved along
+        /// its axis since the last report, sent at every pointer move while held.
+        Resize => "resize",
     }
 }
 

@@ -52,7 +52,7 @@ fn a_displaced_pane_moves_where_it_is_drawn_and_not_where_it_belongs() {
     let mut space = space_with_columns(1);
     let before = space.r().columns_with_positions()[0].rect;
 
-    space.columns[0].panes[0].interactive_move_offset = Point::new(400.0, 90.0);
+    space.m().slide_pane(PaneId(1), Point::new(400.0, 90.0), AnimationConfig::default());
     let after = &space.r().columns_with_positions()[0];
     let pane = after.panes[0];
 

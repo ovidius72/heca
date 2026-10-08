@@ -45,7 +45,7 @@ pub fn type_text(root: &mut dyn Component, text: &str) -> Handled {
 /// nothing: a widget used to be offered every key in the tree and decide for itself, which is why
 /// an unfocused row could answer an Enter meant for the cursor.
 pub fn give_keyboard(c: &mut dyn Component) {
-    c.base_mut().focused.set(true);
+    c.base().focus(false);
 }
 
 /// Paint `widget` fresh into its own scene, the way a host paints one frame — assumes `widget` is

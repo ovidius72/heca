@@ -173,7 +173,7 @@ fn an_overlay_delivers_the_whole_pointer_set_to_its_panel() {
 #[test]
 fn an_unfocused_focus_scope_delivers_the_whole_pointer_set() {
     let (probe, seen, bounds) = Probe::new();
-    let scope = FocusScope::new(probe).focus(signal(false));
+    let scope = FocusScope::new(probe);
     assert_full_set("FocusScope (unfocused)", Box::new(scope), &seen, &bounds);
 }
 
@@ -181,7 +181,8 @@ fn an_unfocused_focus_scope_delivers_the_whole_pointer_set() {
 #[test]
 fn a_focused_focus_scope_delivers_the_whole_pointer_set() {
     let (probe, seen, bounds) = Probe::new();
-    let scope = FocusScope::new(probe).focus(signal(true));
+    let scope = FocusScope::new(probe);
+    scope.base().focus(true);
     assert_full_set("FocusScope (focused)", Box::new(scope), &seen, &bounds);
 }
 

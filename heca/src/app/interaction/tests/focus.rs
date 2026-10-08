@@ -81,14 +81,11 @@ fn can_focus_pane_allows_active_floating_pane() {
         Point::new(0.0, 0.0),
         Size::new(1280.0, 800.0),
     ));
-    ws.floating_panes.push(FloatingPane {
-        pane: Pane::new(PaneId(99), "float-99"),
-        position: Point::new(50.0, 50.0),
-        size: Size::new(800.0, 600.0),
-        is_active: true,
-        original_column_idx: None,
-        original_pane_idx: None,
-    });
+    ws.add_floating_pane(
+        Pane::new(PaneId(99), "float-99"),
+        Rectangle::new(Point::new(50.0, 50.0), Size::new(800.0, 600.0)),
+        None,
+    );
     ws.focus_domain = FocusDomain::Floating;
 
     // The active floating pane (ID 99) can be focused from all sources.

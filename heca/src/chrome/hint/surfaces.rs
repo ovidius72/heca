@@ -32,12 +32,9 @@ pub(crate) enum HintSurface {
     /// The window root — the chrome subtree and **every surface seated beside it**: an overlay, a
     /// modal, a context menu, the exposé, the toast stack, a plugin's panel.
     Window,
-    /// One pane's own tree — the frame that owns the pane's identity and its letter, and whatever
-    /// sits in its header slot. There used to be a second variant for the info bar; the bar is a
-    /// child of its pane now, so it is the same tree (F003/P097/T497).
-    ///
-    /// Still separate because a pane's shell is still a retained tree of its own; it becomes an
-    /// ordinary node in `P094(F011)/T449`, and this enum goes with it.
+    /// One pane — the frame that owns the pane's identity and its letter, and whatever sits in its
+    /// header slot. It is a node in the workspace, which is in the window root; it is named apart
+    /// because the window's walk skips the workspace and each pane is judged by its own frame.
     Pane(PaneId),
 }
 
@@ -110,21 +107,11 @@ pub(crate) fn hint_surface_root<'a>(
 ) -> Option<&'a dyn heca_grid_ui::Component> {
     match surface {
         HintSurface::Window => Some(&state.window_root as &dyn heca_grid_ui::Component),
-        // **Wherever that pane's tree lives.** A floating pane is the host's own; a tiled one is a
-        // child of its column, so the surface resolves to the pane's own node inside it. One
-        // function, read by every side — offering a letter, running the pick and collecting the
-        // targets all ask here, so none of them can disagree about where a pane is.
-        HintSurface::Pane(pane_id) => state
-            .panes
-            .get(pane_id)
-            .map(|p| &p.root as &dyn heca_grid_ui::Component)
-            .or_else(|| {
-                let key = crate::chrome::pane_key(*pane_id);
-                state
-                    .columns
-                    .values()
-                    .find_map(|c| heca_grid_ui::node_with_key(&c.root, &key))
-            }),
+        // **Wherever that pane is held.** A pane is a node in the workspace, in a column or
+        // floating, so the surface resolves to the pane's own node. One function, read by every
+        // side — offering a letter, running the pick and collecting the targets all ask here, so
+        // none of them can disagree about where a pane is.
+        HintSurface::Pane(pane_id) => crate::chrome::workspace::pane_node(state, *pane_id),
     }
 }
 
@@ -137,19 +124,7 @@ fn hint_surface_root_mut<'a>(
 ) -> Option<&'a mut dyn heca_grid_ui::Component> {
     match surface {
         HintSurface::Window => Some(&mut state.window_root as &mut dyn heca_grid_ui::Component),
-        HintSurface::Pane(pane_id) => {
-            let key = crate::chrome::pane_key(*pane_id);
-            if state.panes.contains_key(pane_id) {
-                return state
-                    .panes
-                    .get_mut(pane_id)
-                    .map(|p| &mut p.root as &mut dyn heca_grid_ui::Component);
-            }
-            state
-                .columns
-                .values_mut()
-                .find_map(|c| heca_grid_ui::node_with_key_mut(&mut c.root, &key))
-        }
+        HintSurface::Pane(pane_id) => crate::chrome::workspace::pane_node_mut(state, *pane_id),
     }
 }
 
@@ -236,15 +211,13 @@ pub(crate) fn fire_widget_action(state: &crate::app_state::AppState, name: &str)
     // that is two answers to "what is in front": the registry lists only what it owns, so a surface
     // placed without registering — the toast stack — was reachable solely through the root walk,
     // which descends in document order and would have let the chrome shadow it.
-    for child in state.window_root.base().children.iter().rev() {
-        if heca_grid_ui::fire_action(child.as_ref(), name) {
-            return true;
-        }
-    }
     state
-        .panes
-        .values()
-        .any(|p| heca_grid_ui::fire_action(&p.root, name))
+        .window_root
+        .base()
+        .children
+        .iter()
+        .rev()
+        .any(|child| heca_grid_ui::fire_action(child.as_ref(), name))
 }
 
 /// **Withdraw every letter**, from every retained tree — what closing the picker means.
@@ -257,9 +230,4 @@ pub(crate) fn fire_widget_action(state: &crate::app_state::AppState, name: &str)
 /// and reached only the surfaces the registry owned — never one placed without registering.
 pub(crate) fn clear_hint_letters(state: &crate::app_state::AppState) {
     heca_grid_ui::clear_hints(&state.window_root);
-    // Every tree that holds panes — a floating pane's own, and each column's, which carries the
-    // tiled ones as children.
-    for root in crate::chrome::pane_roots(state) {
-        heca_grid_ui::clear_hints(root);
-    }
 }

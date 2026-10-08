@@ -9,7 +9,7 @@
 use crate::color::Color;
 use crate::drag::DropSide;
 use crate::hint::DeclaredAction;
-use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use crate::reactive::{Signal, SignalGet, signal};
 use crate::scene::{
     Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, RectCmd, ScanlineCmd,
     Scene, Shadow, TextAlign, TextCmd, TextStyle,
@@ -217,6 +217,11 @@ pub struct Base {
     pub style: Style,
     /// This component's node in the layout tree (set during layout).
     pub node: Option<taffy::NodeId>,
+    /// Which retained layout tree [`node`](Self::node) belongs to, so a component moved in from
+    /// another tree is not taken for a node of this one.
+    pub(crate) layout_tree: Cell<u64>,
+    /// What this tree remembers of its last layout — only a root holds one.
+    pub(crate) layout_cache: RefCell<Option<Box<crate::layout::RetainedLayout>>>,
     /// Absolute bounds in logical pixels, filled in after layout.
     pub bounds: Rectangle,
     /// Whether this component is rendered.
@@ -225,7 +230,13 @@ pub struct Base {
     /// by focus traversal. A common, base-level property every widget inherits.
     pub disabled: Signal<bool>,
     /// Whether this component currently holds keyboard focus.
+    ///
+    /// Written only through the focus door ([`Base::focus`] / [`Base::blur`] and the signal a
+    /// widget follows, [`Base::follow_focus`]); read it, never set it.
     pub focused: Signal<bool>,
+    /// Who focused this widget last, and the host signal it follows, if any. See
+    /// [`FocusDoor`](crate::focus::FocusDoor).
+    pub(crate) focus_door: crate::focus::FocusDoor,
     /// Whether the focus ring should show — true for keyboard focus, false for
     /// mouse focus (focus-visible behavior).
     pub focus_visible: Signal<bool>,
@@ -288,10 +299,13 @@ pub struct Base {
     /// It used to carry an opaque id handed out by a host registry, and a closed list of which
     /// surfaces were allowed to drag at all. Both are gone: a row said who it was twice, and a
     /// plugin's row could say it neither time — it could not be added to a list that is an enum in
-    /// our source, so it could never be dragged (Antonio, 2026-09-01: *"hardcode smell?? what i
-    /// hate"*). A widget with no `key` is not a drag source, because there would be nothing to
-    /// name what was picked up.
+    /// our source, so it could never be dragged. A widget with no `key` is not a drag source,
+    /// because there would be nothing to name what was picked up.
     pub draggable: bool,
+    /// **When a press may pick this widget up** — `None` is always. Set with
+    /// [`ComponentExt::draggable_when`](crate::builders::ComponentExt::draggable_when). Asked when a
+    /// drag would *start* only: one already in flight is never cancelled by the rule going false.
+    pub drag_gate: Option<std::rc::Rc<dyn Fn(Modifiers) -> bool>>,
     /// **What this widget is, when it is dragged** — an opaque word its component chose
     /// (`"pane"`, `"column"`, `"docker.container"`). Set with
     /// [`ComponentExt::draggable_as`](crate::builders::ComponentExt::draggable_as); `None` means it
@@ -301,6 +315,9 @@ pub struct Base {
     /// plugin cannot join, and the same shape a row already uses to say what its right-click menu
     /// is about.
     pub drag_kind: Option<String>,
+    /// **Show a picture of this widget under the pointer while it is carried**, instead of the
+    /// small chip. See [`ComponentExt::drag_image`](crate::builders::ComponentExt::drag_image).
+    pub drag_image: bool,
     /// This widget **accepts drops**, identified the same way — by its [`key`](Self::key).
     /// Universal opt-in via [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target);
     /// resolved generically by [`drag::resolve_at`](crate::drag::resolve_at).
@@ -312,7 +329,7 @@ pub struct Base {
     /// A target that refuses is not offered: the walk skips it and keeps looking outward, so
     /// nothing is drawn over something that would then do nothing. That mismatch is what this
     /// exists to end — the line said yes and the release said no, because the drawing and the rule
-    /// lived in different places (Antonio, driving, 2026-09-01).
+    /// lived in different places.
     pub accepts: Vec<String>,
     /// **Can a thing be dropped *onto* this widget, or only beside it?**
     ///
@@ -324,9 +341,7 @@ pub struct Base {
     ///
     /// Set by [`accepts`](crate::builders::ComponentExt::accepts) and
     /// [`accepts_beside`](crate::builders::ComponentExt::accepts_beside). It exists because the
-    /// two are genuinely different and only the component knows which it is (Antonio, 2026-09-01:
-    /// *"a pane should be released above another pane because we want to move or swap; a column
-    /// above another column doesn't tell us if it is placed below or above"*).
+    /// two are genuinely different and only the component knows which it is.
     pub accepts_onto: bool,
     /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
     /// the right-click target and the drag are three readers of this one declaration.
@@ -359,9 +374,9 @@ pub struct Base {
     /// notification stack spans the window so a corner can mean the screen's corner, and a
     /// decorator wrapped around one hugs it and spans the window too. Left to the box, an empty
     /// invisible surface swallows every press in the application and nothing anywhere fails
-    /// (Antonio, driving, 2026-09-01). Fixing the widgets one at a time does not end it: the next
-    /// surface, or the next decorator over one, brings it back, and its author had no way to know
-    /// they were meant to think about it.
+    /// Fixing the widgets one at a time does not end it: the next surface, or the next decorator
+    /// over one, brings it back, and its author had no way to know they were meant to think about
+    /// it.
     ///
     /// A surface that *wants* to swallow says so where it already says it —
     /// [`overlay_occludes`](Component::overlay_occludes), which `Overlay::blocking(true)` answers
@@ -468,15 +483,14 @@ pub struct Base {
     /// to scale that. What a widget floats *beside* itself is different: a tooltip bubble is a small
     /// panel belonging to the surface, not a part of the control, so an emphasized button was
     /// getting an emphasized bubble — 1.25× the text of an identical tip on the button next to it
-    /// (Antonio, driving, 2026-09-03).
     pub root_font: f32,
     /// The **viewport the tree was laid out against**, written by the layout pass.
     ///
     /// A widget that draws a floating panel has to clamp it on screen, and it used to learn the
     /// viewport from `PaintCx` — one pass *after* the layout that placed the panel. So the first
     /// frame placed it against a stale size and the next one corrected it, and a context menu
-    /// visibly jumped after it appeared (Antonio, 2026-08-10). The engine already knows the size it
-    /// was told to compute against; this is that size, available at the moment placement happens.
+    /// visibly jumped after it appeared. The engine already knows the size it was told to compute
+    /// against; this is that size, available at the moment placement happens.
     pub viewport: Size,
     /// Hover, capture, click-run and drag state, kept by the pointer router (see
     /// [`crate::pointer`]). A widget reads `pointer.hovered`; nothing else here writes it.
@@ -489,6 +503,21 @@ pub struct Base {
     /// [`ComponentExt`](crate::builders::ComponentExt) writes and [`dispatch`] runs. `None` until the
     /// first one is registered, which is the common case and costs a null pointer.
     pub handlers: Option<Box<Handlers>>,
+    /// What this widget does with the props its owner hands it — see [`crate::props`]. `None` for
+    /// a widget that takes none.
+    pub props: Option<crate::props::PropsSlot>,
+    /// Whether this widget **clips what it holds** to its own box — CSS `overflow: hidden`. A
+    /// child that is placed or grows past the edge is not drawn there and cannot be hit there.
+    pub clip_children: bool,
+    /// Whether this widget **only arranges its children** — see [`Base::container`]. A layout-only
+    /// widget claims the pointer on its own box only where it declares or paints something.
+    pub layout_only: bool,
+    /// The version of what this child was built from, when a parent that keeps its children
+    /// across passes built it from one — see [`reconcile_keyed`](crate::reconcile::reconcile_keyed).
+    pub built_from: Option<String>,
+    /// What the cursor looks like while the pointer is over this widget — see
+    /// [`cursor_at`](crate::cursor_at). `None` leaves it to what holds this widget.
+    pub cursor: Option<crate::cursor::Cursor>,
     /// **The context menu this widget carries**, built fresh each time it is triggered.
     ///
     /// A universal slot like [`key`](Self::key) and [`drag_source`](Self::drag_source), so
@@ -666,6 +695,26 @@ pub struct Base {
 }
 
 impl Base {
+    /// **Does this widget declare anything the pointer could mean on it?** A handler, a focus
+    /// stop, a drag or drop role, a cursor, a tooltip, a menu, a hint, or something painted (fill,
+    /// border, glow). A box with none of these is layout only: where no child is, nothing is under
+    /// the pointer but whatever is behind it.
+    pub fn answers_pointer(&self) -> bool {
+        let v = &self.style.visual;
+        self.handlers.is_some()
+            || self.focusable
+            || self.one_click_target
+            || self.draggable
+            || self.drop_target
+            || self.cursor.is_some()
+            || self.tooltip.is_some()
+            || self.context_menu.is_some()
+            || self.hint.is_some()
+            || v.fill.is_some()
+            || v.border.is_some()
+            || v.glow.is_some()
+    }
+
     /// **The name this widget declares itself by** — its [`key`](Self::key), or its
     /// [`scope_key`](Self::scope_key) when it names a region rather than a row.
     ///
@@ -694,16 +743,29 @@ impl Base {
         self.key.as_deref() == Some(name) || self.scope_key.as_deref() == Some(name)
     }
 
+    /// A base for a widget whose whole job is **arranging children** (a row, a grid, a wrapper):
+    /// where none of its children is, the pointer goes to whatever is behind it, unless the widget
+    /// declares something or paints (see [`answers_pointer`](Self::answers_pointer)). Every layout
+    /// container starts here, so no author of one writes anything for it.
+    pub fn container() -> Self {
+        let mut base = Self::new();
+        base.layout_only = true;
+        base
+    }
+
     /// A new base with default style and an empty child list.
     pub fn new() -> Self {
         Self {
             style: Style::default(),
             grid_area: None,
             node: None,
+            layout_tree: Cell::new(0),
+            layout_cache: RefCell::new(None),
             bounds: Rectangle::from_size(Size::new(0.0, 0.0)),
             visible: signal(true),
             disabled: signal(false),
             focused: signal(false),
+            focus_door: crate::focus::FocusDoor::default(),
             focus_visible: signal(false),
             focusable: false,
             focus_barrier: false,
@@ -712,7 +774,9 @@ impl Base {
             tab_index: None,
             children: Vec::new(),
             draggable: false,
+            drag_gate: None,
             drag_kind: None,
+            drag_image: false,
             drop_target: false,
             accepts: Vec::new(),
             accepts_onto: true,
@@ -721,8 +785,13 @@ impl Base {
             font: 15.0,
             root_font: 15.0,
             viewport: Size::new(f64::MAX, f64::MAX),
+            layout_only: false,
             pointer: crate::pointer::PointerState::new(),
             handlers: None,
+            props: None,
+            clip_children: false,
+            built_from: None,
+            cursor: None,
             context_menu: None,
             surface: false,
             surface_slot: None,
@@ -796,8 +865,7 @@ impl Base {
             // draws from those bounds and so draws nothing — but an icon is a glyph at the font's
             // size, drawn wherever its box says it is, so a revealed button put its icon in the
             // corner of the screen for the frame before the next layout reached it. During a drag
-            // that is continuous, and it is red when the button is a destructive one (Antonio,
-            // driving, 2026-09-04).
+            // that is continuous, and it is red when the button is a destructive one.
             //
             // Clearing the layout node says the truth — nothing has placed this yet — and
             // [`paint_child`](crate::paint_child) already declines to draw what has never been
@@ -827,7 +895,6 @@ impl Base {
     /// played — several frames after the click that dismissed it. Nothing re-laid-out at that
     /// moment, so the cards below it kept their old positions until some unrelated click happened
     /// to trigger a layout, and the gap where the card had been simply sat there
-    /// (Antonio, driving the showcase, F003/P096).
     pub fn mark_needs_layout(&self) {
         self.needs_layout.set(true);
         request_frame();
@@ -900,12 +967,15 @@ impl Base {
     ///
     /// What that cost: the exposé's cards kept being offered letters by `prefix+/` after it had
     /// been opened once and closed — a full-window target sitting over everything you could
-    /// actually see (Antonio, driving, 2026-09-15).
+    /// actually see.
     ///
     /// It lives beside `close` because it is the other half of that rule, and splitting them is
     /// how they came to disagree: two widgets had hand-written `presence.tick` and neither ended
     /// the exit, which is a rule in two call sites and therefore in the wrong place.
     pub fn tick_presence(&mut self, dt: f32) -> bool {
+        // A widget that follows a host signal for focus catches up here, once a frame, for every
+        // widget — see [`Base::follow_focus`].
+        self.sync_focus_follow();
         let animating = self.presence.tick(dt);
         // **Exactly the frame an exit ends.** Asked of the presence rather than inferred from
         // "not open and not leaving", which is also true of a widget that was never up — and which
@@ -976,6 +1046,20 @@ pub trait Component {
     fn base(&self) -> &Base;
     /// Mutably borrow this component's base.
     fn base_mut(&mut self) -> &mut Base;
+
+    /// **Hand this widget new props**: the facts its owner holds, for it to show without being
+    /// rebuilt. `true` when it took them; `false` when it declares no
+    /// [`on_props`](crate::builders::ComponentExt::on_props) or declares one for another type.
+    fn set_props(&mut self, props: &dyn std::any::Any) -> bool {
+        let base = self.base_mut();
+        // The slot is lifted out while it runs: its handler is given the base it lives in.
+        let Some(mut slot) = base.props.take() else {
+            return false;
+        };
+        let took = slot.take(props, base);
+        base.props.get_or_insert(slot);
+        took
+    }
 
     /// Whether this component participates in keyboard focus traversal
     /// (Tab/Shift+Tab). The default reads the declared [`Base::focusable`] flag and
@@ -1076,10 +1160,6 @@ pub trait Component {
     /// the user to actually navigate. Default: nothing.
     fn focus_first_quiet(&mut self) {}
 
-    /// **A click inside this surface moves its keyboard**, and a click that hits no control leaves
-    /// the keyboard where it is — the trapped-panel rule. Default: nothing.
-    fn focus_at_trapped(&mut self, _pos: heca_core::layout::Point) {}
-
     /// **Dismiss this surface.**
     ///
     /// With an animation declared this *begins* the exit — the surface is gone when
@@ -1118,6 +1198,30 @@ pub trait Component {
     /// `false`; see [`FocusManager`](crate::focus::FocusManager).
     fn overlay_active(&self) -> bool {
         false
+    }
+
+    /// **Does this widget draw its own mark for a drag over it?** Then the framework does not wash
+    /// the whole box. A line along a border is one: the wash would cover the panes beside it.
+    fn paints_own_drag_feedback(&self) -> bool {
+        false
+    }
+
+    /// **The cursor over `point`, when it depends on where the pointer is.** A widget with one
+    /// cursor for its whole box declares it ([`cursor`](crate::builders::ComponentExt::cursor));
+    /// one that changes across its box — a link inside a terminal, which only counts while a
+    /// modifier is held — answers here. It wins over the declared one, and nearer widgets win over
+    /// farther. `None` leaves it to the declaration and to what holds this widget.
+    fn cursor_over(&self, _point: Point) -> Option<crate::cursor::Cursor> {
+        None
+    }
+
+    /// Whether this widget's **own box** is something the pointer lands on, where none of its
+    /// children is. A leaf is what it draws, so it does. A layout-only widget ([`Base::container`])
+    /// does only where it declares something or paints, so a full-size layout box laid over other
+    /// things does not take every press that no child wants.
+    fn claims_pointer(&self) -> bool {
+        let base = self.base();
+        !base.layout_only || base.answers_pointer()
     }
 
     /// Whether this component's **overlay surface geometrically occludes** `pos`
@@ -1160,8 +1264,15 @@ pub trait Component {
             return;
         }
         cx.paint_base(self.base());
-        for child in &self.base().children {
-            paint_child(child.as_ref(), cx);
+        let paint_children = |cx: &mut PaintCx| {
+            for child in &self.base().children {
+                paint_child(child.as_ref(), cx);
+            }
+        };
+        if self.base().clip_children {
+            cx.with_clip(self.base().bounds, paint_children);
+        } else {
+            paint_children(cx);
         }
     }
 
@@ -1316,7 +1427,7 @@ pub trait Component {
     ///
     /// If you are adding a fourth walk over the tree, it asks this too.
     fn clips_children(&self) -> bool {
-        false
+        self.base().clip_children
     }
 
     /// **This component arranges its children as a grid** — its column and row tracks, and its
@@ -1336,14 +1447,12 @@ pub trait Component {
     /// flag (which drives the focus ring). Override to add behaviour.
     /// `visible` is true for keyboard focus (show the ring), false for mouse.
     fn on_focus(&mut self, visible: bool) {
-        self.base_mut().focused.set(true);
-        self.base_mut().focus_visible.set(visible);
+        self.base().focus(visible);
     }
 
     /// Called when this component loses keyboard focus. Default: clear it.
     fn on_blur(&mut self) {
-        self.base_mut().focused.set(false);
-        self.base_mut().focus_visible.set(false);
+        self.base().blur();
     }
 
     /// The taffy style for this component's layout node. Default: the base
@@ -1424,9 +1533,20 @@ pub trait Component {
     /// did not** — the same string the keyboard cursor, the right-click target and a remembered
     /// hint letter are filed under ([`nav::identity_of`](crate::nav::identity_of)). Asking for the
     /// key here instead would make `.draggable()` silently do nothing on every widget that never
-    /// needed a name, and put an internal rule in front of the author (Antonio, 2026-09-01).
+    /// needed a name, and put an internal rule in front of the author.
     fn is_drag_source(&self) -> bool {
         self.base().draggable
+    }
+
+    /// **Would a press now pick this widget up?** It is a drag source, and its rule (if it set one)
+    /// holds for what is held down right now.
+    fn may_start_drag(&self) -> bool {
+        self.is_drag_source()
+            && self
+                .base()
+                .drag_gate
+                .as_ref()
+                .is_none_or(|rule| rule(crate::event::modifiers()))
     }
 
     /// **Does this widget accept drops?** The same shape, reading
@@ -1516,6 +1636,7 @@ pub fn deliver(node: &mut dyn Component, ev: &Event) -> Handled {
         // first row in a list answering an Enter meant for the cursor, an unfocused dock answering
         // an intent aimed at its neighbour. A host that wants a key to reach a surface focuses the
         // surface — which it already does, because that is what the focus ring means.
+        crate::focus::settle(node);
         let Some(path) = focus_path(node) else {
             return Handled::No;
         };
@@ -1536,19 +1657,12 @@ fn is_keyboard(ev: &Event) -> bool {
     )
 }
 
-/// The path from `node` to the **deepest** widget in it holding keyboard focus, or `None` when
-/// nothing in this tree does.
-///
-/// Deepest, because focus nests: a host marks a whole dock as the keyboard's target *and* the field
-/// inside it is focused, and the key belongs to the field. Hidden and invisible subtrees are
-/// skipped — a closed overlay still holds the focus flag its field had when it closed, and that
-/// must not pull the keyboard into something nobody can see.
 /// **Does anything in this subtree hold the keyboard?**
 ///
 /// The public form of [`focus_path`] — a host asking "is this surface the one taking keys" gets the
 /// same answer the event walk uses, rather than inventing a predicate beside it. A surface that
-/// wants keys holds focus (`Overlay`, `ContextMenu` and `CommandPalette` all bind their open signal
-/// to [`Base::focused`]), so an open layer answers `true` by being open.
+/// wants keys holds focus (`Overlay`, `ContextMenu` and `CommandPalette` follow their open signal
+/// for it), so an open layer answers `true` by being open.
 ///
 /// Hidden and invisible subtrees are skipped, so a dismissed surface that still carries the focus
 /// flag its field had when it closed does not answer `true`.
@@ -1556,22 +1670,10 @@ pub fn holds_keyboard(node: &dyn Component) -> bool {
     focus_path(node).is_some()
 }
 
+/// The path from `node` to the widget in it that owns the keyboard, or `None` when nothing in this
+/// tree does. See [`focus::holder_path`](crate::focus::holder_path) for how a holder is chosen.
 pub(crate) fn focus_path(node: &dyn Component) -> Option<Vec<usize>> {
-    // **Last-added first**, the same order hit-testing uses: what is drawn on top owns the input.
-    // Several things can carry the focus flag at once — an open layer says it holds the keyboard,
-    // and the button the user clicked before opening it still says so too — and the one on top is
-    // the one that means it. Walking in document order picked the button and left every keystroke
-    // falling through the palette to the page behind it.
-    for (i, child) in node.base().children.iter().enumerate().rev() {
-        if !child.base().visible.get_untracked() || child.base().style.layout.hidden {
-            continue;
-        }
-        if let Some(mut sub) = focus_path(child.as_ref()) {
-            sub.insert(0, i);
-            return Some(sub);
-        }
-    }
-    node.base().focused.get_untracked().then(Vec::new)
+    crate::focus::holder_path(node)
 }
 
 /// Capture down `path`, then handlers and [`on_event`](Component::on_event) back up — the same
@@ -1726,7 +1828,7 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
     // it walks, so a widget the walk has never reached still holds `None` — it has no bounds, and
     // its default ones put it at the window's origin. Painting it draws it there for one frame: a
     // small thing flickering in the top-left corner of the scrolling area, which a resize produces
-    // continuously (Antonio, driving, 2026-09-03).
+    // continuously.
     //
     // A widget added *while* its tree is being laid out is exactly that case, and it happened three
     // separate times in one session — the ⋮ built inside the decision, the ⋮ rebuilt on each
@@ -1758,7 +1860,11 @@ pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
 
 /// The paint itself, once the inherited hue is in place — see [`paint_child`].
 fn paint_subtree(c: &dyn Component, cx: &mut PaintCx) {
+    // What the widget asks to have drawn over its children (a frame) is landed when its subtree is
+    // done, so it covers its own children and not what is painted after it.
+    let outline = cx.scene.outline_mark();
     c.paint(cx);
+    cx.scene.settle_outline(outline);
     crate::widgets::key_hint::paint_hint_label(c, cx);
     crate::widgets::tooltip::paint_tooltip(c, cx);
     paint_drag_feedback(c, cx);
@@ -1784,7 +1890,7 @@ fn paint_subtree(c: &dyn Component, cx: &mut PaintCx) {
 /// itself carries, so the outline never promises something the drop will not do.
 fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
     let b = c.base();
-    if b.pointer.is_drag_over() {
+    if b.pointer.is_drag_over() && !c.paints_own_drag_feedback() {
         let bounds = b.bounds;
         match crate::drag::DropAction::held() {
             crate::drag::DropAction::Swap => cx.swap_indicator(bounds),
@@ -1795,8 +1901,7 @@ fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
         // **What you are carrying is faded where it still sits.** Otherwise a container's highlight
         // is drawn around a source that looks untouched, and the two read as both being
         // highlighted — which is exactly the case of dropping a column into the workspace that
-        // holds it (Antonio, 2026-09-01). Faded here, outlined there, and the chip under the cursor
-        // says which is which.
+        // holds it. Faded here, outlined there, and the chip under the cursor says which is which.
         let bg = cx.theme().colors.background;
         cx.rect(
             b.bounds,
@@ -1805,6 +1910,10 @@ fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
             cx.theme().colors.border_radius,
             None,
         );
+        if b.drag_image {
+            paint_drag_image(c, cx);
+            return;
+        }
         // A picture of what was picked up, offset off the cursor and vertically centred on it, in
         // the overlay band so nothing this widget sits inside can clip it.
         let at = b.pointer.drag_pos();
@@ -1817,6 +1926,42 @@ fn paint_drag_feedback(c: &dyn Component, cx: &mut PaintCx) {
         );
         cx.drag_ghost(rect, &text, crate::drag::DropAction::held().is_swap());
     }
+}
+
+/// **The picture of a carried widget**: the widget painted as it is — terminal surface and all — in
+/// the top layer, faded and shrunk by the theme's tokens, with the point that was grabbed kept under
+/// the pointer. Painted as an echo, so the host does not take its surfaces for where they live.
+fn paint_drag_image(c: &dyn Component, cx: &mut PaintCx) {
+    let b = c.base();
+    let (alpha, scale) = {
+        let colors = &cx.theme().colors;
+        (colors.drag_image_alpha, colors.drag_image_scale)
+    };
+    let (pos, grab) = (b.pointer.drag_pos(), b.pointer.drag_origin());
+    let (dx, dy) = (pos.x - grab.x, pos.y - grab.y);
+    cx.with_overlay(|cx| {
+        cx.with_opacity(alpha, |cx| {
+            cx.with_translate(dx, dy, |cx| {
+                cx.with_scale(scale, pos, |cx| {
+                    cx.with_echo(|cx| {
+                        let outline = cx.scene.outline_mark();
+                        c.paint(cx);
+                        cx.scene.settle_outline(outline);
+                    });
+                });
+            });
+        });
+        if crate::drag::DropAction::held().is_swap() {
+            // The same double frame the chip wears: this is an exchange, not a move.
+            let k = f64::from(scale);
+            let at = |p: Point| Point::new(pos.x + (p.x + dx - pos.x) * k, pos.y + (p.y + dy - pos.y) * k);
+            let image = Rectangle::new(
+                at(b.bounds.loc),
+                heca_core::layout::Size::new(b.bounds.size.w * k, b.bounds.size.h * k),
+            );
+            cx.swap_indicator(image);
+        }
+    });
 }
 
 /// Translate a component's whole subtree by `(dx, dy)` — bounds only, no re-layout.
@@ -1887,6 +2032,9 @@ pub struct PaintCx<'a> {
     /// Alpha multiplier applied to every draw emitted through this context — see
     /// [`with_opacity`](Self::with_opacity). `1.0` normally: a widget paints at its own colours.
     opacity: f32,
+    /// Whether what is painted is **a picture of something that lives elsewhere** — see
+    /// [`with_echo`](Self::with_echo).
+    echo: bool,
     /// The active [scale](PaintCx::with_scale) — multiplicative, like `opacity`.
     scale: f32,
     /// The fixed point the scale shrinks toward, already in scene coordinates.
@@ -1917,9 +2065,9 @@ pub struct PaintCx<'a> {
 ///
 /// That is why the exposé's cards would not shrink with the window: each card asked for 100% of a
 /// wrapper that asked for 100% of nothing, so a card stayed as wide as the path inside it and every
-/// card's text ran across its neighbours (Antonio, driving, 2026-08-24). `expose/mod.rs` already
-/// carried a hand-written workaround — "the room the panel gives it has to be passed on
-/// deliberately" — which is one call site fixing a rule that belongs here.
+/// card's text ran across its neighbours. `expose/mod.rs` already carried a hand-written workaround
+/// — "the room the panel gives it has to be passed on deliberately" — which is one call site fixing
+/// a rule that belongs here.
 ///
 /// Adopting whatever the child declares keeps the chain unbroken, and a child that hugs still hugs,
 /// because then there is nothing to adopt.
@@ -1971,10 +2119,13 @@ fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangl
     match cmd {
         DrawCommand::Host(h) => DrawCommand::Host(HostCmd {
             rect: place(h.rect),
-            // A blur radius is a distance, so it scales with everything else; a surface id and an
-            // alpha are not distances.
+            // A blur radius and a corner are distances, so they scale with everything else; a
+            // surface id and an alpha are not distances.
             draw: match h.draw {
-                HostDraw::Backdrop { radius } => HostDraw::Backdrop { radius: radius * k },
+                HostDraw::Backdrop { radius, corner } => HostDraw::Backdrop {
+                    radius: radius * k,
+                    corner: corner * k,
+                },
                 other => other,
             },
             ..h
@@ -2076,6 +2227,7 @@ impl<'a> PaintCx<'a> {
             content_glow: None,
             offset: (0.0, 0.0),
             opacity: 1.0,
+            echo: false,
             scale: 1.0,
             scale_origin: Point::new(0.0, 0.0),
             clip: None,
@@ -2117,6 +2269,16 @@ impl<'a> PaintCx<'a> {
         self.opacity = previous * alpha.clamp(0.0, 1.0);
         f(self);
         self.opacity = previous;
+    }
+
+    /// Paint `f`'s subtree **as a picture of itself**, not as itself: the host work it records (a
+    /// terminal's surface) is marked an echo, so whoever asks where a surface was drawn is not told
+    /// the picture's place. What a carried widget's image under the pointer is painted with.
+    pub fn with_echo(&mut self, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = self.echo;
+        self.echo = true;
+        f(self);
+        self.echo = previous;
     }
 
     /// Paint `f`'s subtree **scaled** by `factor` about `origin` — the whole surface smaller or
@@ -2225,6 +2387,16 @@ impl<'a> PaintCx<'a> {
         self.scene.begin_overlay();
         f(self);
         self.scene.end_overlay();
+    }
+
+    /// **Paint `f` over this widget's children.** A widget paints first and its children after, so a
+    /// frame drawn in `paint` sits under whatever it holds; drawn here it sits over it. See
+    /// [`Scene::begin_outline`](crate::scene::Scene::begin_outline) — it keeps the clips it was
+    /// called inside, and paints in place inside an overlay.
+    pub fn outline(&mut self, f: impl FnOnce(&mut PaintCx<'a>)) {
+        self.scene.begin_outline();
+        f(self);
+        self.scene.end_outline();
     }
 
     /// Run `f` with all its draws **clipped** to `rect` (logical px). Content that
@@ -2401,23 +2573,26 @@ impl<'a> PaintCx<'a> {
             draw: HostDraw::Surface { id },
             rect,
             alpha: 1.0,
+            echo: self.echo,
         }));
     }
 
     /// **Blur whatever is already drawn behind this widget**, within `rect`.
     ///
     /// Recorded in scene order, so it blurs exactly what came before it and nothing of what comes
-    /// after. `alpha` fades the blurred copy — a surface arriving fades its backdrop in with itself,
+    /// after. `corner` rounds the blurred box to the corner radius of the widget that asks for it.
+    /// `alpha` fades the blurred copy — a surface arriving fades its backdrop in with itself,
     /// rather than holding the session out of focus and snapping sharp in one frame at the end.
-    pub fn backdrop_blur(&mut self, rect: Rectangle, radius: f32, alpha: f32) {
+    pub fn backdrop_blur(&mut self, rect: Rectangle, radius: f32, corner: f32, alpha: f32) {
         if radius <= 0.0 || alpha <= 0.0 || self.culled(rect) {
             return;
         }
         let rect = self.placed(rect);
         self.emit(DrawCommand::Host(HostCmd {
-            draw: HostDraw::Backdrop { radius },
+            draw: HostDraw::Backdrop { radius, corner },
             rect,
             alpha,
+            echo: self.echo,
         }));
     }
 

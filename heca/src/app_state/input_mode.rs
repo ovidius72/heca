@@ -61,9 +61,13 @@ pub enum ColumnPickTarget {
         col_idx: usize,
         col_id: heca_core::layout::ColumnId,
     },
-    /// **A new column, right of the one the pane is in now** — "you keep your place in the strip",
-    /// the same rule `move_pane_to_new_column` already follows.
-    New,
+    /// **A new column at gap `gap` of the active workspace** — the gap left of column `gap`,
+    /// counted with the pane still where it is. It is drawn as an empty place with its letter in
+    /// it, and picking it runs `place_pane` for that gap.
+    NewColumn { gap: usize },
+    /// **A new row at row `row` of column `col`**, counted with the pane still where it is — an
+    /// empty place between, above or below the panes of a column.
+    NewRow { col: usize, row: usize },
 }
 
 
@@ -142,11 +146,16 @@ pub enum InputMode {
     FollowLink {
         candidates: Vec<LinkHint>,
     },
-    /// Scrollback-search query entry (entered with `/` in selection mode). Typing
-    /// edits `AppState.search`'s query and re-runs the search live; Enter keeps the
-    /// matches (so `n`/`N` navigate in selection mode), Esc cancels. The query +
-    /// matches live in [`SearchState`], not here.
-    Search,
+    /// **A terminal's search field has the keyboard.** Typing goes into that terminal's own tree,
+    /// where its field edits the query and the search re-runs live; Enter keeps the matches (so
+    /// `n`/`N` navigate in selection mode), Esc cancels. The query lives in the terminal's field
+    /// and the matches in the terminal that shows them, not here.
+    ///
+    /// The terminal is named only because pane trees are not part of the window's keyboard yet —
+    /// a bridge, and not something a plugin sees. When they join it, this goes (T453).
+    Search {
+        terminal: crate::chrome::terminal::TerminalId,
+    },
     /// Dock (chrome container) letter pick, entered with a bare `focus_dock`: every dock on
     /// screen gets a letter (a `KeyHint` keycap over its body) and the next keypress gives it
     /// chrome **keyboard focus**. Candidates carry a **container id**, so the pick is
@@ -164,6 +173,19 @@ pub enum InputMode {
     },
 }
 
+
+/// A single follow-link candidate: the letter to press, the terminal it lives in, where
+/// to stamp its keycap (the link's first visible cell — `row` from the viewport top,
+/// `start_col` inclusive), and the URL to open. Built from `snapshot.hyperlinks`, so
+/// OSC 8 and auto-detected (linkify) links are followed identically.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LinkHint {
+    pub label: char,
+    pub terminal: crate::chrome::terminal::TerminalId,
+    pub row: usize,
+    pub start_col: usize,
+    pub url: String,
+}
 
 /// What a [`InputMode::WorkspacePick`] moves into the picked workspace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -218,7 +240,7 @@ impl InputMode {
             | InputMode::Mode { .. }
             | InputMode::Selection
             | InputMode::ConfirmDelete
-            | InputMode::Search => false,
+            | InputMode::Search { .. } => false,
         }
     }
 
@@ -260,7 +282,7 @@ impl InputMode {
             | InputMode::Mode { .. }
             | InputMode::Selection
             | InputMode::ConfirmDelete
-            | InputMode::Search => None,
+            | InputMode::Search { .. } => None,
         }
     }
 

@@ -65,7 +65,7 @@ fn reveal_region(state: &mut AppState, region: crate::chrome::RegionId) {
 /// `keyboard_navigable`, not for a named one; F003/P086 will make the pickers take their targets
 /// from a component instead, at which point this goes.
 pub(crate) fn focus_navigable_dock(state: &mut AppState) {
-    let focused = state.chrome_state.focused_container();
+    let focused = crate::app::tree_focus::focused_dock(state);
     let Some((dock, _)) = crate::chrome::navigable_dock(&state.chrome_host, focused.as_deref())
     else {
         return;
@@ -110,7 +110,7 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
     if let Some(dock) = dock {
         // `dock` names a **placement or a component** (F003/P086/T363): a `global_focus` written
         // without an `id` speaks for the component, and lands on the seating you were last in.
-        let focused = state.chrome_state.focused_container();
+        let focused = crate::app::tree_focus::focused_dock(state);
         let last = state.chrome_state.last_focused_container();
         let Some(mount) = crate::chrome::placement_for(
             &state.chrome_host,
@@ -136,7 +136,7 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
         if let Some(region) = state.chrome_host.placement(&mount) {
             reveal_region(state, region);
         }
-        state.chrome_state.set_focused_container(Some(mount));
+        crate::app::tree_focus::focus_dock(state, &mount);
         return;
     }
     let candidates = crate::chrome::dock_candidates(&state.chrome_host, |region| {
@@ -160,7 +160,7 @@ pub fn handle_toggle_dock(state: &mut AppState, action: &WmAction) {
         return;
     };
     if let Some(dock) = dock {
-        let focused = state.chrome_state.focused_container();
+        let focused = crate::app::tree_focus::focused_dock(state);
         let last = state.chrome_state.last_focused_container();
         if let Some(mount) = crate::chrome::placement_for(
             &state.chrome_host,
@@ -186,10 +186,10 @@ pub fn handle_toggle_dock(state: &mut AppState, action: &WmAction) {
 /// A no-op when no dock is focused, so `Esc` in the focus layer and an RPC call are both safe to
 /// repeat.
 pub fn handle_unfocus_dock(state: &mut AppState, _action: &WmAction) {
-    if state.chrome_state.focused_container().is_none() {
+    let Some(dock) = crate::app::tree_focus::focused_dock(state) else {
         return;
-    }
-    state.chrome_state.set_focused_container(None);
+    };
+    crate::app::tree_focus::release_dock(state, &dock);
 }
 
 /// Move a mounted container to another chrome region (validated against the

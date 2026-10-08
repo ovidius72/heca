@@ -45,7 +45,7 @@ pub struct AppState {
     pub image_renderer: ImageRenderer,
     pub grid_renderer: GridRenderer,
     pub compositor: Compositor,
-    pub terminal_layers: HashMap<PaneId, RetainedTerminalLayer>,
+    pub terminal_layers: HashMap<crate::chrome::terminal::TerminalId, RetainedTerminalLayer>,
     pub terminal_layer_scratch: RetainedTerminalScratch,
     /// In-app frosted-blur primitive (shared, compositor-owned).
     /// Produces a blurred copy of the scene texture once per frame, then many
@@ -155,25 +155,12 @@ pub struct AppState {
     /// bookkeeping about it, so dropping it forces a rebuild without taking any surface with it.
     /// See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
-    /// **Retained per-pane shells**, keyed by pane — the frame around whatever app runs inside,
-    /// and the widget that carries the pane's identity and its pick letter. Built/positioned each
-    /// frame by `chrome::sync_panes`, painted through `heca_grid_ui::paint_child` (which is what
-    /// draws the letter).
-    ///
-    /// Retained rather than rebuilt in paint: the picker writes a letter into the tree when it
-    /// opens and reads it back a keystroke later, so a tree that does not outlive the frame cannot
-    /// carry one — which is why the pane letters used to be stamped by a host paint pass
-    /// (F011/P094/T451).
-    pub panes: HashMap<PaneId, crate::chrome::RetainedPane>,
-    /// **Retained per-column trees**, keyed by the column's own id — the box a column occupies in
-    /// the scrolling area, and the identity a pick addresses it by.
-    ///
-    /// The column is what OWNS `col:<id>`; the workspaces dock shows a view of it. Built and placed
-    /// each frame by `chrome::sync_columns` (F003/P082/T474).
-    pub columns: HashMap<heca_core::layout::ColumnId, crate::chrome::RetainedColumn>,
     /// The terminal each pane shows, by pane — the client's view of a running terminal process:
     /// what a window draws, and how much room it was given. Client state, like the retained trees.
-    pub(crate) terminals: HashMap<heca_core::layout::PaneId, crate::chrome::terminal::Terminal>,
+    pub(crate) terminals:
+        HashMap<crate::chrome::terminal::TerminalId, crate::chrome::terminal::Terminal>,
+    /// The CPU cost of a frame, averaged and printed when `HECA_FRAME_TIMES` is set.
+    pub(crate) frame_times: crate::app::frame_times::FrameTimes,
     /// The buttons whose press a terminal's program has heard and whose release it has not — so a
     /// release is passed on only where its press was.
     pub(crate) terminal_presses: crate::app::terminal_host::HeardPresses,
@@ -236,27 +223,11 @@ pub struct AppState {
     /// happens on its own. The widget says how long it needs (`Component::next_redraw`, folded down
     /// a whole tree), the loop sleeps until then, and **this is what makes the loop actually draw
     /// when it gets there** — without it, waking finds every reason-to-draw false and goes straight
-    /// back to sleep, which is a tooltip that appears only when you nudge the mouse (Antonio,
-    /// driving, 2026-09-04).
+    /// back to sleep, which is a tooltip that appears only when you nudge the mouse.
     ///
     /// Same shape as [`bell_flash_until`](Self::bell_flash_until): a deadline the frame loop reads,
     /// never a per-widget timer the host would have to keep in step.
     pub widget_frame_due: Option<std::time::Instant>,
-    /// Active scrollback searches, **one per pane**. Drives each pane's query bar,
-    /// its match highlights, and `n`/`N` navigation. terminal-task-19.
-    ///
-    /// Per-pane rather than a single global search: with one shared slot, starting a
-    /// search in a second pane silently destroyed the first pane's — its bar and
-    /// highlights vanished and there was no way to get them back. Every pane now
-    /// keeps its own, and they all render at once.
-    ///
-    /// A `BTreeMap` so iteration order is stable — panes draw in a deterministic
-    /// order frame to frame rather than wandering with hash seeding.
-    ///
-    /// Reach it through [`search_for`](Self::search_for) /
-    /// [`focused_search`](Self::focused_search) and friends rather than indexing, so
-    /// "the search the keyboard is driving" has exactly one definition.
-    pub searches: std::collections::BTreeMap<PaneId, SearchState>,
     // (The right-click context menu + the destructive-confirm prompt are now host-owned overlay
     // layers in `chrome::overlay` — `open_dropdown` / `open_modal` — not bespoke fields here.)
     /// Most recently focused pane (for "go back" behavior).
@@ -285,7 +256,7 @@ pub struct AppState {
     /// cursor back where it was. Its per-workspace memory above cannot answer that on its own: it
     /// is read at the *active* workspace's index, so a rebuild while the cursor sat in another
     /// row moved the highlight to the active row — which reads as the map jumping to a different
-    /// workspace the moment you delete a pane (Antonio, driving, 2026-08-11).
+    /// workspace the moment you delete a pane.
     ///
     /// Only consulted while the map is **already up**. Opening it fresh still starts at the
     /// workspace you are standing in, which is what the memory above is for.
@@ -306,9 +277,8 @@ pub struct AppState {
     /// on every pick from what is actually on screen, so a target that has gone releases its letter
     /// instead of holding one nobody can reach.
     ///
-    /// Antonio, driving, 2026-08-17: *"I want to expand a pane, prefix+/ and `k` appears on that
-    /// icon… then I want to collapse. prefix+/ and `j` appears on that button, while I was expecting
-    /// `k`."* The letter was the target's **index**, so anything appearing earlier in the tree
+    /// A button that turns into its opposite (expand, then collapse) must keep its letter. The
+    /// letter was the target's **index**, so anything appearing earlier in the tree
     /// shifted every letter after it.
     pub remembered_letters: std::collections::HashMap<String, char>,
     /// Whether mouse interactions are enabled.
@@ -355,6 +325,9 @@ pub struct AppState {
     pub confirm: heca_config::confirm::ConfirmConfig,
     /// Modifier key for interactive pane drag.
     pub interactive_move_modifier: heca_config::theme::ModifierKey,
+    /// Whether the places a pane can be put are shown in this window right now — see
+    /// [`crate::app::places`].
+    pub places_open: bool,
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
     /// The configured prefix key combo (e.g. Ctrl+b).
@@ -429,7 +402,7 @@ impl AppState {
     /// highlight the moment the overlay appears. It used to ask whether the app was in a mode; a
     /// container holding the keyboard is the thing that was always meant.
     pub fn container_cursor_visible(&self) -> bool {
-        self.chrome_state.focused_container().is_some()
+        crate::app::tree_focus::focused_dock(self).is_some()
     }
 
     /// A first-party [`host`](crate::host) API handle (`app.on` / `app.state`) over

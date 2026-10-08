@@ -89,18 +89,6 @@ fn the_chrome_tree_gets_the_release_and_the_wheel_too() {
              welded to the cursor otherwise",
         ),
         (
-            "WindowEvent::MouseInput",
-            "crate::chrome::deliver_to_panes(",
-            "a pane's own tree carries its info bar now, so a bar button that captured a press has \
-             to learn the gesture ended",
-        ),
-        (
-            "WindowEvent::MouseWheel",
-            "crate::chrome::deliver_to_panes(",
-            "nothing in a header scrolls yet, and \"nothing needs it yet\" is the reasoning that \
-             produced every other missing kind",
-        ),
-        (
             "WindowEvent::MouseWheel",
             "crate::chrome::deliver(",
             "a scroll region in the sidebar scrolls on the wheel, and the terminal must not also \
@@ -182,18 +170,18 @@ fn the_mouse_layer_sends_a_release_for_every_press_it_sends() {
     }
 }
 
-/// **A right-click must reach the panes, not only the chrome.** ⚠️ Ran red against its own bug.
+/// **A right-click must reach the window tree, where the panes are.** ⚠️ Ran red against its own
+/// bug.
 ///
-/// A pane's widgets live in a tree of their own until the pane joins the one tree
-/// tree, and only *left* presses were ever handed to them. So a right-click never
-/// reached a pane at all — and the moment a pane started declaring its own menu, right-clicking one
-/// showed nothing whatsoever, while `prefix+>` still worked because the keyboard path resolves the
-/// pane a different way.
+/// A pane is in the same tree as the chrome, so a right-click handed to the tree reaches a pane
+/// like any other widget. A right-click that is not handed over never reaches a pane at all — and
+/// the moment a pane declares its own menu, right-clicking one shows nothing whatsoever, while
+/// `prefix+>` still works because the keyboard path resolves the pane a different way.
 ///
 /// A lint rather than a behaviour test, like its neighbours: what it guards is *absence*, and the
 /// suite was fully green with right-click menus completely dead.
 #[test]
-fn a_right_click_is_handed_to_the_panes_as_well_as_the_chrome() {
+fn a_right_click_is_handed_to_the_window_tree() {
     let src = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"))
         .expect("read the mouse layer");
 
@@ -210,50 +198,13 @@ fn a_right_click_is_handed_to_the_panes_as_well_as_the_chrome() {
             .map(|i| i + arm.len())
             .unwrap_or(body.len());
         assert!(
-            body[..end].contains("deliver_to_panes("),
-            "the mouse layer's `{arm}` arm hands the event to the chrome tree but not to the \
-             panes.\n\
-             A pane is dispatched separately until it joins the one tree, so a right-click that \
-             goes only to the chrome never reaches a pane — and the menu a pane declares about \
-             itself is then unreachable, with nothing failing anywhere.",
+            body[..end].contains("chrome::deliver("),
+            "the mouse layer's `{arm}` arm does not hand the event to the window tree.\n\
+             The panes are in it, so a right-click that is not handed over never reaches a pane — \
+             and the menu a pane declares about itself is then unreachable, with nothing failing \
+             anywhere.",
         );
     }
-}
-
-/// **A divider resize must end at the same level its press started it.**
-///
-/// The press starts the drag in the event loop (`mouse::resize::on_press`, before the general mouse
-/// path). The release used to end it two layers down, inside `mouse::on_mouse_input` — which sits
-/// *behind* an early return: if a terminal's scrollbar claimed the release (it answers one
-/// whenever it holds a thumb grab), the event loop returned and the resize was never told.
-///
-/// `state.mouse.resize` then stayed `Some`, and every later cursor move took the resize branch in
-/// `mouse::on_cursor_moved` **with no button held** — so the pane went on resizing itself, with the
-/// mouse just moving, until it was gone. Same family as the guards above: a gesture that outlives
-/// the release that ends it (F004/P084/T409).
-///
-/// A lint, because what it guards is *ordering*, and the failure is a state that persists rather
-/// than an event that is wrong.
-#[test]
-fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
-    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
-    let body = branch_body(&src, "WindowEvent::MouseInput")
-        .expect("the button branch is still a `WindowEvent::MouseInput` arm");
-
-    let ends = body.find("resize::on_release").expect(
-        "the button branch no longer ends the divider resize. It must: the press starts the \
-             drag here, so the release has to end it here too, or the drag outlives the button.",
-    );
-    // Searched FORWARD from where the resize ends, not from the top of the branch: the panes are
-    // given the press too, further up, and that call cannot swallow a release. What has to hold is
-    // that the swallowing call — the panes' answer to the release, which is where a terminal's
-    // scrollbar holding a thumb grab says so — comes after the resize has been told.
-    assert!(
-        body[ends..].contains("crate::chrome::deliver_to_panes("),
-        "the divider resize is ended AFTER the branch that can return early and swallow the \
-         release.\nA resize that is never told the button came up keeps resizing on every cursor \
-         move, with nothing held down, until the pane is gone.",
-    );
 }
 
 /// **A key release reaches the tree, or `on_key_up` is a builder nothing can fire.**
@@ -261,7 +212,6 @@ fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
 /// The window loop returned at `event.state != ElementState::Pressed`, so `Event::Key { pressed:
 /// false }` did not exist in this app. A widget's release handler was therefore dead — the exposé's
 /// `x`/`X`/`d` did nothing on screen while a headless test that dispatched both halves passed
-/// (Antonio, driving, 2026-08-11).
 ///
 /// Exactly the shape of the pointer guards above: the funnel delivering only one half of a gesture,
 /// invisible to every behaviour test, because a test hands the tree both halves itself.
@@ -313,10 +263,13 @@ fn the_move_that_drives_a_drag_is_not_withheld_while_dragging() {
 
     // Everything the call is nested inside: the last `if` opened before it still decides whether it
     // runs, so that is the condition to read.
-    let guard = body[..call]
-        .rfind("if ")
-        .map(|i| &body[i..call])
-        .unwrap_or("");
+    // Read as code: a comment above the call is not what decides whether it runs.
+    let code: String = body[..call]
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let guard = code.rfind("if ").map(|i| &code[i..]).unwrap_or("");
 
     assert!(
         !guard.contains("drag_in_flight"),
@@ -334,10 +287,10 @@ fn the_move_that_drives_a_drag_is_not_withheld_while_dragging() {
 /// **The tree is told what is held before anyone is asked what it means.**
 ///
 /// The framework records the modifier state from the `ModifiersChanged` broadcast, and the app's
-/// own reaction to that same event asks it what a drag now means (`DropAction::held`). Reacting
-/// before announcing asks the question before the answer exists, so the answer is the *previous*
-/// one: a drag's move-versus-swap trails one event behind and flips when the key comes up instead
-/// of when it goes down.
+/// own reaction to that same event asks it what the pointer now means (the cursor over a link, a
+/// drag's move-versus-swap outline). Reacting before announcing asks the question before the
+/// answer exists, so the answer is the *previous* one: it trails one event behind and flips when
+/// the key comes up instead of when it goes down.
 ///
 /// A lint, like its neighbours, and for the same reason — what it guards is an *ordering*, and the
 /// symptom is a value that is merely stale rather than an event that is missing.
@@ -354,7 +307,7 @@ fn the_tree_learns_the_modifiers_before_the_app_reacts_to_them() {
         .find("heca_grid_ui::dispatch(")
         .expect("the modifiers branch no longer announces to the tree — move this guard with it");
     let reacted = body
-        .find("on_modifiers_changed")
+        .find("update_cursor")
         .expect("the modifiers branch no longer reacts — move this guard with it");
 
     assert!(
@@ -425,8 +378,8 @@ fn the_window_tree_has_one_door_and_not_a_function_per_kind() {
 /// The library has always had the answer (`Component::next_redraw`, folded down a whole tree and
 /// guarded by `a_pending_tooltip_asks_the_host_to_wake_for_it`). **The host simply never asked**, so
 /// a tooltip stayed hidden under a resting pointer and appeared the moment the mouse moved by a
-/// pixel — the nudge being what produced the frame (Antonio, driving, 2026-09-04). Only the showcase
-/// read it, which is why the widget's own tests were green throughout.
+/// pixel — the nudge being what produced the frame. Only the showcase read it, which is why the
+/// widget's own tests were green throughout.
 ///
 /// A lint, like the rest of this file: what it guards against is *absence*, and nothing fails when
 /// a question is not asked.

@@ -1,102 +1,9 @@
 use super::*;
-use heca_core::layout::testing::Shown;
 use heca_core::layout::types::{Point, Size};
-use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane, PaneId};
 
 /// The default bar heights, from the one place that says them: the config's appearance.
 fn bars() -> heca_config::appearance::AppearanceConfig {
     heca_config::appearance::AppearanceConfig::default()
-}
-
-#[test]
-fn test_rubberband_zero() {
-    let result = rubberband(1.0);
-    let expected = (1.0 - (1.0 / (1.0 * 1.0 / 0.5 + 1.0))) * 0.5;
-    assert!((result - expected).abs() < 1e-6);
-}
-
-#[test]
-fn test_rubberband_small() {
-    let r = rubberband(0.25);
-    assert!(r > 0.0 && r < 0.5);
-}
-
-#[test]
-fn test_rubberband_large() {
-    let r = rubberband(100.0);
-    assert!((r - 0.5).abs() < 0.01);
-}
-
-#[test]
-fn test_rubberband_negative() {
-    let r = rubberband(-1.0);
-    assert!(r.is_finite(), "rubberband(-1.0) should be finite");
-}
-
-#[test]
-fn test_find_pane_found() {
-    let mut ws = Shown::new(Size::new(1280.0, 800.0));
-    ws.m().scroll_mut().add_column(
-        None,
-        Column::new(
-            ColumnId(42),
-            Pane::new(PaneId(100), "test-pane"),
-            ColumnWidth::Proportion(1.0),
-        ),
-        false,
-    );
-    assert_eq!(find_pane_in_workspace(&ws, PaneId(100)), Some((0, 0)));
-}
-
-#[test]
-fn test_find_pane_not_found() {
-    let mut ws = Shown::new(Size::new(1280.0, 800.0));
-    ws.m().scroll_mut().add_column(
-        None,
-        Column::new(
-            ColumnId(1),
-            Pane::new(PaneId(10), "a"),
-            ColumnWidth::Proportion(1.0),
-        ),
-        false,
-    );
-    assert_eq!(find_pane_in_workspace(&ws, PaneId(999)), None);
-}
-
-#[test]
-fn test_find_pane_empty() {
-    let ws = Shown::new(Size::new(1280.0, 800.0));
-    assert_eq!(find_pane_in_workspace(&ws, PaneId(1)), None);
-}
-
-#[test]
-fn test_find_pane_multi_column() {
-    let mut ws = Shown::new(Size::new(1280.0, 800.0));
-    ws.m().scroll_mut().add_column(
-        None,
-        Column::new(
-            ColumnId(10),
-            Pane::new(PaneId(1), "a"),
-            ColumnWidth::Proportion(0.5),
-        ),
-        false,
-    );
-    ws.m().scroll_mut().add_column(
-        None,
-        Column::new(
-            ColumnId(20),
-            Pane::new(PaneId(2), "b"),
-            ColumnWidth::Proportion(0.5),
-        ),
-        false,
-    );
-    ws.m().scroll_mut()
-        .add_pane_to_column(0, Some(1), Pane::new(PaneId(3), "c"), false);
-
-    assert_eq!(find_pane_in_workspace(&ws, PaneId(1)), Some((0, 0)));
-    assert_eq!(find_pane_in_workspace(&ws, PaneId(3)), Some((0, 1)));
-    assert_eq!(find_pane_in_workspace(&ws, PaneId(2)), Some((1, 0)));
-    assert_eq!(find_pane_in_workspace(&ws, PaneId(999)), None);
 }
 
 /// **With a sidebar hidden, the panes own that edge right up to the window** — there is no strip
@@ -165,12 +72,4 @@ fn test_chrome_content_rect_no_sidebars() {
     assert_eq!(r.loc.y, 32.0);
     assert_eq!(r.size.w, 1240.0);
     assert_eq!(r.size.h, 744.0);
-}
-
-#[test]
-fn test_rubberband_niri_ref() {
-    assert!((rubberband(0.0) - 0.0).abs() < 1e-6);
-    assert!((rubberband(0.5) - 0.25).abs() < 1e-6);
-    assert!((rubberband(1.0) - 1.0 / 3.0).abs() < 1e-6);
-    assert!((rubberband(2.0) - 0.4).abs() < 1e-6);
 }

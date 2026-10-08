@@ -91,13 +91,11 @@ impl ColumnGroup<'_> {
             // Without it this wrapper carried a colour and a placement and nothing else, so the
             // group was not a pick target at all: a letter offered by `col:<id>` could not land on
             // it and climbed to the nearest thing that could — the **workspace header** above it.
-            // That is why a column pick lettered workspaces (Antonio, driving, 2026-09-10).
+            // That is why a column pick lettered workspaces.
             .on_hint(seams.picks(row_hint(column_key(column.col_id))))
             // **A column is a DESTINATION, not somewhere `prefix+/` sends you.** Its letter means
             // "move the pane here", which only makes sense while that pick is up — so it names
-            // that scope and drops out of the ordinary picker (Antonio, driving, 2026-09-11:
-            // the sidebar's columns wore green letters under `prefix+/` that landed you in the
-            // dock having selected nothing).
+            // that scope and drops out of the ordinary picker.
             //
             // Addressing it **by key** is untouched: `prefix+Ctrl+c` names `col:<id>` outright
             // rather than collecting a set, so there is nothing for a scope to filter.
@@ -122,7 +120,7 @@ mod tests {
     /// It carried its key, a colour and a placement — and no declaration, so it was not a target at
     /// all. A letter offered by `col:<id>` could not land on it and climbed to the nearest thing
     /// that could: the workspace header above it. `prefix+Ctrl+c` therefore lettered *workspaces*
-    /// while asking you to pick a column (Antonio, driving, 2026-09-10).
+    /// while asking you to pick a column.
     #[test]
     fn a_sidebar_column_can_take_the_letter_its_own_key_is_offered() {
         use heca_grid_ui::Component as _;

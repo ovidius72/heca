@@ -464,7 +464,7 @@ impl Select {
         // made a *second* widget claim focus without releasing the first, and `wants_visible`
         // defaults to that flag: every enclosing `ScrollRegion` then kept scrolling to a select
         // that had been opened once and never blurred, so a click anywhere on the page jumped it to
-        // the same spot (Antonio, 2026-08-10).
+        // the same spot.
         self.highlight = self.selected.get_untracked();
 
         let vp = self.viewport.get().h;
@@ -856,8 +856,7 @@ impl Component for Select {
 
     fn on_blur(&mut self) {
         self.close();
-        self.base.focused.set(false);
-        self.base.focus_visible.set(false);
+        self.base.blur();
     }
 }
 

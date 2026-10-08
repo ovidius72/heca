@@ -87,7 +87,7 @@ fn tiled_domain_allows_focused_pane_local() {
 }
 
 
-/// **The user's case** (2026-07-29): a plugin opens a non-modal overlay over the scrolling area,
+/// **The user's case**: a plugin opens a non-modal overlay over the scrolling area,
 /// and `prefix+Enter` must not add a pane behind it. No plugin declares anything about
 /// `split_horizontal` — it declares that its overlay covers the panes, and every `TiledOnly`
 /// act falls away with no further rule (F003/P086/T371).
@@ -128,7 +128,7 @@ fn an_overlay_covering_the_panes_blocks_acting_on_them() {
 
 /// **The exposé's defect, as a rule.** The map declares `lock: false` — you can see
 /// the panes through it, and that is geometrically true — so the old gate said the base context
-/// was still live and `prefix+j` drove the session behind it (Antonio, 2026-08-12). What makes
+/// was still live and `prefix+j` drove the session behind it. What makes
 /// a context active is that it took the keyboard, not what it painted over.
 #[test]
 fn a_surface_that_took_the_keyboard_makes_the_base_context_dormant_even_if_it_covers_nothing() {

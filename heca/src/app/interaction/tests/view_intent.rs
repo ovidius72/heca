@@ -5,7 +5,7 @@ use super::*;
 
 /// **The chain a `prefix+/` candidate is judged by, end to end** (F003/P082/T432).
 ///
-/// Antonio, driving 2026-08-18: with a floating pane active, `prefix+/` lettered every pane and
+/// With a floating pane active, `prefix+/` lettered every pane and
 /// every sidebar row naming one, and pressing a letter did **nothing**. This is why — and now
 /// it is asked one moment earlier, so the letter is never offered.
 ///

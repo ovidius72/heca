@@ -9,7 +9,6 @@ fn every_button_is_shown_when_they_all_fit() {
 
 /// **A button that is still shown keeps its size.** The defect this replaces: a pane's header
 /// buttons fell to seven pixels in a narrow pane while the title beside them ellipsed correctly
-/// (Antonio, driving, 2026-09-02).
 #[test]
 fn a_shown_button_is_never_squashed() {
     // Compared **within one display**, because the words coming off is not squashing — it is the
@@ -45,7 +44,7 @@ fn a_shown_button_is_never_squashed() {
 ///
 /// It fails if the group ever fills the width it is offered again. Filling leaves the parent with no
 /// free space to distribute, so the title and the actions end up side by side at the left, which is
-/// what a pane header looked like (Antonio, driving, 2026-09-03).
+/// what a pane header looked like.
 #[test]
 fn in_a_space_between_row_the_group_sits_at_the_far_end() {
     use heca_grid_ui::{Align, Justify};
@@ -95,13 +94,14 @@ fn in_a_space_between_row_the_group_sits_at_the_far_end() {
     );
 }
 
-/// **The buttons of a group do not touch: the container's own `gap` puts a hairline between them.**
+/// **The buttons of a group visibly do not touch: the container's own `gap` puts air between them.**
 ///
-/// A destructive button's outline sat against its neighbour (Antonio, driving, 2026-09-30). The
-/// air is the group's `gap` — a step of the theme's rhythm, so it scales with the font — and not a
-/// pixel count written into the pane header or any other caller.
+/// A destructive button's outline sat against its neighbour, and the one pixel that first answered
+/// it did not read by eye (2026-10-02): about three now. The air is the group's `gap` — a step of
+/// the theme's rhythm (`Xs`), so it scales with the font — and not a pixel count written into the
+/// pane header or any other caller.
 #[test]
-fn the_buttons_of_a_group_are_a_hairline_apart() {
+fn the_buttons_of_a_group_are_visibly_apart() {
     let g = ButtonGroup::new()
         .display(Display::IconOnly)
         .size(WidgetSize::Small)
@@ -121,8 +121,8 @@ fn the_buttons_of_a_group_are_a_hairline_apart() {
     for pair in shown.windows(2) {
         let air = pair[1].loc.x - (pair[0].loc.x + pair[0].size.w);
         assert!(
-            (0.9..=1.5).contains(&air),
-            "buttons a hairline apart at a 13px font, got {air}"
+            (2.5..=4.0).contains(&air),
+            "buttons about three pixels apart at a 13px font, got {air}"
         );
     }
 }

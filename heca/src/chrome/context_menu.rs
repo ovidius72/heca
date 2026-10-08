@@ -395,11 +395,7 @@ pub(crate) fn target_from_subject(
         return ContextTarget::Contribution;
     };
     let hyperlink = at.and_then(|p| {
-        crate::app::terminal_host::hyperlink_uri_at_position(
-            state,
-            pane_id,
-            (p.x as f32, p.y as f32),
-        )
+        crate::chrome::terminal::of_pane(state, pane_id)?.link_at((p.x as f32, p.y as f32))
     });
     ContextTarget::Pane { pane_id, hyperlink }
 }

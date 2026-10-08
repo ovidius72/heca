@@ -754,7 +754,7 @@ mod identity_tests {
     /// **A wrapped control is still an item.** A chrome button is `Tooltip(KeyHint(IconButton))`,
     /// so a walk that only looks at direct children finds two `Tooltip`s, neither actionable, and
     /// reports nothing — which is exactly how the top bar's two sidebar toggles collided in the
-    /// running app with this check live and silent (Antonio, driving, 2026-08-19).
+    /// running app with this check live and silent.
     #[test]
     fn a_control_behind_wrappers_is_still_an_item() {
         let wrapped = || KeyHint::new(row("×"));

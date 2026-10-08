@@ -5,7 +5,8 @@
 //! heca already has for it, and then calls the same `heca::run()`:
 //!
 //! - a **dock** in the right sidebar — placed by you like any dock: move it, hide it, and your
-//!   choice wins over the line below;
+//!   choice wins over the line below. It holds a **terminal**, `demo.terminal("shell")`: type in it,
+//!   scroll it; hide the dock and show it again and it is the same shell, still running;
 //! - an **action**, `demo.add`, reachable from the palette, a key binding, a menu and RPC;
 //! - an **overlay**, `demo.detail`, opened with `toggle_layer name=demo.detail` from any of them.
 
@@ -13,7 +14,7 @@ use heca::{
     ActionCategory, ChromeCtx, ContainerContribution, Contribution, Provider, RegionId, RegionSet,
     regions,
 };
-use heca_grid_ui::builders::Parent;
+use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::widgets::{Flex, Glyph, Label, Overlay};
 use heca_grid_ui::{Component, Handled};
 
@@ -21,11 +22,15 @@ use heca_grid_ui::{Component, Handled};
 /// second placement of the same dock.
 struct Notes {
     id: String,
+    demo: heca::Extension,
 }
 
 impl Notes {
-    fn new(id: impl Into<String>) -> Self {
-        Self { id: id.into() }
+    fn new(id: impl Into<String>, demo: heca::Extension) -> Self {
+        Self {
+            id: id.into(),
+            demo,
+        }
     }
 }
 
@@ -54,20 +59,29 @@ impl Provider for Notes {
             default_region: self.default_region(),
             movable: self.movable(),
             collapsible: self.collapsible(),
-            build: Box::new(|_ctx, _build| {
-                Box::new(Flex::column().child(Label::new("No notes yet"))) as Box<dyn Component>
+            build: Box::new({
+                let demo = self.demo.clone();
+                move |_ctx, _build| {
+                    Box::new(
+                        Flex::column()
+                            .child(Label::new("No notes yet"))
+                            // The same terminal every time this dock is built: `demo.shell`.
+                            .child(demo.terminal("shell").title("Scratch shell").grow(1.0)),
+                    ) as Box<dyn Component>
+                }
             }),
         })
     }
 }
 
 fn main() {
+    let demo = heca::extension("demo");
+
     // The dock. A default: where you put it, and whether it shows, is yours to decide.
-    regions("sidebar.right").append(Notes::new("notes"));
+    regions("sidebar.right").append(Notes::new("notes", demo.clone()));
 
     // The action. It belongs to no dock, so it is declared here; the handler can only read the app
     // and ask for other actions, which go out the same door a key press does.
-    let demo = heca::extension("demo");
     demo.action("add")
         .label("Add note")
         .description("Open the notes overlay to write a new note.")

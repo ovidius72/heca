@@ -71,8 +71,7 @@ fn a_wordless_button_is_refused_rather_than_emptied() {
 /// anything inside something that had declared one — and a pane's shell declares. That made a
 /// button's letter depend on where it had been put, which is the one thing a widget must never care
 /// about, and it left this control — the only one the widget builds for itself, so with no author to
-/// write the declaration — silently unpickable (Antonio, 2026-09-04: *"Users/Developers MUST not
-/// think where a widget is"*).
+/// write the declaration — silently unpickable.
 #[test]
 fn the_overflow_trigger_says_what_picking_it_does() {
     let parent = lay(group(), 40.0);
@@ -128,8 +127,7 @@ fn a_collapsed_group_fills_up_again_when_the_room_returns() {
 /// layout took the room from: with a title beside the group competing for the same strip, the row
 /// fitted by squeezing the ⋮ instead of pushing a button out, so the group never saw an overflow,
 /// never moved anything into its menu, and its own affordance shrank to a sliver — four to eight
-/// pixels wide beside a twenty-four pixel sibling, and barely clickable (Antonio, driving,
-/// 2026-09-04).
+/// pixels wide beside a twenty-four pixel sibling, and barely clickable.
 ///
 /// Laid out in the pane header's actual shape, because that is what exposes it: a title that wants
 /// room and the actions at the far end. A group alone in its parent never reproduces it.
@@ -183,7 +181,6 @@ fn the_overflow_trigger_is_never_squeezed_by_a_title_beside_it() {
 /// but an icon is a glyph at the font's size, painted wherever its box says it is. So a revealed
 /// button dropped its icon at the window's top-left corner for the frame before the next layout
 /// reached it: continuous while a divider is dragged, and red when the button is the destructive one
-/// (Antonio, driving, 2026-09-04).
 ///
 /// The assertion is on the painted scene rather than on the bounds, because it is the *drawing* that
 /// was wrong — the bounds were honestly reporting that nothing had placed the widget yet.

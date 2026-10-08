@@ -66,7 +66,7 @@ pub struct ChromeRegion {
 #[heca_grid_ui_macros::props]
 impl ChromeRegion {
     fn with(orientation: Orientation) -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         // Stack Docks along the region's long axis: a vertical sidebar stacks in
         // a column, a horizontal bar in a row.
         base.style.layout.direction = match orientation {

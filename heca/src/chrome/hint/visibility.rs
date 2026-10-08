@@ -30,10 +30,10 @@ pub(super) struct HintLayer {
 /// **The centre of the VISIBLE part, not of the target.** The two are the same until a target hangs
 /// off an edge, and then they are not: a pane scrolled left until its centre passes x = 0 is not
 /// covered by a sidebar occluder that starts at x = 0, so it survived — and drew its keycap at that
-/// centre, a sliver of a letter clinging to the window's left margin (Antonio, driving,
-/// 2026-08-24). Clipping to the viewport first asks about a point that is actually on screen, which
-/// is the only kind of point an occluder can be asked about. It also *is* the "lies in `viewport`"
-/// half: an empty intersection means nothing of it is on screen.
+/// centre, a sliver of a letter clinging to the window's left margin. Clipping to the viewport
+/// first asks about a point that is actually on screen, which is the only kind of point an occluder
+/// can be asked about. It also *is* the "lies in `viewport`" half: an empty intersection means
+/// nothing of it is on screen.
 ///
 /// The fine rule subsumes every case — off-screen, hidden behind the sidebar, a zoomed/floating
 /// pane drawn over another — and extends to new surfaces for free. The caller must hand `layers`
@@ -55,9 +55,9 @@ pub(super) fn resolve_hint_layers(
             // the same rule the clip walk follows (`hint::collect::narrowed`), and it is not
             // optional now that this gate runs every frame: the chrome tree is rebuilt with zero
             // bounds and laid out afterwards, so judging it in between called every sidebar row and
-            // top-bar button hidden and *withdrew* their letters (Antonio, driving, 2026-08-24).
-            // A target with no bounds also draws no keycap (`fit_into_view` finds no room), so
-            // keeping it costs nothing and waiting one frame for real geometry costs the letters.
+            // top-bar button hidden and *withdrew* their letters. A target with no bounds also
+            // draws no keycap (`fit_into_view` finds no room), so keeping it costs nothing and
+            // waiting one frame for real geometry costs the letters.
             if b.size.w <= 0.0 || b.size.h <= 0.0 {
                 kept.push((target, b));
                 continue;
@@ -224,8 +224,8 @@ mod hint_visibility {
 
     /// **The defect this task exists for.** With the exposé up, `prefix+/` offered the sidebar's
     /// rows — the letters were invisible under the map, so a keystroke drove a surface the user
-    /// could not see (Antonio, 2026-08-12). A modal layer is the active context: everything
-    /// beneath it is dormant, and dormant surfaces are not pickable.
+    /// could not see. A modal layer is the active context: everything beneath it is dormant, and
+    /// dormant surfaces are not pickable.
     #[test]
     fn a_modal_layer_is_the_active_context_and_nothing_beneath_it_is_pickable() {
         let stack = vec![

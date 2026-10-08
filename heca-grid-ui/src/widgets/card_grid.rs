@@ -42,6 +42,11 @@ impl GridCell {
         }
     }
 
+    /// The signal this cell lights when the cursor is on it — the one it was made with.
+    pub fn selected(&self) -> Signal<bool> {
+        self.selected
+    }
+
     /// Wire the card's **hover** signal, so pointing at a card moves the cursor onto it.
     ///
     /// The cursor stays single-valued: hovering *moves* it rather than raising a second claim
@@ -97,7 +102,7 @@ pub struct CardGrid {
 impl CardGrid {
     /// An empty grid.
     pub fn new() -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         // Rows stack **vertically** — they are rows. Without saying so the default direction lays
         // them side by side, which turned a stack of workspaces into a line of them.
         base.style.layout.direction = crate::style::Direction::Column;
@@ -465,7 +470,7 @@ mod tests {
     /// **Pointing at a card must not scroll it.** Hovering centred the card in the exposé's
     /// `ScrollRegion`, which slid it out from under the pointer — far enough, with one workspace
     /// filling the screen, to land on a *different* card and slide again. The card ran away from
-    /// the cursor and clicking it became a chase (Antonio, driving, 2026-08-12).
+    /// the cursor and clicking it became a chase.
     ///
     /// A reveal exists to bring into view something the user cannot see; what the mouse is on is
     /// visible by definition.

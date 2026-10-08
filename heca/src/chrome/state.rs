@@ -779,21 +779,15 @@ pub struct SharedChromeState {
     /// (triggered by something as small as a pane's git status changing) restores rather than
     /// resets. Shared, so a clone of this store aliases the same signals.
     container_scroll: std::rc::Rc<std::cell::RefCell<HashMap<String, Signal<f32>>>>,
-    /// Which mounted container holds **chrome keyboard focus** (F003/P011/T020).
-    ///
-    /// A **container id**, not a side and not a region: a dock is focused wherever it is seated, so
-    /// moving it from one sidebar to the other keeps the focus with it. Sticky, as focus is; `None`
-    /// until something takes it.
-    focused_container: Signal<Option<String>>,
-    /// Per-mount "is this placement the keyboard target" signals, created on first ask.
-    ///
-    /// The derived half of [`focused_container`](Self::focused_container): exactly one is `true`,
-    /// and [`set_focused_container`](Self::set_focused_container) is the only writer, so a container
-    /// cannot be its own authority on whether it has focus. A container binds its own — a scroll
-    /// area takes [`ScrollRegion::keyboard_target`](heca_grid_ui::ScrollRegion::keyboard_target) —
-    /// and the signal outlives the retained tree, like the scroll offsets beside it.
-    keyboard_target: std::rc::Rc<std::cell::RefCell<HashMap<String, Signal<bool>>>>,
-    /// The mount that held chrome focus most recently — kept after focus is released.
+    /// The container the last focus announcement named, kept **only** so a change is announced once
+    /// ([`announce_focused_container`](Self::announce_focused_container)). Nothing reads it to decide
+    /// where keys go: the window tree is the one record of where the keyboard is.
+    announced_container: Signal<Option<String>>,
+    /// A dock the host asked to give the keyboard to **before the tree had it** — its region was
+    /// only just revealed. A request, not a record: the host lands it once the tree is rebuilt and
+    /// clears it (`app::tree_focus`).
+    dock_focus_request: Signal<Option<String>>,
+    /// The mount that held the keyboard most recently — kept after it is released.
     ///
     /// It answers "which placement did the user mean?" for an action fired from somewhere with no
     /// target of its own: the command palette, an RPC call, a script. Without it, choosing a
@@ -843,53 +837,45 @@ impl SharedChromeState {
         });
     }
 
-    /// The container holding chrome keyboard focus, if any (F003/P011/T020).
-    pub fn focused_container(&self) -> Option<String> {
-        self.focused_container.get()
-    }
-
-    /// Move chrome keyboard focus to `container` (`None` clears it).
+    /// **Say where the keyboard is**, once per change: `container` is the dock that holds it on the
+    /// page (`None` for none). Emits [`ChromeEvent::ContainerFocusChanged`] only when it differs
+    /// from the last announcement, and remembers a dock as the one that held the keyboard last.
     ///
-    /// Guarded — emits [`ChromeEvent::ContainerFocusChanged`] only on a real change. Every
-    /// per-placement keyboard-target signal is republished here, which is what keeps "exactly one
-    /// container is the keyboard target" true by construction rather than by everyone remembering.
-    pub fn set_focused_container(&self, container: Option<String>) {
-        if self.focused_container.get_untracked() == container {
+    /// Written by the host's focus settle from the window tree, which is where keyboard focus lives.
+    /// It is not a second place to put it: nothing asks this store which dock has the keyboard.
+    pub fn announce_focused_container(&self, container: Option<String>) {
+        if self.announced_container.get_untracked() == container {
             return;
         }
-        self.focused_container.set(container.clone());
+        self.announced_container.set(container.clone());
         // Remembered past the release, so an action fired from the palette or RPC has a placement
-        // to mean when nothing currently holds focus. Only a real focus updates it — clearing does
-        // not, or the memory would be wiped by the very act it exists to survive.
+        // to mean when nothing currently holds the keyboard. Only a dock holding it updates this —
+        // letting go does not, or the memory would be wiped by the very act it exists to survive.
         if container.is_some() {
             self.last_focused_container.set(container.clone());
-        }
-        for (id, sig) in self.keyboard_target.borrow().iter() {
-            let mine = container.as_deref() == Some(id.as_str());
-            if sig.get_untracked() != mine {
-                sig.set(mine);
-            }
         }
         self.events
             .emit(ChromeEvent::ContainerFocusChanged { container });
     }
 
-    /// This placement's "am I the keyboard target" signal, created on first ask.
-    ///
-    /// Keyed by **mount id** for the same reason the scroll offsets are: the same container can be
-    /// seated twice, and only one of the two can hold focus.
-    pub fn container_keyboard_target(&self, container: &str) -> Signal<bool> {
-        if let Some(existing) = self.keyboard_target.borrow().get(container) {
-            return *existing;
-        }
-        let created = signal(self.focused_container.get_untracked().as_deref() == Some(container));
-        self.keyboard_target
-            .borrow_mut()
-            .insert(container.to_string(), created);
-        created
+    /// Ask for the keyboard to go to `mount` once the tree has it.
+    pub fn request_dock_focus(&self, mount: String) {
+        self.dock_focus_request.set(Some(mount));
     }
 
-    /// The mount that held chrome focus most recently, whether or not it still does.
+    /// The dock still waiting to be given the keyboard, if any.
+    pub fn dock_focus_request(&self) -> Option<String> {
+        self.dock_focus_request.get_untracked()
+    }
+
+    /// Drop the waiting request, landed or not.
+    pub fn clear_dock_focus_request(&self) {
+        if self.dock_focus_request.get_untracked().is_some() {
+            self.dock_focus_request.set(None);
+        }
+    }
+
+    /// The mount that held the keyboard most recently, whether or not it still does.
     pub fn last_focused_container(&self) -> Option<String> {
         self.last_focused_container.get()
     }
@@ -933,10 +919,10 @@ impl SharedChromeState {
             visible: RegionMap::from_fn(|_| signal(true)),
             workspaces: WorkspacesContainerState::new(events),
             container_scroll: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
-            focused_container: signal(None),
+            announced_container: signal(None),
+            dock_focus_request: signal(None),
             last_focused_container: signal(None),
             container_cursor: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
-            keyboard_target: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
         }
     }
 
@@ -1232,12 +1218,11 @@ mod tests {
         let s = state();
         assert_eq!(s.last_focused_container(), None);
 
-        s.set_focused_container(Some("dock.a".into()));
-        s.set_focused_container(Some("dock.b".into()));
+        s.announce_focused_container(Some("dock.a".into()));
+        s.announce_focused_container(Some("dock.b".into()));
         assert_eq!(s.last_focused_container(), Some("dock.b".to_string()));
 
-        s.set_focused_container(None);
-        assert_eq!(s.focused_container(), None, "focus really was released");
+        s.announce_focused_container(None);
         assert_eq!(
             s.last_focused_container(),
             Some("dock.b".to_string()),
@@ -1245,77 +1230,8 @@ mod tests {
         );
     }
 
-    /// Chrome focus is a **container id**, so it does not name a side and does not move when the
-    /// dock does. Nothing here mentions a region — that is the point (F003/P011/T020).
-    #[test]
-    fn chrome_focus_is_a_container_id() {
-        let s = state();
-        assert_eq!(s.focused_container(), None, "nothing has focus at startup");
-        s.set_focused_container(Some("workspaces".into()));
-        assert_eq!(s.focused_container(), Some("workspaces".to_string()));
-        s.set_focused_container(None);
-        assert_eq!(s.focused_container(), None);
-    }
-
-    /// Exactly one placement is the keyboard target, whichever order the signals were asked for.
-    ///
-    /// Two placements of one container are two targets, so this cannot be keyed by container kind —
-    /// the same mistake the scroll offsets had, and just as invisible until there are two.
-    #[test]
-    fn exactly_one_placement_is_the_keyboard_target() {
-        let s = state();
-        let a = s.container_keyboard_target("dock.a");
-        let b = s.container_keyboard_target("dock.b");
-        assert!(
-            !a.get_untracked() && !b.get_untracked(),
-            "no focus, no target"
-        );
-
-        s.set_focused_container(Some("dock.a".into()));
-        assert!(a.get_untracked());
-        assert!(!b.get_untracked());
-
-        s.set_focused_container(Some("dock.b".into()));
-        assert!(!a.get_untracked(), "the previous target gives it up");
-        assert!(b.get_untracked());
-
-        // A signal asked for *after* focus moved still knows where focus is.
-        s.set_focused_container(Some("dock.c".into()));
-        let c = s.container_keyboard_target("dock.c");
-        assert!(c.get_untracked(), "created knowing it holds focus");
-        assert!(!b.get_untracked());
-
-        s.set_focused_container(None);
-        for (id, sig) in [("dock.a", a), ("dock.b", b), ("dock.c", c)] {
-            assert!(
-                !sig.get_untracked(),
-                "{id} keeps no target once focus is cleared"
-            );
-        }
-    }
-
-    /// The same signal comes back on a second ask, so a tree rebuild does not orphan the binding.
-    #[test]
-    fn a_keyboard_target_signal_outlives_the_tree() {
-        let s = state();
-        s.set_focused_container(Some("workspaces".into()));
-        let first = s.container_keyboard_target("workspaces");
-        let again = s.container_keyboard_target("workspaces");
-        assert!(first.get_untracked() && again.get_untracked());
-        s.set_focused_container(None);
-        assert!(
-            !again.get_untracked(),
-            "and it is the same signal, not a copy"
-        );
-    }
-
-    /// Focus emits once per real change, and never for a repeat.
-    ///
-    /// ⚠️ It used to assert the dock **pick** alongside it, through `set_dock_pick_candidates` and
-    /// its `dock.pick.changed` event. That mirror is gone (F003/P082/T427): it existed to feed the
-    /// per-frame keycap projections, and the letters are offered straight from `InputMode` now. The
-    /// event went with it — see the phase handoff, because it was observable and nothing re-emits
-    /// it.
+    /// Focus emits once per real change, and never for a repeat — the host announces every frame,
+    /// so the store is what makes it once.
     #[test]
     fn focus_emits_only_on_real_change() {
         let s = state();
@@ -1325,10 +1241,18 @@ mod tests {
             log.borrow_mut().push(event.name().to_string());
         });
 
-        s.set_focused_container(Some("workspaces".into()));
-        s.set_focused_container(Some("workspaces".into()));
-
+        for _ in 0..3 {
+            s.announce_focused_container(Some("workspaces".into()));
+        }
         assert_eq!(seen.borrow().as_slice(), ["chrome.container.focus.changed"]);
+
+        s.announce_focused_container(None);
+        s.announce_focused_container(None);
+        assert_eq!(
+            seen.borrow().len(),
+            2,
+            "letting go is one more change, then quiet again"
+        );
     }
 
     #[test]

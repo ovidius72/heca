@@ -65,17 +65,15 @@ use crate::style::{Direction, Length};
 ///
 /// **Home row first** — `asdfghjkl`, then the rest of the alphabet, then the same again shifted
 /// (F003/P082/T443). The letters are spent in the order they are listed, so the targets a picker
-/// finds first get the keys your fingers are already resting on. Antonio, 2026-08-17: *"a way to
-/// prefer row keys?"*
+/// finds first get the keys your fingers are already resting on.
 ///
 /// Lower case before capitals because they are one keystroke on every layout; the capitals extend
 /// the run for a dense surface without introducing a modifier, which would be a second gesture
 /// rather than a longer alphabet.
 ///
 /// **One letter per pick, always, and 52 is the cap.** Past the end of this sequence a target simply
-/// gets none. Two-key sequences were raised and refused (Antonio, 2026-08-17: *"typing 2 letters is
-/// not an option. always 1. stay with 52."*) — anything needing more than 52 at once is a picker
-/// covering too much, and the answer is a smaller picker, never a longer keystroke.
+/// gets none. Two-key sequences were raised and refused — anything needing more than 52 at once is
+/// a picker covering too much, and the answer is a smaller picker, never a longer keystroke.
 ///
 /// It is public so a host can hand the same order to its own pickers instead of keeping a second
 /// copy of this decision.
@@ -107,7 +105,7 @@ impl KeyHintGroup {
     }
 
     fn wrap(child: Box<dyn Component>) -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         // Hug the child and stay a column, so a stretching parent reaches the subtree unchanged —
         // the same transparency `KeyHint` and `FocusScope` need, for the same reason.
         base.style.layout.width = Length::Auto;
@@ -134,7 +132,7 @@ impl KeyHintGroup {
         // **Holding focus is the whole of taking the keyboard.** Keys are delivered down the focus
         // owner's chain, so an open picker is on the path and a closed one is not. There is no
         // gate to write and nothing to decline.
-        self.base.focused = open;
+        self.base.follow_focus_modal(open);
         self
     }
 
@@ -242,7 +240,7 @@ impl KeyHintGroup {
         // *is*, which was fixed by sharing the predicate; the walk stayed duplicated, so every rule
         // the collector learned afterwards reached `prefix+/` and not a surface's own picker. The
         // wrapper rule was the next one, and the exposé drew two keycaps on every card — one for a
-        // `KeyHint` wrapper and one for the widget inside it (Antonio, driving, 2026-09-15).
+        // `KeyHint` wrapper and one for the widget inside it.
         crate::hint::collect_hints_scoped(self, self.base.picker_scope.as_deref())
             .into_iter()
             .map(|(path, _)| path)
@@ -429,7 +427,7 @@ mod tests {
     }
 
     /// **One keystroke per pick, and a target past the end simply gets none** — never a second
-    /// letter to type. Antonio, 2026-08-17: *"typing 2 letters is not an option. always 1."*
+    /// letter to type.
     #[test]
     fn running_out_of_letters_gives_none_rather_than_a_longer_one() {
         let open = signal(false);
@@ -581,13 +579,10 @@ mod tests {
     #[test]
     fn the_declared_verb_also_takes_the_keyboard() {
         let g = KeyHintGroup::new(Flex::column()).opens_on("mypanel.pick");
-        assert!(
-            !g.base().focused.get_untracked(),
-            "closed, focus is elsewhere"
-        );
+        assert!(!crate::holds_keyboard(&g), "closed, focus is elsewhere");
         assert!(crate::fire_action(&g, "mypanel.pick"));
         assert!(
-            g.base().focused.get_untracked(),
+            crate::holds_keyboard(&g),
             "an open picker is the focus owner, or the letters it drew would go to the subtree",
         );
     }

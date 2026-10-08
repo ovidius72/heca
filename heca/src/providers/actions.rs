@@ -334,7 +334,7 @@ pub(crate) fn owning_mount(state: &AppState, action: &str) -> Option<String> {
             .provider(mount)
             .is_some_and(|p| p.actions().iter().any(|m| m.name == action))
     };
-    if let Some(focused) = state.chrome_state.focused_container()
+    if let Some(focused) = crate::app::tree_focus::focused_dock(state)
         && declares(&focused)
     {
         return Some(focused);

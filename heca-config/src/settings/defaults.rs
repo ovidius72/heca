@@ -57,8 +57,7 @@ pub(super) fn default_overview_gap() -> f64 {
 /// way niri's overview does (the panes you were looking at shrinking into cards). `1.0` is no
 /// animation at all.
 ///
-/// Both readings are defensible and this is the one Antonio chose after driving them (2026-08-11):
-/// pulling back read as falling in from somewhere, even softened to 1.3, while growing in reads as
+/// Both readings are defensible and this is the one chosen: pulling back read as falling in from somewhere, even softened to 1.3, while growing in reads as
 /// the map opening. Starting the cards at exactly life size — niri's literal reading — overshoots
 /// badly: the outer rows begin off-screen.
 pub(super) fn default_overview_zoom_from() -> f64 {

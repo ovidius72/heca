@@ -144,7 +144,7 @@ impl WorkspaceRow<'_> {
         // **A float is a card like any other, so the cursor must reach it.** The floats become one
         // more column of cells at the end of the row: stepping right off the last tiled column
         // lands on them. Leaving them out is what made pane focus work in a row without floats and
-        // stop in a row with one (Antonio, driving, 2026-08-11).
+        // stop in a row with one.
         if !float_cells.is_empty() {
             columns_of_cells.push(float_cells);
         }
@@ -295,7 +295,7 @@ mod tests {
     /// **A float is drawn OVER the strip, not beside it.** It is out of the flow, so the tiled
     /// cards are exactly where they would be in a workspace with no float at all — the failure this
     /// guards is a float pushing the columns along, or the stacking wrapper collapsing their
-    /// height to a sliver (Antonio, driving, 2026-08-11).
+    /// height to a sliver.
     #[test]
     fn a_float_changes_nothing_about_the_tiled_cards() {
         let plain = workspace(&[800.0], vec![]);
@@ -359,9 +359,7 @@ mod tests {
         );
     }
 
-    /// **The air between the cards is the same everywhere** (Antonio, driving, 2026-08-13: *"the
-    /// only thing i see here is the different gap between the first 3/4 card at the top and the
-    /// last"*).
+    /// **The air between the cards is the same everywhere**.
     ///
     /// A column's width is a percentage of the map's extent, so its boundaries land on fractional
     /// pixels; the air between two columns is made of **two paddings**, one from each. When a

@@ -337,7 +337,7 @@ fn offers(meta: &crate::actions::ActionMeta) -> Vec<Option<(String, String)>> {
 /// RPC line without `--dock` use. An action whose component has since unmounted resolves to nothing
 /// and is simply not offered.
 pub(crate) fn owners(state: &AppState) -> std::collections::HashMap<String, OwnerInfo> {
-    let focused = state.chrome_state.focused_container();
+    let focused = crate::app::tree_focus::focused_dock(state);
     state
         .action_catalog
         .all()

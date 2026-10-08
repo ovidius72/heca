@@ -3,7 +3,7 @@
 //! `prefix+g` moves the focused pane to another workspace. With a single workspace open there is
 //! nowhere to move it, and the handler returned without entering the mode: no prompt, no message,
 //! no flash. That is indistinguishable from an unbound key, which is exactly how a working feature
-//! gets reported as broken (Antonio, driving, 2026-08-24).
+//! gets reported as broken.
 //!
 //! It was never one handler's bug. Ten handlers each wrote `if !candidates.is_empty() { .. }` for
 //! themselves, and the empty case fell off the end of every one of them. Ten copies of a rule means

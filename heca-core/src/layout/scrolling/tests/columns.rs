@@ -4,8 +4,7 @@ use super::*;
 
 
 /// **A pane leaves its column and gets one of its own, immediately to the right**
-/// (F003/P082/T474 part B; Antonio, 2026-09-10 — right of the current one, not the end of the
-/// strip, so you keep your place).
+/// — right of the current one, not the end of the strip, so you keep your place.
 /// **A new column's width is the layout's to say.** It used to be chosen by each caller: most
 /// said 50%, but taking a pane into an empty workspace said 85% and two fallbacks did too, so
 /// the same act gave a different column depending on how it was reached (F003/P082/T509).
@@ -177,7 +176,7 @@ fn columns_can_be_zoomed_independently() {
 /// A column's left edge is the right edge of the column before it, so moving it takes width
 /// from one and gives it to the other — the active column's *far* edge does not budge. Resizing
 /// only the neighbour would widen it and push the active column sideways unchanged, which reads
-/// as resizing the wrong column (Antonio, driving, 2026-09-04).
+/// as resizing the wrong column.
 #[test]
 fn moving_a_columns_left_edge_trades_width_with_the_column_before_it() {
     let mut space = space_with_columns(3);

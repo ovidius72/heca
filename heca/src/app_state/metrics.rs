@@ -82,7 +82,16 @@ impl AppState {
     /// supported range. Both the PTY cell fit and the rendered glyph size derive
     /// from this single value so they never disagree.
     pub fn effective_terminal_font_size(&self, pane_id: PaneId) -> f32 {
-        let pane_offset = self.pane_font_zoom.get(&pane_id).copied().unwrap_or(0.0);
+        self.terminal_font_size(Some(pane_id))
+    }
+
+    /// The terminal font size for a terminal that may or may not belong to a pane: a pane has its own
+    /// zoom on top of the global one, any other terminal follows the global.
+    pub fn terminal_font_size(&self, pane: Option<PaneId>) -> f32 {
+        let pane_offset = pane
+            .and_then(|pane| self.pane_font_zoom.get(&pane))
+            .copied()
+            .unwrap_or(0.0);
         (self.font_config.size.terminal + self.app_font_zoom + pane_offset).clamp(
             crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MIN,
             crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MAX,

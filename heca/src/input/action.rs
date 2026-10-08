@@ -101,8 +101,10 @@ pub enum WmAction {
         col_idx: usize,
     },
     /// **Put a pane at an exact place**: row `pane_idx` of column `col_idx` in workspace
-    /// `ws_idx`, or — with no row — a new column of its own at `col_idx`. Indices past the end
-    /// clamp to it. From wherever the pane is, tiled or floating, any workspace.
+    /// `ws_idx`, or — with no row — a new column of its own at gap `col_idx` (gap `i` is left of
+    /// column `i`). Indices past the end clamp to it. From wherever the pane is, tiled or floating,
+    /// any workspace. **Within one workspace the numbers are the ones you see with the pane still
+    /// where it is**; what taking it out does to them is the workspace's own business.
     ///
     /// What a drag-and-drop means once the gesture has said where it landed, and what a key or a
     /// plugin names to do the same.

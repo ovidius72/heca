@@ -10,6 +10,7 @@ use std::rc::{Rc, Weak};
 
 use super::input::Seams;
 use heca_config::appearance::ScrollbarVisibility;
+use heca_config::theme::ModifierKey;
 use heca_grid_ui::builders::LayoutExt;
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::Length;
@@ -33,9 +34,18 @@ pub(crate) struct Viewport {
     /// One cell's size in logical pixels as the process has it — what turns a pointer position into
     /// a grid cell.
     pub cell: (f32, f32),
+    /// The stable row at the top of the screen — what places a search match on it.
+    pub top_stable_row: isize,
+    /// How strongly a search match is highlighted, and the current one: the user's
+    /// (`[appearance.terminal] search_match_alpha` / `search_current_match_alpha`), `0..=255`.
+    pub match_alpha: u8,
+    pub current_match_alpha: u8,
     /// The size a cell is meant to be before the box is divided exactly: the font's own. What the
     /// grid the terminal asks for is fitted from.
     pub nominal_cell: (f32, f32),
+    /// The held key that makes a press on the terminal the window's (a pane move) and a click on a
+    /// link open it — the user's interactive-move modifier.
+    pub open_link_modifier: ModifierKey,
 }
 
 impl Viewport {
@@ -219,7 +229,11 @@ mod tests {
             scrollbar: mode,
             badge: true,
             cell: (8.0, 16.0),
+            top_stable_row: 0,
+            match_alpha: 64,
+            current_match_alpha: 150,
             nominal_cell: (8.0, 16.0),
+            open_link_modifier: ModifierKey::Super,
         }
     }
 

@@ -23,7 +23,7 @@ use heca_core::layout::{Point, Rectangle};
 /// is there. Which one it is comes from the modifiers, and the rule was written in two places at
 /// once — the framework painted a swap outline on Shift, and the host separately read Shift off the
 /// drop to decide what to do. Two copies of one convention, free to disagree, and they did: the
-/// outline promised a swap while the drop performed a move (Antonio, driving, 2026-09-02).
+/// outline promised a swap while the drop performed a move.
 ///
 /// So the rule lives here, where the gesture already lives. Ask [`DropAction::held`] or read it off
 /// the [`Dropped`](crate::drag::Dropped) — never re-derive it from a modifier.
@@ -101,8 +101,8 @@ pub struct DropHit {
     ///
     /// Carried because the walk already knows, and searching for it again by name is wrong: the
     /// same container seated twice gives two rows the same name, so the search finds whichever
-    /// comes first and lights up the wrong sidebar (Antonio, driving, 2026-09-01). *What* was
-    /// landed on and *which node* it is are two questions; one string cannot answer both.
+    /// comes first and lights up the wrong sidebar. *What* was landed on and *which node* it is are
+    /// two questions; one string cannot answer both.
     pub path: Vec<usize>,
     /// The target's laid-out bounds (logical px) — paint the indicator against these.
     pub bounds: Rectangle,
@@ -184,8 +184,8 @@ fn drop_at(
 ) -> Option<DropHit> {
     // **What is being carried is not somewhere to put it.** Dropping a thing on itself — or on
     // anything inside it — can only mean nothing happens, and a target that will do nothing must
-    // not light up as though it will (Antonio, driving, 2026-09-01). Skipping the whole subtree is
-    // deliberate: a column dropped on one of its own panes is the same no-op.
+    // not light up as though it will. Skipping the whole subtree is deliberate: a column dropped on
+    // one of its own panes is the same no-op.
     if skip(node) || node.base().pointer.is_dragging() {
         return None;
     }
@@ -201,7 +201,8 @@ fn drop_at(
         && let Some(key) = drag_identity(root, node, path)
         && accept(&key)
     {
-        let bounds = node.base().bounds;
+        // A widget that reacts over more (or less) than it is drawn over says so, as in a click.
+        let bounds = node.hit_bounds().unwrap_or(node.base().bounds);
         if bounds.contains(point) {
             return Some(DropHit {
                 key,
@@ -238,7 +239,7 @@ fn source_at_path(
         }
         path.pop();
     }
-    if node.is_drag_source() && node.base().bounds.contains(point) {
+    if node.may_start_drag() && node.base().bounds.contains(point) {
         return drag_identity(root, node, path);
     }
     None
@@ -309,7 +310,7 @@ mod tests {
     /// They did disagree: the framework painted a swap outline when Shift was down while the host
     /// separately read the modifier off the drop — and the host's copy was reached through a path
     /// that had lost the modifiers entirely, so the outline promised a swap and the drop performed
-    /// a move (Antonio, driving, 2026-09-02).
+    /// a move.
     #[test]
     fn what_a_drop_does_is_decided_in_one_place() {
         use crate::component::dispatch;
@@ -555,7 +556,7 @@ mod tests {
     /// **A target that will not take it is never offered** — so a line is never drawn over
     /// something a release would then ignore.
     ///
-    /// Antonio, driving 2026-09-01: a column could be dropped above a pane, the insertion line
+    /// A column could be dropped above a pane, the insertion line
     /// appeared, and releasing did nothing. The drawing and the rule lived in different places —
     /// the widget drew, and the app refused afterwards. A target says what it takes, and the walk
     /// keeps going outward past one that does not.
@@ -632,8 +633,7 @@ mod tests {
     ///
     /// Requiring a name here would put an internal rule in front of an author before they could
     /// drag anything, and would make `.draggable()` silently do nothing on every widget that had no
-    /// reason to be named (Antonio, 2026-09-01: *"this makes developers know about an internal API
-    /// not common"*).
+    /// reason to be named.
     #[test]
     fn an_unnamed_widget_is_still_draggable() {
         use crate::widgets::Label;

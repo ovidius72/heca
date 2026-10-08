@@ -253,7 +253,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // cursor move was judged the container no longer held the keyboard and it was refused —
         // the click focused the pane but left the cursor behind, and arrowing afterwards resumed
         // from wherever it had been. A row should behave like a file manager's: click it, then go
-        // up and down from there (Antonio, driving, 2026-09-02).
+        // up and down from there.
         //
         // `Global`, not `AlwaysAllowed`: a floating pane is no reason to refuse moving a dock's
         // cursor, and `AlwaysAllowed` is refused while something covers the content.

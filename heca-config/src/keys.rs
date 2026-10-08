@@ -161,7 +161,7 @@ pub struct ModeBindingConfig {
     /// keys is one entry wherever it is written: `keys = ["q", "Ctrl+q"]` here reads exactly as it
     /// does in `[keys]` or `[[keys.surface]]`. It was a bare `String` until 2026-08-21, which meant
     /// a mode block needed a whole repeated `[[keys.mode.bindings]]` per key — the same capability
-    /// spelled two ways in two tables (Antonio: *"why not `keys = ["q", "Ctrl+q"]`?"*).
+    /// spelled two ways in two tables.
     #[serde(alias = "key")]
     pub keys: BindingValue,
     /// Arguments for parameterized actions.
@@ -186,6 +186,12 @@ pub struct KeyModeConfig {
     pub sticky: bool,
     #[serde(default)]
     pub bindings: Vec<ModeBindingConfig>,
+    /// Keys to take **out** of this mode, whatever bound them — the shipped bindings included. It is
+    /// how a mode's way out is moved: `unbind = ["Escape"]` beside a binding of the same action to
+    /// another key. The mode's bindings are added to the shipped ones, so without this a shipped
+    /// key could never be given up. Same name and meaning as `[[keys.surface]]`'s `unbind`.
+    #[serde(default)]
+    pub unbind: Vec<String>,
 }
 
 fn default_mode_sticky() -> bool {
@@ -239,7 +245,7 @@ pub struct KeysConfig {
     #[serde(default)]
     pub bind: Vec<ModeBindingConfig>,
     /// Widget-internal keybindings (`[keys.widgets]`): the generic, cross-widget navigation +
-    /// editing vocabulary (`item_next`/`item_previous`, `menu_up`/`menu_down`, `menu_history_up`/`menu_history_down`, `activate`,
+    /// editing vocabulary (`item_next`/`item_previous`, `menu_up`/`menu_down`, `menu_history_up`/`menu_history_down`, `find`/`find_next`/`find_previous`, `activate`,
     /// `dismiss`, `edit_*`) that the app resolves into a `heca_grid_ui::Keymap`. Applies only
     /// while an interactive widget/overlay is focused; never hijacks normal-mode input.
     #[serde(default)]

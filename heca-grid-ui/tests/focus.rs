@@ -17,29 +17,29 @@ fn focus_traversal_and_keyboard_activation() {
         .child(Button::secondary("B").on_click(move || b.set(b.get() + 1)));
 
     let mut focus = FocusManager::new();
-    assert_eq!(focus.focused(), None);
+    assert_eq!(focus.focused(&mut ui), None);
 
     // Tab → first focusable; Space activates it.
     focus.advance(&mut ui, true);
-    assert_eq!(focus.focused(), Some(0));
+    assert_eq!(focus.focused(&mut ui), Some(0));
     focus.deliver_key(&mut ui, GridKey::Space);
     assert_eq!(clicked.get(), 1);
 
     // Tab → second; Enter activates it.
     focus.advance(&mut ui, true);
-    assert_eq!(focus.focused(), Some(1));
+    assert_eq!(focus.focused(&mut ui), Some(1));
     focus.deliver_key(&mut ui, GridKey::Enter);
     assert_eq!(clicked.get(), 2);
 
     // Forward wraps to first; backward wraps to last.
     focus.advance(&mut ui, true);
-    assert_eq!(focus.focused(), Some(0));
+    assert_eq!(focus.focused(&mut ui), Some(0));
     focus.advance(&mut ui, false);
-    assert_eq!(focus.focused(), Some(1));
+    assert_eq!(focus.focused(&mut ui), Some(1));
 }
 
 #[test]
-fn click_focuses_hit_widget_and_misses_clear() {
+fn a_press_focuses_the_focusable_under_it_and_a_miss_keeps_focus() {
     use heca_grid_ui::FocusManager;
 
     let mut ui = Flex::row()
@@ -51,17 +51,46 @@ fn click_focuses_hit_widget_and_misses_clear() {
     let b = ui.base().children[1].base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
 
-    let mut focus = FocusManager::new();
-    focus.focus_at(&mut ui, center);
-    assert_eq!(focus.focused(), Some(1), "click focuses the hit button");
+    let focus = FocusManager::new();
+    common::press_at(&mut ui, center, PointerButton::Left);
+    assert_eq!(
+        focus.focused(&mut ui),
+        Some(1),
+        "a press focuses the focusable under it"
+    );
     assert!(
         ui.base().children[1].base().focused.get_untracked(),
         "hit button shows focus"
     );
+    assert!(
+        !ui.base().children[1].base().focused_by_keyboard(),
+        "a press is the mouse: no ring"
+    );
 
-    // A click that misses every focusable clears focus.
-    focus.focus_at(&mut ui, Point::new(9999.0, 9999.0));
-    assert_eq!(focus.focused(), None, "missed click clears focus");
+    // A press that lands on nothing focusable changes nothing.
+    common::press_at(&mut ui, Point::new(9999.0, 9999.0), PointerButton::Left);
+    assert_eq!(
+        focus.focused(&mut ui),
+        Some(1),
+        "a press on nothing focusable keeps focus"
+    );
+
+    // A press on the other button moves focus to it, and the first lets go.
+    let a = ui.base().children[0].base().bounds;
+    common::press_at(
+        &mut ui,
+        Point::new(a.loc.x + a.size.w / 2.0, a.loc.y + a.size.h / 2.0),
+        PointerButton::Left,
+    );
+    assert_eq!(
+        focus.focused(&mut ui),
+        Some(0),
+        "a press elsewhere moves focus"
+    );
+    assert!(
+        !ui.base().children[1].base().focused.get_untracked(),
+        "the previous holder let go"
+    );
 }
 
 #[test]
@@ -90,17 +119,21 @@ fn dispatch_focuses_on_press_and_falls_through_when_unconsumed() {
         &Event::pointer_pressed(center, PointerButton::Left),
     );
     assert_eq!(
-        focus.focused(),
+        focus.focused(&mut ui),
         Some(1),
         "dispatch focuses the pressed widget"
     );
 
-    // A press that misses every focusable clears focus.
+    // A press that misses every focusable keeps focus where it was.
     focus.dispatch(
         &mut ui,
         &Event::pointer_pressed(Point::new(9999.0, 9999.0), PointerButton::Left),
     );
-    assert_eq!(focus.focused(), None, "dispatch clears focus on a miss");
+    assert_eq!(
+        focus.focused(&mut ui),
+        Some(1),
+        "dispatch keeps focus on a miss"
+    );
 
     // No widget consumes a scroll → dispatch reports No so the host can page-scroll.
     assert_eq!(
@@ -223,10 +256,14 @@ fn disabled_widget_skipped_by_focus_traversal() {
 
     let mut focus = FocusManager::new();
     focus.advance(&mut ui, true);
-    assert_eq!(focus.focused(), Some(0), "first button focuses");
+    assert_eq!(focus.focused(&mut ui), Some(0), "first button focuses");
     // The disabled toggle is not focusable, so Tab lands on the second button.
     focus.advance(&mut ui, true);
-    assert_eq!(focus.focused(), Some(1), "disabled toggle is skipped");
+    assert_eq!(
+        focus.focused(&mut ui),
+        Some(1),
+        "disabled toggle is skipped"
+    );
 }
 
 #[test]
@@ -237,7 +274,7 @@ fn a_raw_char_key_is_a_shortcut_not_text() {
     // the field leaves it alone, modified or not. That is what the host's "deliver the real
     // character, not the lowercased combo key" fixup used to work around.
     let mut inp = Input::new().value("hi");
-    inp.base_mut().focused.set(true);
+    inp.base().focus(false);
     heca_grid_ui::dispatch(
         &mut inp,
         &Event::ModifiersChanged(Modifiers {
@@ -267,7 +304,7 @@ fn a_raw_char_key_is_a_shortcut_not_text() {
 /// — the keyboard's case. What the mouse is on is visible by definition, and scrolling it moves it
 /// out from under the pointer that asked: clicking a row in a scrolled region focused it, the
 /// focus asked for a reveal, the region centred it, and the click was spent — only the second one
-/// did what you meant (Antonio, driving the showcase, F003/P096).
+/// did what you meant.
 #[test]
 fn a_click_does_not_ask_to_be_scrolled_into_view_but_the_keyboard_does() {
     use heca_grid_ui::{Component, FocusManager, Label, Parent as _, PointerButton};

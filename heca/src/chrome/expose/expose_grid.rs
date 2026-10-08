@@ -310,11 +310,9 @@ mod tests {
     /// **Exactly one card holds the keyboard as the cursor moves.** `focus_path` takes the deepest
     /// widget carrying the flag, so a second card left holding it silently keeps every key: the
     /// cursor moves, the grid reports the move handled, and the card you left answers anyway
-    /// (Antonio, driving, 2026-08-11 — the cursor stuck while `ctrl+l` kept answering `Yes`).
     #[test]
     fn exactly_one_card_holds_the_keyboard_as_the_cursor_moves() {
         use heca_grid_ui::event::{Event, WidgetIntent};
-        use heca_grid_ui::reactive::SignalGet;
         let rows = vec![ws(0, 3, (800.0, 600.0))];
         let (cb, _sink) = callbacks();
         let theme = theme();
@@ -332,7 +330,7 @@ mod tests {
         let mut root = lay_out(g, 1200.0, 900.0);
 
         fn focused_keys(n: &dyn heca_grid_ui::Component, out: &mut Vec<String>) {
-            if n.base().focused.get_untracked()
+            if n.base().is_focused()
                 && let Some(k) = n.base().key.as_deref()
             {
                 out.push(k.to_string());
@@ -368,7 +366,7 @@ mod tests {
 
     /// **The cursor walks from the last tiled pane onto a float.** A float belongs to no column, so
     /// it is in no cell unless the row puts it in one — and moving between panes worked in a row
-    /// without floats and stopped in a row with one (Antonio, driving, 2026-08-11).
+    /// without floats and stopped in a row with one.
     #[test]
     fn the_cursor_walks_from_the_last_tiled_pane_onto_a_float() {
         use crate::chrome::expose::model::ExposeFloating;

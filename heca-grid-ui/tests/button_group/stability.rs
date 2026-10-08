@@ -101,8 +101,8 @@ fn constructing_a_group_does_not_request_a_frame() {
 /// later: a visible flash on every rebuild.
 ///
 /// No caller can prevent that or is even in a position to know about it, which is why the layout
-/// settles before anything is painted rather than every host learning to re-run it. Antonio,
-/// driving (2026-09-05): the pane header's buttons blinked on every terminal command, on a focus
+/// settles before anything is painted rather than every host learning to re-run it. The pane
+/// header's buttons blinked on every terminal command, on a focus
 /// change, on a split, and when the working directory was detected — four symptoms, one widget.
 ///
 /// ⚠️ **The helper above lays out FOUR times**, which is this defect written into the tests: they

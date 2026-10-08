@@ -173,7 +173,7 @@ fn the_size_verb_still_grows_the_active_pane_from_every_seat() {
 /// whole column. Split again and there is nothing left — so the newcomer used to be assigned a
 /// single pixel, and the pass that scales everything to fit took barely one per cent off the
 /// other two. The pane existed, in the column, and could not be seen: what that looks like is
-/// "the third pane went off the screen" (Antonio, driving, 2026-09-03/04).
+/// "the third pane went off the screen".
 ///
 /// ⚠️ **Asserting that the heights sum to the column proves nothing here** — they always did,
 /// which is why an earlier look at this concluded the arithmetic was correct and stopped. The

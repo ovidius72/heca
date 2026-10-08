@@ -32,7 +32,6 @@ mod terminal_layers;
 
 pub use input_mode::*;
 pub use mouse_state::*;
-pub use search::*;
 pub use state::*;
 pub use terminal_layers::*;
 pub(crate) use reaction::show_workspace;

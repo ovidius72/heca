@@ -37,7 +37,7 @@ impl Flex {
     }
 
     fn with_direction(direction: Direction) -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         base.style.layout.direction = direction;
         Self { base }
     }
@@ -162,7 +162,7 @@ mod tests {
     /// strip — had its columns treated as words: the first label of a column of two panes sits
     /// halfway down its first card, the label of a column of one sits halfway down the column, and
     /// the shallower of the two was pushed down to "meet" the deeper. A whole column of panes was
-    /// drawn below the box it belongs to (Antonio, driving, 2026-09-16).
+    /// drawn below the box it belongs to.
     ///
     /// ⚠️ Ran red first: without the wrapper check the second column drops by half a card.
     #[test]
@@ -303,3 +303,8 @@ mod tests {
         assert_eq!(tall, mixed, "the row grew to fit a baseline shift");
     }
 }
+
+#[cfg(test)]
+mod clip;
+#[cfg(test)]
+mod passthrough;

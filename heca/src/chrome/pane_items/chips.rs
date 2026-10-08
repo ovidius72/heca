@@ -100,6 +100,7 @@ pub(crate) enum Fit {
 type Produce = dyn Fn(&PaneFacts) -> Option<PaneChip>;
 
 /// One chip, by name.
+#[derive(Clone)]
 pub(crate) struct PaneChipDef {
     /// What config lists: `location`, `pro.agent`.
     pub(crate) name: String,
@@ -141,18 +142,21 @@ pub(crate) fn add_extension_chip(
 type Kept = HashMap<(PaneId, String), (PaneFacts, Option<PaneChip>)>;
 
 /// **Every pane chip there is**, by name: heca's own and the ones other crates added.
+///
+/// A handle: a clone is the same registry, and the answers kept are shared by every clone.
+#[derive(Clone)]
 pub(crate) struct PaneChips {
-    defs: Vec<PaneChipDef>,
+    defs: Rc<Vec<PaneChipDef>>,
     /// An added chip's last answer, kept against the facts it came from — see the module docs.
-    kept: RefCell<Kept>,
+    kept: Rc<RefCell<Kept>>,
 }
 
 impl Default for PaneChips {
     /// heca's own chips only — what a test wants.
     fn default() -> Self {
         Self {
-            defs: builtin_chips(),
-            kept: RefCell::new(HashMap::new()),
+            defs: Rc::new(builtin_chips()),
+            kept: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 }
@@ -174,7 +178,7 @@ impl PaneChips {
 
     /// Add one. A name already taken is refused and said — the first keeps it.
     fn add(&mut self, def: PaneChipDef) {
-        super::listing::add_unique(&mut self.defs, "pane chip", def);
+        super::listing::add_unique(Rc::make_mut(&mut self.defs), "pane chip", def);
     }
 
     #[cfg(test)]

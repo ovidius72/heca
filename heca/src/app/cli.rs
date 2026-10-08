@@ -13,8 +13,7 @@
 //! ⚠️ **The argument declaration is [`ArgDescriptor`] — the very type an action uses**, checked by
 //! the very same [`check_args`]. A CLI flag and a WM action are different things, but "what
 //! arguments does this take" is one idea, and heca had already solved it once for actions. A second
-//! shape here would be a second thing to keep in step (Antonio, 2026-09-04: *"this would be a
-//! general pattern on how to build arguments"*).
+//! shape here would be a second thing to keep in step.
 //!
 //! These all run **before the window**: no GPU, no event loop, so a script can ask heca a question
 //! without a display.

@@ -9,7 +9,7 @@
 //! the palette and callable by RPC — and a wheel turn per frame is not one.
 
 use heca_core::layout::{Rectangle, Size};
-use heca_grid_ui::{Modifiers, PointerButton};
+use heca_grid_ui::{GridKey, Modifiers, PointerButton};
 
 use super::viewport::ScrollIntents;
 
@@ -87,8 +87,8 @@ impl Grid {
     }
 }
 
-/// One thing the pointer did to a terminal.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// One thing the user did to a terminal: the pointer, or the keyboard while it held it.
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum TerminalInput {
     /// The wheel turned. Lines, positive `y` meaning the content moves down (the grid's
     /// convention); the cell is where the pointer was, if it was on the grid.
@@ -117,9 +117,37 @@ pub(crate) enum TerminalInput {
         cell: Option<Cell>,
         modifiers: Modifiers,
     },
+    /// **Scroll back to the live bottom** — the scrollback chip was clicked.
+    ScrollToBottom,
+    /// **Scroll to `rows` above the live bottom** — the scrollbar thumb moved.
+    ScrollTo { rows: usize },
+    /// **Text the user typed** — or pasted, or an IME composed — while the terminal held the
+    /// keyboard, exactly as the platform produced it (case and shifted symbols intact).
+    Text(String),
+    /// **A key that is not text** — Enter, an arrow, Ctrl+C — with what was held when it went
+    /// down. Whether the program wants it as an escape sequence is the process's own business.
+    Key { key: GridKey, modifiers: Modifiers },
     /// **The terminal's box changed size** (or its font did): this is the grid it wants its process
     /// to have. Said once per change, not once per frame — and the message a client sends a server.
     Resize(Grid),
+    /// **Something about the terminal's own search** — see [`Search`].
+    Search(Search),
+}
+
+/// What a terminal says about its **search**, which it runs as part of itself: the bar is its own
+/// child, so it hears the field and says what the user did to it. The matches are the owner's to
+/// find (it holds the process); the terminal paints what it is told.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Search {
+    /// The query field took the keyboard (`true`) or gave it up (`false`) — a click on it, a key
+    /// that opened it, Enter that left it. The owner routes typing accordingly.
+    Editing(bool),
+    /// The query changed: this is the whole new text. Said once per edit.
+    Query(String),
+    /// Move to the next (`forward`) or previous match.
+    Step { forward: bool },
+    /// The search was dismissed: forget the matches.
+    Close,
 }
 
 /// What the terminal's handle asks of its process. Unlike [`TerminalInput`], these are things a user

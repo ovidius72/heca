@@ -15,8 +15,8 @@ const DURATION: f32 = 0.2;
 ///
 /// ⚠️ **Small.** At `0.66` the surface held fully opaque for two thirds of its shrink and then
 /// dropped — movement with no dissolve, then dissolve with no movement, and the step between them
-/// read as a flash on the way out (Antonio, driving, 2026-08-19). The dissolve has to **ride** the
-/// movement, not follow it: one gesture, not two.
+/// read as a flash on the way out. The dissolve has to **ride** the movement, not follow it: one
+/// gesture, not two.
 const LAG: f32 = 0.15;
 
 /// **Arrives by pulling back, leaves by shrinking away while it dissolves.**

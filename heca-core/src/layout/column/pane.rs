@@ -19,9 +19,6 @@ pub struct Pane {
     /// The share of the room its column gives its panes that this pane was dragged to, in
     /// `(0, 1]`; `None` = auto. A share, not pixels, so it keeps its proportion at any window size.
     pub height_share: Option<f64>,
-    /// Offset applied during interactive move Starting phase (rubberband).
-    /// Cleared on transition to Moving. Not used by entry/exit animations.
-    pub interactive_move_offset: Point,
 }
 
 impl Pane {
@@ -33,7 +30,6 @@ impl Pane {
             runtime: PaneRuntime::default(),
             close_policy: PaneClosePolicy::default(),
             height_share: None,
-            interactive_move_offset: Point::default(),
         }
     }
 }

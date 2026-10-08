@@ -3,11 +3,6 @@
 use crate::app_state::AppState;
 use heca_core::layout::PaneId;
 
-/// The **outer** screen rect (full pane, before content inset) of every visible
-/// pane — tiled then floating — in the active workspace. Same geometry the render
-/// loop derives per pane (`render.rs`); kept here so the pane-header sync step can
-/// position the in-pane info bar without a GPU borrow (render's `scene_view` holds
-/// `state.compositor`). Returns `(pane_id, x, y, w, h)` in logical px.
 /// **The columns of the active workspace, in screen coordinates**, with the panes inside each.
 ///
 /// The same geometry [`pane_outer_frames`] reports, grouped the way the tree is shaped. Built on
@@ -15,13 +10,19 @@ use heca_core::layout::PaneId;
 /// about a pane read one walk.
 ///
 /// Floating panes are **not** here: they belong to no column.
-pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutColumn> {
+/// **Where the layout's own coordinates start on the window** — the content area plus the
+/// workspace's offset. The one place that shift is worked out, for columns, panes and places alike.
+pub(crate) fn layout_origin(state: &AppState) -> (f64, f64) {
     let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
-    let ws_offset = state.layout().workspace_geometries()
+    let offset = state.layout()
+        .workspace_geometries()
         .first()
-        .map(|(_, rect)| (rect.loc.x, rect.loc.y))
-        .unwrap_or((0.0, 0.0));
-    let (dx, dy) = (pane_area.loc.x + ws_offset.0, pane_area.loc.y + ws_offset.1);
+        .map_or((0.0, 0.0), |(_, rect)| (rect.loc.x, rect.loc.y));
+    (pane_area.loc.x + offset.0, pane_area.loc.y + offset.1)
+}
+
+pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutColumn> {
+    let (dx, dy) = layout_origin(state);
     let Some(ws) = state.layout().active_workspace() else {
         return Vec::new();
     };
@@ -45,9 +46,15 @@ pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutC
         .collect()
 }
 
+/// The **outer** screen rect (full pane, before content inset) of every visible
+/// pane — tiled then floating — in the active workspace. Same geometry the render
+/// loop derives per pane (`render.rs`); kept here so the pane-header sync step can
+/// position the in-pane info bar without a GPU borrow (render's `scene_view` holds
+/// `state.compositor`). Returns `(pane_id, x, y, w, h)` in logical px.
 pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32, f32)> {
     let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
-    let ws_offset = state.layout().workspace_geometries()
+    let ws_offset = state.layout()
+        .workspace_geometries()
         .first()
         .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
         .unwrap_or((0.0, 0.0));
@@ -72,4 +79,18 @@ pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32,
         ));
     }
     frames
+}
+
+/// **The panes of the active workspace in layout order** — tiled, column by column, then floating —
+/// with no geometry: a caller that needs *where* a pane is asks its terminal what it drew.
+pub(crate) fn laid_out_pane_ids(state: &AppState) -> Vec<PaneId> {
+    let Some(ws) = state.layout().active_workspace() else {
+        return Vec::new();
+    };
+    ws.scrolling
+        .columns
+        .iter()
+        .flat_map(|col| col.panes.iter().map(|pane| pane.id))
+        .chain(ws.floating_panes.iter().map(|float| float.pane.id))
+        .collect()
 }

@@ -59,7 +59,13 @@ fn a_pick_with_nothing_to_offer_still_counts_as_a_pick() {
 #[test]
 fn a_mode_that_is_not_a_pick_has_no_count() {
     assert_eq!(InputMode::Normal.pick_candidate_count(), None);
-    assert_eq!(InputMode::Search.pick_candidate_count(), None);
+    assert_eq!(
+        InputMode::Search {
+            terminal: crate::chrome::terminal::TerminalId(1)
+        }
+        .pick_candidate_count(),
+        None
+    );
 }
 
 /// **Every pick names what it picks among**, so a refusal reads as a sentence rather than a

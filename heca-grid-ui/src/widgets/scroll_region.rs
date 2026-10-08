@@ -274,9 +274,6 @@ pub struct ScrollRegion {
     thumb_grab: Option<f64>,
     /// While dragging the horizontal thumb: the x-offset from the thumb's left.
     h_thumb_grab: Option<f64>,
-    /// Host-owned: whether this region takes keyboard scroll intents. See
-    /// [`keyboard_target`](ScrollRegion::keyboard_target). `None` ⇒ it does.
-    keyboard_target: Option<Signal<bool>>,
     /// Whether the cursor is over the vertical scrollbar thumb's grab lane. Drives
     /// the hover affordance (the thumb brightens, like [`MarkerGroup`](crate::widgets::MarkerGroup)'s
     /// grip bar).
@@ -364,7 +361,6 @@ impl ScrollRegion {
             applied_offset_x: 0.0,
             thumb_grab: None,
             h_thumb_grab: None,
-            keyboard_target: None,
             thumb_hovered: false,
             h_thumb_hovered: false,
             track_repeat: None,
@@ -622,39 +618,12 @@ impl ScrollRegion {
         self.fire(self.on_scroll.as_deref(), cause);
     }
 
-    /// Declare the gesture over and report it once. No-op when nothing was in flight.
-    /// Whether this region should take keyboard scroll intents right now.
-    ///
-    /// Host-owned, because *which* surface has the keyboard is the host's business and changes
-    /// without the tree being rebuilt. `None` means "yes" — a region with no host wiring behaves as
-    /// it always did, which is what a single-region app or an example wants. A host with several
-    /// regions in one tree binds the flag on **each** of them, so nothing depends on that default.
-    ///
-    /// This is what makes "scroll the focused surface" work without the host having to know where
-    /// the region sits in the tree (F003/P011/T012): the intent is dispatched into the whole tree
-    /// and every region that is not the target declines.
-    /// It binds [`Base::focused`] too, which is how the intent gets here at all: keyboard events
-    /// are delivered to the focus owner and the region it encloses, so a region that says the
-    /// keyboard is aimed at it *is* the owner, and one that says otherwise is not on the path.
-    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
-    pub fn keyboard_target(mut self, focused: Signal<bool>) -> Self {
-        self.keyboard_target = Some(focused);
-        self.base.focused = focused;
-        self
-    }
-
     /// Act on a keyboard scroll intent, or decline it.
     ///
     /// Declines (`Handled::No`) when the intent is not a scroll one, or when this region cannot
     /// scroll that axis at all — either the axis is disabled or the content fits. Declining is what
     /// lets a nested region, or the host, get a turn instead of the key dying here.
     fn scroll_intent(&mut self, intent: WidgetIntent, cause: &Event) -> Handled {
-        // Not the keyboard's target → not ours, so the event carries on to whichever region is.
-        if let Some(focused) = self.keyboard_target
-            && !focused.get_untracked()
-        {
-            return Handled::No;
-        }
         let vp = self.base.bounds;
         let (vertical, target) = match intent {
             WidgetIntent::ScrollPageUp => (
@@ -699,6 +668,7 @@ impl ScrollRegion {
         Handled::Yes
     }
 
+    /// Declare the gesture over and report it once. No-op when nothing was in flight.
     fn end_scroll(&mut self, cause: Option<&Event>) {
         if !self.scrolling {
             return;
@@ -938,7 +908,7 @@ impl ScrollRegion {
             // one card to the middle can only push its neighbours off the edges — which is exactly
             // what an exposé must never do. The map showed a screen of empty space on the left with
             // the last column clipped on the right, because the cursor card was being centred in a
-            // strip that already fitted twice over (Antonio, with a screenshot, 2026-08-12).
+            // strip that already fitted twice over.
             //
             // When it **overflows** — only reachable here with `overscroll`, which has no ends to
             // clamp against — centre the cursor, because then there really is something off-screen
@@ -993,7 +963,7 @@ impl ScrollRegion {
         // **Overscroll is a cushion past the ends, and content that fits has no ends.** Applied
         // unconditionally it handed a full viewport of travel in each direction to a map with
         // nothing off screen, so the wheel carried the whole picture out of the window and there
-        // was no way back but the keyboard (Antonio, driving, 2026-08-12).
+        // was no way back but the keyboard.
         match self.overscroll && self.axes.is_vertical() && max > 0.0 {
             true => (-self.base.bounds.size.h, max + self.base.bounds.size.h),
             false => (0.0, max),
@@ -1753,7 +1723,7 @@ mod tests {
     /// **A wheel over content that fits does nothing.** `overscroll` exists so a map larger than
     /// the window can be pushed past its ends; applied to content with no ends it gave a full
     /// viewport of travel in each direction, and the wheel carried the whole exposé off screen
-    /// with no way back but the keyboard (Antonio, driving, 2026-08-12).
+    /// with no way back but the keyboard.
     #[test]
     fn overscroll_gives_no_travel_to_content_that_fits() {
         let mut r = region_with_children(&[40.0, 40.0]); // content 80, viewport 100
@@ -1929,56 +1899,19 @@ mod tests {
         );
     }
 
-    /// A region that is not the keyboard's target declines, so the one that is can take it.
-    ///
-    /// This is how "scroll the focused surface" works without the host knowing where any region sits
-    /// in the tree: the intent goes into the whole tree and every region but the target refuses it.
-    /// Unset means "yes", so a single-region app or an example needs no wiring; a host with several
-    /// regions binds the flag on each of them and depends on no default.
-    #[test]
-    fn only_the_keyboard_target_takes_a_scroll_intent() {
-        let ev = Event::Widget(WidgetIntent::ScrollPageDown);
-
-        let mut unwired = region_with_children(&[100.0, 100.0, 100.0]);
-        assert_eq!(
-            unwired.scroll_intent(WidgetIntent::ScrollPageDown, &ev),
-            Handled::Yes
-        );
-
-        let focused = crate::reactive::signal(true);
-        let mut target = region_with_children(&[100.0, 100.0, 100.0]).keyboard_target(focused);
-        assert_eq!(
-            target.scroll_intent(WidgetIntent::ScrollPageDown, &ev),
-            Handled::Yes
-        );
-
-        // The same region, once the keyboard is somewhere else — it must not move.
-        focused.set(false);
-        let before = target.scroll_offset.get_untracked();
-        assert_eq!(
-            target.scroll_intent(WidgetIntent::ScrollPageDown, &ev),
-            Handled::No
-        );
-        assert_eq!(
-            target.scroll_offset.get_untracked(),
-            before,
-            "and it did not scroll"
-        );
-    }
-
     /// The intents reach the region through normal dispatch, after the children.
     ///
     /// The unit tests above call the handler directly; this one goes through `dispatch` to prove the
     /// wiring, since `on_event` (not `on_event_capture`) is what gives the innermost region the
     /// first refusal — the same order the wheel uses.
     ///
-    /// It says the keyboard is aimed here, because that is now the whole of how a keyboard event
+    /// It puts the keyboard here first, because that is the whole of how a keyboard event
     /// finds anything: an intent is delivered to the focus owner and the region it encloses, so a
     /// tree with nothing focused has nowhere to deliver one.
     #[test]
     fn a_scroll_intent_arrives_through_dispatch() {
-        let mut r = region_with_children(&[100.0, 100.0, 100.0])
-            .keyboard_target(crate::reactive::signal(true));
+        let mut r = region_with_children(&[100.0, 100.0, 100.0]);
+        r.base().focus(true);
         let handled =
             crate::component::dispatch(&mut r, &Event::Widget(WidgetIntent::ScrollPageDown));
         assert_eq!(handled, Handled::Yes);
@@ -2335,8 +2268,7 @@ mod tests {
     /// the centring pad, so `max_offset` is `0` whenever it fits, and clamping the range to
     /// `[0, 0]` left it "frozen under the mouse".
     ///
-    /// Antonio, driving, reversed it: *"mouse wheel can still scroll even if there's no need and
-    /// put card off the screen"*. Freedom to scroll what is entirely visible is not responsiveness,
+    /// That is reversed: the wheel must not scroll content that already fits. Freedom to scroll what is entirely visible is not responsiveness,
     /// it is a way to lose the picture — and in the exposé it did exactly that, wheeling the whole
     /// map out of the window with no way back but the keyboard. Overscroll is a **cushion past the
     /// ends**; content that fits has no ends to cushion.

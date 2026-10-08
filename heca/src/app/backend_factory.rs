@@ -16,29 +16,24 @@ use winit::event_loop::EventLoopProxy;
 use crate::app::backend_store::{Program, SpawnError, TerminalSpec};
 use crate::app::events::AppEvent;
 use crate::app_state::AppState;
+use crate::chrome::terminal::Grid;
+use heca_core::layout::Size;
 
 pub(crate) const FALLBACK_TERMINAL_GRID: (usize, usize) = (80, 24);
-const MAX_TERMINAL_UNITS: f64 = 16_384.0;
 const BASH_SNIPPET: &str = include_str!("../../assets/shell-integration/bash_init.sh");
 const FISH_SNIPPET: &str = include_str!("../../assets/shell-integration/fish_init.fish");
 const ZSH_RC_SNIPPET: &str = include_str!("../../assets/shell-integration/zsh/.zshrc");
 
+/// **The grid a terminal's box will hold**, worked out by the one rule that fits cells to a box
+/// (`Grid::fit`) so the size a process starts with is the size the terminal later reports. Until the
+/// cell size is known there is nothing to divide by, and the answer is [`FALLBACK_TERMINAL_GRID`].
 pub(crate) fn estimate_terminal_grid(
     width: f64,
     height: f64,
     cell_size: (f32, f32),
 ) -> (usize, usize) {
-    let cols = estimate_terminal_units(width, cell_size.0 as f64, FALLBACK_TERMINAL_GRID.0);
-    let rows = estimate_terminal_units(height, cell_size.1 as f64, FALLBACK_TERMINAL_GRID.1);
-    (cols, rows)
-}
-
-fn estimate_terminal_units(extent: f64, approx_cell: f64, fallback: usize) -> usize {
-    if !extent.is_finite() || !approx_cell.is_finite() || extent <= 0.0 || approx_cell <= 0.0 {
-        return fallback;
-    }
-
-    (extent / approx_cell).ceil().clamp(1.0, MAX_TERMINAL_UNITS) as usize
+    Grid::fit(Size::new(width, height), cell_size)
+        .map_or(FALLBACK_TERMINAL_GRID, |grid| (grid.cols, grid.rows))
 }
 
 /// **The settings every terminal process is started with**, gathered in one place so no caller
@@ -281,4 +276,27 @@ fn write_if_changed(path: &Path, content: &str) -> std::io::Result<()> {
         return Ok(());
     }
     fs::write(path, content)
+}
+
+#[cfg(test)]
+mod grid_estimate_tests {
+    use super::*;
+
+    #[test]
+    fn a_process_starts_at_the_size_the_terminal_will_report() {
+        let (room, cell) = ((803.0, 487.0), (8.0, 16.0));
+        let reported = Grid::fit(Size::new(room.0, room.1), cell).expect("a size");
+        assert_eq!(
+            estimate_terminal_grid(room.0, room.1, cell),
+            (reported.cols, reported.rows)
+        );
+    }
+
+    #[test]
+    fn no_cell_size_yet_is_the_fallback_grid() {
+        assert_eq!(
+            estimate_terminal_grid(800.0, 400.0, (0.0, 0.0)),
+            FALLBACK_TERMINAL_GRID
+        );
+    }
 }

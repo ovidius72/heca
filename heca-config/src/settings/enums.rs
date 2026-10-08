@@ -3,6 +3,17 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Which pane focus lands on when it moves to the next column left or right.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ColumnFocus {
+    /// The pane last used in that column.
+    #[default]
+    Last,
+    /// The pane in that column level with the one you leave.
+    Row,
+}
+
 /// Modifier keys that can be used for mouse-driven interactive actions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]

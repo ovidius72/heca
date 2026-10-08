@@ -174,9 +174,21 @@ impl Rectangle {
     }
 }
 
+/// Which pane focus lands on when it moves to the column on the left or right.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ColumnFocus {
+    /// The pane last used in that column.
+    #[default]
+    Last,
+    /// The pane in that column that overlaps the one being left the most.
+    Row,
+}
+
 /// Layout options derived from config.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayoutOptions {
+    /// Which pane focus lands on when it moves to the next column left or right.
+    pub column_focus: ColumnFocus,
     /// Gap between columns and panes in logical pixels.
     pub gaps: f64,
     /// Whether to center the focused column.
@@ -212,6 +224,7 @@ pub struct LayoutOptions {
 impl Default for LayoutOptions {
     fn default() -> Self {
         Self {
+            column_focus: ColumnFocus::Last,
             gaps: 8.0,
             center_focused_column: CenterFocusedColumn::Never,
             always_center_single_column: false,
@@ -223,9 +236,9 @@ impl Default for LayoutOptions {
             overview_gap: 0.1,
             // **Off by default: an exposé shows everything.** A floor sounds prudent and is not —
             // set to 140px it bound on an ordinary session of three workspaces, holding the zoom a
-            // hair above the vertical fit so two of the three rows fell off the bottom (Antonio,
-            // with a screenshot, 2026-08-12). Small cards are an honest picture of a large session;
-            // hiding two thirds of it is not. A user who would rather scroll than squint sets one.
+            // hair above the vertical fit so two of the three rows fell off the bottom. Small cards
+            // are an honest picture of a large session; hiding two thirds of it is not. A user who
+            // would rather scroll than squint sets one.
         }
     }
 }
@@ -245,11 +258,3 @@ pub enum CenterFocusedColumn {
     Always,
 }
 
-/// Drop target for interactive move.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PaneInsertTarget {
-    /// Insert as a new column at the given index.
-    NewColumn(usize),
-    /// Insert into an existing column at the given pane index.
-    InColumn { col_idx: usize, pane_idx: usize },
-}

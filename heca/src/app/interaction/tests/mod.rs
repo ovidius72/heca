@@ -5,10 +5,10 @@ use crate::input::WmAction;
 use heca_core::layout::column::Pane;
 use heca_core::layout::testing::Windowed;
 use heca_core::layout::types::{Point, Rectangle};
-use heca_core::layout::workspace::FloatingPane;
 use heca_core::layout::{FocusDomain, PaneId, Size};
 
 pub(super) use super::*;
+pub(super) use super::domain::*;
 pub(super) use super::route::*;
 
 /// Helper to create a minimal Session for routing tests.

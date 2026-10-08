@@ -46,7 +46,7 @@ impl ScrollingMut<'_> {
     ///
     /// Resizing only the column on the left is **not** this: that widens the neighbour and shoves
     /// the active column sideways without changing it at all — which is what the first version did,
-    /// and it reads as resizing the wrong column (Antonio, driving, 2026-09-04).
+    /// and it reads as resizing the wrong column.
     ///
     /// The transfer is clamped **once, by whichever side runs out first**, so the two can never
     /// disagree: if the neighbour cannot grow any further, the boundary simply stops.

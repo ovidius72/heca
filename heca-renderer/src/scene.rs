@@ -345,6 +345,7 @@ mod tests {
             draw: HostDraw::Surface { id: 1 },
             rect,
             alpha: 1.0,
+            echo: false,
         })
     }
 
@@ -383,9 +384,13 @@ mod tests {
     fn host_requests_come_back_in_scene_order() {
         let mut scene = Scene::new();
         scene.push(DrawCommand::Host(HostCmd {
-            draw: HostDraw::Backdrop { radius: 8.0 },
+            draw: HostDraw::Backdrop {
+                radius: 8.0,
+                corner: 0.0,
+            },
             rect: rect(0.0, 0.0, 10.0, 10.0),
             alpha: 1.0,
+            echo: false,
         }));
         scene.push(host(rect(0.0, 0.0, 10.0, 10.0)));
 

@@ -17,7 +17,7 @@ use super::{Animate, AnimationFrame};
 ///
 /// - **Entering something already up is not an arrival.** A surface is rebuilt and re-entered
 ///   whenever what it shows changes underneath it; replaying the arrival there made the exposé zoom
-///   open on every keystroke (Antonio, driving, 2026-08-11).
+///   open on every keystroke.
 /// - **A surface on its way out is not resurrected.** Its exit was already decided; arriving
 ///   mid-exit made the map snap back to full opacity and start leaving again (2026-08-19). The
 ///   exposé hits this on the ordinary path: it dismisses itself and *then* focuses the pane you
@@ -232,8 +232,7 @@ mod tests {
     ///
     /// `close` leaves a surface `visible` while its exit plays, so something has to end it.
     /// Nothing did: a surface with an exit animation stayed visible forever after its first close,
-    /// and the exposé kept being offered letters by `prefix+/` long after it was shut (Antonio,
-    /// driving, 2026-09-15).
+    /// and the exposé kept being offered letters by `prefix+/` long after it was shut.
     #[test]
     fn an_animated_exit_reports_finishing_once() {
         let mut p = Presence::new();

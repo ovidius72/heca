@@ -20,7 +20,7 @@ fn column_of(n: usize) -> Column {
 /// worked out against the *whole* column rather than the room those fixed panes had left — so
 /// three panes in a resized column summed to more than the column and the last one was pushed
 /// off the bottom of the screen. It happened only in a column that had been resized, which is
-/// exactly why a freshly created one looked fine (Antonio, driving, 2026-09-03).
+/// exactly why a freshly created one looked fine.
 #[test]
 fn panes_never_sum_to_more_than_the_column() {
     let working = 800.0;
@@ -59,8 +59,7 @@ fn panes_fill_the_column_they_are_given() {
 /// Dragging the middle pane's lower boundary moved the bottom edge, and then at a certain point
 /// started moving the *top* one too: the untouched panes were being forced above the room left
 /// to them, the heights summed past the column, and the proportional scale that keeps the column
-/// full then shrank every pane — including the two the drag had just pinned (Antonio, driving,
-/// 2026-09-03).
+/// full then shrank every pane — including the two the drag had just pinned.
 /// **A column is never narrower than its floor, whatever the window did** (F003/P082/T478).
 ///
 /// `MIN_COLUMN_WIDTH` used to be enforced only by the resize handlers, which stop *you* dragging

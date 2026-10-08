@@ -174,10 +174,14 @@ fn taking_the_only_pane_of_another_workspace_removes_it_and_renumbers() {
     assert_eq!(columns(&w, 0), [[2, 1]]);
 }
 
+/// Within its own workspace a place is counted as the strip is now, with the pane still in it:
+/// row 1 of column 1 is between 2 and 3, even though taking pane 1 out first renumbers that column.
 #[test]
 fn a_pane_is_placed_at_a_row_or_in_a_new_column() {
     let mut w = window(&[&[&[1], &[2, 3]]]);
-    let moved = w.m().place_pane(PaneId(1), 0, 0, Some(1));
+    assert_eq!(w.m().place_pane(PaneId(1), 0, 0, Some(1)).map(|m| m.column), Some(0));
+    assert_eq!(columns(&w, 0), [vec![1], vec![2, 3]], "its own lone column: nothing moves");
+    let moved = w.m().place_pane(PaneId(1), 0, 1, Some(1));
     assert_eq!(moved, Some(Moved { workspace: 0, column: 0, removed_workspace: None }));
     assert_eq!(columns(&w, 0), [[2, 1, 3]]);
     let moved = w.m().place_pane(PaneId(3), 0, 0, None);

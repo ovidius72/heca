@@ -59,6 +59,7 @@ enum HeldWhen {
 type EmitFn = dyn Fn(&ActionCatalog, PaneIds) -> ButtonEmit;
 
 /// One button, by name.
+#[derive(Clone)]
 pub(crate) struct PaneButtonDef {
     /// What config lists: `split`, `pro.show_notes`.
     pub(crate) name: String,
@@ -213,15 +214,18 @@ pub(crate) fn add_extension_button(name: String) {
 }
 
 /// **Every pane button there is**, by name: heca's own and the ones other crates added.
+///
+/// A handle: a clone is the same registry.
+#[derive(Clone)]
 pub(crate) struct PaneButtons {
-    defs: Vec<PaneButtonDef>,
+    defs: Rc<Vec<PaneButtonDef>>,
 }
 
 impl Default for PaneButtons {
     /// heca's own buttons only — what a test wants.
     fn default() -> Self {
         Self {
-            defs: builtin_buttons(),
+            defs: Rc::new(builtin_buttons()),
         }
     }
 }
@@ -238,7 +242,7 @@ impl PaneButtons {
 
     /// Add one. A name already taken is refused and said — the first keeps it.
     fn add(&mut self, def: PaneButtonDef) {
-        super::listing::add_unique(&mut self.defs, "pane button", def);
+        super::listing::add_unique(Rc::make_mut(&mut self.defs), "pane button", def);
     }
 
     #[cfg(test)]

@@ -52,8 +52,8 @@ impl FolderLine<'_> {
         // **Cut from the FRONT, so the tail survives**: `~/projects/heca` says less than
         // `…/projects/heca`, and a path's last components are the ones that tell two panes apart.
         // Without it the line keeps its natural width and takes its whole card with it — a card
-        // 80px wide drew a 120px path, pushing the name out with it (Antonio, driving, 2026-08-24).
-        // Here rather than at each surface, for the same reason the line itself is here.
+        // 80px wide drew a 120px path, pushing the name out with it. Here rather than at each
+        // surface, for the same reason the line itself is here.
         let label = Label::new(self.path.unwrap_or_default())
             .color(self.theme.colors.foreground)
             .truncate(Ellipsis::Start);

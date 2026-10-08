@@ -108,15 +108,17 @@ impl WidgetSize {
 pub enum Spacing {
     None,
     /// **A hairline of air** — about a pixel at the usual font, and it still scales with it. The gap
-    /// between things that belong to one control (the buttons of a [`ButtonGroup`], segments of one
-    /// strip), where `Xs` reads as separate things.
-    ///
-    /// [`ButtonGroup`]: crate::widgets::ButtonGroup
+    /// between lines that belong to one block, such as the lines of text inside a card, where `Xs`
+    /// reads as separate things. Too thin to separate two bordered controls: a
+    /// [`ButtonGroup`](crate::widgets::ButtonGroup) uses `Xs`.
     Hairline,
     Xs,
     Sm,
     Md,
     Lg,
+    /// The widest step: room around a thin target the pointer has to find, such as the line a
+    /// carried pane is dropped on.
+    Xl,
 }
 
 /// **A space: a number of pixels, or a step of the theme's rhythm.**
@@ -186,6 +188,7 @@ impl std::str::FromStr for Space {
             "sm" => return Ok(Space::Step(Spacing::Sm)),
             "md" => return Ok(Space::Step(Spacing::Md)),
             "lg" => return Ok(Space::Step(Spacing::Lg)),
+            "xl" => return Ok(Space::Step(Spacing::Xl)),
             _ => {}
         }
         // `px` is optional and means the same as no suffix — the same rule `Length` follows.
@@ -293,6 +296,7 @@ impl Spacing {
             Spacing::Sm => 0.5,
             Spacing::Md => 0.85,
             Spacing::Lg => 1.25,
+            Spacing::Xl => 2.0,
         }
     }
 }
@@ -1473,7 +1477,7 @@ impl Layout {
             // widget had set on itself, which is how a context menu seated as a surface came to be
             // stretched down the whole window: the seat gives every surface the viewport, and a
             // menu is not a layer — it *is* its panel, so the box it drew and the box it could be
-            // clicked in both became the window (Antonio, driving, 2026-09-01).
+            // clicked in both became the window.
             size: {
                 let axis = |placed: Length, own: Length| match placed {
                     Length::Auto => own.to_taffy(),

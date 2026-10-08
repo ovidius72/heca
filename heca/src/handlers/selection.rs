@@ -121,7 +121,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
             Some(a) => a,
             None => return, // No active selection — safe no-op.
         };
-        let SelectionOwner::Pane(pane_id) = active.owner;
+        let SelectionOwner(terminal) = active.owner;
         let (start_stable, end_stable) = match &active.region {
             SelectionRegion::HostGrid {
                 anchor_stable_row,
@@ -138,7 +138,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
         let snapshot = match state
             .server
             .backends
-            .get(pane_id)
+            .get_by_id(terminal)
             .and_then(|b| b.terminal_snapshot())
         {
             Some(s) => s,
@@ -152,7 +152,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
         let lines = state
             .server
             .backends
-            .get(pane_id)
+            .get_by_id(terminal)
             .map(|b| b.lines_in_stable_range(start_stable, end_stable, snapshot.cols))
             .unwrap_or_default();
 
@@ -175,9 +175,9 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
     // Write to system clipboard.
     set_system_clipboard(&text);
 
-    // Copying ends the selection, however it was made (Antonio, 2026-09-29: `y` and a Shift+drag
-    // release must look the same). Outside selection mode — a mouse selection — that is all; inside
-    // it, the caret below stays where the selection ended so the keyboard can carry on.
+    // Copying ends the selection, however it was made. Outside selection mode — a mouse selection —
+    // that is all; inside it, the caret below stays where the selection ended so the keyboard can
+    // carry on.
     if !matches!(state.input_mode, InputMode::Selection) {
         state.selection.clear();
         return;

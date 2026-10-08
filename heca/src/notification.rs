@@ -1186,7 +1186,6 @@ impl NotificationStore {
     /// The alternative — leave the hole and drop the next queued card straight into it — keeps
     /// every card perfectly still, which is why it was built that way. It also inserts a brand new
     /// card in the middle of ones that have been read, and shows a blank slot in the meantime.
-    /// (Antonio, driving, 2026-08-31: it should append at the end and close the vacancy.)
     fn close_gaps(&mut self) -> bool {
         let before = self.visible.clone();
         let mut occupied: Vec<Option<NotificationId>> = self

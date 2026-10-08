@@ -46,7 +46,6 @@ mod types;
 mod view_intent;
 
 pub(crate) use types::*;
-pub(crate) use domain::*;
 pub use policy::ActionPolicy;
 pub(crate) use policy::{action_allowed_when_floating, action_policy};
 pub(crate) use focus::*;

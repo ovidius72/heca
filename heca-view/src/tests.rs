@@ -392,7 +392,7 @@ fn an_event_is_bound_and_read_by_the_one_vocabulary() {
     );
     assert_eq!(
         ViewEvent::ALL.len(),
-        8,
-        "press, hint, change, toggle, dismiss, action, activate, move"
+        9,
+        "press, hint, change, toggle, dismiss, action, activate, move, resize"
     );
 }

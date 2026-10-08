@@ -34,6 +34,7 @@ pub mod animation;
 pub mod builders;
 pub mod color;
 pub mod component;
+pub mod cursor;
 pub mod drag;
 pub mod effects;
 pub mod event;
@@ -79,7 +80,10 @@ pub use event::{
     DragEvent, EventCx, EventKind, Handlers, PointerButton, PointerEvent, RawPointer,
     RawPointerKind,
 };
-pub use focus::FocusManager;
+pub use focus::{
+    FocusManager, KeyboardOwner, contains_keyboard, focus_scope, keyboard_owner, page_scope,
+    release_scope, settle_focus,
+};
 pub use hint::{
     DeclaredAction, Hint, SurfaceHints, clear_hints, collect_actions, collect_hints,
     collect_hints_by_surface, fire_action, fire_hint, hint_intent, hint_targets_of, offer_hint,
@@ -89,9 +93,13 @@ pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use layout::LayoutEngine;
 pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use nav::{child_name, collect_keys, identity_of, key_at, node_with_key, node_with_key_mut};
-pub use pointer::{PointerState, clear_hover, dragging, hit_test};
-pub use scene::{DrawCommand, Escape, FontRole, Scene, TextStyle};
+pub use cursor::{Cursor, cursor_at};
+pub use pointer::{PointerState, clear_hover, dragged_bounds, dragging, hit_test};
+pub use scene::{
+    BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, Scene, SurfaceAt, TextStyle,
+};
 pub mod prop;
+pub mod props;
 pub use heca_grid_ui_macros::{PropName, prop, props};
 pub use prop::{PropInput, PropName, SetProp};
 pub use style::{
@@ -104,9 +112,9 @@ pub use widgets::{
     Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame,
     DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement, Icon, IconButton,
     Input, Item, ItemGroup, KeyCap, KeyHint, KeyHintGroup, KeycapVariant, Label, LabelSide,
-    MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel, ProgressBar,
+    LandingSlot, MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel, ProgressBar,
     RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion,
-    Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Tile, Toast, ToastAction,
+    Select, Separator, Spinner, Splitter, StatusDot, Surface, Tabs, Tag, Tile, Toast, ToastAction,
     ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
     container, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
 };
@@ -140,7 +148,7 @@ pub mod prelude {
         ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container,
         ContextMenu, Dialog, DockFrame, DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid,
         HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, KeyHintGroup, Label,
-        LabelSide, MarkerGroup, MenuEntry, MenuItem, NfGlyph, NfIcon, Orientation, Pane,
+        LabelSide, LandingSlot, MarkerGroup, MenuEntry, MenuItem, NfGlyph, NfIcon, Orientation, Pane,
         ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo,
         ScrollRegion, Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Tile, Toast,
         ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip,

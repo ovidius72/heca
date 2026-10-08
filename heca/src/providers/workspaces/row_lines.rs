@@ -101,7 +101,11 @@ fn git_line(cx: &LineCx<'_>) -> Box<dyn Component> {
             // Never wider than the card: the row is as wide as its content up to the card, and then
             // the branch — the one child that can — takes the squeeze.
             .max_width(Length::FULL)
-            .child(Icon::new(Glyph::GitBranch).color(theme.colors.warning).shrink(0.0))
+            .child(
+                Icon::new(Glyph::GitBranch)
+                    .color(theme.colors.warning)
+                    .shrink(0.0),
+            )
             .child(
                 branch_label
                     .tooltip_signal(branch_full)
@@ -284,7 +288,9 @@ mod tests {
             );
         }
         assert!(
-            drawn.iter().any(|t| t.contains('…') && t.contains("upgrades")),
+            drawn
+                .iter()
+                .any(|t| t.contains('…') && t.contains("upgrades")),
             "the branch is the part that is cut, from the front: {drawn:?}"
         );
     }

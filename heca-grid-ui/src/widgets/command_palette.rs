@@ -280,7 +280,7 @@ impl CommandPalette {
         // **Open is focused.** The palette's query field is its own (a `RefCell<Input>`, not a
         // child), so the palette is the widget that types — and it types because it holds the
         // keyboard, not because it declared that it takes raw keys and text.
-        base.focused = open;
+        base.follow_focus_modal(open);
         // **A palette locks because it is a palette.** It has the keyboard for its query line,
         // and nothing behind it should be acted on while you are typing into it.
         base.lock = true;
@@ -293,7 +293,7 @@ impl CommandPalette {
             // as long as the palette does.
             query: RefCell::new({
                 let mut q = Input::new();
-                q.base_mut().focused = open;
+                q.base_mut().follow_focus(open);
                 q
             }),
             selected: 0,
@@ -1019,7 +1019,7 @@ impl Component for CommandPalette {
                 let mut q = self.query.borrow_mut();
                 q.base_mut().bounds = query;
                 q.base_mut().font = font;
-                q.base_mut().focused.set(true); // so the caret shows + blinks
+                q.base().focus(false); // so the caret shows + blinks
                 q.paint(cx);
             }
             // The Input hides its placeholder while focused; draw ours when empty.
@@ -1181,8 +1181,8 @@ impl Component for CommandPalette {
         // when a host puts it in a column of overlays, as the showcase does — there its bounds are
         // whatever the flex gave it, the panel is computed against the wrong box, and every row's
         // text lands 76px above the row it belongs to while the icons and keycaps (painted from the
-        // panel, not placed) stay put (Antonio, driving, 2026-08-24). A widget must not infer the
-        // viewport from where it happens to be mounted; the framework already records it.
+        // panel, not placed) stay put. A widget must not infer the viewport from where it happens
+        // to be mounted; the framework already records it.
         let size = self.base.viewport;
         if size.w > 0.0 && size.h > 0.0 && size.w.is_finite() && size.h.is_finite() {
             self.viewport.set(size);
@@ -1363,7 +1363,7 @@ impl Component for CommandPalette {
         // repaint of just the panel — no full-frame, no pegging frames every tick.
         let flipped = {
             let mut q = self.query.borrow_mut();
-            q.base_mut().focused.set(open);
+            q.base().sync_focus_follow();
             q.tick(dt);
             let f = q.base().needs_paint();
             q.base().clear_needs_paint();

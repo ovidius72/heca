@@ -86,7 +86,7 @@ There are two things called "overlay" here: the **`Overlay` widget** in `heca-gr
 | let input fall through | `blocking(false)` — a press beside it reaches the page behind |
 | show and hide | `open` / `hide` / `toggle`, or bind `open_signal` |
 | arrive and leave | `Presence` and the `Animation` trait |
-| hold the keyboard while open | `open` bound to `Base::focused`, so keys arrive down the focus chain |
+| hold the keyboard while open | the overlay follows `open` into `Base::focused` (`Base::follow_focus`), so keys arrive down the focus chain |
 | occlusion geometry | `overlay_occludes` — whole viewport when blocking, the panel alone when not |
 | **nest inside another overlay** | already works — a `Select` dropdown in a modal body composites above it |
 

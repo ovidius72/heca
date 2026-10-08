@@ -141,7 +141,7 @@ fn candidate_allowed(
 /// [`Domain`](crate::app::interaction::Domain): a keyboard-driven source with a dock focused
 /// resolves to `Container`, which permits acts that `Floating` refuses. Asking as `Keyboard` while
 /// the chrome tree dispatches as `MouseLeftSidebar` is exactly how the picker came to offer letters
-/// that execution then refused (Antonio, driving 2026-08-21).
+/// that execution then refused.
 ///
 /// Each surface answers from the emitter that built it, so there is nothing to keep in step:
 /// the chrome tree carries its emitter's source, a layer's is its own id, and a pane's pick is the
@@ -244,10 +244,20 @@ fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, 
     //    where a surface is seated, or keeps a second answer to what is in front. The first
     //    **modal** group is the active context and `resolve_hint_layers` stops there, which is what
     //    suppresses everything beneath an exposé.
+    // The panes are judged by their own frames below, so the window's walk leaves the workspace to
+    // them: a pane's targets would otherwise be collected twice, once at their path from the root
+    // and once at their path from the pane.
+    let workspace_at = state
+        .window_root
+        .base()
+        .children
+        .iter()
+        .position(|c| c.base().key.as_deref() == Some(crate::chrome::workspace::WORKSPACE_KEY));
     for group in heca_grid_ui::collect_hints_by_surface(&state.window_root) {
         let targets: Vec<(HintTarget, Rectangle)> = group
             .targets
             .iter()
+            .filter(|(path, _)| path.first() != workspace_at.as_ref())
             .map(|(path, bounds)| {
                 (
                     HintTarget::new(&HintSurface::Window, &state.window_root, path.clone()),
@@ -340,9 +350,9 @@ fn visible_hint_targets(state: &crate::app_state::AppState) -> Vec<(HintTarget, 
 /// **What can show a letter right now**, resolved once (F003/P082/T438, F003/P097/T499).
 ///
 /// A pane scrolled behind a sidebar is still a pane, and a pick mode reading the SESSION happily
-/// letters it — so its keycap draws on top of the sidebar covering it (Antonio, driving,
-/// 2026-08-19). `prefix+/` never had this problem because the surface stack is resolved first: a
-/// target whose centre is covered by something in front is dropped.
+/// letters it — so its keycap draws on top of the sidebar covering it. `prefix+/` never had this
+/// problem because the surface stack is resolved first: a target whose centre is covered by
+/// something in front is dropped.
 ///
 /// So this asks that same function rather than testing rects again here. Occlusion is decided in
 /// exactly one place — `resolve_hint_layers` — and a second copy would be one more thing to keep in

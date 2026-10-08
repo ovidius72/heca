@@ -4,13 +4,11 @@ use super::types::*;
 use super::view_offset::{ViewOffset, compute_new_view_offset};
 use super::window_view::ScrollView;
 
-// Re-export PaneInsertTarget for convenience.
-pub use super::types::PaneInsertTarget;
-
 mod effect;
 mod pane_effect;
 pub use effect::{ColumnEffect, Positions};
 pub use pane_effect::{PaneEffect, SpaceEffect};
+pub use places::{Place, PlaceKind};
 
 
 /// Minimum width (logical px) a column may be shrunk to by a manual resize, so a
@@ -151,93 +149,6 @@ impl<'a> ScrollingRef<'a> {
             .collect()
     }
 
-    /// Compute the insert position for a point in space coordinates.
-    /// Used during interactive move to determine where to drop a pane.
-    ///
-    /// Algorithm (from NIRI's `scrolling.insert_position()`):
-    /// 1. Transform to space coords and aim for center of gaps.
-    /// 2. Find closest column gap vs closest tile gap.
-    /// 3. Return whichever is closer.
-    pub fn insert_position(&self, pos: Point) -> PaneInsertTarget {
-        let gaps = self.space.options.gaps;
-        // pos is already in space coordinates (caller adds view_pos).
-        let x = pos.x + gaps / 2.0;
-        let y = pos.y + gaps / 2.0;
-
-        // Before first column → NewColumn(0)
-        if x < 0.0 {
-            return PaneInsertTarget::NewColumn(0);
-        }
-
-        // Find the column containing x.
-        let mut col_idx = 0usize;
-        let mut found_col = false;
-        for (i, col_x) in self.column_xs().enumerate() {
-            let col_w = self.column_width(i);
-            if x >= col_x && x < col_x + col_w {
-                col_idx = i;
-                found_col = true;
-                break;
-            }
-        }
-
-        // Past last column → NewColumn at end.
-        if !found_col {
-            return PaneInsertTarget::NewColumn(self.space.columns.len());
-        }
-
-        // Find closest column gap.
-        let mut closest_col_gap_idx = 0usize;
-        let mut closest_col_gap_dist = f64::MAX;
-        for (i, col_x) in self.column_xs().enumerate() {
-            let dist = (col_x - x).abs();
-            if dist < closest_col_gap_dist {
-                closest_col_gap_dist = dist;
-                closest_col_gap_idx = i;
-            }
-            // Also check right edge of column (gap center after this column).
-            let col_w = self.column_width(i);
-            let right_x = col_x + col_w + gaps;
-            let right_dist = (right_x - x).abs();
-            if right_dist < closest_col_gap_dist {
-                closest_col_gap_dist = right_dist;
-                closest_col_gap_idx = i + 1;
-            }
-        }
-
-        // Find closest tile gap within the containing column.
-        let col = &self.space.columns[col_idx];
-        let heights = self.pane_heights(col_idx);
-        let mut tile_y = gaps;
-        let mut closest_tile_idx = 0usize;
-        let mut closest_tile_gap_dist = f64::MAX;
-
-        for (i, height) in heights.iter().enumerate() {
-            let dist = (tile_y - y).abs();
-            if dist < closest_tile_gap_dist {
-                closest_tile_gap_dist = dist;
-                closest_tile_idx = i;
-            }
-            tile_y += height + gaps;
-        }
-        // Check bottom edge.
-        let bottom_dist = (tile_y - y).abs();
-        if bottom_dist < closest_tile_gap_dist {
-            closest_tile_gap_dist = bottom_dist;
-            closest_tile_idx = heights.len();
-        }
-
-        // Compare distances: column gap vs tile gap.
-        if closest_col_gap_dist <= closest_tile_gap_dist {
-            PaneInsertTarget::NewColumn(closest_col_gap_idx.min(self.space.columns.len()))
-        } else {
-            PaneInsertTarget::InColumn {
-                col_idx,
-                pane_idx: closest_tile_idx.min(col.panes.len()),
-            }
-        }
-    }
-
     /// The box the columns are laid out in.
     pub fn area(&self) -> Rectangle {
         self.view.area
@@ -302,11 +213,8 @@ impl<'a> ScrollingRef<'a> {
                     // They are returned apart because a container places its children by the first
                     // and the child carries the second — the same split CSS makes between layout
                     // and `transform`.
-                    let pane_offset = self.view.motion.pane_offset(pane.id);
-                    let rubber = pane.interactive_move_offset;
+                    let displacement = self.view.motion.pane_offset(pane.id);
                     let slot = view_off + col_pos + Point::new(0.0, pane_y);
-                    let displacement =
-                        Point::new(pane_offset.x + rubber.x, pane_offset.y + rubber.y);
                     panes.push(LaidOutPane {
                         id: pane.id,
                         rect: Rectangle::new(slot + displacement, size),
@@ -438,5 +346,7 @@ fn enclosing(panes: &[LaidOutPane]) -> Option<Rectangle> {
 mod tests;
 
 mod columns;
+mod focus;
+mod places;
 mod resize;
 mod view;

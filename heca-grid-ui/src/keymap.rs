@@ -102,8 +102,8 @@ impl Keymap {
     /// showcase each wrote this sequence out by hand, and the showcase's copy simply had no
     /// `TextInput` step: the identical [`CommandPalette`](crate::widgets::CommandPalette) typed in
     /// one surface and was deaf in the other, and nothing in either one was wrong to look at
-    /// (Antonio, 2026-08-10). **A component author mounts a widget in a surface and types into it.
-    /// This is why they never learn any of this.**
+    /// **A component author mounts a widget in a surface and types into it. This is why they never
+    /// learn any of this.**
     ///
     /// `deliver` is the surface's target — a mounted tree, or an open layer's root.
     pub fn deliver_press(
@@ -132,7 +132,7 @@ impl Keymap {
     /// [`on_key_up`](crate::builders::ComponentExt::on_key_up) is a builder that can never fire —
     /// which is exactly what heca's own window loop did until 2026-08-11: it returned at
     /// `event.state != Pressed`, so a widget's release handler was dead in the real app while a
-    /// headless test that dispatched both halves passed (Antonio, driving).
+    /// headless test that dispatched both halves passed.
     pub fn deliver_release(
         &self,
         key: crate::event::GridKey,

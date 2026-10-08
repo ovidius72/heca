@@ -60,15 +60,14 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
     // being driven", and it is what permits a component's own cursor verbs
     // (`workspaces.delete_selected`, the `j`/`k` nav). While a menu, the palette or the exposé is
     // up, the keys belong to *it* — so a key it had no use for must not fall through and drive the
-    // dock underneath it. Antonio, 2026-08-10: right-clicking a sidebar row opened its menu and
-    // `j`/`k` went on moving the pane cursor behind it.
+    // dock underneath it: with a row's menu open, `j`/`k` must not move the pane cursor behind it.
     //
     // The layer used to swallow every key it did not want, by hand, which is the same rule written
     // in the wrong place: it also ate `q` and `Esc`, which are catalogued actions the host resolves
     // (F004/P084/T400). Here the layer claims only the keyboard, and `ActionPolicy` decides the
     // rest — `Global` actions still run, `ContainerFocused` ones do not.
     let modal_holds_keyboard = state.layers.top_modal_id(&state.window_root).is_some();
-    if keyboard_driven && !modal_holds_keyboard && state.chrome_state.focused_container().is_some()
+    if keyboard_driven && !modal_holds_keyboard && crate::app::tree_focus::focused_dock(state).is_some()
     {
         return Domain::Container;
     }
@@ -83,8 +82,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
 /// exactly where they disagree: the map declares `lock: false` because you can still see
 /// the panes through it, and that geometric truth was also, accidentally, saying "the base context
 /// is still live". So `prefix+j` moved the focused pane behind the map, `prefix+p` opened the
-/// palette over it, and `prefix+/` picked sidebar rows the user could not see (Antonio,
-/// 2026-08-12). §6's invariant names the shape of that bug: if you are special-casing a surface,
+/// palette over it, and `prefix+/` picked sidebar rows the user could not see. §6's invariant names the shape of that bug: if you are special-casing a surface,
 /// the surface is mis-modelled.
 ///
 /// So the coarse question is asked coarsely. `modal` on a layer already answers it — it means
@@ -97,8 +95,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
 /// does — only [`InteractionSource::Surface`] separates them. They fall through and are judged like
 /// anyone else's, by the action's declared policy against the session's domain. That is not an
 /// allow-list: a plugin's layer is treated identically for whatever actions it declares, which is
-/// the point (Antonio: *"each overlay might use its own actions and keybindings so we risk blocking
-/// future actions"*).
+/// the point.
 pub(super) fn base_context_is_dormant(
     active_context: Option<SurfaceKey>,
     content_covered: bool,

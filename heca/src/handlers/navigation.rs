@@ -86,7 +86,7 @@ pub fn handle_focus_pane(state: &mut AppState, action: &WmAction) {
     // Every way out is now explicit at the site that means it: the component's activate-and-leave
     // queues `unfocus_dock` itself (`providers/workspaces/mod.rs`), `Esc` releases, a click that
     // lands outside every container releases (`mouse.rs`), and another container taking focus
-    // replaces it in `set_focused_container`.
+    // takes the keyboard from this one (`tree_focus::focus_dock`).
     focus_pane_by_id(state, *pane_id);
 }
 

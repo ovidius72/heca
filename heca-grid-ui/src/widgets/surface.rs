@@ -17,7 +17,7 @@ pub struct Surface {
 impl Surface {
     /// A vertical surface (column).
     pub fn new() -> Self {
-        let mut base = Base::new();
+        let mut base = Base::container();
         base.style.layout.direction = Direction::Column;
         Self { base }
     }
