@@ -24,7 +24,8 @@
   "completionCriteria": [],
   "taskIds": [
     "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f",
-    "3fb07af2-2abd-42f2-b7ee-3fddaf257864"
+    "3fb07af2-2abd-42f2-b7ee-3fddaf257864",
+    "699d914e-728d-4efb-b59b-a36c97d5bd7c"
   ],
   "tasks": [
     {
@@ -167,10 +168,78 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "699d914e-728d-4efb-b59b-a36c97d5bd7c",
+      "phaseId": "7b6d2ef8-3c8e-4376-9dd1-15c6dc454f85",
+      "number": 540,
+      "shortId": "MQSJQ",
+      "priority": 3,
+      "shortName": "settings-defaults-come-from-th",
+      "title": "Settings defaults come from the embedded config on every loading path",
+      "status": "done",
+      "description": "Approved by Antonio on 2026-10-09: fix in a separate open heca branch, record the work, and open a PR. Discovered during heca-pro T019; that task remains in progress and this is separate open heca work.\n\nCurrent: config.default.toml:57 defines the window dimensions. heca-config/src/settings/defaults.rs:25 repeats them in Rust, along with other setting values. settings/mod.rs:223 constructs SettingsConfig::default by hand; field-level serde defaults also use the Rust helpers. settings/notifications.rs:5 duplicates nested defaults. Normal loading in loader/mod.rs:32 already starts with embedded TOML and deep_merge (:77). Main has already split the old 697-line settings.rs into a folder; reuse that split.\n\nGoal: config.default.toml owns all SettingsConfig and NotificationSystemConfig defaults. Default constructors, partial direct deserialization, normal loading and project layering agree. Keep public settings types, aliases and explicit overrides compatible.\n\nPre-flight: reuse loader::CONFIG_DEFAULT and its existing embedded-default parsing pattern (parse_default_keys), and reuse loader::deep_merge for layering. No UI widget, action, or new loading door is needed. Siblings T523 and T533 own project layering and trust notices, respectively; neither owns the duplicated settings defaults.\n\nImplementation: parse the embedded settings table once; use one typed field lookup for serde defaults, without recursively constructing SettingsConfig. Read complete Default constructors from that same table. Remove literal defaults from settings helpers, including nested notifications and enum-valued settings. Add any missing non-optional settings to the default file. Optional overrides stay optional and use any value supplied by the embedded file.\n\nVerify: default constructors and empty/partial deserialization match the file; removing each field preserves its file default; nested defaults and aliases still work; explicit overrides, including zero and false, survive; wrong types remain errors. Run heca-config tests, review against the Rust skill, and run the required clippy checks. Record verification and the PR link. Do not edit the existing shared checkout or heca-pro code.\n\n---\n**Completion summary:**\nImplemented on fix/settings-defaults, code commit 773d2760. PR https://github.com/ovidius72/heca/pull/285 is open from fix/settings-defaults to main, authored by Antonio Pantano (ovidius72).\n\nShipped: config.default.toml owns all SettingsConfig and NotificationSystemConfig defaults. settings/defaults.rs:10 parses the embedded settings table once as raw TOML; required and optional fields share typed decoding (:22). SettingsConfig::default (settings/mod.rs:235), NotificationSystemConfig::default (settings/notifications.rs:68), and serde field defaults read that table. No recursive SettingsConfig initialization. The default file now includes the existing swap modifier and deprecated pane_show_cwd defaults. Public types, aliases, normal configuration layering and explicit overrides are preserved.\n\nVerification: cargo test -p heca-config: 106 passed, including five new tests in settings/default_tests.rs for constructors, empty and partial files, every omitted field, nested notifications, aliases, explicit zero/false overrides, and invalid types. Temporarily changed embedded width, height, palette size, mouse and an optional colour: all five new tests passed. Temporarily restored a hardcoded width: the constructor/empty-file regression failed as expected; restored the fix and all 106 passed. Formal review against /Users/antonio/.agents/skills/rust/SKILL.md: no remaining findings. cargo clippy --workspace --all-targets --all-features passed; Cargo reports the existing block 0.1.6 future-compatibility warning. cargo run -p heca -- --show-config exited successfully. git diff --check passed.\n\nFiles: config.default.toml; heca-config/src/settings/{defaults.rs,mod.rs,notifications.rs,tests.rs,default_tests.rs}. No GUI layout or appearance change was made or claimed visually verified. Remaining external step: review/merge PR #285. heca-pro T019 stays in progress; its remaining workflow choices still need answers. This fix does not change the heca dependency in heca-pro.",
+      "descriptionUpdatedAt": "2026-10-09T15:00:53.142Z",
+      "notes": "DONE on fix/settings-defaults. PR #285: https://github.com/ovidius72/heca/pull/285 (open to main; Antonio Pantano). Implementation commit 773d2760, followed by test style cleanup and this planner record. Formal Rust skill review checked the final diff: no remaining findings. Final cargo test -p heca-config: 106 passed. Final cargo clippy --workspace --all-targets --all-features -- -D warnings: passed; only the existing Cargo future-compatibility notice for third-party block 0.1.6 remains. heca --show-config exited successfully. Changing embedded defaults passed the five new checks; restoring a hardcoded width failed the regression as expected; all mutations were restored. heca-pro T019 contains the cross-project reference and stays in progress. Review/merge of PR #285 remains external to this completed implementation.",
+      "statusLog": [
+        {
+          "id": "699d914e-728d-4efb-b59b-a36c97d5bd7c-check-001-planned-in-progress",
+          "date": "2026-10-09T14:51:56.884Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "699d914e-728d-4efb-b59b-a36c97d5bd7c-check-002-in-progress-done",
+          "date": "2026-10-09T15:00:53.141Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented on fix/settings-defaults, code commit 773d2760. PR https://github.com/ovidius72/heca/pull/285 is open from fix/settings-defaults to main, authored by Antonio Pantano (ovidius72).\n\nShipped: config.default.toml owns all SettingsConfig and NotificationSystemConfig defaults. settings/defaults.rs:10 parses the embedded settings table once as raw TOML; required and optional fields share typed decoding (:22). SettingsConfig::default (settings/mod.rs:235), NotificationSystemConfig::default (settings/notifications.rs:68), and serde field defaults read that table. No recursive SettingsConfig initialization. The default file now includes the existing swap modifier and deprecated pane_show_cwd defaults. Public types, aliases, normal configuration layering and explicit overrides are preserved.\n\nVerification: cargo test -p heca-config: 106 passed, including five new tests in settings/default_tests.rs for constructors, empty and partial files, every omitted field, nested notifications, aliases, explicit zero/false overrides, and invalid types. Temporarily changed embedded width, height, palette size, mouse and an optional colour: all five new tests passed. Temporarily restored a hardcoded width: the constructor/empty-file regression failed as expected; restored the fix and all 106 passed. Formal review against /Users/antonio/.agents/skills/rust/SKILL.md: no remaining findings. cargo clippy --workspace --all-targets --all-features passed; Cargo reports the existing block 0.1.6 future-compatibility warning. cargo run -p heca -- --show-config exited successfully. git diff --check passed.\n\nFiles: config.default.toml; heca-config/src/settings/{defaults.rs,mod.rs,notifications.rs,tests.rs,default_tests.rs}. No GUI layout or appearance change was made or claimed visually verified. Remaining external step: review/merge PR #285. heca-pro T019 stays in progress; its remaining workflow choices still need answers. This fix does not change the heca dependency in heca-pro."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "699d914e-728d-4efb-b59b-a36c97d5bd7c-check-001-make-settings-and-notification-defaults-read-the-embedded-configuration",
+          "number": 1,
+          "title": "Make settings and notification defaults read the embedded configuration",
+          "checked": true
+        },
+        {
+          "id": "699d914e-728d-4efb-b59b-a36c97d5bd7c-check-002-verify-default-agreement-missing-fields-aliases-and-explicit-overrides",
+          "number": 2,
+          "title": "Verify default agreement, missing fields, aliases and explicit overrides",
+          "checked": true
+        },
+        {
+          "id": "699d914e-728d-4efb-b59b-a36c97d5bd7c-check-003-review-the-rust-changes-run-tests-and-clippy-and-open-the-pr",
+          "number": 3,
+          "title": "Review the Rust changes, run tests and clippy, and open the PR",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-09T14:51:56.884Z",
+      "completedAt": "2026-10-09T15:00:53.141Z",
+      "createdAt": "2026-10-09T14:51:32.059Z",
+      "updatedAt": "2026-10-09T15:04:29.924Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:8fc31802-a72f-4b7b-a7dd-b91774f71d83",
+          "createdAt": "2026-10-09T14:51:56.780Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:32.912Z",
-  "updatedAt": "2026-10-01T19:51:41.667Z",
+  "updatedAt": "2026-10-09T15:04:29.924Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -216,9 +285,29 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "53e1c853-bd52-4a42-996b-33738438604c",
+      "date": "2026-10-09T14:51:56.911Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "52ece049-803a-4b34-962c-ee92ee5f011d",
+      "date": "2026-10-09T15:00:53.172Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:8fc31802-a72f-4b7b-a7dd-b91774f71d83",
+      "createdAt": "2026-10-09T14:51:56.780Z"
+    },
     {
       "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
       "createdAt": "2026-10-01T13:27:50.261Z"

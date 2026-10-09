@@ -7,8 +7,8 @@ fn test_settings_config_default_values() {
     let s = SettingsConfig::default();
     assert_eq!(s.theme, "grid_tron");
     assert!(s.mouse);
-    assert_eq!(s.window_width, 1280);
-    assert_eq!(s.window_height, 800);
+    let file = super::default_tests::embedded_window_defaults();
+    assert_eq!((s.window_width, s.window_height), file);
     assert_eq!(s.terminal_foreground, None);
     assert_eq!(s.terminal_background, None);
     assert_eq!(s.terminal_cursor_foreground, None);
