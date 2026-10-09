@@ -51,8 +51,10 @@ fn each_missing_setting_keeps_its_embedded_default() {
 
 #[test]
 fn window_overrides_keep_other_file_defaults() {
-    let mut expected = SettingsConfig::default();
-    expected.window_width = 1600;
+    let mut expected = SettingsConfig {
+        window_width: 1600,
+        ..SettingsConfig::default()
+    };
     let direct: SettingsConfig = toml::from_str("window_width = 1600").unwrap();
     let layered = config_from_layers("[settings]\nwindow_width = 1600").unwrap();
     assert_eq!(direct, expected);
@@ -69,9 +71,14 @@ fn window_overrides_keep_other_file_defaults() {
 
 #[test]
 fn aliases_and_nested_overrides_keep_the_other_defaults() {
-    let mut expected = SettingsConfig::default();
-    expected.terminal_wheel_scroll_lines = 7;
-    expected.notification_system.max_visible = 2;
+    let expected = SettingsConfig {
+        terminal_wheel_scroll_lines: 7,
+        notification_system: NotificationSystemConfig {
+            max_visible: 2,
+            ..NotificationSystemConfig::default()
+        },
+        ..SettingsConfig::default()
+    };
     let direct: SettingsConfig = toml::from_str(
         "terminal-wheel-scroll-lines = 7\n[notification-system]\nmax_visible = 2",
     ).unwrap();
