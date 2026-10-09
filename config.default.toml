@@ -107,6 +107,9 @@ column_focus = "last"
 # One of: "Super" (default) | "Alt" | "Ctrl" | "Shift".
 interactive_move_modifier = "Super"
 
+# Modifier held during a drag to swap instead of move. Must differ from the move modifier.
+swap_modifier = "Shift"
+
 # The line a carried pane can be dropped on (between two stacked panes, top and bottom of a column).
 # drag_edge_color: unset = the theme's accent. drag_edge_width: px when a drag is over it (default 3).
 # drag_edge_color = "#7fd3ff"
@@ -127,7 +130,7 @@ pane_renamed_add_process_name = true
 # DEPRECATED — now `[appearance.expose] show_cwd`. Still read and mapped onto it, with a
 # one-time notice to move it. It no longer affects the sidebar: the sidebar's folder line
 # is `[appearance.sidebar] pane_lines`.
-# pane_show_cwd = false
+pane_show_cwd = false
 
 # Host terminal scrollback capacity in rows (history retained above the
 # visible viewport). The host scrollback viewport scrolls within this range.
