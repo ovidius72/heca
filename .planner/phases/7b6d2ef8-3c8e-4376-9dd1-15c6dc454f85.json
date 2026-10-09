@@ -25,7 +25,8 @@
   "taskIds": [
     "d2aca905-1e7f-4df3-b1f9-e30e1b6d053f",
     "3fb07af2-2abd-42f2-b7ee-3fddaf257864",
-    "699d914e-728d-4efb-b59b-a36c97d5bd7c"
+    "699d914e-728d-4efb-b59b-a36c97d5bd7c",
+    "26712cc0-b4cc-4f93-8439-f86a5ea3f581"
   ],
   "tasks": [
     {
@@ -236,10 +237,84 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "26712cc0-b4cc-4f93-8439-f86a5ea3f581",
+      "phaseId": "7b6d2ef8-3c8e-4376-9dd1-15c6dc454f85",
+      "number": 541,
+      "shortId": "S5AJS",
+      "priority": 4,
+      "shortName": "declare-settings-once-and-gene",
+      "title": "Declare settings once and generate file defaults",
+      "status": "done",
+      "description": "Approved by Antonio on 2026-10-09: a separate branch, task and PR for removing the repeated setting declarations introduced by T540 / merged PR #285 (71b4b164).\n\nCurrent: heca-config/src/settings/mod.rs:22 declares SettingsConfig fields and serde callbacks. settings/defaults.rs:39 and :47 register the same field names and types again in required_defaults!/optional_defaults!; settings/notifications.rs:5 repeats nested callback functions. config.default.toml owns the values after T540. This task removes the repeated declarations while preserving that file as the source of defaults.\n\nPre-flight: reuse defaults::value and its OnceLock raw TOML cache, loader::CONFIG_DEFAULT, and serde's existing container default support. T540 owns moving default values into TOML and is done; T523/T533 own project loading/trust. No existing task owns generating this field wiring. Antonio explicitly approved this follow-up. No UI or widget work is involved.\n\nImplementation: add a private settings declaration macro in settings/schema.rs. Declare each field once with its public type, docs and aliases. Generate the public struct with serde container defaults and a Default implementation that resolves each declared field through one typed lookup using its name and optional nested table path. Remove field registration lists and nested callback boilerplate. Both SettingsConfig and NotificationSystemConfig use the same macro. An absent optional TOML setting remains None through serde's type handling; missing required defaults are embedded-file defects, not user input errors. Do not add dependencies or change callers, public field types, serialized names, config values or deep_merge.\n\nVerify: run existing heca-config tests; cover aliases, nested defaults, explicit zero/false, JSON null and invalid values; demonstrate a new setting needs only its declaration and, if required, a default TOML entry. Check malformed embedded defaults fail clearly. Review against the Rust skill, run required full workspace Clippy, run --show-config, and record the new PR link. Preserve other agents' branches and dirty files. Keep heca-pro T019 in progress.\n\nBranch: refactor/settings-schema in /Users/antonio/projects/heca-settings-schema, based on freshly fetched develop plus merged main so it includes PR #285. PR target: main. Canonical planner: /Users/antonio/projects/heca.\n\n---\n**Completion summary:**\nCompleted in commit 714dd97ce136919086e650e3024581ac147272b6, branch refactor/settings-schema. PR https://github.com/ovidius72/heca/pull/286 is OPEN to main, authored by Antonio Pantano.\n\nShipped: settings/schema.rs:9 declares the private macro and :23 generates Default from each declared field. SettingsConfig uses it at settings/mod.rs:22; NotificationSystemConfig uses it at settings/notifications.rs:23. settings/defaults.rs:24 is the one typed file lookup, retaining the raw cached TOML table at :6. Removed repeated required/optional field lists and nested callback functions. Values still come from config.default.toml; absent optional fields remain None. All 47 root fields, 4 nested fields and 27 aliases are unchanged. No dependency or caller changes.\n\nVerification: cargo test -p heca-config --quiet passes 111 tests, including the existing five defaults-path tests and five schema regressions in settings/schema_tests.rs:19. Temporarily added required Vec<String> and optional Option<Vec<String>> fields to the real declaration plus TOML defaults; all defaults-path tests passed with no helper registration. Temporary changes were restored and the final 111-test suite passed again. JSON explicit null, duplicate aliases, round trips and malformed embedded defaults are covered. Reviewed the final Rust changes against /Users/antonio/.agents/skills/rust/SKILL.md with no findings; cargo clippy --workspace --all-targets --all-features -- -D warnings passed. cargo run -p heca -- --show-config exited 0. git diff --check passed.\n\nVerified locally on macOS. Implementation work is complete; PR review and merge remain outside this task. This follows T540 / merged PR #285. heca-pro T019 remains in progress and its workflow questions are separate.",
+      "descriptionUpdatedAt": "2026-10-09T15:36:18.084Z",
+      "notes": "Formal Rust review completed before the code commit: private helpers, unchanged public fields/types/aliases, no new dependencies or callers, immutable raw cache and no recursive Default construction. User parse errors remain fallible; embedded-file defects have clear diagnostics. No findings.\n\nFinal checks: 111 heca-config tests passed; new required and optional field probe passed without registration; full workspace Clippy with -D warnings passed; heca --show-config exited 0; diff check passed. PR #286 is open to main: https://github.com/ovidius72/heca/pull/286. The completed task record will be committed on the same branch.",
+      "statusLog": [
+        {
+          "id": "26712cc0-b4cc-4f93-8439-f86a5ea3f581-check-001-planned-in-progress",
+          "date": "2026-10-09T15:28:06.437Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "26712cc0-b4cc-4f93-8439-f86a5ea3f581-check-002-in-progress-done",
+          "date": "2026-10-09T15:36:18.082Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed in commit 714dd97ce136919086e650e3024581ac147272b6, branch refactor/settings-schema. PR https://github.com/ovidius72/heca/pull/286 is OPEN to main, authored by Antonio Pantano.\n\nShipped: settings/schema.rs:9 declares the private macro and :23 generates Default from each declared field. SettingsConfig uses it at settings/mod.rs:22; NotificationSystemConfig uses it at settings/notifications.rs:23. settings/defaults.rs:24 is the one typed file lookup, retaining the raw cached TOML table at :6. Removed repeated required/optional field lists and nested callback functions. Values still come from config.default.toml; absent optional fields remain None. All 47 root fields, 4 nested fields and 27 aliases are unchanged. No dependency or caller changes.\n\nVerification: cargo test -p heca-config --quiet passes 111 tests, including the existing five defaults-path tests and five schema regressions in settings/schema_tests.rs:19. Temporarily added required Vec<String> and optional Option<Vec<String>> fields to the real declaration plus TOML defaults; all defaults-path tests passed with no helper registration. Temporary changes were restored and the final 111-test suite passed again. JSON explicit null, duplicate aliases, round trips and malformed embedded defaults are covered. Reviewed the final Rust changes against /Users/antonio/.agents/skills/rust/SKILL.md with no findings; cargo clippy --workspace --all-targets --all-features -- -D warnings passed. cargo run -p heca -- --show-config exited 0. git diff --check passed.\n\nVerified locally on macOS. Implementation work is complete; PR review and merge remain outside this task. This follows T540 / merged PR #285. heca-pro T019 remains in progress and its workflow questions are separate."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "26712cc0-b4cc-4f93-8439-f86a5ea3f581-check-001-generate-settings-types-and-defaults-from-one-field-declaration-remove-duplicate-lists-and-callbacks",
+          "number": 1,
+          "title": "Generate settings types and defaults from one field declaration; remove duplicate lists and callbacks",
+          "checked": true
+        },
+        {
+          "id": "26712cc0-b4cc-4f93-8439-f86a5ea3f581-check-002-verify-existing-behavior-and-new-settings-without-helper-registration",
+          "number": 2,
+          "title": "Verify existing behavior and new settings without helper registration",
+          "checked": true
+        },
+        {
+          "id": "26712cc0-b4cc-4f93-8439-f86a5ea3f581-check-003-review-the-rust-changes-and-pass-config-tests-workspace-clippy-and-show-config",
+          "number": 3,
+          "title": "Review the Rust changes and pass config tests, workspace Clippy and show-config",
+          "checked": true
+        },
+        {
+          "id": "26712cc0-b4cc-4f93-8439-f86a5ea3f581-check-004-commit-and-open-a-separate-pr-record-the-task-result-and-link",
+          "number": 4,
+          "title": "Commit and open a separate PR; record the task result and link",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-09T15:28:06.437Z",
+      "completedAt": "2026-10-09T15:36:18.082Z",
+      "createdAt": "2026-10-09T15:27:40.036Z",
+      "updatedAt": "2026-10-09T15:36:18.082Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:cdecbd63-d7af-461a-b3f8-873a967e2a18",
+          "createdAt": "2026-10-09T15:28:06.334Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T19:21:32.912Z",
-  "updatedAt": "2026-10-09T15:04:29.924Z",
+  "updatedAt": "2026-10-09T15:36:18.082Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -301,9 +376,29 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "f4e45bb9-8990-4d9e-8167-f9cdb873e3b8",
+      "date": "2026-10-09T15:28:06.464Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "b5031404-4629-4cae-a2a4-5007911d2951",
+      "date": "2026-10-09T15:36:18.110Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:cdecbd63-d7af-461a-b3f8-873a967e2a18",
+      "createdAt": "2026-10-09T15:28:06.334Z"
+    },
     {
       "sessionId": "mcp-process:8fc31802-a72f-4b7b-a7dd-b91774f71d83",
       "createdAt": "2026-10-09T14:51:56.780Z"
