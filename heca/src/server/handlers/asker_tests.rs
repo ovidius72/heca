@@ -4,7 +4,7 @@
 
 use heca_core::layout::{ColumnEffect, ColumnWidth, PaneId, Point, Rectangle, Size, SpaceEffect};
 
-use super::testing::{facts, run_as, two_workspaces_of_two_columns};
+use super::testing::{CELL, facts, run_as, two_workspaces_of_two_columns};
 use crate::input::WmAction;
 use crate::server::{Asker, Change};
 
@@ -13,7 +13,7 @@ const WINDOW: Rectangle = Rectangle { loc: Point { x: 0.0, y: 0.0 }, size: Size 
 
 /// An asker in workspace 1, column 0 — while the window the session is held through shows 0.
 fn in_workspace_1() -> Asker {
-    Asker { focused_pane: Some(PaneId(11)), workspace: 1, column: 0, area: WINDOW }
+    Asker { focused_pane: Some(PaneId(11)), workspace: 1, column: 0, area: WINDOW, cell: CELL }
 }
 
 fn width(w: &heca_core::layout::testing::Windowed, ws: usize, col: usize) -> ColumnWidth {
@@ -47,7 +47,7 @@ fn a_column_moves_from_the_askers_place() {
     let up = run_as(&mut w, in_workspace_1(), WmAction::MoveColumnUp);
     assert_eq!(facts(&up), [Change::ColumnMoved { workspace: 0, column: 2 }]);
     assert!(run_as(&mut w, in_workspace_1(), WmAction::MoveColumnDown).is_empty(), "nothing below the last workspace");
-    let in_0 = Asker { focused_pane: None, workspace: 0, column: 1, area: WINDOW };
+    let in_0 = Asker { focused_pane: None, workspace: 0, column: 1, area: WINDOW, cell: CELL };
     let down = run_as(&mut w, in_0, WmAction::MoveColumnDown);
     assert_eq!(facts(&down), [Change::ColumnMoved { workspace: 1, column: 1 }]);
     assert_eq!(w.session.workspaces[0].scrolling.columns.len(), 2);
@@ -100,9 +100,9 @@ fn a_column_moved_to_a_workspace_goes_from_the_askers_workspace() {
 fn an_asker_is_where_the_window_is() {
     let mut w = two_workspaces_of_two_columns();
     w.show(1);
-    let asker = Asker::seen_through(w.l(), Some(PaneId(12)));
+    let asker = Asker::seen_through(w.l(), Some(PaneId(12)), CELL);
     let area = w.l().active_workspace().map(|ws| ws.scroll().area()).expect("a workspace");
-    assert_eq!(asker, Asker { focused_pane: Some(PaneId(12)), workspace: 1, column: 1, area });
+    assert_eq!(asker, Asker { focused_pane: Some(PaneId(12)), workspace: 1, column: 1, area, cell: CELL });
     assert_eq!(area, WINDOW, "the area of the window the test fixture makes");
 }
 
@@ -110,7 +110,7 @@ fn an_asker_is_where_the_window_is() {
 #[test]
 fn swap_left_moves_the_askers_column() {
     let mut w = two_workspaces_of_two_columns();
-    let asker = Asker { focused_pane: None, workspace: 0, column: 1, area: WINDOW };
+    let asker = Asker { focused_pane: None, workspace: 0, column: 1, area: WINDOW, cell: CELL };
     assert_eq!(
         run_as(&mut w, asker, WmAction::SwapLeft),
         [Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(ColumnEffect::Moved { from: 1, to: 0 })] }]
@@ -128,7 +128,7 @@ fn swap_left_moves_the_askers_column() {
 #[test]
 fn swap_left_steps_one_place_and_resize_acts_on_the_askers_column() {
     let mut w = heca_core::layout::testing::Windowed::with_shape(&[&[&[1], &[2], &[3]]]);
-    let asker = Asker { focused_pane: None, workspace: 0, column: 2, area: WINDOW };
+    let asker = Asker { focused_pane: None, workspace: 0, column: 2, area: WINDOW, cell: CELL };
     assert_eq!(
         run_as(&mut w, asker, WmAction::SwapLeft),
         [Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(ColumnEffect::Moved { from: 2, to: 1 })] }]

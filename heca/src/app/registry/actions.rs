@@ -23,8 +23,6 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::FocusWorkspace, handle_focus_workspace);
 
     // ── Layout ──
-    registry.register(WmActionKind::SplitHorizontal, handle_split_horizontal);
-    registry.register(WmActionKind::SplitVertical, handle_split_vertical);
     registry.register(WmActionKind::OpenContextMenu, handle_open_context_menu);
     registry.register(WmActionKind::ScrollViewLeft, handle_scroll_view_left);
     registry.register(WmActionKind::ScrollViewRight, handle_scroll_view_right);
@@ -69,7 +67,6 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::RenamePaneById, handle_rename_pane_by_id);
 
     // ── Workspace ──
-    registry.register(WmActionKind::CreateWorkspace, handle_create_workspace);
     registry.register(WmActionKind::RenameWorkspace, handle_rename_workspace);
     registry.register(
         WmActionKind::RenameWorkspaceByIdx,
@@ -125,7 +122,6 @@ pub fn build_registry() -> ActionRegistry {
     ] {
         registry.register(kind, crate::handlers::handle_layer_visibility);
     }
-    registry.register(WmActionKind::SpawnCommand, handle_spawn_command);
     registry.register(WmActionKind::ReloadConfig, handle_reload_config);
     registry.register(
         WmActionKind::NotificationDismissOne,
@@ -154,8 +150,6 @@ pub fn build_registry() -> ActionRegistry {
     );
 
     // ── Terminal (run a line, end it) ──
-    registry.register(WmActionKind::TerminalRun, handle_terminal_run);
-    registry.register(WmActionKind::TerminalKill, handle_terminal_kill);
 
     // ── Sidebar-specific (parameterized) ──
 

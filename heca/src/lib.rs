@@ -39,7 +39,6 @@ pub use entry::{Extension, LayerBuilder, LayerCx, extension};
 pub use heca_view::{Intent, PropMap, PropValue};
 pub use providers::{ChromeCtx, Provider, ProviderCx, ProviderHandles};
 
-use app::backend_factory::terminal_palette_defaults;
 use app::events::AppEvent;
 use app::events::handle_window_event;
 pub(crate) use app::focus::switch_workspace_tracked;
@@ -262,23 +261,18 @@ impl HecaApp {
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
             state.edge_scroll_distance = self.app_config.config.settings.edge_scroll_distance;
-            state.shell_integration_enabled = self.app_config.config.settings.shell_integration;
             state.pane_renamed_add_process_name = self
                 .app_config
                 .config
                 .settings
                 .pane_renamed_add_process_name;
             state.expose_show_cwd = crate::chrome::expose_show_cwd(&self.app_config.config);
-            state.terminal_scrollback_lines =
-                self.app_config.config.settings.terminal_scrollback_lines;
             state.terminal_mouse_enabled = self.app_config.config.settings.terminal_mouse;
             state.terminal_wheel_scroll_lines =
                 self.app_config.config.settings.terminal_wheel_scroll_lines;
             state.terminal_font_zoom_step = self.app_config.config.settings.terminal_font_zoom_step;
             state.mouse_wheel_change_font_size =
                 self.app_config.config.settings.mouse_wheel_change_font_size;
-            state.terminal_scroll_animations_enabled =
-                self.app_config.config.settings.terminal_scroll_animations;
             // A reload puts every region back to what `[settings] show_*` says — the same call
             // startup makes. The viewport re-flow below picks up the new sizes.
             state
@@ -308,13 +302,9 @@ impl HecaApp {
                     .max(1),
             );
             state.confirm = self.app_config.config.confirm.clone();
-            let link_detection = self.app_config.config.appearance.terminal.link_detection;
-            let palette_defaults = terminal_palette_defaults(&state.theme);
-            for backend in state.server.backends.values_mut() {
-                backend.set_scroll_animations_enabled(state.terminal_scroll_animations_enabled);
-                backend.set_link_detection(link_detection);
-                backend.reload_terminal_config(palette_defaults, state.terminal_scrollback_lines);
-            }
+            state.ask_server(crate::server::ServerAction::ConfigureTerminals(Box::new(
+                crate::app::backend_factory::TerminalSettings::from_config(&self.app_config),
+            )));
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;
             // Layout options and chrome geometry changes must reflow the real viewport

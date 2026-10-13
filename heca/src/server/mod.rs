@@ -6,11 +6,11 @@
 //! This is the first piece taken out of it: the state that **cannot need a window**, so it can be
 //! built and driven without one.
 //!
-//! What lives here is what the server owns: the terminal processes ([`BackendStore`]), the
-//! notification store ([`NotificationRuntime`]), the git facts it keeps for panes
-//! ([`GitRuntimeCache`]) and the program catalog a terminal is started from. The session's
-//! layout is still in `AppState`: it mixes shared content with each window's own view, which is a
-//! decision of its own (see `P104(F012)/T525`).
+//! What lives here is what the server owns: the terminal processes ([`BackendStore`]) and what
+//! starting one takes — it starts and ends them itself ([`Terminals`]) — the notification store
+//! ([`NotificationRuntime`]), the git facts it keeps for panes ([`GitRuntimeCache`]) and the program
+//! catalog a terminal is started from. The session is still kept beside it in `AppState`, but an
+//! action reaches it only as content ([`ServerLayout`]), never through a window's view.
 //!
 //! Standalone heca is this and one client in one process, so there is one way to reach any of it —
 //! `state.server.<part>` — whether the caller is a window or, later, a connection.
@@ -20,6 +20,9 @@ mod change;
 mod cx;
 mod handlers;
 mod layout;
+mod terminals;
+#[cfg(test)]
+mod testing;
 
 use std::rc::Rc;
 use std::time::Instant;
@@ -30,8 +33,11 @@ pub(crate) use action::{NotificationSettings, ServerAction};
 pub(crate) use change::{Change, Refusal};
 pub(crate) use cx::{Asker, ServerCx};
 pub(crate) use layout::ServerLayout;
+pub(crate) use terminals::Terminals;
 
+use crate::app::backend_factory::{Launch, TerminalSettings, launch, terminal_palette_defaults};
 use crate::app::backend_store::BackendStore;
+use crate::app::events::AppEvent;
 use crate::app::git_monitor::GitRuntimeCache;
 use crate::notification::NotificationRuntime;
 
@@ -39,6 +45,13 @@ use crate::notification::NotificationRuntime;
 pub struct ServerState {
     /// The terminal processes — the one owner of them (`BackendStore::ensure` is the one door in).
     pub backends: BackendStore,
+    /// What the configuration says a terminal process starts with.
+    terminal_settings: TerminalSettings,
+    /// How a terminal process wakes the app when its output changes. `None` where there is no loop
+    /// to wake, as in a test.
+    waker: Option<winit::event_loop::EventLoopProxy<AppEvent>>,
+    /// How a terminal process is built.
+    launch: Launch,
     /// The notification store: queueing, lifecycle, dedup, timers, and the list a window shows.
     notifications: NotificationRuntime,
     /// Git facts for panes' folders, kept by repo root so a repo shared by panes is read once.
@@ -87,6 +100,10 @@ impl ServerState {
                 self.notifications
                     .set_max_visible(settings.max_visible, now)
             }
+            ServerAction::ConfigureTerminals(settings) => {
+                self.configure_terminals(*settings);
+                return Vec::new();
+            }
         };
         changed
             .then_some(Change::NotificationsChanged)
@@ -99,20 +116,56 @@ impl ServerState {
         handlers::handler_for(kind).is_some()
     }
 
-    /// **Run a built-in action on the server**, and say what changed. Only for a kind the server
-    /// [`runs`](Self::runs); anything else is a routing mistake, said out loud and ignored.
+    /// **Run a built-in action on the server** for `asker`, on `session`, and say what changed.
+    /// Only for a kind the server [`runs`](Self::runs); anything else is a routing mistake, said out
+    /// loud and ignored.
     pub(crate) fn run(
         &mut self,
-        cx: &mut ServerCx<'_>,
+        session: &mut heca_core::layout::Session,
+        asker: Asker,
         action: &crate::input::WmAction,
     ) -> Vec<Change> {
+        let mut cx = ServerCx {
+            layout: ServerLayout::new(session),
+            terminals: self.terminals(),
+            asker,
+        };
         match handlers::handler_for(action.kind()) {
-            Some(handler) => handler(cx, action),
+            Some(handler) => handler(&mut cx, action),
             None => {
                 debug_assert!(false, "{action:?} is not a server action");
                 Vec::new()
             }
         }
+    }
+
+    /// The terminal processes and what starting one takes, for one request.
+    pub(crate) fn terminals(&mut self) -> Terminals<'_> {
+        Terminals {
+            backends: &mut self.backends,
+            settings: &self.terminal_settings,
+            waker: self.waker.as_ref(),
+            launch: self.launch,
+        }
+    }
+
+    /// This server, building terminal processes with `launch` — a test's, which starts nothing.
+    #[cfg(test)]
+    pub(crate) fn launching_with(mut self, launch: Launch) -> Self {
+        self.launch = launch;
+        self
+    }
+
+    /// New terminal settings: every running process takes them, and every one started from now on
+    /// starts with them.
+    fn configure_terminals(&mut self, settings: TerminalSettings) {
+        let palette = terminal_palette_defaults(&settings.theme);
+        for backend in self.backends.values_mut() {
+            backend.set_scroll_animations_enabled(settings.scroll_animations);
+            backend.set_link_detection(settings.link_detection);
+            backend.reload_terminal_config(palette, settings.scrollback);
+        }
+        self.terminal_settings = settings;
     }
 
     /// Let time pass: notifications past their deadline are dismissed. Called every turn of the
@@ -160,13 +213,18 @@ impl ServerState {
             .action_and_dismiss_after_for_visible(id, key)
     }
 
-    pub fn new(
+    pub(crate) fn new(
         backends: BackendStore,
         notifications: NotificationRuntime,
         programs: ProgramsConfig,
+        terminal_settings: TerminalSettings,
+        waker: Option<winit::event_loop::EventLoopProxy<AppEvent>>,
     ) -> Self {
         Self {
             backends,
+            terminal_settings,
+            waker,
+            launch,
             notifications,
             git_runtime_cache: GitRuntimeCache::default(),
             programs: Rc::new(programs),
@@ -181,11 +239,7 @@ mod tests {
     use std::time::Duration;
 
     fn server(mode: heca_config::settings::NotificationSystem) -> ServerState {
-        ServerState::new(
-            BackendStore::new(),
-            NotificationRuntime::with_capacity(50, Duration::from_millis(4000), mode, 5),
-            ProgramsConfig::default(),
-        )
+        ServerState::for_tests(mode)
     }
 
     fn on_screen(server: &ServerState) -> usize {

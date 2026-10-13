@@ -1,9 +1,7 @@
 //! App-wide actions: the palette, the context menu, reload, running a command, modes, font zoom, notifications and search history.
 
-use crate::app::backend_store::TerminalSpec;
 use crate::app_state::AppState;
-use crate::input::{FontZoomStep, SpawnKind, WmAction};
-use heca_core::layout::{Pane as LayoutPane, PaneId};
+use crate::input::{FontZoomStep, WmAction};
 
 pub fn handle_command_palette(state: &mut AppState, action: &WmAction) {
     let (mode, query) = match action {
@@ -47,52 +45,6 @@ pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {
     state.pending_reload = true;
-}
-
-pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
-    let WmAction::SpawnCommand {
-        command,
-        kind,
-        float,
-        close_policy,
-        cwd,
-    } = action
-    else {
-        return;
-    };
-    match kind {
-        SpawnKind::Terminal => {}
-        SpawnKind::App | SpawnKind::Plugin => {
-            eprintln!("[heca] spawn kind '{kind:?}' not yet implemented");
-            return;
-        }
-    }
-
-    let active_ws = state.layout().active_workspace_idx();
-    let next_id = state.session.next_id();
-
-    // Start the process before touching the layout — a spawn that fails (F009/P055/T225)
-    // should not leave an empty pane behind.
-    let spec = TerminalSpec::command_in_workspace(state, active_ws, command, cwd.as_deref());
-    if let Err(e) = state.start_terminal(PaneId(next_id), spec) {
-        crate::notification::Notification::danger(format!("Couldn't run '{command}'"))
-            .body(e.to_string())
-            .dedup_key(format!("spawn.failed:{command}"))
-            .sticky()
-            .send();
-        return;
-    }
-    let mut pane = LayoutPane::new(PaneId(next_id), command.clone());
-    pane.close_policy = *close_policy;
-
-    if *float {
-        if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
-            let rect = ws.default_float_rect();
-            ws.add_floating_pane(pane, rect, None);
-        }
-    } else {
-        state.layout_mut().add_pane(pane, None, true);
-    }
 }
 
 /// Give chrome keyboard focus to a dock — by id, or by letter.

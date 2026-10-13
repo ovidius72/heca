@@ -15,8 +15,8 @@ use winit::event_loop::EventLoopProxy;
 
 use crate::app::backend_store::{Program, SpawnError, TerminalSpec};
 use crate::app::events::AppEvent;
-use crate::app_state::AppState;
 use crate::chrome::terminal::Grid;
+use heca_config::theme::AppConfig;
 use heca_core::layout::Size;
 
 pub(crate) const FALLBACK_TERMINAL_GRID: (usize, usize) = (80, 24);
@@ -36,34 +36,46 @@ pub(crate) fn estimate_terminal_grid(
         .map_or(FALLBACK_TERMINAL_GRID, |grid| (grid.cols, grid.rows))
 }
 
-/// **The settings every terminal process is started with**, gathered in one place so no caller
-/// threads the theme, the scrollback and the shell-integration choice by hand.
-pub(crate) struct LaunchSettings {
+/// **What every terminal process is started with that the configuration decides**, gathered in one
+/// place so no caller threads the theme, the scrollback and the shell-integration choice by hand.
+/// The server holds it: set from the configuration at start and again on every reload.
+#[derive(Clone, Debug)]
+pub(crate) struct TerminalSettings {
     pub(crate) theme: Theme,
-    pub(crate) event_proxy: Option<EventLoopProxy<AppEvent>>,
     pub(crate) shell_integration: bool,
     pub(crate) scrollback: usize,
     pub(crate) scroll_animations: bool,
-    pub(crate) cell_size: (f32, f32),
     pub(crate) link_detection: bool,
     pub(crate) images: bool,
 }
 
-impl LaunchSettings {
-    /// What the running app says.
-    pub(crate) fn of(state: &AppState) -> Self {
+impl TerminalSettings {
+    /// What the configuration says — the one mapping, used at start and on reload alike.
+    pub(crate) fn from_config(app_config: &AppConfig) -> Self {
+        let settings = &app_config.config.settings;
         Self {
-            theme: state.theme.clone(),
-            event_proxy: Some(state.event_proxy.clone()),
-            shell_integration: state.shell_integration_enabled,
-            scrollback: state.terminal_scrollback_lines,
-            scroll_animations: state.terminal_scroll_animations_enabled,
-            cell_size: state.terminal_cell_size,
-            link_detection: state.appearance.terminal.link_detection,
-            images: state.appearance.terminal.images,
+            theme: app_config.theme.clone(),
+            shell_integration: settings.shell_integration,
+            scrollback: settings.terminal_scrollback_lines,
+            scroll_animations: settings.terminal_scroll_animations,
+            link_detection: app_config.config.appearance.terminal.link_detection,
+            images: app_config.config.appearance.terminal.images,
         }
     }
 }
+
+/// **Everything one terminal process is started with**: the configured settings, how it wakes the
+/// app when its output changes, and the cell size of the window that asked for it.
+pub(crate) struct LaunchSettings<'a> {
+    pub(crate) terminal: &'a TerminalSettings,
+    pub(crate) event_proxy: Option<&'a EventLoopProxy<AppEvent>>,
+    pub(crate) cell_size: (f32, f32),
+}
+
+/// How a terminal process is built from what it starts with — [`launch`] in the app; a test that
+/// drives the server hands it one that starts nothing.
+pub(crate) type Launch =
+    fn(&LaunchSettings<'_>, &TerminalSpec) -> Result<Box<dyn PaneBackend>, SpawnError>;
 
 /// **Build the process a spec describes.** Private to the store's door
 /// ([`BackendStore::ensure`](crate::app::backend_store::BackendStore::ensure)): nothing else starts
@@ -76,11 +88,11 @@ pub(crate) fn launch(
     let mut backend = match &spec.program {
         Program::Shell => {
             let mut options = terminal_backend_options(
-                &settings.theme,
-                settings.event_proxy.as_ref(),
-                settings.shell_integration,
-                settings.scrollback,
-                settings.scroll_animations,
+                &settings.terminal.theme,
+                settings.event_proxy,
+                settings.terminal.shell_integration,
+                settings.terminal.scrollback,
+                settings.terminal.scroll_animations,
             );
             options.cwd = spec.cwd.clone();
             create_terminal_backend_with_options(cols, rows, settings.cell_size, options)
@@ -90,31 +102,20 @@ pub(crate) fn launch(
             // intentionally disabled because OSC prompt/cwd hooks are a shell concern and would
             // only add noise here.
             let mut options = terminal_backend_options(
-                &settings.theme,
-                settings.event_proxy.as_ref(),
+                &settings.terminal.theme,
+                settings.event_proxy,
                 false,
-                settings.scrollback,
-                settings.scroll_animations,
+                settings.terminal.scrollback,
+                settings.terminal.scroll_animations,
             );
             options.cwd = spec.cwd.clone();
             create_command_backend_with_options(cols, rows, settings.cell_size, command, options)
                 .map_err(SpawnError)?
         }
     };
-    backend.set_link_detection(settings.link_detection);
-    backend.set_image_capture(settings.images);
+    backend.set_link_detection(settings.terminal.link_detection);
+    backend.set_image_capture(settings.terminal.images);
     Ok(backend)
-}
-
-pub(crate) fn terminal_grid_for_workspace(state: &AppState, ws_idx: usize) -> (usize, usize) {
-    state
-        .layout()
-        .workspace(ws_idx)
-        .map(|ws| {
-            let area = ws.scroll().area();
-            estimate_terminal_grid(area.size.w, area.size.h, state.terminal_cell_size)
-        })
-        .unwrap_or(FALLBACK_TERMINAL_GRID)
 }
 
 pub(crate) fn terminal_palette_defaults(theme: &Theme) -> Option<TerminalPaletteDefaults> {
@@ -227,7 +228,7 @@ fn create_command_backend_with_options(
             // The PTY itself could not be opened / the shell could not be spawned. (A command
             // that simply does not exist still spawns — the shell exits 127 and the pane's
             // exit-code notification, F009/P055/T221, reports that.) F009/P055/T225: hand the
-            // message back so `handle_spawn_command` can raise a sticky danger toast instead of
+            // message back so the server's `spawn_command` can raise a sticky danger toast instead of
             // silently substituting an inert FakeBackend.
             eprintln!("[heca] failed to spawn command pane ({command}): {err}");
             Err(err.to_string())

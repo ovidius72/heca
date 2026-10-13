@@ -455,7 +455,10 @@ pub enum Event {
     /// cursor goes. That is what a scrollbar thumb needs, and it is no longer something a widget
     /// arranges for itself.
     PointerDown(PointerEvent),
-    /// The button came up, ending the gesture that [`PointerDown`](Self::PointerDown) began.
+    /// The button came up, ending the gesture that [`PointerDown`](Self::PointerDown) began. The
+    /// widget holding the pointer also gets one when the gesture is cancelled — the pointer left the
+    /// window — so whatever it keeps for a drag ends either way. Never a click: a click is a press
+    /// and a release on one widget, and a cancel is neither.
     PointerUp(PointerEvent),
     /// The pointer moved, delivered to the capture target if there is one, otherwise to whatever
     /// is under it now.

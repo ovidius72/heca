@@ -260,20 +260,26 @@ fn pick_rect(mark: &PickMark, model: &WorkspaceModel) -> Option<Rectangle> {
 /// The grab zone of one edge, which tells the seams how far it was dragged.
 fn build_edge(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, edge: dividers::Edge) -> Splitter {
     match edge {
-        dividers::Edge::Column { col } => {
-            let (resize, working) = (seams.resize_column.clone(), working.clone());
-            Splitter::vertical().on_resize(move |px| {
-                let width = working.get();
-                if width > 0.0 {
-                    resize(col, (px / width) as f64);
-                }
-            })
-        }
+        dividers::Edge::Column { col } => column_edge(seams, working, col, 1.0),
+        // The column's left border: dragging it left makes the column wider.
+        dividers::Edge::ColumnStart { col } => column_edge(seams, working, col, -1.0),
         dividers::Edge::Pane { col, pane } => {
             let resize = seams.resize_pane.clone();
             Splitter::horizontal().on_resize(move |px| resize(col, pane, px as f64))
         }
     }
+}
+
+/// An edge that resizes column `col`: a drag of `px` changes its width by `px` times `sign`, as a
+/// share of the working width.
+fn column_edge(seams: &WorkspaceSeams, working: &Rc<Cell<f32>>, col: usize, sign: f32) -> Splitter {
+    let (resize, working) = (seams.resize_column.clone(), working.clone());
+    Splitter::vertical().on_resize(move |px| {
+        let width = working.get();
+        if width > 0.0 {
+            resize(col, f64::from(sign * px / width));
+        }
+    })
 }
 
 /// One column and the panes it holds.

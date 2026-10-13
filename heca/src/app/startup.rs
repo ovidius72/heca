@@ -3,9 +3,8 @@
 //! This module owns first-launch wiring so `main.rs` can focus on lifecycle
 //! control flow rather than GPU/window/session bootstrapping details.
 
-use crate::app::backend_factory::{LaunchSettings, estimate_terminal_grid, launch};
+use crate::app::backend_factory::{TerminalSettings, estimate_terminal_grid};
 use crate::app::backend_store::BackendStore;
-use crate::app::backend_store::{Program, TerminalSpec};
 use crate::app::terminal_metrics::resolve_terminal_cell_size;
 use crate::app_state::{self, AppState, InputMode};
 use crate::chrome::ChromeConfig;
@@ -356,27 +355,7 @@ pub(crate) async fn init_state(
 
     let pane_id = add_initial_pane(&mut session, &mut view);
 
-    let mut backends = BackendStore::new();
-    let (initial_cols, initial_rows) =
-        estimate_terminal_grid(pane_area.size.w, pane_area.size.h, terminal_cell_size);
-    let settings = LaunchSettings {
-        theme: app_config.theme.clone(),
-        event_proxy: Some(event_proxy.clone()),
-        shell_integration: app_config.config.settings.shell_integration,
-        scrollback: app_config.config.settings.terminal_scrollback_lines,
-        scroll_animations: app_config.config.settings.terminal_scroll_animations,
-        cell_size: terminal_cell_size,
-        link_detection: app_config.config.appearance.terminal.link_detection,
-        images: app_config.config.appearance.terminal.images,
-    };
-    let first = TerminalSpec {
-        program: Program::Shell,
-        cwd: None,
-        grid: (initial_cols, initial_rows),
-    };
-    if let Err(err) = backends.ensure(pane_id, first, |spec| launch(&settings, spec)) {
-        eprintln!("[heca] could not start the first terminal: {err}");
-    }
+    let first_grid = estimate_terminal_grid(pane_area.size.w, pane_area.size.h, terminal_cell_size);
 
     let ws_count = session.workspaces.len();
 
@@ -448,8 +427,8 @@ pub(crate) async fn init_state(
     // What every window shares and none needs a window for. `[settings.notification_system]`
     // config (F009/T186/T187/T191); the history depth of 50 is still a placeholder pending its own
     // knob.
-    let server = crate::server::ServerState::new(
-        backends,
+    let mut server = crate::server::ServerState::new(
+        BackendStore::new(),
         crate::notification::NotificationRuntime::with_capacity(
             50,
             std::time::Duration::from_millis(
@@ -463,7 +442,10 @@ pub(crate) async fn init_state(
             app_config.config.settings.notification_system.max_visible,
         ),
         app_config.config.programs.clone(),
+        TerminalSettings::from_config(app_config),
+        Some(event_proxy.clone()),
     );
+    server.terminals().start_shell(pane_id, first_grid, terminal_cell_size);
     let mut state = Box::new(AppState {
         window,
         event_proxy,
@@ -539,15 +521,12 @@ pub(crate) async fn init_state(
         mouse_enabled: app_config.config.settings.mouse,
         auto_scroll_edge: app_config.config.settings.auto_scroll_edge,
         edge_scroll_distance: app_config.config.settings.edge_scroll_distance,
-        shell_integration_enabled: app_config.config.settings.shell_integration,
         pane_renamed_add_process_name: app_config.config.settings.pane_renamed_add_process_name,
         expose_show_cwd: crate::chrome::expose_show_cwd(&app_config.config),
-        terminal_scrollback_lines: app_config.config.settings.terminal_scrollback_lines,
         terminal_mouse_enabled: app_config.config.settings.terminal_mouse,
         terminal_wheel_scroll_lines: app_config.config.settings.terminal_wheel_scroll_lines,
         terminal_font_zoom_step: app_config.config.settings.terminal_font_zoom_step,
         mouse_wheel_change_font_size: app_config.config.settings.mouse_wheel_change_font_size,
-        terminal_scroll_animations_enabled: app_config.config.settings.terminal_scroll_animations,
         confirm: app_config.config.confirm.clone(),
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
         places_open: false,

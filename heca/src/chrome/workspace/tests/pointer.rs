@@ -36,7 +36,9 @@ fn dragging_an_edge_resizes_the_neighbours_it_sits_between() {
         [
             "col:1",
             "col:2",
+            "split:colstart:0",
             "split:col:0",
+            "split:col:1",
             "split:pane:0:0"
         ]
     );
@@ -64,6 +66,39 @@ fn dragging_an_edge_resizes_the_neighbours_it_sits_between() {
     );
 
     assert_eq!(*posted.borrow(), ["col 0 0.0143", "pane 0/0 5"]);
+}
+
+/// **The outer edges resize too**: the last column at its right border, the first at its left — so
+/// a lone column, and the ones at either end, can be dragged wider.
+#[test]
+fn the_outer_edges_resize_the_first_and_last_column() {
+    use heca_grid_ui::component::dispatch;
+    use heca_grid_ui::event::{Event, PointerButton};
+
+    let posted = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+    let mut seams = seams();
+    seams.resize_column = {
+        let posted = posted.clone();
+        Rc::new(move |col, share| posted.borrow_mut().push(format!("col {col} {share:.4}")))
+    };
+    let mut ws: Box<dyn Component> = Box::new(workspace(seams));
+    assert!(ws.set_props(&two_columns()));
+    let mut window = Flex::column().width(800.0).height(600.0);
+    window.base_mut().children.push(ws);
+    LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
+
+    let drag = |window: &mut Flex, from: f64, to: f64| {
+        let at = |x: f64| Point::new(x, 400.0);
+        dispatch(window, &Event::pointer_pressed(at(from), PointerButton::Left));
+        dispatch(window, &Event::pointer_moved(at(to)));
+        dispatch(window, &Event::pointer_released(at(to), PointerButton::Left));
+    };
+    // The last column ends at x 650: drag its border 10px right.
+    drag(&mut window, 650.0, 660.0);
+    // The first column starts at x 40: drag its border 10px left.
+    drag(&mut window, 40.0, 30.0);
+
+    assert_eq!(*posted.borrow(), ["col 1 0.0143", "col 0 0.0143"], "both grew");
 }
 
 /// **A press on a pane reaches the pane, with the chrome seated over it as the app seats it.**

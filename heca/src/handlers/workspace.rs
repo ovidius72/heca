@@ -3,25 +3,8 @@
 use super::confirm::request_destructive;
 use crate::app::interaction::focused_pane_id;
 use crate::app_state::AppState;
+use crate::find_pane_location;
 use crate::input::WmAction;
-use crate::{find_pane_location, pane_name, switch_workspace_tracked};
-use heca_core::layout::{Pane as LayoutPane, PaneId};
-
-pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
-    state.layout_mut().add_workspace();
-    let new_idx = state.session.workspaces.len() - 1;
-    switch_workspace_tracked(state, new_idx);
-    let next_id = state.session.next_id();
-    let pane = LayoutPane::new(PaneId(next_id), pane_name(PaneId(next_id)));
-    state.layout_mut().add_pane(pane, None, true);
-    state.start_shell_in(PaneId(next_id), new_idx);
-    while state.last_visited_pane_per_ws.len() <= new_idx {
-        state.last_visited_pane_per_ws.push(None);
-    }
-    while state.expose_cursor_per_ws.len() <= new_idx {
-        state.expose_cursor_per_ws.push(None);
-    }
-}
 
 /// Delete the "current" column (and all its panes) — the **focused pane's** column.
 ///

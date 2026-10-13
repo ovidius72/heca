@@ -121,3 +121,21 @@ fn the_cursor_over_an_edge_is_the_resize_cursor_for_its_axis() {
         Cursor::ResizeVertical
     );
 }
+
+/// **A drag the pointer leaves the window during ends there**: the release may never come back to
+/// the edge, so the next time the pointer passes over it nothing is resized.
+#[test]
+fn a_drag_cancelled_by_the_pointer_leaving_ends() {
+    let (splitter, seen) = recording();
+    let mut root = window(splitter, false);
+    press(&mut root, 104.0);
+    dispatch(&mut root, &Event::pointer_moved(Point::new(110.0, 50.0)));
+    dispatch(&mut root, &Event::pointer_cancelled());
+    dispatch(&mut root, &Event::pointer_moved(Point::new(104.0, 50.0)));
+    dispatch(&mut root, &Event::pointer_moved(Point::new(102.0, 50.0)));
+    assert_eq!(
+        *seen.borrow(),
+        [6.0],
+        "only the move made while the drag was on"
+    );
+}

@@ -65,10 +65,6 @@ impl AppState {
             if reaction.names_changed {
                 crate::app::mutations::after_metadata_change(self);
             }
-            self.server.backends.kill_all(reaction.stop_terminals);
-            if let Some((pane, workspace)) = reaction.start_shell {
-                self.start_shell_in(pane, workspace);
-            }
             if let (Some(reason), Some(asked)) = (reaction.refusal, asked) {
                 self.status_note = Some(crate::handlers::act_refusal(
                     &self.action_catalog,
@@ -80,18 +76,12 @@ impl AppState {
     }
 
     /// **Run a built-in action on the server**, for this window, and react to what changed. Only
-    /// for an action the server runs ([`ServerState::runs`](crate::server::ServerState::runs)).
-    ///
-    /// The context is built from the session and this window's view only, so the server's own
-    /// state stays borrowable beside it.
+    /// for an action the server runs ([`ServerState::runs`](crate::server::ServerState::runs)). The
+    /// server gets the session and what this window says about itself, never its view.
     pub(crate) fn run_on_server(&mut self, action: &crate::input::WmAction, name: &str) {
-        let asker = crate::server::Asker::seen_through(self.layout(), self.focused_pane);
+        let asker = crate::server::Asker::seen_through(self.layout(), self.focused_pane, self.terminal_cell_size);
         let before = self.layout().before();
-        let mut cx = crate::server::ServerCx {
-            layout: crate::server::ServerLayout::new(&mut self.session),
-            asker,
-        };
-        let changes = self.server.run(&mut cx, action);
+        let changes = self.server.run(&mut self.session, asker, action);
         self.apply_answer(changes, Some(Asked { action, name, before: &before }));
     }
 

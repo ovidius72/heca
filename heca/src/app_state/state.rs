@@ -283,8 +283,6 @@ pub struct AppState {
     /// `[settings] edge_scroll_distance`: how close (px) a dragged pane must come to the content
     /// edge for the view to scroll.
     pub edge_scroll_distance: f32,
-    /// Whether newly spawned terminal panes should auto-inject shell integration.
-    pub shell_integration_enabled: bool,
     /// Append the process/program name (small, dimmed) next to a renamed pane's custom name
     /// (`[settings] pane_renamed_add_process_name`). Threaded here so `sync_pane_headers` reads
     /// it each frame and a reload rebuilds the headers.
@@ -293,10 +291,6 @@ pub struct AppState {
     /// (`[appearance.expose] show_cwd`). Projected into the chrome store each sync so the card
     /// reads it via `ws_state`; a reload updates it live.
     pub expose_show_cwd: bool,
-    /// Host terminal scrollback capacity (rows) threaded from
-    /// `SettingsConfig::terminal_scrollback_lines`; used when spawning terminal
-    /// backends so the engine retains the configured amount of history.
-    pub terminal_scrollback_lines: usize,
     /// Terminal-only mouse support for host scrollback wheel routing.
     /// When true, wheel scrolls the host scrollback viewport unless the terminal
     /// app has grabbed the mouse. Does not affect `mouse_enabled` (chrome).
@@ -311,8 +305,6 @@ pub struct AppState {
     /// `[settings] mouse_wheel_change_font_size`. When false the wheel gesture is
     /// skipped and the modified wheel is forwarded normally.
     pub mouse_wheel_change_font_size: bool,
-    /// Whether backend-side discrete terminal viewport animations are enabled.
-    pub terminal_scroll_animations_enabled: bool,
     /// The `[confirm]` table — per-action confirmation toggles (keyed by confirm name:
     /// `delete_pane` / `delete_column` / `delete_workspace`, or any plugin action). Read by the central
     /// confirm gate via [`ConfirmConfig::enabled`](heca_config::confirm::ConfirmConfig::enabled),
