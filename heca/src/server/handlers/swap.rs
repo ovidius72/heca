@@ -1,15 +1,13 @@
 //! Swapping panes and columns: nothing is added or removed, two things trade places.
 
-use heca_core::layout::SpaceEffect;
+use heca_core::layout::{Arranged, SpaceEffect};
 
 use crate::input::WmAction;
 use crate::server::{Change, ServerCx};
 
-fn laid_out(changed: bool) -> Vec<Change> {
-    match changed {
-        true => vec![Change::LayoutChanged],
-        false => Vec::new(),
-    }
+/// What a swap says; nothing when nothing traded places.
+fn swapped(arranged: Option<Arranged>) -> Vec<Change> {
+    arranged.map(Change::after_arranging).unwrap_or_default()
 }
 
 /// Move the active column one place along; the window keeps it on screen.
@@ -61,7 +59,7 @@ pub(super) fn swap(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
     let WmAction::Swap { a_id, b_id } = action else {
         return Vec::new();
     };
-    laid_out(cx.layout.swap_panes(*a_id, *b_id))
+    swapped(cx.layout.swap_panes(*a_id, *b_id))
 }
 
 /// Swap two columns, wherever they are.
@@ -75,5 +73,5 @@ pub(super) fn swap_columns(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Chan
     else {
         return Vec::new();
     };
-    laid_out(cx.layout.swap_columns_between(*a_ws, *a_col, *b_ws, *b_col))
+    swapped(cx.layout.swap_columns(*a_ws, *a_col, *b_ws, *b_col))
 }

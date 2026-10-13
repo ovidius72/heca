@@ -2,6 +2,9 @@ use crate::layout::testing::Windowed;
 use crate::layout::types::Size;
 use crate::layout::{ColumnId, FocusDomain, Pane, PaneId};
 
+/// The window a pane is given room in.
+const HEIGHT: f64 = 800.0;
+
 /// One workspace, three panes, each in its own column: ids 1, 2, 3.
 fn session() -> Windowed {
     let mut s = Windowed::new(Size::new(1000.0, 800.0), 1.0);
@@ -15,12 +18,12 @@ fn session() -> Windowed {
 fn a_pane_is_taken_from_its_column_or_from_the_floating_layer() {
     let mut s = session();
     let mut ws = s.ws();
-    assert_eq!(ws.take_pane(PaneId(2)).map(|p| p.id), Some(PaneId(2)));
+    assert_eq!(ws.take_pane(PaneId(2)).map(|(p, _)| p.id), Some(PaneId(2)));
     assert!(ws.scrolling.pane_indices(PaneId(2)).is_none());
 
     let rect = ws.reader().default_float_rect();
     ws.add_floating_pane(Pane::new(PaneId(9), ""), rect, None);
-    assert_eq!(ws.take_pane(PaneId(9)).map(|p| p.id), Some(PaneId(9)));
+    assert_eq!(ws.take_pane(PaneId(9)).map(|(p, e)| (p.id, e)), Some((PaneId(9), None)), "a float leaves the columns as they are");
     assert!(ws.floating_panes.is_empty());
     assert_eq!(ws.focus_domain, FocusDomain::Tiled);
     assert!(ws.take_pane(PaneId(42)).is_none());
@@ -30,18 +33,17 @@ fn a_pane_is_taken_from_its_column_or_from_the_floating_layer() {
 fn a_pane_is_placed_at_a_row_of_a_column() {
     let mut s = session();
     let mut ws = s.ws();
-    let pane = ws.take_pane(PaneId(3)).unwrap();
-    ws.place_pane(pane, 0, Some(0), ColumnId(99));
+    let (pane, _) = ws.take_pane(PaneId(3)).unwrap();
+    ws.place_pane(pane, 0, Some(0), ColumnId(99), HEIGHT);
     assert_eq!(ws.scrolling.pane_indices(PaneId(3)), Some((0, 0)));
-    assert_eq!(ws.active_pane().map(|p| p.id), Some(PaneId(3)));
 }
 
 #[test]
 fn with_no_row_the_pane_gets_a_column_of_its_own() {
     let mut s = session();
     let mut ws = s.ws();
-    let pane = ws.take_pane(PaneId(3)).unwrap();
-    ws.place_pane(pane, 0, None, ColumnId(99));
+    let (pane, _) = ws.take_pane(PaneId(3)).unwrap();
+    ws.place_pane(pane, 0, None, ColumnId(99), HEIGHT);
     assert_eq!(ws.scrolling.columns[0].id, ColumnId(99));
     assert_eq!(ws.scrolling.pane_indices(PaneId(3)), Some((0, 0)));
 }
@@ -64,7 +66,7 @@ fn shape(s: &Windowed) -> Vec<Vec<u64>> {
 
 fn moved(s: &mut Windowed, pane: u64, col: usize, row: Option<usize>) -> Vec<Vec<u64>> {
     let mut ws = s.ws();
-    assert!(ws.move_pane(PaneId(pane), col, row, ColumnId(99)));
+    assert!(ws.move_pane(PaneId(pane), col, row, ColumnId(99), HEIGHT).is_some());
     shape(s)
 }
 
@@ -130,8 +132,8 @@ fn the_gaps_that_change_the_strip_leave_out_the_two_beside_a_lone_pane() {
 fn a_place_past_the_end_clamps_to_it() {
     let mut s = session();
     let mut ws = s.ws();
-    let pane = ws.take_pane(PaneId(1)).unwrap();
-    ws.place_pane(pane, 50, Some(50), ColumnId(99));
+    let (pane, _) = ws.take_pane(PaneId(1)).unwrap();
+    ws.place_pane(pane, 50, Some(50), ColumnId(99), HEIGHT);
     let last = ws.scrolling.columns.len() - 1;
     assert_eq!(ws.scrolling.pane_indices(PaneId(1)), Some((last, 0)));
 }

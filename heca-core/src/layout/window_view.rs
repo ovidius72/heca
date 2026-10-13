@@ -117,9 +117,9 @@ impl WindowView {
         self.scrolls.entry(ws).or_insert_with(|| blank.clone())
     }
 
-    /// Forget workspace `ws`: it was removed from the session.
-    pub(crate) fn forget(&mut self, ws: WorkspaceId) {
-        self.scrolls.remove(&ws);
+    /// Forget every workspace `keep` does not keep: they were removed from the session.
+    pub(crate) fn forget_all_but(&mut self, keep: impl Fn(WorkspaceId) -> bool) {
+        self.scrolls.retain(|id, _| keep(*id));
     }
 
     /// The window was resized. This records the new size and what a workspace not yet looked at

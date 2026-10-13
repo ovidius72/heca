@@ -2,6 +2,8 @@
 
 use heca_core::layout::PaneId;
 
+use heca_core::layout::{ColumnEffect, SpaceEffect};
+
 use super::testing::{run, run_for, two_workspaces_of_two_columns};
 use crate::input::WmAction;
 use crate::server::Change;
@@ -12,7 +14,8 @@ use crate::server::Change;
 fn closing_a_pane_by_id_finds_it_in_another_workspace() {
     let mut w = two_workspaces_of_two_columns();
     let changes = run(&mut w, WmAction::ClosePaneById { pane_id: PaneId(12) });
-    assert_eq!(changes, [Change::PaneRemoved { pane: PaneId(12) }, Change::LayoutChanged]);
+    let gone = vec![SpaceEffect::Column(ColumnEffect::Removed { idx: 1 })];
+    assert_eq!(changes, [Change::PaneRemoved { pane: PaneId(12) }, Change::Arranged { workspace: 1, effects: gone }]);
     assert!(w.session.workspaces[1].find_pane(PaneId(12)).is_none());
     assert!(run(&mut w, WmAction::ClosePaneById { pane_id: PaneId(12) }).is_empty());
 }
@@ -32,7 +35,8 @@ fn close_closes_the_askers_focused_pane() {
     let mut w = two_workspaces_of_two_columns();
     assert!(run(&mut w, WmAction::ClosePane).is_empty());
     let changes = run_for(&mut w, Some(PaneId(2)), WmAction::ClosePane);
-    assert_eq!(changes, [Change::PaneRemoved { pane: PaneId(2) }, Change::LayoutChanged]);
+    let gone = vec![SpaceEffect::Column(ColumnEffect::Removed { idx: 1 })];
+    assert_eq!(changes, [Change::PaneRemoved { pane: PaneId(2) }, Change::Arranged { workspace: 0, effects: gone }]);
 }
 
 /// A column goes with every pane in it, each reported.
@@ -46,7 +50,7 @@ fn deleting_a_column_reports_each_of_its_panes() {
         [
             Change::PaneRemoved { pane: PaneId(1) },
             Change::PaneRemoved { pane: PaneId(50) },
-            Change::LayoutChanged
+            Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(ColumnEffect::Removed { idx: 0 })] }
         ]
     );
     assert!(run(&mut w, WmAction::DeleteColumn { ws_idx: 9, col_idx: 0 }).is_empty());

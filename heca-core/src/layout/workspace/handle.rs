@@ -112,9 +112,7 @@ impl<'a> WorkspaceRef<'a> {
     ///
     /// [`float_size`]: crate::layout::types::LayoutOptions::float_size
     pub fn default_float_rect(&self) -> Rectangle {
-        self.view
-            .area
-            .centred_fraction(self.ws.scrolling.options.float_size)
+        self.ws.float_rect_in(self.view.area)
     }
 
     /// A copy of this workspace, as this window sees it, with `pane_id` already taken out — what
@@ -123,7 +121,10 @@ impl<'a> WorkspaceRef<'a> {
     pub fn without_pane(&self, pane_id: PaneId) -> Detached {
         let mut ws = self.ws.clone();
         let mut view = self.view.clone();
-        ws.through_mut(&mut view).take_pane(pane_id);
+        let before = ws.scrolling.through(&view).positions();
+        if let Some((_, Some(effect))) = ws.take_pane(pane_id) {
+            view.react_to(&ws.scrolling, &[effect], &before);
+        }
         Detached { ws, view }
     }
 

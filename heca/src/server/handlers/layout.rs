@@ -12,13 +12,13 @@ const PANE_STEP: f64 = 40.0;
 
 pub(super) fn resize_increase(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
     cx.change_asker_columns(|space, asker| {
-        space.resize_column_by(asker.column, COLUMN_STEP, asker.area.w).into_iter().collect()
+        space.resize_column_by(asker.column, COLUMN_STEP, asker.area.size.w).into_iter().collect()
     })
 }
 
 pub(super) fn resize_decrease(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
     cx.change_asker_columns(|space, asker| {
-        space.resize_column_by(asker.column, -COLUMN_STEP, asker.area.w).into_iter().collect()
+        space.resize_column_by(asker.column, -COLUMN_STEP, asker.area.size.w).into_iter().collect()
     })
 }
 
@@ -32,7 +32,7 @@ fn resize_active_pane(cx: &mut ServerCx<'_>, delta: f64) -> Vec<Change> {
     cx.change_asker_content(|space, asker| {
         let gaps = space.options.gaps;
         if let Some(column) = space.columns.get_mut(asker.column) {
-            column.resize_active_pane_height(delta, asker.area.h, gaps);
+            column.resize_active_pane_height(delta, asker.area.size.h, gaps);
         }
     })
 }
@@ -83,8 +83,8 @@ pub(super) fn resize(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
             // A column's left edge is the right edge of the column before it, so `Left` moves
             // that boundary; the scrolling space owns what each edge means.
             match edge {
-                ResizeEdge::Left => space.move_left_boundary(asker.column, delta, asker.area.w),
-                _ => space.resize_column_by(asker.column, delta, asker.area.w).into_iter().collect(),
+                ResizeEdge::Left => space.move_left_boundary(asker.column, delta, asker.area.size.w),
+                _ => space.resize_column_by(asker.column, delta, asker.area.size.w).into_iter().collect(),
             }
         }),
         ResizeTarget::Pane => cx.change_asker_content(|space, asker| {
@@ -93,8 +93,8 @@ pub(super) fn resize(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
                 // A boundary and a direction, not "grow me": positive is down, whichever pane is
                 // active. `Auto` is the edge the pane already owned.
                 match edge {
-                    ResizeEdge::Top => col.move_active_pane_top_boundary(*amount, asker.area.h, gaps),
-                    _ => col.move_active_pane_boundary(*amount, asker.area.h, gaps),
+                    ResizeEdge::Top => col.move_active_pane_top_boundary(*amount, asker.area.size.h, gaps),
+                    _ => col.move_active_pane_boundary(*amount, asker.area.size.h, gaps),
                 }
             }
         }),
@@ -121,7 +121,7 @@ pub(super) fn resize_to(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change>
         ResizeTarget::Pane => cx.change_asker_content(|space, asker| {
             let gaps = space.options.gaps;
             if let Some(col) = space.columns.get_mut(asker.column) {
-                col.set_pane_height(col.active_pane_idx, *height, asker.area.h, gaps);
+                col.set_pane_height(col.active_pane_idx, *height, asker.area.size.h, gaps);
             }
         }),
     }
@@ -134,7 +134,7 @@ pub(super) fn resize_column_by(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<
         return Vec::new();
     };
     cx.change_asker_columns(|space, asker| {
-        space.resize_column_by(*col_idx, *delta, asker.area.w).into_iter().collect()
+        space.resize_column_by(*col_idx, *delta, asker.area.size.w).into_iter().collect()
     })
 }
 
@@ -152,7 +152,7 @@ pub(super) fn resize_pane_height_by(cx: &mut ServerCx<'_>, action: &WmAction) ->
     cx.change_asker_content(|space, asker| {
         let gaps = space.options.gaps;
         if let Some(col) = space.columns.get_mut(*col_idx) {
-            col.resize_pane_height(*pane_idx, *delta, asker.area.h, gaps);
+            col.resize_pane_height(*pane_idx, *delta, asker.area.size.h, gaps);
         }
     })
 }

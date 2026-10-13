@@ -34,6 +34,7 @@
 //! 5. **Animated transitions** — all focus changes, column moves, and workspace switches animate
 
 pub mod animation;
+pub mod arrange;
 pub mod column;
 pub mod floating;
 mod motion;
@@ -50,7 +51,8 @@ pub mod window_view;
 pub mod workspace;
 
 pub use column::{Column, Pane};
-pub use handle::{Added, Before, Layout, LayoutMut, Moved, Removed};
+pub use arrange::{Added, Arranged, Moved, Removed};
+pub use handle::{Before, Layout, LayoutMut};
 pub use scrolling::{
     ColumnEffect, Direction, LaidOutColumn, LaidOutPane, PaneEffect, Place, PlaceKind, Positions,
     ScrollingMut, ScrollingRef, ScrollingSpace, SpaceEffect,

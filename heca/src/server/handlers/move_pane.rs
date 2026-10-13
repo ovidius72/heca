@@ -8,14 +8,10 @@ use crate::server::{Change, Refusal, ServerCx};
 /// What a pane that landed says.
 fn landed(pane: PaneId, moved: Option<Moved>) -> Vec<Change> {
     match moved {
-        Some(m) => Change::after_move(
-            m,
-            Change::PaneMoved {
-                pane,
-                workspace: m.workspace,
-                column: m.column,
-            },
-        ),
+        Some(m) => {
+            let landed = Change::PaneMoved { pane, workspace: m.workspace, column: m.column };
+            Change::after_move(m, landed)
+        }
         None => Vec::new(),
     }
 }
@@ -34,7 +30,7 @@ fn moved_within(workspace: usize, pane: PaneId, effects: Vec<SpaceEffect>) -> Ve
 /// Where a pane is — workspace, column, row — and which: `pane` when it is named, otherwise the
 /// active pane of the asker's column.
 fn spot(cx: &ServerCx<'_>, pane: Option<PaneId>) -> Option<(PaneId, usize, usize, usize)> {
-    let session = cx.layout.session();
+    let session = &*cx.layout;
     match pane {
         Some(id) => session.pane_location(id).map(|(ws, col, row)| (id, ws, col, row)),
         None => {
@@ -52,7 +48,7 @@ fn move_along(cx: &mut ServerCx<'_>, pane: Option<PaneId>, dir: Direction) -> Ve
         return Vec::new();
     };
     let new_column = ColumnId(cx.layout.next_id());
-    let height = cx.asker.area.h;
+    let height = cx.asker.area.size.h;
     let moved = cx.arrange(workspace, |space, _| {
         space.move_pane_along(col, row, dir, new_column, height)
     });
@@ -70,7 +66,7 @@ fn move_within(cx: &mut ServerCx<'_>, pane: PaneId, dst_col: usize) -> Vec<Chang
         return Vec::new();
     };
     let new_column = ColumnId(cx.layout.next_id());
-    let height = cx.asker.area.h;
+    let height = cx.asker.area.size.h;
     let moved = cx.arrange(workspace, |space, _| {
         let count = space.columns.len();
         match dst_col {
@@ -109,10 +105,11 @@ pub(super) fn move_to_workspace(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec
     let WmAction::MovePaneToWorkspace { pane_id, ws_idx } = action else {
         return Vec::new();
     };
-    let Some((_, column, _)) = cx.layout.session().pane_location(*pane_id) else {
+    let Some((_, column, _)) = cx.layout.pane_location(*pane_id) else {
         return Vec::new();
     };
-    landed(*pane_id, cx.layout.move_pane_to_workspace(*pane_id, *ws_idx, column, false))
+    let height = cx.asker.area.size.h;
+    landed(*pane_id, cx.layout.move_pane_to_workspace(*pane_id, *ws_idx, column, false, height))
 }
 
 /// Move a pane to column `col_idx` of workspace `ws_idx`, stacked with that column's panes.
@@ -125,13 +122,14 @@ pub(super) fn move_to_column(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Ch
     else {
         return Vec::new();
     };
-    let Some((workspace, ..)) = cx.layout.session().pane_location(*pane_id) else {
+    let Some((workspace, ..)) = cx.layout.pane_location(*pane_id) else {
         return Vec::new();
     };
-    match workspace == *ws_idx {
-        true => move_within(cx, *pane_id, *col_idx),
-        false => landed(*pane_id, cx.layout.move_pane_to_workspace(*pane_id, *ws_idx, *col_idx, true)),
+    if workspace == *ws_idx {
+        return move_within(cx, *pane_id, *col_idx);
     }
+    let height = cx.asker.area.size.h;
+    landed(*pane_id, cx.layout.move_pane_to_workspace(*pane_id, *ws_idx, *col_idx, true, height))
 }
 
 /// Take the asker's focused pane out of its column into a new one, right of it.
@@ -153,17 +151,14 @@ pub(super) fn move_to_new_column(cx: &mut ServerCx<'_>, _action: &WmAction) -> V
     }
 }
 
-/// Take a pane from wherever it is to the bottom of the asker's active column.
+/// Take a pane from wherever it is to the bottom of the asker's active column. Whether the asker
+/// then focuses it is the asker's to decide.
 pub(super) fn take_pane(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
-    let WmAction::TakePane {
-        pane_id,
-        focus_after,
-    } = action
-    else {
+    let WmAction::TakePane { pane_id, .. } = action else {
         return Vec::new();
     };
-    let into = cx.asker.workspace;
-    landed(*pane_id, cx.layout.take_pane_into(*pane_id, into, *focus_after))
+    let (into, column, height) = (cx.asker.workspace, cx.asker.column, cx.asker.area.size.h);
+    landed(*pane_id, cx.layout.take_pane_into(*pane_id, into, column, height))
 }
 
 /// Put a pane at an exact place.
@@ -177,5 +172,6 @@ pub(super) fn place_pane(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change
     else {
         return Vec::new();
     };
-    landed(*pane_id, cx.layout.place_pane(*pane_id, *ws_idx, *col_idx, *pane_idx))
+    let height = cx.asker.area.size.h;
+    landed(*pane_id, cx.layout.place_pane(*pane_id, *ws_idx, *col_idx, *pane_idx, height))
 }

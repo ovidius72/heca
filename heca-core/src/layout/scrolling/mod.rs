@@ -260,12 +260,6 @@ impl std::ops::Deref for ScrollingMut<'_> {
 }
 
 impl ScrollingMut<'_> {
-    /// Slide a pane in from `from` to where it is now — how a window shows a pane that landed
-    /// somewhere new.
-    pub(crate) fn slide_pane(&mut self, id: PaneId, from: Point, config: AnimationConfig) {
-        self.view.motion.slide_pane(id, from, config);
-    }
-
     /// The same space, for the reads that only look.
     pub fn reader(&self) -> ScrollingRef<'_> {
         ScrollingRef {

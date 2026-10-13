@@ -15,7 +15,7 @@ pub(super) fn close(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
     let Some(pane) = cx.asker.focused_pane else {
         return Vec::new();
     };
-    removed(cx.layout.remove_pane_anywhere(pane))
+    removed(cx.layout.remove_pane(pane))
 }
 
 /// Close a pane by id, wherever it is.
@@ -23,7 +23,7 @@ pub(super) fn close_pane_by_id(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<
     let WmAction::ClosePaneById { pane_id } = action else {
         return Vec::new();
     };
-    removed(cx.layout.remove_pane_anywhere(*pane_id))
+    removed(cx.layout.remove_pane(*pane_id))
 }
 
 /// Delete a column and all its panes.
@@ -31,7 +31,7 @@ pub(super) fn delete_column(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Cha
     let WmAction::DeleteColumn { ws_idx, col_idx } = action else {
         return Vec::new();
     };
-    removed(cx.layout.remove_column_with_panes(*ws_idx, *col_idx))
+    removed(cx.layout.remove_column(*ws_idx, *col_idx))
 }
 
 /// Delete a workspace and everything in it.
