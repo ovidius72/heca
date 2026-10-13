@@ -2,14 +2,14 @@
 //! a session and each shows its own workspace; a request carries its asker's place, and nothing
 //! here reads the view's.
 
-use heca_core::layout::{ColumnEffect, ColumnWidth, SpaceEffect, PaneId, Size};
+use heca_core::layout::{ColumnEffect, ColumnWidth, PaneId, Point, Rectangle, Size, SpaceEffect};
 
-use super::testing::{run_as, two_workspaces_of_two_columns};
+use super::testing::{facts, run_as, two_workspaces_of_two_columns};
 use crate::input::WmAction;
 use crate::server::{Asker, Change};
 
 /// The size the test window lays a workspace out in.
-const WINDOW: Size = Size { w: 1000.0, h: 800.0 };
+const WINDOW: Rectangle = Rectangle { loc: Point { x: 0.0, y: 0.0 }, size: Size { w: 1000.0, h: 800.0 } };
 
 /// An asker in workspace 1, column 0 — while the window the session is held through shows 0.
 fn in_workspace_1() -> Asker {
@@ -45,11 +45,11 @@ fn a_float_acts_in_the_askers_workspace() {
 fn a_column_moves_from_the_askers_place() {
     let mut w = two_workspaces_of_two_columns();
     let up = run_as(&mut w, in_workspace_1(), WmAction::MoveColumnUp);
-    assert_eq!(up, [Change::ColumnMoved { workspace: 0, column: 2 }]);
+    assert_eq!(facts(&up), [Change::ColumnMoved { workspace: 0, column: 2 }]);
     assert!(run_as(&mut w, in_workspace_1(), WmAction::MoveColumnDown).is_empty(), "nothing below the last workspace");
     let in_0 = Asker { focused_pane: None, workspace: 0, column: 1, area: WINDOW };
     let down = run_as(&mut w, in_0, WmAction::MoveColumnDown);
-    assert_eq!(down, [Change::ColumnMoved { workspace: 1, column: 1 }]);
+    assert_eq!(facts(&down), [Change::ColumnMoved { workspace: 1, column: 1 }]);
     assert_eq!(w.session.workspaces[0].scrolling.columns.len(), 2);
 }
 
@@ -58,7 +58,7 @@ fn a_column_moves_from_the_askers_place() {
 fn a_taken_pane_lands_in_the_askers_workspace() {
     let mut w = two_workspaces_of_two_columns();
     let changes = run_as(&mut w, in_workspace_1(), WmAction::TakePane { pane_id: PaneId(1), focus_after: true });
-    assert_eq!(changes, [Change::PaneMoved { pane: PaneId(1), workspace: 1, column: 1 }]);
+    assert_eq!(facts(&changes), [Change::PaneMoved { pane: PaneId(1), workspace: 1, column: 0 }], "the asker's column");
 }
 
 /// Resetting the workspace name clears the asker's workspace.
@@ -90,7 +90,7 @@ fn a_column_moved_to_a_workspace_goes_from_the_askers_workspace() {
     let mut w = two_workspaces_of_two_columns();
     let action = WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 0, focus: true };
     let changes = run_as(&mut w, in_workspace_1(), action);
-    assert_eq!(changes, [Change::ColumnMoved { workspace: 0, column: 2 }]);
+    assert_eq!(facts(&changes), [Change::ColumnMoved { workspace: 0, column: 2 }]);
     assert_eq!(w.session.workspaces[1].scrolling.columns.len(), 1);
 }
 
@@ -101,7 +101,7 @@ fn an_asker_is_where_the_window_is() {
     let mut w = two_workspaces_of_two_columns();
     w.show(1);
     let asker = Asker::seen_through(w.l(), Some(PaneId(12)));
-    let area = w.l().active_workspace().map(|ws| ws.scroll().area().size).expect("a workspace");
+    let area = w.l().active_workspace().map(|ws| ws.scroll().area()).expect("a workspace");
     assert_eq!(asker, Asker { focused_pane: Some(PaneId(12)), workspace: 1, column: 1, area });
     assert_eq!(area, WINDOW, "the area of the window the test fixture makes");
 }

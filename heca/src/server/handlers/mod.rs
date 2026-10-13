@@ -18,6 +18,8 @@ mod names;
 #[cfg(test)]
 mod names_tests;
 mod pane;
+#[cfg(test)]
+mod react_tests;
 mod remove;
 #[cfg(test)]
 mod remove_tests;

@@ -1,8 +1,6 @@
 //! What a server handler is given: the shared content to change, and who asked.
 
-use heca_core::layout::{
-    ColumnEffect, Layout, PaneId, ScrollingSpace, Size, SpaceEffect, WorkspaceMut,
-};
+use heca_core::layout::{ColumnEffect, Layout, PaneId, Rectangle, ScrollingSpace, Size, SpaceEffect};
 
 use super::{Change, ServerLayout};
 
@@ -17,10 +15,11 @@ pub(crate) struct Asker {
     pub(crate) workspace: usize,
     /// The column that is active in it.
     pub(crate) column: usize,
-    /// The size of the area this window lays that workspace out in. It is **this window's**, not
-    /// a size the session shares: a resize the user does in a window is clamped to what fits that
-    /// window, so a request carries it; nothing should read it as the size of anything else.
-    pub(crate) area: Size,
+    /// The area this window lays that workspace out in. It is **this window's**, not an area the
+    /// session shares: a resize the user does in a window is clamped to what fits that window, and
+    /// a pane floated with no place given floats in the middle of it, so a request carries it;
+    /// nothing should read it as the area of anything else.
+    pub(crate) area: Rectangle,
 }
 
 impl Asker {
@@ -35,36 +34,17 @@ impl Asker {
                 .map_or(0, |ws| ws.scroll().active_column_idx()),
             area: layout
                 .active_workspace()
-                .map_or_else(Size::default, |ws| ws.scroll().area().size),
+                .map_or(Rectangle::from_size(Size::default()), |ws| ws.scroll().area()),
         }
     }
 }
 
 /// What a server handler runs against.
 pub(crate) struct ServerCx<'a> {
-    /// The session, by index and by id. **While standalone heca is one process** the asking
-    /// window's view still travels inside it, so a move shifts that window's scroll exactly as
-    /// before; 2c removes it.
+    /// The session, by index and by id, and no window's view of it.
     pub(crate) layout: ServerLayout<'a>,
     /// Who asked.
     pub(crate) asker: Asker,
-}
-
-impl ServerCx<'_> {
-    /// Change the layout of the workspace the asker is in, and say the layout changed. Says nothing
-    /// when there is no workspace — there was nothing to change.
-    pub(crate) fn change_asker_workspace(
-        &mut self,
-        change: impl FnOnce(WorkspaceMut<'_>),
-    ) -> Vec<Change> {
-        match self.layout.workspace_mut(self.asker.workspace) {
-            Some(ws) => {
-                change(ws);
-                vec![Change::LayoutChanged]
-            }
-            None => Vec::new(),
-        }
-    }
 }
 
 impl ServerCx<'_> {

@@ -94,10 +94,13 @@ pub fn after_mutation_change(state: &mut AppState, kind: MutationKind) {
 /// Close the pane with this id, wherever it is — the one way a pane that goes away on its own (its
 /// shell exited) is removed, with the same facts the close action reports.
 pub(crate) fn close_pane_by_id_anywhere(state: &mut AppState, pane_id: PaneId) -> bool {
-    let Some(removed) = state.layout_mut().remove_pane_anywhere(pane_id) else {
+    if state.session.workspace_holding(pane_id).is_none() {
         return false;
-    };
-    state.apply(crate::server::Change::after_removal(removed));
+    }
+    state.run_on_server(
+        &crate::input::WmAction::ClosePaneById { pane_id },
+        "close_pane_by_id",
+    );
     after_layout_change(state);
     true
 }

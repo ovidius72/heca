@@ -6,6 +6,15 @@ fn window() -> Windowed {
     Windowed::new(Size::new(1280.0, 800.0), 2.0)
 }
 
+/// Remove workspace `idx` from the session, and tell the window it went.
+fn remove(w: &mut Windowed, idx: usize) -> bool {
+    let removed = w.session.remove_workspace(idx);
+    if removed {
+        w.m().workspace_removed(idx);
+    }
+    removed
+}
+
 fn session_with_workspaces(count: usize) -> Windowed {
     let mut w = window();
     // `Session::new` creates one workspace; add more if needed.
@@ -21,7 +30,7 @@ fn test_remove_workspace_active_after_removed() {
     // active workspace (2) > removed (0) → shift down to 1.
     let mut w = session_with_workspaces(3);
     w.view.active_workspace = 2;
-    assert!(w.m().remove_workspace(0));
+    assert!(remove(&mut w, 0));
     assert_eq!(w.session.workspaces.len(), 2);
     assert_eq!(w.view.active_workspace, 1);
 }
@@ -32,7 +41,7 @@ fn test_remove_workspace_active_is_last() {
     // active workspace (2) >= len (2) after removal → clamp to 1.
     let mut w = session_with_workspaces(3);
     w.view.active_workspace = 2;
-    assert!(w.m().remove_workspace(2));
+    assert!(remove(&mut w, 2));
     assert_eq!(w.session.workspaces.len(), 2);
     assert_eq!(w.view.active_workspace, 1);
 }
@@ -43,7 +52,7 @@ fn test_remove_workspace_active_before_removed() {
     // active workspace (0) is not > removed (1) and not >= len (2) → unchanged at 0.
     let mut w = session_with_workspaces(3);
     w.view.active_workspace = 0;
-    assert!(w.m().remove_workspace(1));
+    assert!(remove(&mut w, 1));
     assert_eq!(w.session.workspaces.len(), 2);
     assert_eq!(w.view.active_workspace, 0);
 }
@@ -53,7 +62,7 @@ fn test_remove_workspace_can_remove_last_leaving_empty() {
     // Removing the sole workspace is allowed; the session is left empty and
     // `active_workspace()` returns `None` (no underflow on the index clamp).
     let mut w = session_with_workspaces(1);
-    assert!(w.m().remove_workspace(0));
+    assert!(remove(&mut w, 0));
     assert_eq!(w.session.workspaces.len(), 0);
     assert_eq!(w.view.active_workspace, 0);
     assert!(w.l().active_workspace().is_none());
@@ -62,7 +71,7 @@ fn test_remove_workspace_can_remove_last_leaving_empty() {
 #[test]
 fn test_remove_workspace_out_of_bounds() {
     let mut w = session_with_workspaces(2);
-    assert!(!w.m().remove_workspace(5));
+    assert!(!remove(&mut w, 5));
     assert_eq!(w.session.workspaces.len(), 2);
 }
 
@@ -73,7 +82,7 @@ fn test_remove_workspace_active_is_removed() {
     // → unchanged at 1, which now points to the former workspace 2.
     let mut w = session_with_workspaces(3);
     w.view.active_workspace = 1;
-    assert!(w.m().remove_workspace(1));
+    assert!(remove(&mut w, 1));
     assert_eq!(w.session.workspaces.len(), 2);
     assert_eq!(w.view.active_workspace, 1);
 }
@@ -164,4 +173,23 @@ fn resizing_the_window_rescales_the_floating_panes() {
     let float: &FloatingPane = &w.session.workspaces[0].floating_panes[0];
     assert_eq!(float.size, Size::new(1280.0, 800.0), "twice the window, twice the float");
     assert_eq!(float.position, Point::new(200.0, 160.0));
+}
+
+/// A pane that arrives from another workspace slides in from where this window drew it there.
+#[test]
+fn a_pane_from_another_workspace_slides_in_from_where_it_was_drawn() {
+    let mut w = Windowed::with_shape(&[&[&[1], &[2]], &[&[3]]]);
+    w.show(1);
+    let before = w.l().before();
+    let moved = w.session.move_pane_to_workspace(PaneId(2), 1, 0, true, 800.0).expect("it moves");
+    for (ws, effects) in &moved.arranged.effects {
+        w.m().show_change(*ws, effects, &before);
+    }
+    let drawn = w.ws().scroll().panes_with_positions().into_iter().find(|(id, _)| *id == PaneId(2));
+    let slot = w.ws().scroll().pane_slot(PaneId(2)).expect("in a column");
+    let view = w.ws().scroll().view_pos();
+    let area = w.ws().scroll().area();
+    let offset = drawn.map(|(_, rect)| rect.loc.y - area.loc.y - slot.y).expect("drawn");
+    let sideways = drawn.map(|(_, rect)| rect.loc.x + view - area.loc.x - slot.x).expect("drawn");
+    assert!(offset.abs() > 1.0 || sideways.abs() > 1.0, "it slides in: {sideways}, {offset}");
 }

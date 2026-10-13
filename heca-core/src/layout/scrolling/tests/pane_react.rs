@@ -159,3 +159,41 @@ fn closing_the_active_column_leaves_the_others_where_they_were() {
     let target = space.r().target_view_pos();
     assert!((target - rest).abs() < 0.5, "the view moved from {rest} to {target}");
 }
+
+/// A column that leaves and another that arrives in its place — two workspaces trading columns —
+/// leave the window on that place, not on the column after it.
+#[test]
+fn a_window_stays_on_its_column_when_another_takes_its_place() {
+    let mut space = space_with_columns(3);
+    space.m().activate_column(1);
+    let before = space.r().positions();
+
+    space.space.columns[1] = test_column(50, ColumnWidth::Proportion(0.5));
+    let replaced = [
+        SpaceEffect::Column(ColumnEffect::Removed { idx: 1 }),
+        SpaceEffect::Column(ColumnEffect::Inserted { idx: 1 }),
+    ];
+    space.m().show(&replaced, &before);
+
+    assert_eq!(space.r().active_column_idx(), 1);
+    assert_eq!(active_column_id(&space.space, &space.view), Some(ColumnId(50)));
+}
+
+/// A pane that lands far from where it was slides in from no further than the layout's reach.
+#[test]
+fn a_moved_pane_slides_from_no_further_than_the_reach() {
+    let mut space = space_with_columns(4);
+    space.m().activate_column(0);
+    space.space.options.move_slide_reach = 0.1;
+    let before = space.r().positions();
+
+    let effects = space.space.move_pane_between(3, 0, 0, 800.0).expect("it moves");
+    space.m().show(&effects, &before);
+
+    let slot = space.r().pane_slot(PaneId(4)).map(|p| p.x).expect("in a column");
+    let drawn = space.r().panes_with_positions().into_iter().find(|(id, _)| *id == PaneId(4));
+    let view = space.r().view_pos();
+    let offset = drawn.map(|(_, rect)| rect.loc.x + view - space.view.area.loc.x - slot).expect("drawn");
+    assert!(offset.abs() > 1.0, "it slides");
+    assert!(offset.abs() <= 1000.0 * 0.1 + 0.5, "from {offset}, past the reach");
+}

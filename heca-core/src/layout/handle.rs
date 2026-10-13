@@ -146,7 +146,7 @@ impl LayoutMut<'_> {
             return;
         };
         if let Some(positions) = before.of(ws.id) {
-            self.view.scroll_mut(ws.id).react_to(&ws.scrolling, effects, positions);
+            self.view.scroll_mut(ws.id).react_to(&ws.scrolling, effects, &positions);
         }
     }
 
@@ -181,29 +181,22 @@ impl LayoutMut<'_> {
         self.session.add_workspace()
     }
 
-    /// Remove the workspace at `idx`. Returns `false` only for an out-of-range index.
-    /// Removing the **last** workspace is allowed and leaves the session empty —
-    /// `active_workspace()` then returns `None` until a new workspace is created
-    /// (e.g. via `add_workspace`); the app renders blank and stays recoverable.
-    pub fn remove_workspace(&mut self, idx: usize) -> bool {
-        let Some(ws) = self.session.workspaces.get(idx) else {
-            return false;
-        };
-        self.view.forget(ws.id);
-        self.session.workspaces.remove(idx);
+    /// **Workspace `idx` is gone from the session** ([`Session::remove_workspace`]): this window
+    /// forgets how it looked at it, and keeps showing the workspace it showed — numbered one lower
+    /// when it was after the one that went. A window showing the one that went shows the one now in
+    /// its place, or the new last one. With no workspace left it shows nothing until one is made.
+    pub fn workspace_removed(&mut self, idx: usize) {
+        let session = &*self.session;
+        self.view.forget_all_but(|id| session.index_of(id).is_some());
         let shown = &mut self.view.active_workspace;
         let remaining = self.session.workspaces.len();
         if remaining == 0 {
-            // Session emptied — keep the index in a benign state (`get` → `None`).
             *shown = 0;
         } else if *shown > idx {
-            // The active workspace was after the removed one; shift down.
             *shown -= 1;
         } else if *shown >= remaining {
-            // The removed workspace was the last one; clamp to the new last.
             *shown = remaining - 1;
         }
-        true
     }
 
     /// Switch to a workspace by index with animation.
@@ -320,29 +313,26 @@ impl LayoutMut<'_> {
     }
 }
 
-mod moves;
-mod names;
-#[cfg(test)]
-mod name_tests;
-mod remove;
-#[cfg(test)]
-mod remove_tests;
-#[cfg(test)]
-mod move_tests;
-mod swap;
-pub use moves::{Added, Moved};
-
 /// Where everything was in each workspace for one window, taken before a change, so the window
 /// can show the change from where it was ([`LayoutMut::show_change`]).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Before(Vec<(WorkspaceId, super::scrolling::Positions)>);
 
 impl Before {
-    /// Where things were in workspace `id`. `None` when it did not exist yet.
-    pub fn of(&self, id: WorkspaceId) -> Option<&super::scrolling::Positions> {
-        self.0.iter().find_map(|(ws, positions)| (*ws == id).then_some(positions))
+    /// Where things were in workspace `id`, with the panes of every other workspace as they would
+    /// sit in it — so a pane that came from another workspace slides in from where it was. `None`
+    /// when the workspace did not exist yet.
+    pub fn of(&self, id: WorkspaceId) -> Option<super::scrolling::Positions> {
+        let mut positions = self
+            .0
+            .iter()
+            .find_map(|(ws, positions)| (*ws == id).then_some(positions))?
+            .clone();
+        for (_, others) in self.0.iter().filter(|(ws, _)| *ws != id) {
+            positions.add_panes_from(others);
+        }
+        Some(positions)
     }
 }
-pub use remove::Removed;
 #[cfg(test)]
 mod tests;

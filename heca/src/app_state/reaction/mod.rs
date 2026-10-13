@@ -129,10 +129,17 @@ pub(crate) fn window_reacts(
         }
         Change::Arranged { workspace, ref effects } => {
             // Shown from where this window had things when it asked. A window with no picture —
-            // the change answers another window — has nothing to slide from.
-            if let Some(before) = before {
-                layout.show_change(workspace, effects, before);
-            }
+            // the change answers another window — still keeps its place: it has nothing to slide
+            // from, so it shows the change from where things are now.
+            let now;
+            let before = match before {
+                Some(before) => before,
+                None => {
+                    now = layout.reader().before();
+                    &now
+                }
+            };
+            layout.show_change(workspace, effects, before);
         }
         Change::ColumnZoomed { workspace, column } => {
             // The window shows what it zoomed: the workspace, and the column, which also brings
@@ -143,8 +150,12 @@ pub(crate) fn window_reacts(
             }
         }
         Change::PaneAdded { pane, workspace, .. } => {
+            // A pane made for this window is shown and focused.
             if asked.is_some() {
                 show_workspace(layout, tracking.last_visited_ws, workspace);
+                if let Some(mut ws) = layout.workspace_mut(workspace) {
+                    ws.activate_pane(pane);
+                }
             }
             reaction.start_shell = Some((pane, workspace));
         }
@@ -161,12 +172,19 @@ pub(crate) fn window_reacts(
                 ws.activate_pane(pane);
             }
         }
-        Change::ColumnMoved { workspace, .. } => {
+        Change::ColumnMoved { workspace, column } => {
+            // A column moved by this window is shown where it landed, and active there.
             if asked.is_some() && follows_column(asked) {
                 show_workspace(layout, tracking.last_visited_ws, workspace);
+                if let Some(mut ws) = layout.workspace_mut(workspace) {
+                    ws.scroll_mut().activate_column(column);
+                }
             }
         }
-        Change::WorkspaceRemoved { index } => tracking.forget_workspace(index),
+        Change::WorkspaceRemoved { index } => {
+            layout.workspace_removed(index);
+            tracking.forget_workspace(index);
+        }
         Change::Refused(reason) => reaction.refusal = Some(reason),
         Change::NotificationsChanged => reaction.redraw = false,
     }

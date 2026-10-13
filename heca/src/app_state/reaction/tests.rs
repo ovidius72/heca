@@ -240,37 +240,35 @@ fn only_a_name_change_says_names_are_out_of_date() {
     }
 }
 
-/// A change to the columns is shown by the window that asked, from where it had things before —
-/// and not by a window with no picture of its own, which has nothing to show it from.
+/// A change to the columns is shown by every window, each keeping its place: the window that
+/// asked shows it from where it had things before, and a window with no picture of its own shows
+/// it from where things are now.
 #[test]
-fn a_change_to_the_columns_is_shown_from_the_window_s_own_picture() {
+fn a_change_to_the_columns_keeps_each_window_on_its_column() {
     use heca_core::layout::{ColumnEffect, SpaceEffect};
-    let mut window = two_workspaces_of_two_columns();
-    window.m().focus_right();
-    let before = window.l().before();
-    let active_before = window.l().workspace(0).map(|ws| ws.scroll().active_column_idx());
-    assert_eq!(active_before, Some(1));
-    // The content loses its first column; the window that asked from workspace 0 shifts.
-    let effect = window
-        .m()
-        .columns_mut(0)
-        .and_then(|space| space.take_column(0))
-        .map(|(_, effect)| effect)
-        .expect("a column");
-    assert_eq!(effect, ColumnEffect::Removed { idx: 0 });
-    let mut tracked = Tracked::default();
-    let change = Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(effect)] };
-    window_reacts(&mut window.m(), &mut tracked.parts(), &change, None, None);
-    assert_eq!(
-        window.l().workspace(0).map(|ws| ws.scroll().active_column_idx()),
-        Some(1),
-        "a window with no picture shows nothing"
-    );
-    let reaction = window_reacts(&mut window.m(), &mut tracked.parts(), &change, None, Some(&before));
-    assert!(reaction.redraw);
-    assert_eq!(
-        window.l().workspace(0).map(|ws| ws.scroll().active_column_idx()),
-        Some(0),
-        "the asking window's active column followed the removal"
-    );
+    for asked in [true, false] {
+        let mut window = two_workspaces_of_two_columns();
+        window.m().focus_right();
+        let before = window.l().before();
+        let active_before = window.l().workspace(0).map(|ws| ws.scroll().active_column_idx());
+        assert_eq!(active_before, Some(1));
+        // The content loses its first column, which renumbers the one the window is on.
+        let effect = window
+            .m()
+            .columns_mut(0)
+            .and_then(|space| space.take_column(0))
+            .map(|(_, effect)| effect)
+            .expect("a column");
+        assert_eq!(effect, ColumnEffect::Removed { idx: 0 });
+        let mut tracked = Tracked::default();
+        let change = Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(effect)] };
+        let picture = asked.then_some(&before);
+        let reaction = window_reacts(&mut window.m(), &mut tracked.parts(), &change, None, picture);
+        assert!(reaction.redraw);
+        assert_eq!(
+            window.l().workspace(0).map(|ws| ws.scroll().active_column_idx()),
+            Some(0),
+            "with a picture of its own: {asked}; still on the column it was on"
+        );
+    }
 }

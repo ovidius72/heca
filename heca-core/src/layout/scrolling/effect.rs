@@ -54,6 +54,20 @@ impl Positions {
     pub fn pane(&self, id: PaneId) -> Option<Point> {
         self.panes.iter().find_map(|(pane, at)| (*pane == id).then_some(*at))
     }
+
+    /// Add the panes of `other` — where things were in another strip — as they sit on screen
+    /// here, so a pane that arrives from there slides from where it was drawn. A pane already here
+    /// keeps its own slot.
+    pub fn add_panes_from(&mut self, other: &Positions) {
+        let shift = self.view_pos - other.view_pos;
+        let arriving: Vec<_> = other
+            .panes
+            .iter()
+            .filter(|(id, _)| self.pane(*id).is_none())
+            .map(|(id, at)| (*id, Point::new(at.x + shift, at.y)))
+            .collect();
+        self.panes.extend(arriving);
+    }
 }
 
 impl ScrollingSpace {

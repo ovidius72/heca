@@ -88,7 +88,7 @@ impl AppState {
         let asker = crate::server::Asker::seen_through(self.layout(), self.focused_pane);
         let before = self.layout().before();
         let mut cx = crate::server::ServerCx {
-            layout: crate::server::ServerLayout::new(self.session.through_mut(&mut self.view)),
+            layout: crate::server::ServerLayout::new(&mut self.session),
             asker,
         };
         let changes = self.server.run(&mut cx, action);

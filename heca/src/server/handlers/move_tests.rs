@@ -3,28 +3,26 @@
 use heca_core::layout::testing::Windowed;
 use heca_core::layout::{Pane, PaneId};
 
-use super::testing::{run, run_for, two_workspaces_of_two_columns};
+use super::testing::{arranged, facts, run, run_and_react, run_for, two_workspaces_of_two_columns};
 use crate::input::WmAction;
 use crate::server::{Change, Refusal};
 
-/// A swap says the layout changed; swapping a pane with itself says nothing.
+/// A swap says what changed in the workspace; swapping a pane with itself says nothing.
 #[test]
-fn a_swap_of_two_panes_reports_a_layout_change() {
+fn a_swap_of_two_panes_says_what_changed() {
     let mut w = two_workspaces_of_two_columns();
-    assert_eq!(
-        run(&mut w, WmAction::Swap { a_id: PaneId(1), b_id: PaneId(2) }),
-        [Change::LayoutChanged]
-    );
+    let changes = run(&mut w, WmAction::Swap { a_id: PaneId(1), b_id: PaneId(2) });
+    assert_eq!((arranged(&changes), facts(&changes)), (vec![0], vec![]));
     assert_eq!(w.session.workspaces[0].scrolling.columns[0].panes[0].id, PaneId(2));
     assert!(run(&mut w, WmAction::Swap { a_id: PaneId(1), b_id: PaneId(1) }).is_empty());
 }
 
-/// Swapping columns across workspaces trades them and says so.
+/// Swapping columns across workspaces trades them, and each workspace says what changed in it.
 #[test]
-fn a_swap_of_columns_across_workspaces_reports_a_layout_change() {
+fn a_swap_of_columns_across_workspaces_says_what_changed_in_each() {
     let mut w = two_workspaces_of_two_columns();
     let changes = run(&mut w, WmAction::SwapColumns { a_ws: 0, a_col: 0, b_ws: 1, b_col: 0 });
-    assert_eq!(changes, [Change::LayoutChanged]);
+    assert_eq!((arranged(&changes), facts(&changes)), (vec![0, 1], vec![]));
     assert_eq!(w.session.workspaces[0].scrolling.columns[0].panes[0].id, PaneId(11));
 }
 
@@ -33,7 +31,8 @@ fn a_swap_of_columns_across_workspaces_reports_a_layout_change() {
 fn a_pane_moved_to_another_workspace_says_where_it_landed() {
     let mut w = two_workspaces_of_two_columns();
     let changes = run(&mut w, WmAction::MovePaneToWorkspace { pane_id: PaneId(1), ws_idx: 1 });
-    assert_eq!(changes, [Change::PaneMoved { pane: PaneId(1), workspace: 1, column: 0 }]);
+    assert_eq!(arranged(&changes), [0, 1], "both workspaces show the move");
+    assert_eq!(facts(&changes), [Change::PaneMoved { pane: PaneId(1), workspace: 1, column: 0 }]);
     assert_eq!(w.l().active_workspace_idx(), 0, "the server never switches the shown workspace");
 }
 
@@ -44,9 +43,11 @@ fn a_move_that_empties_a_workspace_reports_its_removal_first() {
     run(&mut w, WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 1, focus: true });
     let changes = run(&mut w, WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 1, focus: true });
     assert_eq!(
-        changes,
+        facts(&changes),
         [Change::WorkspaceRemoved { index: 0 }, Change::ColumnMoved { workspace: 0, column: 3 }]
     );
+    assert_eq!(arranged(&changes), [0], "only the workspace left has anything to show");
+    assert!(matches!(changes[0], Change::WorkspaceRemoved { .. }), "the removal is said first");
     assert_eq!(w.session.workspaces.len(), 1);
 }
 
@@ -56,7 +57,7 @@ fn a_column_moves_to_the_neighbouring_workspace() {
     let mut w = two_workspaces_of_two_columns();
     assert!(run(&mut w, WmAction::MoveColumnUp).is_empty(), "no workspace above the first");
     let changes = run(&mut w, WmAction::MoveColumnDown);
-    assert_eq!(changes, [Change::ColumnMoved { workspace: 1, column: 2 }]);
+    assert_eq!(facts(&changes), [Change::ColumnMoved { workspace: 1, column: 2 }]);
 }
 
 /// A column moved to a place among the columns of its own workspace.
@@ -64,7 +65,8 @@ fn a_column_moves_to_the_neighbouring_workspace() {
 fn a_column_is_moved_to_an_index() {
     let mut w = two_workspaces_of_two_columns();
     let action = WmAction::MoveColumn { src_ws: 0, src_col: 0, dst_ws: 0, dst_idx: 1, focus: false };
-    assert_eq!(run(&mut w, action), [Change::ColumnMoved { workspace: 0, column: 1 }]);
+    let changes = run(&mut w, action);
+    assert_eq!((arranged(&changes), facts(&changes)), (vec![0], vec![Change::ColumnMoved { workspace: 0, column: 1 }]));
 }
 
 /// The columns of workspace `ws`, as pane ids.
@@ -166,7 +168,7 @@ fn the_active_pane_swaps_within_its_column() {
 fn a_taken_pane_lands_in_the_active_column() {
     let mut w = two_workspaces_of_two_columns();
     let changes = run(&mut w, WmAction::TakePane { pane_id: PaneId(1), focus_after: true });
-    assert_eq!(changes, [Change::PaneMoved { pane: PaneId(1), workspace: 0, column: 0 }]);
+    assert_eq!(facts(&changes), [Change::PaneMoved { pane: PaneId(1), workspace: 0, column: 0 }]);
     assert!(run(&mut w, WmAction::TakePane { pane_id: PaneId(1), focus_after: true }).is_empty());
 }
 
@@ -177,10 +179,8 @@ fn a_placed_pane_says_where_it_landed_and_a_bad_place_keeps_it() {
     let place = |ws_idx| WmAction::PlacePane { pane_id: PaneId(1), ws_idx, col_idx: 0, pane_idx: None };
     assert!(run(&mut w, place(9)).is_empty());
     assert_eq!(w.session.workspaces[0].scrolling.columns.len(), 2);
-    assert_eq!(
-        run(&mut w, place(1)),
-        [Change::PaneMoved { pane: PaneId(1), workspace: 1, column: 0 }]
-    );
+    let changes = run(&mut w, place(1));
+    assert_eq!(facts(&changes), [Change::PaneMoved { pane: PaneId(1), workspace: 1, column: 0 }]);
 }
 
 /// Making a pane says it was added and where; a workspace that is not there says nothing.
@@ -188,29 +188,14 @@ fn a_placed_pane_says_where_it_landed_and_a_bad_place_keeps_it() {
 fn a_made_pane_is_reported_as_added() {
     let mut w = two_workspaces_of_two_columns();
     let changes = run(&mut w, WmAction::AddPaneToColumn { ws_idx: 1, col_idx: 0 });
-    let [Change::PaneAdded { workspace: 1, column: 0, pane }] = changes[..] else {
+    let [Change::Arranged { workspace: 1, .. }, Change::PaneAdded { workspace: 1, column: 0, pane }] = changes[..] else {
         panic!("unexpected {changes:?}");
     };
     assert!(w.session.workspaces[1].find_pane(pane).is_some());
     let changes = run(&mut w, WmAction::AddColumnToWorkspace { ws_idx: 0 });
-    assert!(matches!(changes[..], [Change::PaneAdded { workspace: 0, .. }]));
+    assert!(matches!(facts(&changes)[..], [Change::PaneAdded { workspace: 0, .. }]));
     assert_eq!(w.session.workspaces[0].scrolling.columns.len(), 3, "a column of its own");
     assert!(run(&mut w, WmAction::AddColumnToWorkspace { ws_idx: 9 }).is_empty());
-}
-
-/// Run `action` for the window and have the window react to what it says, as the app does.
-fn run_and_react(w: &mut Windowed, focused: Option<PaneId>, action: WmAction) {
-    let before = w.l().before();
-    let changes = run_for(w, focused, action.clone());
-    let (mut last_ws, mut panes, mut cursors) = (None, Vec::new(), Vec::new());
-    let mut tracking = crate::app_state::reaction::Tracking {
-        last_visited_ws: &mut last_ws,
-        last_visited_pane_per_ws: &mut panes,
-        expose_cursor_per_ws: &mut cursors,
-    };
-    for change in &changes {
-        crate::app_state::reaction::window_reacts(&mut w.m(), &mut tracking, change, Some(&action), Some(&before));
-    }
 }
 
 /// Two columns of two panes that both fit: the pane moved left from the second lands in the first,
