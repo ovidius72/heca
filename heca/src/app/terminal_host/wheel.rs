@@ -25,6 +25,43 @@ fn device_delta((x, y): (f32, f32), pixels: Option<(f32, f32)>) -> MouseScrollDe
     }
 }
 
+/// What a wheel turn means for a terminal's font.
+#[derive(Debug, PartialEq)]
+enum WheelZoom {
+    /// Not a zoom gesture: the setting is off, or neither Ctrl nor Meta is held.
+    Not,
+    /// A zoom gesture that steps nothing (no vertical turn), consumed all the same.
+    Consumed,
+    /// The zoom of the terminal it turned over.
+    Step(WmAction),
+}
+
+/// **What a wheel turn means for the font of `terminal`** — turning away from you makes it
+/// bigger.
+fn wheel_font_zoom(
+    enabled: bool,
+    modifiers: heca_grid_ui::Modifiers,
+    y: f32,
+    terminal: TerminalId,
+) -> WheelZoom {
+    if !enabled || !(modifiers.ctrl || modifiers.meta) {
+        return WheelZoom::Not;
+    }
+    if y == 0.0 {
+        return WheelZoom::Consumed;
+    }
+    let step = if y < 0.0 {
+        FontZoomStep::In
+    } else {
+        FontZoomStep::Out
+    };
+    WheelZoom::Step(WmAction::PaneTerminalFontZoom {
+        pane_id: None,
+        terminal: Some(terminal.0),
+        step,
+    })
+}
+
 pub(super) fn on_wheel(
     state: &mut AppState,
     registry: &ActionRegistry,
@@ -33,30 +70,16 @@ pub(super) fn on_wheel(
     cell: Option<Cell>,
     modifiers: heca_grid_ui::Modifiers,
 ) {
-    // **Ctrl/Meta+wheel is a font-zoom gesture**, resolved by the terminal it turned over. It is
-    // consumed whatever the direction, so a modified wheel never reaches the program as a scroll.
-    if state.mouse_wheel_change_font_size && (modifiers.ctrl || modifiers.meta) {
-        // The zoom is a pane's: a terminal no pane owns is not zoomed by it, but the wheel is still
-        // consumed.
-        if y != 0.0
-            && let Some(pane_id) = state.server.backends.pane_of(terminal)
-        {
-            let step = if y < 0.0 {
-                FontZoomStep::In
-            } else {
-                FontZoomStep::Out
-            };
-            dispatch_action(
-                state,
-                registry,
-                InteractionSource::MouseContent,
-                &WmAction::PaneTerminalFontZoom {
-                    pane_id: Some(pane_id),
-                    step,
-                },
-            );
+    // **Ctrl/Meta+wheel is a font-zoom gesture** for the terminal it turned over, whoever owns it.
+    // It is consumed whatever the direction, so a modified wheel never reaches the program as a
+    // scroll.
+    match wheel_font_zoom(state.mouse_wheel_change_font_size, modifiers, y, terminal) {
+        WheelZoom::Not => {}
+        WheelZoom::Consumed => return,
+        WheelZoom::Step(action) => {
+            dispatch_action(state, registry, InteractionSource::MouseContent, &action);
+            return;
         }
-        return;
     }
     if crate::chrome::drag_in_flight(state) {
         return;
@@ -255,6 +278,51 @@ mod tests {
         assert_eq!(
             host_scroll_notches(device_delta((0.0, 0.7), Some((0.0, 14.0))), 14.0),
             -1.0
+        );
+    }
+
+    /// **A modified wheel zooms the terminal it turned over**, whoever owns it — a docked one as
+    /// much as a pane's — and names that terminal, so the zoom is that terminal's alone.
+    #[test]
+    fn a_modified_wheel_zooms_the_terminal_it_turned_over() {
+        let ctrl = heca_grid_ui::Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
+        let unowned = TerminalId(7);
+        assert_eq!(
+            wheel_font_zoom(true, ctrl, -1.0, unowned),
+            WheelZoom::Step(WmAction::PaneTerminalFontZoom {
+                pane_id: None,
+                terminal: Some(7),
+                step: FontZoomStep::In,
+            })
+        );
+        let meta = heca_grid_ui::Modifiers {
+            meta: true,
+            ..Default::default()
+        };
+        assert!(matches!(
+            wheel_font_zoom(true, meta, 2.0, unowned),
+            WheelZoom::Step(WmAction::PaneTerminalFontZoom {
+                step: FontZoomStep::Out,
+                ..
+            })
+        ));
+        assert_eq!(
+            wheel_font_zoom(true, ctrl, 0.0, unowned),
+            WheelZoom::Consumed,
+            "a sideways turn is consumed and steps nothing"
+        );
+        assert_eq!(
+            wheel_font_zoom(true, heca_grid_ui::Modifiers::default(), -1.0, unowned),
+            WheelZoom::Not,
+            "a plain wheel is a scroll"
+        );
+        assert_eq!(
+            wheel_font_zoom(false, ctrl, -1.0, unowned),
+            WheelZoom::Not,
+            "the setting turns the gesture off"
         );
     }
 }

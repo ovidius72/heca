@@ -43,13 +43,11 @@ pub(crate) struct PaneShell<'a> {
     /// The pane keeps the header it is given as its own: it seats the node as a child and answers
     /// the facts it is handed by showing them there.
     pub(crate) header: Option<crate::chrome::PaneHeader>,
-    /// **The content slot — what actually runs in this pane**, under the header.
+    /// **The content slot — what actually runs in this pane**, under the header: a terminal today.
     ///
-    /// Empty today: a terminal paints itself into the pane's rect rather than being a child
-    /// (P094/T449 is what makes it one). The slot exists anyway, because it is what gives the
-    /// column its second row — the header takes its natural height and this takes everything
-    /// left, which is what puts the header in a strip at the top instead of in the middle of the
-    /// pane.
+    /// It takes everything the header leaves, which is what puts the header in a strip at the top
+    /// instead of in the middle of the pane. It is the header's sibling, so a header built again
+    /// for a new shape leaves it the node it was.
     pub(crate) content: Option<Box<dyn heca_grid_ui::Component>>,
 }
 

@@ -1,5 +1,6 @@
-//! **Terminal actions** — typing a line into a running terminal, and ending one. The two ways
-//! anything outside the terminal (a key, the palette, RPC, heca-pro) reaches a terminal process.
+//! **Terminal actions** — typing a line into a running terminal, ending one, and stepping one's own
+//! font size. The ways anything outside the terminal (a key, the palette, RPC, heca-pro) reaches a
+//! terminal process, all naming their target by one rule.
 
 use crate::app_state::AppState;
 use crate::chrome::terminal::TerminalId;
@@ -35,6 +36,41 @@ fn target_of(state: &AppState, pane_id: Option<PaneId>, terminal: Option<u64>) -
             None => state.server.backends.get_by_id(id).map(|_| Target::Unowned(id)),
         }
     })
+}
+
+impl Target {
+    /// The terminal itself, whoever owns it.
+    fn terminal(self, state: &AppState) -> Option<TerminalId> {
+        match self {
+            Target::Pane(pane) => state.server.backends.identity_of(pane),
+            Target::Unowned(id) => Some(id),
+        }
+    }
+}
+
+/// **Step one terminal's own font** — bigger, smaller, or back to following the app.
+///
+/// A terminal or pane the action names is zoomed. Naming neither means the terminal the keyboard
+/// is on: one placed in a dock or an overlay that holds it is asked first and answers itself (it
+/// says so back with its id, which lands here again); otherwise the focused pane's.
+pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) {
+    let WmAction::PaneTerminalFontZoom {
+        pane_id,
+        terminal,
+        step,
+    } = action
+    else {
+        return;
+    };
+    let named = pane_id.is_some() || terminal.is_some();
+    if !named && crate::app::terminal_host::tree_answers(state, step.intent()) {
+        return;
+    }
+    let Some(id) = target_of(state, *pane_id, *terminal).and_then(|t| t.terminal(state)) else {
+        return;
+    };
+    let delta = super::system::font_zoom_delta(state, *step);
+    crate::app::terminal_metrics::apply_terminal_font_zoom(state, id, delta);
 }
 
 /// Type `text` into a terminal, and press Enter after it unless told not to.

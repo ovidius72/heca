@@ -92,6 +92,25 @@ pub enum FontZoomStep {
     Reset,
 }
 
+impl FontZoomStep {
+    /// **The step as the widget vocabulary says it** — what the widget holding the keyboard is
+    /// asked, so a terminal placed anywhere answers the same keys a pane's does.
+    pub fn intent(self) -> heca_grid_ui::WidgetIntent {
+        match self {
+            FontZoomStep::In => heca_grid_ui::WidgetIntent::ZoomIn,
+            FontZoomStep::Out => heca_grid_ui::WidgetIntent::ZoomOut,
+            FontZoomStep::Reset => heca_grid_ui::WidgetIntent::ZoomReset,
+        }
+    }
+
+    /// The step a widget intent asks for, if it asks for one — the inverse of [`intent`](Self::intent).
+    pub fn of_intent(intent: heca_grid_ui::WidgetIntent) -> Option<Self> {
+        [FontZoomStep::In, FontZoomStep::Out, FontZoomStep::Reset]
+            .into_iter()
+            .find(|step| step.intent() == intent)
+    }
+}
+
 impl EnumArg for FontZoomStep {
     const VALUES: &'static [&'static str] =
         &["in", "increase", "+", "out", "decrease", "-", "reset", "0"];
@@ -192,5 +211,19 @@ mod tests {
         check::<FontZoomStep>("FontZoomStep");
         check::<SpawnKind>("SpawnKind");
         check::<crate::chrome::RegionId>("RegionId");
+    }
+
+    /// A zoom step and the intent a widget is asked are one vocabulary: each step names its own
+    /// intent, comes back from it, and no other intent is a zoom.
+    #[test]
+    fn a_zoom_step_and_its_intent_are_one_vocabulary() {
+        for step in [FontZoomStep::In, FontZoomStep::Out, FontZoomStep::Reset] {
+            assert_eq!(FontZoomStep::of_intent(step.intent()), Some(step));
+        }
+        assert_ne!(FontZoomStep::In.intent(), FontZoomStep::Out.intent());
+        assert_eq!(
+            FontZoomStep::of_intent(heca_grid_ui::WidgetIntent::Find),
+            None
+        );
     }
 }

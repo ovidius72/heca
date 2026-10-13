@@ -207,17 +207,11 @@ pub(crate) fn room_of(state: &AppState, id: TerminalId) -> Option<heca_core::lay
 /// before the snapshot was read, so a change shows one frame late unless one is asked for.
 pub(crate) fn show_viewports<'a>(
     state: &AppState,
-    snapshots: impl Iterator<
-        Item = (
-            TerminalId,
-            Option<PaneId>,
-            &'a heca_core::backend::TerminalSnapshot,
-        ),
-    >,
+    snapshots: impl Iterator<Item = (TerminalId, &'a heca_core::backend::TerminalSnapshot)>,
 ) -> bool {
     let appearance = &state.appearance.terminal;
     let mut changed = false;
-    for (id, pane, snapshot) in snapshots {
+    for (id, snapshot) in snapshots {
         let Some(terminal) = state.terminals.get(&id) else {
             continue;
         };
@@ -231,9 +225,7 @@ pub(crate) fn show_viewports<'a>(
             top_stable_row: snapshot.viewport_top_stable_row,
             match_alpha: appearance.search_match_alpha,
             current_match_alpha: appearance.search_current_match_alpha,
-            nominal_cell: pane.map_or(state.terminal_cell_size, |pane| {
-                state.pane_base_cell_size(pane)
-            }),
+            nominal_cell: state.terminal_base_cell_size(id),
             open_link_modifier: state.interactive_move_modifier,
         });
         terminal.show_links(&snapshot.hyperlinks);

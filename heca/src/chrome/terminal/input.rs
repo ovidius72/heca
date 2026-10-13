@@ -132,6 +132,9 @@ pub(crate) enum TerminalInput {
     Resize(Grid),
     /// **Something about the terminal's own search** — see [`Search`].
     Search(Search),
+    /// **Its font one step bigger, smaller, or back to the app's** — asked of the terminal that
+    /// holds the keyboard, wherever it is placed.
+    FontZoom(crate::input::FontZoomStep),
 }
 
 /// What a terminal says about its **search**, which it runs as part of itself: the bar is its own

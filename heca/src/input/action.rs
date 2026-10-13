@@ -180,12 +180,13 @@ pub enum WmAction {
     AppFontZoom {
         step: FontZoomStep,
     },
-    /// Per-pane terminal font zoom, layered on top of the global size. `pane_id =
-    /// None` targets the focused pane (keyboard); `Some(id)` targets a specific
-    /// pane (`Ctrl`/`Meta`+wheel over a pane, or RPC). `Reset` makes the pane
-    /// follow the global size again.
+    /// **One terminal's font zoom**, layered on top of the global size. The target is a `terminal`
+    /// (the id the store issued — what `Ctrl`/`Meta`+wheel over any terminal names), a `pane_id`,
+    /// or — with neither — the terminal the keyboard is on: a docked one that holds it, else the
+    /// focused pane's. `Reset` makes it follow the global size again.
     PaneTerminalFontZoom {
         pane_id: Option<PaneId>,
+        terminal: Option<u64>,
         step: FontZoomStep,
     },
     /// **Type a line into a running terminal.** The target is a `terminal` (the id the store

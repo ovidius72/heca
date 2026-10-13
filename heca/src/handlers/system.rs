@@ -192,7 +192,7 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
 /// size (`[settings] terminal_font_zoom_step`). `Reset` maps to `0.0`, which both
 /// zoom helpers treat as "clear the offset". A non-positive configured step falls
 /// back to the built-in default so zoom never becomes a no-op.
-fn font_zoom_delta(state: &AppState, step: FontZoomStep) -> f32 {
+pub(crate) fn font_zoom_delta(state: &AppState, step: FontZoomStep) -> f32 {
     use crate::app::terminal_metrics::TERMINAL_FONT_ZOOM_STEP;
     let size = if state.terminal_font_zoom_step > 0.0 {
         state.terminal_font_zoom_step
@@ -213,17 +213,4 @@ pub fn handle_app_font_zoom(state: &mut AppState, action: &WmAction) {
     };
     let delta = font_zoom_delta(state, *step);
     crate::app::terminal_metrics::apply_app_font_zoom(state, delta);
-}
-
-/// Per-pane terminal font zoom. `pane_id = None` targets the focused pane
-/// (keyboard); `Some(id)` targets a specific pane (`Ctrl`/`Meta`+wheel / RPC).
-pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) {
-    let WmAction::PaneTerminalFontZoom { pane_id, step } = action else {
-        return;
-    };
-    let Some(target) = pane_id.or(state.focused_pane) else {
-        return;
-    };
-    let delta = font_zoom_delta(state, *step);
-    crate::app::terminal_metrics::apply_pane_terminal_font_zoom(state, target, delta);
 }

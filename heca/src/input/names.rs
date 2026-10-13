@@ -88,14 +88,17 @@ pub(super) fn action_from_name(name: &str) -> Option<WmAction> {
         // Font zoom — focused-pane branch (keyboard resolves `pane_id = None`).
         "pane_terminal_font_increase" => Some(WmAction::PaneTerminalFontZoom {
             pane_id: None,
+            terminal: None,
             step: FontZoomStep::In,
         }),
         "pane_terminal_font_decrease" => Some(WmAction::PaneTerminalFontZoom {
             pane_id: None,
+            terminal: None,
             step: FontZoomStep::Out,
         }),
         "pane_terminal_font_reset" => Some(WmAction::PaneTerminalFontZoom {
             pane_id: None,
+            terminal: None,
             step: FontZoomStep::Reset,
         }),
         "workspace_next" => Some(WmAction::WorkspaceNext),
@@ -239,6 +242,7 @@ mod tests {
             action_from_name("pane_terminal_font_decrease"),
             Some(WmAction::PaneTerminalFontZoom {
                 pane_id: None,
+                terminal: None,
                 step: FontZoomStep::Out
             })
         );

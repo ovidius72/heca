@@ -8,6 +8,7 @@
 //! shows them: nothing here holds a copy.
 
 use super::selection::ensure_caret_visible;
+use super::tree_answers;
 use crate::app::selection_model::SelectionOwner;
 use crate::app_state::{AppState, InputMode};
 use crate::chrome::terminal::{Search, TerminalId};
@@ -83,13 +84,6 @@ pub(crate) fn search_step(state: &mut AppState, forward: bool) {
     if let Some(terminal) = state.search_target() {
         step(state, terminal, forward);
     }
-}
-
-/// **Did a terminal that holds the keyboard in the window tree take this intent?** Only asked while
-/// the keyboard really is in the tree (a dock or a layer in front); the panes' keys are not.
-fn tree_answers(state: &mut AppState, intent: WidgetIntent) -> bool {
-    crate::app::input::focused_surface(state).delivers_to_tree()
-        && crate::chrome::deliver(state, &heca_grid_ui::Event::Widget(intent))
 }
 
 /// Re-run the search for `query` in `terminal`, refresh the match list, focus the match nearest

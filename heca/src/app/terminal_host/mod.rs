@@ -59,6 +59,15 @@ pub(crate) fn prepare_terminal_mount(
     })
 }
 
+/// **Did a terminal that holds the keyboard in the window tree take this intent?** Only asked while
+/// the keyboard really is in the tree (a dock or a layer in front); the panes' keys are not. The
+/// one door a terminal action uses to reach a terminal placed anywhere before falling back to the
+/// focused pane's.
+pub(crate) fn tree_answers(state: &mut AppState, intent: heca_grid_ui::WidgetIntent) -> bool {
+    crate::app::input::focused_surface(state).delivers_to_tree()
+        && crate::chrome::deliver(state, &heca_grid_ui::Event::Widget(intent))
+}
+
 pub(crate) fn notify_focus_changed(
     state: &mut AppState,
     prev: Option<PaneId>,

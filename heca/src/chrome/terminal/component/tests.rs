@@ -1,8 +1,9 @@
 //! The terminal component's tests, by what they test; the fixtures they share are here.
 
-use super::super::input::Grid;
+use super::super::input::{Cell as GridCell, Grid, Seams, TerminalCommand};
+use super::super::model::TerminalId;
 use super::super::testing::{header_above, laid_out_in, recording};
-use super::super::viewport::ScrollIntents;
+use super::super::viewport::{ScrollIntents, Viewport};
 use super::*;
 use heca_config::appearance::ScrollbarVisibility;
 use heca_grid_ui::component::{Event, Handled};
@@ -18,6 +19,7 @@ mod layout;
 mod links;
 mod pointer;
 mod typing;
+mod zoom;
 
 /// Seams that ignore input — for tests of the scrollback controls.
 fn seams(scroll: ScrollIntents) -> Seams {

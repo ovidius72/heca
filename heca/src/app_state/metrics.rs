@@ -77,33 +77,26 @@ impl AppState {
         )
     }
 
-    /// The effective terminal font size for a specific pane: the configured size
-    /// plus the global zoom offset plus that pane's per-pane offset, clamped to the
-    /// supported range. Both the PTY cell fit and the rendered glyph size derive
-    /// from this single value so they never disagree.
-    pub fn effective_terminal_font_size(&self, pane_id: PaneId) -> f32 {
-        self.terminal_font_size(Some(pane_id))
+    /// What every terminal's own zoom is added to: the configured terminal size plus the app zoom.
+    pub(crate) fn terminal_zoom_base(&self) -> f32 {
+        self.font_config.size.terminal + self.app_font_zoom
     }
 
-    /// The terminal font size for a terminal that may or may not belong to a pane: a pane has its own
-    /// zoom on top of the global one, any other terminal follows the global.
-    pub fn terminal_font_size(&self, pane: Option<PaneId>) -> f32 {
-        let pane_offset = pane
-            .and_then(|pane| self.pane_font_zoom.get(&pane))
-            .copied()
-            .unwrap_or(0.0);
-        (self.font_config.size.terminal + self.app_font_zoom + pane_offset).clamp(
-            crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MIN,
-            crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MAX,
-        )
+    /// **The font size `terminal` is drawn at** — the global size plus its own zoom, whoever owns
+    /// it. Both the grid its process is fitted to and the glyphs drawn derive from this one value,
+    /// so they never disagree.
+    pub(crate) fn terminal_font_size(&self, terminal: crate::chrome::terminal::TerminalId) -> f32 {
+        self.terminal_zoom.size(terminal, self.terminal_zoom_base())
     }
 
-    /// The base cell size a pane's PTY grid is fitted to, honoring per-pane zoom.
-    /// Falls back to the global `terminal_cell_size` for panes with no override.
-    pub fn pane_base_cell_size(&self, pane_id: PaneId) -> (f32, f32) {
-        self.pane_cell_override
-            .get(&pane_id)
-            .copied()
+    /// The cell size `terminal`'s grid is fitted from: its own when it is zoomed, else the
+    /// global `terminal_cell_size`.
+    pub(crate) fn terminal_base_cell_size(
+        &self,
+        terminal: crate::chrome::terminal::TerminalId,
+    ) -> (f32, f32) {
+        self.terminal_zoom
+            .cell(terminal)
             .unwrap_or(self.terminal_cell_size)
     }
 

@@ -2064,7 +2064,7 @@ demo.terminal("logs").command("tail -f app.log").cwd(dir)
 | `extension.terminal("short")` | the terminal `<extension>.<short>`. **The name is the identity and never changes.** Every call with the same name is the same terminal, so building the dock again or opening the overlay again shows the process that was already running |
 | `.command("…")` | run this under the user's shell instead of the shell itself. Fixed when it starts |
 | `.cwd(path)` | start in this folder. Fixed when it starts |
-| `.title("…")` | what the user reads; defaults to the name. The user can rename it like a pane |
+| `.title("…")` | what the user reads; defaults to the name. ⚠️ Nothing shows it yet and the user cannot rename it: both wait for the terminal's own header (P094(F011)/T450) |
 | `.run("ls")` | type a line into it and press Enter. Does nothing until it has started |
 | `.kill()` | end it — the one thing that does |
 | `.find()` / `.find_next()` / `.find_previous()` | open its search bar with the keyboard in the field / step to the next / previous match. Works wherever it is placed |
@@ -2087,8 +2087,14 @@ In a dock the terminal gets the key first, as any focused widget does, and the d
 sidebar's `j`/`k`/`Enter`, the `focus` floor's paging keys) act on what it did not take — so a vim in
 a docked terminal gets its PageUp. The one reserved key is the way out: `Escape` leaves the dock as
 shipped, ahead of the terminal, so it cannot trap you. Move it in the `focus` block (see the README)
-and `Escape` reaches the program like any other key. Selecting text and link hints
-for terminals no pane owns arrive with P094(F011)/T449 slice 5c.
+and `Escape` reaches the program like any other key.
+
+**Selecting, links and font size work wherever it is placed.** Shift+drag selects in it and the
+selection is drawn over it; link hints (`prefix+/`) letter its links; Cmd-click opens one. The font
+zoom is the terminal's own: Ctrl/Cmd+wheel over it, or the `pane_terminal_font_*` keys while it holds
+the keyboard, step that terminal and no other — the keys reach it as the `ZoomIn` / `ZoomOut` /
+`ZoomReset` widget intents, which the terminal holding the keyboard answers (a pane's terminal is
+reached through the focused pane until panes join the window's keyboard).
 
 **It searches itself.** The search bar — a query field and a match counter — is a **child of the
 terminal**, drawn at its bottom-right corner by the same walk as the scrollback chip, so placing a

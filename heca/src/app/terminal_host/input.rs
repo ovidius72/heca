@@ -235,22 +235,21 @@ pub(crate) fn on_terminal_input(
     input: crate::chrome::terminal::TerminalInput,
 ) {
     use crate::chrome::terminal::TerminalInput;
-    // What every terminal does, whoever owns it: its grid and its scrollback.
+    // Every terminal's, whoever owns it. Only a pointer move asks whether a pane owns it.
     match input {
-        TerminalInput::Resize(grid) => return on_resize(state, terminal, grid),
+        // Its grid and its scrollback.
+        TerminalInput::Resize(grid) => on_resize(state, terminal, grid),
         TerminalInput::ScrollToBottom => {
             if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
                 backend.scroll_to_bottom_animated();
                 state.needs_redraw = true;
             }
-            return;
         }
         TerminalInput::ScrollTo { rows } => {
             if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
                 crate::handlers::scroll_backend_to_offset(backend, rows);
                 state.needs_redraw = true;
             }
-            return;
         }
         TerminalInput::Wheel {
             x,
@@ -258,36 +257,26 @@ pub(crate) fn on_terminal_input(
             pixels,
             cell,
             modifiers,
-        } => {
-            return super::wheel::on_wheel(
-                state,
-                registry,
-                terminal,
-                ((x, y), pixels),
-                cell,
-                modifiers,
-            );
-        }
-        // What was typed into it while it held the keyboard — any terminal's, whoever owns it.
-        TerminalInput::Text(text) => return super::typing::on_text(state, terminal, &text),
+        } => super::wheel::on_wheel(state, registry, terminal, ((x, y), pixels), cell, modifiers),
+        // What was typed into it while it held the keyboard.
+        TerminalInput::Text(text) => super::typing::on_text(state, terminal, &text),
         TerminalInput::Key { key, modifiers } => {
-            return super::typing::on_key(state, terminal, key, modifiers);
+            super::typing::on_key(state, terminal, key, modifiers);
         }
         // What it says about its own search: the matches are the host's to find.
-        TerminalInput::Search(search) => return super::search::on_search(state, terminal, search),
-        _ => {}
-    }
-    // The pointer's buttons and moves are every terminal's; what only a pane has (its selection)
-    // is asked of `pane`, which is `None` for a terminal no pane owns.
-    let pane = state.server.backends.pane_of(terminal);
-    match input {
-        TerminalInput::Wheel { .. }
-        | TerminalInput::Resize(_)
-        | TerminalInput::ScrollToBottom
-        | TerminalInput::ScrollTo { .. }
-        | TerminalInput::Text(_)
-        | TerminalInput::Key { .. }
-        | TerminalInput::Search(_) => {}
+        TerminalInput::Search(search) => super::search::on_search(state, terminal, search),
+        // Its own font size: the same action a key and RPC run, naming this terminal.
+        TerminalInput::FontZoom(step) => dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
+            &WmAction::PaneTerminalFontZoom {
+                pane_id: None,
+                terminal: Some(terminal.0),
+                step,
+            },
+        ),
+        // The pointer's buttons and moves.
         TerminalInput::Press {
             button,
             cell,
@@ -298,7 +287,10 @@ pub(crate) fn on_terminal_input(
             cell,
             modifiers,
         } => on_release(state, terminal, button, cell, modifiers),
-        TerminalInput::Move { cell, modifiers } => on_move(state, terminal, pane, cell, modifiers),
+        TerminalInput::Move { cell, modifiers } => {
+            let pane = state.server.backends.pane_of(terminal);
+            on_move(state, terminal, pane, cell, modifiers);
+        }
     }
 }
 

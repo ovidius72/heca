@@ -874,6 +874,14 @@ pub enum WidgetIntent {
     FindNext,
     /// **The previous match** of the search that is open. `find_previous`.
     FindPrevious,
+    /// **Make the content bigger** — whichever widget holds the keyboard and can scale what it
+    /// shows answers (a terminal steps its font up). One step; how big a step is, is the answer's.
+    ZoomIn,
+    /// **Make the content smaller** — the counterpart of [`ZoomIn`](Self::ZoomIn).
+    ZoomOut,
+    /// **Back to the content's own size** — undo every [`ZoomIn`](Self::ZoomIn) /
+    /// [`ZoomOut`](Self::ZoomOut).
+    ZoomReset,
 
     /// Activate / commit / submit the current entry or primary action. `activate`.
     Activate,

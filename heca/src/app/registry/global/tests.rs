@@ -140,6 +140,7 @@ fn default_font_zoom_bindings_resolve_without_collision() {
         ),
         Some(&WmAction::PaneTerminalFontZoom {
             pane_id: None,
+            terminal: None,
             step: FontZoomStep::In
         })
     );
@@ -150,6 +151,7 @@ fn default_font_zoom_bindings_resolve_without_collision() {
         ),
         Some(&WmAction::PaneTerminalFontZoom {
             pane_id: None,
+            terminal: None,
             step: FontZoomStep::Out
         })
     );
@@ -160,6 +162,7 @@ fn default_font_zoom_bindings_resolve_without_collision() {
         ),
         Some(&WmAction::PaneTerminalFontZoom {
             pane_id: None,
+            terminal: None,
             step: FontZoomStep::Reset
         })
     );

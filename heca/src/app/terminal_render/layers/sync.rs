@@ -11,7 +11,6 @@ use heca_core::backend::TerminalDamage;
 use heca_core::layout::{Point, Rectangle, Size};
 use heca_renderer::image::ImageLayer;
 use heca_renderer::terminal::{TerminalRenderer, TerminalStyle};
-use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
 pub(crate) fn sync_retained_terminal_layers(
@@ -36,11 +35,11 @@ pub(crate) fn sync_retained_terminal_layers(
             continue;
         };
 
-        // Per-pane font zoom: start from the shared style and override the font
-        // size for this pane. The render key already folds in `font_size`, so a
-        // zoom change on one pane repaints only that pane's retained layer.
+        // A terminal's own font zoom: start from the shared style and override the font size for
+        // this terminal. The render key already folds in `font_size`, so a zoom change on one
+        // terminal repaints only its retained layer.
         let mut pane_style = terminal_style;
-        pane_style.font_size = state.terminal_font_size(pane.pane);
+        pane_style.font_size = state.terminal_font_size(pane.id);
         let render_key = terminal_layer_render_key(&pane_style);
 
         let physical_size = retained_terminal_texture_size(mount.content_rect, state.scale_factor);
@@ -140,29 +139,12 @@ pub(crate) fn sync_retained_terminal_layers(
 const IMAGE_TEXTURE_MAX_AGE_FRAMES: u64 = 600;
 
 fn retain_live_terminal_layers(state: &mut AppState) {
-    let mut live_panes = HashSet::new();
-    for ws in &state.session.workspaces {
-        for col in &ws.scrolling.columns {
-            for pane in &col.panes {
-                live_panes.insert(pane.id);
-            }
-        }
-        for float in &ws.floating_panes {
-            live_panes.insert(float.pane.id);
-        }
-    }
     let backends = &state.server.backends;
     state
         .terminal_layers
         .retain(|id, _| backends.is_issued(*id));
-    // Per-pane font-zoom state is keyed by pane; drop it for closed panes so the
-    // maps don't leak entries across the app's lifetime.
-    state
-        .pane_font_zoom
-        .retain(|pane_id, _| live_panes.contains(pane_id));
-    state
-        .pane_cell_override
-        .retain(|pane_id, _| live_panes.contains(pane_id));
+    // A terminal's own font zoom ends with it, so the map does not keep ended terminals.
+    state.terminal_zoom.retain(|id| backends.is_issued(id));
 }
 
 fn terminal_layer_render_key(style: &TerminalStyle<'_>) -> u64 {

@@ -110,16 +110,11 @@ pub struct AppState {
     /// chrome. `0.0` = no zoom. Reset returns it to `0.0`; a config reload leaves
     /// it intact.
     pub app_font_zoom: f32,
-    /// Per-pane terminal font-zoom **offset in points**, applied on top of the
-    /// global base (`font_config.size.terminal + app_font_zoom`) for
-    /// that pane only. Absent = follows the global size. The effective per-pane
-    /// size is clamped to `[TERMINAL_FONT_SIZE_MIN, TERMINAL_FONT_SIZE_MAX]`.
-    pub pane_font_zoom: HashMap<PaneId, f32>,
-    /// Resolved base cell size for panes with a non-zero `pane_font_zoom` offset,
-    /// recomputed whenever that pane's effective font size changes. Panes absent
-    /// here use the global `terminal_cell_size`. Feeds the base cell that
-    /// `prepare_terminal_mount` fits the PTY grid to.
-    pub pane_cell_override: HashMap<PaneId, (f32, f32)>,
+    /// **Each terminal's own font zoom**, on top of the global base
+    /// (`font_config.size.terminal + app_font_zoom`), and the cell size it measures to — kept by
+    /// the terminal's id, so a docked terminal zooms like a pane's. A terminal absent there follows
+    /// the global size and `terminal_cell_size`.
+    pub(crate) terminal_zoom: crate::app::terminal_zoom::TerminalZoom,
     pub scale_factor: f64,
     pub needs_redraw: bool,
     /// **One line of feedback in the bottom bar**, shown until the next keypress.
