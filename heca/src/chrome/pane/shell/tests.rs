@@ -488,3 +488,67 @@ fn a_tiled_pane_is_carried_as_a_picture_and_a_float_is_not_carried() {
     let float = build(&float);
     assert!(!float.base().draggable && !float.base().drag_image);
 }
+
+/// **A header that changes shape is built again, and nothing else is.** A chip appearing — a working
+/// folder arriving, a button shown — needs a new header tree; the terminal in the pane's body keeps
+/// the node it had, so its scrollback controls, its search and anything in flight survive.
+#[test]
+fn a_header_that_changes_shape_leaves_what_the_pane_holds_alone() {
+    use crate::chrome::PaneHeader;
+    use crate::chrome::pane_header::PaneHeaderInput;
+    use heca_grid_ui::scene::{DrawCommand, Scene};
+    use heca_grid_ui::widgets::Label;
+
+    fn content(n: &mut dyn Component) -> Option<&mut dyn Component> {
+        if n.base().grid_area.as_deref() == Some(PANE_CONTENT_AREA) {
+            return Some(n);
+        }
+        n.base_mut()
+            .children
+            .iter_mut()
+            .find_map(|c| content(c.as_mut()))
+    }
+    fn header_says(n: &dyn Component, words: &str) -> bool {
+        let theme = heca_grid_ui::theme::Theme::default();
+        let mut scene = Scene::new();
+        heca_grid_ui::paint_child(n, &mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
+        scene
+            .iter()
+            .any(|c| matches!(c, DrawCommand::Text(t) if t.text == words))
+    }
+    fn lay_out(n: &mut dyn Component) {
+        size_to(n, 400.0, 300.0);
+        LayoutEngine::new().compute(n, Size::new(400.0, 300.0));
+    }
+
+    let (cb, _) = recording_callbacks();
+    let m = model(4);
+    // The header's shape here is "the chips pane N has", so new facts are a new shape.
+    let mut pane = PaneShell {
+        model: &m,
+        cb: &cb,
+        header: Some(PaneHeader::showing(|input, node| {
+            let shape = format!("chips of {}", input.pane().0);
+            node.show(shape.clone(), move || {
+                Some(Box::new(Label::new(shape)) as Box<dyn Component>)
+            });
+        })),
+        content: Some(Box::new(crate::chrome::terminal::Terminal::new())),
+    }
+    .build();
+    assert!(pane.set_props(&PaneHeaderInput::for_test(PaneId(1))));
+    lay_out(&mut pane);
+    assert!(header_says(&pane, "chips of 1"));
+    // A mark only this node of the content carries.
+    content(&mut pane).expect("a body").base_mut().key = Some("placed once".into());
+
+    assert!(pane.set_props(&PaneHeaderInput::for_test(PaneId(2))));
+    lay_out(&mut pane);
+
+    assert!(header_says(&pane, "chips of 2"), "the header took its new shape");
+    assert_eq!(
+        content(&mut pane).expect("a body").base().key.as_deref(),
+        Some("placed once"),
+        "the terminal is the node it was"
+    );
+}

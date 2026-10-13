@@ -147,7 +147,7 @@ pub(in crate::app) fn sync_terminal_layers(
         state,
         terminals
             .all()
-            .filter_map(|t| t.mount.as_ref().map(|m| (t.id, t.pane, &m.snapshot))),
+            .filter_map(|t| t.mount.as_ref().map(|m| (t.id, &m.snapshot))),
     ) {
         state.mark_full_redraw();
     }

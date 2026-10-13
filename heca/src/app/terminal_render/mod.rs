@@ -23,8 +23,6 @@ use heca_renderer::text::TextBox;
 pub(crate) struct TerminalRenderState {
     /// The terminal process this draws, by the id the store issued.
     pub(crate) id: TerminalId,
-    /// The pane it belongs to, if one does: what only a pane has (zoom, selection) is asked of it.
-    pub(crate) pane: Option<PaneId>,
     pub(crate) x: f32,
     pub(crate) y: f32,
     pub(crate) w: f32,
@@ -68,7 +66,6 @@ impl TerminalRenderState {
         }
         Self {
             id,
-            pane,
             x,
             y,
             w,

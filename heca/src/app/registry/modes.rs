@@ -156,6 +156,7 @@ mod tests {
             pane.resolve_builtin("pane_font_size", &KeyCombo::parse("k")),
             Some(&WmAction::PaneTerminalFontZoom {
                 pane_id: None,
+                terminal: None,
                 step: FontZoomStep::In
             })
         );
@@ -163,6 +164,7 @@ mod tests {
             pane.resolve_builtin("pane_font_size", &KeyCombo::parse("0")),
             Some(&WmAction::PaneTerminalFontZoom {
                 pane_id: None,
+                terminal: None,
                 step: FontZoomStep::Reset
             })
         );

@@ -122,19 +122,19 @@ pane_height_decrease = "prefix+Shift+-"
 
 # ── Font zoom ──
 # Two explicit scopes (no implicit resolution): Ctrl = whole app (chrome/UI font
-# AND every terminal pane), Ctrl+Shift = the focused terminal pane only, layered
-# on top of the app-wide size. =/- zoom in/out; 0 resets. The same gesture is also
-# on Ctrl/Meta+mouse-wheel, resolved by what's under the pointer (pane → pane,
-# chrome → whole app).
+# AND every terminal), Ctrl+Shift = the terminal the keyboard is on only (a docked
+# one that holds it, else the focused pane's), layered on top of the app-wide size.
+# =/- zoom in/out; 0 resets. The same gesture is also on Ctrl/Meta+mouse-wheel,
+# resolved by what's under the pointer (a terminal → that terminal, chrome → whole app).
 # (Ctrl rather than Alt here for a reason that outlived its cause: macOS's Option rewrites the typed
 #  character, which used to stop an `Alt+=` binding matching at all. It no longer does — see the
 #  header — but these keys are muscle memory now and are left where they are.)
 app_font_increase = "prefix+Ctrl+="        # Whole app (chrome + terminals) bigger
 app_font_decrease = "prefix+Ctrl+-"        # Whole app (chrome + terminals) smaller
 app_font_reset    = "prefix+Ctrl+0"        # Whole app back to configured sizes
-pane_terminal_font_increase   = "prefix+Ctrl+Shift+="  # Focused pane font bigger
-pane_terminal_font_decrease   = "prefix+Ctrl+Shift+-"  # Focused pane font smaller
-pane_terminal_font_reset      = "prefix+Ctrl+Shift+0"  # Focused pane follows app-wide
+pane_terminal_font_increase   = "prefix+Ctrl+Shift+="  # The keyboard's terminal bigger
+pane_terminal_font_decrease   = "prefix+Ctrl+Shift+-"  # The keyboard's terminal smaller
+pane_terminal_font_reset      = "prefix+Ctrl+Shift+0"  # The keyboard's terminal follows app-wide
 
 # ── Pane operations ──
 close = "prefix+x"   # Close active pane
@@ -769,8 +769,8 @@ keys = "Escape"
 # Enter the mode once, then tap keys repeatedly without re-pressing the chord:
 #   k / ArrowUp = bigger,  j / ArrowDown = smaller,  0 = reset,  Esc/Enter = exit.
 # `app_font_size` scales the WHOLE app (chrome + every terminal); `pane_font_size`
-# scales only the focused terminal pane. The direct chords still work too
-# (prefix+Ctrl+=/-/0 whole app, prefix+Ctrl+Shift+=/-/0 focused pane).
+# scales only the terminal the keyboard is on. The direct chords still work too
+# (prefix+Ctrl+=/-/0 whole app, prefix+Ctrl+Shift+=/-/0 the keyboard's terminal).
 [[keys.mode]]
 name = "app_font_size"
 trigger = "prefix+!"   # prefix then Shift+1

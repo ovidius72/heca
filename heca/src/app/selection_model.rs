@@ -919,9 +919,7 @@ mod tests {
 ///   add to fill the grid width.
 /// - Returns `None` when the selection is inactive or uses `BackendNative`
 ///   rendering.
-/// - The owner is assumed to be `SelectionOwner::Pane` (the only variant today);
-///   if future owner variants are added, this function must be updated to handle
-///   or reject them.
+/// - The owner is whichever terminal the selection is in; `lines` must be that terminal's.
 pub fn extract_selection_text(
     selection: &SelectionState,
     lines: &[heca_core::backend::TerminalLine],

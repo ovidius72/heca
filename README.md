@@ -182,10 +182,11 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 ### Font zoom
 
 Two explicit scopes (no implicit resolution): **`Ctrl`** = whole app (chrome/UI
-font **and** every terminal pane), **`Ctrl+Shift`** = the focused terminal pane
-only, layered on top of the app-wide size. The same gesture is also on
-**`Ctrl`/`Meta`+mouse-wheel**, resolved by what's under the pointer (over a pane →
-that pane; over chrome/empty → whole app). (`Alt` is avoided: on macOS the Option
+font **and** every terminal), **`Ctrl+Shift`** = the terminal the keyboard is on
+only (a docked terminal that holds it, else the focused pane's), layered on top of
+the app-wide size. The same gesture is also on **`Ctrl`/`Meta`+mouse-wheel**,
+resolved by what's under the pointer (over a terminal, in a pane or a dock → that
+terminal; over chrome/empty → whole app). (`Alt` is avoided: on macOS the Option
 key rewrites the typed character, so `Alt+=` never matches.)
 
 | Command | Default Binding | Description |
@@ -193,13 +194,13 @@ key rewrites the typed character, so `Alt+=` never matches.)
 | App font bigger (everything) | `Ctrl+=` | Increase chrome/UI + every terminal pane |
 | App font smaller (everything) | `Ctrl+-` | Decrease chrome/UI + every terminal pane |
 | App font reset (everything) | `Ctrl+0` | Reset to the configured sizes |
-| Terminal font bigger (pane) | `Ctrl+Shift+=` | Increase the focused pane's font size |
-| Terminal font smaller (pane) | `Ctrl+Shift+-` | Decrease the focused pane's font size |
-| Terminal font reset (pane) | `Ctrl+Shift+0` | Focused pane follows the app-wide size |
+| Terminal font bigger | `Ctrl+Shift+=` | Increase the font of the terminal the keyboard is on |
+| Terminal font smaller | `Ctrl+Shift+-` | Decrease the font of the terminal the keyboard is on |
+| Terminal font reset | `Ctrl+Shift+0` | That terminal follows the app-wide size |
 
 **Sticky font-size modes** (avoid re-pressing the chord): enter once, then tap keys
-repeatedly. `prefix+!` → **app** font mode (whole app), `prefix+@` → **pane** font
-mode (focused pane). Inside either mode: `k`/`↑` bigger, `j`/`↓` smaller, `0` reset,
+repeatedly. `prefix+!` → **app** font mode (whole app), `prefix+@` → **terminal** font
+mode (the terminal the keyboard is on). Inside either mode: `k`/`↑` bigger, `j`/`↓` smaller, `0` reset,
 `Esc`/`Enter` exit. Like the built-in `resize` mode (`prefix+r`), fully rebindable.
 
 ### Move / Swap (adjacent)

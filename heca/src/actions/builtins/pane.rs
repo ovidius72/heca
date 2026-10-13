@@ -444,13 +444,18 @@ pub(super) const ACTIONS: &[ActionDescriptor] = &[
         name: "pane_terminal_font_zoom",
         side: Side::Client,
         label: "Pane Font Zoom",
-        description: "Step one terminal pane's font size up, down, or back to following the app.",
+        description: "Step one terminal's font size up, down, or back to following the app. Name the terminal by `terminal` (its id), or a `pane_id`; with neither, the terminal the keyboard is on.",
         icon: None,
         args: &[
             ArgDescriptor::optional(
+                "terminal",
+                ArgKind::Int,
+                "The terminal's id, as the store issued it. Wins over pane_id.",
+            ),
+            ArgDescriptor::optional(
                 "pane_id",
                 ArgKind::Int,
-                "The pane to zoom; omit for the focused one.",
+                "The pane whose terminal to zoom; omit for the terminal the keyboard is on.",
             ),
             ArgDescriptor::required_enum(
                 "step",

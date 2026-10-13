@@ -20,13 +20,14 @@ pub(super) fn build_terminal(
         "scroll_to_offset" => Some(WmAction::ScrollToOffset {
             rows: get_usize(args, "rows")?,
         }),
-        // Font zoom (RPC): `step` = in|out|reset; pane variant optionally targets
-        // a specific `pane_id` (omitted → focused pane).
+        // Font zoom (RPC): `step` = in|out|reset. One terminal's zoom names its target the way
+        // `terminal_run` does: a `terminal` id, a `pane_id`, or — with neither — the keyboard's.
         "app_font_zoom" => Some(WmAction::AppFontZoom {
             step: get_enum(args, "step")?,
         }),
         "pane_terminal_font_zoom" => Some(WmAction::PaneTerminalFontZoom {
             pane_id: get_u64(args, "pane_id").map(PaneId),
+            terminal: get_u64(args, "terminal"),
             step: get_enum(args, "step")?,
         }),
         // Terminal (RPC): the target is a `terminal` id, a `pane_id`, or — with neither — the

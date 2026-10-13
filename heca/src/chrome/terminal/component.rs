@@ -6,12 +6,10 @@ use std::rc::Rc;
 use heca_core::layout::Rectangle;
 use heca_grid_ui::{Point, Size};
 
-use super::input::{Cell as GridCell, Seams, Search, TerminalCommand, TerminalInput};
-use super::model::TerminalId;
+use super::input::{Search, TerminalInput};
 use super::search::{SearchBar, SearchSlot};
-use super::shared::{Declared, Shared};
-use super::viewport::{Controls, IntentSlot, Viewport};
-use crate::app::backend_store::Program;
+use super::shared::Shared;
+use super::viewport::{Controls, IntentSlot};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt};
 use heca_grid_ui::component::{Base, Component, GridKey, PaintCx, WidgetIntent};
 use heca_grid_ui::event::EventKind;
@@ -125,264 +123,6 @@ impl Terminal {
         .on(EventKind::Click, move |cx| me.open_link(cx))
     }
 
-    /// **A terminal an extension places by name** — the one every handle of that name shares, so a
-    /// dock built twice, or an overlay opened again, shows the same running process. Reached through
-    /// `extension("demo").terminal("shell")`, never by naming the owner half yourself.
-    pub(crate) fn declared(name: String) -> Self {
-        super::declared::of(name)
-    }
-
-    /// **Run this command instead of the user's shell**, under the shell so job control and rc behave
-    /// as in a pane. Fixed when the terminal starts: a running terminal's program does not change.
-    pub fn command(self, command: impl Into<String>) -> Self {
-        if let Some(declared) = self.shared.declared.borrow_mut().as_mut() {
-            declared.program = Program::Command(command.into());
-        }
-        self
-    }
-
-    /// **Start in this folder** (heca's own when unset). Fixed when the terminal starts.
-    pub fn cwd(self, folder: impl Into<std::path::PathBuf>) -> Self {
-        if let Some(declared) = self.shared.declared.borrow_mut().as_mut() {
-            declared.cwd = Some(folder.into());
-        }
-        self
-    }
-
-    /// **What the user reads** as this terminal's name; it defaults to the name it was declared
-    /// with. Only a title: the name is the identity and does not change.
-    pub fn title(self, title: impl Into<String>) -> Self {
-        if let Some(declared) = self.shared.declared.borrow_mut().as_mut() {
-            declared.title = Some(title.into());
-        }
-        self
-    }
-
-    /// The title to show: the one given, else the name; `None` for a terminal that was not
-    /// declared by an extension.
-    pub fn shown_title(&self) -> Option<String> {
-        self.shared
-            .declared
-            .borrow()
-            .as_ref()
-            .map(|d| d.title.clone().unwrap_or_else(|| d.name.clone()))
-    }
-
-    /// The declaration the host should start, if it has not yet.
-    pub(super) fn to_start(&self) -> Option<(String, Program, Option<std::path::PathBuf>)> {
-        let declared = self.shared.declared.borrow();
-        let declared = declared.as_ref().filter(|d| !d.resolved)?;
-        Some((
-            declared.name.clone(),
-            declared.program.clone(),
-            declared.cwd.clone(),
-        ))
-    }
-
-    /// Whether the host has yet to start what was declared.
-    pub(super) fn is_waiting(&self) -> bool {
-        self.shared
-            .declared
-            .borrow()
-            .as_ref()
-            .is_some_and(|d| !d.resolved)
-    }
-
-    /// The host started it (or could not): never start it again.
-    pub(super) fn resolved(&self) {
-        if let Some(declared) = self.shared.declared.borrow_mut().as_mut() {
-            declared.resolved = true;
-        }
-    }
-
-    /// Make this handle's shared state a declared terminal named `name`.
-    pub(super) fn declare(&self, name: String) {
-        *self.shared.declared.borrow_mut() = Some(Declared {
-            name,
-            title: None,
-            program: Program::Shell,
-            cwd: None,
-            resolved: false,
-        });
-    }
-
-    /// Say what the terminal's owner wants of it: what a click on the scrollback controls means,
-    /// and where its input goes. Said once, by whoever owns the terminal.
-    pub(super) fn bind(&self, seams: Seams) {
-        *self.shared.intents.borrow_mut() = Some(seams);
-    }
-
-    /// Show how the terminal's viewport looks: the chip and the scrollbar follow it. Returns whether
-    /// anything the user can see changed, so the caller can ask for a frame.
-    pub(crate) fn show(&self, viewport: &Viewport) -> bool {
-        self.shared.cell.set(viewport.cell);
-        self.shared.nominal.set(viewport.nominal_cell);
-        self.shared.link_modifier.set(viewport.open_link_modifier);
-        self.shared.view.set((viewport.top_stable_row, viewport.rows));
-        let search = &self.shared.search;
-        let highlights_changed = search.set_view(viewport.top_stable_row, viewport.rows)
-            | search.set_look(viewport.match_alpha, viewport.current_match_alpha);
-        self.shared.controls.borrow_mut().show(viewport) | highlights_changed
-    }
-
-    /// **Open the search bar and put the keyboard in its field** — the handle's `find`. Works
-    /// wherever the terminal is placed; the bar is its own.
-    pub fn find(&self) {
-        self.shared.search.open();
-    }
-
-    /// Whether the search bar is open — what a test asks, since the bar itself is the user's view.
-    #[cfg(test)]
-    pub(crate) fn search_open(&self) -> bool {
-        self.shared.search.is_open()
-    }
-
-    /// **Dismiss the search** — the bar goes, and the matches and the query with it.
-    pub fn close_search(&self) {
-        self.shared.search.close();
-    }
-
-    /// **Go to the next match** of the search that is open.
-    pub fn find_next(&self) {
-        self.shared.step(true);
-    }
-
-    /// **Go to the previous match** of the search that is open.
-    pub fn find_previous(&self) {
-        self.shared.step(false);
-    }
-
-    /// **Move to the next or previous match**, wrapping. Returns whether it moved, so the caller
-    /// can ask for a frame. The terminal holds the matches, so it is the one that steps.
-    pub(crate) fn step_match(&self, forward: bool) -> bool {
-        self.shared.search.step(forward)
-    }
-
-    /// The match the search is on, if any: where the caller scrolls to.
-    pub(crate) fn current_match(&self) -> Option<heca_core::backend::SearchMatch> {
-        self.shared.search.current_match()
-    }
-
-    /// **Show these matches**, `current` the focused one — what the owner found for the query the
-    /// terminal said. Returns whether anything the user can see changed: the same result again
-    /// changes nothing and asks for no frame.
-    pub(crate) fn show_matches(
-        &self,
-        matches: Vec<heca_core::backend::SearchMatch>,
-        current: Option<usize>,
-    ) -> bool {
-        self.shared.search.set_result(matches, current)
-    }
-
-    /// **Type a line into this terminal and press Enter** — the handle's `run`. Does nothing until the
-    /// terminal shows a process.
-    pub fn run(&self, text: &str) {
-        self.tell(TerminalCommand::Run {
-            text: text.to_string(),
-            enter: true,
-        });
-    }
-
-    /// **End this terminal** — the handle's `kill`.
-    ///
-    /// An ended named terminal stays ended: the dock that placed it keeps showing the ended
-    /// terminal, and the declared table keeps its entry, so asking for the same name again does not
-    /// start another behind the user's back.
-    pub fn kill(&self) {
-        self.tell(TerminalCommand::Kill);
-    }
-
-    fn tell(&self, command: TerminalCommand) {
-        let Some(id) = self.shared.id.get() else {
-            return;
-        };
-        if let Some(seams) = self.shared.intents.borrow().as_ref() {
-            (seams.command)(id, command);
-        }
-    }
-
-    /// Say which terminal process this shows. Said once, by whoever owns the processes.
-    pub(super) fn attach(&self, id: TerminalId) {
-        self.shared.id.set(Some(id));
-    }
-
-    /// Which terminal process this shows, once it has been said.
-    pub(crate) fn id(&self) -> Option<TerminalId> {
-        self.shared.id.get()
-    }
-
-    /// Say where it was drawn this frame, or that it was not. Said once a frame, by whoever reads
-    /// the frame's surface requests.
-    pub(super) fn place(&self, rect: Option<Rectangle>) {
-        self.shared.placed.set(rect);
-    }
-
-    /// Where it was drawn on the last frame it was on screen, in window coordinates.
-    pub(crate) fn placed(&self) -> Option<Rectangle> {
-        self.shared.placed.get()
-    }
-
-    /// **The grid cell under `pos`**, in window coordinates — `None` when the terminal was not drawn
-    /// last frame, the point is off its grid, or its cell size is not known yet. The same answer its
-    /// own pointer handlers give, so a question about "the cell the mouse is on" has one source.
-    pub(crate) fn cell_at(&self, pos: (f32, f32)) -> Option<GridCell> {
-        self.shared.placed.get()?;
-        let (cell_w, cell_h) = self.shared.cell.get();
-        GridCell::at(
-            (pos.0 as f64, pos.1 as f64),
-            self.shared.bounds.get(),
-            cell_w as f64,
-            cell_h as f64,
-        )
-    }
-
-    /// **Where cell `(row, col)` is on screen** (its top-left, window coordinates) — the inverse of
-    /// [`cell_at`](Self::cell_at). `None` when the terminal was not drawn last frame.
-    pub(crate) fn cell_origin(&self, row: usize, col: usize) -> Option<(f32, f32)> {
-        self.shared.placed.get()?;
-        let (cell_w, cell_h) = self.shared.cell.get();
-        let at = self.shared.bounds.get().loc;
-        Some((
-            at.x as f32 + col as f32 * cell_w,
-            at.y as f32 + row as f32 * cell_h,
-        ))
-    }
-
-    /// **Say which hyperlinks are on screen** — the backend's capture for this frame.
-    pub(crate) fn show_links(&self, links: &[heca_core::backend::HyperlinkSpan]) {
-        let mut mine = self.shared.links.borrow_mut();
-        if mine.as_slice() != links {
-            *mine = links.to_vec();
-        }
-    }
-
-    /// Every link on screen, in the order the backend captured them.
-    pub(crate) fn links(&self) -> Vec<heca_core::backend::HyperlinkSpan> {
-        self.shared.links.borrow().clone()
-    }
-
-    /// The target of the link under `pos` (window coordinates), if the terminal was drawn and the
-    /// point is on one.
-    pub(crate) fn link_at(&self, pos: (f32, f32)) -> Option<String> {
-        let cell = self.cell_at(pos)?;
-        self.shared.link_at(cell.row, cell.col)
-    }
-
-    /// The target of the link at a **stable-row** cell — the rows a selection keeps — if that row is
-    /// on screen.
-    pub(crate) fn link_at_stable(&self, stable_row: isize, col: usize) -> Option<String> {
-        let (top, rows) = self.shared.view.get();
-        let row = stable_row - top;
-        if row < 0 || row >= rows as isize {
-            return None;
-        }
-        self.shared.link_at(row as usize, col)
-    }
-
-    /// How much room the layout gave it the last time it was laid out.
-    pub(crate) fn room(&self) -> Option<Size> {
-        self.shared.size.get()
-    }
 }
 
 impl Terminal {
@@ -408,10 +148,6 @@ impl Component for Terminal {
         &mut self.base
     }
 
-    /// **The terminal's picture, then what sits over it.** The cell glyphs are rasterised by the
-    /// host into a texture it keeps (they are the hottest path in the app); all this says is which
-    /// terminal and which box, and the host draws it there. The scrollback controls are drawn after
-    /// it, in the same walk, so they are on top.
     /// **A hand over a link while the window's key is held** — the moment a click would open it.
     fn cursor_over(&self, point: Point) -> Option<heca_grid_ui::Cursor> {
         (self.shared.reserved(heca_grid_ui::event::modifiers())
@@ -419,6 +155,10 @@ impl Component for Terminal {
         .then_some(heca_grid_ui::Cursor::Pointer)
     }
 
+    /// **The terminal's picture, then what sits over it.** The cell glyphs are rasterised by the
+    /// host into a texture it keeps (they are the hottest path in the app); all this says is which
+    /// terminal and which box, and the host draws it there. The scrollback controls are drawn after
+    /// it, in the same walk, so they are on top.
     fn paint(&self, cx: &mut PaintCx) {
         self.shared.bounds.set(self.base.bounds);
         if let Some(id) = self.shared.id.get() {
@@ -480,6 +220,9 @@ impl Component for Terminal {
             }
             Event::Widget(WidgetIntent::FindNext) => self.shared.step(true),
             Event::Widget(WidgetIntent::FindPrevious) => self.shared.step(false),
+            // **Its own font size**: the terminal the keyboard is on answers, wherever it is placed.
+            Event::Widget(intent) => crate::input::FontZoomStep::of_intent(*intent)
+                .is_some_and(|step| self.shared.emit(TerminalInput::FontZoom(step))),
             Event::TextInput(text) => self.shared.emit(TerminalInput::Text(text.clone())),
             Event::Key { key, pressed: true } => self.shared.emit(TerminalInput::Key {
                 key: *key,
@@ -498,6 +241,8 @@ impl Component for Terminal {
 }
 
 impl LayoutExt for Terminal {}
+
+mod handle;
 
 #[cfg(test)]
 mod tests;

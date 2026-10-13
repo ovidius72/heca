@@ -102,7 +102,7 @@ pub(crate) fn draw_terminal(
     let surface_physical_size = state.window.inner_size();
     // Any terminal's, whoever owns it: the selection is a terminal's, asked of its id.
     let selection_overlay = selection_overlay_for_terminal(state, pane.id, &mount.snapshot);
-    let font_size = state.terminal_font_size(pane.pane);
+    let font_size = state.terminal_font_size(pane.id);
     // Clipped by its scene (a dock, an overlay) or by the target's own box (a pane).
     let content_clip = clip.unwrap_or(target.content_clip);
     let scissor = match clip {
