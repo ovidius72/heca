@@ -21,6 +21,15 @@ pub(crate) struct Tracking<'a> {
 }
 
 impl Tracking<'_> {
+    /// Know workspace `idx`, which is new: nothing was visited in it yet.
+    pub(crate) fn know_workspace(&mut self, idx: usize) {
+        for per_ws in [&mut *self.last_visited_pane_per_ws, &mut *self.expose_cursor_per_ws] {
+            if per_ws.len() <= idx {
+                per_ws.resize(idx + 1, None);
+            }
+        }
+    }
+
     /// Forget workspace `idx`, which is gone: what pointed at it points at nothing, and what
     /// pointed past it moves down one.
     pub(crate) fn forget_workspace(&mut self, idx: usize) {
@@ -61,12 +70,6 @@ pub(crate) struct Reaction {
     pub(crate) redraw: bool,
     /// Say, in the status bar, why the action asked for did nothing.
     pub(crate) refusal: Option<Refusal>,
-    /// Start a shell in this pane of this workspace. The terminals are still the window's, so a
-    /// pane the server made is given its shell here; it goes when they move behind the server.
-    pub(crate) start_shell: Option<(PaneId, usize)>,
-    /// End the terminal in this pane, which is gone. Like the shell start, the terminals are
-    /// still the window's, so this goes when they move behind the server.
-    pub(crate) stop_terminals: Vec<PaneId>,
     /// Names changed: whatever shows them is out of date.
     pub(crate) names_changed: bool,
 }
@@ -157,10 +160,9 @@ pub(crate) fn window_reacts(
                     ws.activate_pane(pane);
                 }
             }
-            reaction.start_shell = Some((pane, workspace));
         }
         Change::NamesChanged => reaction.names_changed = true,
-        Change::PaneRemoved { pane } => reaction.stop_terminals.push(pane),
+        Change::PaneRemoved { .. } => {}
         Change::PaneMoved { pane, workspace, .. } => {
             // A pane moved by this window is shown where it landed, and focused there.
             if asked.is_some() {
@@ -181,6 +183,7 @@ pub(crate) fn window_reacts(
                 }
             }
         }
+        Change::WorkspaceAdded { index } => tracking.know_workspace(index),
         Change::WorkspaceRemoved { index } => {
             layout.workspace_removed(index);
             tracking.forget_workspace(index);

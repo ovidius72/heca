@@ -9,7 +9,7 @@ use crate::layout::animation::{Animation, AnimationConfig};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{Result as IoResult, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use wezterm_surface::CursorVisibility;
@@ -105,7 +105,10 @@ impl Clipboard for OscClipboard {
 #[derive(Debug)]
 struct HecaTerminalConfig {
     palette: ColorPalette,
-    scrollback_size: usize,
+    /// How many rows of history to keep. Shared with every config this terminal is given: the
+    /// terminal library holds on to the config each screen was made with, so a size handed over
+    /// in a new config would never reach a running terminal — one cell read live does.
+    scrollback_size: Arc<AtomicUsize>,
 }
 
 impl TerminalConfiguration for HecaTerminalConfig {
@@ -114,7 +117,7 @@ impl TerminalConfiguration for HecaTerminalConfig {
     }
 
     fn scrollback_size(&self) -> usize {
-        self.scrollback_size
+        self.scrollback_size.load(Ordering::Relaxed)
     }
 
     /// Capture Kitty graphics in addition to the Sixel + iTerm2 `OSC 1337`
@@ -129,6 +132,8 @@ impl TerminalConfiguration for HecaTerminalConfig {
 
 pub(super) struct TerminalEngine {
     terminal: Terminal,
+    /// How many rows of history to keep — the one cell every config of this terminal reads.
+    scrollback_size: Arc<AtomicUsize>,
     cols: usize,
     rows: usize,
     pending_bell: Arc<AtomicBool>,
@@ -191,9 +196,10 @@ impl TerminalEngine {
         palette_defaults: Option<TerminalPaletteDefaults>,
         scrollback_size: usize,
     ) -> Result<Self, super::PtyError> {
+        let scrollback_size = Arc::new(AtomicUsize::new(scrollback_size));
         let mut terminal = Terminal::new(
             terminal_size(cols, rows, cell_px),
-            terminal_config(palette_defaults, scrollback_size),
+            terminal_config(palette_defaults, &scrollback_size),
             "heca",
             env!("CARGO_PKG_VERSION"),
             Box::new(writer),
@@ -214,6 +220,7 @@ impl TerminalEngine {
             cols,
             rows,
             pending_bell,
+            scrollback_size,
             viewport_offset: 0,
             viewport_changed: false,
             viewport_anim: None,
@@ -340,7 +347,9 @@ impl TerminalEngine {
         palette_defaults: Option<TerminalPaletteDefaults>,
         scrollback_size: usize,
     ) {
-        let config = terminal_config(palette_defaults, scrollback_size);
+        self.scrollback_size
+            .store(scrollback_size, Ordering::Relaxed);
+        let config = terminal_config(palette_defaults, &self.scrollback_size);
         // Force the freshly-configured palette to win. `set_config` only swaps the config
         // Arc — wezterm keeps any palette a program forked via dynamic-color escapes (OSC
         // 4/10/11, which nvim and many shell prompts emit), and `palette()` (read by the
@@ -1352,7 +1361,7 @@ fn detect_plain_links(lines: &[TerminalLine], hyperlinks: &mut Vec<HyperlinkSpan
 
 fn terminal_config(
     palette_defaults: Option<TerminalPaletteDefaults>,
-    scrollback_size: usize,
+    scrollback_size: &Arc<AtomicUsize>,
 ) -> Arc<HecaTerminalConfig> {
     // Engines are created once per pane, so a fresh `Arc` per engine is cheap and
     // keeps the `scrollback_size` override correct (a shared `OnceLock` cache would
@@ -1362,7 +1371,7 @@ fn terminal_config(
             Some(defaults) => palette_with_defaults(defaults),
             None => ColorPalette::default(),
         },
-        scrollback_size,
+        scrollback_size: Arc::clone(scrollback_size),
     })
 }
 
@@ -1619,6 +1628,26 @@ mod tests {
             ansi: None,
             brights: None,
         }
+    }
+
+    /// **A new history size reaches a terminal that is already running**: from the next line that
+    /// scrolls off, it keeps no more than the new size.
+    #[test]
+    fn reload_config_changes_how_much_history_a_running_terminal_keeps() {
+        let writer = SharedWriter::new(Box::new(SinkWriter));
+        let mut engine = TerminalEngine::new(20, 10, (8.0, 16.0), writer, None, 3500)
+            .expect("engine should initialize");
+        let lines = |n: usize| (1..=n).map(|i| format!("{i}\r\n")).collect::<String>();
+        engine.advance_bytes(lines(1000).as_bytes());
+        assert!(
+            engine.max_viewport_offset() > 900,
+            "it kept the history it was given room for"
+        );
+
+        engine.reload_config(None, 100);
+        engine.advance_bytes(lines(5).as_bytes());
+
+        assert_eq!(engine.max_viewport_offset(), 100);
     }
 
     #[test]

@@ -1,5 +1,6 @@
-//! **The edges between the columns and between the panes stacked in one**, worked out from the
-//! rects the layout engine gave.
+//! **The edges of the columns and between the panes stacked in one**, worked out from the rects the
+//! layout engine gave: between two columns, and also the outer edges of the first and last, so a
+//! lone column and the ones at either end can be resized too.
 //!
 //! Each becomes a [`Splitter`](heca_grid_ui::widgets::Splitter) child of the workspace, so dragging
 //! one is the library's gesture and a float laid over it covers it.
@@ -12,8 +13,11 @@ use super::WorkspaceModel;
 /// resize takes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Edge {
-    /// The gap right of column `col`: moves that column's width.
+    /// The gap right of column `col` — or, for the last, its right border: moves that column's
+    /// width.
     Column { col: usize },
+    /// The left border of column `col`, the first: moves that column's width, wider to the left.
+    ColumnStart { col: usize },
     /// The gap below pane `pane` of column `col`: moves that pane's height.
     Pane { col: usize, pane: usize },
 }
@@ -23,6 +27,7 @@ impl Edge {
     pub(super) fn name(self) -> String {
         match self {
             Edge::Column { col } => format!("split:col:{col}"),
+            Edge::ColumnStart { col } => format!("split:colstart:{col}"),
             Edge::Pane { col, pane } => format!("split:pane:{col}:{pane}"),
         }
     }
@@ -41,12 +46,25 @@ pub(super) fn edges(model: &WorkspaceModel) -> Vec<(Edge, Rectangle)> {
         )
     };
     let mut out = Vec::new();
+    if let Some(first) = model.columns.first() {
+        out.push((
+            Edge::ColumnStart { col: 0 },
+            rect(first.x, first.y, 0.0, first.h),
+        ));
+    }
     for (col, pair) in model.columns.windows(2).enumerate() {
         let (left, right) = (&pair[0], &pair[1]);
         let from = left.x + left.w;
         out.push((
             Edge::Column { col },
             rect(from, left.y, right.x - from, left.h),
+        ));
+    }
+    if let Some(last) = model.columns.last() {
+        let col = model.columns.len() - 1;
+        out.push((
+            Edge::Column { col },
+            rect(last.x + last.w, last.y, 0.0, last.h),
         ));
     }
     for (col, column) in model.columns.iter().enumerate() {

@@ -2,7 +2,7 @@
 
 use super::{Arranged, Record};
 use crate::layout::scrolling::SpaceEffect;
-use crate::layout::{ColumnId, Pane, PaneId, Session};
+use crate::layout::{ColumnId, Pane, PaneId, Rectangle, Session};
 
 /// Where a pane that was made landed.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,12 +49,34 @@ impl Session {
     pub fn add_column(&mut self, ws: usize, at: usize) -> Option<Added> {
         self.workspaces.get(ws)?;
         let pane = Pane::new(PaneId(self.next_id()), String::new());
+        self.add_column_with(ws, at, pane)
+    }
+
+    /// Put `pane` in a new column of workspace `ws`, at index `at` (the end, when past it).
+    /// `None` when the workspace is not there.
+    pub fn add_column_with(&mut self, ws: usize, at: usize, pane: Pane) -> Option<Added> {
+        self.workspaces.get(ws)?;
         let id = pane.id;
         let new_column = ColumnId(self.next_id());
         let space = &mut self.workspaces[ws].scrolling;
         let column = space.new_column(new_column, pane);
         let effect = space.insert_column(at, column);
         self.added(ws, id, SpaceEffect::Column(effect))
+    }
+
+    /// Float `pane` in workspace `ws` at `rect`, in front and focused. Nothing in the columns
+    /// changes. `None` when the workspace is not there.
+    pub fn add_floating(&mut self, ws: usize, pane: Pane, rect: Rectangle) -> Option<Added> {
+        let id = pane.id;
+        self.workspaces
+            .get_mut(ws)?
+            .add_floating_pane(pane, rect, None);
+        Some(Added {
+            pane: id,
+            workspace: ws,
+            column: 0,
+            arranged: Arranged::default(),
+        })
     }
 
     /// What a pane made in workspace `ws` says.

@@ -60,7 +60,7 @@ fn an_open_pick_marks_the_workspace_and_the_marks_leave_with_it() {
     assert!(ws.set_props(&two_columns()));
     assert_eq!(
         keys(ws.as_ref()),
-        ["col:1", "col:2", "split:col:0", "split:pane:0:0"],
+        ["col:1", "col:2", "split:colstart:0", "split:col:0", "split:col:1", "split:pane:0:0"],
         "the marks left with the pick, and nothing else was rebuilt"
     );
 }

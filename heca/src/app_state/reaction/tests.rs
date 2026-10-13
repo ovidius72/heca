@@ -102,7 +102,6 @@ fn only_the_asking_window_follows_a_moved_pane() {
 #[test]
 fn a_moved_pane_is_focused_unless_the_move_said_not_to() {
     let landed = Change::PaneMoved { pane: PaneId(2), workspace: 0, column: 1 };
-    let focused = |window: &Windowed| window.l().active_workspace().and_then(|ws| ws.scroll().active_pane().map(|p| p.id));
     let mut window = two_workspaces_of_two_columns();
     window.m().focus_left();
     let mut tracked = Tracked::default();
@@ -182,51 +181,37 @@ fn a_named_pane_is_focused_even_when_it_did_not_move() {
     assert_eq!(window.l().workspace(1).map(|ws| ws.scroll().active_column_idx()), Some(0));
 }
 
-/// Only the asking window is taken to a pane it made; every window is told to start its shell,
-/// because until the terminals are behind the server nothing else will. Pinned so that
-/// reaction is found and removed with that work: no other fact asks for a shell.
-#[test]
-fn a_made_pane_gets_its_shell_and_nothing_else_does() {
-    let added = Change::PaneAdded { pane: PaneId(7), workspace: 1, column: 0 };
-    let mut window = two_workspaces_of_two_columns();
-    let mut tracked = Tracked::default();
-    let heard = react(&mut window, &mut tracked, &added, None);
-    assert_eq!(heard.start_shell, Some((PaneId(7), 1)));
-    assert_eq!(window.l().active_workspace_idx(), 0, "another window does not follow");
-    let ask = WmAction::AddPaneToColumn { ws_idx: 1, col_idx: 0 };
-    react(&mut window, &mut tracked, &added, Some(&ask));
-    assert_eq!(window.l().active_workspace_idx(), 1);
-
-    for other in [
-        Change::LayoutChanged,
-        Change::ColumnZoomed { workspace: 0, column: 0 },
-        landed_in_workspace_1(),
-        Change::ColumnMoved { workspace: 0, column: 0 },
-        Change::WorkspaceRemoved { index: 0 },
-        Change::Refused(Refusal::OnlyPaneInColumn),
-        Change::NotificationsChanged,
-    ] {
-        assert_eq!(react(&mut window, &mut tracked, &other, None).start_shell, None, "{other:?}");
-    }
+/// The pane the window shows as active.
+fn focused(window: &Windowed) -> Option<PaneId> {
+    window.l().active_workspace().and_then(|ws| ws.scroll().active_pane().map(|p| p.id))
 }
 
-/// A pane that is gone has its terminal ended by the window, and nothing else asks for that —
-/// pinned with the shell start so both go together when the terminals are behind the server.
+/// Only the asking window is taken to a pane it made, and focuses it.
 #[test]
-fn a_removed_pane_has_its_terminal_ended_and_nothing_else_does() {
+fn only_the_asking_window_goes_to_a_pane_it_made() {
+    let added = Change::PaneAdded { pane: PaneId(12), workspace: 1, column: 1 };
     let mut window = two_workspaces_of_two_columns();
     let mut tracked = Tracked::default();
-    let gone = react(&mut window, &mut tracked, &Change::PaneRemoved { pane: PaneId(2) }, None);
-    assert_eq!(gone.stop_terminals, [PaneId(2)]);
-    for other in [
-        Change::LayoutChanged,
-        Change::PaneAdded { pane: PaneId(7), workspace: 0, column: 0 },
-        landed_in_workspace_1(),
-        Change::WorkspaceRemoved { index: 0 },
-        Change::NotificationsChanged,
-    ] {
-        assert!(react(&mut window, &mut tracked, &other, None).stop_terminals.is_empty(), "{other:?}");
-    }
+    react(&mut window, &mut tracked, &added, None);
+    assert_eq!(window.l().active_workspace_idx(), 0, "another window does not follow");
+    let ask = WmAction::AddPaneToColumn { ws_idx: 1, col_idx: 1 };
+    react(&mut window, &mut tracked, &added, Some(&ask));
+    assert_eq!(window.l().active_workspace_idx(), 1);
+    assert_eq!(focused(&window), Some(PaneId(12)));
+}
+
+/// A new workspace is known to the window, with nothing visited in it yet.
+#[test]
+fn a_new_workspace_is_known_with_nothing_visited() {
+    let mut window = two_workspaces_of_two_columns();
+    let mut tracked = Tracked {
+        last_visited_pane_per_ws: vec![Some(PaneId(1)), Some(PaneId(11))],
+        expose_cursor_per_ws: vec![None, Some(PaneId(12))],
+        ..Tracked::default()
+    };
+    react(&mut window, &mut tracked, &Change::WorkspaceAdded { index: 2 }, None);
+    assert_eq!(tracked.last_visited_pane_per_ws, [Some(PaneId(1)), Some(PaneId(11)), None]);
+    assert_eq!(tracked.expose_cursor_per_ws, [None, Some(PaneId(12)), None]);
 }
 
 /// A name that changed tells the window what shows names is out of date; nothing else does.

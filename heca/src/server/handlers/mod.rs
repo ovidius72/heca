@@ -24,6 +24,9 @@ mod remove;
 #[cfg(test)]
 mod remove_tests;
 mod swap;
+mod terminal;
+#[cfg(test)]
+mod terminal_tests;
 #[cfg(test)]
 mod testing;
 
@@ -32,23 +35,6 @@ use crate::input::{WmAction, WmActionKind};
 
 /// A server action's handler.
 pub(crate) type ServerHandler = fn(&mut ServerCx<'_>, &WmAction) -> Vec<Change>;
-
-/// **The server actions that cannot run on the server yet, because they start or find a terminal.**
-///
-/// Starting a shell builds its launch settings from the window — the event proxy that wakes the
-/// loop, the theme, the cell size and viewport — and the terminals are not yet behind the server.
-/// Until then these keep their window handler. The list is pinned by a test so it can only shrink,
-/// and it **empties with 2b (terminals behind the server)**: a handler that starts a shell moves
-/// here the day the server can start one itself.
-#[cfg(test)]
-pub(crate) const AWAITING_TERMINALS: &[WmActionKind] = &[
-    WmActionKind::SplitHorizontal,
-    WmActionKind::SplitVertical,
-    WmActionKind::SpawnCommand,
-    WmActionKind::CreateWorkspace,
-    WmActionKind::TerminalRun,
-    WmActionKind::TerminalKill,
-];
 
 /// The server handler for `kind`, if the action has been moved here.
 pub(crate) fn handler_for(kind: WmActionKind) -> Option<ServerHandler> {
@@ -97,6 +83,12 @@ pub(crate) fn handler_for(kind: WmActionKind) -> Option<ServerHandler> {
         K::ResetWorkspaceNameByIdx => names::reset_workspace_name_by_idx,
         K::Float => pane::float,
         K::FloatAt => pane::float_at,
+        K::SplitHorizontal => add::split_horizontal,
+        K::SplitVertical => add::split_vertical,
+        K::CreateWorkspace => add::create_workspace,
+        K::SpawnCommand => terminal::spawn_command,
+        K::TerminalRun => terminal::terminal_run,
+        K::TerminalKill => terminal::terminal_kill,
         _ => return None,
     })
 }
@@ -122,28 +114,16 @@ mod tests {
         assert!(missing.is_empty(), "kinds with no side: {missing:?}");
     }
 
-    /// **A server action is not run by a window handler**: either the server has it, or it is on
-    /// the one list of those waiting for the terminals. This is the finish line of moving the
-    /// actions over: a new server action with no handler fails it, and the list can only shrink.
+    /// **A server action is run by the server**, never by a window handler: a new server action
+    /// with no handler here fails this.
     #[test]
-    fn every_server_action_runs_on_the_server_or_awaits_the_terminals() {
+    fn every_server_action_runs_on_the_server() {
         let sides = sides();
         let stragglers: Vec<_> = WmActionKind::iter()
             .filter(|k| sides.of(*k) == Some(Side::Server))
-            .filter(|k| handler_for(*k).is_none() && !AWAITING_TERMINALS.contains(k))
+            .filter(|k| handler_for(*k).is_none())
             .collect();
         assert!(stragglers.is_empty(), "still on the window: {stragglers:?}");
-    }
-
-    /// The waiting list can only shrink: everything on it is a server action that has no server
-    /// handler yet. Once a handler is moved, it must leave the list.
-    #[test]
-    fn what_awaits_the_terminals_is_a_server_action_without_a_server_handler() {
-        let sides = sides();
-        for kind in AWAITING_TERMINALS {
-            assert_eq!(sides.of(*kind), Some(Side::Server), "{kind:?}");
-            assert!(handler_for(*kind).is_none(), "{kind:?} moved: take it off the list");
-        }
     }
 
     /// **A plugin's dispatch is routed by the built-in it names.** A name-keyed action runs

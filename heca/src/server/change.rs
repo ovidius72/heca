@@ -19,13 +19,13 @@ pub(crate) enum Change {
         workspace: usize,
         column: usize,
     },
-    /// A new pane now sits in column `column` of workspace `workspace`. Nothing runs in it yet.
+    /// A new pane now sits in column `column` of workspace `workspace`, its program running.
     PaneAdded {
         pane: heca_core::layout::PaneId,
         workspace: usize,
         column: usize,
     },
-    /// The pane is gone from the layout. Whatever ran in it is the window's to end.
+    /// The pane is gone from the layout, and whatever ran in it has ended.
     PaneRemoved { pane: heca_core::layout::PaneId },
     /// The columns or panes of workspace `workspace` changed, as `effects` say: each window shows
     /// it for itself. Several effects are one change (a move is a removal and an insertion).
@@ -35,6 +35,8 @@ pub(crate) enum Change {
     },
     /// A column now sits at index `column` of workspace `workspace` (numbered as they are now).
     ColumnMoved { workspace: usize, column: usize },
+    /// A workspace now sits at `index`, after the last.
+    WorkspaceAdded { index: usize },
     /// The workspace that was at `index` is gone; every later one is one lower.
     WorkspaceRemoved { index: usize },
     /// A pane, column or workspace has a different name.

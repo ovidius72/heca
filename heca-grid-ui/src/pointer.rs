@@ -403,9 +403,13 @@ fn route_wheel(root: &mut dyn Component, raw: &RawPointer) -> Handled {
 }
 
 /// The pointer left the window, or the host is cancelling: nothing may stay hovered, captured,
-/// pressed or dragging behind it.
+/// pressed or dragging behind it — and the widget holding the pointer hears its gesture end, as a
+/// [`PointerUp`](Event::PointerUp), so a drag it keeps itself cannot outlive it.
 fn cancel(root: &mut dyn Component, raw: &RawPointer) {
     update_hover(root, None, raw);
+    if let Some(path) = capture_path(root) {
+        let _ = deliver_targeted(root, &path, Event::PointerUp(pointer_event(raw, 0)));
+    }
     if let Some(path) = dragging_path(root) {
         let item = drag_identity(root, &path);
         clear_drag_over(root);

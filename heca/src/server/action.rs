@@ -40,4 +40,7 @@ pub(crate) enum ServerAction {
     Hover(bool),
     /// New notification settings (startup, reload).
     Configure(NotificationSettings),
+    /// New terminal settings (reload): every running process takes them, and every one started
+    /// from now on starts with them.
+    ConfigureTerminals(Box<crate::app::backend_factory::TerminalSettings>),
 }

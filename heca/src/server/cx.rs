@@ -2,7 +2,7 @@
 
 use heca_core::layout::{ColumnEffect, Layout, PaneId, Rectangle, ScrollingSpace, Size, SpaceEffect};
 
-use super::{Change, ServerLayout};
+use super::{Change, ServerLayout, Terminals};
 
 /// Plain data about the window that asked — what a server action needs to know that only the
 /// window knows. The server never reads it from a window: with several windows (F012) each request
@@ -20,12 +20,20 @@ pub(crate) struct Asker {
     /// a pane floated with no place given floats in the middle of it, so a request carries it;
     /// nothing should read it as the area of anything else.
     pub(crate) area: Rectangle,
+    /// How big this window draws a terminal's cell — what a terminal it asks for is started with.
+    /// Like the area, it is **this window's**: another window may draw at another size.
+    pub(crate) cell: (f32, f32),
 }
 
 impl Asker {
+    /// How many cells a terminal filling this asker's area holds.
+    pub(crate) fn grid(&self) -> (usize, usize) {
+        crate::app::backend_factory::estimate_terminal_grid(self.area.size.w, self.area.size.h, self.cell)
+    }
+
     /// The asker for a window that sees the session as `layout` shows it, with `focused_pane`
-    /// focused — the one place a window's place is turned into data.
-    pub(crate) fn seen_through(layout: Layout<'_>, focused_pane: Option<PaneId>) -> Self {
+    /// focused and terminal cells `cell` big — the one place a window's place is turned into data.
+    pub(crate) fn seen_through(layout: Layout<'_>, focused_pane: Option<PaneId>, cell: (f32, f32)) -> Self {
         Self {
             focused_pane,
             workspace: layout.active_workspace_idx(),
@@ -35,6 +43,7 @@ impl Asker {
             area: layout
                 .active_workspace()
                 .map_or(Rectangle::from_size(Size::default()), |ws| ws.scroll().area()),
+            cell,
         }
     }
 }
@@ -43,6 +52,8 @@ impl Asker {
 pub(crate) struct ServerCx<'a> {
     /// The session, by index and by id, and no window's view of it.
     pub(crate) layout: ServerLayout<'a>,
+    /// The terminal processes, and what starting one takes.
+    pub(crate) terminals: Terminals<'a>,
     /// Who asked.
     pub(crate) asker: Asker,
 }

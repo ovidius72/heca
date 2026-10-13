@@ -19,6 +19,9 @@ use heca_core::layout::PaneId;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+mod target;
+pub(crate) use target::TerminalTarget;
+
 /// What to run in a terminal. Fixed at start: a running terminal's program and folder do not change.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Program {
