@@ -1,6 +1,8 @@
 //! What a server handler is given: the shared content to change, and who asked.
 
-use heca_core::layout::{ColumnEffect, Layout, PaneId, Rectangle, ScrollingSpace, Size, SpaceEffect};
+use heca_core::layout::{
+    ColumnEffect, Layout, PaneId, Rectangle, ScrollingSpace, Size, SpaceEffect,
+};
 
 use super::{Change, ServerLayout, Terminals};
 
@@ -28,12 +30,20 @@ pub(crate) struct Asker {
 impl Asker {
     /// How many cells a terminal filling this asker's area holds.
     pub(crate) fn grid(&self) -> (usize, usize) {
-        crate::app::backend_factory::estimate_terminal_grid(self.area.size.w, self.area.size.h, self.cell)
+        crate::app::backend_factory::estimate_terminal_grid(
+            self.area.size.w,
+            self.area.size.h,
+            self.cell,
+        )
     }
 
     /// The asker for a window that sees the session as `layout` shows it, with `focused_pane`
     /// focused and terminal cells `cell` big — the one place a window's place is turned into data.
-    pub(crate) fn seen_through(layout: Layout<'_>, focused_pane: Option<PaneId>, cell: (f32, f32)) -> Self {
+    pub(crate) fn seen_through(
+        layout: Layout<'_>,
+        focused_pane: Option<PaneId>,
+        cell: (f32, f32),
+    ) -> Self {
         Self {
             focused_pane,
             workspace: layout.active_workspace_idx(),
@@ -42,7 +52,9 @@ impl Asker {
                 .map_or(0, |ws| ws.scroll().active_column_idx()),
             area: layout
                 .active_workspace()
-                .map_or(Rectangle::from_size(Size::default()), |ws| ws.scroll().area()),
+                .map_or(Rectangle::from_size(Size::default()), |ws| {
+                    ws.scroll().area()
+                }),
             cell,
         }
     }
@@ -71,7 +83,10 @@ impl ServerCx<'_> {
         };
         change(space, &asker)
             .into_iter()
-            .map(|effect| Change::Arranged { workspace, effects: vec![SpaceEffect::Column(effect)] })
+            .map(|effect| Change::Arranged {
+                workspace,
+                effects: vec![SpaceEffect::Column(effect)],
+            })
             .collect()
     }
 

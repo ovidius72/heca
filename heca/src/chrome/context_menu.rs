@@ -152,8 +152,7 @@ impl ContextMenuRegistry {
         // **One sorted list, not blocks-then-items.** Every entry has an order: the one it declared
         // for itself, or its block's when it declared none. So a plugin can place its entries as a
         // block — which is what it usually wants — and still lift a single one to the top, without
-        // anyone having to understand two orderings to predict where anything lands
-        //.
+        // anyone having to understand two orderings to predict where anything lands.
         //
         // Stable, so entries that end up with equal orders keep the order their source produced
         // them in — which is what makes a block where no entry says anything come out as written.

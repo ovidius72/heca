@@ -125,35 +125,35 @@ pub(crate) fn model(
                 .map(|(col_idx, col)| {
                     let heights = ws.scroll().pane_heights(col_idx);
                     ExposeColumn {
-                    col_idx,
-                    // The width the layout gives this column in this window.
-                    width: ws.scroll().column_width(col_idx),
-                    panes: col
-                        .panes
-                        .iter()
-                        .enumerate()
-                        .map(|(pane_idx, pane)| ExposePane {
-                            pane_id: pane.id,
-                            name: name_of(pane),
-                            // **"Turned off" and "there is none" are the same absence.** The
-                            // setting is read once, here, rather than carried down four components
-                            // as a flag every one of them would have to pass on untouched.
-                            folder: folders
-                                .then_some(pane.runtime.cwd.as_deref())
-                                .flatten()
-                                .map(crate::chrome::home_relative_path),
-                            active: pane_idx == col.active_pane_idx
-                                && col_idx == ws.scroll().active_column_idx(),
-                            // The layout's resolved height, which already accounts for
-                            // `height_share`; a column with no room gives equal weights, which
-                            // is exactly the even split.
-                            height: heights
-                                .get(pane_idx)
-                                .copied()
-                                .filter(|h| *h > 0.0)
-                                .unwrap_or(1.0),
-                        })
-                        .collect(),
+                        col_idx,
+                        // The width the layout gives this column in this window.
+                        width: ws.scroll().column_width(col_idx),
+                        panes: col
+                            .panes
+                            .iter()
+                            .enumerate()
+                            .map(|(pane_idx, pane)| ExposePane {
+                                pane_id: pane.id,
+                                name: name_of(pane),
+                                // **"Turned off" and "there is none" are the same absence.** The
+                                // setting is read once, here, rather than carried down four components
+                                // as a flag every one of them would have to pass on untouched.
+                                folder: folders
+                                    .then_some(pane.runtime.cwd.as_deref())
+                                    .flatten()
+                                    .map(crate::chrome::home_relative_path),
+                                active: pane_idx == col.active_pane_idx
+                                    && col_idx == ws.scroll().active_column_idx(),
+                                // The layout's resolved height, which already accounts for
+                                // `height_share`; a column with no room gives equal weights, which
+                                // is exactly the even split.
+                                height: heights
+                                    .get(pane_idx)
+                                    .copied()
+                                    .filter(|h| *h > 0.0)
+                                    .unwrap_or(1.0),
+                            })
+                            .collect(),
                     }
                 })
                 .collect();
@@ -217,7 +217,11 @@ mod tests {
         let s = session();
         let rows = model(s.l(), |p| p.title.clone(), false);
 
-        assert_eq!(rows.len(), s.session.workspaces.len(), "one row per workspace");
+        assert_eq!(
+            rows.len(),
+            s.session.workspaces.len(),
+            "one row per workspace"
+        );
         assert_eq!(rows[0].name, "Editing");
         assert!(rows[0].active, "the first workspace is the active one");
         assert_eq!(rows[1].name, "Workspace 2");

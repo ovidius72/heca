@@ -53,6 +53,11 @@ pub(super) struct Shared {
     pub(super) view: Cell<(isize, usize)>,
     /// The key that makes a press the window's and a click on a link open it.
     pub(super) link_modifier: Cell<ModifierKey>,
+    /// The window's identity of the node drawn on the last frame (its focus identity), `0` before
+    /// one is drawn. Read with `placed`: a terminal not drawn has no node on screen.
+    pub(super) node: Cell<u64>,
+    /// Asked to take the keyboard before it was drawn: the next node drawn takes it.
+    pub(super) wants_keyboard: Cell<bool>,
 }
 
 /// **What an extension declared about a terminal it placed.** The name is the identity and never

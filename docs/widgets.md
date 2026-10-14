@@ -5001,6 +5001,11 @@ set, focused and unfocused.)
 - **Reads (host)**: `contains_keyboard(node)` (is the keyboard inside this subtree), `page_scope(root)`
   (the named region the keyboard is in on the page, looking through a dialog above it to where it
   returns).
+- **One widget, by identity (host)**: `keyboard_holder(root)` — the focus identity
+  (`Base::focus_id`) of the widget holding the keyboard, the browser's `document.activeElement` —
+  and `focus_widget_by_id(root, id)`, its `element.focus()`. For a host that remembers a widget by
+  identity rather than by a path a rebuild moves: heca keeps each terminal's on-screen node this
+  way, so "which terminal has the keyboard" is asked of the window and never kept beside it.
 - **Theme**: the outline is [`PaintCx::focus_ring`] — the same primitive every control's ring uses,
   at `focus_border_width`, offset outside the bounds like a CSS `outline`. A theme with
   `show_focus_border = false` hides this one too: whether focus outlines are drawn is the theme's
@@ -6608,7 +6613,8 @@ silently resolves to the most permissive setting in the system.
 | Policy | Use it when |
 |--------|-------------|
 | `Global` | App-level with **no layout impact** — must keep working while a floating pane is up (`reload_config` is the model). |
-| `FocusedPaneLocal` | Acts on the focused pane in either domain (close, rename, copy). |
+| `FocusedPaneLocal` | Acts on the focused pane in either domain (close, rename). |
+| `KeyboardTerminal` | Acts on the terminal the keyboard is on (scroll, select, copy, search, font size) — also while something covers the panes, when a terminal shown in it holds the keyboard. |
 | `TiledOnly` | Only meaningful in the tiled column layout (focus, split, resize, move, swap). |
 | `WorkspaceLevel` | Switches or mutates workspaces. |
 | `SourceDependent` | Allowed only for some interaction sources / targets. |

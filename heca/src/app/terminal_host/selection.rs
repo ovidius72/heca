@@ -5,13 +5,8 @@ use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSour
 use crate::app_state::{AppState, InputMode};
 use crate::chrome::terminal::TerminalId;
 
-/// The terminal the keyboard's selection acts on: the focused pane's.
-fn focused_terminal(state: &AppState) -> Option<TerminalId> {
-    state.server.backends.identity_of(state.focused_pane?)
-}
-
 pub(crate) fn enter_selection_mode_for_focused_terminal(state: &mut AppState) -> bool {
-    let Some(terminal) = focused_terminal(state) else {
+    let Some(terminal) = state.keyboard_terminal() else {
         return false;
     };
     let Some(snapshot) = state
@@ -51,7 +46,7 @@ pub(crate) fn move_focused_terminal_selection(
     row_delta: isize,
     col_delta: isize,
 ) -> bool {
-    let Some(terminal) = focused_terminal(state) else {
+    let Some(terminal) = state.keyboard_terminal() else {
         return false;
     };
     let Some(snapshot) = state

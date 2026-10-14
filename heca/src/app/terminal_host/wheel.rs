@@ -73,7 +73,12 @@ pub(super) fn on_wheel(
     // **Ctrl/Meta+wheel is a font-zoom gesture** for the terminal it turned over, whoever owns it.
     // It is consumed whatever the direction, so a modified wheel never reaches the program as a
     // scroll.
-    match wheel_font_zoom(state.mouse_wheel_change_font_size, modifiers, y, terminal) {
+    match wheel_font_zoom(
+        state.settings.mouse_wheel_change_font_size,
+        modifiers,
+        y,
+        terminal,
+    ) {
         WheelZoom::Not => {}
         WheelZoom::Consumed => return,
         WheelZoom::Step(action) => {
@@ -110,7 +115,7 @@ pub(super) fn on_wheel(
         .backends
         .get_by_id(terminal)
         .is_some_and(|b| b.is_mouse_grabbed());
-    let do_host_scroll = shift_held || (state.terminal_mouse_enabled && !wants_mouse);
+    let do_host_scroll = shift_held || (state.settings.terminal_mouse_enabled && !wants_mouse);
 
     if !do_host_scroll {
         // Forward wheel to the terminal backend.
@@ -144,7 +149,7 @@ pub(super) fn on_wheel(
         return;
     }
 
-    let lines = state.terminal_wheel_scroll_lines;
+    let lines = state.settings.terminal_wheel_scroll_lines;
     // Determine number of host-scroll notches from the dominant wheel axis.
     // On many platforms Shift+wheel is remapped to horizontal scroll (`x`) with
     // `y == 0`; the host scrollback policy still wants that gesture to behave as

@@ -1954,7 +1954,12 @@ fn paint_drag_image(c: &dyn Component, cx: &mut PaintCx) {
         if crate::drag::DropAction::held().is_swap() {
             // The same double frame the chip wears: this is an exchange, not a move.
             let k = f64::from(scale);
-            let at = |p: Point| Point::new(pos.x + (p.x + dx - pos.x) * k, pos.y + (p.y + dy - pos.y) * k);
+            let at = |p: Point| {
+                Point::new(
+                    pos.x + (p.x + dx - pos.x) * k,
+                    pos.y + (p.y + dy - pos.y) * k,
+                )
+            };
             let image = Rectangle::new(
                 at(b.bounds.loc),
                 heca_core::layout::Size::new(b.bounds.size.w * k, b.bounds.size.h * k),

@@ -82,8 +82,8 @@ pub(crate) fn cell_screen_pos(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use heca_core::backend::HyperlinkSpan;
     use crate::chrome::terminal::TerminalId;
+    use heca_core::backend::HyperlinkSpan;
 
     fn link(row: usize, uri: &str) -> HyperlinkSpan {
         HyperlinkSpan {

@@ -1,6 +1,5 @@
 //! **The passes of a frame**, each a method of [`Frame`] named for what it draws.
 
-
 use super::host_work::{HostTargets, do_host_work};
 use super::{Frame, FrameTerminals};
 use crate::app::scene_flush::flush_scene;

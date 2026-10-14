@@ -182,8 +182,8 @@ toggle_current_workspace_collapsed = "prefix+<"
 toggle_current_column_collapsed    = "prefix+("
 
 # ── Chrome region show/hide (sidebar-fu-6) ──
-# ⚠ CHANGED 2026-09-29 — the twelve actions show_/hide_/toggle_ × left_sidebar, right_sidebar,
-# top_bar, bottom_bar were removed. A binding that still names one of them does nothing; rewrite it
+# ⚠ The twelve actions show_/hide_/toggle_ × left_sidebar, right_sidebar, top_bar, bottom_bar
+# were removed. A binding that still names one of them does nothing; rewrite it
 # as below (the full old → new table is in docs/keybindings.md, "Changed actions").
 #
 # The same one show/hide state as `sidebar_left`/`sidebar_right` above, for any of the four
@@ -225,7 +225,7 @@ swap_down  = "prefix+Ctrl+j"
 command_palette = "prefix+p"        # Open command palette (actions)
 reload_config   = "prefix+Shift+r"  # Reload config at runtime
 
-# ── Notifications (F009) ──
+# ── Notifications ──
 # `notification_dismiss_one` has no default binding — it needs an id, and a keypress cannot
 # supply one; use the toast's own × (mouse, or `prefix+/`) or RPC instead.
 notification_pick          = "prefix+n"        # Scoped picker over visible toast actions/× (in addition to prefix+/, not instead)
@@ -234,8 +234,7 @@ notification_dismiss_all   = "prefix+Alt+n"    # Dismiss every visible notificat
 # NB: `close_overlay` is NOT bound here. Closing an overlay is a **surface** key, and it lives in
 # the `layer` floor further down — see the `[[keys.mode]] name = "layer"` block. Bound globally, its
 # keys are taken from the program running in the pane whether or not an overlay is up: `q` shipped
-# here, and `:q` in vim stopped at the colon, in every terminal, always (Antonio, driving,
-# 2026-08-20). Escape is not here either, and for the same reason — a key that acts on the surface
+# here, and `:q` in vim stopped at the colon, in every terminal, always. Escape is not here either, and for the same reason — a key that acts on the surface
 # in front of you belongs to that surface, never to everyone.
 
 
@@ -300,7 +299,7 @@ keys   = "ContextMenu"          # the dedicated Menu key, where a keyboard has o
 action = "open_context_menu"
 
 # The exposé — a bird's-eye view of every workspace, its columns and its panes
-# (F003/P082/T327). niri binds its equivalent to `toggle-overview`; this is the same idea.
+#. niri binds its equivalent to `toggle-overview`; this is the same idea.
 [[keys.bind]]
 keys   = "prefix+Tab"
 action = "toggle_layer"
@@ -400,7 +399,7 @@ args   = { name = "heca.expose" }
 # resolves at press time, so it simply does nothing until that component appears. Nor is an `id`
 # for a placement that never exists.
 #
-# TWO KEYS EVERY CONTAINER HAS, WITH NOTHING DECLARED (F003/P086/T363):
+# TWO KEYS EVERY CONTAINER HAS, WITH NOTHING DECLARED:
 #
 #   global_focus = "prefix+d"    # takes the keyboard. Written in the entry above like any other
 #                                #   binding, but it applies while the container does NOT have
@@ -546,7 +545,7 @@ edit_select_all           = ["Ctrl+a", "Super+a"]    # Input: select the whole f
 # h/Left move the boundary left, j/Down move it down —
 # whichever column or pane is active. A pane's boundary is the one below it, or the
 # one above when it is the last pane; moving that one down shrinks the last pane,
-# which is the same divider going the same way (F004/P084/T414).
+# which is the same divider going the same way.
 [[keys.mode]]
 name = "resize"
 trigger = "prefix+r"
@@ -656,8 +655,9 @@ keys = ["Escape", "q", "Ctrl+q"]
 # declines and the key does nothing.
 #
 # Vertical takes the bare keys, which are free here precisely because nothing is being forwarded to
-# a backend. The `Shift+` forms in [keys] above keep scrolling the focused PANE and, while a dock is
-# focused, are aimed at the dock too — one binding, one meaning: scroll whatever has the keyboard.
+# a backend. The `Shift+` forms in [keys] above scroll whatever has the keyboard — a pane's terminal,
+# or whatever holds it in a dock or an overlay, a terminal placed there included — one binding, one
+# meaning.
 # Horizontal takes the same four keys with Alt, since a terminal viewport has no horizontal axis to
 # share them with.
 [[keys.mode]]
@@ -853,18 +853,17 @@ zoom_selected     = "z"
 [[keys.surface]]
 name = "heca.expose"
 # The map's three deletes, one letter per thing: the pane under the cursor, the column it sits in,
-# and the workspace that column sits in. These were literals in `chrome/expose.rs` until T416, which
-# made them the one part of the map a user could not rebind.
+# and the workspace that column sits in — bound here so a user can rebind them like any key.
 #
 # `r` rather than `Shift+x` for the column: `x` and `X` are the same *key* and differ only as typed
 # text, so the pair read as one gesture with a modifier the key layer cannot see.
 delete_pane      = "x"
 delete_column    = "r"
 delete_workspace = "d"
-# **Type a letter to jump to any card** (F003/P082/T427). `pick` is the MAP's own action, declared
+# **Type a letter to jump to any card**. `pick` is the MAP's own action, declared
 # on its widget (`KeyHintGroup::opens_on`) rather than borrowed from the app — and a plugin's overlay
 # writes the same one line, natively or as `"props": {"opens_on": "mypanel.pick"}` in its own tree
-# (F003/P082/T436), so it has a picker of its own instead of only contributing targets to heca's.
+#, so it has a picker of its own instead of only contributing targets to heca's.
 #
 # Bound as a bare `s` because the map holds the keyboard while it is up, and a surface's own entry
 # is consulted before the global map (see the resolution order above). Unbind it and the map simply

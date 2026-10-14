@@ -60,15 +60,7 @@ pub(super) fn spawn_command(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Cha
         cx.terminals.end([pane]);
         return Vec::new();
     };
-    let made = Change::PaneAdded {
-        pane: a.pane,
-        workspace: a.workspace,
-        column: a.column,
-    };
-    Change::after_arranging(a.arranged)
-        .into_iter()
-        .chain([made])
-        .collect()
+    Change::after_adding(a)
 }
 
 /// Type `text` into a terminal, and press Enter after it unless told not to. Nothing changes that

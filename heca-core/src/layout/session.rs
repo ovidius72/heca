@@ -13,7 +13,7 @@ use super::workspace::Workspace;
 /// (`heca/src/chrome/expose/`) that draws its own map and never asks the session to zoom. The
 /// pre-layer overview that lived here — `OverviewState`, `toggle_overview`, `overview_zoom`,
 /// `overview_workspace_geometries` — was unreachable code by the time it was removed: nothing
-/// outside this file ever set it active (F003/P082/T422).
+/// outside this file ever set it active.
 #[derive(Debug, Clone)]
 pub struct Session {
     pub id: SessionId,

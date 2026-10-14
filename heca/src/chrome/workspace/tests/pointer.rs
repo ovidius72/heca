@@ -89,16 +89,26 @@ fn the_outer_edges_resize_the_first_and_last_column() {
 
     let drag = |window: &mut Flex, from: f64, to: f64| {
         let at = |x: f64| Point::new(x, 400.0);
-        dispatch(window, &Event::pointer_pressed(at(from), PointerButton::Left));
+        dispatch(
+            window,
+            &Event::pointer_pressed(at(from), PointerButton::Left),
+        );
         dispatch(window, &Event::pointer_moved(at(to)));
-        dispatch(window, &Event::pointer_released(at(to), PointerButton::Left));
+        dispatch(
+            window,
+            &Event::pointer_released(at(to), PointerButton::Left),
+        );
     };
     // The last column ends at x 650: drag its border 10px right.
     drag(&mut window, 650.0, 660.0);
     // The first column starts at x 40: drag its border 10px left.
     drag(&mut window, 40.0, 30.0);
 
-    assert_eq!(*posted.borrow(), ["col 1 0.0143", "col 0 0.0143"], "both grew");
+    assert_eq!(
+        *posted.borrow(),
+        ["col 1 0.0143", "col 0 0.0143"],
+        "both grew"
+    );
 }
 
 /// **A press on a pane reaches the pane, with the chrome seated over it as the app seats it.**
@@ -135,8 +145,14 @@ fn a_press_on_a_pane_reaches_the_pane_under_the_chrome() {
     LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
 
     let at = Point::new(100.0, 100.0); // inside pane 10
-    dispatch(&mut window, &Event::pointer_pressed(at, PointerButton::Left));
-    dispatch(&mut window, &Event::pointer_released(at, PointerButton::Left));
+    dispatch(
+        &mut window,
+        &Event::pointer_pressed(at, PointerButton::Left),
+    );
+    dispatch(
+        &mut window,
+        &Event::pointer_released(at, PointerButton::Left),
+    );
     assert_eq!(*focused.borrow(), ["focus_pane(Some(Int(10)))"]);
 }
 
@@ -167,10 +183,11 @@ fn a_plugin_widget_in_a_dock_or_an_overlay_and_a_pane_each_get_their_own_press()
     assert!(ws.set_props(&two_columns_and_a_float()));
     window.base_mut().children.push(ws);
 
-    let mut dock = Flex::column()
-        .width(100.0)
-        .height(Length::FULL)
-        .child(Flex::row().at_rect(0.0, 70.0, 100.0, 40.0).on_click(move |_| dock_clicks.borrow_mut().push("dock".into())));
+    let mut dock = Flex::column().width(100.0).height(Length::FULL).child(
+        Flex::row()
+            .at_rect(0.0, 70.0, 100.0, 40.0)
+            .on_click(move |_| dock_clicks.borrow_mut().push("dock".into())),
+    );
     dock.base_mut().style.visual.fill = Some(Color::new(20, 20, 20, 255));
     crate::chrome::seat_chrome(
         &mut window,
@@ -190,10 +207,11 @@ fn a_plugin_widget_in_a_dock_or_an_overlay_and_a_pane_each_get_their_own_press()
         &mut window,
         "plugin.overlay",
         Box::new(
-            Flex::row()
-                .width(Length::FULL)
-                .height(Length::FULL)
-                .child(Flex::row().at_rect(680.0, 300.0, 100.0, 40.0).on_click(move |_| overlay_clicks.borrow_mut().push("overlay".into()))),
+            Flex::row().width(Length::FULL).height(Length::FULL).child(
+                Flex::row()
+                    .at_rect(680.0, 300.0, 100.0, 40.0)
+                    .on_click(move |_| overlay_clicks.borrow_mut().push("overlay".into())),
+            ),
         ),
     );
     LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
@@ -214,18 +232,30 @@ fn a_plugin_widget_in_a_dock_or_an_overlay_and_a_pane_each_get_their_own_press()
 /// inside is clicked, and a pane behind the wrapper is clicked where the wrapper holds nothing.
 #[test]
 fn every_layout_container_over_the_panes_leaves_them_their_presses() {
+    use heca_grid_ui::Length;
     use heca_grid_ui::builders::{ComponentExt, Parent};
     use heca_grid_ui::component::dispatch;
     use heca_grid_ui::event::{Event, PointerButton};
     use heca_grid_ui::widgets::{Grid, KeyHintGroup, Surface, Visibility};
-    use heca_grid_ui::Length;
 
     type Wrap = fn(Flex) -> Box<dyn Component>;
     let wrappers: [(&str, Wrap); 5] = [
         ("Flex", |inner| Box::new(inner)),
-        ("Grid", |inner| Box::new(Grid::new().width(Length::FULL).height(Length::FULL).child(inner))),
+        ("Grid", |inner| {
+            Box::new(
+                Grid::new()
+                    .width(Length::FULL)
+                    .height(Length::FULL)
+                    .child(inner),
+            )
+        }),
         ("Surface", |inner| {
-            Box::new(Surface::column().width(Length::FULL).height(Length::FULL).child(inner))
+            Box::new(
+                Surface::column()
+                    .width(Length::FULL)
+                    .height(Length::FULL)
+                    .child(inner),
+            )
         }),
         ("Visibility", |inner| Box::new(Visibility::new(inner, true))),
         ("KeyHintGroup", |inner| Box::new(KeyHintGroup::new(inner))),
@@ -243,14 +273,11 @@ fn every_layout_container_over_the_panes_leaves_them_their_presses() {
         let mut ws: Box<dyn Component> = Box::new(workspace(seams()));
         assert!(ws.set_props(&two_columns_and_a_float()));
         window.base_mut().children.push(ws);
-        let inner = Flex::row()
-            .width(Length::FULL)
-            .height(Length::FULL)
-            .child(
-                Flex::row()
-                    .at_rect(680.0, 300.0, 100.0, 40.0)
-                    .on_click(move |_| item_clicks.borrow_mut().push("item".into())),
-            );
+        let inner = Flex::row().width(Length::FULL).height(Length::FULL).child(
+            Flex::row()
+                .at_rect(680.0, 300.0, 100.0, 40.0)
+                .on_click(move |_| item_clicks.borrow_mut().push("item".into())),
+        );
         crate::chrome::seat_chrome(
             &mut window,
             Flex::column()
@@ -262,8 +289,14 @@ fn every_layout_container_over_the_panes_leaves_them_their_presses() {
 
         for (x, y) in [(720.0, 320.0), (100.0, 100.0)] {
             let at = Point::new(x, y);
-            dispatch(&mut window, &Event::pointer_pressed(at, PointerButton::Left));
-            dispatch(&mut window, &Event::pointer_released(at, PointerButton::Left));
+            dispatch(
+                &mut window,
+                &Event::pointer_pressed(at, PointerButton::Left),
+            );
+            dispatch(
+                &mut window,
+                &Event::pointer_released(at, PointerButton::Left),
+            );
         }
         assert_eq!(*clicks.borrow(), ["item", "focus_pane"], "inside a {name}");
     }
@@ -312,7 +345,10 @@ fn a_float_answers_its_press_and_the_edges_beside_it_do_nothing() {
         heca_grid_ui::Cursor::Default,
         "no resize cursor while a pane floats"
     );
-    dispatch(&mut window, &Event::pointer_pressed(gap, PointerButton::Left));
+    dispatch(
+        &mut window,
+        &Event::pointer_pressed(gap, PointerButton::Left),
+    );
     dispatch(&mut window, &Event::pointer_moved(Point::new(355.0, 400.0)));
     dispatch(
         &mut window,
@@ -327,7 +363,13 @@ fn a_float_answers_its_press_and_the_edges_beside_it_do_nothing() {
     // A press on the float itself (pane 30, x 200..450, y 100..300) reaches it.
     seen.borrow_mut().clear();
     let on_float = Point::new(300.0, 200.0);
-    dispatch(&mut window, &Event::pointer_pressed(on_float, PointerButton::Left));
-    dispatch(&mut window, &Event::pointer_released(on_float, PointerButton::Left));
+    dispatch(
+        &mut window,
+        &Event::pointer_pressed(on_float, PointerButton::Left),
+    );
+    dispatch(
+        &mut window,
+        &Event::pointer_released(on_float, PointerButton::Left),
+    );
     assert_eq!(*seen.borrow(), ["focus_pane(Some(Int(30)))"]);
 }

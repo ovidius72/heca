@@ -227,9 +227,9 @@ fn create_command_backend_with_options(
         Err(err) => {
             // The PTY itself could not be opened / the shell could not be spawned. (A command
             // that simply does not exist still spawns — the shell exits 127 and the pane's
-            // exit-code notification, F009/P055/T221, reports that.) F009/P055/T225: hand the
-            // message back so the server's `spawn_command` can raise a sticky danger toast instead of
-            // silently substituting an inert FakeBackend.
+            // exit-code notification reports that.) Hand the message back so the server's
+            // `spawn_command` can raise a sticky danger toast instead of silently substituting an
+            // inert FakeBackend.
             eprintln!("[heca] failed to spawn command pane ({command}): {err}");
             Err(err.to_string())
         }

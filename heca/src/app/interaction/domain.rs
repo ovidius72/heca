@@ -1,11 +1,10 @@
 //! **What owns the screen right now** — the domain a request is judged in.
 
+use super::types::{InteractionSource, SurfaceKey};
 use crate::app_state::AppState;
 use heca_core::layout::{FocusDomain, Layout};
-use super::types::{InteractionSource, SurfaceKey};
 
-
-/// **What owns the screen right now** — the axis a policy is judged against (F003/P086/T371).
+/// **What owns the screen right now** — the axis a policy is judged against.
 ///
 /// The other half of the pair: [`ActionPolicy`] says *what kind of act this is*, `Domain` says
 /// *what the app is currently doing*. Both are needed, and only the policy half was modelled:
@@ -22,14 +21,15 @@ pub(crate) enum Domain {
     /// A **dock** has the keyboard.
     Container,
     /// Something **covers the tiled area**: a modal, or a plugin overlay that declared it obscures
-    /// the panes. Acting on panes you cannot see is the thing this exists to stop.
-    Overlay,
+    /// the panes. Acting on panes you cannot see is the thing this exists to stop. `terminal_keys`
+    /// says a terminal shown in front holds the keyboard, so its own keys still reach it.
+    Overlay { terminal_keys: bool },
 }
 
 /// Which domain the app is in for an interaction from `source`.
 ///
 /// **Coverage first, then the keyboard, then the session.** Decided explicitly rather than left to
-/// match order (F003/P086/T371):
+/// match order:
 ///
 /// - an overlay that covers the tiled area wins over everything — whatever else is true, the panes
 ///   are not what the user is looking at;
@@ -37,9 +37,8 @@ pub(crate) enum Domain {
 ///   component's own `perform`, or a script), even with a floating pane active: the user is driving
 ///   the dock. A mouse click lands *on* something, so it is judged by what it landed on, not by
 ///   where the keyboard happens to be — and a script lands on nothing, which is precisely why it
-///   belongs with the keys rather than with the clicks (F003/P085/T358). Without this, a component's
-///   `ContainerFocused` verb was unreachable over RPC *even with its dock focused*, so the door T371
-///   closed had no key;
+///   belongs with the keys rather than with the clicks. Without this, a component's
+///   `ContainerFocused` verb would be unreachable over RPC *even with its dock focused*;
 /// - otherwise the session's own `Tiled | Floating`.
 pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain {
     if base_context_is_dormant(
@@ -50,7 +49,11 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
         crate::chrome::content_covered(state),
         source,
     ) {
-        return Domain::Overlay;
+        // A terminal shown in what covers the panes, holding the keyboard — not a pane's terminal
+        // behind it, which may still hold it under something that did not take it.
+        let terminal_keys = state.window_keyboard_terminal().is_some()
+            && heca_grid_ui::keyboard_owner(&state.window_root).is_some_and(|o| o.in_surface);
+        return Domain::Overlay { terminal_keys };
     }
     let keyboard_driven = matches!(
         source,
@@ -63,11 +66,13 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
     // dock underneath it: with a row's menu open, `j`/`k` must not move the pane cursor behind it.
     //
     // The layer used to swallow every key it did not want, by hand, which is the same rule written
-    // in the wrong place: it also ate `q` and `Esc`, which are catalogued actions the host resolves
-    // (F004/P084/T400). Here the layer claims only the keyboard, and `ActionPolicy` decides the
+    // in the wrong place: it also ate `q` and `Esc`, which are catalogued actions the host resolves.
+    // Here the layer claims only the keyboard, and `ActionPolicy` decides the
     // rest — `Global` actions still run, `ContainerFocused` ones do not.
     let modal_holds_keyboard = state.layers.top_modal_id(&state.window_root).is_some();
-    if keyboard_driven && !modal_holds_keyboard && crate::app::tree_focus::focused_dock(state).is_some()
+    if keyboard_driven
+        && !modal_holds_keyboard
+        && crate::app::tree_focus::focused_dock(state).is_some()
     {
         return Domain::Container;
     }
@@ -75,7 +80,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
 }
 
 /// **Is the base context — panes, sidebar, floats — dormant?** The coarse half of
-/// `docs/surface-compositor.md` §2, and the whole of what F003/P082/T416 changed.
+/// `docs/surface-compositor.md` §2.
 ///
 /// It used to be a single call to `chrome::content_covered` — a fact about **what is painted
 /// over** — used to decide **which context is live**. The two are orthogonal, and the exposé is

@@ -87,18 +87,18 @@ fn place_on_row(
             (ws_idx, col, Some(row))
         }
         // The end of the workspace: a gap past the last column clamps to it.
-        WorkspaceRow::Workspace { ws_idx, .. } => (ws_idx, usize::MAX, None),
+        WorkspaceRow::Workspace { ws_idx, .. } => (ws_idx, heca_core::layout::END, None),
         WorkspaceRow::Column { ws_idx, col_id, .. } => {
             let ws = state.session.workspaces.get(ws_idx)?;
             let col = ws.scrolling.columns.iter().position(|c| c.id == col_id)?;
-            (ws_idx, col, Some(usize::MAX))
+            (ws_idx, col, Some(heca_core::layout::END))
         }
         WorkspaceRow::FloatingPane { .. } => {
             let ws = state.layout().workspace(original_ws)?;
             (
                 original_ws,
                 ws.scroll().active_column_idx(),
-                Some(usize::MAX),
+                Some(heca_core::layout::END),
             )
         }
     };

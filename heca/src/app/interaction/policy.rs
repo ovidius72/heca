@@ -2,14 +2,13 @@
 
 use crate::input::WmAction;
 
-
 /// Policy classification for a WM action.
 ///
 /// This determines how the action behaves under different [`Domain`]s. Callers should use
 /// `dispatch_action()` or `route_interaction()` and never check policy directly — it is `pub`
 /// only because a component **declares** one on every action it registers
 /// (`ActionMeta::policy`), and a plugin outside this crate must be able to name what it is
-/// required to declare (F003/P086/T371 step 6; the plugin-facing crate itself is F003/P017/T9).
+/// required to declare.
 ///
 /// Its wire name (RPC introspection) is the variant in `snake_case` — `TiledOnly` is `tiled_only`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -26,6 +25,10 @@ pub enum ActionPolicy {
     TiledOnly,
     /// Operates on the focused pane regardless of domain (close, rename, float/unfloat).
     FocusedPaneLocal,
+    /// A terminal key — scrolling, selecting, searching, its font size — acting on the terminal
+    /// the keyboard is on. Like [`FocusedPaneLocal`](Self::FocusedPaneLocal), and also allowed
+    /// while something covers the panes when the terminal holding the keyboard is shown in it.
+    KeyboardTerminal,
     /// Affects workspace structure — blocked when Floating by current policy.
     /// If that product rule changes, update this classification together with
     /// the routing tests; do not rely on an implicit future relaxation.
@@ -33,7 +36,7 @@ pub enum ActionPolicy {
     /// Policy depends on the interaction source.
     SourceDependent,
     /// Only while **that component's container holds the keyboard** — what a component's
-    /// selection-dependent actions actually mean (F003/P086/T371).
+    /// selection-dependent actions actually mean.
     ///
     /// "Delete the row my cursor is on" is not a request anyone should be able to make from the
     /// command palette or over RPC while the dock is not being driven; it only had no gate because
@@ -96,13 +99,13 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // **Taking** chrome focus, likewise. This was `Global`, justified as "unlike `SidebarFocus`,
         // which enters a nav mode that moves pane focus". That stopped being true when
         // `sidebar_focus` was retired: a focused container's own `activate`/`hint` move pane focus,
-        // and they are reached through this (F003/P085/T356). It also matches the two lines below —
+        // and they are reached through this. It also matches the two lines below —
         // a sidebar cannot even be toggled while floating, so being able to focus and drive one was
         // the stranger half.
         //
         // It costs a dock that merely scrolls, which would be harmless during a float. Telling the
         // two apart needs to know whether *this* dock is `keyboard_navigable`, and `policy_allows`
-        // only receives the session — the widening tracked as F003/P086/T371.
+        // only receives the session.
         | WmAction::FocusDock { .. }
         | WmAction::ToggleDock { .. }
         | WmAction::SidebarRight
@@ -137,9 +140,12 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ResetPaneName
         | WmAction::ResetPaneNameById { .. }
         | WmAction::RenameTarget { .. }
-        // Scrollback operates on the focused pane and is allowed in both
-        // tiled and floating domains.
-        | WmAction::ScrollbackPageUp
+        // Typing into a terminal, or ending it, acts on one pane and moves nothing else.
+        | WmAction::TerminalRun { .. }
+        | WmAction::TerminalKill { .. } => ActionPolicy::FocusedPaneLocal,
+
+        // ── The terminal the keyboard is on ──
+        WmAction::ScrollbackPageUp
         | WmAction::ScrollbackPageDown
         | WmAction::ScrollbackLineUp { .. }
         | WmAction::ScrollbackLineDown { .. }
@@ -170,12 +176,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::SearchScrollback
         | WmAction::SearchNextMatch
         | WmAction::SearchPrevMatch
-        // Per-pane font zoom operates on the focused (or specified) pane with no
-        // layout impact — allowed in both tiled and floating domains.
-        | WmAction::PaneTerminalFontZoom { .. }
-        // Typing into a terminal, or ending it, acts on one pane and moves nothing else.
-        | WmAction::TerminalRun { .. }
-        | WmAction::TerminalKill { .. } => ActionPolicy::FocusedPaneLocal,
+        | WmAction::PaneTerminalFontZoom { .. } => ActionPolicy::KeyboardTerminal,
 
         // ── Workspace-level: blocked when Floating ──
         WmAction::WorkspaceNext
@@ -199,7 +200,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // so it must stay reachable while a floating pane is active (hot-reload).
         WmAction::ReloadConfig => ActionPolicy::Global,
         // Dismissing/picking a notification touches no layout and no pane — a toast can be up
-        // over a floating pane just as easily as a tiled one, and must stay reachable (F009).
+        // over a floating pane just as easily as a tiled one, and must stay reachable.
         WmAction::NotificationDismissOne { .. }
         | WmAction::NotificationDismissAll
         | WmAction::NotificationDismissLast
@@ -220,7 +221,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // target's intent is separately policy-checked when it dispatches.
         WmAction::HintPick => ActionPolicy::Global,
         // **Asking a surface for its menu is surface-agnostic** — it acts on whichever context is
-        // live, so there is no domain in which it should be refused (F003/P082/T416). It was
+        // live, so there is no domain in which it should be refused. It was
         // `FocusedPaneLocal`, which was true of it while a pane was the only thing that had a menu;
         // once a context surface can own the keyboard, that classification would refuse the exposé
         // its own menu while permitting the pane's behind it. Bubbling already decides *whose* menu
@@ -238,7 +239,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::SetRegionVisible { .. } => ActionPolicy::Global,
         // **Releasing** chrome focus is always allowed, in every domain. It is the way back to the
         // main region, and a way out that can be blocked is not a way out — the same reason `Esc`
-        // is a guarantee rather than a default (F003/P086/T363).
+        // is a guarantee rather than a default.
         // **The container-cursor family** — permitted only while a dock is being driven
         // (`Domain::Container`), which is what keeps "put the cursor on that row" out of the
         // command palette and RPC while nobody is in a dock. A click on a row emits
@@ -295,6 +296,6 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
 pub(crate) fn action_allowed_when_floating(action: &WmAction) -> bool {
     matches!(
         action_policy(action),
-        ActionPolicy::FocusedPaneLocal | ActionPolicy::Global
+        ActionPolicy::FocusedPaneLocal | ActionPolicy::KeyboardTerminal | ActionPolicy::Global
     )
 }

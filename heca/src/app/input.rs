@@ -8,7 +8,7 @@ use crate::app::interaction::InteractionSource;
 use crate::app::interaction::dispatch_action_ref;
 use crate::app::keyboard::{winit_key_to_backend_event, winit_key_to_terminal_input};
 use crate::app_state::{AppState, InputMode};
-use crate::keymap::{KeyCombo, Keymaps};
+use crate::keymap::{KeyCombo, KeymapRegistry, Keymaps};
 use winit::keyboard::{Key, PhysicalKey};
 
 mod modes;
@@ -100,6 +100,7 @@ pub(crate) fn handle_keyboard_input(
                 && !ctx.offered_to_tree
                 && crate::app::tree_keys::deliver_press_to_tree(
                     state,
+                    keymap,
                     ctx.event_combo,
                     ctx.key_text,
                 ) == Some(heca_grid_ui::Handled::Yes)
@@ -200,7 +201,7 @@ pub(crate) fn handle_keyboard_input(
             handle_hint_pick_mode(registry, state, &candidates, ctx);
         }
         InputMode::Search { .. } => {
-            handle_search_mode(state, ctx);
+            handle_search_mode(state, keymap, ctx);
         }
         InputMode::PaneSwap {
             candidates,
@@ -245,8 +246,8 @@ pub(crate) fn handle_keyboard_input(
 /// where the field takes it through the same rule as every other field: text as text, the editing
 /// shortcuts as the intents they resolve to. Enter and Escape come back as the terminal's own
 /// messages (keep the matches, dismiss the search), which is also what leaves this mode.
-fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
-    crate::app::tree_keys::deliver_press_to_tree(state, ctx.event_combo, ctx.key_text);
+fn handle_search_mode(state: &mut AppState, keymap: &KeymapRegistry, ctx: KeyInputContext<'_>) {
+    crate::app::tree_keys::deliver_press_to_tree(state, keymap, ctx.event_combo, ctx.key_text);
     state.needs_redraw = true;
 }
 

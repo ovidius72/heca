@@ -5,8 +5,8 @@ mod common;
 use common::{paint_via_child, press_at, release_at};
 use heca_grid_ui::builders::StyleExt;
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::widgets::Surface;
 use heca_grid_ui::scene::{HostCmd, HostDraw};
+use heca_grid_ui::widgets::Surface;
 use heca_grid_ui::{Color, DrawCommand, Event, LayoutEngine, Point, Size, Theme};
 
 /// A 100 × 50 red source at the origin, picked up at (10, 10) and carried to (60, 30).
@@ -31,9 +31,13 @@ fn reds(root: &Flex, theme: &Theme) -> Vec<(f64, f64, f64, f64, u8)> {
     paint_via_child(root, theme)
         .iter()
         .filter_map(|c| match c {
-            DrawCommand::Rect(r) if r.fill.r == 200 && r.fill.g == 0 => {
-                Some((r.rect.loc.x, r.rect.loc.y, r.rect.size.w, r.rect.size.h, r.fill.a))
-            }
+            DrawCommand::Rect(r) if r.fill.r == 200 && r.fill.g == 0 => Some((
+                r.rect.loc.x,
+                r.rect.loc.y,
+                r.rect.size.w,
+                r.rect.size.h,
+                r.fill.a,
+            )),
             _ => None,
         })
         .collect()
@@ -54,7 +58,9 @@ fn a_source_that_asks_is_carried_as_a_faded_smaller_picture_of_itself() {
         "the picture under the pointer: {drawn:?}"
     );
     assert!(
-        drawn.iter().any(|d| (d.0, d.1, d.2, d.3) == (0.0, 0.0, 100.0, 50.0)),
+        drawn
+            .iter()
+            .any(|d| (d.0, d.1, d.2, d.3) == (0.0, 0.0, 100.0, 50.0)),
         "and the widget is still where it was: {drawn:?}"
     );
 }
@@ -96,7 +102,10 @@ fn the_host_work_of_a_picture_is_marked_an_echo() {
     base.drag_kind = Some("pane".into());
     base.drag_image = true;
     base.key = Some("screen".into());
-    let mut root = Flex::row().width(300.0).height(100.0).child(Screen { base });
+    let mut root = Flex::row()
+        .width(300.0)
+        .height(100.0)
+        .child(Screen { base });
     LayoutEngine::new().compute(&mut root, Size::new(300.0, 100.0));
     press_at(&mut root, Point::new(10.0, 10.0), PointerButton::Left);
     let _ = heca_grid_ui::dispatch(&mut root, &Event::pointer_moved(Point::new(60.0, 30.0)));
@@ -114,8 +123,15 @@ fn the_host_work_of_a_picture_is_marked_an_echo() {
             _ => None,
         })
         .collect();
-    assert_eq!(surfaces.len(), 2, "the surface itself and its picture: {surfaces:?}");
-    assert!(surfaces.iter().any(|(echo, a)| !echo && *a == 1.0), "the real one: {surfaces:?}");
+    assert_eq!(
+        surfaces.len(),
+        2,
+        "the surface itself and its picture: {surfaces:?}"
+    );
+    assert!(
+        surfaces.iter().any(|(echo, a)| !echo && *a == 1.0),
+        "the real one: {surfaces:?}"
+    );
     assert!(
         surfaces
             .iter()

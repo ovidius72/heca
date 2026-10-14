@@ -79,10 +79,21 @@ impl AppState {
     /// for an action the server runs ([`ServerState::runs`](crate::server::ServerState::runs)). The
     /// server gets the session and what this window says about itself, never its view.
     pub(crate) fn run_on_server(&mut self, action: &crate::input::WmAction, name: &str) {
-        let asker = crate::server::Asker::seen_through(self.layout(), self.focused_pane, self.terminal_cell_size);
+        let asker = crate::server::Asker::seen_through(
+            self.layout(),
+            self.focused_pane,
+            self.terminal_cell_size,
+        );
         let before = self.layout().before();
         let changes = self.server.run(&mut self.session, asker, action);
-        self.apply_answer(changes, Some(Asked { action, name, before: &before }));
+        self.apply_answer(
+            changes,
+            Some(Asked {
+                action,
+                name,
+                before: &before,
+            }),
+        );
     }
 
     /// Point the toast stack's signal at what the server says is on show, if that changed.

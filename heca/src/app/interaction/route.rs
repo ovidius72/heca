@@ -1,18 +1,17 @@
 //! **The router** — judges an interaction by its source, the domain and the action's policy: allow it or block it.
 
+use super::domain::{Domain, domain_for};
+use super::policy::{ActionPolicy, action_policy};
+use super::types::{InteractionIntent, InteractionSource, RouteDecision};
 use crate::app_state::AppState;
 use crate::input::WmAction;
 use heca_core::layout::Layout;
-use super::types::{InteractionIntent, InteractionSource, RouteDecision};
-use super::domain::{Domain, domain_for};
-use super::policy::{ActionPolicy, action_policy};
-
 
 /// Decide whether an interaction is allowed under the current state.
 ///
 /// **One layer, two inputs**: the interaction's [`ActionPolicy`] (what kind of act it is) judged
 /// against the current [`Domain`] (what owns the screen). Everything the router used to special-case
-/// beside the policy system is a domain now (F003/P086/T371):
+/// beside the policy system is a domain now:
 ///
 /// - a modal used to be a blunt "block everything" check right here; it is an overlay that **covers
 ///   the tiled area**, so `Domain::Overlay` blocks the same things — and a *non-modal* plugin
@@ -45,6 +44,7 @@ pub(crate) fn route_interaction(
 /// | `Global` | ✓ | ✓ | ✓ | ✓ |
 /// | `AlwaysAllowed` | ✓ | ✗ | ✓ | ✗ |
 /// | `FocusedPaneLocal` | ✓ | ✓ | ✓ | ✗ |
+/// | `KeyboardTerminal` | ✓ | ✓ | ✓ | when a terminal shown in it holds the keyboard |
 /// | `TiledOnly` | ✓ | ✗ | ✓ | ✗ |
 /// | `WorkspaceLevel` | ✓ | ✗ | ✓ | ✗ |
 /// | `ContainerFocused` | ✗ | ✗ | ✓ | ✗ |
@@ -64,7 +64,7 @@ pub(crate) fn route_in_domain(
     // workspace, start this drag. None of them is meaningful while a floating pane owns the domain
     // or while something covers the panes, and each has always said so; `blocked_domain` is that
     // one condition written once instead of three times.
-    let blocked_domain = matches!(domain, Domain::Floating | Domain::Overlay);
+    let blocked_domain = matches!(domain, Domain::Floating | Domain::Overlay { .. });
     match &intent {
         InteractionIntent::ActivateAction(action) => route_action(layout, domain, source, action),
         // Defensive: `dispatch_intent` expands this into FocusPane + the action before
@@ -129,11 +129,12 @@ pub(super) fn policy_allows(
     action: Option<&WmAction>,
 ) -> bool {
     // Nothing but a true global act reaches past something covering the panes — acting on what the
-    // user cannot see is the whole reason this domain exists (F003/P086/T371). It replaces the
+    // user cannot see is the whole reason this domain exists. It replaces the
     // blunt "a modal blocks everything" check the router did before policy was consulted at all,
     // and unlike that one it also covers a non-modal overlay that declared it obscures the panes.
-    if domain == Domain::Overlay {
-        return policy == ActionPolicy::Global;
+    if let Domain::Overlay { terminal_keys } = domain {
+        return policy == ActionPolicy::Global
+            || (terminal_keys && policy == ActionPolicy::KeyboardTerminal);
     }
     let floating = domain == Domain::Floating;
 
@@ -146,7 +147,7 @@ pub(super) fn policy_allows(
         // floating from the current sources. Future chrome sources (MouseTopMenu, MouseStatusBar)
         // may allow these even while floating.
         ActionPolicy::AlwaysAllowed => !floating,
-        ActionPolicy::FocusedPaneLocal => true,
+        ActionPolicy::FocusedPaneLocal | ActionPolicy::KeyboardTerminal => true,
         ActionPolicy::TiledOnly => !floating,
         ActionPolicy::WorkspaceLevel => !floating,
         // A component's own selection-dependent verb: only while a dock is being driven. This is
@@ -175,10 +176,10 @@ pub(super) fn policy_allows(
                     // would be blocked from a key while a pane is floating, asking for it from
                     // inside `perform` must be blocked too.
                     InteractionSource::Provider => false,
-                    // Nor does a script (F003/P086/T372).
+                    // Nor does a script.
                     InteractionSource::Rpc => false,
                     // Nor a surface acting on itself: a layer is a place a declaration was made,
-                    // not a licence to reach past the floating domain (F003/P082/T416).
+                    // not a licence to reach past the floating domain.
                     InteractionSource::Surface(_) => false,
                 }
             } else {

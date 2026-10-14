@@ -9,8 +9,8 @@ use crate::input::WmAction;
 /// **Step one terminal's own font** — bigger, smaller, or back to following the app.
 ///
 /// A terminal or pane the action names is zoomed. Naming neither means the terminal the keyboard
-/// is on: one placed in a dock or an overlay that holds it is asked first and answers itself (it
-/// says so back with its id, which lands here again); otherwise the focused pane's.
+/// acts on ([`AppState::keyboard_terminal`]): one placed in a dock or an overlay that holds it is
+/// asked first and answers itself (it says so back with its id, which lands here again).
 pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) {
     let WmAction::PaneTerminalFontZoom {
         pane_id,
@@ -24,9 +24,16 @@ pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) {
     if !named && crate::app::terminal_host::tree_answers(state, step.intent()) {
         return;
     }
-    let backends = &state.server.backends;
-    let target = backends.target(*pane_id, *terminal, state.focused_pane);
-    let Some(id) = target.and_then(|t| backends.terminal_of(t)) else {
+    let id = match named {
+        true => {
+            let backends = &state.server.backends;
+            backends
+                .target(*pane_id, *terminal, None)
+                .and_then(|t| backends.terminal_of(t))
+        }
+        false => state.keyboard_terminal(),
+    };
+    let Some(id) = id else {
         return;
     };
     let delta = super::system::font_zoom_delta(state, *step);

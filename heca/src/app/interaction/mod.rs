@@ -45,9 +45,9 @@ mod tests;
 mod types;
 mod view_intent;
 
-pub(crate) use types::*;
+pub(crate) use dispatch::*;
+pub(crate) use focus::*;
 pub use policy::ActionPolicy;
 pub(crate) use policy::{action_allowed_when_floating, action_policy};
-pub(crate) use focus::*;
-pub(crate) use dispatch::*;
+pub(crate) use types::*;
 pub(crate) use view_intent::*;

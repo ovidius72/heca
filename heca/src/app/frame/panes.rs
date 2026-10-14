@@ -75,7 +75,8 @@ pub(in crate::app) fn paint_window(state: &mut AppState, v: &FrameValues) -> Gui
 /// **Every terminal this frame draws**: the tiled panes', the floating panes', and those no pane
 /// owns — a dock's, an overlay's — each with its snapshot.
 pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> FrameTerminals {
-    let pane_positions = state.layout()
+    let pane_positions = state
+        .layout()
         .active_workspace()
         .map(|ws| ws.scroll().panes_with_positions())
         .unwrap_or_default();
@@ -93,7 +94,8 @@ pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> Fr
             )
         })
         .collect();
-    let float_boxes: Vec<(PaneId, (f32, f32, f32, f32))> = state.layout()
+    let float_boxes: Vec<(PaneId, (f32, f32, f32, f32))> = state
+        .layout()
         .active_workspace()
         .map(|ws| {
             ws.floating_panes

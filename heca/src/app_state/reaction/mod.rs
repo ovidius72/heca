@@ -23,7 +23,10 @@ pub(crate) struct Tracking<'a> {
 impl Tracking<'_> {
     /// Know workspace `idx`, which is new: nothing was visited in it yet.
     pub(crate) fn know_workspace(&mut self, idx: usize) {
-        for per_ws in [&mut *self.last_visited_pane_per_ws, &mut *self.expose_cursor_per_ws] {
+        for per_ws in [
+            &mut *self.last_visited_pane_per_ws,
+            &mut *self.expose_cursor_per_ws,
+        ] {
             if per_ws.len() <= idx {
                 per_ws.resize(idx + 1, None);
             }
@@ -96,7 +99,13 @@ fn follows_column(asked: Option<&WmAction>) -> bool {
 /// Whether the window that sent `asked` goes where the pane it moved went. A pane taken with
 /// `focus_after` off stays where it was focused; every other move is followed.
 fn follows_pane(asked: Option<&WmAction>) -> bool {
-    !matches!(asked, Some(WmAction::TakePane { focus_after: false, .. }))
+    !matches!(
+        asked,
+        Some(WmAction::TakePane {
+            focus_after: false,
+            ..
+        })
+    )
 }
 
 /// The pane the action this window sent names as the one it acts on, when it names one.
@@ -117,7 +126,10 @@ pub(crate) fn window_reacts(
     asked: Option<&WmAction>,
     before: Option<&Before>,
 ) -> Reaction {
-    let mut reaction = Reaction { redraw: true, ..Reaction::default() };
+    let mut reaction = Reaction {
+        redraw: true,
+        ..Reaction::default()
+    };
     match *change {
         Change::LayoutChanged => {
             // An action that named a pane focuses it even when nothing moved.
@@ -130,7 +142,10 @@ pub(crate) fn window_reacts(
                 }
             }
         }
-        Change::Arranged { workspace, ref effects } => {
+        Change::Arranged {
+            workspace,
+            ref effects,
+        } => {
             // Shown from where this window had things when it asked. A window with no picture —
             // the change answers another window — still keeps its place: it has nothing to slide
             // from, so it shows the change from where things are now.
@@ -152,7 +167,9 @@ pub(crate) fn window_reacts(
                 ws.scroll_mut().activate_column(column);
             }
         }
-        Change::PaneAdded { pane, workspace, .. } => {
+        Change::PaneAdded {
+            pane, workspace, ..
+        } => {
             // A pane made for this window is shown and focused.
             if asked.is_some() {
                 show_workspace(layout, tracking.last_visited_ws, workspace);
@@ -163,12 +180,15 @@ pub(crate) fn window_reacts(
         }
         Change::NamesChanged => reaction.names_changed = true,
         Change::PaneRemoved { .. } => {}
-        Change::PaneMoved { pane, workspace, .. } => {
+        Change::PaneMoved {
+            pane, workspace, ..
+        } => {
             // A pane moved by this window is shown where it landed, and focused there.
             if asked.is_some() {
                 show_workspace(layout, tracking.last_visited_ws, workspace);
             }
-            if asked.is_some() && follows_pane(asked)
+            if asked.is_some()
+                && follows_pane(asked)
                 && let Some(mut ws) = layout.workspace_mut(workspace)
             {
                 ws.activate_pane(pane);

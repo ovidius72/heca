@@ -36,7 +36,10 @@ impl Sides {
             let args: Vec<ArgSpec> = d.args.iter().map(ArgSpec::from_descriptor).collect();
             let kind = crate::input::resolve_action(d.name, &sample_args(&args))
                 .unwrap_or_else(|| {
-                    unreachable!("built-in action {:?} builds from neither name nor arguments", d.name)
+                    unreachable!(
+                        "built-in action {:?} builds from neither name nor arguments",
+                        d.name
+                    )
                 })
                 .kind();
             names.entry(kind).or_insert(d.name);
@@ -48,7 +51,10 @@ impl Sides {
                 );
             }
         }
-        Self { sides: table, names }
+        Self {
+            sides: table,
+            names,
+        }
     }
 
     /// The side of `kind`. `None` for a kind no built-in descriptor names.

@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 /// In Tiled domain, TiledOnly actions are allowed from any source.
 #[test]
 fn tiled_domain_allows_tiled_actions() {
@@ -30,7 +29,6 @@ fn tiled_domain_allows_tiled_actions() {
     }
 }
 
-
 /// A View intent is a pass-through at the router: it carries only an action name, so
 /// the router always allows it and real policy is applied when it resolves to a
 /// `WmAction` and re-dispatches. Also exercises constructing the `View` variant.
@@ -49,7 +47,6 @@ fn view_intent_passes_through_router() {
         decision,
     );
 }
-
 
 /// In Tiled domain, FocusedPaneLocal actions are allowed.
 #[test]
@@ -86,11 +83,10 @@ fn tiled_domain_allows_focused_pane_local() {
     }
 }
 
-
 /// **The user's case**: a plugin opens a non-modal overlay over the scrolling area,
 /// and `prefix+Enter` must not add a pane behind it. No plugin declares anything about
 /// `split_horizontal` — it declares that its overlay covers the panes, and every `TiledOnly`
-/// act falls away with no further rule (F003/P086/T371).
+/// act falls away with no further rule.
 #[test]
 fn an_overlay_covering_the_panes_blocks_acting_on_them() {
     let session = test_session();
@@ -103,7 +99,9 @@ fn an_overlay_covering_the_panes_blocks_acting_on_them() {
     ] {
         let decision = route_in_domain(
             session.l(),
-            Domain::Overlay,
+            Domain::Overlay {
+                terminal_keys: false,
+            },
             InteractionSource::Keyboard,
             InteractionIntent::ActivateAction(action.clone()),
         );
@@ -117,7 +115,9 @@ fn an_overlay_covering_the_panes_blocks_acting_on_them() {
     assert!(matches!(
         route_in_domain(
             session.l(),
-            Domain::Overlay,
+            Domain::Overlay {
+                terminal_keys: false
+            },
             InteractionSource::Keyboard,
             InteractionIntent::ActivateAction(WmAction::ReloadConfig),
         ),
@@ -125,6 +125,38 @@ fn an_overlay_covering_the_panes_blocks_acting_on_them() {
     ));
 }
 
+/// **A terminal shown in something covering the panes keeps its own keys**: scrolling, searching
+/// and its font size reach it while it holds the keyboard — and still never reach a pane behind.
+#[test]
+fn a_terminal_in_front_holding_the_keyboard_keeps_its_keys() {
+    let session = test_session();
+    let route = |terminal_keys: bool, action: WmAction| {
+        route_in_domain(
+            session.l(),
+            Domain::Overlay { terminal_keys },
+            InteractionSource::Keyboard,
+            InteractionIntent::ActivateAction(action),
+        )
+    };
+    for action in [
+        WmAction::ScrollPageUp,
+        WmAction::SearchScrollback,
+        WmAction::EnterSelectionMode,
+    ] {
+        assert!(
+            matches!(route(true, action.clone()), RouteDecision::Allow(_)),
+            "{action:?}"
+        );
+        assert!(
+            matches!(route(false, action.clone()), RouteDecision::Block),
+            "{action:?}"
+        );
+    }
+    assert!(
+        matches!(route(true, WmAction::ClosePane), RouteDecision::Block),
+        "a pane behind"
+    );
+}
 
 /// **The exposé's defect, as a rule.** The map declares `lock: false` — you can see
 /// the panes through it, and that is geometrically true — so the old gate said the base context
@@ -139,8 +171,7 @@ fn a_surface_that_took_the_keyboard_makes_the_base_context_dormant_even_if_it_co
     ));
 }
 
-
-/// The exception that keeps T327's deletes working, and the one a plugin's layer relies on:
+/// The exception that keeps the map's deletes working, and the one a plugin's layer relies on:
 /// the surface holding the keyboard is not "the app being driven behind it". `x` on a card is
 /// the map's own declaration and is judged by the action's policy, like anyone else's.
 #[test]
@@ -152,7 +183,6 @@ fn the_active_surface_acting_on_itself_is_not_refused() {
     ));
 }
 
-
 /// …and it is the *active* surface, not any surface. A layer that no longer holds the keyboard
 /// — one beneath the dialog that opened over it — gets no reach past it.
 #[test]
@@ -163,7 +193,6 @@ fn a_surface_underneath_the_active_one_gets_no_reach() {
         InteractionSource::Surface(surface("heca.expose")),
     ));
 }
-
 
 /// With nothing holding the keyboard, coverage still means what it says: something opaque over
 /// the tiled area means the panes are not what the user is looking at.
@@ -181,9 +210,8 @@ fn coverage_still_decides_when_no_surface_holds_the_keyboard() {
     ));
 }
 
-
 /// A component's cursor verb is reachable **only while its dock is being driven** — which is
-/// what closes the palette/RPC hole those actions had (F003/P086/T371).
+/// what closes the palette/RPC hole those actions had.
 #[test]
 fn a_container_focused_action_needs_a_focused_container() {
     let session = test_session();
@@ -194,7 +222,13 @@ fn a_container_focused_action_needs_a_focused_container() {
         ActionPolicy::ContainerFocused,
         None,
     ));
-    for domain in [Domain::Tiled, Domain::Floating, Domain::Overlay] {
+    for domain in [
+        Domain::Tiled,
+        Domain::Floating,
+        Domain::Overlay {
+            terminal_keys: false,
+        },
+    ] {
         assert!(
             !policy_allows(
                 session.l(),
@@ -208,13 +242,12 @@ fn a_container_focused_action_needs_a_focused_container() {
     }
 }
 
-
-/// **A script is judged like a key, not like a click** (F003/P085/T358).
+/// **A script is judged like a key, not like a click**.
 ///
 /// A click lands *on* something and is judged by what it landed on; a script lands on nothing,
 /// so where the keyboard is *is* the context. Without this, `heca action workspaces.delete_row`
-/// was refused even with the workspaces dock focused — the policy T371 introduced had no door at
-/// all from RPC, which is what `FocusContainerThenAction` exists to open.
+/// would be refused even with the workspaces dock focused — there would be no door at all from
+/// RPC, which is what `FocusContainerThenAction` exists to open.
 #[test]
 fn a_script_is_judged_where_the_keyboard_is() {
     let session = test_session();
@@ -245,14 +278,19 @@ fn a_script_is_judged_where_the_keyboard_is() {
     ));
 }
 
-
 /// The composite is expanded before routing, so the router only ever sees it defensively — and
 /// passes it through, because the action half carries a *name* whose real policy is read when
 /// `dispatch_view_intent` resolves it.
 #[test]
 fn the_focus_container_composite_passes_through_the_router() {
     let session = test_session();
-    for domain in [Domain::Tiled, Domain::Container, Domain::Overlay] {
+    for domain in [
+        Domain::Tiled,
+        Domain::Container,
+        Domain::Overlay {
+            terminal_keys: false,
+        },
+    ] {
         assert!(
             matches!(
                 route_in_domain(
@@ -270,7 +308,6 @@ fn the_focus_container_composite_passes_through_the_router() {
         );
     }
 }
-
 
 /// A dock holding the keyboard does not stop the app's own tiled actions — the phase's rule
 /// that `prefix+…` keeps working while a container is focused, expressed as a domain.
@@ -296,7 +333,6 @@ fn a_focused_container_still_permits_the_tiled_actions() {
         );
     }
 }
-
 
 // ── plugin-04 / T3: a name-keyed action is judged by IDENTICAL rules ──
 
@@ -325,7 +361,6 @@ fn a_declared_tiled_only_action_is_blocked_when_floating() {
     ));
 }
 
-
 /// `Global` is the only policy that is truly always allowed (the `AlwaysAllowed` name is a trap
 /// — the router blocks THAT one when floating). A plugin action declaring `Global` keeps working
 /// while a floating pane owns the domain.
@@ -352,7 +387,6 @@ fn a_declared_global_action_survives_the_floating_domain() {
     );
 }
 
-
 /// `SourceDependent` with no introspectable action (the name-keyed case) takes the conservative
 /// branch and is blocked when floating — the host cannot prove it targets the active pane.
 #[test]
@@ -367,7 +401,6 @@ fn source_dependent_without_an_action_is_conservatively_blocked_when_floating() 
         None
     ));
 }
-
 
 /// When tiled, sidebar actions are allowed via MouseLeftSidebar.
 #[test]
@@ -390,7 +423,6 @@ fn tiled_sidebar_action_allowed_via_mouse_sidebar() {
     }
 }
 
-
 /// When tiled, FocusPane from MouseContent is allowed.
 #[test]
 fn tiled_content_focus_pane_allowed_via_mouse_content() {
@@ -407,7 +439,6 @@ fn tiled_content_focus_pane_allowed_via_mouse_content() {
         decision,
     );
 }
-
 
 // ── E.3: Behavior preservation tests ──
 
@@ -436,7 +467,6 @@ fn tiled_keyboard_focus_navigation_allowed() {
         );
     }
 }
-
 
 /// When tiled, workspace actions are allowed.
 #[test]

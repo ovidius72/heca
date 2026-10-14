@@ -691,7 +691,9 @@ mod tests {
     #[test]
     fn opening_the_map_starts_on_the_pane_the_session_is_focused_on() {
         let s = session();
-        let focused = s.l().active_workspace()
+        let focused = s
+            .l()
+            .active_workspace()
             .and_then(|ws| ws.active_pane())
             .map(|p| p.id)
             .expect("the fixture has a focused pane");
@@ -731,7 +733,8 @@ mod tests {
         let mut s = session();
         // Give the second workspace a pane, while the session stays focused in the first.
         s.show(1);
-        s.m().add_pane(heca_core::layout::Pane::new(PaneId(3), "c"), None, false);
+        s.m()
+            .add_pane(heca_core::layout::Pane::new(PaneId(3), "c"), None, false);
         s.show(0);
 
         assert_eq!(
@@ -746,7 +749,9 @@ mod tests {
     #[test]
     fn a_remembered_pane_that_no_longer_exists_falls_back_to_the_session() {
         let s = session();
-        let focused = s.l().active_workspace()
+        let focused = s
+            .l()
+            .active_workspace()
             .and_then(|ws| ws.active_pane())
             .map(|p| p.id)
             .expect("the fixture has a focused pane");

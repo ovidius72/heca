@@ -23,13 +23,13 @@ pub(super) fn handle_prefix_mode(
     if ctx.is_prefix {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
-        // The double-prefix literal passthrough is for a pane that is *taking text*. While a dock
-        // holds the keyboard nothing is, so sending a literal `Ctrl+B` to a pane the user is not
-        // typing in is a surprise rather than a passthrough (F003/P085/T352).
-        if crate::app::tree_focus::focused_dock(state).is_some() {
-            return;
-        }
-        if let Some(pane_id) = state.focused_pane
+        // **The second prefix is a literal `Ctrl+B` for whatever holds the keyboard.** While the
+        // window holds it, it is given there like any key: a terminal placed anywhere types it, and
+        // anything that does not take keys ignores it. Otherwise it is typed into the focused pane.
+        if crate::app::tree_keys::window_holds_keyboard(state) {
+            let combo = state.prefix_combo.clone();
+            crate::app::tree_keys::deliver_press_to_tree(state, keymap, &combo, "");
+        } else if let Some(pane_id) = state.focused_pane
             && let Some(backend) = state.server.backends.get_mut(pane_id)
         {
             let literal = prefix_combo_to_literal_input(&state.prefix_combo);

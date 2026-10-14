@@ -800,12 +800,13 @@ in.
 | `Global` | Allow | **Allow** | `ReloadConfig` — true app-level, no layout impact, must work even when floating |
 | `AlwaysAllowed` | Allow | **Block** (current sources) | `CommandPalette`, `SpawnCommand` — app-level but layout-affecting |
 | `TiledOnly` | Allow | Block | `Focus*`, `Split*`, `ZoomColumn`, `Resize*`, `Swap*`, `Move*`, `Sidebar*`, `PaneSelect/Swap/Take`, `FloatAt`, `RenameColumn`, `DeleteColumn`, collapse/expand workspace+column |
-| `FocusedPaneLocal` | Allow | **Allow** | `Float`, `ClosePane`, `ClosePaneById`, `RenamePane`, `RenameTarget`, `Selection*` (`EnterSelectionMode`, `Selection*`, `ClearSelection`, `CopySelection`, `PasteClipboard`, `BeginSelection`, `ToggleSelectionEndpoint`) — operate on the focused pane in either domain |
+| `FocusedPaneLocal` | Allow | **Allow** | `Float`, `ClosePane`, `ClosePaneById`, `RenamePane`, `RenameTarget`, `TerminalRun`, `TerminalKill` — operate on the focused pane in either domain |
+| `KeyboardTerminal` | Allow | **Allow** | `Scrollback*`, `Scroll*` (vertical), `Selection*` (`EnterSelectionMode`, `ClearSelection`, `CopySelection`, `PasteClipboard`, `BeginSelection`, `ToggleSelectionEndpoint`, `OpenLinkAtCaret`), `Search*`, `PaneTerminalFontZoom` — act on the terminal the keyboard is on; also allowed under an overlay when a terminal shown in it holds the keyboard |
 | `WorkspaceLevel` | Allow | Block | `WorkspaceNext/Prev`, `FocusWorkspace`, `CreateWorkspace`, `RenameWorkspace`, `DeleteWorkspace` |
 | `SourceDependent` | Allow | depends | `FocusPane` — allowed only if it targets the active floating pane |
 | `ContainerFocused` | **Block** | Block | a component's own cursor verbs (`workspaces.delete_selected`, `rename_selected`, …) — allowed **only** in `Domain::Container`. This is what keeps "delete the row my cursor is on" out of the command palette and RPC while the dock is not being driven |
 
-**Floating-domain policy:** when `FocusDomain::Floating` is active, only `FocusedPaneLocal` + `Global` actions pass from `Keyboard`/`MouseContent`/`MouseLeftSidebar`. Everything else is blocked. The only escape from floating is `prefix+f` (Float toggle) or `ClosePane`.
+**Floating-domain policy:** when `FocusDomain::Floating` is active, only `FocusedPaneLocal` + `KeyboardTerminal` + `Global` actions pass from `Keyboard`/`MouseContent`/`MouseLeftSidebar`. Everything else is blocked. The only escape from floating is `prefix+f` (Float toggle) or `ClosePane`.
 
 **`Global` vs `AlwaysAllowed` — do NOT conflate.** `AlwaysAllowed` is a misnomer: the router *blocks* it when floating. `Global` is the only policy that is truly always allowed. Use `Global` for app-level actions with **zero layout impact** that must stay reachable while floating (e.g. `ReloadConfig`). The hot-reload bug (config/style only applied on full restart, not on `prefix+Shift+r`, whenever a floating pane was active) was exactly `ReloadConfig` being mis-classified as `AlwaysAllowed` — fixed by moving it to `Global`.
 

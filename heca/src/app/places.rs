@@ -3,8 +3,8 @@
 //! layout, which only reports where each place is.
 
 use crate::app_state::{AppState, InputMode};
-use heca_core::layout::types::Point;
 use heca_core::layout::Place;
+use heca_core::layout::types::Point;
 
 /// Whether the places should be shown this frame: a pane is being carried out of the content area,
 /// or a column pick is open.

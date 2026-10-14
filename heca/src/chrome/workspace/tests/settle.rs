@@ -29,14 +29,24 @@ fn model_of(session: &Windowed, open: bool) -> WorkspaceModel {
                 .panes
                 .iter()
                 .map(|p| {
-                    model_at(p.id, p.rect.loc.x as f32, p.rect.loc.y as f32, p.rect.size.w as f32, p.rect.size.h as f32)
+                    model_at(
+                        p.id,
+                        p.rect.loc.x as f32,
+                        p.rect.loc.y as f32,
+                        p.rect.size.w as f32,
+                        p.rect.size.h as f32,
+                    )
                 })
                 .collect(),
         })
         .collect();
     let mut model = model(columns, vec![]);
     model.area = Rect::new(Point::new(0.0, 0.0), Sz::new(1000.0, 800.0));
-    model.places = if open { ws.scroll().places() } else { Vec::new() };
+    model.places = if open {
+        ws.scroll().places()
+    } else {
+        Vec::new()
+    };
     model
 }
 
@@ -44,7 +54,11 @@ fn model_of(session: &Windowed, open: bool) -> WorkspaceModel {
 fn frame(ws: &dyn Component) -> Vec<(f64, f64, f64, f64)> {
     let mut out = Vec::new();
     fn walk(c: &dyn Component, out: &mut Vec<(f64, f64, f64, f64)>) {
-        if c.base().key.as_deref().is_some_and(|k| k.starts_with("pane:")) {
+        if c.base()
+            .key
+            .as_deref()
+            .is_some_and(|k| k.starts_with("pane:"))
+        {
             let b = c.base().bounds;
             out.push((b.loc.x, b.loc.y, b.size.w, b.size.h));
         }
@@ -63,7 +77,10 @@ fn a_carry_has_one_layout_whatever_the_pointer_does() {
 
     let session = session();
     let mut window = crate::chrome::new_window_root();
-    window.base_mut().children.push(Box::new(workspace(seams())));
+    window
+        .base_mut()
+        .children
+        .push(Box::new(workspace(seams())));
     let mut frames = Vec::new();
     let render = |window: &mut Flex, open: bool| {
         let model = model_of(&session, open);
@@ -73,9 +90,15 @@ fn a_carry_has_one_layout_whatever_the_pointer_does() {
     };
 
     render(&mut window, false);
-    let cmd = heca_grid_ui::Modifiers { meta: true, ..heca_grid_ui::Modifiers::default() };
+    let cmd = heca_grid_ui::Modifiers {
+        meta: true,
+        ..heca_grid_ui::Modifiers::default()
+    };
     dispatch(&mut window, &Event::ModifiersChanged(cmd));
-    dispatch(&mut window, &Event::pointer_pressed(Point::new(100.0, 120.0), PointerButton::Left));
+    dispatch(
+        &mut window,
+        &Event::pointer_pressed(Point::new(100.0, 120.0), PointerButton::Left),
+    );
     // The pointer moves to where it will rest, then is held still, a move event sent every frame.
     let rest = Point::new(160.0, 130.0);
     dispatch(&mut window, &Event::pointer_moved(rest));

@@ -50,7 +50,7 @@ pub(crate) fn enter_scrollback_search(state: &mut AppState) {
     if tree_answers(state, WidgetIntent::Find) {
         return;
     }
-    let Some(terminal) = state.search_target() else {
+    let Some(terminal) = state.keyboard_terminal() else {
         return;
     };
     if state
@@ -81,7 +81,7 @@ pub(crate) fn search_step(state: &mut AppState, forward: bool) {
     if tree_answers(state, intent) {
         return;
     }
-    if let Some(terminal) = state.search_target() {
+    if let Some(terminal) = state.keyboard_terminal() {
         step(state, terminal, forward);
     }
 }

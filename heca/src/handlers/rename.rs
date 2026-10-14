@@ -117,7 +117,9 @@ fn enter_column_rename(state: &mut AppState, ws_idx: usize, col_idx: usize) {
 
 pub fn handle_rename_column(state: &mut AppState, _action: &WmAction) {
     let ws_idx = state.layout().active_workspace_idx();
-    let Some(col_idx) = state.layout().active_workspace()
+    let Some(col_idx) = state
+        .layout()
+        .active_workspace()
         .map(|ws| ws.scroll().active_column_idx())
     else {
         return;

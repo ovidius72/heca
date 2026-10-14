@@ -56,11 +56,13 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
             0.0
         },
     };
-    let active_pane = state.layout()
+    let active_pane = state
+        .layout()
         .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
-    let floating: std::collections::HashSet<PaneId> = state.layout()
+    let floating: std::collections::HashSet<PaneId> = state
+        .layout()
         .active_workspace()
         .map(|ws| ws.floating_panes.iter().map(|f| f.pane.id).collect())
         .unwrap_or_default();
@@ -91,7 +93,7 @@ pub(crate) fn pane_models(state: &crate::app_state::AppState) -> Vec<PaneShellMo
                 accent,
                 active_glow,
                 float: floating.contains(&pane_id).then_some(float_look),
-                move_modifier: state.interactive_move_modifier,
+                move_modifier: state.settings.interactive_move_modifier,
             }
         })
         .collect();

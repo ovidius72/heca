@@ -13,15 +13,7 @@ fn with_shell(cx: &mut ServerCx<'_>, added: Option<Added>) -> Vec<Change> {
     };
     let (grid, cell) = (cx.asker.grid(), cx.asker.cell);
     cx.terminals.start_shell(a.pane, grid, cell);
-    let made = Change::PaneAdded {
-        pane: a.pane,
-        workspace: a.workspace,
-        column: a.column,
-    };
-    Change::after_arranging(a.arranged)
-        .into_iter()
-        .chain([made])
-        .collect()
+    Change::after_adding(a)
 }
 
 /// Where a new column of workspace `ws` goes: after the asker's active column in the workspace it
@@ -29,7 +21,7 @@ fn with_shell(cx: &mut ServerCx<'_>, added: Option<Added>) -> Vec<Change> {
 fn new_column_place(cx: &ServerCx<'_>, ws: usize) -> usize {
     match ws == cx.asker.workspace {
         true => cx.asker.column + 1,
-        false => usize::MAX,
+        false => heca_core::layout::END,
     }
 }
 

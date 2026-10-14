@@ -949,6 +949,7 @@ mouse = true                  # Enable mouse interactions
 focus_follows_mouse = true    # Focus pane on hover
 auto_scroll_edge = true       # Auto-scroll near edges
 edge_scroll_distance = 80.0   # How close (px) a dragged pane must come to the edge for that to start
+edge_scroll_speed = 1000.0    # How fast (px per second) the view scrolls while a dragged pane is at the edge
 column_focus = "last"  # Pane focus lands on in the next column: "last" used there, or the one level with "row"
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 float_size = 0.95             # Share of the working area a pane takes when it floats with nowhere given

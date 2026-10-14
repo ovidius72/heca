@@ -9,7 +9,10 @@ use crate::server::{Change, ServerCx};
 /// What floating a pane says: what leaving its column did.
 fn floated(workspace: usize, effect: Option<SpaceEffect>) -> Vec<Change> {
     match effect {
-        Some(effect) => vec![Change::Arranged { workspace, effects: vec![effect] }],
+        Some(effect) => vec![Change::Arranged {
+            workspace,
+            effects: vec![effect],
+        }],
         None => Vec::new(),
     }
 }
@@ -31,8 +34,18 @@ pub(super) fn float(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
     };
     if let Some(effect) = ws.unfloat_pane(pane, new_column_id, area.size.h) {
         let column = ws.scrolling.pane_indices(pane).map_or(0, |(col, _)| col);
-        let landed = Change::PaneMoved { pane, workspace, column };
-        return vec![Change::Arranged { workspace, effects: vec![effect] }, landed];
+        let landed = Change::PaneMoved {
+            pane,
+            workspace,
+            column,
+        };
+        return vec![
+            Change::Arranged {
+                workspace,
+                effects: vec![effect],
+            },
+            landed,
+        ];
     }
     let rect = ws.float_rect_in(area);
     float_tiled(cx, pane, rect)
@@ -40,7 +53,14 @@ pub(super) fn float(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
 
 /// Float a pane at an exact place.
 pub(super) fn float_at(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
-    let WmAction::FloatAt { pane_id, x, y, width, height } = action else {
+    let WmAction::FloatAt {
+        pane_id,
+        x,
+        y,
+        width,
+        height,
+    } = action
+    else {
         return Vec::new();
     };
     let rect = Rectangle::new(Point::new(*x, *y), Size::new(*width, *height));
@@ -50,6 +70,10 @@ pub(super) fn float_at(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> 
 /// Float the tiled pane `pane` of the asker's workspace at `rect`.
 fn float_tiled(cx: &mut ServerCx<'_>, pane: PaneId, rect: Rectangle) -> Vec<Change> {
     let workspace = cx.asker.workspace;
-    let effect = cx.layout.workspaces.get_mut(workspace).and_then(|ws| ws.float_tiled_pane(pane, rect));
+    let effect = cx
+        .layout
+        .workspaces
+        .get_mut(workspace)
+        .and_then(|ws| ws.float_tiled_pane(pane, rect));
     floated(workspace, effect)
 }

@@ -56,8 +56,8 @@ use std::time::Instant;
 
 mod drag;
 
-pub use drag::{dragged_bounds, dragging};
 use drag::{announce, clear_drag_over, drag_identity, dragging_path, drive_drag, finish_drag};
+pub use drag::{dragged_bounds, dragging};
 
 /// Longest gap between two presses still counted as one click run (seconds).
 ///
@@ -365,8 +365,7 @@ fn route_release(root: &mut dyn Component, raw: &RawPointer) -> Handled {
             // `prevent_default`, the way a browser does. It used to be cancelled by
             // `stop_propagation` instead, which is a different question — that one is about who
             // *else* sees the event — so a widget that stopped the walk for an unrelated reason
-            // silently lost its own menu, with nothing failing and no warning
-            //.
+            // silently lost its own menu, with nothing failing and no warning.
             if kind == EventKind::RightClick
                 && !default_prevented
                 && crate::menu::open_declared_at(root, &path, raw.pos)

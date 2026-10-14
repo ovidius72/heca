@@ -1,8 +1,8 @@
 //! Tests for [`super`].
 
 use super::*;
-use heca_core::layout::testing::Windowed;
 use heca_core::layout::PaneId;
+use heca_core::layout::testing::Windowed;
 
 /// What a window remembers, owned, for a test to hold.
 #[derive(Default)]
@@ -35,7 +35,10 @@ fn a_zoom_elsewhere_shows_that_workspace_and_column() {
     let reaction = window_reacts(
         &mut window.m(),
         &mut tracked.parts(),
-        &Change::ColumnZoomed { workspace: 1, column: 0 },
+        &Change::ColumnZoomed {
+            workspace: 1,
+            column: 0,
+        },
         None,
         None,
     );
@@ -54,7 +57,10 @@ fn a_zoom_here_does_not_record_a_visit() {
     window_reacts(
         &mut window.m(),
         &mut tracked.parts(),
-        &Change::ColumnZoomed { workspace: 0, column: 0 },
+        &Change::ColumnZoomed {
+            workspace: 0,
+            column: 0,
+        },
         None,
         None,
     );
@@ -66,8 +72,13 @@ fn a_zoom_here_does_not_record_a_visit() {
 fn a_notification_is_not_the_layouts_business() {
     let mut window = two_workspaces_of_two_columns();
     let mut tracked = Tracked::default();
-    let reaction =
-        window_reacts(&mut window.m(), &mut tracked.parts(), &Change::NotificationsChanged, None, None);
+    let reaction = window_reacts(
+        &mut window.m(),
+        &mut tracked.parts(),
+        &Change::NotificationsChanged,
+        None,
+        None,
+    );
     assert!(!reaction.redraw);
 }
 
@@ -81,18 +92,30 @@ fn react(
 }
 
 fn landed_in_workspace_1() -> Change {
-    Change::PaneMoved { pane: PaneId(1), workspace: 1, column: 0 }
+    Change::PaneMoved {
+        pane: PaneId(1),
+        workspace: 1,
+        column: 0,
+    }
 }
 
 /// The window that moved a pane is taken to where it landed; one that only hears of it is not.
 #[test]
 fn only_the_asking_window_follows_a_moved_pane() {
-    let ask = WmAction::MovePaneToWorkspace { pane_id: PaneId(1), ws_idx: 1 };
+    let ask = WmAction::MovePaneToWorkspace {
+        pane_id: PaneId(1),
+        ws_idx: 1,
+    };
     let mut window = two_workspaces_of_two_columns();
     let mut tracked = Tracked::default();
     react(&mut window, &mut tracked, &landed_in_workspace_1(), None);
     assert_eq!(window.l().active_workspace_idx(), 0);
-    react(&mut window, &mut tracked, &landed_in_workspace_1(), Some(&ask));
+    react(
+        &mut window,
+        &mut tracked,
+        &landed_in_workspace_1(),
+        Some(&ask),
+    );
     assert_eq!(window.l().active_workspace_idx(), 1);
     assert_eq!(tracked.last_visited_ws, Some(0));
 }
@@ -101,26 +124,49 @@ fn only_the_asking_window_follows_a_moved_pane() {
 /// leaves the focus where it was.
 #[test]
 fn a_moved_pane_is_focused_unless_the_move_said_not_to() {
-    let landed = Change::PaneMoved { pane: PaneId(2), workspace: 0, column: 1 };
+    let landed = Change::PaneMoved {
+        pane: PaneId(2),
+        workspace: 0,
+        column: 1,
+    };
     let mut window = two_workspaces_of_two_columns();
     window.m().focus_left();
     let mut tracked = Tracked::default();
     assert_eq!(focused(&window), Some(PaneId(1)));
 
-    let quiet = WmAction::TakePane { pane_id: PaneId(2), focus_after: false };
+    let quiet = WmAction::TakePane {
+        pane_id: PaneId(2),
+        focus_after: false,
+    };
     react(&mut window, &mut tracked, &landed, Some(&quiet));
     assert_eq!(focused(&window), Some(PaneId(1)));
 
-    react(&mut window, &mut tracked, &landed, Some(&WmAction::MovePaneRight { pane_id: None }));
+    react(
+        &mut window,
+        &mut tracked,
+        &landed,
+        Some(&WmAction::MovePaneRight { pane_id: None }),
+    );
     assert_eq!(focused(&window), Some(PaneId(2)));
 }
 
 /// A column moved with `focus` off stays out of sight; with it on, it is followed.
 #[test]
 fn a_moved_column_is_followed_only_when_asked_to() {
-    let landed = Change::ColumnMoved { workspace: 1, column: 0 };
-    let quiet = WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 1, focus: false };
-    let loud = WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 1, focus: true };
+    let landed = Change::ColumnMoved {
+        workspace: 1,
+        column: 0,
+    };
+    let quiet = WmAction::MoveColumnToWorkspace {
+        col_idx: 0,
+        ws_idx: 1,
+        focus: false,
+    };
+    let loud = WmAction::MoveColumnToWorkspace {
+        col_idx: 0,
+        ws_idx: 1,
+        focus: true,
+    };
     let mut window = two_workspaces_of_two_columns();
     let mut tracked = Tracked::default();
     react(&mut window, &mut tracked, &landed, Some(&quiet));
@@ -139,15 +185,43 @@ fn a_removed_workspace_is_forgotten_by_the_window() {
         last_visited_pane_per_ws: vec![Some(PaneId(1)), Some(PaneId(2)), Some(PaneId(3))],
         expose_cursor_per_ws: vec![None, Some(PaneId(2)), None],
     };
-    react(&mut window, &mut tracked, &Change::WorkspaceRemoved { index: 1 }, None);
+    react(
+        &mut window,
+        &mut tracked,
+        &Change::WorkspaceRemoved { index: 1 },
+        None,
+    );
     assert_eq!(tracked.last_visited_ws, Some(1));
-    assert_eq!(tracked.last_visited_pane_per_ws, [Some(PaneId(1)), Some(PaneId(3))]);
+    assert_eq!(
+        tracked.last_visited_pane_per_ws,
+        [Some(PaneId(1)), Some(PaneId(3))]
+    );
     assert_eq!(tracked.expose_cursor_per_ws, [None, None]);
-    react(&mut window, &mut tracked, &Change::WorkspaceRemoved { index: 2 }, None);
-    assert_eq!(tracked.last_visited_ws, Some(1), "an earlier one is untouched");
-    let mut tracked = Tracked { last_visited_ws: Some(1), ..Tracked::default() };
-    react(&mut window, &mut tracked, &Change::WorkspaceRemoved { index: 1 }, None);
-    assert_eq!(tracked.last_visited_ws, None, "the one it pointed at is gone");
+    react(
+        &mut window,
+        &mut tracked,
+        &Change::WorkspaceRemoved { index: 2 },
+        None,
+    );
+    assert_eq!(
+        tracked.last_visited_ws,
+        Some(1),
+        "an earlier one is untouched"
+    );
+    let mut tracked = Tracked {
+        last_visited_ws: Some(1),
+        ..Tracked::default()
+    };
+    react(
+        &mut window,
+        &mut tracked,
+        &Change::WorkspaceRemoved { index: 1 },
+        None,
+    );
+    assert_eq!(
+        tracked.last_visited_ws, None,
+        "the one it pointed at is gone"
+    );
 }
 
 /// A refusal is handed on to be said, and changes nothing the window shows.
@@ -169,32 +243,72 @@ fn a_refusal_is_handed_on_to_be_said() {
 /// A move that changed nothing still takes the asking window to the pane it named.
 #[test]
 fn a_named_pane_is_focused_even_when_it_did_not_move() {
-    let ask = WmAction::MovePaneLeft { pane_id: Some(PaneId(11)) };
+    let ask = WmAction::MovePaneLeft {
+        pane_id: Some(PaneId(11)),
+    };
     let mut window = two_workspaces_of_two_columns();
     let mut tracked = Tracked::default();
     react(&mut window, &mut tracked, &Change::LayoutChanged, None);
-    assert_eq!(window.l().active_workspace_idx(), 0, "another window's change is not followed");
-    react(&mut window, &mut tracked, &Change::LayoutChanged, Some(&WmAction::MovePaneLeft { pane_id: None }));
-    assert_eq!(window.l().active_workspace_idx(), 0, "no pane named, nothing to follow");
-    react(&mut window, &mut tracked, &Change::LayoutChanged, Some(&ask));
+    assert_eq!(
+        window.l().active_workspace_idx(),
+        0,
+        "another window's change is not followed"
+    );
+    react(
+        &mut window,
+        &mut tracked,
+        &Change::LayoutChanged,
+        Some(&WmAction::MovePaneLeft { pane_id: None }),
+    );
+    assert_eq!(
+        window.l().active_workspace_idx(),
+        0,
+        "no pane named, nothing to follow"
+    );
+    react(
+        &mut window,
+        &mut tracked,
+        &Change::LayoutChanged,
+        Some(&ask),
+    );
     assert_eq!(window.l().active_workspace_idx(), 1);
-    assert_eq!(window.l().workspace(1).map(|ws| ws.scroll().active_column_idx()), Some(0));
+    assert_eq!(
+        window
+            .l()
+            .workspace(1)
+            .map(|ws| ws.scroll().active_column_idx()),
+        Some(0)
+    );
 }
 
 /// The pane the window shows as active.
 fn focused(window: &Windowed) -> Option<PaneId> {
-    window.l().active_workspace().and_then(|ws| ws.scroll().active_pane().map(|p| p.id))
+    window
+        .l()
+        .active_workspace()
+        .and_then(|ws| ws.scroll().active_pane().map(|p| p.id))
 }
 
 /// Only the asking window is taken to a pane it made, and focuses it.
 #[test]
 fn only_the_asking_window_goes_to_a_pane_it_made() {
-    let added = Change::PaneAdded { pane: PaneId(12), workspace: 1, column: 1 };
+    let added = Change::PaneAdded {
+        pane: PaneId(12),
+        workspace: 1,
+        column: 1,
+    };
     let mut window = two_workspaces_of_two_columns();
     let mut tracked = Tracked::default();
     react(&mut window, &mut tracked, &added, None);
-    assert_eq!(window.l().active_workspace_idx(), 0, "another window does not follow");
-    let ask = WmAction::AddPaneToColumn { ws_idx: 1, col_idx: 1 };
+    assert_eq!(
+        window.l().active_workspace_idx(),
+        0,
+        "another window does not follow"
+    );
+    let ask = WmAction::AddPaneToColumn {
+        ws_idx: 1,
+        col_idx: 1,
+    };
     react(&mut window, &mut tracked, &added, Some(&ask));
     assert_eq!(window.l().active_workspace_idx(), 1);
     assert_eq!(focused(&window), Some(PaneId(12)));
@@ -209,8 +323,16 @@ fn a_new_workspace_is_known_with_nothing_visited() {
         expose_cursor_per_ws: vec![None, Some(PaneId(12))],
         ..Tracked::default()
     };
-    react(&mut window, &mut tracked, &Change::WorkspaceAdded { index: 2 }, None);
-    assert_eq!(tracked.last_visited_pane_per_ws, [Some(PaneId(1)), Some(PaneId(11)), None]);
+    react(
+        &mut window,
+        &mut tracked,
+        &Change::WorkspaceAdded { index: 2 },
+        None,
+    );
+    assert_eq!(
+        tracked.last_visited_pane_per_ws,
+        [Some(PaneId(1)), Some(PaneId(11)), None]
+    );
     assert_eq!(tracked.expose_cursor_per_ws, [None, Some(PaneId(12)), None]);
 }
 
@@ -220,8 +342,15 @@ fn only_a_name_change_says_names_are_out_of_date() {
     let mut window = two_workspaces_of_two_columns();
     let mut tracked = Tracked::default();
     assert!(react(&mut window, &mut tracked, &Change::NamesChanged, None).names_changed);
-    for other in [Change::LayoutChanged, Change::PaneRemoved { pane: PaneId(1) }, landed_in_workspace_1()] {
-        assert!(!react(&mut window, &mut tracked, &other, None).names_changed, "{other:?}");
+    for other in [
+        Change::LayoutChanged,
+        Change::PaneRemoved { pane: PaneId(1) },
+        landed_in_workspace_1(),
+    ] {
+        assert!(
+            !react(&mut window, &mut tracked, &other, None).names_changed,
+            "{other:?}"
+        );
     }
 }
 
@@ -235,7 +364,10 @@ fn a_change_to_the_columns_keeps_each_window_on_its_column() {
         let mut window = two_workspaces_of_two_columns();
         window.m().focus_right();
         let before = window.l().before();
-        let active_before = window.l().workspace(0).map(|ws| ws.scroll().active_column_idx());
+        let active_before = window
+            .l()
+            .workspace(0)
+            .map(|ws| ws.scroll().active_column_idx());
         assert_eq!(active_before, Some(1));
         // The content loses its first column, which renumbers the one the window is on.
         let effect = window
@@ -246,12 +378,24 @@ fn a_change_to_the_columns_keeps_each_window_on_its_column() {
             .expect("a column");
         assert_eq!(effect, ColumnEffect::Removed { idx: 0 });
         let mut tracked = Tracked::default();
-        let change = Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(effect)] };
+        let change = Change::Arranged {
+            workspace: 0,
+            effects: vec![SpaceEffect::Column(effect)],
+        };
         let picture = asked.then_some(&before);
-        let reaction = window_reacts(&mut window.m(), &mut tracked.parts(), &change, None, picture);
+        let reaction = window_reacts(
+            &mut window.m(),
+            &mut tracked.parts(),
+            &change,
+            None,
+            picture,
+        );
         assert!(reaction.redraw);
         assert_eq!(
-            window.l().workspace(0).map(|ws| ws.scroll().active_column_idx()),
+            window
+                .l()
+                .workspace(0)
+                .map(|ws| ws.scroll().active_column_idx()),
             Some(0),
             "with a picture of its own: {asked}; still on the column it was on"
         );

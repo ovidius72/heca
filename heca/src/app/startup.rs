@@ -445,7 +445,9 @@ pub(crate) async fn init_state(
         TerminalSettings::from_config(app_config),
         Some(event_proxy.clone()),
     );
-    server.terminals().start_shell(pane_id, first_grid, terminal_cell_size);
+    server
+        .terminals()
+        .start_shell(pane_id, first_grid, terminal_cell_size);
     let mut state = Box::new(AppState {
         window,
         event_proxy,
@@ -468,13 +470,11 @@ pub(crate) async fn init_state(
         view,
         theme: app_config.theme.clone(),
         appearance,
-        command_palette_size: app_config.config.settings.command_palette_size,
+        settings: crate::app_state::WindowSettings::from_config(app_config),
         // Loaded from disk when `[settings] search_history` allows it; a missing, corrupt or
         // unknown-version file is simply an empty store, so a first run and a broken file behave
         // identically and neither can stop the launch.
         search_store: std::rc::Rc::new(std::cell::RefCell::new(loaded_search.0)),
-        search_case: app_config.config.settings.search_case,
-        search_history: app_config.config.settings.search_history,
         search_saved_revision: 0,
         search_baseline: loaded_search.1,
         font_config: app_config.config.font.clone(),
@@ -518,17 +518,6 @@ pub(crate) async fn init_state(
         expose_cursor_ws: None,
         offered_letters: Default::default(),
         remembered_letters: Default::default(),
-        mouse_enabled: app_config.config.settings.mouse,
-        auto_scroll_edge: app_config.config.settings.auto_scroll_edge,
-        edge_scroll_distance: app_config.config.settings.edge_scroll_distance,
-        pane_renamed_add_process_name: app_config.config.settings.pane_renamed_add_process_name,
-        expose_show_cwd: crate::chrome::expose_show_cwd(&app_config.config),
-        terminal_mouse_enabled: app_config.config.settings.terminal_mouse,
-        terminal_wheel_scroll_lines: app_config.config.settings.terminal_wheel_scroll_lines,
-        terminal_font_zoom_step: app_config.config.settings.terminal_font_zoom_step,
-        mouse_wheel_change_font_size: app_config.config.settings.mouse_wheel_change_font_size,
-        confirm: app_config.config.confirm.clone(),
-        interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
         places_open: false,
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
@@ -602,8 +591,8 @@ mod tests {
 mod column_focus_tests {
     use super::layout_options_from;
     use heca_config::loader::AppConfig;
-    use heca_core::layout::types::{ColumnFocus, Size};
     use heca_core::layout::testing::Windowed;
+    use heca_core::layout::types::{ColumnFocus, Size};
     use heca_core::layout::{Pane, PaneId};
 
     fn from_toml(text: &str) -> AppConfig {
@@ -620,11 +609,21 @@ mod column_focus_tests {
     #[test]
     fn a_reload_changes_the_options_of_the_workspaces_that_already_exist() {
         let mut window = Windowed::new(Size::new(1000.0, 800.0), 1.0);
-        window.session.set_options(layout_options_from(&from_toml("")));
+        window
+            .session
+            .set_options(layout_options_from(&from_toml("")));
         window.m().add_pane(Pane::new(PaneId(1), ""), None, true);
-        assert_eq!(window.session.workspaces[0].scrolling.options.column_focus, ColumnFocus::Last);
-        window.session.set_options(layout_options_from(&from_toml("[settings]\ncolumn_focus = \"row\"")));
-        assert_eq!(window.session.workspaces[0].scrolling.options.column_focus, ColumnFocus::Row);
+        assert_eq!(
+            window.session.workspaces[0].scrolling.options.column_focus,
+            ColumnFocus::Last
+        );
+        window.session.set_options(layout_options_from(&from_toml(
+            "[settings]\ncolumn_focus = \"row\"",
+        )));
+        assert_eq!(
+            window.session.workspaces[0].scrolling.options.column_focus,
+            ColumnFocus::Row
+        );
         assert_eq!(window.session.options.column_focus, ColumnFocus::Row);
     }
 
@@ -638,16 +637,22 @@ mod column_focus_tests {
             ("[settings]\ncolumn_focus = \"row\"", PaneId(1)),
         ] {
             let mut window = Windowed::new(Size::new(1000.0, 800.0), 1.0);
-            window.session.set_options(layout_options_from(&from_toml(text)));
+            window
+                .session
+                .set_options(layout_options_from(&from_toml(text)));
             window.m().add_pane(Pane::new(PaneId(1), ""), None, true);
             window.m().add_pane(Pane::new(PaneId(3), ""), None, true);
             let mut ws = window.ws();
-            ws.scroll_mut().add_pane_to_column(0, Some(1), Pane::new(PaneId(11), ""), false);
+            ws.scroll_mut()
+                .add_pane_to_column(0, Some(1), Pane::new(PaneId(11), ""), false);
             ws.scrolling.columns[0].active_pane_idx = 1; // b was the last used on the left
             ws.scroll_mut().activate_column(1);
             ws.scrolling.columns[1].active_pane_idx = 0;
             assert!(window.m().focus_left());
-            let landed = window.l().active_workspace().and_then(|ws| ws.scroll().active_pane().map(|p| p.id));
+            let landed = window
+                .l()
+                .active_workspace()
+                .and_then(|ws| ws.scroll().active_pane().map(|p| p.id));
             assert_eq!(landed, Some(want), "{text:?} ({:?})", ColumnFocus::Row);
         }
     }

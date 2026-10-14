@@ -19,8 +19,8 @@ pub(crate) mod pane_header;
 pub(crate) mod terminal;
 pub(crate) mod workspace;
 pub(crate) use pane_header::{
-    ActionShortcuts, HeaderEnv, PaneHeader, action_tooltip, home_relative_path,
-    give_header_facts, pane_header_inputs, pane_info_view,
+    ActionShortcuts, HeaderEnv, PaneHeader, action_tooltip, give_header_facts, home_relative_path,
+    pane_header_inputs, pane_info_view,
 };
 pub(crate) mod drag;
 pub(crate) mod pane_items;
@@ -45,9 +45,8 @@ mod dispatch;
 mod focus;
 mod scene;
 pub(crate) use dispatch::{
-    cancel_every_tree, deliver, dispatch_surface_pointer, drag_in_flight,
-    drain_pending_drops, drain_pending_menus, next_redraw_across_trees,
-    open_declared_menu_for_focus,
+    cancel_every_tree, deliver, dispatch_surface_pointer, drag_in_flight, drain_pending_drops,
+    drain_pending_menus, next_redraw_across_trees, open_declared_menu_for_focus,
 };
 #[cfg(test)]
 use scene::chrome_scene;
@@ -671,7 +670,6 @@ pub(crate) fn row_of_key(key: &str) -> Option<(usize, usize)> {
 pub(crate) fn slot_of_key(key: &str) -> Option<usize> {
     key.strip_prefix("slot:")?.parse().ok()
 }
-
 
 /// **What one of a pane's own controls is called** — `pane:7-zoom`.
 ///
@@ -1932,7 +1930,11 @@ mod tests {
         let chrome = SharedChromeState::new(280.0, 260.0);
         let mut window = Windowed::new(Size::new(1280.0, 800.0), 1.0);
         {
-            window.m().add_pane(heca_core::layout::Pane::new(PaneId(10), "editor"), None, true);
+            window.m().add_pane(
+                heca_core::layout::Pane::new(PaneId(10), "editor"),
+                None,
+                true,
+            );
             let ws = window
                 .session
                 .workspaces
@@ -2000,9 +2002,11 @@ mod tests {
     fn sync_pane_runtime_state_prunes_removed_panes() {
         let chrome = SharedChromeState::new(280.0, 260.0);
         let mut window = Windowed::new(Size::new(1280.0, 800.0), 1.0);
-        window
-            .m()
-            .add_pane(heca_core::layout::Pane::new(PaneId(10), "editor"), None, true);
+        window.m().add_pane(
+            heca_core::layout::Pane::new(PaneId(10), "editor"),
+            None,
+            true,
+        );
 
         super::signals::sync_pane_runtime_state(&window.session, &chrome.workspaces);
         assert!(

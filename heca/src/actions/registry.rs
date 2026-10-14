@@ -170,7 +170,8 @@ impl ActionRegistry {
         let disc = action.kind();
         // **Routed by the action's side**: a server action runs on the server when it has been
         // moved there; anything else runs here, as it always has.
-        if self.sides.of(disc) == Some(super::Side::Server) && crate::server::ServerState::runs(disc)
+        if self.sides.of(disc) == Some(super::Side::Server)
+            && crate::server::ServerState::runs(disc)
         {
             let name = self.sides.name_of(disc).unwrap_or_default();
             run_then_follow_up(state, |state| state.run_on_server(action, name));

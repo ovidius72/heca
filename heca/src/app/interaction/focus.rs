@@ -1,10 +1,9 @@
 //! Focus-target helpers: which pane has the keyboard, and whether a pane can take it.
 
+use super::domain::is_floating_domain;
+use super::types::InteractionSource;
 use crate::app_state::AppState;
 use heca_core::layout::{Layout, PaneId};
-use super::types::InteractionSource;
-use super::domain::is_floating_domain;
-
 
 /// Returns the focused pane ID from `AppState`, if any.
 ///

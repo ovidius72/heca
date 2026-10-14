@@ -7,7 +7,8 @@ use super::*;
 /// the source and whatever it is over informed.
 pub(super) fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPointer) -> Handled {
     // A drag already in flight is followed whatever the pick-up rule says now; only a new one asks.
-    let carried = dragging_path(root).and_then(|path| drag_identity(root, &path).map(|id| (path, id)));
+    let carried =
+        dragging_path(root).and_then(|path| drag_identity(root, &path).map(|id| (path, id)));
     let Some((source_path, item)) = carried.or_else(|| drag_source_on(root, press)) else {
         return Handled::No;
     };
@@ -29,7 +30,11 @@ pub(super) fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPoi
             .dragging
             .set(true);
         if let Some((at, _)) = origin {
-            node_at(root, &source_path).base().pointer.drag_origin.set(at);
+            node_at(root, &source_path)
+                .base()
+                .pointer
+                .drag_origin
+                .set(at);
         }
         let ev = Event::DragStart(drag_event(&item, raw, DropSide::Onto));
         let _ = deliver_path(root, &source_path, &ev);
@@ -115,7 +120,13 @@ pub(super) fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled
 /// itself is not told: it has its own events.
 pub(super) fn announce(root: &mut dyn Component, source: &[usize], ev: &Event) {
     let kind = node_at(root, source).base().drag_kind.clone();
-    fn tell(node: &mut dyn Component, kind: Option<&str>, ev: &Event, here: &mut Path, source: &[usize]) {
+    fn tell(
+        node: &mut dyn Component,
+        kind: Option<&str>,
+        ev: &Event,
+        here: &mut Path,
+        source: &[usize],
+    ) {
         if node.is_drop_target() && node.accepts_drag(kind) && here.as_slice() != source {
             let _ = node.base_mut().run_handlers(ev);
             let _ = node.on_event(ev);

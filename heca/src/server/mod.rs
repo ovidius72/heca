@@ -1,6 +1,6 @@
 //! **The server's half of the app's state** — what is shared by every window and needs none.
 //!
-//! heca is a server and a client (F012): the server holds the content (workspaces, panes, the
+//! heca is a server and a client: the server holds the content (workspaces, panes, the
 //! terminal processes behind them, notifications) and a window — a client — draws it and moves
 //! through it by itself. `AppState` used to hold both in one struct beside the window and the GPU.
 //! This is the first piece taken out of it: the state that **cannot need a window**, so it can be
@@ -57,8 +57,8 @@ pub struct ServerState {
     /// Git facts for panes' folders, kept by repo root so a repo shared by panes is read once.
     git_runtime_cache: GitRuntimeCache,
     /// The program catalog (`[program]`), behind an `Rc` so mirroring it into the chrome store is
-    /// a pointer clone and the store can tell "unchanged" from "reloaded" by identity
-    /// (F003/P086/T367). Refreshed on reload.
+    /// a pointer clone and the store can tell "unchanged" from "reloaded" by identity.
+    /// Refreshed on reload.
     pub programs: Rc<ProgramsConfig>,
 }
 
@@ -72,7 +72,7 @@ impl ServerState {
                 if self.notifications.suppressed() {
                     return Vec::new();
                 }
-                // `mode = "system"` has no OS backend yet (F009/T222): fall back to the in-app
+                // `mode = "system"` has no OS backend yet: fall back to the in-app
                 // stack and say so once.
                 if let Some(notice) = self.notifications.system_fallback_notice() {
                     let _ = self.notifications.push(notice, now);
@@ -252,10 +252,7 @@ mod tests {
     fn the_server_state_is_built_with_no_window() {
         let server = server(Default::default());
         assert!(
-            server
-                .backends
-                .get(heca_core::layout::PaneId(1))
-                .is_none(),
+            server.backends.get(heca_core::layout::PaneId(1)).is_none(),
             "no terminal process yet"
         );
         assert_eq!(Rc::strong_count(&server.programs), 1);
@@ -303,7 +300,10 @@ mod tests {
         assert_eq!(server.next_wake(), None, "held still: no wake");
         let _ = server.execute(ServerAction::Hover(false), start);
 
-        assert_eq!(server.tick(deadline + Duration::from_millis(1)), [Change::NotificationsChanged]);
+        assert_eq!(
+            server.tick(deadline + Duration::from_millis(1)),
+            [Change::NotificationsChanged]
+        );
         assert_eq!(on_screen(&server), 0);
     }
 }

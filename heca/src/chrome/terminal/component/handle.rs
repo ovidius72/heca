@@ -214,6 +214,23 @@ impl Terminal {
         self.shared.placed.get()
     }
 
+    /// **The window's identity of it on screen** — the node drawn on the last frame, which the
+    /// window answers about ([`heca_grid_ui::keyboard_holder`]) and gives the keyboard to
+    /// ([`heca_grid_ui::focus_widget_by_id`]). `None` when it was not drawn.
+    pub(crate) fn node(&self) -> Option<u64> {
+        self.shared.placed.get()?;
+        Some(self.shared.node.get()).filter(|id| *id != 0)
+    }
+
+    /// **Take the window's keyboard** in `root`: at once when it is on screen, else the first time
+    /// it is drawn.
+    pub(crate) fn take_keyboard(&self, root: &mut dyn heca_grid_ui::Component) {
+        let taken = self
+            .node()
+            .is_some_and(|node| heca_grid_ui::focus_widget_by_id(root, node));
+        self.shared.wants_keyboard.set(!taken);
+    }
+
     /// **The grid cell under `pos`**, in window coordinates — `None` when the terminal was not drawn
     /// last frame, the point is off its grid, or its cell size is not known yet. The same answer its
     /// own pointer handlers give, so a question about "the cell the mouse is on" has one source.

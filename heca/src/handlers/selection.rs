@@ -202,14 +202,12 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
     }
 }
 
-/// Paste the system clipboard into the focused pane.
+/// Paste the system clipboard into the terminal the keyboard is on — a pane's, or one in a dock or
+/// a popup.
 ///
-/// Reads the OS clipboard via `arboard` and forwards it to the focused backend.
-/// The backend wraps the text in bracketed-paste markers when the program
-/// enabled that mode (see `PaneBackend::paste`), so editors treat it as literal
-/// input.
+/// The backend wraps the text in bracketed-paste markers when the program enabled that mode (see
+/// `PaneBackend::paste`), so editors treat it as literal input.
 pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
-    // Read the system clipboard and forward text into the focused pane.
     let text = match arboard::Clipboard::new() {
         Ok(mut cb) => match cb.get_text() {
             Ok(t) => t,
@@ -223,19 +221,7 @@ pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
             return;
         }
     };
-
-    // Find the active pane.
-    let pane_id = match state.layout().active_workspace()
-        .and_then(|ws| ws.active_pane())
-        .map(|pane| pane.id)
-        .or(state.focused_pane)
-    {
-        Some(id) => id,
-        None => return,
-    };
-
-    // Forward the text to the pane's backend (bracketed-paste aware).
-    if let Some(backend) = state.server.backends.get_mut(pane_id) {
+    if let Some(backend) = state.keyboard_backend_mut() {
         backend.paste(&text);
     }
 }

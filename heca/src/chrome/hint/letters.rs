@@ -228,11 +228,8 @@ fn offer_in_every_tree(
     // what to do with it.
     for pane_id in crate::app::terminal_host::laid_out_pane_ids(state) {
         if let Some(pane) = crate::chrome::workspace::pane_node(state, pane_id) {
-            offered |= heca_grid_ui::offer_hint_by_key(
-                pane,
-                key,
-                for_view(HintSurface::Pane(pane_id)),
-            );
+            offered |=
+                heca_grid_ui::offer_hint_by_key(pane, key, for_view(HintSurface::Pane(pane_id)));
         }
     }
     // **The columns in the scrolling area** — a column and the tiled panes inside it. Drawn in the

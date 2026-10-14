@@ -5,22 +5,18 @@ use crate::app::terminal_host::{
     move_focused_terminal_selection,
 };
 use crate::app_state::{AppState, InputMode};
+use crate::chrome::terminal::Page;
 use crate::input::WmAction;
 
-/// Get the approximate viewport page size for the focused terminal pane, in rows.
-/// Falls back to a sensible default (24) when no snapshot is available.
+/// How many rows a page of the keyboard's terminal is — the fallback grid's when there is no
+/// snapshot.
 fn focused_terminal_page_rows(state: &AppState) -> usize {
     state
-        .focused_pane
-        .and_then(|pane_id| {
-            state
-                .server
-                .backends
-                .get(pane_id)
-                .and_then(|b| b.terminal_snapshot())
-                .map(|s| s.rows)
-        })
-        .unwrap_or(24)
+        .keyboard_terminal()
+        .and_then(|terminal| state.server.backends.get_by_id(terminal))
+        .and_then(|b| b.terminal_snapshot())
+        .map(|s| s.rows)
+        .unwrap_or(crate::app::backend_factory::FALLBACK_TERMINAL_GRID.1)
 }
 
 pub fn handle_scrollback_page_up(state: &mut AppState, _action: &WmAction) {
@@ -44,7 +40,7 @@ pub fn handle_scrollback_line_up(state: &mut AppState, action: &WmAction) {
         return;
     };
     // `amount` is in notches; multiply by the user-configurable lines-per-notch.
-    let lines = (amount * state.terminal_wheel_scroll_lines) as isize;
+    let lines = (amount * state.settings.terminal_wheel_scroll_lines) as isize;
     if !matches!(state.input_mode, InputMode::Selection) {
         let _ = enter_selection_mode_for_focused_terminal(state);
     }
@@ -56,7 +52,7 @@ pub fn handle_scrollback_line_down(state: &mut AppState, action: &WmAction) {
         return;
     };
     // `amount` is in notches; multiply by the user-configurable lines-per-notch.
-    let lines = (amount * state.terminal_wheel_scroll_lines) as isize;
+    let lines = (amount * state.settings.terminal_wheel_scroll_lines) as isize;
     if !matches!(state.input_mode, InputMode::Selection) {
         let _ = enter_selection_mode_for_focused_terminal(state);
     }
@@ -68,11 +64,11 @@ pub fn handle_scrollback_to_top(state: &mut AppState, _action: &WmAction) {
         let _ = enter_selection_mode_for_focused_terminal(state);
     }
     // Move caret to the oldest scrollback content row.
-    if let Some(pane_id) = state.focused_pane
+    if let Some(terminal) = state.keyboard_terminal()
         && let Some(ref snapshot) = state
             .server
             .backends
-            .get(pane_id)
+            .get_by_id(terminal)
             .and_then(|b| b.terminal_snapshot())
     {
         let base = snapshot.viewport_top_stable_row
@@ -84,9 +80,7 @@ pub fn handle_scrollback_to_top(state: &mut AppState, _action: &WmAction) {
         } else {
             state.selection.update_focus(oldest, 0);
         }
-        if let Some(terminal) = state.server.backends.identity_of(pane_id) {
-            ensure_caret_visible(state, terminal, oldest, snapshot);
-        }
+        ensure_caret_visible(state, terminal, oldest, snapshot);
     }
 }
 
@@ -96,16 +90,14 @@ pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) {
     }
     // Scroll to the live bottom immediately, then move the caret to the
     // cursor position (newest terminal text, not the adjusted cursor row).
-    if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.server.backends.get_mut(pane_id)
-    {
+    if let Some(backend) = state.keyboard_backend_mut() {
         backend.scroll_to_bottom();
     }
-    if let Some(pane_id) = state.focused_pane
+    if let Some(terminal) = state.keyboard_terminal()
         && let Some(ref snapshot) = state
             .server
             .backends
-            .get(pane_id)
+            .get_by_id(terminal)
             .and_then(|b| b.terminal_snapshot())
     {
         let cursor_stable = snapshot.viewport_top_stable_row + snapshot.cursor.row as isize;
@@ -123,15 +115,13 @@ pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_exit_scrollback(state: &mut AppState, _action: &WmAction) {
     // Scroll to live bottom, clear selection, and exit selection mode.
-    if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.server.backends.get_mut(pane_id)
-    {
+    if let Some(backend) = state.keyboard_backend_mut() {
         backend.scroll_to_bottom();
     }
     state.selection.clear();
     // Leaving the copy-mode session also ends that pane's scrollback search; other
     // panes keep theirs.
-    if let Some(terminal) = state.search_target() {
+    if let Some(terminal) = state.keyboard_terminal() {
         // Its bar closes with it: leaving copy-mode ends the search the terminal was showing.
         if let Some(handle) = state.terminals.get(&terminal) {
             handle.close_search();
@@ -142,19 +132,17 @@ pub fn handle_exit_scrollback(state: &mut AppState, _action: &WmAction) {
     }
 }
 
-/// Route a scroll to the **focused chrome container** when one holds keyboard focus.
+/// **A scroll key goes where the keyboard is**, like every other key.
 ///
-/// Returns `true` when chrome focus is set — which is what makes the caller stop, whether or not
-/// anything in the tree acted: a container with nothing scrollable declines, and a declined intent
-/// stops at the chrome rather than falling through to the pane (F003/P085/T352). Letting it fall
-/// through would mean the pane scrolls under a key aimed at a dock, which is the surprise this whole
-/// phase exists to remove.
+/// While the window holds the keyboard, the intent goes to the widget holding it and bubbles up:
+/// a terminal pages its history, a scroll region its content — in a dock, an overlay or anything
+/// placed later. One with nothing to scroll declines and the key does nothing; it never falls
+/// through to a pane the user is not on. Returns whether the window held the keyboard.
 ///
-/// The host only ever says *what* — "one page down, this axis". The `ScrollRegion` owns its viewport
-/// and its clamp, so the arithmetic lives in the widget, once, for every container that will ever
-/// nest one.
-fn scroll_focused_dock(state: &mut AppState, intent: heca_grid_ui::WidgetIntent) -> bool {
-    if crate::app::tree_focus::focused_dock(state).is_none() {
+/// The host only ever says *what* — "one page down, this axis". The widget owns its viewport and
+/// its clamp, so the arithmetic lives in the widget, once.
+fn scroll_where_the_keyboard_is(state: &mut AppState, intent: heca_grid_ui::WidgetIntent) -> bool {
+    if !crate::app::tree_keys::window_holds_keyboard(state) {
         return false;
     }
     crate::chrome::deliver(state, &heca_grid_ui::Event::Widget(intent));
@@ -162,99 +150,86 @@ fn scroll_focused_dock(state: &mut AppState, intent: heca_grid_ui::WidgetIntent)
 }
 
 pub fn handle_scroll_line_up(state: &mut AppState, _action: &WmAction) {
-    let lines = state.terminal_wheel_scroll_lines as i32;
-    if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.server.backends.get_mut(pane_id)
-    {
+    let lines = state.settings.terminal_wheel_scroll_lines as i32;
+    if let Some(backend) = state.keyboard_backend_mut() {
         backend.scroll_viewport(lines);
     }
 }
 
 pub fn handle_scroll_line_down(state: &mut AppState, _action: &WmAction) {
-    let lines = -(state.terminal_wheel_scroll_lines as i32);
-    if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.server.backends.get_mut(pane_id)
-    {
+    let lines = -(state.settings.terminal_wheel_scroll_lines as i32);
+    if let Some(backend) = state.keyboard_backend_mut() {
         backend.scroll_viewport(lines);
     }
 }
 
 pub fn handle_scroll_page_up(state: &mut AppState, _action: &WmAction) {
-    if scroll_focused_dock(state, heca_grid_ui::WidgetIntent::ScrollPageUp) {
-        return;
-    }
-    let page_rows = focused_terminal_page_rows(state) as i32;
-    if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.server.backends.get_mut(pane_id)
-    {
-        // Direct page jumps are the primary user-visible discrete scrollback
-        // jump path in Normal mode, so they should honor
-        // `terminal_scroll_animations`. Caret-follow / selection-mode paths stay
-        // immediate elsewhere to avoid lagging the caret behind the content.
-        backend.scroll_viewport_animated(page_rows);
-    }
+    page_keyboard_terminal(state, Page::Up);
 }
 
 pub fn handle_scroll_page_down(state: &mut AppState, _action: &WmAction) {
-    if scroll_focused_dock(state, heca_grid_ui::WidgetIntent::ScrollPageDown) {
-        return;
-    }
-    let page_rows = -(focused_terminal_page_rows(state) as i32);
-    if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.server.backends.get_mut(pane_id)
-    {
-        backend.scroll_viewport_animated(page_rows);
-    }
+    page_keyboard_terminal(state, Page::Down);
 }
 
 pub fn handle_scroll_to_top(state: &mut AppState, _action: &WmAction) {
-    if scroll_focused_dock(state, heca_grid_ui::WidgetIntent::ScrollToTop) {
-        return;
-    }
-    if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.server.backends.get_mut(pane_id)
-    {
-        backend.scroll_to_top_animated();
-    }
+    page_keyboard_terminal(state, Page::Top);
 }
 
 pub fn handle_scroll_to_bottom(state: &mut AppState, _action: &WmAction) {
-    if scroll_focused_dock(state, heca_grid_ui::WidgetIntent::ScrollToBottom) {
+    page_keyboard_terminal(state, Page::Bottom);
+}
+
+/// **A paging key**: whatever holds the keyboard in the window pages itself; while the panes hold
+/// it, the pane's terminal is paged.
+fn page_keyboard_terminal(state: &mut AppState, page: Page) {
+    if scroll_where_the_keyboard_is(state, page.intent()) {
         return;
     }
-    if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.server.backends.get_mut(pane_id)
-    {
-        backend.scroll_to_bottom_animated();
+    if let Some(backend) = state.keyboard_backend_mut() {
+        page_terminal(backend, page);
     }
 }
 
-// The horizontal four have no terminal half — a pane's scrollback has one axis — so they are the
-// focused container's alone. A key aimed at nothing is silent, not an error.
+/// **Page a terminal's history**, wherever it is placed. A page is the terminal's own height, and
+/// the move honours `terminal_scroll_animations`: a page jump is a discrete move the eye should
+/// follow. Caret-follow and selection paths stay immediate elsewhere so the caret never lags.
+pub(crate) fn page_terminal(backend: &mut dyn heca_core::backend::PaneBackend, page: Page) {
+    let rows = backend
+        .terminal_snapshot()
+        .map(|s| s.rows)
+        .unwrap_or(crate::app::backend_factory::FALLBACK_TERMINAL_GRID.1) as i32;
+    match page {
+        Page::Up => backend.scroll_viewport_animated(rows),
+        Page::Down => backend.scroll_viewport_animated(-rows),
+        Page::Top => backend.scroll_to_top_animated(),
+        Page::Bottom => backend.scroll_to_bottom_animated(),
+    }
+}
+
+// The horizontal four have no terminal half — a terminal's history has one axis — so they reach
+// only what holds the keyboard in the window. A key aimed at nothing is silent, not an error.
 
 pub fn handle_scroll_page_left(state: &mut AppState, _action: &WmAction) {
-    scroll_focused_dock(state, heca_grid_ui::WidgetIntent::ScrollPageLeft);
+    scroll_where_the_keyboard_is(state, heca_grid_ui::WidgetIntent::ScrollPageLeft);
 }
 
 pub fn handle_scroll_page_right(state: &mut AppState, _action: &WmAction) {
-    scroll_focused_dock(state, heca_grid_ui::WidgetIntent::ScrollPageRight);
+    scroll_where_the_keyboard_is(state, heca_grid_ui::WidgetIntent::ScrollPageRight);
 }
 
 pub fn handle_scroll_to_left_edge(state: &mut AppState, _action: &WmAction) {
-    scroll_focused_dock(state, heca_grid_ui::WidgetIntent::ScrollToLeftEdge);
+    scroll_where_the_keyboard_is(state, heca_grid_ui::WidgetIntent::ScrollToLeftEdge);
 }
 
 pub fn handle_scroll_to_right_edge(state: &mut AppState, _action: &WmAction) {
-    scroll_focused_dock(state, heca_grid_ui::WidgetIntent::ScrollToRightEdge);
+    scroll_where_the_keyboard_is(state, heca_grid_ui::WidgetIntent::ScrollToRightEdge);
 }
 
 pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) {
     let WmAction::ScrollToOffset { rows } = action else {
         return;
     };
-    if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.server.backends.get_mut(pane_id)
-    {
+    if let Some(backend) = state.keyboard_backend_mut() {
         scroll_backend_to_offset(backend, *rows);
     }
 }

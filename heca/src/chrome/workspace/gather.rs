@@ -21,7 +21,8 @@ pub(crate) fn gather(
 ) -> WorkspaceModel {
     let area = crate::chrome::ChromeConfig::of(state).content_rect();
     let models = pane_models(state);
-    let tiled: HashSet<PaneId> = state.layout()
+    let tiled: HashSet<PaneId> = state
+        .layout()
         .active_workspace()
         .map(|ws| {
             ws.scroll()
@@ -69,7 +70,8 @@ pub(crate) fn gather(
             )
         })
         .collect();
-    let working_width = state.layout()
+    let working_width = state
+        .layout()
         .active_workspace()
         .map_or(0.0, |ws| ws.scroll().area().size.w as f32);
     let pick = pick_marks(state);

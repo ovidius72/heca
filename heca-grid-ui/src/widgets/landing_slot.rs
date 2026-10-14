@@ -80,7 +80,9 @@ impl LandingSlot {
     /// **How far an edge reacts past its line**, on each side — a step of the theme's spacing (or
     /// pixels), resolved at layout time like the splitter's grab, so a border of no thickness is
     /// still a reachable target at any zoom.
-    #[heca_grid_ui_macros::host_only("a spacing step or pixels, not a scalar a description carries")]
+    #[heca_grid_ui_macros::host_only(
+        "a spacing step or pixels, not a scalar a description carries"
+    )]
     pub fn reach(mut self, reach: impl Into<Space>) -> Self {
         self.reach = reach.into();
         self
@@ -136,7 +138,11 @@ impl LandingSlot {
             let target = colors.drag_edge_target_color.unwrap_or(colors.warning);
             (colors.drag_edge_width, colors.drag_edge_color, target)
         };
-        let color = if near { target } else { color.unwrap_or_else(|| cx.accent()) };
+        let color = if near {
+            target
+        } else {
+            color.unwrap_or_else(|| cx.accent())
+        };
         let thickness = f64::from(if near { width } else { width / 2.0 });
         let line = self.line_rect(thickness);
         cx.with_opacity(if near { 1.0 } else { 0.5 }, |cx| {
@@ -145,7 +151,10 @@ impl LandingSlot {
         });
         if let Some(letter) = &self.label {
             let side = f64::from(self.base.font) * 1.6;
-            let (cx_, cy_) = (line.loc.x + line.size.w / 2.0, line.loc.y + line.size.h / 2.0);
+            let (cx_, cy_) = (
+                line.loc.x + line.size.w / 2.0,
+                line.loc.y + line.size.h / 2.0,
+            );
             let chip = Rectangle::new(
                 Point::new(cx_ - side / 2.0, cy_ - side / 2.0),
                 Size::new(side, side),
@@ -153,7 +162,14 @@ impl LandingSlot {
             let bg = cx.theme().colors.background;
             cx.with_overlay(|cx| {
                 cx.rect(chip, color, None, cx.theme().colors.border_radius, None);
-                cx.text(chip, letter, bg, self.base.font, TextAlign::Center, TextStyle::BOLD);
+                cx.text(
+                    chip,
+                    letter,
+                    bg,
+                    self.base.font,
+                    TextAlign::Center,
+                    TextStyle::BOLD,
+                );
             });
         }
     }
@@ -175,11 +191,17 @@ impl LandingSlot {
         let b = self.base.bounds;
         match self.resolved_line() {
             EdgeLine::Upright(share) => Rectangle::new(
-                Point::new(b.loc.x + b.size.w * f64::from(share) - thickness / 2.0, b.loc.y),
+                Point::new(
+                    b.loc.x + b.size.w * f64::from(share) - thickness / 2.0,
+                    b.loc.y,
+                ),
                 Size::new(thickness, b.size.h),
             ),
             EdgeLine::Flat(share) => Rectangle::new(
-                Point::new(b.loc.x, b.loc.y + b.size.h * f64::from(share) - thickness / 2.0),
+                Point::new(
+                    b.loc.x,
+                    b.loc.y + b.size.h * f64::from(share) - thickness / 2.0,
+                ),
                 Size::new(b.size.w, thickness),
             ),
         }
@@ -223,7 +245,10 @@ impl Component for LandingSlot {
         let (x, y) = (b.loc.x.min(around.loc.x), b.loc.y.min(around.loc.y));
         let right = (b.loc.x + b.size.w).max(around.loc.x + around.size.w);
         let bottom = (b.loc.y + b.size.h).max(around.loc.y + around.size.h);
-        Some(Rectangle::new(Point::new(x, y), Size::new(right - x, bottom - y)))
+        Some(Rectangle::new(
+            Point::new(x, y),
+            Size::new(right - x, bottom - y),
+        ))
     }
 
     fn paints_own_drag_feedback(&self) -> bool {

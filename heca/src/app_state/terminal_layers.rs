@@ -16,7 +16,6 @@ pub struct RetainedTerminalLayer {
     pub image_rows: Vec<heca_core::backend::TerminalRowRange>,
 }
 
-
 impl RetainedTerminalLayer {
     pub fn new(
         device: &wgpu::Device,
@@ -77,13 +76,11 @@ impl RetainedTerminalLayer {
     }
 }
 
-
 pub struct RetainedTerminalScratch {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
     physical_size: (u32, u32),
 }
-
 
 impl RetainedTerminalScratch {
     pub fn new(
@@ -140,7 +137,6 @@ impl RetainedTerminalScratch {
     }
 }
 
-
 fn make_terminal_texture(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
@@ -166,4 +162,3 @@ fn make_terminal_texture(
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     (texture, view)
 }
-

@@ -208,8 +208,8 @@ Key facts (from the code):
   — e.g. a provider/plugin action resolved at press time). `register_dynamic`
   (`actions/registry.rs`) wires name-keyed handlers + metadata into the one `ActionCatalog`.
 - **Policy is separate from priority** (`app/interaction.rs`): `action_policy()`
-  returns one of 7 `ActionPolicy` variants (Global / AlwaysAllowed / TiledOnly /
-  FocusedPaneLocal / WorkspaceLevel / SourceDependent / ContainerFocused), checked
+  returns one of 8 `ActionPolicy` variants (Global / AlwaysAllowed / TiledOnly /
+  FocusedPaneLocal / KeyboardTerminal / WorkspaceLevel / SourceDependent / ContainerFocused), checked
   against the computed `Domain` (Tiled / Floating / Container / Overlay). The match is
   exhaustive — adding a `WmAction` variant won't compile until it is classified.
 - **`build_registry` (`app/registry/actions.rs`)** registers every variant → its `handle_*`

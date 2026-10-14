@@ -71,8 +71,14 @@ fn click(root: &mut dyn heca_grid_ui::Component, at: heca_grid_ui::Point) {
 fn a_link_covers_its_cells_from_the_start_up_to_the_end() {
     let (t, ..) = with_a_link();
     let at = |col: f32, row: f32| (col * 10.0 + 5.0, row * 20.0 + 1.0);
-    assert_eq!(t.link_at(at(4.0, 3.0)).as_deref(), Some("https://example.com"));
-    assert_eq!(t.link_at(at(8.0, 3.0)).as_deref(), Some("https://example.com"));
+    assert_eq!(
+        t.link_at(at(4.0, 3.0)).as_deref(),
+        Some("https://example.com")
+    );
+    assert_eq!(
+        t.link_at(at(8.0, 3.0)).as_deref(),
+        Some("https://example.com")
+    );
     assert_eq!(t.link_at(at(9.0, 3.0)), None, "the end is outside");
     assert_eq!(t.link_at(at(3.0, 3.0)), None, "before the start");
     assert_eq!(t.link_at(at(5.0, 2.0)), None, "another row");
@@ -145,5 +151,9 @@ fn the_cursor_is_a_hand_over_a_link_only_while_the_window_key_is_held() {
     assert_ne!(over(root.as_ref(), on_link()), Cursor::Pointer, "key up");
     hold(root.as_mut(), cmd());
     assert_eq!(over(root.as_ref(), on_link()), Cursor::Pointer);
-    assert_ne!(over(root.as_ref(), off_link()), Cursor::Pointer, "off a link");
+    assert_ne!(
+        over(root.as_ref(), off_link()),
+        Cursor::Pointer,
+        "off a link"
+    );
 }

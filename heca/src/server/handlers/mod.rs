@@ -11,9 +11,9 @@ mod layout;
 #[cfg(test)]
 mod layout_tests;
 mod move_column;
+mod move_pane;
 #[cfg(test)]
 mod move_tests;
-mod move_pane;
 mod names;
 #[cfg(test)]
 mod names_tests;
@@ -110,7 +110,9 @@ mod tests {
     #[test]
     fn every_action_kind_has_a_side() {
         let sides = sides();
-        let missing: Vec<_> = WmActionKind::iter().filter(|k| sides.of(*k).is_none()).collect();
+        let missing: Vec<_> = WmActionKind::iter()
+            .filter(|k| sides.of(*k).is_none())
+            .collect();
         assert!(missing.is_empty(), "kinds with no side: {missing:?}");
     }
 

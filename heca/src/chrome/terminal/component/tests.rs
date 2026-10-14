@@ -17,6 +17,7 @@ mod grid;
 mod handle;
 mod layout;
 mod links;
+mod paging;
 mod pointer;
 mod typing;
 mod zoom;

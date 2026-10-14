@@ -81,7 +81,7 @@ struct HecaApp {
 impl HecaApp {
     /// Parse and execute an RPC command string.
     ///
-    /// **Both vocabularies, one gate** (F003/P086/T372): a named built-in command and the generic
+    /// **Both vocabularies, one gate**: a named built-in command and the generic
     /// `action <name> [key=value …]` verb both go out as an `Intent` through the same
     /// `dispatch_view_intent` a click, a key and a menu entry use. So a component's or plugin's
     /// declared action is callable at last — and everything a script asks for is judged by the same
@@ -98,7 +98,7 @@ impl HecaApp {
         let state = self.state.as_mut().ok_or(rpc::RpcError::NotInitialized)?;
         // One map: the name is looked up in the same catalog every other caller uses.
         let (intent, dock) = rpc::parse_rpc(cmd)?.into_intent(&state.action_catalog)?;
-        // **Which placement, and does it need the keyboard?** (F003/P085/T358)
+        // **Which placement, and does it need the keyboard?**
         //
         // `--dock` names the seating outright. Without it, an action a *component* declared
         // still has to land somewhere, and `owning_mount` is the one rule that says where —
@@ -171,7 +171,7 @@ impl HecaApp {
     ///
     /// Returns `Err` with the parse/load error when the file is bad — the working config is kept
     /// untouched (a bad config must never overwrite settings that work). The caller turns the
-    /// result into a notification (F009/P062). The stderr lines stay for a terminal user watching
+    /// result into a notification. The stderr lines stay for a terminal user watching
     /// the process.
     fn reload_config(&mut self) -> Result<(), heca_config::loader::ConfigError> {
         let Some(state) = self.state.as_mut() else {
@@ -220,18 +220,10 @@ impl HecaApp {
             // so would stack another container/effect view each reload. Changing
             // `vibrancy` (or toggling transparency on↔off) needs a restart.
             state.appearance = self.app_config.config.appearance.clone();
+            state.settings = crate::app_state::WindowSettings::from_config(&self.app_config);
             crate::project_trust::notify_if_untrusted();
             crate::chrome::pane_items::report_pane_items(state);
-            // Re-read on reload like the rest: change the setting, press reload, the next palette
-            // opens at the new size.
-            state.command_palette_size = self.app_config.config.settings.command_palette_size;
-            state.search_case = self.app_config.config.settings.search_case;
-            state.search_history = self.app_config.config.settings.search_history;
-            // **The layout's own options too.** They were read once at startup and never again, so
-            // editing `overview_gap`, `overview_zoom_from`, the pane gap or
-            // `center_focused_column` and pressing reload appeared to do nothing — the settings
-            // were live in the file and dead in the app. One mapping,
-            // `startup::layout_options_from`, shared by both paths so they cannot drift.
+            // The layout's own options, by the one mapping startup uses too.
             state
                 .session
                 .set_options(crate::app::startup::layout_options_from(&self.app_config));
@@ -258,21 +250,6 @@ impl HecaApp {
                 &self.keymaps.by_action,
                 crate::shortcut::KeyStyle::Compact,
             );
-            state.mouse_enabled = self.app_config.config.settings.mouse;
-            state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
-            state.edge_scroll_distance = self.app_config.config.settings.edge_scroll_distance;
-            state.pane_renamed_add_process_name = self
-                .app_config
-                .config
-                .settings
-                .pane_renamed_add_process_name;
-            state.expose_show_cwd = crate::chrome::expose_show_cwd(&self.app_config.config);
-            state.terminal_mouse_enabled = self.app_config.config.settings.terminal_mouse;
-            state.terminal_wheel_scroll_lines =
-                self.app_config.config.settings.terminal_wheel_scroll_lines;
-            state.terminal_font_zoom_step = self.app_config.config.settings.terminal_font_zoom_step;
-            state.mouse_wheel_change_font_size =
-                self.app_config.config.settings.mouse_wheel_change_font_size;
             // A reload puts every region back to what `[settings] show_*` says — the same call
             // startup makes. The viewport re-flow below picks up the new sizes.
             state
@@ -280,10 +257,7 @@ impl HecaApp {
                 .apply_visibility(&crate::chrome::shown_from_settings(
                     &self.app_config.config.settings,
                 ));
-            // Every setting in this table must be re-applied here. One that is only read at startup
-            // is dead until someone remembers it — the defect `P031(F006)/T415` is filed against,
-            // and `max_visible` walked straight into it the day it was added (2026-08-31). The
-            // notification settings go to the server whole, so none can be left out.
+            // The notification settings go to the server whole, so none can be left out.
             let notifications = &self.app_config.config.settings.notification_system;
             state.ask_server(crate::server::ServerAction::Configure(
                 crate::server::NotificationSettings {
@@ -301,12 +275,9 @@ impl HecaApp {
                     .max_lines
                     .max(1),
             );
-            state.confirm = self.app_config.config.confirm.clone();
             state.ask_server(crate::server::ServerAction::ConfigureTerminals(Box::new(
                 crate::app::backend_factory::TerminalSettings::from_config(&self.app_config),
             )));
-            state.interactive_move_modifier =
-                self.app_config.config.settings.interactive_move_modifier;
             // Layout options and chrome geometry changes must reflow the real viewport
             // path so cached column widths, pane sizes, and working areas stay
             // coherent after reload.
@@ -333,7 +304,7 @@ impl HecaApp {
     }
 }
 
-/// Turn a `prefix+Shift+r` outcome into a toast — F009/P062.
+/// Turn a `prefix+Shift+r` outcome into a toast.
 ///
 /// Success: a plain "Configuration reloaded" that auto-dismisses. Failure: a **sticky**
 /// "Config reload failed" carrying the parse error and a **Retry** action; `dismiss_after` on
@@ -369,7 +340,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             // Every mounted component's **declared** actions join the one catalog and registry here
             // — after the host has its providers, before any input can reach them. This is the host
             // half of the declaration: a component never mutates app state, so it cannot register
-            // its own (F003/P085/T353).
+            // its own.
             crate::providers::register_provider_actions(
                 &mut state,
                 &mut self.registry,
@@ -385,7 +356,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             // What another crate added with an extension's `.layer(..)`: registered hidden, under its name,
             // so `toggle_layer` finds it from a key, a menu, the palette and RPC.
             crate::entry::register_queued_layers(&mut state);
-            // `notify` (F009/T491) is a host action, not a component's, but it takes the same
+            // `notify` is a host action, not a component's, but it takes the same
             // name-keyed door because `WmAction` — a closed enum — cannot express "any plugin can
             // raise a notification". Registered here, once, alongside every other declared action.
             let _ = crate::notification::register_notify_action(
@@ -487,7 +458,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             }
             AppEvent::RaiseNotification { draft } => {
                 // `notification::raise` is the host's clock, on the event loop's own turn, never
-                // the caller's (F009/T493) — shared with the name-keyed `notify` action.
+                // the caller's — shared with the name-keyed `notify` action.
                 crate::notification::raise(state, draft);
                 state.window.request_redraw();
             }
@@ -501,8 +472,8 @@ impl ApplicationHandler<AppEvent> for HecaApp {
 /// crate adds first is picked up here.
 pub fn run() {
     // Command-line questions — `--help`, `--keys-show`, `--list-actions`, `--describe-action` —
-    // are answered and exited before the window, so a script can ask heca anything without a GPU
-    // (F003/P086/T366). One table dispatches and documents them; see `app::cli`.
+    // are answered and exited before the window, so a script can ask heca anything without a GPU.
+    // One table dispatches and documents them; see `app::cli`.
     let args: Vec<String> = std::env::args().skip(1).collect();
     if crate::app::cli::run_if_requested(&args) {
         return;

@@ -57,7 +57,9 @@ impl Change {
     /// What a change to the arrangement says: the workspace it emptied and removed first, if any,
     /// then what changed in each workspace that is left, for every window to show for itself.
     pub(crate) fn after_arranging(arranged: heca_core::layout::Arranged) -> Vec<Self> {
-        let removed = arranged.removed_workspace.map(|index| Self::WorkspaceRemoved { index });
+        let removed = arranged
+            .removed_workspace
+            .map(|index| Self::WorkspaceRemoved { index });
         let arranged = arranged
             .effects
             .into_iter()
@@ -67,12 +69,33 @@ impl Change {
 
     /// What a removal says: each pane that went, then what taking them out did.
     pub(crate) fn after_removal(removed: heca_core::layout::Removed) -> Vec<Self> {
-        let panes = removed.panes.into_iter().map(|pane| Self::PaneRemoved { pane });
-        panes.chain(Self::after_arranging(removed.arranged)).collect()
+        let panes = removed
+            .panes
+            .into_iter()
+            .map(|pane| Self::PaneRemoved { pane });
+        panes
+            .chain(Self::after_arranging(removed.arranged))
+            .collect()
+    }
+
+    /// What making a pane says: what making it did, then where it is.
+    pub(crate) fn after_adding(added: heca_core::layout::Added) -> Vec<Self> {
+        let made = Self::PaneAdded {
+            pane: added.pane,
+            workspace: added.workspace,
+            column: added.column,
+        };
+        Self::after_arranging(added.arranged)
+            .into_iter()
+            .chain([made])
+            .collect()
     }
 
     /// What a move that landed says: what it did to get there, then where it landed.
     pub(crate) fn after_move(moved: heca_core::layout::Moved, landed: Self) -> Vec<Self> {
-        Self::after_arranging(moved.arranged).into_iter().chain([landed]).collect()
+        Self::after_arranging(moved.arranged)
+            .into_iter()
+            .chain([landed])
+            .collect()
     }
 }

@@ -175,7 +175,7 @@ pub(crate) fn gate_covers(catalog: &crate::actions::ActionCatalog, name: &str) -
 /// when set, else the action's declared `default_enabled`. Generic — a plugin action is
 /// configurable by name automatically, no dedicated settings field.
 fn confirm_enabled(state: &AppState, config_name: &str, default_enabled: bool) -> bool {
-    state.confirm.enabled(config_name, default_enabled)
+    state.settings.confirm.enabled(config_name, default_enabled)
 }
 
 /// The confirm config name for a raw destructive action (`None` if it isn't confirmable).

@@ -20,7 +20,7 @@ use crate::input::WmAction;
 /// Posted to the event loop, which runs it through the interaction policy and the follow-up every
 /// action gets (focus re-sync, redraw, refreshing what lists the session). A drop used to call the
 /// handler itself and then the follow-up by hand — the one place left that ran an action without
-/// the dispatcher, so it had to remember what the dispatcher does (F003/P082/T509).
+/// the dispatcher, so it had to remember what the dispatcher does.
 pub(crate) fn dispatch_drop(state: &AppState, source: InteractionSource, action: WmAction) {
     crate::chrome::ChromeIntentEmitter::new(&state.event_proxy, source).fire(
         crate::app::interaction::InteractionIntent::ActivateAction(action),
@@ -80,12 +80,12 @@ pub(crate) fn window_center_logical(state: &AppState) -> (f32, f32) {
 /// **Takes the event the loop built, not the winit pair it was built from.** One `Event::Raw` per
 /// device event, handed down rather than reconstructed here — a second construction is a second
 /// answer, and the one that used to happen further down this file delivered the same press to the
-/// chrome tree twice (F003/P097/T496).
+/// chrome tree twice.
 pub fn on_mouse_input(
     state: &mut AppState,
     ev: &heca_grid_ui::Event,
 ) -> Option<(WmAction, InteractionSource)> {
-    if !state.mouse_enabled {
+    if !state.settings.mouse_enabled {
         return None;
     }
 
@@ -109,7 +109,7 @@ pub fn on_mouse_input(
             //
             // Nothing is asked before the tree. The app used to take the press first to put its own
             // question — is this a drag source? — which is what made dragging exist only where the
-            // app had been taught about it (F003/P097/T496).
+            // app had been taught about it.
             if crate::chrome::deliver(state, ev) {
                 return None;
             }
@@ -127,11 +127,11 @@ pub fn on_mouse_input(
             // **A dragged row's release is not handled here.** The framework pairs the press with
             // the release, ends the gesture and hands back a drop naming what it landed on, which
             // `chrome::drain_pending_drops` acts on. A release that crossed no threshold becomes a
-            // click by the same pairing, which is what focuses the pane (F003/P097/T496).
+            // click by the same pairing, which is what focuses the pane.
         }
         // **The release is what makes it a click.** The framework pairs a press with a release on
         // the same widget and only then emits `RightClick` — which is what an unclaimed right-click
-        // turns into a declared context menu (F004/P084/T395). Delivering only the press produced
+        // turns into a declared context menu. Delivering only the press produced
         // no clicks at all, so no sidebar row opened a menu.
         (Btn::Right, Kind::Released) => {
             // **Both halves of the gesture.** A pane is in the same tree as the chrome, so the
@@ -146,8 +146,8 @@ pub fn on_mouse_input(
             return None;
         }
         // Right-click → the menu for whatever is under the cursor: a container's row, else the
-        // content pane. **A right-click aims the keyboard the same way a left-click does**
-        // (F003/P086/T365): clicking a container's row focuses that container, and clicking
+        // content pane. **A right-click aims the keyboard the same way a left-click does**:
+        // clicking a container's row focuses that container, and clicking
         // outside every container releases it — so the menu that opens describes the same thing
         // the keyboard is now on.
         //
@@ -174,10 +174,14 @@ pub fn on_mouse_input(
     None
 }
 
+/// The longest time (seconds) one edge-scroll step may cover: after a stall — the first frame of a
+/// drag, a slow frame — the view moves one frame's worth, not a jump.
+const LONGEST_EDGE_SCROLL_STEP: f64 = 0.05;
+
 /// Process edge scrolling in `about_to_wait`. Should be called every frame
 /// while a drag is active. Returns true if the view was scrolled.
 pub fn process_edge_scroll(state: &mut AppState) -> bool {
-    if !state.auto_scroll_edge {
+    if !state.settings.auto_scroll_edge {
         return false;
     }
 
@@ -197,10 +201,8 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
 
     let pos = state.mouse.pos;
 
-    // During drag, scroll when near any edge:
-    // - Absolute window edge (150px): covers sidebar area, fast (1000 px/s)
-    // - Content area edge (80px): reaches hidden panes, fast (1000 px/s)
-    let content_trigger = state.edge_scroll_distance;
+    // Scroll when near either edge of the content area, or past it over a sidebar.
+    let content_trigger = state.settings.edge_scroll_distance;
 
     // Compute normalized delta, covering the full horizontal range without gaps.
     // Left side: trigger from window edge through sidebar into content area.
@@ -237,13 +239,10 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
         .last_edge_scroll_time
         .map(|t| now.duration_since(t).as_secs_f64())
         .unwrap_or(1.0 / 60.0)
-        .min(0.05); // cap at 50ms to avoid jumps
+        .min(LONGEST_EDGE_SCROLL_STEP);
     state.mouse.last_edge_scroll_time = Some(now);
 
-    // During drag always use fast scroll speed.
-    let actual_speed = 1000.0f32;
-
-    let scroll_px = raw as f64 * actual_speed as f64 * dt;
+    let scroll_px = raw as f64 * f64::from(state.settings.edge_scroll_speed) * dt;
 
     if let Some(mut ws) = state.layout_mut().active_workspace_mut() {
         ws.scroll_mut().edge_scroll(scroll_px);

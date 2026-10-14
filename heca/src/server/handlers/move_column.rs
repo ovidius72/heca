@@ -9,7 +9,10 @@ use crate::server::{Change, ServerCx};
 fn landed(moved: Option<Moved>) -> Vec<Change> {
     match moved {
         Some(m) => {
-            let landed = Change::ColumnMoved { workspace: m.workspace, column: m.column };
+            let landed = Change::ColumnMoved {
+                workspace: m.workspace,
+                column: m.column,
+            };
             Change::after_move(m, landed)
         }
         None => Vec::new(),
@@ -17,7 +20,10 @@ fn landed(moved: Option<Moved>) -> Vec<Change> {
 }
 
 /// Move the asker's active column to the workspace `to` of the one it is in.
-fn move_active_column(cx: &mut ServerCx<'_>, to: impl FnOnce(usize, usize) -> Option<usize>) -> Vec<Change> {
+fn move_active_column(
+    cx: &mut ServerCx<'_>,
+    to: impl FnOnce(usize, usize) -> Option<usize>,
+) -> Vec<Change> {
     let (from, column) = (cx.asker.workspace, cx.asker.column);
     let count = cx.layout.workspaces.len();
     let Some(target) = to(from, count) else {
@@ -30,7 +36,10 @@ fn move_active_column(cx: &mut ServerCx<'_>, to: impl FnOnce(usize, usize) -> Op
 fn to_the_end(cx: &mut ServerCx<'_>, from: usize, column: usize, to: usize) -> Vec<Change> {
     match from == to {
         true => Vec::new(),
-        false => landed(cx.layout.move_column(from, column, to, usize::MAX)),
+        false => landed(
+            cx.layout
+                .move_column(from, column, to, heca_core::layout::END),
+        ),
     }
 }
 
@@ -44,7 +53,10 @@ pub(super) fn move_column_down(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec
 
 /// Move a column of the asker's workspace to another workspace.
 pub(super) fn move_column_to_workspace(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
-    let WmAction::MoveColumnToWorkspace { col_idx, ws_idx, .. } = action else {
+    let WmAction::MoveColumnToWorkspace {
+        col_idx, ws_idx, ..
+    } = action
+    else {
         return Vec::new();
     };
     let from = cx.asker.workspace;
@@ -53,7 +65,14 @@ pub(super) fn move_column_to_workspace(cx: &mut ServerCx<'_>, action: &WmAction)
 
 /// Move a column to an index of a workspace, which may be its own.
 pub(super) fn move_column(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
-    let WmAction::MoveColumn { src_ws, src_col, dst_ws, dst_idx, .. } = action else {
+    let WmAction::MoveColumn {
+        src_ws,
+        src_col,
+        dst_ws,
+        dst_idx,
+        ..
+    } = action
+    else {
         return Vec::new();
     };
     landed(cx.layout.move_column(*src_ws, *src_col, *dst_ws, *dst_idx))
