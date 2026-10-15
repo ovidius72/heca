@@ -243,7 +243,7 @@ impl HecaApp {
             // The pane shells and the headers they hold bake the theme, fonts and shortcuts at
             // build, so a reload drops them all and the next frame rebuilds them.
             crate::chrome::clear_workspace(state);
-            state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
+            state.prefix = crate::app_state::PrefixKey::from_config(&self.app_config.config.keys);
             state.widget_keymap =
                 crate::app::registry::build_widget_keymap(&self.app_config.config);
             state.action_shortcuts = crate::chrome::ActionShortcuts::from_index(

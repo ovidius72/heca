@@ -123,3 +123,17 @@ fn the_rename_dialog_submits_the_action_that_names_the_target() {
         }
     );
 }
+
+/// **The prefix key and its wait come from `[keys]` together**, so a reload that takes one takes
+/// the other.
+#[test]
+fn the_prefix_key_carries_its_own_timeout() {
+    let keys = heca_config::keys::KeysConfig {
+        prefix: "ctrl+a".into(),
+        prefix_timeout_ms: 2500,
+        ..Default::default()
+    };
+    let prefix = PrefixKey::from_config(&keys);
+    assert_eq!(prefix.combo, crate::keymap::KeyCombo::parse("ctrl+a"));
+    assert_eq!(prefix.timeout, std::time::Duration::from_millis(2500));
+}

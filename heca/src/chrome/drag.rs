@@ -1,4 +1,4 @@
-//! **Chrome drag identities** — what a drag id in this app refers to (F003/P082/T427 split).
+//! **Chrome drag identities** — what a drag id in this app refers to
 //!
 //! The drag framework is domain-neutral: an id is an opaque `usize`. This is the app-side map that
 //! gives one meaning, so a kind round-trips through `drag::source_at` / `resolve_at` without
@@ -17,20 +17,18 @@ use heca_core::layout::PaneId;
 pub(crate) enum ChromeDragItem {
     /// A pane card (drag source + drop target).
     Pane(PaneId),
-    /// A column [`MarkerGroup`], addressed positionally (drag source + drop target).
+    /// A column [`MarkerGroup`](heca_grid_ui::widgets::MarkerGroup), addressed positionally (drag source + drop target).
     Column { ws: usize, col: usize },
-    /// A workspace [`DockFrame`] (drop target only — drop a column here to move it
+    /// A workspace frame (drop target only — drop a column here to move it
     /// into that workspace).
     Workspace { ws: usize },
 }
 
 /// What each of this component's row names means, recorded as the tree is built and read back when
-/// a drag starts or lands. Lives on [`RetainedChrome`]; rebuilt with the tree.
+/// a drag starts or lands. Lives on [`RetainedChrome`](super::RetainedChrome); rebuilt with the tree.
 ///
-/// It used to hand out an opaque index and the widget carried that instead of its own name, so a
-/// row said who it was twice — and a plugin's row could say it neither time, because the list of
-/// draggable surfaces was a closed enum in our source. The widget layer now carries the name only;
-/// what a name *means* stays here, where the component that wrote it lives.
+/// The widget carries only its own name; what a name *means* stays here, where the component that
+/// wrote it lives, so a plugin's row is named the same way.
 #[derive(Default, Clone, Debug)]
 pub(crate) struct DragItemRegistry {
     items: HashMap<String, ChromeDragItem>,
@@ -51,5 +49,29 @@ impl DragItemRegistry {
     #[cfg(test)]
     pub(crate) fn items(&self) -> Vec<ChromeDragItem> {
         self.items.values().cloned().collect()
+    }
+}
+
+/// **What a pane can be dropped onto**, as the workspaces component names it.
+///
+/// One translation, so the two callers that need it — the pointer path and the drop the framework
+/// hands back — cannot disagree about what a pane landing on a workspace means. A column is not a
+/// pane target: pane-into-column placement does not exist yet, and a pane dropped there falls
+/// through to "re-add to the active workspace".
+pub(crate) fn pane_drop_row(
+    state: &crate::app_state::AppState,
+    item: ChromeDragItem,
+) -> Option<crate::providers::workspaces::WorkspaceRow> {
+    match item {
+        ChromeDragItem::Pane(pane_id) => {
+            Some(crate::providers::workspaces::WorkspaceRow::Pane { pane_id })
+        }
+        // Dropping a pane on a workspace's header or empty area moves it INTO that workspace — the
+        // only way to reach an *empty* one, which has no pane card to aim at.
+        ChromeDragItem::Workspace { ws } => {
+            let ws_id = state.session.workspaces.get(ws).map(|w| w.id)?;
+            Some(crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx: ws, ws_id })
+        }
+        ChromeDragItem::Column { .. } => None,
     }
 }

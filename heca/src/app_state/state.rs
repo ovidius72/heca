@@ -271,10 +271,8 @@ pub struct AppState {
     pub places_open: bool,
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
-    /// The configured prefix key combo (e.g. Ctrl+b).
-    pub prefix_combo: crate::keymap::KeyCombo,
-    /// **How long prefix mode waits for the next key** — `[keys] prefix_timeout_ms`.
-    pub prefix_timeout_ms: u64,
+    /// The prefix key and how long it waits — `[keys] prefix` and `prefix_timeout_ms`.
+    pub prefix: PrefixKey,
     /// Widget keymap (`widget-keys-config`): the single host-owned `[keys.widgets]`-derived map
     /// from a key chord to the semantic [`WidgetIntent`](heca_grid_ui::WidgetIntent)s it triggers.
     /// Every interactive widget/overlay (context menu, palette, `Select`, `Tabs`, `Dialog`,

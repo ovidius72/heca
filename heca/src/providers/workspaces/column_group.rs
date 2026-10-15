@@ -9,7 +9,7 @@
 
 use super::seams::{DockRegistries, DockSeams};
 use super::{ColumnEntry, MENU_COLUMN, column_key, column_row_items, pane_row::PaneRow, row_hint};
-use crate::chrome::{ChromeDragItem, RepaintWatch};
+use crate::chrome::ChromeDragItem;
 use heca_grid_ui::Tone;
 use heca_grid_ui::builders::{DragExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent};
 use heca_grid_ui::style::Spacing;
@@ -29,7 +29,7 @@ pub(crate) struct ColumnGroup<'a> {
 
 impl ColumnGroup<'_> {
     /// Build the column, returning the concrete widget so the parent still sizes it.
-    pub(crate) fn build(self, seams: &DockSeams<'_>, reg: &mut DockRegistries<'_>) -> RepaintWatch {
+    pub(crate) fn build(self, seams: &DockSeams<'_>, reg: &mut DockRegistries<'_>) -> MarkerGroup {
         let ColumnGroup { column, ws_idx } = self;
         let active = column
             .panes
@@ -84,7 +84,7 @@ impl ColumnGroup<'_> {
         // letter is drawn by `paint_child` for any widget carrying one. The letter itself is
         // offered **by key** (`chrome::hint`): nothing is registered here and nothing is projected
         // onto it every frame.
-        let hinted = col
+        col
             // **What a pick does to this row** — the cursor lands on the column and the dock keeps
             // the keyboard, exactly as a pane row and a workspace row already declare.
             //
@@ -103,9 +103,7 @@ impl ColumnGroup<'_> {
             // The tone says what the target IS; the theme colours it, so this file names no
             // colour and a column still reads distinctly from a pane and a workspace.
             .hint_tone(Tone::Success)
-            .hint_placement(HintPlacement::CenterRight);
-        let (watch, _repaint) = RepaintWatch::new(hinted);
-        watch
+            .hint_placement(HintPlacement::CenterRight)
     }
 }
 

@@ -12,7 +12,7 @@
   "summary": "AppState splits into server state (sessions, terminals, agents) and client state (window, drawing, docks, overlays); standalone keeps working unchanged.",
   "description": "First step of the server/client model (F012 accepted decisions \"heca runs standalone or as a server…\" and \"Two windows on one session…\"). Depends on P098 (library). Nothing changes for the user: standalone is the server part and one client part inside one process, talking through one clear interface.\n\n## Current state\n- `heca/src/app_state.rs` (1326 lines) holds, side by side: the window and GPU renderers (heca_renderer Grid/Text/Primitive/Image/Blur/Compositor), retained chrome trees (`chrome_tree` ~816, `panes` ~826, `terminal_layers` ~707), and the state: `session: Session` (~722), `backends: BackendStore` (~724), `chrome_state: SharedChromeState` (~866). 81 files use AppState; ~65 places touch the window.\n- Terminal data is already separate from drawing: `heca-core/src/backend/snapshot.rs` — TerminalSnapshot (:194, screen as data) and TerminalDamage (:40, which rows changed). The snapshot carries pixel cell sizes (cell_w/cell_h), which belong to the client.\n- `SharedChromeState` already mirrors the state the sidebars read — the natural start for what the server sends.\n\n## Goal\n- Server part: sessions (a list, even if only one for now), workspaces/columns/panes, terminal backends, runtime/agent state, notifications store.\n- Client part: window, renderers, retained chrome, docks, overlays, per-window view (shown workspace, focused pane, scroll, open overlays).\n- One interface between them: the client sends actions and input; the server sends state changes and terminal snapshots + changed rows. The client builds all UI from that data — the server never sends interface.\n- Every action sorted: changes state → server; window only (open palette, scroll the view, show a dock) → client.\n- Pixel cell sizes move to the client; rows x cols come from the client.\n\n## Preserve\n- Standalone behaves exactly as today; all tests green; AGENTS.md § 0 (DOM-shaped events, a component owns its input, no fixes at the call site).\n\n## Done when\n- The app runs through the interface with server and client in one process; a test drives the server part with no window at all.",
   "descriptionUpdatedAt": "2026-09-29T21:32:06.549Z",
-  "notes": "",
+  "notes": "**Handoff context update:**\nStep 1 (ServerState carve-out incl. backends/notifications/git cache/programs), 2a (notifications via plain-data ServerAction -> Vec<Change>), 2a-2 (store owns no signal; window owns AppState::toasts) and 2c (git cache private, ServerState::refresh_git) are built and committed locally on feat/p104-notifications-server (HEAD 10dd94bf); not pushed. Step 3 decided: option A (accepted decision 2c249a29).\n\n**Remaining work:**\nPR 1: move the view (active_ws, workspace_switch, viewport, scale, per-workspace ViewOffset) out of Session/ScrollingSpace into a client WindowView, standalone behaviour identical. PR 2: layout-op ServerAction interface. Then facts (PaneFacts/Server::facts/Change::FactsChanged), 2b terminals (parked until stream 1's refactor A and 5a merge), 2d action SIDE descriptor field + routing.",
   "goals": [],
   "nonGoals": [],
   "dependencies": [],
@@ -34,11 +34,36 @@
       "priority": 1,
       "shortName": "split-appstate-into-a-server-p",
       "title": "Split AppState into a server part and a client part behind one interface, in one process",
-      "status": "planned",
+      "status": "waiting",
       "description": "Execution task for P104 — read the phase and F012's accepted decisions first. Current: `heca/src/app_state.rs` (1341 lines, ~100 fields) mixes renderers/window/retained chrome with `session`, `backends`, `chrome_state`; 91 files name AppState. `heca-core/src/backend/snapshot.rs` already gives terminal data (TerminalSnapshot) and changed rows (TerminalDamage). Edge cases: actions that touch both sides; per-window state now implicit in AppState (focus, scroll, open layers); tests that build AppState (it needs a window today — the server part must not).\n\n## Measured (origin/main, 2026-10-01)\n- Only 4 handler files touch window fields directly (9 refs); the 140 WmAction handlers are almost all state-only already. 271 refs to session/backends/terminals in 43 files.\n- `terminals` (T449) is already the CLIENT's view of a terminal (chrome::terminal::Terminal is a widget); the server side of a terminal is `BackendStore` (app/backend_store.rs).\n\n## Field map (decided with the orchestrator 2026-10-01)\nSERVER (shared by every window): session (content part: workspaces, columns, panes, layout options), backends, notifications store (queue, lifecycle, timers), git_runtime_cache, programs config, pane runtime facts (PaneFacts), action registry handlers + the catalog (actions run where state is).\nCLIENT (per window): window, surface/device/queue/renderers (primitive, text, image, grid, compositor, blur, backdrop, background), terminal_layers + scratch, theme/appearance/font_config/zoom/cell sizes/scale_factor, retained chrome (chrome_tree, panes, columns, layers, overlays, window_root, chrome_host, context_menu_registry, action_shortcuts), terminals + terminal_presses, mouse/modifiers/selection, input_mode + prefix state, focused_pane/last_focused/last_visited, expose cursors, hint letters, pending menus/drops, widget_keymap, notification_hovered/pick_open signals, searches (a window's own view of a pane search), needs_redraw, window_focused, current_cursor.\nMIXED — each needs a decision:\n1. Session: shared content vs per-window view (active_workspace_idx, workspace_switch animation, viewport_size, scale, and the scrolling view offset inside each workspace's ScrollingSpace). Design decision for Antonio (options written to the orchestrator); NOT guessed.\n2. SharedChromeState: sidebar content mirror (workspaces container state) = sent by the server; region sizes/visible, focus, cursors, keyboard targets = client.\n3. NotificationRuntime: the store (server) vs the toast projection/hover/pick signals (client). Split in step 2.\n4. action_catalog: one catalog; the client reads descriptors.\n5. search_store/history and `confirm` config: per-user, decide when the interface exists.\n\n## Steps (agreed)\n1. ServerState carve-out, behaviour-neutral, one PR: new heca/src/server/ module; ServerState holds notifications store, git_runtime_cache, programs, pane runtime facts; AppState owns `server: ServerState`; mechanical path change; compiler lists every window touch of server state = the work list for step 2. WITHOUT `backends` (stream 1's process PR reshapes backend_store.rs/terminal_process.rs; backends joins ServerState in a small follow-up commit once that PR merges). Leave `terminals` on the client.\n2. The one interface (client sends actions/input; server returns state changes + terminal snapshots/changed rows); a test drives the server part with no window; split notification store from its projection.\n3. Session view split — options to the orchestrator, who takes the decision to Antonio.",
       "descriptionUpdatedAt": "2026-10-01T19:50:17.117Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-001-planned-in-progress",
+          "date": "2026-10-02T14:23:31.875Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "80d2bd44-72a3-4068-95f3-bd6d833046fc",
+          "date": "2026-10-15T09:11:48.308Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Antonio asked to work on T468 (file splits) now; only one task should be in progress.\nWhat was being done: Server/client split of AppState. Steps 1 and 2 of the description are in main (PR #289 and earlier); the open items are C9, C10, C12, C5 and C7 from the review list.\nResume location: T525 description, Steps section; then the C-item list.\nHow to resume: Reread T525 in full, branch from current origin/main, and continue with C9."
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-003-planned-waiting",
+          "date": "2026-10-15T09:16:38.147Z",
+          "fromStatus": "planned",
+          "toStatus": "waiting",
+          "title": "Antonio, 2026-10-15: finish T468 (file splits) first, then resume T525 to prepare for heca-pro. Resume T525 as soon as T468 is done; the resume point is in its pause checkpoint (next: C9, C10, C12, C5, C7).",
+          "description": "Antonio, 2026-10-15: finish T468 (file splits) first, then resume T525 to prepare for heca-pro. Resume T525 as soon as T468 is done; the resume point is in its pause checkpoint (next: C9, C10, C12, C5, C7)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -83,26 +108,99 @@
           "number": 7,
           "title": "Docs: architecture section for server/client",
           "checked": false
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-009-pr-2-layout-door-a-content-change-from-one-window-must-shift-every-window-s-view-offsets-the-door-returns-a-plain-view-shift-each-window-applies",
+          "number": 8,
+          "title": "PR 2 (layout door): a content change from one window must shift every window's view offsets — the door returns a plain view-shift each window applies",
+          "checked": true
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-010-pr-2-the-shown-workspace-becomes-a-workspace-id-not-an-index-a-shared-workspace-removal-leaves-another-window-s-index-stale",
+          "number": 9,
+          "title": "PR 2: the shown workspace becomes a workspace id, not an index (a shared workspace removal leaves another window's index stale)",
+          "checked": false
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-010-pr-2-layout-door-geometry-and-animation-cached-in-the-shared-content-use-the-last-window-s-size-and-clock-column-widths-pane-sizes-floating-positions-workspace-update-working-area-rescales-them-column-pane-move-animations-and-the-drag-offset-interactive-move-offset-per-window-visual-state-also-per-window-focus-kept-in-the-content-focus-domain-and-a-floating-pane-s-is-active",
+          "number": 10,
+          "title": "PR 2 (layout door): geometry and animation cached in the shared content use the last window's size and clock — column widths, pane sizes, floating positions (Workspace::update_working_area rescales them), column/pane move animations, and the drag offset interactive_move_offset (per-window visual state). Also per-window focus kept in the content: focus_domain and a floating pane's is_active",
+          "checked": false
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-011-2c-per-window-visual-state-still-living-in-the-shared-content-the-slide-animations-of-swap-and-place-heca-core-layout-handle-swap-rs-slide-from-used-by-moves-rs-join-the-other-animations-to-move-out-of-the-content",
+          "number": 11,
+          "title": "2c: per-window visual state still living in the shared content: the slide animations of swap and place (heca-core layout/handle/swap.rs slide_from, used by moves.rs) join the other animations to move out of the content",
+          "checked": true
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-012-move-each-column-s-active-pane-column-active-pane-idx-out-of-the-shared-content-into-the-window-s-view-the-focused-pane-is-per-window-decision-463ccd07-but-it-still-lives-in-the-session-today",
+          "number": 12,
+          "title": "Move each column's active pane (Column.active_pane_idx) out of the shared content into the window's view: the focused pane is per window (decision 463ccd07), but it still lives in the session today.",
+          "checked": false
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-013-when-rebasing-onto-stream1-s-stack-keep-session-set-options-in-heca-core-and-drop-stream1-s-startup-apply-layout-options-both-fix-the-same-reload-bug-workspaces-kept-an-old-copy-of-the-layout-settings-keep-stream1-s-heca-config-loader-config-from-layers",
+          "number": 13,
+          "title": "When rebasing onto stream1's stack: keep Session::set_options in heca-core and drop stream1's startup::apply_layout_options (both fix the same reload bug: workspaces kept an old copy of the layout settings). Keep stream1's heca_config::loader::config_from_layers.",
+          "checked": true
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-014-b2-2-next-the-server-moves-panes-and-columns-between-workspaces-takes-and-places-panes-swaps-across-columns-and-workspaces-and-floats-without-touching-any-window-s-view-each-window-shows-the-change-itself-then-the-server-loses-its-access-to-a-window-s-view-serverlayout-workspace-mut-and-the-old-view-bound-moves-are-deleted-moves-inside-one-workspace-already-work-this-way-pr-284",
+          "number": 14,
+          "title": "B2.2 (NEXT) — the server moves panes and columns between workspaces, takes and places panes, swaps across columns and workspaces, and floats, without touching any window's view; each window shows the change itself. Then the server loses its access to a window's view (ServerLayout::workspace_mut) and the old view-bound moves are deleted. (Moves inside one workspace already work this way: PR #284.)",
+          "checked": true
+        },
+        {
+          "id": "cf787705-41cb-49d6-8668-da5c975d8ee4-check-015-2b-terminals-live-behind-the-server-a-window-asks-the-server-for-a-terminal-s-rows-instead-of-owning-the-terminal-empties-awaiting-terminals",
+          "number": 15,
+          "title": "2b — terminals live behind the server: a window asks the server for a terminal's rows instead of owning the terminal (empties AWAITING_TERMINALS).",
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [
         "47245745-7545-4dde-876d-03169ba2ba1a"
       ],
-      "pauseSnapshot": null,
-      "pauseHistory": [],
-      "startedAt": "",
+      "pauseSnapshot": {
+        "id": "1a8354f3-0891-4df0-93a7-e5c84fce50cd",
+        "reason": "Antonio asked to work on T468 (file splits) now; only one task should be in progress.",
+        "whatWasBeingDone": "Server/client split of AppState. Steps 1 and 2 of the description are in main (PR #289 and earlier); the open items are C9, C10, C12, C5 and C7 from the review list.",
+        "resumeLocation": "T525 description, Steps section; then the C-item list.",
+        "howToResume": "Reread T525 in full, branch from current origin/main, and continue with C9.",
+        "relatedTaskId": "",
+        "pausedAt": "2026-10-15T09:11:48.308Z",
+        "pausedBy": ""
+      },
+      "pauseHistory": [
+        {
+          "id": "1a8354f3-0891-4df0-93a7-e5c84fce50cd",
+          "reason": "Antonio asked to work on T468 (file splits) now; only one task should be in progress.",
+          "whatWasBeingDone": "Server/client split of AppState. Steps 1 and 2 of the description are in main (PR #289 and earlier); the open items are C9, C10, C12, C5 and C7 from the review list.",
+          "resumeLocation": "T525 description, Steps section; then the C-item list.",
+          "howToResume": "Reread T525 in full, branch from current origin/main, and continue with C9.",
+          "relatedTaskId": "",
+          "pausedAt": "2026-10-15T09:11:48.308Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-10-02T14:23:31.875Z",
       "completedAt": "",
       "createdAt": "2026-09-29T21:32:32.856Z",
-      "updatedAt": "2026-10-01T19:50:17.115Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-10-15T09:16:38.147Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:f85e584e-0798-420c-8fa3-616087f1bc6a",
+          "createdAt": "2026-10-02T14:23:31.770Z"
+        }
+      ],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-29T21:32:06.456Z",
-  "updatedAt": "2026-10-01T19:50:17.115Z",
-  "handoff": "# Server/client split — where T520 and T523 left things, and what waits on T449\n\nCreated at: 2026-10-01T08:16:53.848Z\nUpdated at: 2026-10-01T08:16:53.848Z\nReason: The stream-2 session that built T520/T523 is at its context limit; a fresh session starts P104 (the AppState split) from this once heca-82's T449 slice 4 is merged.\n\n## Current focus\n- Feature: F012. Phase: P104 (split heca into server and client, still in one process). Task: P104(F012)/T525 (not started).\n- **Do not start T525 until heca-82 (the stream-1 session) says T449 slice 4 is merged.** T525 is the AppState split and sits right over T449's work (`heca/src/app_state.rs`, `chrome/pane*`, `chrome/terminal/`, `app/terminal_render.rs`, `app/render.rs`, `app/terminal_host.rs`, `mouse/`, one line in `app/startup.rs`). The orchestrator session (`heca-pro-commercial-agents`) tells you when. Start from a fresh `origin/main`.\n- Read first: F012's three accepted decisions (server/client model; two windows share content, move independently; sessions), AGENTS.md § 0, `docs/extending-heca.md`.\n\n## Current and partial state\n- **T520 is merged (PR #267).** heca is a library plus a one-line `main.rs` (`heca::run()`). Another crate adds through doors in `heca/src/entry/`: `heca::extension(\"pro\")`, then `pro.action` (**server side**), `pro.layer`, `pro.pane_button`, `pro.pane_chip`, `pro.pane_line` (**client side**); docks use `heca::regions(..).append(..)` (client). Each door **queues into a thread-local** (`entry/action.rs`, `entry/layer.rs`, `chrome/pane_items/{buttons,chips,lines}.rs`, `chrome/regions.rs`); the app takes each queue once at startup. P104 has to route these by side: actions run where the state is; layers, docks and pane items live in a window. The registries live on `AppState` as client state today: `added_layers`, `pane_buttons`, `pane_chips`, `pane_lines`.\n- Pane items are listed by name in config (`title_actions`, `title_segments`, `[appearance.sidebar] pane_lines`); the rules are in `chrome/pane_items/listing.rs`. Their facts (`PaneFacts`) are plain data and are what the server should send.\n- **T523 is done, PR #268 open** (project settings, trust, one confirm gate). `heca_config::loader::config_sources()` and `read_project()` are the entry points; `heca --show-config` / `--trust` / `--untrust` are in `app/cli.rs`.\n- **T449's terminal-store design (heca-82)**, which P104 moves behind the server: terminals live in a store on `AppState` (`terminals`), keyed by `TerminalId`; run and kill are **actions**; a terminal's size is **reported on change**; and there is **one `ensure` door** that creates a terminal when a pane needs one. Read its code and `.planner` task P094/T449 before splitting; do not redesign it.\n\n## Preservation constraints\n- Standalone heca must behave exactly as today: server and one client in one process, one code path (F012 decision). No second path for anything.\n- The doors and their naming rules (owner half comes from the extension handle, never per item) must keep working; extension items are defaults, the user's lists win.\n- The confirm gate is one function (`handlers/confirm.rs raise_confirm`); a test fails if a declared confirm has no gate. Keep it so on both sides of the split.\n- `trust_project` must stay confirm-gated and un-switch-off-able: a script or agent must not trust a repository's file.\n- Never commit anything under `.planner/` from a worktree; the real planner is `~/projects/heca/.planner`.\n\n## Supporting documents\n- None needed: the design lives in F012's accepted decisions, `docs/extending-heca.md` and AGENTS.md.\n\n## Blockers and risks\n- **Blocked on heca-82's T449 slice 4.** Starting earlier makes a merge conflict across the same files.\n- **Project settings and trust must follow each session's folder, not the server's current directory.** `read_project()` takes the folder from `std::env::current_dir()` at load; with one server holding many sessions each session has its own project folder, so the loader needs the folder passed in (`read_project_in` already takes one) and trust is per folder already. **`heca --show-config` must then say which session it reports on.**\n- Window-specific state that is tied to the process today: `[settings] show_*_sidebar` and the sidebar toggle are two separate settings; the config reload path is in `heca/src/lib.rs`. Known open bugs, filed by the orchestrator: see tasks T530 (sidebar border colour is read by nothing) and the two bugs it filed after Antonio's checks of T523 (pane header path on start; project `show_left_sidebar = false` blocks the toggle). They are not part of P104.\n\n## How to resume\n1. Ask the orchestrator whether T449 slice 4 is merged. If not, wait.\n2. `git fetch origin`, new branch from `origin/main`, read F012's decisions and `heca/src/app_state.rs`; list which `AppState` fields are server state (session, backends, terminals, agents, status) and which are window state (renderers, retained chrome trees, view scroll, overlays, docks).\n3. Propose the split to the orchestrator before writing code (the doors' sides above are the starting map; SharedChromeState is the natural start for what the server sends).",
-  "handoffUpdatedAt": "2026-10-01T08:16:53.848Z",
+  "updatedAt": "2026-10-15T09:16:38.147Z",
+  "handoff": "# Server/client split — B1 and B2.1 merged (PR #284); next B2.2 on feat/p104-b2-2\n\nCreated at: 2026-10-01T08:16:53.848Z\nUpdated at: 2026-10-12T15:09:00.020Z\nReason: B2 commits (a), (b1), (b2.1), the merge of main and the drag drop-area fix landed in main through PR #284; the old handoff described the state before any of it. A cold agent needs the new state and the B2.2 plan.\n\n## Current focus\n- Feature F012, phase P104(F012), task P104(F012)/T525 (in progress).\n- Session heca-f0 owns F012 and reports straight to Antonio. He tests only from `~/projects/heca-check`, which this session points at a commit and builds. Another session worked on settings (T540/T541, PRs #285/#286); check the planner for active work before touching config.\n- Worktree `~/projects/heca-f012`, branch `feat/p104-b2-2`, at origin/main `0c554c02` (after #286), no commits yet, tree clean.\n- Exact resume point: **B2.2**, below. No code exists for it yet.\n\n## Current and partial state\nIn main (PR #284):\n- The server owns ServerState (backends, notifications, git cache, programs). Every layout action runs on the server and reports `Change`s, which are past facts only.\n- Each window has a view per workspace (ScrollView: active column, offset, area, Motion slides). Content stores no pixels.\n- Column ops: view-free on ScrollingSpace (scrolling/effect.rs). Pane ops: insert_pane, take_pane_from, move_pane_between, extract_pane, move_pane_along, swap_panes_in_column (scrolling/pane_effect.rs). They return `SpaceEffect = Column(ColumnEffect) | Pane(PaneEffect)`; `SpaceEffect::landing` gives where a pane landed.\n- Window side: ScrollView::react_to(space, &[SpaceEffect], before), follow(col), activate_column. Focus moves and the column-focus rule are in scrolling/focus.rs.\n- Server side: `Change::Arranged{workspace, effects}`. The window keeps a `Before` (Layout::before, keyed by WorkspaceId) and LayoutMut::show_change. window_reacts follows a PaneMoved through activate_pane, except TakePane with focus_after:false (follows_pane).\n- Content-only on the server: move_pane_left/right, Move, MovePaneToColumn within one workspace, MovePaneToNewColumn, swap_up/down, and all the column ops.\n- Drag drop areas: Place{kind, rect: line, zone}; Place::moved_by shifts both. LandingSlot `.line(EdgeLine)`. Setting `drop_edge_reach` (default 0.25).\n- Fixes in main: a moved-in pane gets room like a new one; pane slides add to a running slide; follow uses activate_column; closing the active column keeps the view in place.\n\n## Preservation constraints\n- Library first: a rule a caller must remember is the bug. Nothing hard-coded: values come from settings (config.default.toml), the theme or layout options. One path per act. No unwrap/expect outside tests. Files under ~400 lines. Comments without names, dates or history.\n- Every test drives the real path and is break-checked (put the bug back, see red). Run cargo scoped (`-p heca-core -p heca`). Run the workspace-wide `cargo test` + `cargo clippy --all-targets -D warnings` before any PR (heca-view-realize checks every exported widget type).\n- Never launch the GUI; Antonio checks by eye from heca-check. Commit only on his word; PRs only with his OK.\n- Standalone heca behaves as before. A Change is a past fact. View decisions happen only in the window (window_reacts / ScrollView).\n- No planner tasks without Antonio's yes; keeping T525's own checklist honest is fine.\n\n## Supporting documents\n- None needed. Older detail: .planner/docs/handoff-p104-2026-10-07T08-31-38-118Z.md (pre-B2 state, superseded) and handoff-p104-2026-10-05T07-57-22-208Z.md (2a rules).\n\n## Blockers and risks\n- Still view-bound and still on ServerLayout: LayoutMut::move_pane_to_workspace, move_column_to_workspace, move_column, swap_columns_between, take_pane_into, place_pane, add_pane_to_column, add_column; swap_panes between columns/workspaces (handle/swap.rs); floating. ServerLayout still exposes workspace_mut.\n- T525 C12: Column.active_pane_idx is shared content but is per-window focus.\n- Unreproduced: a pane pushed off the bottom after resize + swap (test panes_stay_on_screen_after_a_resize_and_a_swap covers it). Chase it only with Antonio's exact steps.\n- Main still has 26 plain-date comments; leave them unless asked.\n\n## How to resume\n1. `cd ~/projects/heca-f012 && git fetch && git status` (feat/p104-b2-2; fast-forward it if main moved and it has no commits). Baseline: `cargo test -p heca-core -p heca` green.\n2. B2.2: give the remaining server handlers content ops that return effects per workspace. Cover moves across workspaces (removal effects in the source, insertion in the destination, WorkspaceRemoved first), take_pane_into (from columns or floats), place_pane (Workspace::move_pane counted as it is now within one workspace), add_pane_to_column / add_column (PaneAdded), and swap_panes between columns/workspaces. Report `Change::Arranged` per workspace touched, plus PaneMoved/ColumnMoved; the window follows through follows_pane / follows_column. Then delete the view-bound LayoutMut versions and remove `workspace_mut` from ServerLayout, so the compiler proves the server never reads a view.\n3. Tests: content ops on a bare ScrollingSpace; server tests via heca/src/server/handlers/testing.rs; the run_and_react path test in move_tests.rs. Break-check each.\n4. Point heca-check at the result, give Antonio check steps, commit on his word.\n5. After B2.2: 2b (terminals behind the server; empties AWAITING_TERMINALS), then C12.",
+  "handoffUpdatedAt": "2026-10-12T15:09:00.020Z",
   "handoffAudit": {
     "version": 1,
     "entries": [
@@ -309,10 +407,10 @@
       ]
     },
     "supportingDocuments": [],
-    "contentHash": "f19b32d1f1e54e1929f38b7fc4c791035d8081b6194c56560cb39be3644b535f",
-    "contentLength": 5154,
-    "verifiedAt": "2026-10-01T08:16:53.848Z",
-    "resumeReadyAt": "2026-10-01T08:16:57.197Z",
+    "contentHash": "6d21a73cd41600c71941fbb314185e051a9c7d4363d1685fde196b119825d6da",
+    "contentLength": 5478,
+    "verifiedAt": "2026-10-12T15:09:00.020Z",
+    "resumeReadyAt": "2026-10-12T15:09:03.277Z",
     "readBackSourceReviews": [
       {
         "source": "conversation",
@@ -336,7 +434,7 @@
       }
     ]
   },
-  "handoffReadAt": "2026-10-01T08:16:57.197Z",
+  "handoffReadAt": "2026-10-12T15:09:03.277Z",
   "handoffHistory": [],
   "statusLog": [
     {
@@ -346,7 +444,36 @@
       "toStatus": "planned",
       "title": "draft → planned",
       "description": ""
+    },
+    {
+      "id": "cbb797ea-2210-4311-acce-6f027bfa2f43",
+      "date": "2026-10-02T14:23:31.903Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "69660168-e3df-4a7f-864b-d9fadb1ddc72",
+      "date": "2026-10-15T09:11:48.337Z",
+      "fromStatus": "in-progress",
+      "toStatus": "planned",
+      "title": "in-progress → planned",
+      "description": ""
+    },
+    {
+      "id": "dc5de28f-08cd-482b-91bc-3996b8098622",
+      "date": "2026-10-15T09:16:38.179Z",
+      "fromStatus": "planned",
+      "toStatus": "waiting",
+      "title": "planned → waiting",
+      "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:f85e584e-0798-420c-8fa3-616087f1bc6a",
+      "createdAt": "2026-10-02T14:23:31.770Z"
+    }
+  ]
 }

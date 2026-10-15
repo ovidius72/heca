@@ -179,3 +179,67 @@ pub(crate) fn chrome_status(state: &crate::app_state::AppState) -> String {
     };
     format!("{pane_count} panes | {focus_title} | {mode_str}{tail}")
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn app_theme_to_gui_theme_preserves_loaded_palette_tokens() {
+        let theme = heca_config::theme::load("mocha");
+        let font_config = heca_config::font::FontConfig::default();
+        let gui = super::theme::app_theme_to_gui_theme(&theme, &font_config);
+
+        assert_eq!(gui.colors.name, theme.name);
+        assert_eq!(gui.colors.background, theme.background);
+        assert_eq!(gui.colors.surface, theme.surface);
+        assert_eq!(gui.colors.muted, theme.muted);
+        assert_eq!(gui.colors.border, theme.border);
+        assert_eq!(gui.colors.accent, theme.accent);
+        assert_eq!(gui.colors.glow, theme.glow);
+        assert_eq!(gui.colors.danger, theme.danger);
+        assert_eq!(gui.colors.success, theme.success);
+        assert_eq!(gui.colors.warning, theme.warning);
+        assert_eq!(gui.font_family, font_config.family.ui_normal());
+        assert_eq!(gui.font_size, font_config.size.ui);
+        assert_eq!(gui.colors.border_radius, theme.border_radius);
+        assert_eq!(gui.colors.border_width, theme.border_width);
+        assert_eq!(gui.colors.glow_size, heca_grid_ui::theme::GlowLevel::None);
+        assert_eq!(gui.colors.intensity, heca_grid_ui::theme::Intensity::Off);
+        assert!(gui.colors.show_focus_border);
+    }
+
+    #[test]
+    fn chrome_background_and_surface_colors_come_from_theme_tokens() {
+        let tron = heca_config::theme::load("grid_tron");
+        let latte = heca_config::theme::load("latte");
+
+        assert_eq!(
+            super::theme::top_bottom_pane_background_color(&tron),
+            tron.effective_top_bottom_pane_background()
+        );
+        assert_eq!(super::theme::chrome_surface_color(&tron), tron.surface);
+        assert_eq!(super::theme::chrome_surface_color(&latte), latte.surface);
+        assert_ne!(
+            latte.effective_left_sidebar_background(),
+            super::theme::chrome_surface_color(&latte)
+        );
+    }
+
+    #[test]
+    fn sidebar_shell_background_stays_distinct_from_bar_tint_when_transparent() {
+        let theme = heca_config::theme::load("latte");
+        let appearance = heca_config::appearance::AppearanceConfig {
+            transparency: 10,
+            ..Default::default()
+        };
+
+        let left_bg = theme.effective_left_sidebar_background();
+        assert_ne!(
+            super::theme::chrome_bar_color_for(&theme, &appearance),
+            super::theme::sidebar_shell_background_color_for(left_bg, &appearance)
+        );
+        assert_eq!(
+            super::theme::sidebar_shell_background_color_for(left_bg, &appearance).r,
+            theme.effective_left_sidebar_background().r
+        );
+    }
+}

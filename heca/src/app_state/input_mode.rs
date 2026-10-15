@@ -2,6 +2,28 @@
 
 use super::*;
 
+/// **The prefix key** — the chord that starts a command, and how long it waits for the next key.
+///
+/// Both come from `[keys]` together, so startup and a config reload take them in one step and
+/// neither can be left behind.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PrefixKey {
+    /// The chord itself, e.g. `Ctrl+b`.
+    pub combo: crate::keymap::KeyCombo,
+    /// How long prefix mode waits for the next key before giving up.
+    pub timeout: std::time::Duration,
+}
+
+impl PrefixKey {
+    /// The prefix key `[keys]` describes.
+    pub fn from_config(keys: &heca_config::keys::KeysConfig) -> Self {
+        Self {
+            combo: crate::keymap::KeyCombo::parse(&keys.prefix),
+            timeout: std::time::Duration::from_millis(keys.prefix_timeout_ms),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SidebarItemState {
     /// Currently active (focused workspace / pane).

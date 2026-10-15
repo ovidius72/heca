@@ -8,7 +8,6 @@ use crate::app::backend_store::BackendStore;
 use crate::app::terminal_metrics::resolve_terminal_cell_size;
 use crate::app_state::{self, AppState, InputMode};
 use crate::chrome::ChromeConfig;
-use crate::keymap;
 use crate::pane_name;
 use heca_config::theme::AppConfig;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session, WindowView};
@@ -520,8 +519,7 @@ pub(crate) async fn init_state(
         remembered_letters: Default::default(),
         places_open: false,
         prefix_entered_at: None,
-        prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
-        prefix_timeout_ms: app_config.config.keys.prefix_timeout_ms,
+        prefix: crate::app_state::PrefixKey::from_config(&app_config.config.keys),
         widget_keymap: crate::app::registry::build_widget_keymap(&app_config.config),
         pending_menus: pending_menus.clone(),
         pending_drops: pending_drops.clone(),

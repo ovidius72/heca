@@ -27,12 +27,12 @@ pub(super) fn handle_prefix_mode(
         // window holds it, it is given there like any key: a terminal placed anywhere types it, and
         // anything that does not take keys ignores it. Otherwise it is typed into the focused pane.
         if crate::app::tree_keys::window_holds_keyboard(state) {
-            let combo = state.prefix_combo.clone();
+            let combo = state.prefix.combo.clone();
             crate::app::tree_keys::deliver_press_to_tree(state, keymap, &combo, "");
         } else if let Some(pane_id) = state.focused_pane
             && let Some(backend) = state.server.backends.get_mut(pane_id)
         {
-            let literal = prefix_combo_to_literal_input(&state.prefix_combo);
+            let literal = prefix_combo_to_literal_input(&state.prefix.combo);
             if !literal.is_empty() {
                 backend.process_input(&literal);
             }

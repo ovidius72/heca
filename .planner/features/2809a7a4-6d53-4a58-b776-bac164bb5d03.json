@@ -5,7 +5,7 @@
   "priority": 0,
   "name": "🛠️ App / Chrome Features",
   "description": "Feature applicative e di chrome: audit di parità con Niri, split di `render.rs`, zoom/font-size controls, pane numbering, workspace drag-to-reorder, sidebar wiring + collapsed rail, damage-region optimization, fix vibrancy warning macOS, leftovers sidebar/chrome e context menu.",
-  "descriptionUpdatedAt": "2026-07-01T18:08:37.398Z",
+  "descriptionUpdatedAt": "",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -26,8 +26,7 @@
     "a6831878-0168-4261-935e-818cc9b9a909",
     "884c75d3-e99a-4537-b09c-aa9efab3270c",
     "3bdc254b-4b5c-4f74-a783-8de4ae1628fa",
-    "9cefac90-9fea-427c-9106-9a41e71e8acd",
-    "821e5ab9-22e8-4e04-a356-209350f305d5"
+    "9cefac90-9fea-427c-9106-9a41e71e8acd"
   ],
   "dependsOn": [],
   "statusLog": [],

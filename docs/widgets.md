@@ -5233,7 +5233,7 @@ uniform and rebind-aware. The grid-ui primitives involved are **`IconButton`**,
 resolution seam is app-side.
 
 ```rust
-// heca/src/chrome/mod.rs — one call composes label + the live keybind(s):
+// heca/src/chrome/pane_header/shortcuts.rs — one call composes label + the live keybind(s):
 let fire = move || emit(InteractionIntent::ActivateAction(action.clone()));
 let hint = fire.clone();                        // this button's pick IS its click
 let button = IconButton::new(icon).on_click(fire);
@@ -6242,7 +6242,7 @@ tree, an RPC message and a config file, so what an author writes is what the app
 ⚠️ **The same value is spelled two ways on purpose.** On the wire it is `"50%"`, because that is
 what an author writes; in Rust it is `Length::Percent(0.5)`, because that is the fraction taffy
 takes underneath. One translator does the conversion — `Length`'s `Deserialize`/`Serialize` in
-`heca-grid-ui/src/style.rs` — and it round-trips, which is what the layout merge relies on. So a
+`heca-grid-ui/src/style/length.rs` — and it round-trips, which is what the layout merge relies on. So a
 plugin never sees `0.5` and native code never sees `"50%"`, and neither has to know the other
 spelling exists.
 

@@ -149,7 +149,7 @@ pub(crate) fn handle_window_event(
                 &key_text,
                 state.modifiers,
             );
-            let is_prefix = is_prefix_match(&event_combo, &state.prefix_combo, log_key, &key_text);
+            let is_prefix = is_prefix_match(&event_combo, &state.prefix.combo, log_key, &key_text);
 
             // A layer in front owns the keyboard — EXCEPT the universal hint picker, which must
             // still reach its buttons (they are collected as hint targets out of the laid-out

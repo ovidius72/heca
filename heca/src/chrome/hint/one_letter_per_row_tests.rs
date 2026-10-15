@@ -98,7 +98,7 @@ fn pick_in_two_docks(lower_dock_scrolled: f32) {
     );
     let catalog = crate::actions::ActionCatalog::with_builtins();
     let ctx = ChromeCtx::for_build(crate::host::App::new(&chrome), &theme, &emit, &catalog);
-    let body = crate::chrome::build_region_content(
+    let body = crate::chrome::scene::build_region_content(
         &host,
         crate::chrome::RegionId::LeftSidebar,
         &ctx,

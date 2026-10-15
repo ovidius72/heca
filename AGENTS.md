@@ -72,11 +72,11 @@ reinventing something, and it will be rejected.
    components written to § 0b-bis land at 150–450 on their own (`chrome/expose/` is 149 / 282 /
    327 / 374 / 433, `chrome/pane/` is 39 / 60 / 152 / 200), and every file above 600 here is a file
    doing several jobs — `terminal_render.rs` (1700) interleaves the pane shell with the GPU passes,
-   `chrome/mod.rs` (3074) is host logic and UI composition together. Length is what makes you look;
-   **the defect is always the second job**, and no line limit catches a 250-line file that mixes
-   host wiring with a component. This applies to code you are only passing through: when you meet an
-   oversized file while fixing something else, **say so and agree the split first** — a large file
-   quietly reorganised is a diff nobody can review.
+   and a chrome file holding host logic and UI composition together is the same defect. Length is
+   what makes you look; **the defect is always the second job**, and no line limit catches a
+   250-line file that mixes host wiring with a component. This applies to code you are only
+   passing through: when you meet an oversized file while fixing something else, **say so and
+   agree the split first** — a large file quietly reorganised is a diff nobody can review.
 2. ⛔ **THE FIX IS ALWAYS CENTRALIZED. NEVER HARDCODED. ALWAYS COMPOSED AND REUSABLE.**
 
    This is not a question to weigh up, and there is no "where does this one belong" to decide.
@@ -947,7 +947,7 @@ tip. This is the one pattern; follow it for any new button.
 > layer, surface, overlay/modal, or a button on a new surface.** Never add a bespoke
 > visibility filter — model the surface instead.
 
-**1. Tooltip with the live keybinding — `action_tooltip(...)`** (`heca/src/chrome/mod.rs`):
+**1. Tooltip with the live keybinding — `action_tooltip(...)`** (`heca/src/chrome/pane_header/shortcuts.rs`):
 
 ```rust
 row = row.child(action_tooltip(button, action_name, label, &state.action_shortcuts));
@@ -1226,7 +1226,7 @@ The two effect tokens are **independent**; do not conflate them:
 
 Both are `[appearance]`-overridable (`AppearanceConfig::effective_glow_size` /
 `effective_intensity`; unset → theme wins, set → overrides) and applied at the
-single choke point `chrome_gui_theme(state)` in `heca/src/chrome/mod.rs`.
+single choke point `chrome_gui_theme(state)` in `heca/src/chrome/theme.rs`.
 
 ---
 

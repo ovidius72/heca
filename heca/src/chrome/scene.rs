@@ -396,7 +396,6 @@ fn chrome_root(
         // The status label's text is bound so mode/focus changes update it in place.
         let status_label = Label::new(status).color(fg);
         let status_signal = status_label.text_signal();
-        let (status_watch, _status_repaint) = RepaintWatch::new(status_label);
         signals.status = Some(status_signal);
         root = root.child(
             Surface::row()
@@ -405,7 +404,7 @@ fn chrome_root(
                 .background(side_bg)
                 .align("center")
                 .padding_x(Spacing::Sm)
-                .child(status_watch),
+                .child(status_label),
         );
     }
     root
@@ -669,3 +668,6 @@ pub(crate) fn build_chrome_root(
     let source = emit_intent.source();
     (root, signals, drag_items, source)
 }
+
+#[cfg(test)]
+mod tests;

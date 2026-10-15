@@ -230,3 +230,118 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use heca_core::layout::testing::Windowed;
+    use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
+    use std::path::PathBuf;
+
+    #[test]
+    fn sync_pane_runtime_state_projects_session_runtime_into_store() {
+        let chrome = SharedChromeState::new(280.0, 260.0);
+        let mut window = Windowed::new(Size::new(1280.0, 800.0), 1.0);
+        {
+            window.m().add_pane(
+                heca_core::layout::Pane::new(PaneId(10), "editor"),
+                None,
+                true,
+            );
+            let ws = window
+                .session
+                .workspaces
+                .first_mut()
+                .expect("session should create an initial workspace");
+            ws.add_floating_pane(
+                heca_core::layout::Pane::new(PaneId(20), "git"),
+                Rectangle::new(Point::new(50.0, 50.0), Size::new(400.0, 300.0)),
+                None,
+            );
+            ws.find_pane_mut(PaneId(10)).expect("tiled pane").runtime = PaneRuntime {
+                program: Some("nvim".into()),
+                status: ProcessStatus::Running,
+                cwd: Some(PathBuf::from("/tmp/project")),
+                exit_code: Some(0),
+                git: Some(GitInfo {
+                    branch: Some("main".into()),
+                    ahead: 1,
+                    behind: 0,
+                    added: 2,
+                    modified: 3,
+                    deleted: 4,
+                    dirty: true,
+                }),
+                kind: ContentKind::Terminal,
+            };
+            ws.find_pane_mut(PaneId(20)).expect("floating pane").runtime = PaneRuntime {
+                program: Some("lazygit".into()),
+                status: ProcessStatus::Idle,
+                cwd: Some(PathBuf::from("/tmp/project")),
+                exit_code: None,
+                git: None,
+                kind: ContentKind::Terminal,
+            };
+        }
+
+        super::signals::sync_pane_runtime_state(&window.session, &chrome.workspaces);
+
+        let tiled = chrome.workspaces.with_pane_runtime(PaneId(10), |runtime| {
+            runtime.expect("tiled runtime").snapshot()
+        });
+        let floating = chrome.workspaces.with_pane_runtime(PaneId(20), |runtime| {
+            runtime.expect("floating runtime").snapshot()
+        });
+        assert_eq!(tiled.program.as_deref(), Some("nvim"));
+        assert_eq!(tiled.status, ProcessStatus::Running);
+        assert_eq!(tiled.cwd, Some(PathBuf::from("/tmp/project")));
+        assert_eq!(
+            tiled.git,
+            Some(GitInfo {
+                branch: Some("main".into()),
+                ahead: 1,
+                behind: 0,
+                added: 2,
+                modified: 3,
+                deleted: 4,
+                dirty: true,
+            })
+        );
+        assert_eq!(floating.program.as_deref(), Some("lazygit"));
+        assert_eq!(floating.status, ProcessStatus::Idle);
+    }
+
+    #[test]
+    fn sync_pane_runtime_state_prunes_removed_panes() {
+        let chrome = SharedChromeState::new(280.0, 260.0);
+        let mut window = Windowed::new(Size::new(1280.0, 800.0), 1.0);
+        window.m().add_pane(
+            heca_core::layout::Pane::new(PaneId(10), "editor"),
+            None,
+            true,
+        );
+
+        super::signals::sync_pane_runtime_state(&window.session, &chrome.workspaces);
+        assert!(
+            chrome
+                .workspaces
+                .with_pane_runtime(PaneId(10), |runtime| runtime.is_some())
+        );
+
+        window
+            .session
+            .workspaces
+            .first_mut()
+            .expect("session should keep its workspace")
+            .scrolling
+            .columns
+            .clear();
+        super::signals::sync_pane_runtime_state(&window.session, &chrome.workspaces);
+
+        assert!(
+            !chrome
+                .workspaces
+                .with_pane_runtime(PaneId(10), |runtime| runtime.is_some())
+        );
+    }
+}

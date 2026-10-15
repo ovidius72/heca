@@ -1,4 +1,5 @@
 use super::*;
+use heca_core::runtime::{ContentKind, GitInfo};
 use heca_grid_ui::builders::HintExt as _;
 use heca_grid_ui::widgets::Label;
 
@@ -122,4 +123,266 @@ fn a_pick_that_already_named_itself_is_left_alone() {
         named.action, "close_pane_by_id",
         "the caller's own naming wins"
     );
+}
+
+#[test]
+fn pane_info_view_resolves_program_status_and_git_segments() {
+    let programs = ProgramsConfig::default();
+    let runtime = PaneRuntime {
+        program: Some("v".into()),
+        status: ProcessStatus::Running,
+        cwd: None,
+        exit_code: None,
+        git: Some(GitInfo {
+            branch: Some("main".into()),
+            ahead: 0,
+            behind: 0,
+            added: 2,
+            modified: 3,
+            deleted: 1,
+            dirty: true,
+        }),
+        kind: ContentKind::Terminal,
+    };
+
+    // No custom name → title is the program name, no process hint (the title IS the process).
+    let view = pane_info_view(&programs, "shell", None, Some(&runtime), true);
+    assert_eq!(view.title, "Neovim");
+    assert_eq!(view.process_hint, None);
+
+    // Custom name + setting on → title is the custom name, hint carries the program name.
+    let view = pane_info_view(&programs, "shell", Some("Editor"), Some(&runtime), true);
+    assert_eq!(view.title, "Editor");
+    assert_eq!(view.process_hint.as_deref(), Some("Neovim"));
+    // Custom name + setting off → no hint.
+    let view = pane_info_view(&programs, "shell", Some("Editor"), Some(&runtime), false);
+    assert_eq!(view.title, "Editor");
+    assert_eq!(view.process_hint, None);
+
+    let view = pane_info_view(&programs, "shell", None, Some(&runtime), false);
+
+    assert_eq!(view.icon, Glyph::FileCode);
+    assert_eq!(view.title, "Neovim");
+    assert_eq!(view.status, ProcessStatus::Running);
+    assert_eq!(view.git_branch.as_deref(), Some("main"));
+    assert_eq!(view.git_added.as_deref(), Some("+2"));
+    assert_eq!(view.git_modified.as_deref(), Some("~3"));
+    assert_eq!(view.git_deleted.as_deref(), Some("-1"));
+}
+
+#[test]
+fn pane_info_view_uses_shell_fallbacks_without_git() {
+    let programs = ProgramsConfig::default();
+    let runtime = PaneRuntime {
+        program: Some("zsh".into()),
+        status: ProcessStatus::Idle,
+        ..PaneRuntime::default()
+    };
+
+    let view = pane_info_view(&programs, "pane", None, Some(&runtime), false);
+
+    assert_eq!(view.icon, Glyph::Terminal);
+    assert_eq!(view.title, "zsh");
+    assert_eq!(view.status, ProcessStatus::Idle);
+    assert_eq!(view.git_branch, None);
+    assert_eq!(view.git_added, None);
+    assert_eq!(view.git_modified, None);
+    assert_eq!(view.git_deleted, None);
+}
+
+#[test]
+fn pane_header_key_tracks_its_shape_never_its_words_or_width() {
+    let programs = ProgramsConfig::default();
+    let chips = super::PaneChips::default();
+    let segments: Vec<&super::pane_items::PaneChipDef> = ["app_name", "git_branch"]
+        .iter()
+        .map(|n| chips.get(n).expect("shipped"))
+        .collect();
+    let buttons = super::PaneButtons::default();
+    let actions: Vec<&super::pane_items::PaneButtonDef> = ["split", "close"]
+        .iter()
+        .map(|n| buttons.get(n).expect("shipped"))
+        .collect();
+    let runtime = PaneRuntime {
+        program: Some("zsh".into()),
+        status: ProcessStatus::Idle,
+        git: Some(GitInfo {
+            branch: Some("main".into()),
+            ..GitInfo::default()
+        }),
+        ..PaneRuntime::default()
+    };
+    let hints = ActionShortcuts::default();
+    let catalog = crate::actions::ActionCatalog::with_builtins();
+    let facts_of = |rt: &PaneRuntime| {
+        super::pane_items::PaneFacts::of(PaneId(1), &programs, "shell", None, Some(rt))
+    };
+    #[allow(clippy::too_many_arguments)]
+    fn content<'a>(
+        chips: &'a super::PaneChips,
+        segments: &'a [&'a super::pane_items::PaneChipDef],
+        actions: &'a [&'a super::pane_items::PaneButtonDef],
+        facts: &'a super::pane_items::PaneFacts,
+        hints: &'a ActionShortcuts,
+        catalog: &'a crate::actions::ActionCatalog,
+        col_idx: usize,
+    ) -> super::pane_header::PaneHeaderContent<'a> {
+        super::pane_header::PaneHeaderContent {
+            facts,
+            segments,
+            chips,
+            actions,
+            ws_idx: 0,
+            col_idx,
+            zoomed: false,
+            floating: false,
+            shortcuts: hints,
+            catalog,
+        }
+    }
+    let base = super::pane_header::pane_header_key(
+        &content(
+            &chips,
+            &segments,
+            &actions,
+            &facts_of(&runtime),
+            &hints,
+            &catalog,
+            0,
+        ),
+        15.0,
+        300.0,
+    );
+    // Same inputs ⇒ same key (no needless rebuild).
+    assert_eq!(
+        base,
+        super::pane_header::pane_header_key(
+            &content(
+                &chips,
+                &segments,
+                &actions,
+                &facts_of(&runtime),
+                &hints,
+                &catalog,
+                0
+            ),
+            15.0,
+            300.0
+        )
+    );
+    // A different column ⇒ different key (re-bakes the split action's col_idx).
+    assert_ne!(
+        base,
+        super::pane_header::pane_header_key(
+            &content(
+                &chips,
+                &segments,
+                &actions,
+                &facts_of(&runtime),
+                &hints,
+                &catalog,
+                1
+            ),
+            15.0,
+            300.0
+        )
+    );
+    // **A different branch ⇒ the SAME key** (F003/P097/T500). A branch is *words*, and words are
+    // a per-frame input written into the retained tree, not part of what the header is. While
+    // they were part of its identity, every command rebuilt the whole bar — twice, at the
+    // command's start and finish — and a rebuilt widget paints nothing until the layout walk
+    // gives it a box, so the buttons blinked out and back both times.
+    let mut other = runtime.clone();
+    other.git = Some(GitInfo {
+        branch: Some("dev".into()),
+        ..GitInfo::default()
+    });
+    assert_eq!(
+        base,
+        super::pane_header::pane_header_key(
+            &content(
+                &chips,
+                &segments,
+                &actions,
+                &facts_of(&other),
+                &hints,
+                &catalog,
+                0
+            ),
+            15.0,
+            300.0
+        ),
+        "changing a segment's words rebuilt the header instead of rewriting them",
+    );
+
+    // **A segment that GOES ⇒ a different key.** That is a change of shape, not of words: the
+    // bar has one section fewer, so it genuinely is a different header. This is the other half
+    // of the rule, and without it "words never rebuild" would be satisfied by never rebuilding.
+    let mut no_branch = runtime.clone();
+    no_branch.git = None;
+    assert_ne!(
+        base,
+        super::pane_header::pane_header_key(
+            &content(
+                &chips,
+                &segments,
+                &actions,
+                &facts_of(&no_branch),
+                &hints,
+                &catalog,
+                0
+            ),
+            15.0,
+            300.0
+        ),
+        "a segment disappearing must rebuild — it changes what the bar IS",
+    );
+
+    // **And the status changes nothing at all.** It is carried on the projection and rendered
+    // nowhere in this bar, so Idle → Running → Success used to churn the identity while
+    // changing nothing a user could see. That was half of every command's rebuilds.
+    let mut running = runtime.clone();
+    running.status = heca_core::runtime::ProcessStatus::Running;
+    assert_eq!(
+        base,
+        super::pane_header::pane_header_key(
+            &content(
+                &chips,
+                &segments,
+                &actions,
+                &facts_of(&running),
+                &hints,
+                &catalog,
+                0
+            ),
+            15.0,
+            300.0
+        ),
+        "a status this bar does not render must not rebuild it",
+    );
+    // **A width change ⇒ the SAME key.** A pane's width is a per-frame layout input, not part of
+    // what the header is — the same rule the pane shell states for its own rect. The bar used to
+    // re-run width arithmetic of its own, so a resize had to rebuild it; `Label` truncates
+    // itself, so nothing does now. Keying on width meant every step of a drag threw the header
+    // away and built a new one: a burst of CPU and a visible flicker in the buttons. It re-lays
+    // out instead.
+    for w in [120.0, 295.0, 1600.0] {
+        assert_eq!(
+            base,
+            super::pane_header::pane_header_key(
+                &content(
+                    &chips,
+                    &segments,
+                    &actions,
+                    &facts_of(&runtime),
+                    &hints,
+                    &catalog,
+                    0
+                ),
+                15.0,
+                w
+            ),
+            "a resize to {w} rebuilt the header instead of re-laying it out"
+        );
+    }
 }

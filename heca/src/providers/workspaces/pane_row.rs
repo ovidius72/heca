@@ -20,9 +20,7 @@
 use super::seams::{DockRegistries, DockSeams};
 use super::{MENU_PANE, PaneEntry, pane_key, pane_row_items, pane_row_press, row_hint};
 use crate::chrome::pane_items::LineCx;
-use crate::chrome::{
-    ChromeDragItem, PaneFacts, RepaintWatch, alpha_u8, pane_info_view, runtime_snapshot,
-};
+use crate::chrome::{ChromeDragItem, PaneFacts, alpha_u8, pane_info_view};
 use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::builders::{
     DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, StyleExt,
@@ -57,7 +55,7 @@ pub(crate) struct PaneRow<'a> {
 impl PaneRow<'_> {
     /// Build the row, returning the concrete widget so the **parent** can still size it
     /// (§ 0b-bis step 5).
-    pub(crate) fn build(self, seams: &DockSeams<'_>, reg: &mut DockRegistries<'_>) -> RepaintWatch {
+    pub(crate) fn build(self, seams: &DockSeams<'_>, reg: &mut DockRegistries<'_>) -> Row {
         let PaneRow {
             pane,
             column_of_pane,
@@ -69,7 +67,7 @@ impl PaneRow<'_> {
         // Read off this row's own projection rather than back through the store: the projection
         // was built from it, and the menu is about the row being drawn.
         let has_custom_name = pane.custom_name.is_some();
-        let runtime = runtime_snapshot(ws_state, pane_id);
+        let runtime = ws_state.pane_runtime(pane_id);
         let info = pane_info_view(
             seams.programs,
             &pane.name,
@@ -294,18 +292,15 @@ impl PaneRow<'_> {
                 add_process_name.get(),
             ));
         });
-        let (watch, _repaint) = RepaintWatch::new(
-            // **The card says it about itself** — no `KeyHint` wrapper, which is for a region that
-            // is not a widget you can put a builder on.
-            //
-            // **What `prefix+/` does to this row**, declared right where its letter is drawn: move
-            // the cursor here and bring the pane to the front, staying in the sidebar. Nothing is
-            // registered and no id leaves this line — which is the only reason a plugin's row could
-            // ever have the same picker (RULE ZERO).
-            card.on_hint(seams.picks(row_hint(pane_key(pane_id))))
-                .hint_placement(HintPlacement::CenterRight),
-        );
-        watch
+        // **The card says it about itself** — no `KeyHint` wrapper, which is for a region that is
+        // not a widget you can put a builder on.
+        //
+        // **What `prefix+/` does to this row**, declared right where its letter is drawn: move the
+        // cursor here and bring the pane to the front, staying in the sidebar. Nothing is
+        // registered and no id leaves this line, which is what lets a plugin's row have the same
+        // picker.
+        card.on_hint(seams.picks(row_hint(pane_key(pane_id))))
+            .hint_placement(HintPlacement::CenterRight)
     }
 }
 
@@ -478,7 +473,7 @@ mod tests {
     }
 
     /// Lay the row out in a sidebar-sized box and return every run of text it actually drew.
-    fn painted_text(row: RepaintWatch) -> Vec<String> {
+    fn painted_text(row: Row) -> Vec<String> {
         use heca_grid_ui::Component as _;
         let mut root = Flex::column().child(row);
         heca_grid_ui::LayoutEngine::new()
