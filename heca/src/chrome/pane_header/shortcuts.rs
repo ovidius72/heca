@@ -145,7 +145,7 @@ impl ActionShortcuts {
 /// resolved centrally from `shortcuts` by `action_name`. The one place any button's
 /// tooltip is composed: callers name the action, never the shortcut, so a rebind
 /// updates every tip and no surface can drift on the leader symbol or format.
-pub(crate) fn action_tooltip<C: Component + heca_grid_ui::ComponentExt + 'static>(
+pub(crate) fn action_tooltip<C: Component + heca_grid_ui::TooltipExt + 'static>(
     child: C,
     action_name: &str,
     label: &str,

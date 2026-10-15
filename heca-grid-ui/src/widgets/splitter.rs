@@ -27,7 +27,7 @@ const GRAB: Spacing = Spacing::Xs;
 /// What is told how far the edge moved, in logical px along the drag axis.
 type Moved = dyn FnMut(f32);
 
-/// A grab zone that resizes. See the [module docs](self).
+/// A grab zone that resizes. See the module docs.
 pub struct Splitter {
     base: Base,
     orientation: Orientation,

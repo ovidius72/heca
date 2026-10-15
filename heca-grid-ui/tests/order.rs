@@ -1,6 +1,6 @@
 //! `.order(..)` — CSS `order`: a child says where it is laid out among its siblings.
 
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, PlaceExt};
+use heca_grid_ui::builders::{IdentityExt, LayoutExt, Parent, PlaceExt};
 use heca_grid_ui::widgets::{Flex, Grid};
 use heca_grid_ui::{Component, LayoutEngine, Size};
 

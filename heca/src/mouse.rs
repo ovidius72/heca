@@ -178,6 +178,25 @@ pub fn on_mouse_input(
 /// drag, a slow frame — the view moves one frame's worth, not a jump.
 const LONGEST_EDGE_SCROLL_STEP: f64 = 0.05;
 
+/// **How hard the columns are pushed with the pointer at `pos`**: `-1.0..0.0` within `trigger` of
+/// the left edge of `area`, `0.0..1.0` within it of the right edge, strongest at the edge itself —
+/// and nothing anywhere else, outside `area` included.
+fn edge_push(pos: (f32, f32), area: heca_core::layout::Rectangle, trigger: f32) -> f32 {
+    let (left, top) = (area.loc.x as f32, area.loc.y as f32);
+    let (right, bottom) = (left + area.size.w as f32, top + area.size.h as f32);
+    let (x, y) = pos;
+    if trigger <= 0.0 || x < left || x >= right || y < top || y >= bottom {
+        return 0.0;
+    }
+    if x < left + trigger {
+        -(left + trigger - x) / trigger
+    } else if x > right - trigger {
+        (x - (right - trigger)) / trigger
+    } else {
+        0.0
+    }
+}
+
 /// Process edge scrolling in `about_to_wait`. Should be called every frame
 /// while a drag is active. Returns true if the view was scrolled.
 pub fn process_edge_scroll(state: &mut AppState) -> bool {
@@ -185,48 +204,16 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
         return false;
     }
 
-    let pane_area = ChromeConfig::of(state).content_rect();
-    // **Only a pane carried out of the content area scrolls it.** Dragging a row in a sidebar
-    // reaches those same screen edges and must not move the strip: the tree says where the carried
-    // widget came from, and nothing keeps a list of what can be dragged.
-    let carried_from_content = heca_grid_ui::dragged_bounds(&state.window_root).is_some_and(|b| {
-        pane_area.contains(heca_core::layout::types::Point::new(
-            b.loc.x + b.size.w / 2.0,
-            b.loc.y + b.size.h / 2.0,
-        ))
-    });
-    if !carried_from_content {
+    // **The columns scroll while a pane is carried over them, near their edges** — a pane from a
+    // column or from a sidebar row alike, as the drag says. A row moved inside a sidebar is over
+    // the sidebar, not the columns, so it leaves them where they are.
+    let carrying_pane = heca_grid_ui::dragged_kind(&state.window_root).as_deref()
+        == Some(crate::chrome::PANE_DRAG_KIND);
+    if !carrying_pane {
         return false;
     }
-
-    let pos = state.mouse.pos;
-
-    // Scroll when near either edge of the content area, or past it over a sidebar.
-    let content_trigger = state.settings.edge_scroll_distance;
-
-    // Compute normalized delta, covering the full horizontal range without gaps.
-    // Left side: trigger from window edge through sidebar into content area.
-    // Right side: trigger from content area edge through sidebar to window edge.
-    let raw = if pos.0 < pane_area.loc.x as f32 {
-        // In the left sidebar/activity area — use distance from content edge.
-        let dist = pane_area.loc.x as f32 - pos.0;
-        -(content_trigger + dist) / content_trigger
-    } else if pos.0 < pane_area.loc.x as f32 + content_trigger {
-        // Near the left content area edge.
-        -(content_trigger - (pos.0 - pane_area.loc.x as f32)) / content_trigger
-    } else if pos.0 > pane_area.loc.x as f32 + pane_area.size.w as f32 - content_trigger
-        && pos.0 < pane_area.loc.x as f32 + pane_area.size.w as f32
-    {
-        // Near the right content area edge.
-        (pos.0 - (pane_area.loc.x as f32 + pane_area.size.w as f32 - content_trigger))
-            / content_trigger
-    } else if pos.0 >= pane_area.loc.x as f32 + pane_area.size.w as f32 {
-        // In the right sidebar/activity area — use distance from content edge.
-        let dist = pos.0 - (pane_area.loc.x as f32 + pane_area.size.w as f32);
-        (content_trigger + dist) / content_trigger
-    } else {
-        0.0
-    };
+    let pane_area = ChromeConfig::of(state).content_rect();
+    let raw = edge_push(state.mouse.pos, pane_area, state.settings.edge_scroll_distance);
 
     if raw == 0.0 {
         return false;

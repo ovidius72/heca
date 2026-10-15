@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 /// theme resolves it each frame.
 ///
 /// Used wherever the library lets a caller colour something by meaning: a keycap
-/// ([`hint_tone`](crate::builders::LayoutExt::hint_tone)) and the text of everything inside a
-/// container ([`content_tone`](crate::builders::LayoutExt::content_tone)).
+/// ([`hint_tone`](crate::builders::HintExt::hint_tone)) and the text of everything inside a
+/// container ([`content_tone`](crate::builders::ToneExt::content_tone)).
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, heca_grid_ui_macros::PropName,
 )]

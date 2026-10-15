@@ -86,7 +86,7 @@ fn a_button_with_no_words_is_not_padded_for_them() {
 /// must not get emphasized words hovering over it.
 #[test]
 fn a_tooltip_does_not_inherit_an_emphasised_control_size() {
-    use heca_grid_ui::ComponentExt;
+    use heca_grid_ui::TooltipExt;
     let mut big = Button::new("Zoom").tooltip("Zoom").size(WidgetSize::Header);
     LayoutEngine::new()
         .base_font(13.0)

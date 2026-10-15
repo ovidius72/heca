@@ -97,7 +97,7 @@ Core modules:
 - `event` / `pointer` / `focus` / `hint` / `nav` / `keymap` (DOM-shaped event
   model)
 - `action` / `menu` / `search` / `drag/` / `effects` / `builders`
-  (`ComponentExt`/`LayoutExt`/`Parent`/`StyleExt`)
+  (`EventExt`/`DragExt`/`HintExt`/…/`LayoutExt`/`Parent`/`StyleExt`)
 - re-exports `heca_core::layout::*` and `heca_grid_ui_macros::*`
 
 `widgets/` — ~55 generic widgets: `flex`, `surface`, `card`, `card_grid`,

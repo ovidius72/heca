@@ -134,7 +134,7 @@ impl Row {
     }
 
     /// Bind a **host-owned** "needs attention" request signal. When the host sets
-    /// it `true`, the row flashes [`ATTENTION_PULSES`] times (and the signal is
+    /// it `true`, the row flashes `ATTENTION_PULSES` times (and the signal is
     /// consumed back to `false`). The matching **sound** is the host's job — it
     /// plays its beep when it sets this signal (grid-ui stays audio-free).
     #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
@@ -503,7 +503,7 @@ impl Component for Row {
     /// it turns into is delivered to whoever took that press — this control — which is what makes
     /// "one control, one click target" a framework rule rather than something each control
     /// arranges by swallowing events. Bubble, not capture, so an
-    /// [`ComponentExt`](crate::builders::ComponentExt) handler registered on this widget gets first
+    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
     /// refusal and can take the click with `stop_propagation`.
     fn on_event(&mut self, ev: &Event) -> Handled {
         if !self.interactive() || self.base.disabled.get_untracked() {

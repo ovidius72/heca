@@ -25,7 +25,7 @@ impl std::fmt::Debug for DeclaredAction {
 /// **Every action declared anywhere in this tree**, in document order.
 ///
 /// What a host lists to answer "what can this surface do right now" — the same uniform walk
-/// [`collect_hints`] is, over the same retained trees.
+/// [`collect_hints`](crate::hint::collect_hints) is, over the same retained trees.
 pub fn collect_actions(root: &dyn Component) -> Vec<String> {
     let mut out = Vec::new();
     actions_into(root, &mut out);

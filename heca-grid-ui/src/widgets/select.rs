@@ -89,7 +89,7 @@ const EMPTY_W: f32 = 120.0;
 ///
 /// ```ignore
 /// // Sugar — plain text options (each becomes a `Choice::labeled(text, text)`).
-/// Select::new(["LOW", "MEDIUM", "HIGH"]).selected(1).on_change(|a| …)
+/// Select::new(["LOW", "MEDIUM", "HIGH"]).selected(1).on_change(|a| { /* … */ })
 ///
 /// // Composed — an option is a value plus any content.
 /// Select::empty()
@@ -537,7 +537,7 @@ impl Component for Select {
     ///
     /// The rows carry the control's horizontal insets as margins: `left` aligns their content with
     /// the trigger's label (an option's own padding is smaller than the trigger's), `right` is the
-    /// [gutter](Select::gutter) for the chevron and the scrollbar. Being margins, they widen the
+    /// gutter for the chevron and the scrollbar. Being margins, they widen the
     /// control *and* keep the option content out of them — which is exactly what a padding on this
     /// node could not do, since it would inset the rows themselves.
     fn remeasure(&mut self) {
@@ -566,7 +566,7 @@ impl Component for Select {
     }
 
     /// Layout just reset every row to its natural position and size: re-measure the rows from it,
-    /// then place them into the panel again (see [`place_options`](Select::place_options)).
+    /// then place them into the panel again (see `place_options`).
     fn on_layout(&mut self) {
         self.natural_h = self
             .base

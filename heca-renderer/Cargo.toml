@@ -35,3 +35,6 @@ pollster = { workspace = true }
 [[example]]
 name = "showcase"
 path = "examples/showcase.rs"
+
+[lints]
+workspace = true

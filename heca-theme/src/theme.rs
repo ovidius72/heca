@@ -330,7 +330,7 @@ pub struct Theme {
     ///
     /// A host may still tint one *kind* of target differently — workspace picks are drawn in
     /// `warning` so they read apart from pane picks — through
-    /// [`ComponentExt::hint_color`](../heca_grid_ui/builders/trait.ComponentExt.html), which
+    /// [`HintExt::hint_color`](../heca_grid_ui/builders/trait.HintExt.html), which
     /// overrides this per widget.
     #[serde(default)]
     pub hint_color: Option<Color>,
@@ -747,7 +747,8 @@ impl Theme {
             .unwrap_or_else(|| self.surface.lerp(self.accent, WORKSPACE_PREVIOUS_LIFT))
     }
 
-    /// Corner radius for small controls — a fraction of the base [`radius`](Theme::radius).
+    /// Corner radius for small controls — a fraction of the base
+    /// [`border_radius`](Theme::border_radius).
     pub fn control_radius(&self) -> f32 {
         self.border_radius * CONTROL_RADIUS_FRAC
     }

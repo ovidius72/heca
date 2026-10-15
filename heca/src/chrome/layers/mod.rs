@@ -474,6 +474,12 @@ impl LayerRegistry {
         self.live_declaration_at(window, slot).is_some()
     }
 
+    /// **What the layer seated in `slot` is called** — [`name_of`](Self::name_of), asked by the
+    /// slot the window tree knows it by.
+    pub(crate) fn name_of_slot(&self, slot: &str) -> Option<String> {
+        self.declaration_at(slot).and_then(|l| l.name.clone())
+    }
+
     /// **What this layer is called** — the addressable, owner-prefixed name (`heca.expose`,
     /// `docker.panel`), or `None` for an anonymous one.
     ///

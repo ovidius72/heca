@@ -126,7 +126,7 @@ not work** — two red tests said so before anything was built on it:
   either.
 
 So it is a field after all: **`Base::activatable`**, set wherever the action is wired — once in
-`ComponentExt::on` for the generic listeners (`Click`, `DoubleClick`, `Key`, which covers `on_click`,
+`EventExt::on` for the generic listeners (`Click`, `DoubleClick`, `Key`, which covers `on_click`,
 `on_double_click`, `on_key_down` and `on_key_up`), and one line in each of the eight. That line sits
 beside their existing `base.focusable` and `base.one_click_target`, which are the same pattern.
 
@@ -138,7 +138,7 @@ gets a letter = activatable && !hintable(false)
 than doing the thing, so it should not spend one of the 52.
 
 **Known consequence, accepted:** `on_key_down` and `on_key_up` both register as `EventKind::Key` and
-sort themselves out *inside* the closure (`builders.rs:601`), so a widget listening only for Escape or
+sort themselves out *inside* the closure (`builders/component_ext.rs`), so a widget listening only for Escape or
 arrows is still marked activatable. Those get a letter too. Watch it on screen; `.hintable(false)` is
 the fix where it is wrong, not a narrower rule.
 
@@ -271,7 +271,7 @@ children hintable, and does not make itself hintable on their behalf. There is n
 letters are handed out.
 
 **The pick propagates** like any other event, through the existing `deliver_to_path`
-(`heca-grid-ui/src/component.rs:830`): capture down → target → bubble up, with `stop_propagation`
+(`heca-grid-ui/src/component/dispatch.rs`): capture down → target → bubble up, with `stop_propagation`
 ending the walk. No second dispatch path.
 
 The closest DOM analogy is **not** `onclick`. It is `tabindex`: scarce, explicit, per-element, and a
@@ -318,7 +318,7 @@ is the whole source of the confusion — but one is **a target** and the other i
 ### `on_hint(..)` — on the widget itself
 
 **This is the normal way, and almost always the only thing you need.** Every widget has it, from
-`ComponentExt`, along with `hintable`, `hint_placement`, `hint_tone` and `hint_offset_y`.
+`HintExt`, along with `hintable`, `hint_placement`, `hint_tone` and `hint_offset_y`.
 
 ```rust
 Row::new().child(Label::new("editor"))
@@ -457,8 +457,8 @@ otherwise — the same `hint.or_else(press)` rule the declarative side has had a
 switch: it says a pick does something other than a click. Target-phase-only (§4), plus the bubbled
 delegation seam, on the existing `deliver_to_path` walk. *Deletes:* the wrapper requirement; the
 two-direction search in `offer_hint_by_key`; the "is the pick on the parent or the child" question.
-`Base::hint` is **already** on `Base` (`component.rs:254`) — only the builder was in the wrong place,
-and the doc at `component.rs:245` claiming it belongs on the wrapper is what this falsifies.
+`Base::hint` is **already** on `Base` (`component/base/mod.rs`) — only the builder was in the wrong place,
+and the doc on `Base` claiming it belongs on the wrapper is what this falsifies.
 
 **What it actually landed as.** `Base::hint` became a `Hint { intent: Option<Intent>, run }` rather
 than a bare closure, and `heca-grid-ui` took a dependency on `heca-view` to name that `Intent` —
@@ -500,7 +500,7 @@ hand later.
 **Still standing, deliberately:** the two-direction search in `offer_hint_by_key`. It is only
 deletable once the app's declarations move off their `KeyHint` wrappers onto the widgets themselves,
 and today the wrapper is also what carries the **placement** (`Base::hint_style`, whose builders are
-`KeyHint`'s). Moving them without a placement builder on `ComponentExt` would silently relocate every
+`KeyHint`'s). Moving them without a placement builder on `HintExt` would silently relocate every
 keycap — a visual change nobody can verify from a test. It goes with T438.
 
 **4. The labeller becomes caller-supplied** (§6), current alphabet as default. **One letter, never
@@ -537,7 +537,7 @@ inside the widget instead of at each call site.
 
 `on_action`'s declarative form is a node's **`actions`** map (`name → Intent`), read once in
 `realize` for every kind beside `hint`, `key` and `hintable` — universal, because
-`ComponentExt::on_action` is universal, and a per-kind arm would be the same framework rule written
+`EventExt::on_action` is universal, and a per-kind arm would be the same framework rule written
 thirty-three times. An **event** is fired *at* a node by what the user did to it; an **action** is a
 name said out loud by a binding, the palette or a script, and answered by whoever on screen declares
 it. One refusal, at the only place that knows both names: a verb whose intent names *itself* is not

@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::widgets::Flex;
-use heca_grid_ui::{Component, ComponentExt, LayoutExt, Parent};
+use heca_grid_ui::{Component, HintExt, IdentityExt, LayoutExt, Parent};
 
 use super::model::ColumnShellModel;
 use crate::chrome::pane::{PaneCallbacks, PaneShell, PaneShellModel};

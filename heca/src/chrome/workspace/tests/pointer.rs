@@ -165,7 +165,7 @@ fn a_press_on_a_pane_reaches_the_pane_under_the_chrome() {
 /// click handler.
 #[test]
 fn a_plugin_widget_in_a_dock_or_an_overlay_and_a_pane_each_get_their_own_press() {
-    use heca_grid_ui::builders::{ComponentExt, Parent};
+    use heca_grid_ui::builders::{EventExt, Parent};
     use heca_grid_ui::component::dispatch;
     use heca_grid_ui::event::{Event, PointerButton};
     use heca_grid_ui::{Color, Length};
@@ -233,7 +233,7 @@ fn a_plugin_widget_in_a_dock_or_an_overlay_and_a_pane_each_get_their_own_press()
 #[test]
 fn every_layout_container_over_the_panes_leaves_them_their_presses() {
     use heca_grid_ui::Length;
-    use heca_grid_ui::builders::{ComponentExt, Parent};
+    use heca_grid_ui::builders::{EventExt, Parent};
     use heca_grid_ui::component::dispatch;
     use heca_grid_ui::event::{Event, PointerButton};
     use heca_grid_ui::widgets::{Grid, KeyHintGroup, Surface, Visibility};

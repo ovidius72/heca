@@ -1,8 +1,9 @@
-//! Typed builders for [`ViewNode`] — the authoring layer (plugin-task-ui-2, F003/P011/T006).
+//! Typed builders for [`ViewNode`](crate::ViewNode) — the authoring layer (plugin-task-ui-2,
+//! F003/P011/T006).
 //!
-//! A [`ViewNode`] is a uniform bag of properties, which is right for a *wire format* and wrong for
-//! writing by hand: nothing stops `Label::new("x").prop("title", …)`, and nothing reports it either
-//! — the property is simply ignored at realize time.
+//! A [`ViewNode`](crate::ViewNode) is a uniform bag of properties, which is right for a *wire
+//! format* and wrong for writing by hand: nothing stops `Label::new("x").prop("title", …)`, and
+//! nothing reports it either — the property is simply ignored at realize time.
 //!
 //! ```
 //! use heca_view::build::*;
@@ -37,10 +38,10 @@
 //! # Staying honest
 //!
 //! `every_widget_property_is_reachable_from_the_sdk` in `heca-view-realize` walks
-//! [`WidgetKind::ALL`] against each widget's generated `PROP_NAMES` and fails when a property has
-//! no builder here. It fails **closed**: a new property must reach the SDK, or someone must name an
-//! exception and say why. Without it this file becomes the hand-written list that falls behind,
-//! which is the defect this whole phase exists to remove.
+//! [`WidgetKind::ALL`](crate::WidgetKind::ALL) against each widget's generated `PROP_NAMES` and
+//! fails when a property has no builder here. It fails **closed**: a new property must reach the
+//! SDK, or someone must name an exception and say why. Without it this file becomes the
+//! hand-written list that falls behind, which is the defect this whole phase exists to remove.
 
 // ── The per-kind properties ───────────────────────────────────────────────────────────────
 // Each block mirrors that widget's generated `PROP_NAMES`, and the drift guard in

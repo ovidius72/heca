@@ -69,10 +69,14 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
     // in the wrong place: it also ate `q` and `Esc`, which are catalogued actions the host resolves.
     // Here the layer claims only the keyboard, and `ActionPolicy` decides the
     // rest — `Global` actions still run, `ContainerFocused` ones do not.
-    let modal_holds_keyboard = state.layers.top_modal_id(&state.window_root).is_some();
+    //
+    // The same holds for any surface that holds the keyboard, modal or not, and for a widget
+    // outside every dock: the dock is driven only while its own area is where the keys go.
     if keyboard_driven
-        && !modal_holds_keyboard
-        && crate::app::tree_focus::focused_dock(state).is_some()
+        && matches!(
+            crate::app::input::focused_surface(state),
+            crate::app::input::FocusedSurface::Dock { .. }
+        )
     {
         return Domain::Container;
     }

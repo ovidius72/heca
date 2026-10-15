@@ -322,3 +322,60 @@ fn a_header_that_changes_shape_leaves_what_the_pane_holds_alone() {
         "the terminal is the node it was"
     );
 }
+
+/// **What a pane holds is cut to the pane's round corners**, by the pane: a terminal in it is drawn
+/// under the corners the pane's frame is drawn with, and the host draws it by that alone — so the
+/// picture of the pane carried under the pointer cuts its terminal where the picture is.
+#[test]
+fn what_a_pane_holds_is_drawn_under_the_panes_round_corners() {
+    use heca_grid_ui::component::{Base, PaintCx};
+    use heca_grid_ui::scene::{DrawCommand, HostCmd, HostDraw, Scene};
+
+    struct Screen {
+        base: Base,
+    }
+    impl Component for Screen {
+        fn base(&self) -> &Base {
+            &self.base
+        }
+        fn base_mut(&mut self) -> &mut Base {
+            &mut self.base
+        }
+        fn paint(&self, cx: &mut PaintCx) {
+            cx.surface(self.base.bounds, 9);
+        }
+    }
+    let mut base = Base::new();
+    base.style.layout.width = heca_grid_ui::Length::Percent(1.0);
+    base.style.layout.height = heca_grid_ui::Length::Percent(1.0);
+
+    let (cb, _) = recording_callbacks();
+    let m = model(5);
+    let mut pane = PaneShell {
+        model: &m,
+        cb: &cb,
+        header: None,
+        content: Some(Box::new(Screen { base })),
+    }
+    .build();
+    size_to(&mut pane, 400.0, 300.0);
+    LayoutEngine::new().compute(&mut pane, Size::new(400.0, 300.0));
+    let theme = heca_grid_ui::theme::Theme::default();
+    let mut scene = Scene::new();
+    heca_grid_ui::paint_child(&pane, &mut PaintCx::new(&mut scene, &theme));
+
+    let rounded = scene.iter().find_map(|c| match c {
+        DrawCommand::Host(HostCmd {
+            draw: HostDraw::Surface { id: 9 },
+            rounded,
+            ..
+        }) => Some(*rounded),
+        _ => None,
+    });
+    let rounded = rounded.flatten();
+    assert_eq!(
+        rounded.map(|r| (r.rect, r.radius)),
+        Some((pane.base().bounds, m.border_radius)),
+        "the terminal is cut to the pane's box and corners",
+    );
+}

@@ -10,7 +10,10 @@
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::widgets::{HintPlacement, Pane as UiPane};
-use heca_grid_ui::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
+use heca_grid_ui::{
+    DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, PlaceExt, PresenceExt,
+    StyleExt,
+};
 
 use super::model::PaneShellModel;
 
@@ -95,7 +98,10 @@ impl PaneShell<'_> {
             .height(heca_grid_ui::Length::Percent(1.0))
             .padding(content_inset)
             .border(to_gui_color(border_color), border_width)
-            .radius(border_radius);
+            .radius(border_radius)
+            // What it holds is cut to its round corners, wherever it is drawn — in its column, or
+            // as the picture carried under the pointer.
+            .clip_children(true);
         if active {
             pane = pane.glow_with(to_gui_color(border_color), active_glow.0, active_glow.1);
         }
@@ -123,7 +129,6 @@ impl PaneShell<'_> {
             pane = pane
                 .draggable_as(crate::chrome::PANE_DRAG_KIND)
                 .draggable_when(move |held| crate::modifier::held(key, held))
-                .drag_image()
                 .accepts_beside([crate::chrome::PANE_DRAG_KIND]);
         }
 

@@ -1,5 +1,5 @@
 use super::*;
-use crate::builders::{ComponentExt, Parent};
+use crate::builders::{IdentityExt, Parent};
 use crate::layout::LayoutEngine;
 use crate::reactive::{Signal, SignalGet};
 use crate::widgets::{Flex, Label};

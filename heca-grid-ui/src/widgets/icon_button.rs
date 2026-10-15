@@ -98,11 +98,11 @@ impl IconButton {
 
     /// Override the hover/press hue (default: the hue a container published, else theme accent).
     ///
-    /// The same property [`ComponentExt::tone`](crate::builders::ComponentExt::tone) sets on any
-    /// widget — one field, so "my hue" and "the hue inside me" cannot drift apart.
+    /// The same property [`ToneExt::accent`](crate::builders::ToneExt::accent) sets on
+    /// any widget — one field, so "my hue" and "the hue inside me" cannot drift apart.
     #[heca_grid_ui_macros::prop]
     pub fn accent(self, c: Color) -> Self {
-        crate::builders::ComponentExt::accent(self, c)
+        crate::builders::ToneExt::accent(self, c)
     }
 
     /// Enable or disable the hover glow (default: enabled).
@@ -161,8 +161,8 @@ impl Component for IconButton {
 
     /// A pinned square, or auto (hug the icon + padding) when unset. The size
     /// variant scales the padding; the **icon child inherits the variant from the layout pass**
-    /// (see [`Style::size_explicit`](crate::style::Style::size_explicit)), so the whole affordance
-    /// grows/shrinks together without this widget copying the variant into its child.
+    /// (see [`Layout::size_explicit`](crate::style::Layout::size_explicit)), so the whole
+    /// affordance grows/shrinks together without this widget copying the variant into its child.
     fn remeasure(&mut self) {
         let size = self.base.style.layout.size;
         self.base.style.layout.padding = (DEFAULT_PAD * size.pad_scale()).into();
@@ -272,7 +272,7 @@ impl Component for IconButton {
     /// it turns into is delivered to whoever took that press — this control — which is what makes
     /// "one control, one click target" a framework rule rather than something each control
     /// arranges by swallowing events. Bubble, not capture, so an
-    /// [`ComponentExt`](crate::builders::ComponentExt) handler registered on this widget gets first
+    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
     /// refusal and can take the click with `stop_propagation`.
     fn on_event(&mut self, ev: &Event) -> Handled {
         if self.on_click.is_none() || self.base.disabled.get_untracked() {

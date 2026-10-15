@@ -368,7 +368,7 @@ impl CommandPalette {
     /// this is its own property rather than [`LayoutExt::size`](crate::builders::LayoutExt::size),
     /// whose font scaling would cascade through the whole panel.
     ///
-    /// Whatever the variant, the panel never exceeds [`PANEL_VIEWPORT_FRAC`] of the window, so a
+    /// Whatever the variant, the panel never exceeds `PANEL_VIEWPORT_FRAC` of the window, so a
     /// small screen is safe by construction.
     #[heca_grid_ui_macros::prop]
     pub fn panel_size(mut self, size: WidgetSize) -> Self {
@@ -432,7 +432,7 @@ impl CommandPalette {
     /// something that changes while the palette is open (a pane's running program, a rename).
     ///
     /// Writing one **renames that row in place**: the label re-marks itself and nothing else is
-    /// rebuilt, so the list never flashes. [`results`](Self::results) reads these back, so a row
+    /// rebuilt, so the list never flashes. `results` reads these back, so a row
     /// renamed this way is also matched by its new name rather than the one it was built with.
     pub fn label_signals(&self) -> &[Signal<String>] {
         &self.title_text

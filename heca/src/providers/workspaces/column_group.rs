@@ -11,7 +11,7 @@ use super::seams::{DockRegistries, DockSeams};
 use super::{ColumnEntry, MENU_COLUMN, column_key, column_row_items, pane_row::PaneRow, row_hint};
 use crate::chrome::{ChromeDragItem, RepaintWatch};
 use heca_grid_ui::Tone;
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
+use heca_grid_ui::builders::{DragExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent};
 use heca_grid_ui::style::Spacing;
 use heca_grid_ui::widgets::{HintPlacement, MarkerGroup};
 

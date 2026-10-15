@@ -4,7 +4,7 @@ use crate::input::WmAction;
 
 /// Policy classification for a WM action.
 ///
-/// This determines how the action behaves under different [`Domain`]s. Callers should use
+/// This determines how the action behaves under different `Domain`s. Callers should use
 /// `dispatch_action()` or `route_interaction()` and never check policy directly — it is `pub`
 /// only because a component **declares** one on every action it registers
 /// (`ActionMeta::policy`), and a plugin outside this crate must be able to name what it is

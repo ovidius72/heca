@@ -183,7 +183,7 @@ pub enum Contribution {
 /// [`Provider::context_menus`](crate::providers::Provider::context_menus), which returns as many as
 /// the provider likes — across as many paths as it likes.
 pub struct ContextMenuContribution {
-    /// Where these entries appear — a dotted [`ContextPath`](crate::chrome::ContextPath):
+    /// Where these entries appear — a dotted `ContextPath`:
     /// `"pane"` (the host's own), or a path the provider defines for its rows
     /// (`"workspaces.pane"`, `"docker.container"`) — namespaced by component, like its action ids.
     pub context_path: String,
@@ -194,7 +194,7 @@ pub struct ContextMenuContribution {
     pub order: heca_grid_ui::order::Order,
     /// Builds the entries for one opening of the menu. Reads the app through the
     /// [`ChromeCtx`](crate::providers::ChromeCtx) facade and *what was clicked* from the
-    /// [`ContextTarget`](crate::chrome::ContextTarget) — never `AppState`. Each entry carries an
+    /// `ContextTarget` — never `AppState`. Each entry carries an
     /// `Intent`, so a provider dispatches **its own** registered actions, not just heca's.
     pub build: crate::chrome::MenuBuild,
 }

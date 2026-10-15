@@ -238,7 +238,8 @@ impl From<ViewOrder> for PropValue {
 }
 
 value_set! {
-    /// How a [`ButtonGroup`](WidgetKind::ButtonGroup) shows its actions — mirrors grid-ui `Display`.
+    /// How a [`ButtonGroup`](crate::WidgetKind::ButtonGroup) shows its actions — mirrors grid-ui
+    /// `Display`.
     ///
     /// Whatever does not fit collapses into a ⋮ menu whichever of these is chosen; this only decides
     /// how wide each action is before that happens.

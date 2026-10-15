@@ -108,7 +108,7 @@ pub(crate) fn handle_window_event(
         WindowEvent::KeyboardInput { event, .. } => {
             // **A release is half a keystroke, and it is delivered.** Returning here meant
             // `Event::Key { pressed: false }` never existed in this app, so
-            // `ComponentExt::on_key_up` was a builder nothing could ever fire — the exposé's
+            // `EventExt::on_key_up` was a builder nothing could ever fire — the exposé's
             // delete keys did nothing while a headless test that dispatched both halves passed
             // The same shape as the right-click that never opened a menu because the funnel
             // delivered only presses.

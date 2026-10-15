@@ -174,14 +174,14 @@ pub trait Provider {
     ///
     /// The declaration alone buys the palette entry, the icon and label, `describe-action` and RPC,
     /// the `prefix+/` hint, and the central destructive-confirm gate — because these metas join the
-    /// same [`ActionCatalog`](crate::actions::ActionCatalog) the built-ins do.
+    /// same `ActionCatalog` the built-ins do.
     fn actions(&self) -> Vec<crate::actions::ActionMeta> {
         Vec::new()
     }
 
     /// The host moved this placement's cursor to `key` — a click, an RPC call, a script.
     ///
-    /// The key is one **this component wrote** (`ComponentExt::key`), so only it can say which row
+    /// The key is one **this component wrote** (`IdentityExt::key`), so only it can say which row
     /// that is; the host deliberately never parses it. Whatever the component keeps of its own — a
     /// positional index, a domain-typed selection — reconciles here.
     ///
@@ -214,13 +214,13 @@ pub trait Provider {
     ///   closure does not — so native and plugin components stay one design;
     /// - `&self` is available, because the host is calling **into** the component; a closure
     ///   registered at mount outlives `actions()` and has to hoist everything it needs into `Rc`s;
-    /// - a raw [`DynHandler`](crate::actions::DynHandler) is `Fn(&mut AppState, …)` — full mutable
+    /// - a raw `DynHandler` is `Fn(&mut AppState, …)` — full mutable
     ///   app state, which §2.3 forbids a provider. [`ProviderCx`] is read + emit, so the contract is
     ///   enforced by the type rather than by discipline;
     /// - "which placement?" is answered once, by the host, instead of captured per closure.
     ///
-    /// Returning [`Handled::No`] is a legitimate **silent decline** — nothing selected, nothing to
-    /// act on — not an error.
+    /// Returning [`Handled::No`](heca_grid_ui::Handled::No) is a legitimate **silent decline** —
+    /// nothing selected, nothing to act on — not an error.
     fn perform(
         &self,
         _action: &str,
@@ -294,7 +294,7 @@ impl<'a> ProviderCx<'a> {
         self.mount
     }
 
-    /// Read-only state selectors — the same [`StateView`] a render pass reads through.
+    /// Read-only state selectors — the same `StateView` a render pass reads through.
     pub fn state(&self) -> StateView<'_> {
         StateView::over(&self.store)
     }
@@ -371,14 +371,14 @@ struct RenderInputs<'a> {
 }
 
 /// The provider/plugin-facing facade (contract §3.4.1). It *extends* the shipped
-/// read/observe [`App`] host API (`heca/src/host.rs`) with the write/contribute
+/// read/observe `App` host API (`heca/src/host.rs`) with the write/contribute
 /// halves deferred to §3.5 rows 3–10. plugin-02 wired the read/observe half;
 /// plugin-03 adds the render-pass selectors below; `actions` / `overlay` / `regions`
 /// arrive in plugin-04/05.
 ///
 /// Everything reachable here is **read-only**: a provider projects app state into
 /// widgets and reports user actions as
-/// [`InteractionIntent`](crate::app::interaction::InteractionIntent)s through
+/// `InteractionIntent`s through
 /// [`emit_intent`](ChromeCtx::emit_intent) — it never mutates app state (§2.3). The
 /// registries a build *does* mutate are the separate, explicit
 /// [`BuildCx`](crate::chrome::BuildCx).

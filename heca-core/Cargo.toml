@@ -17,3 +17,6 @@ wezterm-surface = { git = "https://github.com/wezterm/wezterm", package = "wezte
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[lints]
+workspace = true

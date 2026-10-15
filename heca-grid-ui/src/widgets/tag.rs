@@ -123,7 +123,7 @@ impl Tag {
         leading: Option<Box<dyn Component>>,
         key: Option<&str>,
     ) -> Self {
-        use crate::builders::ComponentExt as _;
+        use crate::builders::IdentityExt as _;
         let mut text = Label::new(label).font_scale(FONT_SCALE);
         if let Some(k) = key {
             text = text.key(k);

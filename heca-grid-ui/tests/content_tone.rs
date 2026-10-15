@@ -6,7 +6,7 @@ mod common;
 use heca_core::layout::Size;
 use heca_grid_ui::widgets::{Button, Dialog, Flex, Label};
 use heca_grid_ui::{
-    Color, Component, ComponentExt, DrawCommand, LayoutEngine, Parent, Theme, Tone,
+    Color, Component, ToneExt, DrawCommand, LayoutEngine, Parent, Theme, Tone,
 };
 
 /// Lay `w` out in a 600×400 viewport, paint it through `paint_child` — the one path every widget is

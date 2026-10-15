@@ -245,6 +245,7 @@ mod drawn_tests {
             alpha: 1.0,
             clip: None,
             echo,
+            rounded: None,
         }
     }
 

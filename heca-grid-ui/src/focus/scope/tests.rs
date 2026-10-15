@@ -1,5 +1,5 @@
 use super::*;
-use crate::builders::{ComponentExt, LayoutExt, Parent};
+use crate::builders::{IdentityExt, LayoutExt, Parent};
 use crate::component::{Base, Event, Handled};
 use crate::event::PointerButton;
 use crate::focus::keyboard_owner;
@@ -284,4 +284,50 @@ fn a_scroll_intent_after_focusing_a_dock_scrolls_that_docks_region() {
         moved < still,
         "the focused dock's content moved up ({moved}) while the other's stayed ({still})"
     );
+}
+
+/// **The keys of a popup are the popup's.** While a surface opened from a dock holds the keyboard,
+/// the area the keys go to is that surface — not the dock behind it, which is only where the
+/// keyboard goes back to.
+#[test]
+fn a_surface_holding_the_keyboard_is_where_the_keys_go() {
+    let open = signal(false);
+    let mut dialog = Control::new();
+    dialog.base_mut().follow_focus_modal(open);
+    dialog.base_mut().surface_slot = Some("dialog".into());
+    let mut root = Flex::row().child(dock("a")).child(dialog);
+
+    focus_scope(&mut root, "a");
+    assert_eq!(keyboard_area(&root), Some(KeyboardArea::Region("a".into())));
+    open.set(true);
+    crate::settle_focus(&mut root);
+
+    assert_eq!(
+        keyboard_area(&root),
+        Some(KeyboardArea::Surface("dialog".into())),
+        "the popup answers its own keys"
+    );
+    assert_eq!(page_scope(&root).as_deref(), Some("a"), "and still goes back to the dock");
+}
+
+/// A dock inside a surface is nearer than the surface, so its name is the area.
+#[test]
+fn the_nearest_named_area_wins() {
+    let mut surface = Flex::row().child(dock("inner"));
+    surface.base_mut().surface_slot = Some("popup".into());
+    let mut root = Flex::row().child(surface);
+    assert!(focus_scope(&mut root, "inner"));
+    assert_eq!(keyboard_area(&root), Some(KeyboardArea::Region("inner".into())));
+}
+
+/// A control outside every named area holds the keyboard in no area — and nothing holding it is
+/// the same answer.
+#[test]
+fn a_control_outside_every_area_is_in_none() {
+    let mut root = page_with_a_control_outside();
+    assert_eq!(keyboard_area(&root), None, "nothing holds it");
+    root.base().children[0].base().focus(false);
+    crate::settle_focus(&mut root);
+    assert!(holder(&root).is_some());
+    assert_eq!(keyboard_area(&root), None);
 }

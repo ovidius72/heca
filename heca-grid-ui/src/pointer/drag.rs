@@ -202,11 +202,14 @@ pub fn dragging(root: &dyn Component) -> bool {
     dragging_path(root).is_some()
 }
 
-/// **Where the widget being carried sits** — its own laid-out bounds, not the pointer's — or `None`
-/// when nothing is being dragged. What lets a host tell a drag that began in one region from one
-/// that began in another without keeping a list of what can be dragged.
-pub fn dragged_bounds(root: &dyn Component) -> Option<heca_core::layout::Rectangle> {
-    dragging_path(root).map(|path| bounds_at(root, &path))
+/// **What is being carried, by the word its source declared** — the
+/// [`draggable_as`](crate::builders::DragExt::draggable_as) kind — or `None` when nothing is
+/// being dragged or the source said nothing about itself.
+///
+/// What a host asks to know whether a drag concerns it: places that take a pane open while a pane
+/// is carried, whichever widget it was picked up from — a pane in a column or a row in a sidebar.
+pub fn dragged_kind(root: &dyn Component) -> Option<String> {
+    dragging_path(root).and_then(|path| node_at(root, &path).base().drag_kind.clone())
 }
 
 /// The path to the widget currently dragging, if any.

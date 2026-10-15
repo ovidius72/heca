@@ -1,13 +1,13 @@
 //! **What the pointer looks like over a widget** — declared by the widget, read from the tree.
 //!
 //! A widget says what the cursor should be while the pointer is over it, the way CSS `cursor` does,
-//! with [`cursor`](crate::builders::ComponentExt::cursor). [`cursor_at`] asks the tree: the pointer
+//! with [`cursor`](crate::builders::PresenceExt::cursor). [`cursor_at`] asks the tree: the pointer
 //! is over whatever the topmost-first hit test finds, and the **nearest** widget on the way up from
 //! there that declared one wins. A host turns the answer into whatever its window calls a cursor,
 //! once, after each move — it keeps no list of what is draggable, resizable or a link.
 //!
 //! A widget whose cursor depends on **where** the pointer is (a terminal's link, a text run) answers
-//! [`Component::cursor_over`](crate::component::Component::cursor_over) instead of declaring one.
+//! [`Component::cursor_over`] instead of declaring one.
 
 use crate::component::Component;
 use crate::pointer::hit_test;

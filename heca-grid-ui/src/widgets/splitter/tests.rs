@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::Splitter;
-use crate::builders::{ComponentExt, LayoutExt, Parent};
+use crate::builders::{EventExt, LayoutExt, Parent};
 use crate::component::dispatch;
 use crate::cursor::{Cursor, cursor_at};
 use crate::event::{Event, PointerButton};

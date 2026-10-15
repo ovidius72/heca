@@ -316,7 +316,7 @@ A move, never a copy. See § 0b.
 ### 0c. THE EVENT SYSTEM IS DOM-SHAPED. Read this before you write ANY input handling
 
 **Every agent forgets this and re-invents it.** It is capture → target → bubble, exactly like a
-browser. `heca-grid-ui/src/component.rs` (`dispatch` / `deliver` / `deliver_to_path`) is the whole
+browser. `heca-grid-ui/src/component/dispatch.rs` (`dispatch` / `deliver` / `deliver_to_path`) is the whole
 of it; `tests/pointer_routing.rs` + `tests/pointer_delivery.rs` hold it.
 
 | | The browser | heca |
@@ -327,7 +327,7 @@ of it; `tests/pointer_routing.rs` + `tests/pointer_delivery.rs` hold it.
 | **keyboard target** | `document.activeElement` | the **deepest widget holding `Base::focused`** |
 | the walk | capture down, target, bubble up | capture down, target, bubble up — **identical** |
 | stopping it | `e.stopPropagation()` | `cx.stop_propagation()` (or `Handled::Yes`) |
-| listeners | `el.addEventListener` | `.on_click` / `.on_right_click` / `.on_key_down` / `.on_key_up` / `.on_scroll` / `.on(kind, f)` — on **every** widget, via `ComponentExt`, one argument `&mut EventCx` carrying the event |
+| listeners | `el.addEventListener` | `.on_click` / `.on_right_click` / `.on_key_down` / `.on_key_up` / `.on_scroll` / `.on(kind, f)` — on **every** widget, via `EventExt`, one argument `&mut EventCx` carrying the event |
 
 **The four things agents get wrong, including in the same session they were told:**
 
@@ -984,7 +984,7 @@ whose type is unknown. Which to reach for, with a symptom→cause table:
 [`docs/hint-architecture.md` § 5a](docs/hint-architecture.md).
 
 The slot is `Base::hint`, universal, and so is the **builder**: `on_hint` is on
-`ComponentExt`, so every widget takes one and `KeyHint` stays what it
+`HintExt`, so every widget takes one and `KeyHint` stays what it
 always was — an optional decorator for a region that is not a widget you can put a
 builder on. Being pickable is **not** what it turns on: anything actionable already
 wears a letter, and this says a pick does something *other* than a click.
@@ -1016,7 +1016,7 @@ walk the chrome tree, every `state.pane_headers` tree and every visible layer. S
   described tree, and `[[keys.surface]] pick = "s"` binds the key to that name. The
   widget owns its open signal and the keyboard it holds; a caller that assembles those
   by hand owns a rule it can get half right. `on_action(name, intent)` is on the SDK's
-  shared builder trait for the same reason it is on `ComponentExt`: **any** node may
+  shared builder trait for the same reason it is on `EventExt`: **any** node may
   declare a verb, and whichever one is on screen answers it.
 - **The button set is a dynamic vector, never a hardcoded switch.** Pane-header buttons
   come from `pane_header_buttons(content, ctx) -> Vec<PaneHeaderButton>` (config's
@@ -1214,7 +1214,7 @@ The two effect tokens are **independent**; do not conflate them:
 - **`glow_size`** (`GlowLevel`: `none | thin | medium | large`) — the **sole
   owner of glow**: presence + halo radius (`radius_scale()`) + strength
   (`strength_scale()`, curve `0.0/0.5/1.0/1.6`). `MarkerGroup` reads
-  `t.glow_size.strength_scale()` for its glow alpha; `component.rs::scaled_glow`
+  `t.glow_size.strength_scale()` for its glow alpha; `PaintCx::scaled_glow`
   reads `glow_size.radius_scale()` for the halo size.
 - **`intensity`** (`Intensity`: `off | low | medium | heavy`) — owns
   **scanline/CRT overlay opacity only** (`scanline_opacity()`). It does **not**
@@ -1405,8 +1405,11 @@ Button::destructive("Delete")
   has it, and returns to the control it held when it last let go. There is no "most recent wins":
   there is one holder.
 - **The tree is the one truth about where the keyboard is, and nothing else keeps a copy.** The host
-  asks it (`app/tree_focus.rs::focused_dock`, which is `heca_grid_ui::page_scope`: the dock the
-  keyboard is in, looking through a dialog above it to where it returns) and moves it through the
+  asks it two questions, and must not mix them up. **Who answers a key, a right-click menu or an
+  action** is `heca_grid_ui::keyboard_area` — the nearest popup or dock around what holds the
+  keyboard, never looking through a popup — read by `app/input/surface.rs::focused_surface`.
+  **Which dock the keyboard returns to** is `app/tree_focus.rs::focused_dock`, which is
+  `heca_grid_ui::page_scope`: it looks through a dialog above the dock. It moves it through the
   same door (`focus_scope` / `release_scope`, **host-only**: they take a region name, which a plugin
   never passes — a plugin calls a method on its own widget). The chrome store hears only an
   announcement, once per change (`ContainerFocusChanged`), and the memory of which dock held it
@@ -1420,7 +1423,7 @@ Button::destructive("Delete")
 - **Typed text is `Event::TextInput`, not a key.** A field types from it and from nothing else; a
   raw `GridKey::Char` is a shortcut. Do not re-introduce a host-side "deliver the real character"
   fixup — that patch existed only because a field rebuilt text from keys.
-- **Handlers live on `Base`**, written with `ComponentExt` (`.on_click`, `.on_right_click`, `.on_key`,
+- **Handlers live on `Base`**, written with `EventExt` (`.on_click`, `.on_right_click`, `.on_key`,
   `.on(kind, …)`) — one trait, blanket-implemented, holding everything every component gets:
   handlers, `key`, `hintable`, and the drag slots. Every widget has them; none opts in. **One spelling, one argument**: an `&mut EventCx` carrying the event *and*
   `stop_propagation()`, and **nothing is consumed for you** — a handler that wants the event says so.
@@ -1617,7 +1620,7 @@ myvim/
 │   │   ├── reactive/      ← Signal/Memo/Effect facade over floem_reactive
 │   │   ├── scene.rs       ← Scene + DrawCommand display list (visual vocabulary)
 │   │   ├── style.rs       ← Style (taffy::Style wrapper) + Theme tokens + builders
-│   │   ├── component.rs   ← Component trait + Base struct + Layout/Paint contexts
+│   │   ├── component/     ← Component trait, Base struct, event dispatch, paint walk, PaintCx
 │   │   ├── layout.rs      ← taffy tree sync + compute → Base.bounds
 │   │   └── widgets/       ← Flex, Grid, Stack, Label, Button, Card, Hud, Gauge,
 │   │                        CornerBrackets, StatusBar, Sidebar, Pane, ...
@@ -1814,6 +1817,9 @@ DRY_RUN=1 ./scripts/lint-changed.sh    # print the crate list, run nothing
 
 # Full workspace lint -- only before opening a PR, not in the edit loop.
 cargo clippy --workspace --all-targets --all-features
+
+# Docs -- before opening a PR: a broken or private doc link fails the build.
+cargo doc --workspace --no-deps
 
 # Fix auto-fixable issues
 cargo clippy --fix --workspace --all-targets --all-features

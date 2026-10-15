@@ -44,7 +44,7 @@
 use super::RegionId;
 use crate::providers::Provider;
 
-/// **The region called `name`** — see the [module docs](self).
+/// **The region called `name`** — see the module docs.
 ///
 /// Never fails: an unknown name gives a handle whose every call reports the name and the ones that
 /// exist, and does nothing else.

@@ -371,7 +371,7 @@ impl Icon {
     }
 
     /// Explicit secondary-layer color (default: the primary color at the theme's
-    /// [`icon_secondary_alpha`](crate::theme::Theme::icon_secondary_alpha)).
+    /// [`icon_secondary_alpha`](heca_theme::Theme::icon_secondary_alpha)).
     #[heca_grid_ui_macros::prop]
     pub fn secondary_color(mut self, c: Color) -> Self {
         self.secondary = Some(c);

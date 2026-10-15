@@ -6,7 +6,7 @@
 //! (existing things outlined, plus empty placeholders between them), each with its letter. It fills
 //! the box it is given and works out no geometry of its own.
 
-use crate::builders::{ComponentExt, LayoutExt};
+use crate::builders::{EventExt, LayoutExt};
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{SignalGet, SignalUpdate};

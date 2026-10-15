@@ -9,7 +9,7 @@
 
 use super::seams::{DockRegistries, DockSeams};
 use super::{MENU_CONTAINER, WorkspaceTree, container_items, workspace_frame::WorkspaceFrame};
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
+use heca_grid_ui::builders::{LayoutExt, MenuExt, Parent};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::Spacing;
 use heca_grid_ui::widgets::{Flex, ScrollRegion};

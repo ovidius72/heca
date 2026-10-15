@@ -209,7 +209,7 @@ pub fn realize(
     // **What a leader-key pick does to this node**, read once here for every kind, like style.
     //
     // Written into the widget's own [`Base::hint`] slot. The native authoring surface is
-    // `ComponentExt::on_hint` — on every widget since F003/P082/T432 — and the declarative one is
+    // `HintExt::on_hint` — on every widget since F003/P082/T432 — and the declarative one is
     // this event. Two authoring models, one slot, and the framework's collector sees no difference
     // between them: that is what makes a described row and a native row equally pickable. A wrapper
     // here would be a second widget in the tree that the description never asked for, sitting
@@ -228,7 +228,7 @@ pub fn realize(
     }
     // **Who this node is**, read once here for every kind, exactly like style and the hint above.
     //
-    // It cannot be a per-kind property: `key` is `ComponentExt::key` natively — on *every* widget,
+    // It cannot be a per-kind property: `key` is `IdentityExt::key` natively — on *every* widget,
     // because a collection can be built from any of them — so there is no widget whose builder
     // surface it belongs to. Reading it here is the same statement, and it means a described row
     // and a native row land in the **same** `Base::key` slot: the keyboard cursor, the right-click
@@ -244,7 +244,7 @@ pub fn realize(
     }
     // **What this node says on hover**, read once here for every kind, exactly like the key above.
     //
-    // `ComponentExt::tooltip` is on every widget natively — it stopped being a wrapper you put
+    // `TooltipExt::tooltip` is on every widget natively — it stopped being a wrapper you put
     // *around* something precisely because a wrapper put the rule in every caller's discipline and
     // made a tooltip impossible on a widget a typed container holds. So there is no widget whose
     // builder surface it belongs to, and no `Tooltip` kind for a description to name: the same
@@ -343,7 +343,7 @@ pub fn realize(
     }
     // **The verbs this node answers to**, read once here for every kind, exactly like the hint.
     //
-    // `ComponentExt::on_action` is on every widget, so this is universal too — a per-kind arm would
+    // `EventExt::on_action` is on every widget, so this is universal too — a per-kind arm would
     // be the same framework rule written thirty-three times. It is what gives a described
     // **surface** a verb of its own: `[[keys.surface]] pick = "s"` names `mypanel.pick`, the host
     // walks the visible trees for whoever declares that name (`fire_widget_action`), and this is
@@ -4406,7 +4406,7 @@ mod tests {
 
     /// **A described node declares verbs by name**, on any kind (F003/P082/T436).
     ///
-    /// `ComponentExt::on_action` is universal natively, so this is read once for every kind rather
+    /// `EventExt::on_action` is universal natively, so this is read once for every kind rather
     /// than wired per arm. It is the seam a **surface** has and a dock got from `Provider::actions`:
     /// without it a described panel can only bind verbs the app already compiled in.
     #[test]
@@ -4545,55 +4545,69 @@ mod tests {
     ///
     /// [`every_widget_property_is_reachable_from_the_sdk`] walks each *kind's* generated
     /// `PROP_NAMES`, and that is the whole of its reach. A capability that belongs to no particular
-    /// widget — `tooltip`, `hintable`, the ones that come next — lives on `ComponentExt`, a plain
-    /// trait with no generated property surface, so it appears in no kind's `PROP_NAMES` and that
-    /// guard cannot see it. `tooltip` was undeclarable for exactly as long as that was true, with
-    /// nothing failing anywhere.
+    /// widget — `tooltip`, `hintable`, the ones that come next — lives on a builder trait that
+    /// every widget gets (`TooltipExt`, `HintExt`, …), a plain trait with no generated property
+    /// surface, so it appears in no kind's `PROP_NAMES` and that guard cannot see it. `tooltip` was
+    /// undeclarable for exactly as long as that was true, with nothing failing anywhere.
     ///
     /// So this asks the other half of the question, and **fails closed** in the same way: every
-    /// `#[prop]` builder on `ComponentExt` must have a setter of the same name in the SDK, or be
-    /// named below with a reason. It reads both sources rather than calling them, because *"does a
-    /// method exist"* is not a question a running test can ask.
+    /// `#[prop]` builder on a trait implemented for every component must have a setter of the same
+    /// name in the SDK, or be named below with a reason. It reads both sources rather than calling
+    /// them, because *"does a method exist"* is not a question a running test can ask.
     #[test]
     fn every_universal_capability_is_reachable_from_the_sdk() {
         /// Universal builders with no SDK spelling, each with the reason. An entry here is a
         /// capability a described tree cannot use — keep it empty if you can.
         const NOT_IN_SDK: &[(&str, &str)] = &[];
 
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let native = std::fs::read_to_string(dir.join("../heca-grid-ui/src/builders.rs"))
-            .expect("the native builder source is where it is expected");
-        let sdk = sdk_source();
-
-        // `ComponentExt` is the trait a capability lands on when it belongs to every widget rather
-        // than to one, so it is the list this guard is about.
-        let head = "\npub trait ComponentExt: Component + Sized {\n";
-        let start = native
-            .find(head)
-            .expect("ComponentExt is where it is expected")
-            + head.len();
-        let body = &native[start..start + native[start..].find("\n}\n").unwrap_or(0)];
-
-        let universal: Vec<&str> = body
-            .split("#[heca_grid_ui_macros::prop]")
-            .skip(1)
-            .filter_map(|after| {
-                let f = after.find("fn ")? + 3;
-                let rest = &after[f..];
-                Some(&rest[..rest.find(['(', '<'])?])
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../heca-grid-ui/src/builders");
+        let sources: Vec<String> = std::fs::read_dir(&dir)
+            .expect("the native builders are where they are expected")
+            .filter_map(|entry| {
+                let path = entry.ok()?.path();
+                (path.extension()? == "rs").then(|| std::fs::read_to_string(path).ok())?
             })
             .collect();
+        let sdk = sdk_source();
+
+        // A trait implemented for every component is where a capability lands when it belongs to
+        // every widget rather than to one, so those traits are the list this guard is about.
+        let mut universal: Vec<String> = Vec::new();
+        for native in &sources {
+            let Some(name) = native
+                .split("\npub trait ")
+                .skip(1)
+                .filter_map(|after| after.split(':').next())
+                .find(|name| {
+                    native.contains(&format!("impl<T: Component + Sized> {name} for T {{}}"))
+                })
+            else {
+                continue;
+            };
+            let head = format!("\npub trait {name}: Component + Sized {{\n");
+            let Some(start) = native.find(&head).map(|at| at + head.len()) else {
+                continue;
+            };
+            let body = &native[start..start + native[start..].find("\n}\n").unwrap_or(0)];
+            universal.extend(body.split("#[heca_grid_ui_macros::prop]").skip(1).filter_map(
+                |after| {
+                    let f = after.find("fn ")? + 3;
+                    let rest = &after[f..];
+                    Some(rest[..rest.find(['(', '<'])?].to_string())
+                },
+            ));
+        }
         assert!(
             !universal.is_empty(),
-            "no `#[prop]` builders found on ComponentExt — this guard has stopped reading anything, \
-             which is worse than the gap it exists for",
+            "no `#[prop]` builders found on the universal builder traits — this guard has \
+             stopped reading anything, which is worse than the gap it exists for",
         );
 
-        let missing: Vec<&str> = universal
+        let missing: Vec<&String> = universal
             .iter()
-            .filter(|name| !NOT_IN_SDK.iter().any(|(n, _)| n == *name))
+            .filter(|name| !NOT_IN_SDK.iter().any(|(n, _)| n == name))
             .filter(|name| !sdk.contains(&format!("fn {name}(")))
-            .copied()
             .collect();
         assert!(
             missing.is_empty(),
@@ -5083,7 +5097,7 @@ mod tests {
     /// **Anything a widget can be given in Rust, a description must be able to ask for.**
     ///
     /// The runtime half: a `hint` written into a node of **any** kind survives `realize` and is
-    /// found by the picker. `on_hint` is on `ComponentExt` (F003/P082/T432), so natively *every*
+    /// found by the picker. `on_hint` is on `HintExt` (F003/P082/T432), so natively *every*
     /// widget can be told what a pick does to it; this holds the described side to the same reach.
     ///
     /// `ScrollBar` is the one exception, and the same one everywhere else: it is host-only, its

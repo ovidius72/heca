@@ -272,7 +272,7 @@ fn yield_to_content(window_width: f32, left: f32, right: f32, sidebar_gap: f32) 
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{EventExt, HintExt, IdentityExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
@@ -291,7 +291,7 @@ pub(crate) fn runtime_snapshot(
 }
 
 /// How a chrome widget reports a user action back to the app: it emits an
-/// [`InteractionIntent`](crate::app::interaction::InteractionIntent), never a direct
+/// `InteractionIntent`, never a direct
 /// state mutation. Handed to container providers through
 /// [`ChromeCtx::emit_intent`](crate::providers::ChromeCtx::emit_intent).
 #[derive(Clone)]
@@ -740,7 +740,7 @@ mod naming_tests {
 ///
 /// **`mount` is not ceremony — it is which element this is.** A widget is built inside one mounted
 /// container and the gesture it declares carries that seating
-/// ([`SEAT_ARG`](crate::providers::SEAT_ARG)), so the same container seated twice has two rows that
+/// (`SEAT_ARG`), so the same container seated twice has two rows that
 /// each answer for themselves. It is a parameter rather than something a caller may add, because a
 /// rule a caller has to remember is a rule that gets forgotten: without it the host had to resolve
 /// the call back to an instance by guessing (focused seat, else last focused, else the first one

@@ -179,7 +179,7 @@ fn a_tiled_pane_is_carried_as_a_picture_and_a_float_is_not_carried() {
         .build()
     };
     let tiled = build(&model(7));
-    assert!(tiled.base().draggable && tiled.base().drag_image);
+    assert!(tiled.base().draggable && !tiled.base().drag_chip);
     assert_eq!(
         tiled.base().drag_kind.as_deref(),
         Some(crate::chrome::PANE_DRAG_KIND)
@@ -197,5 +197,5 @@ fn a_tiled_pane_is_carried_as_a_picture_and_a_float_is_not_carried() {
         ..model(8)
     };
     let float = build(&float);
-    assert!(!float.base().draggable && !float.base().drag_image);
+    assert!(!float.base().draggable);
 }

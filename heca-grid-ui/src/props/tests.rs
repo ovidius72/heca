@@ -1,4 +1,4 @@
-use crate::builders::ComponentExt;
+use crate::builders::IdentityExt;
 use crate::component::Component;
 use crate::widgets::Flex;
 use std::cell::RefCell;

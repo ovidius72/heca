@@ -6,13 +6,12 @@
 //!    scene, so every terminal has its room; [`collect_panes`] and [`sync_terminal_layers`] bring
 //!    the terminals up to date;
 //! 3. [`Frame::open`] — the surface, the command encoder and the views the frame draws into;
-//! 4. [`Frame::clear_and_background`], [`Frame::write_mask`], [`Frame::flush_window`],
-//!    [`Frame::finish`] — the passes.
+//! 4. [`Frame::clear_and_background`], [`Frame::flush_window`], [`Frame::finish`] — the passes.
 
 use heca_core::layout::Rectangle;
 
 use crate::app::scene_flush::{ChromePassOpts, Flushed, flush_scene};
-use crate::app::terminal_render::{TerminalRenderState, pane_scissor_rect};
+use crate::app::terminal_render::TerminalRenderState;
 use crate::app_state::AppState;
 use crate::chrome::ChromeConfig;
 
@@ -34,28 +33,21 @@ pub(super) struct FrameValues {
     h: f32,
     /// The content area: where the panes live.
     pane_area: Rectangle,
-    ws_offset: (f32, f32),
     glow_alpha_scale: f32,
     surface_alpha: f32,
     /// Floating panes use independent opacity/blur/border knobs so they can stay readable (opaque
     /// by default) while tiled panes are frosted.
     floating_surface_alpha: f32,
-    pane_border_radius: f32,
-    content_scissor: Option<(u32, u32, u32, u32)>,
 }
 
-/// **Every terminal a frame draws**, grouped by where it sits.
-pub(in crate::app) struct FrameTerminals {
-    pub(in crate::app) tiled: Vec<TerminalRenderState>,
-    pub(in crate::app) floating: Vec<TerminalRenderState>,
-    /// The ones no pane owns: a dock's, an overlay's. Drawn where their scene puts them, with no
-    /// pane mask.
-    pub(in crate::app) docked: Vec<TerminalRenderState>,
-}
+/// **Every terminal a frame draws.** Each is drawn where the scene puts it and cut by what cuts it
+/// there, so what holds it — a column, a float, a dock, an overlay, a picture under the pointer —
+/// is not told apart here.
+pub(in crate::app) struct FrameTerminals(pub(in crate::app) Vec<TerminalRenderState>);
 
 impl FrameTerminals {
     pub(in crate::app) fn all(&self) -> impl Iterator<Item = &TerminalRenderState> {
-        self.tiled.iter().chain(&self.floating).chain(&self.docked)
+        self.0.iter()
     }
 }
 
@@ -68,8 +60,8 @@ pub(super) struct Frame {
     /// The persistent scene texture the passes draw into. A handle, not a borrow of the compositor,
     /// so a phase can hand `&mut state` to the flush while it holds the view.
     scene: wgpu::TextureView,
-    /// Stencil buffer paired with the scene texture: holds the rounded content-clip mask written
-    /// each frame so terminal content follows the pane's rounded border.
+    /// Stencil buffer paired with the scene texture: holds the round corners a terminal is cut to,
+    /// written just before it is drawn.
     stencil: wgpu::TextureView,
     /// What the flushes leave for the end: overlay content (hover tooltips, popovers) from every
     /// surface — panes, floats, chrome — flushed once at the very end, above all bases (the
@@ -115,20 +107,6 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
     // The three pane frame colours are **not** read here. A pane's frame colour is its own —
     // written onto the pane by the workspace, which is also where it becomes the hue the pane
     // publishes to its contents. Reading them here meant the host decided how a widget looked.
-    let ws_offset = state
-        .layout()
-        .workspace_geometries()
-        .first()
-        .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
-        .unwrap_or((0.0, 0.0));
-    let content_scissor = pane_scissor_rect(
-        pane_area.loc.x as f32,
-        pane_area.loc.y as f32,
-        pane_area.size.w as f32,
-        pane_area.size.h as f32,
-        state.scale_factor,
-        phys_size,
-    );
     Some(FrameValues {
         chrome,
         phys_size,
@@ -136,14 +114,11 @@ pub(super) fn begin(state: &mut AppState) -> Option<FrameValues> {
         w: phys_size.width as f32 / scale,
         h: phys_size.height as f32 / scale,
         pane_area,
-        ws_offset,
         glow_alpha_scale: heca_renderer::scene::glow_alpha_scale_for_background(
             state.theme.background.to_f32x4(),
         ),
         surface_alpha: state.terminal_surface_opacity(),
         floating_surface_alpha: state.terminal_floating_surface_opacity(),
-        pane_border_radius: state.appearance.effective_pane_border_radius(&state.theme),
-        content_scissor,
     })
 }
 

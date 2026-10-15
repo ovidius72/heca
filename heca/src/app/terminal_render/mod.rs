@@ -23,10 +23,9 @@ use heca_renderer::text::TextBox;
 pub(crate) struct TerminalRenderState {
     /// The terminal process this draws, by the id the store issued.
     pub(crate) id: TerminalId,
-    pub(crate) x: f32,
-    pub(crate) y: f32,
-    pub(crate) w: f32,
-    pub(crate) h: f32,
+    /// How see-through its cells' background is: a floating pane's terminal covers what is under
+    /// it more than a tiled one. Its own, so wherever it is drawn it looks the same.
+    pub(crate) opacity: f32,
     /// The room its terminal was given, at the origin: its size is what is known before the scene
     /// draws it; where it is comes with the surface the scene asks for.
     pub(crate) content_rect: Option<Rectangle>,
@@ -34,8 +33,9 @@ pub(crate) struct TerminalRenderState {
 }
 
 impl TerminalRenderState {
-    /// **The pane as this frame draws it**, whether tiled or floating: its box `(x, y, w, h)`, how
-    /// much room its terminal was given, and the snapshot to draw. Also tells the chrome store the terminal's scroll position, so what shows it follows.
+    /// **The terminal as this frame draws it**: how see-through it is, how much room it was given,
+    /// and the snapshot to draw. Also tells the chrome store the terminal's scroll position, so
+    /// what shows it follows.
     ///
     /// **The terminal's box is the terminal's own.** How much room it has comes from the layout,
     /// for every pane whether or not it is on screen; where it is drawn comes from the surface the
@@ -44,7 +44,7 @@ impl TerminalRenderState {
         state: &mut AppState,
         id: TerminalId,
         pane: Option<PaneId>,
-        (x, y, w, h): (f32, f32, f32, f32),
+        opacity: f32,
     ) -> Self {
         let content_rect = crate::chrome::terminal::room_of(state, id)
             .map(|room| Rectangle::new(heca_core::layout::Point::new(0.0, 0.0), room));
@@ -66,10 +66,7 @@ impl TerminalRenderState {
         }
         Self {
             id,
-            x,
-            y,
-            w,
-            h,
+            opacity,
             content_rect,
             mount,
         }

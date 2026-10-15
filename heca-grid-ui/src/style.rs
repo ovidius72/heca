@@ -197,7 +197,7 @@ impl std::str::FromStr for Space {
     }
 }
 
-/// What [`Space::from_str`] returns when a string is neither a step name nor a length.
+/// What [`Space`]'s `from_str` returns when a string is neither a step name nor a length.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpaceParseError;
 
@@ -385,7 +385,7 @@ impl std::str::FromStr for Length {
     }
 }
 
-/// What [`Length::from_str`] returns when a string is none of the four spellings.
+/// What [`Length`]'s `from_str` returns when a string is none of the four spellings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LengthParseError;
 
@@ -668,7 +668,7 @@ impl std::str::FromStr for Track {
     }
 }
 
-/// What [`Track::from_str`] returns when a string is no track size at all.
+/// What [`Track`]'s `from_str` returns when a string is no track size at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TrackParseError;
 
@@ -1068,7 +1068,7 @@ pub struct Visual {
     /// body = 1.0). Ignored when [`font_size`](Self::font_size) is set explicitly.
     ///
     /// A raw multiplier, so it is host-only: the semantic route a description *can* take is
-    /// [`Style::size`] (`Small`/`Normal`/`Big`), which scales font and padding together and
+    /// [`Layout::size`] (`Small`/`Normal`/`Big`), which scales font and padding together and
     /// cascades to children.
     pub font_scale: f32,
 }
@@ -1204,13 +1204,13 @@ pub struct Layout {
     /// region in a bounded panel overflows its parent instead of scrolling
     /// (the classic flexbox `min-height: auto` trap).
     pub min_width: Option<Length>,
-    /// Minimum height — see [`min_width`](Style::min_width).
+    /// Minimum height — see [`min_width`](Layout::min_width).
     pub min_height: Option<Length>,
     /// Maximum width. `None` ⇒ unbounded. Used to cap a node against its parent —
     /// an overlay panel is capped at `Percent(1.0)` so a fixed `Px` size can never
     /// make a dialog larger than the window.
     pub max_width: Option<Length>,
-    /// Maximum height — see [`max_width`](Style::max_width).
+    /// Maximum height — see [`max_width`](Layout::max_width).
     pub max_height: Option<Length>,
     pub flex_grow: f32,
 

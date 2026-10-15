@@ -187,7 +187,7 @@ impl ToastStack {
     ///
     /// It is a **signal rather than a callback** because it is a state, not an act: the answer is
     /// true for as long as the pointer stays, whoever asks. The same shape
-    /// [`open_when`](super::KeyHintGroup::open_when) reads, in the other direction.
+    /// [`open_when`](crate::widgets::KeyHintGroup::open_when) reads, in the other direction.
     ///
     /// The stack does not decide what pausing means — it has no clock and no idea what a card's
     /// lifetime is. It reports the fact; the owner of the lifetime acts on it.

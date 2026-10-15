@@ -10,7 +10,7 @@ use super::input::{Search, TerminalInput};
 use super::search::{SearchBar, SearchSlot};
 use super::shared::Shared;
 use super::viewport::{Controls, IntentSlot};
-use heca_grid_ui::builders::{ComponentExt, LayoutExt};
+use heca_grid_ui::builders::{EventExt, LayoutExt};
 use heca_grid_ui::component::{Base, Component, GridKey, PaintCx, WidgetIntent};
 use heca_grid_ui::event::EventKind;
 use heca_grid_ui::style::Length;

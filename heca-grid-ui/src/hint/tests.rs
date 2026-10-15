@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod declarations {
-    use crate::builders::ComponentExt as _;
+    use crate::builders::HintExt as _;
     use crate::component::Component;
     use crate::hint::*;
     use crate::reactive::SignalUpdate;
@@ -38,7 +38,7 @@ mod declarations {
     /// top-centred one under `prefix+q`.
     #[test]
     fn a_declaration_outranks_mere_actionability_when_offering_by_key() {
-        use crate::builders::ComponentExt;
+        use crate::builders::{EventExt, HintExt, IdentityExt};
         use crate::reactive::SignalGet;
 
         let inner = Surface::new().key("pane:7").on_click(|_| {});
@@ -68,7 +68,7 @@ mod declarations {
     /// the pick on a child — heca's mounted docks — must letter the child.
     #[test]
     fn a_declaration_inside_the_named_node_still_wins() {
-        use crate::builders::ComponentExt;
+        use crate::builders::{HintExt, IdentityExt};
         use crate::reactive::SignalGet;
 
         let declaring = KeyHint::new(Surface::new()).on_hint(|| {});
@@ -101,7 +101,7 @@ mod declarations {
     /// orange on the workspace's own header.
     #[test]
     fn a_letter_never_crosses_into_something_that_names_itself() {
-        use crate::builders::ComponentExt;
+        use crate::builders::{EventExt, HintExt, IdentityExt};
         use crate::reactive::SignalGet;
 
         // A workspace that names itself, declares its pick on the wrapper AROUND it, and holds a
@@ -144,7 +144,7 @@ mod declarations {
     /// decides nothing.
     #[test]
     fn a_real_container_keeps_its_letter_however_many_children_it_holds() {
-        use crate::builders::ComponentExt;
+        use crate::builders::{EventExt, HintExt, IdentityExt};
 
         // A dock that is actionable but declares nothing — heca's focus wrapper — holding a list
         // with `n` workspace rows, each of which names itself and declares its own pick.
@@ -195,7 +195,7 @@ mod declarations {
     /// one of its 52 on. Scoping it removed it from both at once, and the dock pick went dark.
     #[test]
     fn a_scoped_target_is_still_reachable_when_it_is_named() {
-        use crate::builders::ComponentExt;
+        use crate::builders::{EventExt, HintExt, IdentityExt};
         use crate::reactive::SignalGet;
 
         let dock = Surface::new()
@@ -232,7 +232,7 @@ mod declarations {
     /// standing in for, kept — a transparent wrapper says so, so the pair is still one thing.
     #[test]
     fn a_transparent_wrapper_does_not_spend_a_letter_of_its_own() {
-        use crate::builders::ComponentExt;
+        use crate::builders::{EventExt, HintExt, IdentityExt};
 
         let inner = Surface::new().key("pane:7").on_click(|_| {});
         let wrapped = KeyHint::new(inner).on_hint(|| {});
@@ -251,7 +251,7 @@ mod declarations {
     /// crossing into somebody else; it does not make a nested target unreachable.
     #[test]
     fn a_nested_identity_still_gets_the_letter_that_is_its_own() {
-        use crate::builders::ComponentExt;
+        use crate::builders::{EventExt, HintExt, IdentityExt};
         use crate::reactive::SignalGet;
 
         let row = KeyHint::new(Surface::new().key("pane:7").on_click(|_| {})).on_hint(|| {});
@@ -410,7 +410,7 @@ mod declarations {
 
 #[cfg(test)]
 mod actionable_tests {
-    use crate::builders::{ComponentExt, Parent};
+    use crate::builders::{HintExt, Parent};
     use crate::hint::*;
     use crate::widgets::{Button, Flex, Label};
     use std::cell::RefCell;
@@ -454,7 +454,7 @@ mod actionable_tests {
 /// **The pick is an event, and it behaves like one** (F003/P082/T432).
 #[cfg(test)]
 mod pick_delivery_tests {
-    use crate::builders::{ComponentExt, Parent};
+    use crate::builders::{EventExt, HintExt, IdentityExt, Parent};
     use crate::event::EventKind;
     use crate::hint::*;
     use crate::widgets::{Flex, Row};
@@ -575,7 +575,7 @@ mod pick_delivery_tests {
 
 #[cfg(test)]
 mod offer_tests {
-    use crate::builders::{ComponentExt, Parent};
+    use crate::builders::{HintExt, IdentityExt, Parent};
     use crate::component::Component;
     use crate::hint::*;
     use crate::reactive::SignalGet;
@@ -657,7 +657,7 @@ mod offer_tests {
 #[cfg(test)]
 mod clipped_away {
     use crate::LayoutEngine;
-    use crate::builders::{ComponentExt as _, LayoutExt as _, Parent as _};
+    use crate::builders::{HintExt as _, IdentityExt as _, LayoutExt as _, Parent as _};
     use crate::component::Component;
     use crate::hint::*;
     use crate::reactive::SignalGet;
@@ -936,7 +936,7 @@ mod by_surface {
     /// a host call, so its overlay was a second-class version of one of heca's own.
     #[test]
     fn a_surface_declares_what_it_obscures_with_one_line_on_the_widget() {
-        use crate::builders::ComponentExt as _;
+        use crate::builders::PresenceExt as _;
         use crate::widgets::Button;
 
         let mut panel = Flex::column()
@@ -1003,7 +1003,7 @@ mod by_surface {
     /// gives it a box, so the buttons blinked out and back.
     #[test]
     fn a_named_nodes_words_are_rewritten_in_place() {
-        use crate::builders::ComponentExt as _;
+        use crate::builders::IdentityExt as _;
         use crate::widgets::Label;
 
         use crate::reactive::SignalGet as _;
@@ -1036,7 +1036,7 @@ mod by_surface {
 /// rule, beside the clip. A widget squeezed to nothing draws nothing, so there is nothing to aim at.
 #[cfg(test)]
 mod visibility {
-    use crate::builders::ComponentExt as _;
+    use crate::builders::{EventExt as _, IdentityExt as _};
     use crate::component::Component;
     use crate::hint::*;
     use crate::reactive::SignalGet as _;
@@ -1201,7 +1201,7 @@ mod visibility {
 /// their ⊠ icons mean *remove that*. One picker over both hands out twice the letters, and half of
 /// them delete what you meant to jump to.
 mod scoped_pickers {
-    use crate::builders::{ComponentExt, Parent};
+    use crate::builders::{HintExt, Parent};
     use crate::component::Component;
     use crate::reactive::{SignalGet, SignalUpdate};
     use crate::widgets::{Button, Flex, KeyHintGroup, Label};
@@ -1375,7 +1375,7 @@ mod scoped_pickers {
 /// they may touch.
 #[cfg(test)]
 mod keyed_walk_tests {
-    use crate::builders::{ComponentExt, Parent};
+    use crate::builders::{HintExt, IdentityExt, Parent};
     use crate::component::Component;
     use crate::hint::*;
     use crate::reactive::{SignalGet, SignalUpdate};

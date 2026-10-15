@@ -3,7 +3,7 @@
 //! A tooltip is a *declaration*: `Button::new("Close").tooltip("Close the pane")`. It is
 //! [`Base::tooltip`], so every widget takes one on the same terms, and the framework does the rest
 //! — it times the reveal from the hover clock the pointer router already keeps, and paints the
-//! bubble in [`paint_child`](crate::component::paint_child), beside the hint letter and the drag
+//! bubble in [`paint_child`], beside the hint letter and the drag
 //! feedback. **No widget opts in, and no host paints on their behalf.**
 //!
 //! It used to be a wrapper you put *around* a widget, which meant the rule lived in every caller's
@@ -56,7 +56,7 @@ pub type TooltipSide = BesideSide;
 pub const DEFAULT_DELAY: f32 = 0.5;
 /// The shorter rest for a tip that is the point of the thing it sits on — a value cut short on
 /// purpose (a branch name in a narrow row) that the reader goes to the pointer for.
-/// See [`ComponentExt::tooltip_quick`](crate::builders::ComponentExt::tooltip_quick).
+/// See [`TooltipExt::tooltip_quick`](crate::builders::TooltipExt::tooltip_quick).
 pub const QUICK_DELAY: f32 = DEFAULT_DELAY / 2.0;
 /// Gap between the target and the bubble (logical px).
 const GAP: f64 = 6.0;
@@ -71,7 +71,7 @@ const BUBBLE_GLOW_INTENSITY: f32 = 0.2;
 
 /// **What a widget says on hover** — the declaration held in [`Base::tooltip`].
 ///
-/// Built by [`ComponentExt::tooltip`](crate::builders::ComponentExt::tooltip); a widget that
+/// Built by [`TooltipExt::tooltip`](crate::builders::TooltipExt::tooltip); a widget that
 /// declares none has `None` here and costs nothing.
 #[derive(Clone)]
 pub struct Tip {

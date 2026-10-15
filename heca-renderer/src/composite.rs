@@ -34,11 +34,11 @@ pub struct Compositor {
 pub const STENCIL_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8;
 
 /// Depth/stencil state for content render passes (backdrop/primitive/text) that
-/// test against the rounded content-clip mask written by [`GridRenderer::render_stencil`].
-/// Stencil compare `Equal` to the pass reference (1), all ops `Keep` (content never
-/// modifies the mask), depth disabled. Pipelines using this require their render
-/// pass to attach the stencil view with `depth_ops: None` + `stencil_ops: Some(Load/Store)`
-/// and call `set_stencil_reference(1)`.
+/// test against the rounded content-clip mask written by
+/// [`GridRenderer::render_stencil`](crate::grid::GridRenderer::render_stencil). Stencil compare
+/// `Equal` to the pass reference (1), all ops `Keep` (content never modifies the mask), depth
+/// disabled. Pipelines using this require their render pass to attach the stencil view with
+/// `depth_ops: None` + `stencil_ops: Some(Load/Store)` and call `set_stencil_reference(1)`.
 pub fn content_clip_stencil_state() -> wgpu::DepthStencilState {
     let face = wgpu::StencilFaceState {
         compare: wgpu::CompareFunction::Equal,

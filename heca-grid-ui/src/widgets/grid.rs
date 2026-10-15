@@ -72,7 +72,7 @@ impl Grid {
     ///     .child([icon.area("dot"), title.area("title"), tag.area("tag"), sub.area("sub")])
     /// ```
     ///
-    /// A child says which area it belongs in — [`LayoutExt::area`](crate::builders::LayoutExt::area)
+    /// A child says which area it belongs in — [`PlaceExt::area`](crate::builders::PlaceExt::area)
     /// — exactly as CSS has it. The name is resolved against this template during layout.
     pub fn template_area(mut self, rows: impl IntoRows) -> Self {
         self.areas = rows.into_rows();
@@ -105,7 +105,7 @@ impl Component for Grid {
     }
 
     /// Inject `display: grid` + the track templates; child placement comes from
-    /// each child's `style.grid_cell` (see [`Style::to_taffy`]).
+    /// each child's `style.grid_cell` (see `Style::to_taffy`).
     fn taffy_style(&self) -> taffy::Style {
         self.base
             .style

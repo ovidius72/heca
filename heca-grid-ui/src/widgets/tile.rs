@@ -55,7 +55,7 @@ const SUFFIX: usize = 1;
 const HEAD: usize = 0;
 
 /// A status pip, an icon, a title with an optional suffix, and lines under it — see the
-/// [module docs](self).
+/// module docs.
 pub struct Tile {
     base: Base,
 }

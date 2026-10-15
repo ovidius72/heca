@@ -143,6 +143,17 @@ impl Pane {
     }
 }
 
+impl Pane {
+    /// Its corner radius: its own when it sets one, else the theme's.
+    fn radius(&self, theme: &crate::theme::Theme) -> f32 {
+        if self.base.style.visual.radius > 0.0 {
+            self.base.style.visual.radius
+        } else {
+            theme.colors.border_radius
+        }
+    }
+}
+
 impl Component for Pane {
     fn base(&self) -> &Base {
         &self.base
@@ -158,12 +169,7 @@ impl Component for Pane {
         let b = self.base.bounds;
         let fill = self.base.style.visual.fill;
 
-        // Radius: per-widget override (> 0), else theme fallback.
-        let radius = if self.base.style.visual.radius > 0.0 {
-            self.base.style.visual.radius
-        } else {
-            cx.theme().colors.border_radius
-        };
+        let radius = self.radius(cx.theme());
         // Surface glow: an explicit `.glow(..)` (StyleExt) wins; otherwise the
         // theme rest glow (`PaintCx::rest_glow`) gives the pane the shared neon
         // identity at rest, scaled by the `glow_size` setting (T011).
@@ -237,6 +243,14 @@ impl Component for Pane {
         for child in &self.base.children {
             paint_child(child.as_ref(), cx);
         }
+    }
+
+    /// Cut to its own round corners, the ones its frame is drawn with.
+    fn children_clip(&self, theme: &crate::theme::Theme) -> Option<crate::scene::Rounded> {
+        self.base.clip_children.then(|| crate::scene::Rounded {
+            rect: self.base.bounds,
+            radius: self.radius(theme),
+        })
     }
 }
 

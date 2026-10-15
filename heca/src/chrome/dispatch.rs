@@ -107,10 +107,13 @@ pub(crate) fn open_declared_menu_for_focus(state: &mut crate::app_state::AppStat
     // `key` of the row it sits on. That is the half only the host knows, so it is the half the
     // host passes; `open_for_keyboard` owns the rest, including falling back to a genuinely focused
     // widget (a plugin's input) when the cursor names nothing.
-    let cursor = {
-        use heca_grid_ui::reactive::SignalGet as _;
-        crate::app::tree_focus::focused_dock(state)
-            .and_then(|mount| state.chrome_state.container_cursor(&mount).get())
+    // Only while the dock is where the keys go: a popup a dock opened answers for itself.
+    let cursor = match crate::app::input::focused_surface(state) {
+        crate::app::input::FocusedSurface::Dock { mount, .. } => {
+            use heca_grid_ui::reactive::SignalGet as _;
+            state.chrome_state.container_cursor(&mount).get()
+        }
+        _ => None,
     };
     heca_grid_ui::open_for_keyboard(&state.window_root, cursor.as_deref())
 }
@@ -255,7 +258,7 @@ pub(crate) fn cancel_every_tree(state: &mut crate::app_state::AppState, ev: &Eve
 #[cfg(test)]
 mod surface_pointer_tests {
     use super::*;
-    use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
+    use heca_grid_ui::builders::{LayoutExt, Parent, TooltipExt};
     use heca_grid_ui::widgets::{Button, Flex, Label, Overlay};
     use heca_grid_ui::{LayoutEngine, RawPointer, RawPointerKind, Size};
 

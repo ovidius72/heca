@@ -1,5 +1,5 @@
 use super::*;
-use heca_grid_ui::builders::ComponentExt as _;
+use heca_grid_ui::builders::HintExt as _;
 use heca_grid_ui::widgets::Label;
 
 fn facts_for(cwd: &str) -> super::super::pane_items::PaneFacts {

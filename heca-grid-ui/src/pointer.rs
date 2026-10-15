@@ -57,7 +57,7 @@ use std::time::Instant;
 mod drag;
 
 use drag::{announce, clear_drag_over, drag_identity, dragging_path, drive_drag, finish_drag};
-pub use drag::{dragged_bounds, dragging};
+pub use drag::{dragged_kind, dragging};
 
 /// Longest gap between two presses still counted as one click run (seconds).
 ///

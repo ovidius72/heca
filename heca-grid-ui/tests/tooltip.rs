@@ -54,7 +54,7 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
 /// it would change what it is, so the container would refuse it.
 #[test]
 fn any_widget_declares_its_own_tooltip_without_being_wrapped() {
-    use heca_grid_ui::ComponentExt;
+    use heca_grid_ui::TooltipExt;
 
     let mut button = Button::new("Close")
         .tooltip("Close the pane")
@@ -96,7 +96,7 @@ fn any_widget_declares_its_own_tooltip_without_being_wrapped() {
 /// a still pointer produces no frames of its own.
 #[test]
 fn a_pending_tooltip_asks_the_host_to_wake_for_it() {
-    use heca_grid_ui::ComponentExt;
+    use heca_grid_ui::TooltipExt;
 
     let mut button = Button::new("Close").tooltip("Close the pane");
     LayoutEngine::new().compute(&mut button, Size::new(300.0, 200.0));

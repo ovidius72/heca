@@ -10,7 +10,7 @@
 /// Deliberately small: an argument arrives as text (a `config.toml` binding, an
 /// [`Intent`](crate::chrome::Intent)'s [`PropValue`](crate::chrome::PropValue) flattened to a
 /// string, an RPC word), so this says how to read that text, not how it is stored in the
-/// [`WmAction`](crate::input::WmAction) variant.
+/// `WmAction` variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ArgKind {
@@ -23,7 +23,7 @@ pub enum ArgKind {
     Bool,
     /// Free text (a name, a URL, a command line).
     Text,
-    /// One of a fixed set of spellings, listed in [`ArgDescriptor::values`] /
+    /// One of a fixed set of spellings, listed in `ArgDescriptor::values` /
     /// [`ArgSpec::values`] — the vocabulary the argument's own `FromStr` accepts.
     Enum,
 }
@@ -106,9 +106,9 @@ impl ArgDescriptor {
 }
 
 /// Runtime, owned declaration of one action argument — what [`ActionMeta::args`](crate::actions::ActionMeta::args) holds and what RPC
-/// introspection serializes. The owned counterpart of [`ArgDescriptor`], for the same reason
-/// [`ActionMeta`](crate::actions::ActionMeta) is the owned counterpart of [`ActionDescriptor`](crate::actions::ActionDescriptor): an action registered at runtime
-/// by a provider or a plugin has no `'static` strings.
+/// introspection serializes. The owned counterpart of `ArgDescriptor`, for the same reason
+/// [`ActionMeta`](crate::actions::ActionMeta) is the owned counterpart of `ActionDescriptor`: an
+/// action registered at runtime by a provider or a plugin has no `'static` strings.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ArgSpec {
     pub name: String,
@@ -133,7 +133,7 @@ impl ArgSpec {
     }
 
     /// A value this argument accepts, for building a representative action from a declaration
-    /// alone (see [`ActionCatalog::with_builtins`](crate::actions::ActionCatalog::with_builtins)) or for a test that needs a well-formed call.
+    /// alone (see `ActionCatalog::with_builtins`) or for a test that needs a well-formed call.
     pub fn sample_value(&self) -> String {
         match self.kind {
             ArgKind::Int => "0".to_string(),

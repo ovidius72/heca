@@ -137,9 +137,9 @@ pub enum WidgetKind {
     /// **A keyboard glyph** from the embedded Nerd Font — ⇧ ⌃ ⌥ ⌘, Enter, Escape, the arrows
     /// (F003/P097/T501).
     ///
-    /// Its own `glyph` vocabulary ([`ViewNfGlyph`]), because it is its own font. It is what lets a
-    /// plugin draw a shortcut the way heca's own key hints do, rather than typing a character its
-    /// user's font may not carry.
+    /// Its own `glyph` vocabulary ([`ViewNfGlyph`](crate::ViewNfGlyph)), because it is its own
+    /// font. It is what lets a plugin draw a shortcut the way heca's own key hints do, rather than
+    /// typing a character its user's font may not carry.
     NfIcon,
     /// **A row of actions that gets out of its own way** (F003/P097/T501).
     ///

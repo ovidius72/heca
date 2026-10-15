@@ -17,7 +17,7 @@ impl FocusedSurface {
     /// must not be able to take typing from it.
     pub(crate) fn delivers_to_tree(&self) -> bool {
         match self {
-            Self::Layer { .. } | Self::Dock { .. } => true,
+            Self::Layer { .. } | Self::Dock { .. } | Self::Widget => true,
             Self::Panes => false,
         }
     }

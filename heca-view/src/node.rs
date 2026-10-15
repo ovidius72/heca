@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetKind};
 
 /// A declarative widget node — one element of the serializable UI tree that both native code and
-/// plugins author, and that [`realize`](super::realize) turns into a retained grid-ui
-/// [`Component`](heca_grid_ui::Component).
+/// plugins author, and that `realize` turns into a retained grid-ui
+/// `Component`.
 ///
 /// # The model (SwiftUI/Flutter-style)
 /// A node is **five things, all owned by *this* node**:
@@ -46,7 +46,7 @@ use crate::{DropdownItem, Events, Intent, PropMap, PropValue, ViewEvent, WidgetK
 /// ```
 ///
 /// # Style props — every kind, no list
-/// **Any field of [`Layout`](heca_grid_ui::Layout) or [`Visual`](heca_grid_ui::Visual) is a prop on
+/// **Any field of `Layout` or `Visual` is a prop on
 /// any kind**, named exactly as the field is. Layout: `padding`, `margin` (+ per-side), `gap`,
 /// `gap_spacing`, `align`, `align_self`, `justify`, `justify_items`, `justify_self`, `direction`,
 /// `width`, `height`, min/max sizes, `flex`, `order`, `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
@@ -178,7 +178,7 @@ pub struct ViewNode {
     /// (F003/P097/T501).
     ///
     /// ⚠️ **A menu is not a widget kind, and must not become one.** Natively it is one builder on
-    /// *any* widget (`ComponentExt::context_menu`) — no row identity, no path string, no registered
+    /// *any* widget (`MenuExt::context_menu`) — no row identity, no path string, no registered
     /// builder, no anchor: the framework takes the anchor from whatever triggered it, and owns the
     /// dismissal and the keyboard half. A described node says the same thing the same way, so the
     /// two authoring paths converge instead of drifting. A plugin made to assemble a menu out of
@@ -194,7 +194,7 @@ pub struct ViewNode {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub menu: Vec<DropdownItem>,
     /// This node's **own** named verbs (`name` → [`Intent`]) — the declarative spelling of
-    /// `ComponentExt::on_action`, and how a described surface owns a verb of its own instead of
+    /// `EventExt::on_action`, and how a described surface owns a verb of its own instead of
     /// borrowing one the app already compiled in (F003/P082/T436).
     ///
     /// **Not the same thing as an event.** An event is fired *at* this node by something the user
@@ -240,7 +240,7 @@ impl<N: Into<ViewNode>, const K: usize> IntoNodes for [N; K] {
 
 impl ViewNode {
     /// **Open this menu when the node is right-clicked** — the described spelling of
-    /// `ComponentExt::context_menu`, and available on every kind for the same reason it is on every
+    /// `MenuExt::context_menu`, and available on every kind for the same reason it is on every
     /// widget (F003/P097/T501).
     ///
     /// ```ignore
@@ -287,7 +287,7 @@ impl ViewNode {
     /// Convenience: set the `"key"` prop — **this node's identity, when it is one of a collection
     /// you are iterating**.
     ///
-    /// The same `key` a native tree declares with `ComponentExt::key`, and it means React's `key`:
+    /// The same `key` a native tree declares with `IdentityExt::key`, and it means React's `key`:
     /// the identity of the *thing this node represents*, taken from your data, so the framework can
     /// tell "this row again" from "a different row" after the tree is rebuilt. `realize` writes it
     /// into the widget's own slot, so a described row and a native row are identified alike.
@@ -325,7 +325,7 @@ impl ViewNode {
 
     /// **Declare a verb this node answers to**, by name — `.on_action("mypanel.reload", …)`.
     ///
-    /// The declarative `ComponentExt::on_action`: the node names the verb, config names the key.
+    /// The declarative `EventExt::on_action`: the node names the verb, config names the key.
     ///
     /// ```ignore
     /// // [[keys.surface]] name = "mypanel" / reload = "r"   →   mypanel.reload

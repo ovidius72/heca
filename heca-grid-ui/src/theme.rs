@@ -52,7 +52,7 @@ pub struct Theme {
     /// UI base font size in logical px.
     pub font_size: f32,
     /// Width in logical px of the **affordance** outlines — the keyboard focus
-    /// ring ([`PaintCx::corner_brackets`](crate::PaintCx::corner_brackets)) and the
+    /// ring ([`PaintCx::bracket_frame`](crate::PaintCx::bracket_frame)) and the
     /// selected-item highlight. Deliberately independent of
     /// [`border_width`](heca_theme::Theme::border_width) so focus and selection
     /// stay visible even with decorative borders turned off

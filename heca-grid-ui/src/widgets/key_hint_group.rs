@@ -39,7 +39,7 @@
 //!
 //! ⚠️ **A row says its own pick — do not wrap it in a [`KeyHint`](super::KeyHint).** `on_hint`,
 //! `hint_placement`, `hint_tone` and `hintable` are on *every* widget
-//! ([`ComponentExt`](crate::builders::ComponentExt)); the wrapper is only for a region that is not a
+//! ([`HintExt`](crate::builders::HintExt)); the wrapper is only for a region that is not a
 //! widget you can put a builder on. Wrapping a widget that could declare for itself puts **two**
 //! targets where the author wrote one, and a picker letters both. This example taught the wrapper
 //! shape until 2026-09-15, and heca's own exposé had it — two keycaps on every card.
@@ -176,7 +176,7 @@ impl KeyHintGroup {
     /// ```
     ///
     /// **The widget names the verb; config names the key** — the same division
-    /// [`on_action`](crate::builders::ComponentExt::on_action) states, and the reason this is not a
+    /// [`on_action`](crate::builders::EventExt::on_action) states, and the reason this is not a
     /// key builder. It *is* `open_when` + `on_action` over the picker's own signal, said once here
     /// rather than at every call site: a caller that assembles those three parts owns the rule that
     /// an open picker holds the keyboard, and there is no signal to assemble from a description at
@@ -186,7 +186,7 @@ impl KeyHintGroup {
     /// state — when something *other* than this verb also opens it.
     #[heca_grid_ui_macros::prop]
     pub fn opens_on(self, action: impl Into<String>) -> Self {
-        use crate::builders::ComponentExt as _;
+        use crate::builders::EventExt as _;
         let open = self.open;
         self.open_when(open)
             .on_action(action, move || open.set(true))
@@ -196,7 +196,7 @@ impl KeyHintGroup {
     /// target that named no scope, which is how every picker that exists today behaves.
     ///
     /// Name one and this picker letters only the targets that named it with
-    /// [`hint_scope`](crate::builders::ComponentExt::hint_scope), and **only those**: a surface
+    /// [`hint_scope`](crate::builders::HintExt::hint_scope), and **only those**: a surface
     /// with two verbs over one tree gives each its own set of letters rather than one picker
     /// handing out twice as many, half of which do the other thing.
     ///
@@ -368,7 +368,7 @@ impl crate::builders::Parent for KeyHintGroup {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::{ComponentExt as _, Parent as _};
+    use crate::builders::{HintExt as _, Parent as _};
     use crate::widgets::{Flex, KeyHint, Label, Row};
     use std::cell::RefCell;
     use std::rc::Rc;

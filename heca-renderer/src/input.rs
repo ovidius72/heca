@@ -2,7 +2,7 @@
 //!
 //! `heca-grid-ui` is renderer-agnostic and never sees `winit`, so somebody has to bridge the two.
 //! That somebody was every surface: the heca app mapped its normalised chord to a
-//! [`GridKey`](heca_grid_ui::GridKey) in `app/registry.rs`, and the showcase mapped
+//! [`GridKey`] in `app/registry.rs`, and the showcase mapped
 //! `winit::NamedKey` to one in its own file — the same twelve keys written twice, in two shapes,
 //! free to drift apart with nothing to notice.
 //!

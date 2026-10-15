@@ -7,7 +7,7 @@
 //! goes over, and [`fire_hint`] runs one.
 //!
 //! **Nothing is registered and no id exists.** A widget declares the behaviour itself with
-//! [`KeyHint::on_hint`](crate::widgets::KeyHint::on_hint); a target is addressed by its **path**
+//! [`on_hint`](crate::builders::HintExt::on_hint); a target is addressed by its **path**
 //! from the root, which lives exactly as long as the frame it was collected in. That is what makes
 //! the picker something a plugin can join: there is no host registry to reach and no host-private
 //! intent type to name. It replaced an opaque `HintTargetId` the host mapped back to a

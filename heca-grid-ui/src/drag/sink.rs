@@ -8,7 +8,7 @@
 //! does.
 //!
 //! **A widget that handles its own drop still wins.** This is the fallback, not the path: if
-//! [`on_drop`](crate::builders::ComponentExt::on_drop) consumed the event, nothing arrives here.
+//! [`on_drop`](crate::builders::EventExt::on_drop) consumed the event, nothing arrives here.
 //!
 //! Why a sink rather than a handler each row writes: the alternative is the same three lines copied
 //! into every row that can be dropped on, and a fourth copy in every plugin that ever wants one —
@@ -23,7 +23,7 @@ use std::cell::RefCell;
 /// A drop nothing in the tree claimed: what was carried, what it landed on, and how.
 ///
 /// Both names are widget **identities** — declared with
-/// [`key`](crate::builders::ComponentExt::key), or derived from the widget's content when it
+/// [`key`](crate::builders::IdentityExt::key), or derived from the widget's content when it
 /// declared none. The library never interprets them; the host knows what its own names mean, which
 /// is what lets a plugin's rows take part without the host knowing what they are.
 #[derive(Clone, Debug, PartialEq)]

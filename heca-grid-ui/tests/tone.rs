@@ -121,7 +121,7 @@ fn an_explicit_tone_wins_over_the_container() {
 #[test]
 fn a_container_publishes_its_hue_to_everything_inside_it() {
     use heca_grid_ui::widgets::Surface;
-    use heca_grid_ui::{Button, Color, ComponentExt, LayoutExt, Parent};
+    use heca_grid_ui::{Button, Color, LayoutExt, Parent, ToneExt};
 
     let tone = Color::rgb(240, 80, 60);
     let mut card = Surface::new()
@@ -144,7 +144,7 @@ fn a_container_publishes_its_hue_to_everything_inside_it() {
 #[test]
 fn a_published_hue_does_not_redefine_what_a_variant_means() {
     use heca_grid_ui::widgets::Surface;
-    use heca_grid_ui::{Badge, Color, ComponentExt, DrawCommand, LayoutExt, Parent};
+    use heca_grid_ui::{Badge, Color, DrawCommand, LayoutExt, Parent, ToneExt};
 
     let tone = Color::rgb(240, 80, 60);
     let theme = Theme::default();
@@ -179,7 +179,7 @@ fn a_published_hue_does_not_redefine_what_a_variant_means() {
 #[test]
 fn a_widgets_own_hue_outranks_the_one_it_inherits() {
     use heca_grid_ui::widgets::Surface;
-    use heca_grid_ui::{Button, Color, ComponentExt, LayoutExt, Parent};
+    use heca_grid_ui::{Button, Color, LayoutExt, Parent, ToneExt};
 
     let outer = Color::rgb(240, 80, 60);
     let own = Color::rgb(10, 200, 120);

@@ -4,12 +4,12 @@ use crate::{Intent, ViewOrder};
 
 /// One entry of a dropdown / context menu. The author supplies id/label/action; the host resolves
 /// the icon from the action registry (`ActionCatalog::icon`) and wires the intent + quick-pick —
-/// the same centralized path as [`ModalAction`], with **no hand-picked glyph and no `prefix+X`
+/// the same centralized path as `ModalAction`, with **no hand-picked glyph and no `prefix+X`
 /// label** (the leader doesn't work while the menu is open; a host-assigned single-letter quick-pick
 /// that *does* work replaces it).
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DropdownItem {
-    /// Stable id returned in [`ModalResult::Action`]; also the **catalog name** the icon and label
+    /// Stable id returned in `ModalResult::Action`; also the **catalog name** the icon and label
     /// resolve from — the entry's visual identity (e.g. `"close"`).
     ///
     /// It is deliberately **not** the same thing as what the entry runs: a sidebar "Close pane"
