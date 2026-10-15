@@ -146,8 +146,8 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
 /// back to the built-in default so zoom never becomes a no-op.
 pub(crate) fn font_zoom_delta(state: &AppState, step: FontZoomStep) -> f32 {
     use crate::app::terminal_metrics::TERMINAL_FONT_ZOOM_STEP;
-    let size = if state.terminal_font_zoom_step > 0.0 {
-        state.terminal_font_zoom_step
+    let size = if state.settings.terminal_font_zoom_step > 0.0 {
+        state.settings.terminal_font_zoom_step
     } else {
         TERMINAL_FONT_ZOOM_STEP
     };

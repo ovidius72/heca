@@ -17,7 +17,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 
 - [Mental model](#mental-model)
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
-- [Foundations](#foundations) — `Base`, `Component`, **[the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)**, builder traits (incl. **[`ComponentExt`](#componentext--what-every-widget-gets)**), `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Animations](#animations--how-a-surface-arrives-and-leaves)**, **[Search](#search--matching-ranking-by-use-and-query-history)**
+- [Foundations](#foundations) — `Base`, `Component`, **[the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)**, builder traits (incl. **[what every widget gets](#what-every-widget-gets)**), `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Animations](#animations--how-a-surface-arrives-and-leaves)**, **[Search](#search--matching-ranking-by-use-and-query-history)**
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
@@ -207,7 +207,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `text_summary(&self) -> Option<String>` | first child that has one | The **accessible name** of the widget's content: the plain text of a composed subtree. `Label` supplies it; a `Choice` holding an `Icon` + `Label("HIGH")` summarizes to `"HIGH"`. It exists because a control sometimes needs the *text* of content whose type it cannot see (children are `impl Component`) — it is how [`Select`](#select) reports its value as text (`selected_label()`). Override it in a widget that renders text it owns. |
 | `paint(&self, cx: &mut PaintCx)` | base chrome + children | Emit `DrawCommand`s. |
 | `on_event_capture(&mut self, ev) -> Handled` | `No` | Handle an event **before** this widget's children see it. `Yes` stops the walk. See [the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree). |
-| `on_event(&mut self, ev) -> Handled` | `No` | Handle an event the children **declined**. Registered [`ComponentExt`](#componentext--what-every-widget-gets) handlers run just before it, so an author's handler can take the event from the widget's own behaviour. |
+| `on_event(&mut self, ev) -> Handled` | `No` | Handle an event the children **declined**. Registered [`EventExt`](#what-every-widget-gets) handlers run just before it, so an author's handler can take the event from the widget's own behaviour. |
 | `hit_bounds(&self) -> Option<Rectangle>` | `Some(bounds)` | The rect this widget occupies **for input**, or `None` when it takes none at all. Overridden by a widget that draws a floating panel (a menu, a palette) or that is inert right now (a closed [`Overlay`](#overlay), whose subtree is still laid out). |
 | `after_subtree(&mut self, ev, handled)` | no-op | Called **after this widget's subtree has seen `ev`**, consumed or not — for a container that reports what its own rows did ([`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe)). Observation only: it cannot consume the event or revive a consumed one. |
 | `clips_children(&self) -> bool` | `false` | `true` when the widget clips its children, so a press or move **outside its bounds** must not reach them — content scrolled out of sight stops being clickable. |
@@ -394,7 +394,7 @@ content, a swallow, or state that must be current before anything below is hit-t
 returning `Handled::No` is normal — it means "I looked, carry on".
 
 **Bubble** (`on_event`) for what you do with what nobody below wanted. This is also where a widget's
-own behaviour belongs, so an [`ComponentExt`](#componentext--what-every-widget-gets) handler registered on
+own behaviour belongs, so an [`EventExt`](#what-every-widget-gets) handler registered on
 it gets first refusal.
 
 **`after_subtree(ev, handled)`** for a container that **watches what its own subtree did**, whether
@@ -722,7 +722,7 @@ Described trees say it the same way — see [Spaces on the wire](#spaces-on-the-
 <a id="accent"></a>
 #### Overriding the accent — for a widget and everything inside it
 
-`.accent(Color)` — on **any** widget, from `ComponentExt`.
+`.accent(Color)` — on **any** widget, from `ToneExt`.
 
 ```rust
 Surface::new().accent(theme.colors.danger)   // this card is a danger card
@@ -770,7 +770,7 @@ Not to be confused with `.hint_tone(Tone)`, which declares what a **keycap means
 <a id="content-tone"></a>
 #### The colour of the text inside — `content_tone`
 
-`.content_tone(Tone)` — on **any** widget, from `ComponentExt`. CSS's inherited `color`, named by
+`.content_tone(Tone)` — on **any** widget, from `ToneExt`. CSS's inherited `color`, named by
 meaning (`Tone::Accent`/`Muted`/`Warning`/`Success`/`Danger`) because a widget has no theme until
 paint:
 
@@ -784,12 +784,22 @@ own `.color(..)` keeps it, and a control that colours its own content (a `Button
 `Choice`) keeps its own. Applied to the subtree by `paint_child`, beside the accent, so nothing
 opts in. `Dialog::danger(true)` is built on it.
 
-<a id="componentext--what-every-widget-gets"></a>
-**`ComponentExt`** — **everything every component gets**: handlers (what happens to it), `key`
-(who it is), `accent` (the hue it and its subtree paint chrome with), `hintable` (whether the
-picker may reach it) and the drag slots. It was four traits — `ComponentExt`, `ComponentExt`, `DragExt`, `HintExt` —
-split by nothing but the order they were added in; all four were unconditional, so the split carried
-no rule. The two that remain separate do carry one, enforced by the type system: `StyleExt` is
+<a id="what-every-widget-gets"></a>
+**What every widget gets** — one builder trait per subject, each implemented for every
+`Component`, so nothing opts in and the prelude brings them all:
+
+| Trait | What it says about a widget |
+|---|---|
+| `EventExt` | what happens to it — `on_click`, `on_key_down`, `on(kind, f)`, `on_drop`, `on_action`, … |
+| `DragExt` | what it does in a drag — `draggable`, `draggable_as`, `drag_chip`, `drop_target`, `accepts` |
+| `MenuExt` | the menu a right-click opens — `context_menu` |
+| `TooltipExt` | the tooltip under the pointer — `tooltip`, `tooltip_side`, `tooltip_delay`, … |
+| `HintExt` | the letter it wears while a pick is open — `hintable`, `on_hint`, `hint_placement`, … |
+| `IdentityExt` | who it is — `key`, `scope_key`, `on_props` |
+| `PresenceExt` | whether and how it is there — `hidden`, `visible`, `lock`, `clip_children`, `cursor`, … |
+| `ToneExt` | the hue it reads in — `accent`, `content_tone` |
+
+The traits that only fit some widgets stay separate, enforced by the type system: `StyleExt` is
 surfaces only, `Parent` is containers only.
 
 **One spelling, one argument, every kind.** A handler takes an `&mut EventCx` carrying the event
@@ -866,7 +876,7 @@ takes no argument and there is no event to carry.
 > **When you add a slot to a widget, take `impl IntoComponent`.** That is the whole rule.
 
 <a id="hintable-and-being-pickable"></a>
-**Being pickable** (part of `ComponentExt`):
+**Being pickable** (part of `HintExt`):
 
 | Method | Effect |
 |--------|--------|
@@ -922,7 +932,7 @@ too. **Two targets where you wrote one thing**, and a picker letters both — tw
 Full reference — which of `on_hint` / `hintable` / `KeyHint` / `KeyHintGroup` to reach for, and the
 symptoms when the wrong one is used: [`hint-architecture.md` § 5a](hint-architecture.md).
 
-**"Actionable" is `Base::activatable`**, set wherever an action is wired: once in `ComponentExt::on`
+**"Actionable" is `Base::activatable`**, set wherever an action is wired: once in `EventExt::on`
 for the generic listeners (`Click`, `DoubleClick`, `Key` — so `on_click`, `on_double_click`,
 `on_key_down`, `on_key_up`), and in each widget that keeps its own callback instead (`Button`,
 `IconButton`, `BadgeButton`, `Toast` via `on_click`; `Choice`, `RailCell`, `Item`, `Row` via
@@ -942,7 +952,7 @@ in some context — a ⊠ under a "close" verb, a column under "move a pane here
 
 > **Declarative form:** `hintable` is an ordinary boolean prop on the node, read for every kind — see [Identity props](#identity-props--key-and-hintable-on-every-kind).
 
-**Identity** (part of `ComponentExt`):
+**Identity** (part of `IdentityExt`):
 
 | Method | Effect |
 |--------|--------|
@@ -1304,7 +1314,7 @@ back through `~/.config/heca/themes/{name}.toml` → bundled → `grid_tron`, so
 | `border_width` | `f32` | Decorative border stroke width for every box/pill widget **and** the `Pane`/`bracket_frame` reticle. `0` ⇒ no border anywhere. (App config: global `[appearance] border_width`.) |
 | `focus_border_width` | `f32` | Width of the **affordance** outlines — the keyboard focus indicator (`focus_ring`) and selected-item highlight. Independent of `border_width`, so focus/selection stay visible even with borders off. Default `1.5`. (App config: `[appearance] focus_border_width`.) |
 | `focus_ring` | `Option<Color>` | Color of the keyboard **focus outline** drawn by `PaintCx::focus_ring` (every widget). Unset ⇒ derived per-tone by `effective_focus_ring()` / `focus_ring_tone()`: the tone (accent, or `danger` for a destructive button) shifted toward `foreground`, which brightens the ring on dark themes and darkens it on light themes so it stays distinct from the widget's own border. Set it to pin the default/accent focus color; the `danger` ring always derives. |
-| `hint_color` | `Option<Color>` | Colour of the **picker's letters** — every keycap `prefix+/` and the pane / column / workspace picks stamp over their targets. Unset ⇒ the `accent`, via `effective_hint_color()`. **One colour for the whole app**, like `hint_font_size` is one size: a letter is chrome drawn *over* a target, never part of it, so it must not take the colour of whatever it lands on. A host may still tint one *kind* of target apart — workspace picks use `warning` — with [`ComponentExt::hint_color`](#componentext--what-every-widget-gets), which overrides this per widget. |
+| `hint_color` | `Option<Color>` | Colour of the **picker's letters** — every keycap `prefix+/` and the pane / column / workspace picks stamp over their targets. Unset ⇒ the `accent`, via `effective_hint_color()`. **One colour for the whole app**, like `hint_font_size` is one size: a letter is chrome drawn *over* a target, never part of it, so it must not take the colour of whatever it lands on. A host may still tint one *kind* of target apart — workspace picks use `warning` — with [`HintExt::hint_color`](#what-every-widget-gets), which overrides this per widget. |
 | `show_focus_border` | `bool` | Focus-ring **kill switch** (default `true`); every ring draw is gated on it. Overridable per-config via `[appearance] show_focus_border`. Rings additionally show only on **keyboard** focus (`Base::shows_focus_ring()`), never on click. |
 | `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius **and strength**. `None` removes glow entirely. |
 | `intensity` | `Intensity` | The **CRT scanline overlay** only (no longer touches glow). |
@@ -4634,7 +4644,7 @@ with no downcasting.
   > This is the same move the tooltip made, for the same reason: wrapping is impossible on a widget
   > a typed container holds, so a grouped button could not move its own letter at all.
   **`on_hint` is no longer here** — it is
-  [`ComponentExt::on_hint`](#componentext--what-every-widget-gets), on every widget, so the two
+  [`HintExt::on_hint`](#what-every-widget-gets), on every widget, so the two
   facts about a target (who it is, and what picking it does) stop living on two different nodes.
   A `KeyHint::new(row).on_hint(…)` call reads exactly the same; what changed is that a widget which
   can carry the declaration itself no longer has to be wrapped to say what a pick does to it.
@@ -4916,7 +4926,7 @@ registry, no id to hold, no signal and no closure — which is why the picker is
 exposé uses and not a cut-down copy of it.
 
 **Any node can declare a verb**, not just a picker: `on_action(name, intent)` is on the SDK's shared
-builder trait, because `ComponentExt::on_action` is on every widget natively. A described surface
+builder trait, because `EventExt::on_action` is on every widget natively. A described surface
 therefore owns verbs of its own instead of borrowing ones the app compiled in, and whichever node on
 screen declares the name is the one that runs — so a verb whose surface is not up resolves to
 nothing. A verb whose intent names *itself* is refused at realize time: it would resolve back to the
@@ -4998,9 +5008,16 @@ set, focused and unfocused.)
   - `.color(Color)` — outline colour. Default: `effective_focus_ring()` (the `focus_ring` token, or
     the accent shifted toward `foreground`). Override to mark a *kind* of focus distinctly, the way
     `KeyHint::color` distinguishes kinds of pick target.
-- **Reads (host)**: `contains_keyboard(node)` (is the keyboard inside this subtree), `page_scope(root)`
-  (the named region the keyboard is in on the page, looking through a dialog above it to where it
-  returns).
+- **Reads (host)**: `contains_keyboard(node)` (is the keyboard inside this subtree),
+  `keyboard_area(root)` (the nearest named area around what holds the keyboard — a surface by its
+  slot, or a region by its name — which is who answers a key, a menu or an action; it never looks
+  through a surface) and `page_scope(root)` (the named region the keyboard is in on the page,
+  looking through a dialog above it to where it returns).
+- **One widget, by identity (host)**: `keyboard_holder(root)` — the focus identity
+  (`Base::focus_id`) of the widget holding the keyboard, the browser's `document.activeElement` —
+  and `focus_widget_by_id(root, id)`, its `element.focus()`. For a host that remembers a widget by
+  identity rather than by a path a rebuild moves: heca keeps each terminal's on-screen node this
+  way, so "which terminal has the keyboard" is asked of the window and never kept beside it.
 - **Theme**: the outline is [`PaintCx::focus_ring`] — the same primitive every control's ring uses,
   at `focus_border_width`, offset outside the bounds like a CSS `outline`. A theme with
   `show_focus_border = false` hides this one too: whether focus outlines are drawn is the theme's
@@ -5065,7 +5082,11 @@ let took = workspace.set_props(&model);   // false = wrong type, or the widget t
   version is built afresh. The child carries its version (`Base::built_from`), so the parent keeps
   no table of what each was built from.
 - `.clip_children(true)` — CSS `overflow: hidden` on any widget: what it holds is not drawn or hit
-  past its edge, and the engine does not squeeze it to fit.
+  past its edge, and the engine does not squeeze it to fit. With a `.radius(..)` the cut has round
+  corners, and content the host draws itself (a terminal, an image) follows them too. The framework
+  applies the cut to each child as it draws it, so it holds however a widget draws its children,
+  and the picture of a dragged widget is cut where the picture is. A widget whose cut is not its
+  box says so in `Component::children_clip` (a scroll area keeps its scrollbar lane clear).
 
 ### Cursor — what the pointer looks like over a widget
 
@@ -5111,7 +5132,7 @@ has, so **no widget opts in and no host paints on their behalf**.
 | `.tooltip_delay(seconds)` | how long the pointer must rest (default `0.5`). No-op with no tooltip declared. |
 | `.tooltip_quick(true)` | the library's shorter rest (`QUICK_DELAY`, half the default) — a name instead of a number, for a tip that carries what the widget had to cut short (a branch name in a narrow row). No-op with no tooltip declared. In a described tree: `.prop("tooltip_quick", PropValue::Bool(true))`. |
 
-All four are on `ComponentExt`, so they apply to **every** widget — and the first, third and fourth
+All four are on `TooltipExt`, so they apply to **every** widget — and the first, third and fourth
 have the described spellings below. `tooltip_signal` is native-only, because a signal is a live host
 value a description cannot name.
 
@@ -5208,7 +5229,7 @@ Any chrome button that triggers a `WmAction` gets its **tooltip** and its `prefi
 **KeyHint** from that action, automatically — the caller names the action, never a
 shortcut string, the leader symbol, or a hand-built tip. This keeps every button
 uniform and rebind-aware. The grid-ui primitives involved are **`IconButton`**,
-**`Tooltip`**, and **`ComponentExt::on_hint`** ([`KeyHint`](#keyhint) framework); the
+**`Tooltip`**, and **`HintExt::on_hint`** ([`KeyHint`](#keyhint) framework); the
 resolution seam is app-side.
 
 ```rust
@@ -5907,7 +5928,7 @@ lay them out.
 
 #### Declaring it: a value or a closure
 
-`ComponentExt::context_menu` accepts either, via `IntoContextMenu`:
+`MenuExt::context_menu` accepts either, via `IntoContextMenu`:
 
 ```rust
 Row::new().context_menu(ctx.clone());            // a value — `ContextMenu` is `Clone`
@@ -6608,7 +6629,8 @@ silently resolves to the most permissive setting in the system.
 | Policy | Use it when |
 |--------|-------------|
 | `Global` | App-level with **no layout impact** — must keep working while a floating pane is up (`reload_config` is the model). |
-| `FocusedPaneLocal` | Acts on the focused pane in either domain (close, rename, copy). |
+| `FocusedPaneLocal` | Acts on the focused pane in either domain (close, rename). |
+| `KeyboardTerminal` | Acts on the terminal the keyboard is on (scroll, select, copy, search, font size) — also while something covers the panes, when a terminal shown in it holds the keyboard. |
 | `TiledOnly` | Only meaningful in the tiled column layout (focus, split, resize, move, swap). |
 | `WorkspaceLevel` | Switches or mutates workspaces. |
 | `SourceDependent` | Allowed only for some interaction sources / targets. |
@@ -6942,8 +6964,8 @@ Flex::column().drop_target(DragItemId::new(zone_id))       // a drop zone
 travels far enough to start a drag (Cmd+drag); a drag already in flight is never cancelled by the
 rule going false, and without the key the press stays whatever the widget's content makes of it.
 
-`.drag_image()` makes a source carry **a picture of itself** under the pointer instead of the small
-chip: the widget painted as it is (a terminal's surface included), in the top layer, at the theme's
+A source carries **a picture of itself** under the pointer, as the browser does; `.drag_chip()`
+asks for the small title chip instead. The picture is the widget painted as it is (a terminal's surface included), in the top layer, at the theme's
 `drag_image_alpha` and shrunk by `drag_image_scale` toward the point that was grabbed. The picture's
 host work is marked an *echo*, so a terminal asked where it was drawn answers with its real place,
 not the picture's.

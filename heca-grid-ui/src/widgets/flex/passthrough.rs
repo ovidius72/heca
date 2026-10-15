@@ -1,6 +1,6 @@
 //! A container with nothing to answer for lets the pointer through its own box.
 
-use crate::builders::{ComponentExt, LayoutExt, Parent};
+use crate::builders::{EventExt, IdentityExt, LayoutExt, Parent};
 use crate::widgets::Flex;
 use crate::{Color, Component, LayoutEngine, Point, Size, hit_test};
 

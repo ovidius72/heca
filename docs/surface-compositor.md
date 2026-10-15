@@ -200,7 +200,7 @@ Given that tree the host does four things per frame, each **one walk**:
 | hints | collect the `prefix+/` letter targets |
 
 `heca-grid-ui` already provides the input walk — `dispatch(node, ev)` in
-`heca-grid-ui/src/component.rs` is DOM-shaped and complete. **The host's job is to own one tree and
+`heca-grid-ui/src/component/` is DOM-shaped and complete. **The host's job is to own one tree and
 call it once per event**, not to call it once per root and arbitrate between roots itself.
 
 ### 0.9 Two designs that get proposed repeatedly, and why both are wrong

@@ -10,7 +10,10 @@
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::widgets::{HintPlacement, Pane as UiPane};
-use heca_grid_ui::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
+use heca_grid_ui::{
+    DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, PlaceExt, PresenceExt,
+    StyleExt,
+};
 
 use super::model::PaneShellModel;
 
@@ -38,7 +41,7 @@ pub(crate) struct PaneShell<'a> {
     ///
     /// It is a **child**, which is the whole point: the layout places it, it sizes itself, and one
     /// walk delivers its input. Before this it was a second retained tree the app laid out,
-    /// positioned by hand and routed events to separately (F003/P097/T497).
+    /// positioned by hand and routed events to separately.
     ///
     /// The pane keeps the header it is given as its own: it seats the node as a child and answers
     /// the facts it is handed by showing them there.
@@ -95,7 +98,10 @@ impl PaneShell<'_> {
             .height(heca_grid_ui::Length::Percent(1.0))
             .padding(content_inset)
             .border(to_gui_color(border_color), border_width)
-            .radius(border_radius);
+            .radius(border_radius)
+            // What it holds is cut to its round corners, wherever it is drawn — in its column, or
+            // as the picture carried under the pointer.
+            .clip_children(true);
         if active {
             pane = pane.glow_with(to_gui_color(border_color), active_glow.0, active_glow.1);
         }
@@ -111,7 +117,7 @@ impl PaneShell<'_> {
 
         // The pane's own identity, from the data — never a counter, never a position. A pane id is
         // stable across every rebuild, which is what lets a letter stay with the same pane between
-        // openings of the picker (F003/P082/T445).
+        // openings of the picker.
         // **One pane, seen in several places.** The sidebar row and the exposé card show this
         // same pane and declare the same key, so the three of them wear one letter between them.
         let mut pane = pane.key(crate::chrome::pane_key(pane_id));
@@ -123,7 +129,6 @@ impl PaneShell<'_> {
             pane = pane
                 .draggable_as(crate::chrome::PANE_DRAG_KIND)
                 .draggable_when(move |held| crate::modifier::held(key, held))
-                .drag_image()
                 .accepts_beside([crate::chrome::PANE_DRAG_KIND]);
         }
 
@@ -199,7 +204,7 @@ impl PaneShell<'_> {
         );
 
         let pick = self.cb.pick.clone();
-        // **Say what the pick IS, not only what it runs** (F003/P082/T432). The closure emits
+        // **Say what the pick IS, not only what it runs**. The closure emits
         // `InteractionIntent::FocusPane`, which is host-private and opaque to a policy; the intent
         // beside it is the same act as data, so `chrome::active_hint_targets` can ask
         // `route_interaction` whether focusing *this* pane is permitted before spending a letter on

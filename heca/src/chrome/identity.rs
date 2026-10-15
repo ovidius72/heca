@@ -1,6 +1,6 @@
 //! **The identity rule, reported where it can be seen and fixed** (F003/P082/T444).
 //!
-//! A row's identity — its [`key`](heca_grid_ui::builders::ComponentExt::key) — is what the keyboard
+//! A row's identity — its [`key`](heca_grid_ui::builders::IdentityExt::key) — is what the keyboard
 //! cursor, the right-click target, the drag identity and the picker's remembered letter are kept
 //! *on*. Declare none and one is derived from the row's content, which is a floor rather than a
 //! guarantee: a derived identity changes when the text does, and two rows that read the same have

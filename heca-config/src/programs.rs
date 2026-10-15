@@ -226,7 +226,7 @@ impl ProgramsConfig {
 impl Default for ProgramsConfig {
     /// The built-in catalog is parsed from the embedded `config.default.toml`
     /// `[program]` table — that file is the single source of truth. Uses the
-    /// recursion-free [`ProgramsConfig::from_entries`] path so the catalog's own
+    /// recursion-free `ProgramsConfig::from_entries` path so the catalog's own
     /// `Deserialize` (which merges over `default()`) is never re-entered.
     fn default() -> Self {
         Self::from_entries(crate::loader::parse_default_program_entries())

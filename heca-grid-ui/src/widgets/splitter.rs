@@ -12,9 +12,9 @@
 
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component};
-use crate::reactive::SignalGet;
 use crate::cursor::Cursor;
 use crate::event::{Event, Handled, PointerButton};
+use crate::reactive::SignalGet;
 use crate::style::Space;
 use crate::style::Spacing;
 use crate::widgets::Orientation;
@@ -27,7 +27,7 @@ const GRAB: Spacing = Spacing::Xs;
 /// What is told how far the edge moved, in logical px along the drag axis.
 type Moved = dyn FnMut(f32);
 
-/// A grab zone that resizes. See the [module docs](self).
+/// A grab zone that resizes. See the module docs.
 pub struct Splitter {
     base: Base,
     orientation: Orientation,
@@ -102,7 +102,9 @@ impl Splitter {
 
     /// **How far the grab zone reaches past the box** on each side — a step of the theme's spacing
     /// (or pixels), so it scales with the font like every other space.
-    #[heca_grid_ui_macros::host_only("a spacing step or pixels, not a scalar a description carries")]
+    #[heca_grid_ui_macros::host_only(
+        "a spacing step or pixels, not a scalar a description carries"
+    )]
     pub fn grab(mut self, reach: impl Into<Space>) -> Self {
         self.grab = reach.into();
         self

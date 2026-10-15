@@ -7,7 +7,7 @@ use crate::{Intent, PropMap, PropValue, ViewAlign, ViewEvent, ViewJustify, ViewN
 ///
 /// # What is deliberately absent
 ///
-/// - **`direction`** — the kind already says it. A [`HStack`] with `direction: column` is a
+/// - **`direction`** — the kind already says it. A `HStack` with `direction: column` is a
 ///   contradiction the author should not be able to write.
 /// - **`size_explicit`** — set by the layout pass to record that a size was chosen, not by an
 ///   author.
@@ -211,7 +211,7 @@ pub trait Style: Sized {
     /// **This node's identity, when it is one of a collection you are iterating** — React's `key`,
     /// meaning exactly what it means there.
     ///
-    /// It is on this trait, not on one builder, for the reason `ComponentExt::key` is on every
+    /// It is on this trait, not on one builder, for the reason `IdentityExt::key` is on every
     /// widget: a collection can be built from any kind, so the identity of an item cannot belong to
     /// a particular one. `realize` reads it once for every kind and writes it into the widget's own
     /// slot, so a described row is identified exactly as a native row is — the cursor, the
@@ -251,7 +251,7 @@ pub trait Style: Sized {
     /// let close = Button::new().icon(ViewGlyph::Minus).tooltip("Close the pane");
     /// ```
     ///
-    /// Universal, like [`key`](Style::key), because `ComponentExt::tooltip` is on every widget
+    /// Universal, like [`key`](Style::key), because `TooltipExt::tooltip` is on every widget
     /// natively — so a described row says it the same way a native one does, and the framework owns
     /// the rest: the reveal delay is timed off the hover clock the pointer router already keeps,
     /// and the bubble is drawn in the one place every widget passes through.
@@ -390,7 +390,7 @@ pub trait Style: Sized {
 
     /// Keep this node **out of the picker**, however actionable it is. Default `true`.
     ///
-    /// The declarative spelling of `ComponentExt::hintable`. Being pickable is not opt-in — a node
+    /// The declarative spelling of `HintExt::hintable`. Being pickable is not opt-in — a node
     /// with a `press` wears a letter with nothing written — so the only thing left to say is "not
     /// me". Letters are scarce (52, one keystroke each), and a close button on every row of a long
     /// list would spend one apiece.
@@ -399,7 +399,7 @@ pub trait Style: Sized {
     }
 
     /// **Declare a verb this node answers to**, by name — the declarative
-    /// `heca_grid_ui::ComponentExt::on_action`.
+    /// `heca_grid_ui::EventExt::on_action`.
     ///
     /// The node names the verb; config names the key. That division is the whole of it: a key
     /// written into a description would be unrebindable, absent from the palette and unreachable
@@ -418,7 +418,7 @@ pub trait Style: Sized {
     /// (F003/P082/T436). Whichever node on screen declares the name is the one that runs it, so a
     /// verb whose surface is not up resolves to nothing, exactly as an unmounted provider's does.
     ///
-    /// ⚠️ [`Toast`] has an inherent `on_action` of its own — the **event** its action button fires,
+    /// ⚠️ `Toast` has an inherent `on_action` of its own — the **event** its action button fires,
     /// which takes an intent alone. Its arity differs, so the compiler says which you reached.
     fn on_action(mut self, name: impl Into<String>, intent: Intent) -> Self {
         self.node_mut().actions.insert(name.into(), intent);
@@ -431,7 +431,7 @@ pub trait Style: Sized {
     /// free. Bind it when the two genuinely differ: heca's sidebar row activates the pane and leaves
     /// the sidebar on a click, and stays in the sidebar on a hint pick.
     ///
-    /// On every kind, because natively a hint is `ComponentExt::on_hint` — universal, on `Base`, no
+    /// On every kind, because natively a hint is `HintExt::on_hint` — universal, on `Base`, no
     /// widget opts in — and `realize` writes a node's `hint` event into that same slot for every
     /// kind. A node carrying one **is** a pick target, whether or not it can be clicked. It is one
     /// method here, not a row per kind in the event table, so a kind added later cannot be left

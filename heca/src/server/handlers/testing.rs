@@ -1,7 +1,7 @@
 //! Fixtures for the tests of the server's handlers.
 
-use heca_core::layout::testing::Windowed;
 use heca_core::layout::PaneId;
+use heca_core::layout::testing::Windowed;
 
 use crate::input::WmAction;
 use crate::server::{Asker, Change, ServerState};
@@ -23,7 +23,11 @@ pub(super) fn run(window: &mut Windowed, action: WmAction) -> Vec<Change> {
 pub(super) const CELL: (f32, f32) = (10.0, 20.0);
 
 /// Run `action` for a window whose focused pane is `focused`, and that shows what it shows.
-pub(super) fn run_for(window: &mut Windowed, focused: Option<PaneId>, action: WmAction) -> Vec<Change> {
+pub(super) fn run_for(
+    window: &mut Windowed,
+    focused: Option<PaneId>,
+    action: WmAction,
+) -> Vec<Change> {
     let asker = Asker::seen_through(window.l(), focused, CELL);
     run_as(window, asker, action)
 }
@@ -59,7 +63,11 @@ pub(super) fn arranged(changes: &[Change]) -> Vec<usize> {
 
 /// `changes` without what they say was arranged: the facts a window follows.
 pub(super) fn facts(changes: &[Change]) -> Vec<Change> {
-    changes.iter().filter(|change| !matches!(change, Change::Arranged { .. })).cloned().collect()
+    changes
+        .iter()
+        .filter(|change| !matches!(change, Change::Arranged { .. }))
+        .cloned()
+        .collect()
 }
 
 /// Run `action` for the window and have the window react to what it says, as the app does.
@@ -73,6 +81,12 @@ pub(super) fn run_and_react(w: &mut Windowed, focused: Option<PaneId>, action: W
         expose_cursor_per_ws: &mut cursors,
     };
     for change in &changes {
-        crate::app_state::reaction::window_reacts(&mut w.m(), &mut tracking, change, Some(&action), Some(&before));
+        crate::app_state::reaction::window_reacts(
+            &mut w.m(),
+            &mut tracking,
+            change,
+            Some(&action),
+            Some(&before),
+        );
     }
 }

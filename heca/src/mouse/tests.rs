@@ -73,3 +73,24 @@ fn test_chrome_content_rect_no_sidebars() {
     assert_eq!(r.size.w, 1240.0);
     assert_eq!(r.size.h, 744.0);
 }
+
+/// **The columns are pushed only with the pointer over them, near an edge**: hardest at the edge,
+/// nothing in the middle, and nothing over a sidebar — so a row moved inside a sidebar leaves them
+/// where they are.
+#[test]
+fn the_columns_are_pushed_only_near_their_own_edges() {
+    use heca_core::layout::{Point, Rectangle, Size};
+    let area = Rectangle::new(Point::new(200.0, 40.0), Size::new(800.0, 600.0));
+    let push = |x: f32| super::edge_push((x, 300.0), area, 100.0);
+    assert_eq!(push(200.0), -1.0, "hardest at the left edge");
+    assert_eq!(push(250.0), -0.5, "half way into the trigger");
+    assert_eq!(push(600.0), 0.0, "nothing in the middle");
+    assert_eq!(push(950.0), 0.5, "half way into the right trigger");
+    assert_eq!(push(150.0), 0.0, "nothing over the left sidebar");
+    assert_eq!(push(1050.0), 0.0, "nothing over the right sidebar");
+    assert_eq!(
+        super::edge_push((250.0, 10.0), area, 100.0),
+        0.0,
+        "nothing above the columns either"
+    );
+}

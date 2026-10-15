@@ -36,3 +36,6 @@ objc2-app-kit = { version = "0.2.2", default-features = false, features = ["std"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 window-vibrancy = "0.5"
+
+[lints]
+workspace = true

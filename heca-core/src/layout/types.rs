@@ -1,3 +1,8 @@
+/// **"At the end"** as an index: past every column of a workspace or every row of a column. Every
+/// place a column or pane is put clamps to the last place, so this lands it after the last — the
+/// one way to say "the end" where an index is asked for, a script's arguments included.
+pub const END: usize = usize::MAX;
+
 /// Unique identifier for a session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SessionId(pub u64);
@@ -6,7 +11,7 @@ pub struct SessionId(pub u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkspaceId(pub u64);
 
-/// Unique identifier for a column.
+/// Unique identifier for a pane.
 // `Ord` so panes can key an ordered map: iteration order is then stable frame to
 // frame, which matters wherever per-pane state is *drawn* (e.g. each pane's
 // scrollback-search bar) and would otherwise wander with hash seeding.
@@ -19,6 +24,7 @@ impl std::fmt::Display for PaneId {
     }
 }
 
+/// Unique identifier for a column.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ColumnId(pub u64);
 

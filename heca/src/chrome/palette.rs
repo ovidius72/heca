@@ -420,7 +420,7 @@ pub(crate) fn open_command_palette(
         .search(
             heca_grid_ui::search::SearchModel::new("command", state.search_store.clone())
                 // The user's `[settings] search_case`, as the library's own vocabulary.
-                .case(match state.search_case {
+                .case(match state.settings.search_case {
                     heca_config::settings::SearchCase::Smart => {
                         heca_grid_ui::search::MatchCase::Smart
                     }
@@ -434,7 +434,7 @@ pub(crate) fn open_command_palette(
         )
         // The user's `[settings] command_palette_size`, as a semantic variant — the widget owns what
         // each one means in pixels.
-        .panel_size(match state.command_palette_size {
+        .panel_size(match state.settings.command_palette_size {
             heca_config::settings::PaletteSize::Small => heca_grid_ui::WidgetSize::Small,
             heca_config::settings::PaletteSize::Normal => heca_grid_ui::WidgetSize::Normal,
             heca_config::settings::PaletteSize::Large => heca_grid_ui::WidgetSize::Large,

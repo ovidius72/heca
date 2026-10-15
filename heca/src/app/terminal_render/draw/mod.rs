@@ -48,26 +48,15 @@ pub(crate) fn hyperlink_decor_from(
     }
 }
 
-/// **Where and how one terminal is drawn**: the texture it goes into, the mask and scissor that
-/// round it to its pane, and how see-through it is. A tiled pane and a floating one differ only in
-/// these, so they are one value, not two code paths.
+/// **What one terminal is drawn into**: the texture, and the stencil holding the round corners it
+/// is cut to — `None` when nothing round holds it.
 pub(crate) struct TerminalTarget<'a> {
     pub(crate) view: &'a wgpu::TextureView,
-    /// The rounded content-clip mask the terminal tests against. A pane has one; a terminal in a
-    /// dock or an overlay has none and is clipped by the scene alone.
     pub(crate) stencil: Option<&'a wgpu::TextureView>,
-    /// The scissor its cursor and selection are flushed under.
-    pub(crate) scissor: Option<(u32, u32, u32, u32)>,
-    pub(crate) surface_alpha: f32,
-    /// Everything a terminal draws is kept inside this (the content area).
-    pub(crate) content_clip: Rectangle,
-    /// Whether to keep it inside what clips it **in its scene** instead — a terminal in a dock or
-    /// an overlay is clipped by the scroll region or the panel around it, not by the content area.
-    pub(crate) follow_scene_clip: bool,
 }
 
-/// **Draw the terminal surface `surface` a scene asked for**, if it is one of `panes`. A surface
-/// nobody can draw is left out rather than guessed at.
+/// **Draw the terminal surface `surface` a scene asked for**, if it is one of `terminals`. A
+/// surface nobody can draw is left out rather than guessed at.
 pub(crate) fn draw_surface(
     state: &mut AppState,
     terminals: &[TerminalRenderState],
@@ -76,58 +65,55 @@ pub(crate) fn draw_surface(
     encoder: &mut wgpu::CommandEncoder,
 ) {
     if let Some(terminal) = terminals.iter().find(|t| t.id.0 == surface.id) {
-        let clip = surface.clip.filter(|_| target.follow_scene_clip);
-        draw_terminal(state, terminal, surface.rect, target, clip, encoder);
+        draw_terminal(state, terminal, surface, target, encoder);
     }
 }
 
-/// **Draw one terminal where the scene put it**: its retained texture, then its cursor and
-/// selection over it — or, for a terminal with no retained layer yet, the full render.
+/// **Draw one terminal where the scene put it**, cut by the clip in force there: its retained
+/// texture, then its cursor and selection over it — or, for a terminal with no retained layer yet,
+/// the full render.
 ///
-/// `at` is where the scene put it. A terminal with nothing to draw (no room or no snapshot yet) is
-/// skipped.
-pub(crate) fn draw_terminal(
+/// A picture of it (an echo, such as the one carried under the pointer) is its texture alone, in
+/// the picture's box and at the picture's opacity: the cursor and the selection belong to where
+/// the terminal is. A terminal with nothing to draw (no room or no snapshot yet) is skipped.
+fn draw_terminal(
     state: &mut AppState,
-    pane: &TerminalRenderState,
-    at: Rectangle,
+    terminal: &TerminalRenderState,
+    at: &heca_grid_ui::SurfaceAt,
     target: &TerminalTarget<'_>,
-    clip: Option<Rectangle>,
     encoder: &mut wgpu::CommandEncoder,
 ) {
-    let (Some(room), Some(mount)) = (pane.content_rect, pane.mount.as_ref()) else {
+    let (Some(room), Some(mount)) = (terminal.content_rect, terminal.mount.as_ref()) else {
         return;
     };
-    // Its size is what the layout gave it; its place is where the scene drew it.
-    let rect = Rectangle::new(at.loc, room.size);
     let surface_physical_size = state.window.inner_size();
-    // Any terminal's, whoever owns it: the selection is a terminal's, asked of its id.
-    let selection_overlay = selection_overlay_for_terminal(state, pane.id, &mount.snapshot);
-    let font_size = state.terminal_font_size(pane.id);
-    // Clipped by its scene (a dock, an overlay) or by the target's own box (a pane).
-    let content_clip = clip.unwrap_or(target.content_clip);
-    let scissor = match clip {
-        Some(c) => pane_scissor_rect(
-            c.loc.x as f32,
-            c.loc.y as f32,
-            c.size.w as f32,
-            c.size.h as f32,
-            state.scale_factor,
-            surface_physical_size,
-        ),
-        None => target.scissor,
-    };
-    if blit_retained_terminal_layer(
+    let blitted = blit_retained_terminal_layer(
         state,
-        pane.id,
+        terminal.id,
         encoder,
         target,
         (
             surface_physical_size.width as f32,
             surface_physical_size.height as f32,
         ),
-        rect,
-        clip,
-    ) {
+        at,
+    );
+    if at.echo {
+        return;
+    }
+    // Its size is what the layout gave it; its place is where the scene drew it.
+    let rect = Rectangle::new(at.rect.loc, room.size);
+    let selection_overlay = selection_overlay_for_terminal(state, terminal.id, &mount.snapshot);
+    let content_clip = at.clip.unwrap_or(rect);
+    let scissor = pane_scissor_rect(
+        content_clip.loc.x as f32,
+        content_clip.loc.y as f32,
+        content_clip.size.w as f32,
+        content_clip.size.h as f32,
+        state.scale_factor,
+        surface_physical_size,
+    );
+    if blitted {
         queue_terminal_dynamic_overlays(
             &mut state.text_renderer,
             &mut state.primitive_renderer,
@@ -144,6 +130,7 @@ pub(crate) fn draw_terminal(
             target.stencil,
         );
     } else {
+        let font_size = state.terminal_font_size(terminal.id);
         render_terminal_mount(
             TerminalRenderPassContext {
                 text_renderer: &mut state.text_renderer,
@@ -160,7 +147,7 @@ pub(crate) fn draw_terminal(
             TerminalStyle {
                 font_size,
                 families: terminal_font_families_from(&state.font_config.family),
-                surface_alpha: target.surface_alpha,
+                surface_alpha: terminal.opacity,
                 ligatures: state.appearance.terminal.ligatures,
                 hyperlink_style: hyperlink_decor_from(state.appearance.terminal.hyperlink_style),
                 hyperlink_color: state

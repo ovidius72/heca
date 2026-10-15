@@ -37,7 +37,7 @@
 //! write-via-actions* contract — the host's toggle action expands the rail back.
 
 use crate::action::{Action, SignalData};
-use crate::builders::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
+use crate::builders::{HintExt, LayoutExt, Parent, PlaceExt, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
@@ -389,7 +389,7 @@ impl Component for DockFrame {
         self.nav.get_untracked() || self.base.focused_by_keyboard()
     }
 
-    /// The frame arranges its parts; [`ROWS`] says how.
+    /// The frame arranges its parts; `ROWS` says how.
     fn taffy_style(&self) -> taffy::Style {
         self.base
             .style

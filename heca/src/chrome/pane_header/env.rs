@@ -74,7 +74,7 @@ impl PaneHeader {
     }
 
     /// Teach `pane` to show the facts it is handed in this header.
-    pub(crate) fn answer_props<C: heca_grid_ui::builders::ComponentExt>(self, pane: C) -> C {
+    pub(crate) fn answer_props<C: heca_grid_ui::builders::IdentityExt>(self, pane: C) -> C {
         pane.on_props(move |input: &PaneHeaderInput, _| (self.show)(input, &self.node))
     }
 }

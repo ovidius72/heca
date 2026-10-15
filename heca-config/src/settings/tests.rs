@@ -20,6 +20,7 @@ fn test_settings_config_default_values() {
     assert_eq!(s.terminal_brights, None);
     assert!(s.auto_scroll_edge);
     assert_eq!(s.edge_scroll_distance, 80.0);
+    assert_eq!(s.edge_scroll_speed, 1000.0);
     assert_eq!(s.interactive_move_modifier, ModifierKey::Super);
     assert_eq!(s.column_focus, ColumnFocus::Last);
     assert_eq!(s.swap_modifier, ModifierKey::Shift);

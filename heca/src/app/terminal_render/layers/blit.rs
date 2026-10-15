@@ -9,21 +9,24 @@ use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::terminal::{SelectionOverlay, TerminalRenderer};
 use heca_renderer::text::TextRenderer;
 
+/// **Put `terminal`'s retained texture where the scene put it**: stretched to the scene's box (a
+/// picture shrinks it), cropped to the clip in force there, at the scene's opacity. `false` when
+/// it has no texture yet.
 pub(crate) fn blit_retained_terminal_layer(
     state: &AppState,
     terminal: TerminalId,
     encoder: &mut wgpu::CommandEncoder,
     target: &TerminalTarget<'_>,
     viewport_px: (f32, f32),
-    rect: Rectangle,
-    clip: Option<Rectangle>,
+    at: &heca_grid_ui::SurfaceAt,
 ) -> bool {
     let Some(layer) = state.terminal_layers.get(&terminal) else {
         return false;
     };
+    let rect = at.rect;
     // The part of the terminal that shows: all of it, or what its clip leaves. The texture is
     // cropped to match, so what shows is the same picture, not a squeezed one.
-    let shown = match clip {
+    let shown = match at.clip {
         Some(clip) => rect.intersection(clip),
         None => Some(rect),
     };
@@ -51,7 +54,7 @@ pub(crate) fn blit_retained_terminal_layer(
             shown.size.h as f32 * scale,
         ),
         Some(uv),
-        1.0,
+        at.alpha,
         0.0,
         target.stencil,
     );

@@ -27,7 +27,7 @@ use heca_core::layout::{PaneId, Rectangle};
 use heca_grid_ui::component::Base;
 use heca_grid_ui::style::Placement;
 use heca_grid_ui::widgets::{Flex, LandingSlot, Splitter};
-use heca_grid_ui::{Component, ComponentExt, Length, reconcile};
+use heca_grid_ui::{Component, IdentityExt, Length, PresenceExt, reconcile};
 
 use crate::chrome::column::{ColumnCallbacks, ColumnShell, ColumnShellModel};
 use crate::chrome::pane::shell::focus_state_to;

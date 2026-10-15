@@ -4,7 +4,6 @@ use crate::chrome::Intent as ViewIntent;
 use crate::input::WmAction;
 use heca_core::layout::PaneId;
 
-
 /// **Which surface an intent was declared on** — the identity
 /// [`InteractionSource::Surface`] carries.
 ///
@@ -48,20 +47,20 @@ pub(crate) enum InteractionSource {
     /// Mouse click or drag in the left sidebar.
     MouseLeftSidebar,
     /// A mounted **component** asking the host for something from inside its `perform`
-    /// (`ProviderCx::dispatch`, F003/P085/T353).
+    /// (`ProviderCx::dispatch`).
     ///
     /// Its own source, not a borrowed one, because it is genuinely a different actor: the request
     /// did not come from a device, and a component is the one caller the host must be able to judge
     /// separately from the user driving it.
     Provider,
-    /// A scripted call over the RPC surface (F003/P086/T372).
+    /// A scripted call over the RPC surface.
     ///
     /// Its own source for the same reason `Provider` is: a script is a different actor from a
     /// device, and it is judged by the same policy as everyone else — a `TiledOnly` action called
     /// while a float owns the domain is blocked, exactly as the keypress would be.
     Rpc,
     /// **A layer's own retained tree**, acting on itself — the exposé's `x` on a card, a plugin
-    /// panel's button (F003/P082/T416).
+    /// panel's button.
     ///
     /// Its own source because the surface that holds the keyboard is a different actor from the
     /// user typing at the app *behind* it, and [`domain_for`] has to tell them apart. While the
@@ -111,7 +110,7 @@ pub(crate) enum InteractionIntent {
     },
     /// Focus a mounted **container**, then run an action on it — the container half of
     /// [`FocusPaneThenAction`](Self::FocusPaneThenAction), and the way the palette and RPC reach a
-    /// component's own verbs (F003/P085/T358).
+    /// component's own verbs.
     ///
     /// A component's selection-dependent actions declare
     /// [`ActionPolicy::ContainerFocused`](ActionPolicy::ContainerFocused), so "delete the row my

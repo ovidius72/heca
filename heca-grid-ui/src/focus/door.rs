@@ -137,8 +137,10 @@ impl Base {
     }
 
     /// This widget's identity for focus purposes — what lets a surface remember *which* widget to
-    /// give the keyboard back to, across a frame that rebuilt nothing it can point at.
-    pub(super) fn focus_id(&self) -> u64 {
+    /// give the keyboard back to, across a frame that rebuilt nothing it can point at. A host keeps
+    /// it to ask whether this widget holds the keyboard ([`keyboard_holder`](crate::keyboard_holder))
+    /// or to give it the keyboard ([`focus_widget_by_id`](crate::focus_widget_by_id)).
+    pub fn focus_id(&self) -> u64 {
         let door = &self.focus_door;
         if door.id.get() == 0 {
             door.id.set(NEXT_ID.with(|n| {

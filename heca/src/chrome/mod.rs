@@ -19,8 +19,8 @@ pub(crate) mod pane_header;
 pub(crate) mod terminal;
 pub(crate) mod workspace;
 pub(crate) use pane_header::{
-    ActionShortcuts, HeaderEnv, PaneHeader, action_tooltip, home_relative_path,
-    give_header_facts, pane_header_inputs, pane_info_view,
+    ActionShortcuts, HeaderEnv, PaneHeader, action_tooltip, give_header_facts, home_relative_path,
+    pane_header_inputs, pane_info_view,
 };
 pub(crate) mod drag;
 pub(crate) mod pane_items;
@@ -45,9 +45,8 @@ mod dispatch;
 mod focus;
 mod scene;
 pub(crate) use dispatch::{
-    cancel_every_tree, deliver, dispatch_surface_pointer, drag_in_flight,
-    drain_pending_drops, drain_pending_menus, next_redraw_across_trees,
-    open_declared_menu_for_focus,
+    cancel_every_tree, deliver, dispatch_surface_pointer, drag_in_flight, drain_pending_drops,
+    drain_pending_menus, next_redraw_across_trees, open_declared_menu_for_focus,
 };
 #[cfg(test)]
 use scene::chrome_scene;
@@ -273,7 +272,7 @@ fn yield_to_content(window_width: f32, left: f32, right: f32, sidebar_gap: f32) 
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{EventExt, HintExt, IdentityExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
@@ -292,7 +291,7 @@ pub(crate) fn runtime_snapshot(
 }
 
 /// How a chrome widget reports a user action back to the app: it emits an
-/// [`InteractionIntent`](crate::app::interaction::InteractionIntent), never a direct
+/// `InteractionIntent`, never a direct
 /// state mutation. Handed to container providers through
 /// [`ChromeCtx::emit_intent`](crate::providers::ChromeCtx::emit_intent).
 #[derive(Clone)]
@@ -672,7 +671,6 @@ pub(crate) fn slot_of_key(key: &str) -> Option<usize> {
     key.strip_prefix("slot:")?.parse().ok()
 }
 
-
 /// **What one of a pane's own controls is called** — `pane:7-zoom`.
 ///
 /// A control named for its ROLE is not named at all: every pane has a zoom button, so `zoom` says
@@ -742,7 +740,7 @@ mod naming_tests {
 ///
 /// **`mount` is not ceremony — it is which element this is.** A widget is built inside one mounted
 /// container and the gesture it declares carries that seating
-/// ([`SEAT_ARG`](crate::providers::SEAT_ARG)), so the same container seated twice has two rows that
+/// (`SEAT_ARG`), so the same container seated twice has two rows that
 /// each answer for themselves. It is a parameter rather than something a caller may add, because a
 /// rule a caller has to remember is a rule that gets forgotten: without it the host had to resolve
 /// the call back to an instance by guessing (focused seat, else last focused, else the first one
@@ -1932,7 +1930,11 @@ mod tests {
         let chrome = SharedChromeState::new(280.0, 260.0);
         let mut window = Windowed::new(Size::new(1280.0, 800.0), 1.0);
         {
-            window.m().add_pane(heca_core::layout::Pane::new(PaneId(10), "editor"), None, true);
+            window.m().add_pane(
+                heca_core::layout::Pane::new(PaneId(10), "editor"),
+                None,
+                true,
+            );
             let ws = window
                 .session
                 .workspaces
@@ -2000,9 +2002,11 @@ mod tests {
     fn sync_pane_runtime_state_prunes_removed_panes() {
         let chrome = SharedChromeState::new(280.0, 260.0);
         let mut window = Windowed::new(Size::new(1280.0, 800.0), 1.0);
-        window
-            .m()
-            .add_pane(heca_core::layout::Pane::new(PaneId(10), "editor"), None, true);
+        window.m().add_pane(
+            heca_core::layout::Pane::new(PaneId(10), "editor"),
+            None,
+            true,
+        );
 
         super::signals::sync_pane_runtime_state(&window.session, &chrome.workspaces);
         assert!(

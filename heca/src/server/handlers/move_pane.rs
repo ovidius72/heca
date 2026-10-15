@@ -9,7 +9,11 @@ use crate::server::{Change, Refusal, ServerCx};
 fn landed(pane: PaneId, moved: Option<Moved>) -> Vec<Change> {
     match moved {
         Some(m) => {
-            let landed = Change::PaneMoved { pane, workspace: m.workspace, column: m.column };
+            let landed = Change::PaneMoved {
+                pane,
+                workspace: m.workspace,
+                column: m.column,
+            };
             Change::after_move(m, landed)
         }
         None => Vec::new(),
@@ -22,7 +26,11 @@ fn moved_within(workspace: usize, pane: PaneId, effects: Vec<SpaceEffect>) -> Ve
     let landed = SpaceEffect::landing(&effects);
     let mut changes = vec![Change::Arranged { workspace, effects }];
     if let Some((column, _)) = landed {
-        changes.push(Change::PaneMoved { pane, workspace, column });
+        changes.push(Change::PaneMoved {
+            pane,
+            workspace,
+            column,
+        });
     }
     changes
 }
@@ -32,7 +40,9 @@ fn moved_within(workspace: usize, pane: PaneId, effects: Vec<SpaceEffect>) -> Ve
 fn spot(cx: &ServerCx<'_>, pane: Option<PaneId>) -> Option<(PaneId, usize, usize, usize)> {
     let session = &*cx.layout;
     match pane {
-        Some(id) => session.pane_location(id).map(|(ws, col, row)| (id, ws, col, row)),
+        Some(id) => session
+            .pane_location(id)
+            .map(|(ws, col, row)| (id, ws, col, row)),
         None => {
             let (ws, col) = (cx.asker.workspace, cx.asker.column);
             let column = session.workspaces.get(ws)?.scrolling.columns.get(col)?;
@@ -94,7 +104,11 @@ pub(super) fn move_pane_right(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<C
 
 /// Move a pane into a column of its own workspace.
 pub(super) fn move_to_column_here(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change> {
-    let WmAction::Move { pane_id, target_col } = action else {
+    let WmAction::Move {
+        pane_id,
+        target_col,
+    } = action
+    else {
         return Vec::new();
     };
     move_within(cx, *pane_id, *target_col)
@@ -109,7 +123,11 @@ pub(super) fn move_to_workspace(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec
         return Vec::new();
     };
     let height = cx.asker.area.size.h;
-    landed(*pane_id, cx.layout.move_pane_to_workspace(*pane_id, *ws_idx, column, false, height))
+    landed(
+        *pane_id,
+        cx.layout
+            .move_pane_to_workspace(*pane_id, *ws_idx, column, false, height),
+    )
 }
 
 /// Move a pane to column `col_idx` of workspace `ws_idx`, stacked with that column's panes.
@@ -129,12 +147,17 @@ pub(super) fn move_to_column(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Ch
         return move_within(cx, *pane_id, *col_idx);
     }
     let height = cx.asker.area.size.h;
-    landed(*pane_id, cx.layout.move_pane_to_workspace(*pane_id, *ws_idx, *col_idx, true, height))
+    landed(
+        *pane_id,
+        cx.layout
+            .move_pane_to_workspace(*pane_id, *ws_idx, *col_idx, true, height),
+    )
 }
 
 /// Take the asker's focused pane out of its column into a new one, right of it.
 pub(super) fn move_to_new_column(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Change> {
-    let Some((pane, workspace, col, row)) = cx.asker.focused_pane.and_then(|p| spot(cx, Some(p))) else {
+    let Some((pane, workspace, col, row)) = cx.asker.focused_pane.and_then(|p| spot(cx, Some(p)))
+    else {
         return Vec::new();
     };
     let new_column = ColumnId(cx.layout.next_id());
@@ -158,7 +181,10 @@ pub(super) fn take_pane(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change>
         return Vec::new();
     };
     let (into, column, height) = (cx.asker.workspace, cx.asker.column, cx.asker.area.size.h);
-    landed(*pane_id, cx.layout.take_pane_into(*pane_id, into, column, height))
+    landed(
+        *pane_id,
+        cx.layout.take_pane_into(*pane_id, into, column, height),
+    )
 }
 
 /// Put a pane at an exact place.
@@ -173,5 +199,9 @@ pub(super) fn place_pane(cx: &mut ServerCx<'_>, action: &WmAction) -> Vec<Change
         return Vec::new();
     };
     let height = cx.asker.area.size.h;
-    landed(*pane_id, cx.layout.place_pane(*pane_id, *ws_idx, *col_idx, *pane_idx, height))
+    landed(
+        *pane_id,
+        cx.layout
+            .place_pane(*pane_id, *ws_idx, *col_idx, *pane_idx, height),
+    )
 }

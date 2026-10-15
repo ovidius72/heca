@@ -30,11 +30,11 @@ pub struct PanelChrome {
     /// The widget's preferred edge (color + width) — used **only** when
     /// `overlay_frame` draws an edge (`Bordered`/`Bracketed`), and ignored under
     /// [`FrameStyle::None`](crate::theme::FrameStyle::None). `None` here falls back
-    /// to the theme's neutral `border` color, so the base [`Overlay`] still gets an
-    /// edge when the user asks for one.
+    /// to the theme's neutral `border` color, so the base [`Overlay`](crate::widgets::Overlay)
+    /// still gets an edge when the user asks for one.
     pub border: Option<Border>,
-    /// Glow on the panel fill. `None` (the base [`Overlay`]) = no halo. **Not**
-    /// governed by `overlay_frame`: the halo is the panel's neon identity, not a
+    /// Glow on the panel fill. `None` (the base [`Overlay`](crate::widgets::Overlay)) = no halo.
+    /// **Not** governed by `overlay_frame`: the halo is the panel's neon identity, not a
     /// frame, so it survives `FrameStyle::None`.
     pub glow: Option<Glow>,
     /// How far above the page this surface sits — the depth its drop shadow
@@ -63,7 +63,7 @@ pub enum PanelElevation {
     Panel,
     /// A transient surface hovering just above its target — the
     /// [`Tooltip`](crate::widgets::Tooltip) bubble. Same shadow shape at
-    /// [`HOVER_SHADOW_SCALE`] of the depth: enough to lift it off the page, not
+    /// `HOVER_SHADOW_SCALE` of the depth: enough to lift it off the page, not
     /// enough to read as a panel.
     Hover,
 }
@@ -92,8 +92,8 @@ impl PanelElevation {
 /// the panel's **edge** as the user configured it.
 ///
 /// This is the single authority for what an overlay panel *looks like*, so the base
-/// [`Overlay`] and the widgets that own their own panel (a `Select` dropdown, whose
-/// option rows are placed children and therefore cannot be handed to an `Overlay`)
+/// [`Overlay`](crate::widgets::Overlay) and the widgets that own their own panel (a `Select`
+/// dropdown, whose option rows are placed children and therefore cannot be handed to an `Overlay`)
 /// cannot drift apart. Call it inside a [`PaintCx::with_overlay`] block; it does not
 /// open the overlay layer itself.
 ///

@@ -35,7 +35,7 @@ pub struct Zoom {
 }
 
 impl Zoom {
-    /// A zoom over [`DEFAULT_DURATION`] between [`DEFAULT_FROM`] and life size.
+    /// A zoom over `DEFAULT_DURATION` between `DEFAULT_FROM` and life size.
     pub fn new() -> Self {
         Self {
             left: None,

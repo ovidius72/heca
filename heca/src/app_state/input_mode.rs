@@ -12,14 +12,12 @@ pub enum SidebarItemState {
     None,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RenameTarget {
     Workspace(usize),
     Column { ws_idx: usize, col_idx: usize },
     Pane(PaneId),
 }
-
 
 impl RenameTarget {
     /// The catalogued action that renames this kind of thing — whose label titles the rename
@@ -38,14 +36,15 @@ impl RenameTarget {
         use crate::input::WmAction;
         match self {
             RenameTarget::Pane(pane_id) => WmAction::RenameTarget { pane_id, name },
-            RenameTarget::Column { ws_idx, col_idx } => {
-                WmAction::RenameColumnTo { ws_idx, col_idx, name }
-            }
+            RenameTarget::Column { ws_idx, col_idx } => WmAction::RenameColumnTo {
+                ws_idx,
+                col_idx,
+                name,
+            },
             RenameTarget::Workspace(ws_idx) => WmAction::RenameWorkspaceTo { ws_idx, name },
         }
     }
 }
-
 
 /// **Where a picked pane goes** — a column that exists, or one that does not yet.
 ///
@@ -69,7 +68,6 @@ pub enum ColumnPickTarget {
     /// empty place between, above or below the panes of a column.
     NewRow { col: usize, row: usize },
 }
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
@@ -173,7 +171,6 @@ pub enum InputMode {
     },
 }
 
-
 /// A single follow-link candidate: the letter to press, the terminal it lives in, where
 /// to stamp its keycap (the link's first visible cell — `row` from the viewport top,
 /// `start_col` inclusive), and the URL to open. Built from `snapshot.hyperlinks`, so
@@ -197,7 +194,6 @@ pub enum WorkspacePickTarget {
     /// A specific pane (by stable id), for `MovePaneToWorkspace`.
     Pane(PaneId),
 }
-
 
 impl InputMode {
     pub fn candidates(&self) -> Option<&[(char, PaneId)]> {
@@ -343,7 +339,6 @@ impl InputMode {
     }
 }
 
-
 /// A keyboard pick (target-selection) currently in progress. Exposed reactively so
 /// components/plugins can render their own UI for the pending action.
 ///
@@ -363,7 +358,6 @@ pub struct PendingPick {
     pub prompt: String,
 }
 
-
 /// The kind of in-progress keyboard pick.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PickKind {
@@ -376,7 +370,6 @@ pub enum PickKind {
     /// Pick a chrome container to give keyboard focus to.
     FocusDock,
 }
-
 
 impl PickKind {
     /// **What this pick offers, as a word** — so a refusal can say what there was none of without
@@ -392,4 +385,3 @@ impl PickKind {
         }
     }
 }
-

@@ -30,8 +30,8 @@
 //! segment and composites above everything this overlay draws — see
 //! [`Scene::overlay_segments`](crate::scene::Scene::overlay_segments).
 //!
-//! **This surface is three files**: the widget here, [what a panel looks like](chrome) and
-//! [where a panel goes](place).
+//! **This surface is three files**: the widget here, what a panel looks like and
+//! where a panel goes.
 
 mod chrome;
 mod component;
@@ -70,7 +70,8 @@ const SCRIM_REACH: f64 = 1.0e9;
 ///
 /// Build with [`Overlay::new`], hand it the panel via [`panel`](Overlay::panel) (or
 /// a mapper-produced `Box<dyn Component>` goes through the same builder), and raise it
-/// with [`open`](Overlay::open) / [`hide`](Overlay::hide) / [`toggle`](Overlay::toggle) — or bind
+/// with [`show`](Component::show) / [`close`](Overlay::close) / [`toggle`](Overlay::toggle) — or
+/// bind
 /// [`open_signal`](Overlay::open_signal), which a composing widget does.
 /// [`blocking`](Overlay::blocking) selects the layer policy: blocking (default) = scrim + swallow
 /// outside input; non-blocking = outside input falls through (light dismiss).
@@ -238,8 +239,7 @@ impl Overlay {
     /// of anything the caller laid out.
     ///
     /// Call order does not matter: this is stored on the overlay and re-applied
-    /// whenever the panel is (re)set by [`panel`](Overlay::panel) /
-    /// [`panel_boxed`](Overlay::panel_boxed).
+    /// whenever the panel is (re)set by [`panel`](Overlay::panel).
     ///
     /// ```ignore
     /// // A modal that is 60% of the viewport wide and 70% tall, whose body scrolls.
@@ -423,7 +423,8 @@ impl Overlay {
     /// keyboard where it was.
     ///
     /// **No `key` required.** The name is the control's declared `key` when it has one and the
-    /// words it reads by when it does not — see [`FocusManager::focus_named`].
+    /// words it reads by when it does not — see
+    /// [`FocusManager::focus_named`](crate::focus::FocusManager::focus_named).
     #[heca_grid_ui_macros::prop]
     pub fn default_focus(mut self, name: impl Into<String>) -> Self {
         self.default_focus = Some(name.into());
@@ -515,7 +516,7 @@ impl Overlay {
     ///
     /// The `Overlay` owns appearing and disappearing as a **concept** — it already owns the scrim,
     /// the panel chrome, the placement and whether it is open — and hands the *how* to an
-    /// [`Animation`]. So [`show`](Component::show) and [`hide`](Component::hide) stop being
+    /// [`Animation`]. So [`show`](Component::show) and [`close`](Component::close) stop being
     /// instant: a dismissed overlay stays on screen, inert, until its exit has played out.
     ///
     /// **One builder, both authors.** A description names the same animation, because

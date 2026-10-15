@@ -13,20 +13,58 @@ use crate::server::Change;
 #[test]
 fn closing_a_pane_by_id_finds_it_in_another_workspace() {
     let mut w = two_workspaces_of_two_columns();
-    let changes = run(&mut w, WmAction::ClosePaneById { pane_id: PaneId(12) });
+    let changes = run(
+        &mut w,
+        WmAction::ClosePaneById {
+            pane_id: PaneId(12),
+        },
+    );
     let gone = vec![SpaceEffect::Column(ColumnEffect::Removed { idx: 1 })];
-    assert_eq!(changes, [Change::PaneRemoved { pane: PaneId(12) }, Change::Arranged { workspace: 1, effects: gone }]);
+    assert_eq!(
+        changes,
+        [
+            Change::PaneRemoved { pane: PaneId(12) },
+            Change::Arranged {
+                workspace: 1,
+                effects: gone
+            }
+        ]
+    );
     assert!(w.session.workspaces[1].find_pane(PaneId(12)).is_none());
-    assert!(run(&mut w, WmAction::ClosePaneById { pane_id: PaneId(12) }).is_empty());
+    assert!(
+        run(
+            &mut w,
+            WmAction::ClosePaneById {
+                pane_id: PaneId(12)
+            }
+        )
+        .is_empty()
+    );
 }
 
 /// Closing the last pane of a workspace removes the workspace, and says so after the pane.
 #[test]
 fn closing_a_workspaces_last_pane_reports_the_workspace_too() {
     let mut w = two_workspaces_of_two_columns();
-    run(&mut w, WmAction::ClosePaneById { pane_id: PaneId(11) });
-    let changes = run(&mut w, WmAction::ClosePaneById { pane_id: PaneId(12) });
-    assert_eq!(changes, [Change::PaneRemoved { pane: PaneId(12) }, Change::WorkspaceRemoved { index: 1 }]);
+    run(
+        &mut w,
+        WmAction::ClosePaneById {
+            pane_id: PaneId(11),
+        },
+    );
+    let changes = run(
+        &mut w,
+        WmAction::ClosePaneById {
+            pane_id: PaneId(12),
+        },
+    );
+    assert_eq!(
+        changes,
+        [
+            Change::PaneRemoved { pane: PaneId(12) },
+            Change::WorkspaceRemoved { index: 1 }
+        ]
+    );
 }
 
 /// `close` is the asker's focused pane; with none focused nothing happens.
@@ -36,24 +74,56 @@ fn close_closes_the_askers_focused_pane() {
     assert!(run(&mut w, WmAction::ClosePane).is_empty());
     let changes = run_for(&mut w, Some(PaneId(2)), WmAction::ClosePane);
     let gone = vec![SpaceEffect::Column(ColumnEffect::Removed { idx: 1 })];
-    assert_eq!(changes, [Change::PaneRemoved { pane: PaneId(2) }, Change::Arranged { workspace: 0, effects: gone }]);
+    assert_eq!(
+        changes,
+        [
+            Change::PaneRemoved { pane: PaneId(2) },
+            Change::Arranged {
+                workspace: 0,
+                effects: gone
+            }
+        ]
+    );
 }
 
 /// A column goes with every pane in it, each reported.
 #[test]
 fn deleting_a_column_reports_each_of_its_panes() {
     let mut w = two_workspaces_of_two_columns();
-    w.ws().scroll_mut().add_pane_to_column(0, None, heca_core::layout::Pane::new(PaneId(50), "x"), false);
-    let changes = run(&mut w, WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 });
+    w.ws().scroll_mut().add_pane_to_column(
+        0,
+        None,
+        heca_core::layout::Pane::new(PaneId(50), "x"),
+        false,
+    );
+    let changes = run(
+        &mut w,
+        WmAction::DeleteColumn {
+            ws_idx: 0,
+            col_idx: 0,
+        },
+    );
     assert_eq!(
         changes,
         [
             Change::PaneRemoved { pane: PaneId(1) },
             Change::PaneRemoved { pane: PaneId(50) },
-            Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(ColumnEffect::Removed { idx: 0 })] }
+            Change::Arranged {
+                workspace: 0,
+                effects: vec![SpaceEffect::Column(ColumnEffect::Removed { idx: 0 })]
+            }
         ]
     );
-    assert!(run(&mut w, WmAction::DeleteColumn { ws_idx: 9, col_idx: 0 }).is_empty());
+    assert!(
+        run(
+            &mut w,
+            WmAction::DeleteColumn {
+                ws_idx: 9,
+                col_idx: 0
+            }
+        )
+        .is_empty()
+    );
 }
 
 /// A workspace goes with everything in it, and is reported gone.

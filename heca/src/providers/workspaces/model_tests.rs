@@ -2,11 +2,7 @@
 
 use super::*;
 use crate::app_state::SidebarItemState;
-use heca_core::layout::{
-    Pane as LayoutPane, PaneId,
-    testing::Windowed,
-    types::Size,
-};
+use heca_core::layout::{Pane as LayoutPane, PaneId, testing::Windowed, types::Size};
 
 // Workspace collapse is owned by chrome_state; these helpers drive it the way the
 // app does — mutate chrome_state, then project onto the tree via apply_ws_collapsed.
@@ -524,7 +520,9 @@ fn selection_survives_a_tree_rebuild() {
     // than row-removal.
     let (mut session, _ids) = make_test_session();
     session.m().switch_to_workspace(1);
-    session.m().add_pane(LayoutPane::new(PaneId(9), "Pane9"), None, true);
+    session
+        .m()
+        .add_pane(LayoutPane::new(PaneId(9), "Pane9"), None, true);
     let chrome = test_chrome();
     let mut tree = WorkspaceTree::new();
     tree.sync_from_session(session.l(), None, Some(PaneId(1)), &[]);
@@ -616,7 +614,9 @@ fn no_selection_is_not_a_request_to_move() {
 fn a_row_keeps_its_key_when_a_column_is_inserted_before_it() {
     let mut session = Windowed::new(Size::new(1280.0, 800.0), 1.0);
     for i in 1..=2u64 {
-        session.m().add_pane(LayoutPane::new(PaneId(i), format!("Pane{i}")), None, true);
+        session
+            .m()
+            .add_pane(LayoutPane::new(PaneId(i), format!("Pane{i}")), None, true);
     }
 
     let key_of_last = |session: &Windowed| {
@@ -633,7 +633,9 @@ fn a_row_keeps_its_key_when_a_column_is_inserted_before_it() {
     let before = key_of_last(&session);
 
     // Split: a new column arrives *in front of* the last one, so every position after it shifts.
-    session.m().add_pane(LayoutPane::new(PaneId(9), "Pane9"), None, true);
+    session
+        .m()
+        .add_pane(LayoutPane::new(PaneId(9), "Pane9"), None, true);
     {
         let mut ws = session.ws();
         let inserted = ws.scrolling.columns.pop().expect("the new column");

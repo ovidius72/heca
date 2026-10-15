@@ -3,7 +3,7 @@
 //! These are the geometry layer of the drag framework: pure bounds walks over the
 //! **retained widget tree** (whose `Base.bounds` are filled in by layout each
 //! frame). They replace hand-computed, per-surface hit-testing — any widget marked
-//! via [`ComponentExt`](crate::builders::ComponentExt) participates automatically.
+//! via [`DragExt`](crate::builders::DragExt) participates automatically.
 //!
 //! Domain-neutral: a result is the widget's **identity** — the name it declared with
 //! [`key`](crate::component::Base::key), or one derived from its content when it declared none
@@ -93,7 +93,7 @@ pub enum DropSide {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DropHit {
     /// The target's own name — what it declared with
-    /// [`ComponentExt::key`](crate::builders::ComponentExt::key), or one derived from its content.
+    /// [`IdentityExt::key`](crate::builders::IdentityExt::key), or one derived from its content.
     /// This is what a **host** reads: it says *what* was landed on, and a pane is the same pane
     /// whichever seating you dragged it in.
     pub key: String,
@@ -148,7 +148,7 @@ pub fn resolve_at(root: &dyn Component, point: Point) -> Option<DropHit> {
 }
 
 /// [`resolve_at`], for a drag that says **what it is** — a target that does not
-/// [`accept`](crate::builders::ComponentExt::accepts) that word is skipped and the walk keeps
+/// [`accept`](crate::builders::DragExt::accepts) that word is skipped and the walk keeps
 /// going outward, so the drop lands on the nearest thing that would actually take it and nothing
 /// else is ever drawn on.
 pub fn resolve_at_for(root: &dyn Component, point: Point, kind: Option<&str>) -> Option<DropHit> {
@@ -367,7 +367,7 @@ mod tests {
     }
 
     use super::*;
-    use crate::builders::ComponentExt;
+    use crate::builders::{DragExt, IdentityExt};
     use crate::widgets::{Flex, Surface};
     use heca_core::layout::{Point, Rectangle, Size};
 

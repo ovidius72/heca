@@ -9,7 +9,7 @@
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::Component;
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{EventExt, HintExt, IdentityExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::{Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Flex, GridCell, HintPlacement, Row};

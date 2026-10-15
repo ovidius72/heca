@@ -342,7 +342,7 @@ fn forget_on_disk(path: &Path, scope: Option<&str>, what: Forget) -> std::io::Re
 /// Best-effort: a home directory that cannot be written is not a reason to interrupt someone running
 /// a command, so a failure is reported once and the session carries on remembering in memory.
 pub fn persist_if_changed(state: &mut crate::app_state::AppState) {
-    if !state.search_history {
+    if !state.settings.search_history {
         return;
     }
     let revision = state.search_store.borrow().revision();

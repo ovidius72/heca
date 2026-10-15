@@ -59,7 +59,9 @@ fn a_pane_stacks_into_a_column_of_another_workspace() {
 #[test]
 fn a_column_moves_to_the_end_of_another_workspace() {
     let mut s = session(&[&[&[1], &[2]], &[&[3]]]);
-    let moved = s.move_column(0, 0, 1, usize::MAX).expect("it moves");
+    let moved = s
+        .move_column(0, 0, 1, crate::layout::END)
+        .expect("it moves");
     assert_eq!(
         (
             moved.workspace,
@@ -74,7 +76,9 @@ fn a_column_moves_to_the_end_of_another_workspace() {
 #[test]
 fn the_last_column_leaving_removes_its_workspace_and_renumbers_the_target() {
     let mut s = session(&[&[&[1]], &[&[2]]]);
-    let moved = s.move_column(0, 0, 1, usize::MAX).expect("it moves");
+    let moved = s
+        .move_column(0, 0, 1, crate::layout::END)
+        .expect("it moves");
     assert_eq!(
         (
             moved.workspace,

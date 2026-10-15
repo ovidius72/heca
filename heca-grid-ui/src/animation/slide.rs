@@ -67,7 +67,7 @@ pub struct Slide {
 }
 
 impl Slide {
-    /// A slide over [`DEFAULT_DURATION`], in from the right by [`DEFAULT_DISTANCE`].
+    /// A slide over `DEFAULT_DURATION`, in from the right by `DEFAULT_DISTANCE`.
     pub fn new() -> Self {
         Self {
             left: None,

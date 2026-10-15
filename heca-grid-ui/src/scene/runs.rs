@@ -26,6 +26,7 @@ impl Scene {
                     rect,
                     alpha,
                     echo,
+                    rounded,
                 }) => {
                     for _ in &open {
                         draws.commands.push(DrawCommand::PopClip);
@@ -43,6 +44,7 @@ impl Scene {
                             alpha: *alpha,
                             clip,
                             echo: *echo,
+                            rounded: *rounded,
                         }),
                         HostDraw::Backdrop { radius, corner } => HostWork::Backdrop(BackdropAt {
                             radius,
@@ -209,6 +211,9 @@ pub struct SurfaceAt {
     /// A picture of the surface rather than the surface's own place — see
     /// [`HostCmd::echo`](crate::scene::HostCmd::echo).
     pub echo: bool,
+    /// The round corners it is cut to, on top of `clip` — see
+    /// [`Rounded`](crate::scene::Rounded).
+    pub rounded: Option<crate::scene::Rounded>,
 }
 
 /// One draw that fell outside the box it was measured against — see

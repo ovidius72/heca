@@ -1,10 +1,8 @@
 //! **The passes of a frame**, each a method of [`Frame`] named for what it draws.
 
-
 use super::host_work::{HostTargets, do_host_work};
 use super::{Frame, FrameTerminals};
 use crate::app::scene_flush::flush_scene;
-use crate::app::terminal_render::TerminalRenderState;
 use crate::app_state::AppState;
 
 impl Frame {
@@ -45,9 +43,9 @@ impl Frame {
         // Bottom-most layer: a blurred vertical gradient composited at `background_alpha()` (opaque
         // by default per the locked decision). Tiled panes then render translucent
         // (`surface_alpha`) directly over this — their frost IS z=0 showing through, not a
-        // per-pane tint. Drawn pre-stencil (`stencil = None`) so the tiled content-clip never
-        // clips the background. `BackgroundLayer` caches the blurred result; it recomputes only on
-        // resize or param change (see `heca-renderer/src/background.rs`).
+        // per-pane tint. Drawn without the stencil (`stencil = None`) so no terminal's corners cut
+        // the background. `BackgroundLayer` caches the blurred result; it recomputes only on resize
+        // or param change (see `heca-renderer/src/background.rs`).
         let top = state
             .appearance
             .effective_background_gradient_top(&state.theme)
@@ -99,53 +97,6 @@ impl Frame {
         state
             .text_renderer
             .render(&state.queue, &self.scene, &mut self.encoder, None);
-    }
-
-    /// **Write the rounded content-clip mask for `panes`.**
-    ///
-    /// Marks each pane's rounded rect (the full pane, radius = the pane border radius) in the
-    /// stencil buffer so the content passes (backdrop + text + primitives) test against it and fill
-    /// to the pane edge, following the rounded border. The border is drawn OUTSIDE this rect, so
-    /// content meets the border's inner edge with no gap (outer-border style). One pass writes the
-    /// union of masks; each pane's content is separately scissored to its own rect, so the union
-    /// mask clips it to its own rounded shape. The grid renderer appends this at its running frame
-    /// offset (composing with the later border/color passes).
-    ///
-    /// Clear-once contract: `render_stencil` clears the stencil to 0 then writes the mask; the
-    /// content passes `Load` it (never clear). Called once a frame, for the tiled and the floating
-    /// panes together.
-    pub(in crate::app) fn write_mask<'a>(
-        &mut self,
-        state: &mut AppState,
-        panes: impl Iterator<Item = &'a TerminalRenderState>,
-    ) {
-        let mut any = false;
-        for pane in panes {
-            any = true;
-            state.grid_renderer.draw(heca_renderer::grid::GlowRect {
-                x: pane.x,
-                y: pane.y,
-                w: pane.w,
-                h: pane.h,
-                fill: [0.0; 4],
-                border: [0.0; 4],
-                border_width: 0.0,
-                radius: self.v.pane_border_radius,
-                glow: [0.0; 4],
-                glow_radius: 0.0,
-                glow_intensity: 0.0,
-                glow_alpha_scale: 0.0,
-                shadow: [0.0; 4],
-                shadow_radius: 0.0,
-                shadow_offset: [0.0, 0.0],
-            });
-        }
-        if !any {
-            return;
-        }
-        state
-            .grid_renderer
-            .render_stencil(&state.queue, &self.stencil, &mut self.encoder);
     }
 
     /// **Flush the window's scene**, once, in the order it was painted.

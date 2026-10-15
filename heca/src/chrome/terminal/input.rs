@@ -135,6 +135,43 @@ pub(crate) enum TerminalInput {
     /// **Its font one step bigger, smaller, or back to the app's** — asked of the terminal that
     /// holds the keyboard, wherever it is placed.
     FontZoom(crate::input::FontZoomStep),
+    /// **Its history paged from the keyboard** — asked of the terminal that holds the keyboard,
+    /// wherever it is placed, as of any scroll area.
+    Page(Page),
+}
+
+/// One paging step through a terminal's history: what the scroll keys ask of any scroll area.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Page {
+    /// One page back.
+    Up,
+    /// One page on.
+    Down,
+    /// The oldest line.
+    Top,
+    /// The live bottom.
+    Bottom,
+}
+
+impl Page {
+    /// The widget intent that asks for this step.
+    pub(crate) fn intent(self) -> heca_grid_ui::WidgetIntent {
+        use heca_grid_ui::WidgetIntent;
+        match self {
+            Self::Up => WidgetIntent::ScrollPageUp,
+            Self::Down => WidgetIntent::ScrollPageDown,
+            Self::Top => WidgetIntent::ScrollToTop,
+            Self::Bottom => WidgetIntent::ScrollToBottom,
+        }
+    }
+
+    /// The step a widget intent asks for, if it is a vertical scroll intent — the inverse of
+    /// [`intent`](Self::intent).
+    pub(crate) fn of_intent(intent: heca_grid_ui::WidgetIntent) -> Option<Self> {
+        [Self::Up, Self::Down, Self::Top, Self::Bottom]
+            .into_iter()
+            .find(|page| page.intent() == intent)
+    }
 }
 
 /// What a terminal says about its **search**, which it runs as part of itself: the bar is its own

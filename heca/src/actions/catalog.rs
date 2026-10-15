@@ -67,7 +67,7 @@ pub enum Side {
 }
 
 /// Runtime metadata for **one action** — a built-in or a name-keyed one contributed by a provider
-/// or plugin. The single entry type of the [`ActionCatalog`]: built-in and plugin actions have the
+/// or plugin. The single entry type of the `ActionCatalog`: built-in and plugin actions have the
 /// *same* shape, so every surface (icons, tooltips, command palette, RPC introspection) treats them
 /// identically.
 ///
@@ -75,15 +75,13 @@ pub enum Side {
 /// catalog. The zero-copy `&'static ActionDescriptor` form was the deliberate Phase-A shortcut
 /// (action-interaction plan §8b) that deferred this ripple; this is that ripple.
 ///
-/// `policy` is **required, no default**. A built-in gets it from [`action_policy`]'s exhaustive
+/// `policy` is **required, no default**. A built-in gets it from `action_policy`'s exhaustive
 /// `match` — forgetting to classify a new variant there is a *compile error*, and this field is
 /// **computed** from that match at registration, never hand-written, so the match stays the single
 /// authority. A name-keyed action has no variant, so nothing else would force the question; a
 /// permissive default would mean "the author forgot" silently resolves to the most permissive
 /// setting in the system. It is a plain field so an action cannot be registered without answering
 /// it.
-///
-/// [`action_policy`]: crate::app::interaction::action_policy
 #[derive(Clone)]
 pub struct ActionMeta {
     /// Stable id — the identity used by config bindings, RPC, menus, and `Intent.action`.
@@ -111,7 +109,7 @@ pub struct ActionMeta {
     /// The arguments this action takes. **Required, and empty means it takes none** — for the same
     /// reason `policy` has no default: an omitted list would read as "takes nothing" and every
     /// argument handed to it would be silently unknown, which is the defect this field exists to
-    /// close (action-task-E). [`check_args`](crate::args::check_args) compares a call against this list at both doors.
+    /// close (action-task-E). `check_args` compares a call against this list at both doors.
     pub args: Vec<ArgSpec>,
     /// Declarative confirmation requirement (action-interaction plan §4). `Some` means the central
     /// gate raises a confirm/response prompt before the action runs; `None` runs it straight.
@@ -167,7 +165,7 @@ impl ActionMeta {
     }
 
     /// The icon every surface shows for it — menu, header button, palette. Without one it wears
-    /// [`GENERIC_ACTION_ICON`].
+    /// `GENERIC_ACTION_ICON`.
     pub fn icon(mut self, icon: Glyph) -> Self {
         self.icon = Some(icon);
         self

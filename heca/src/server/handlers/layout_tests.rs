@@ -2,7 +2,7 @@
 //! and one window's view of it.
 
 use heca_core::layout::testing::Windowed;
-use heca_core::layout::{ColumnEffect, ColumnWidth, SpaceEffect, Pane, PaneId};
+use heca_core::layout::{ColumnEffect, ColumnWidth, Pane, PaneId, SpaceEffect};
 
 use super::testing::{run, two_workspaces_of_two_columns};
 use crate::input::{ResizeEdge, ResizeTarget, WmAction};
@@ -26,9 +26,19 @@ fn resizing_the_active_column_changes_its_width() {
             edge: ResizeEdge::Auto,
         },
     );
-    assert_eq!(changes, [Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(ColumnEffect::Resized { idx: 1 })] }]);
+    assert_eq!(
+        changes,
+        [Change::Arranged {
+            workspace: 0,
+            effects: vec![SpaceEffect::Column(ColumnEffect::Resized { idx: 1 })]
+        }]
+    );
     assert_ne!(width_of(&window, 0, 1), before);
-    assert_eq!(width_of(&window, 0, 0), other, "the other column is untouched");
+    assert_eq!(
+        width_of(&window, 0, 0),
+        other,
+        "the other column is untouched"
+    );
 }
 
 /// `resize_to` gives the active column a fixed width.
@@ -43,7 +53,13 @@ fn resizing_a_column_to_a_width_makes_it_fixed() {
             height: 0.0,
         },
     );
-    assert_eq!(changes, [Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(ColumnEffect::Resized { idx: 1 })] }]);
+    assert_eq!(
+        changes,
+        [Change::Arranged {
+            workspace: 0,
+            effects: vec![SpaceEffect::Column(ColumnEffect::Resized { idx: 1 })]
+        }]
+    );
     assert_eq!(width_of(&window, 0, 1), ColumnWidth::Fixed(333.0));
 }
 
@@ -52,8 +68,20 @@ fn resizing_a_column_to_a_width_makes_it_fixed() {
 fn a_divider_drag_resizes_the_column_it_names() {
     let mut window = two_workspaces_of_two_columns();
     let before = width_of(&window, 0, 0);
-    let changes = run(&mut window, WmAction::ResizeColumnBy { col_idx: 0, delta: 0.1 });
-    assert_eq!(changes, [Change::Arranged { workspace: 0, effects: vec![SpaceEffect::Column(ColumnEffect::Resized { idx: 0 })] }]);
+    let changes = run(
+        &mut window,
+        WmAction::ResizeColumnBy {
+            col_idx: 0,
+            delta: 0.1,
+        },
+    );
+    assert_eq!(
+        changes,
+        [Change::Arranged {
+            workspace: 0,
+            effects: vec![SpaceEffect::Column(ColumnEffect::Resized { idx: 0 })]
+        }]
+    );
     assert_ne!(width_of(&window, 0, 0), before);
 }
 
@@ -61,14 +89,23 @@ fn a_divider_drag_resizes_the_column_it_names() {
 #[test]
 fn a_divider_drag_between_stacked_panes_changes_their_heights() {
     let mut window = two_workspaces_of_two_columns();
-    window.ws().scroll_mut().add_pane_to_column(0, None, Pane::new(PaneId(99), "x"), false);
+    window
+        .ws()
+        .scroll_mut()
+        .add_pane_to_column(0, None, Pane::new(PaneId(99), "x"), false);
     let height = |w: &Windowed| {
-        w.l().workspace(0).map_or(0.0, |ws| ws.scroll().pane_heights(0)[0])
+        w.l()
+            .workspace(0)
+            .map_or(0.0, |ws| ws.scroll().pane_heights(0)[0])
     };
     let before = height(&window);
     let changes = run(
         &mut window,
-        WmAction::ResizePaneHeightBy { col_idx: 0, pane_idx: 0, delta: 40.0 },
+        WmAction::ResizePaneHeightBy {
+            col_idx: 0,
+            pane_idx: 0,
+            delta: 40.0,
+        },
     );
     assert_eq!(changes, [Change::LayoutChanged]);
     assert_ne!(height(&window), before);
@@ -80,19 +117,53 @@ fn a_divider_drag_between_stacked_panes_changes_their_heights() {
 fn zooming_a_column_elsewhere_changes_content_and_leaves_the_view_alone() {
     let mut window = two_workspaces_of_two_columns();
     let active_before = window.l().active_workspace_idx();
-    let changes = run(&mut window, WmAction::ZoomColumnAtIndex { ws_idx: 1, col_idx: 0 });
-    assert_eq!(changes, [Change::ColumnZoomed { workspace: 1, column: 0 }]);
+    let changes = run(
+        &mut window,
+        WmAction::ZoomColumnAtIndex {
+            ws_idx: 1,
+            col_idx: 0,
+        },
+    );
+    assert_eq!(
+        changes,
+        [Change::ColumnZoomed {
+            workspace: 1,
+            column: 0
+        }]
+    );
     assert!(window.session.workspaces[1].scrolling.columns[0].is_zoomed());
     assert!(!window.session.workspaces[0].scrolling.columns[0].is_zoomed());
-    assert_eq!(window.l().active_workspace_idx(), active_before, "the server never switches the shown workspace");
+    assert_eq!(
+        window.l().active_workspace_idx(),
+        active_before,
+        "the server never switches the shown workspace"
+    );
 }
 
 /// Naming a workspace or column that is not there changes nothing and says nothing.
 #[test]
 fn zooming_a_column_that_is_not_there_says_nothing() {
     let mut window = two_workspaces_of_two_columns();
-    assert!(run(&mut window, WmAction::ZoomColumnAtIndex { ws_idx: 5, col_idx: 0 }).is_empty());
-    assert!(run(&mut window, WmAction::ZoomColumnAtIndex { ws_idx: 0, col_idx: 9 }).is_empty());
+    assert!(
+        run(
+            &mut window,
+            WmAction::ZoomColumnAtIndex {
+                ws_idx: 5,
+                col_idx: 0
+            }
+        )
+        .is_empty()
+    );
+    assert!(
+        run(
+            &mut window,
+            WmAction::ZoomColumnAtIndex {
+                ws_idx: 0,
+                col_idx: 9
+            }
+        )
+        .is_empty()
+    );
 }
 
 /// `resize_to` on a pane moves the active pane towards that height (the column still fills exactly,
@@ -100,17 +171,32 @@ fn zooming_a_column_that_is_not_there_says_nothing() {
 #[test]
 fn resizing_a_pane_to_a_height_sets_it() {
     let mut window = two_workspaces_of_two_columns();
-    let col = window.l().workspace(0).map_or(0, |ws| ws.scroll().active_column_idx());
-    window.ws().scroll_mut().add_pane_to_column(col, None, Pane::new(PaneId(99), "x"), false);
+    let col = window
+        .l()
+        .workspace(0)
+        .map_or(0, |ws| ws.scroll().active_column_idx());
+    window
+        .ws()
+        .scroll_mut()
+        .add_pane_to_column(col, None, Pane::new(PaneId(99), "x"), false);
     let height = |w: &Windowed, row: usize| {
-        w.l().workspace(0).map_or(0.0, |ws| ws.scroll().pane_heights(col)[row])
+        w.l()
+            .workspace(0)
+            .map_or(0.0, |ws| ws.scroll().pane_heights(col)[row])
     };
     let active_row = window.session.workspaces[0].scrolling.columns[col].active_pane_idx;
     let before = height(&window, active_row);
     let changes = run(
         &mut window,
-        WmAction::ResizeTo { target: ResizeTarget::Pane, width: 0.0, height: 250.0 },
+        WmAction::ResizeTo {
+            target: ResizeTarget::Pane,
+            width: 0.0,
+            height: 250.0,
+        },
     );
     assert_eq!(changes, [Change::LayoutChanged]);
-    assert!(height(&window, active_row) < before - 10.0, "the pane got shorter");
+    assert!(
+        height(&window, active_row) < before - 10.0,
+        "the pane got shorter"
+    );
 }

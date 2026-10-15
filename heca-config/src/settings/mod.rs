@@ -88,6 +88,9 @@ declare_settings! {
         /// How close (logical px) the pointer must come to the content area's edge, while dragging a
         /// pane, for the view to start scrolling. Only used with `auto_scroll_edge`. Default 80.
         pub edge_scroll_distance: f32,
+        /// How fast (logical px per second) the view scrolls while a dragged pane is at the edge.
+        /// Only used with `auto_scroll_edge`. Default 1000.
+        pub edge_scroll_speed: f32,
         /// Which pane focus lands on when it moves to the column on the left or right: the one
         /// last used in that column (`"last"`, the default), or the one level with the pane you leave
         /// (`"row"`).

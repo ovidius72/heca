@@ -71,8 +71,7 @@ impl PaneShellModel {
         // They used to be part of this key, so focusing a pane threw its tree away and built a new
         // one — which lost any gesture in flight. A right-click is made from a press and a release
         // on the *same* widget, and the press had been recorded on the tree that focusing
-        // discarded, so the first right-click on an unfocused pane focused it and opened nothing
-        //.
+        // discarded, so the first right-click on an unfocused pane focused it and opened nothing.
         format!(
             "{}|{:?}|{}|{}|{}|{:?}",
             self.pane_id.0,

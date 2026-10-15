@@ -107,7 +107,7 @@ fn actionable(c: &dyn Component) -> bool {
 /// **Does this widget get a letter?**
 ///
 /// Anything you can act on, plus anything that declared what a pick does — minus anything that said
-/// [`hintable(false)`](crate::builders::ComponentExt::hintable). **Being pickable is not opt-in**
+/// [`hintable(false)`](crate::builders::HintExt::hintable). **Being pickable is not opt-in**
 /// (F003/P082/T441): requiring a declaration is what made the picker show a curated handful and feel
 /// not worth having, and it is the drift this closes — the declarative side has defaulted a pick to
 /// the node's `press` all along (`heca-view-realize`).
@@ -145,7 +145,7 @@ pub(crate) fn is_addressable(c: &dyn Component) -> bool {
 ///
 /// `scope` is the picker's: `None` is the ordinary one — `prefix+/` in heca — and a name is a
 /// surface's own verb. A target declares the scopes it answers to with
-/// [`hint_scope`](crate::builders::ComponentExt::hint_scope), and declaring none means it belongs
+/// [`hint_scope`](crate::builders::HintExt::hint_scope), and declaring none means it belongs
 /// to the ordinary picker and to nothing else.
 ///
 /// **The asymmetry is deliberate.** A scoped target does *not* also appear in the ordinary picker:
@@ -174,9 +174,10 @@ pub(crate) fn foreign_picker(c: &dyn Component, scope: Option<&str>) -> bool {
 }
 
 /// **Every widget in this tree that says what a pick does to it**, with the rect the letter goes
-/// over, in document order. The path addresses the widget so [`fire_hint`] can reach it again.
+/// over, in document order. The path addresses the widget so [`fire_hint`](crate::hint::fire_hint)
+/// can reach it again.
 ///
-/// The framework's half of [`on_hint`](crate::builders::ComponentExt::on_hint): a host walks its trees,
+/// The framework's half of [`on_hint`](crate::builders::HintExt::on_hint): a host walks its trees,
 /// lays the letters out and draws them, and hands the pick back here. Nothing is registered, and no
 /// id outlives the frame it was collected in — a retained tree rebuilt between the letters
 /// appearing and one being picked simply offers a fresh set.
@@ -206,10 +207,10 @@ pub fn collect_hints_scoped(
 /// **One surface's pick targets** — everything a letter could land on inside it, and what the
 /// surface itself is, so a host never has to walk back down the tree to find out.
 ///
-/// A "surface" is a node marked [`Base::surface`]: a layer, an overlay, a menu, a plugin's panel —
-/// anything seated *above* the page rather than laid out in it. The page's own targets come back in
-/// a group whose [`path`](Self::path) is empty, so "is this the page or a surface" is answered by
-/// structure and never by matching a name.
+/// A "surface" is a node marked [`Base::surface`](crate::component::Base::surface): a layer, an
+/// overlay, a menu, a plugin's panel — anything seated *above* the page rather than laid out in it.
+/// The page's own targets come back in a group whose [`path`](Self::path) is empty, so "is this the
+/// page or a surface" is answered by structure and never by matching a name.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SurfaceHints {
     /// Path to the surface node, from the root. **Empty for the page itself.**
@@ -218,15 +219,17 @@ pub struct SurfaceHints {
     pub key: Option<String>,
     /// The surface's laid-out box, for a host that occludes by geometry.
     pub bounds: Rectangle,
-    /// What it declares about standing in front of the page — [`Base::lock`].
+    /// What it declares about standing in front of the page —
+    /// [`Base::lock`](crate::component::Base::lock).
     pub lock: bool,
     /// **Whether it holds the keyboard** — observed unless the surface overrode it.
     ///
     /// A surface that wants keys *holds focus*: `Overlay`, `ContextMenu` and `CommandPalette` all
-    /// bind their open signal to [`Base::focused`], which is the whole of how an open layer takes
-    /// the keyboard. So an author writes nothing and an open overlay answers `true` by being open,
-    /// while an ambient stack answers `false` by holding no focus.
-    /// [`Base::captures_keyboard`] overrides it for a surface the framework cannot read.
+    /// bind their open signal to [`Base::focused`](crate::component::Base::focused), which is the
+    /// whole of how an open layer takes the keyboard. So an author writes nothing and an open
+    /// overlay answers `true` by being open, while an ambient stack answers `false` by holding no
+    /// focus. [`Base::captures_keyboard`](crate::component::Base::captures_keyboard) overrides it
+    /// for a surface the framework cannot read.
     pub holds_keyboard: bool,
     /// Its targets, each addressed **from the root** so one resolver still reaches them.
     pub targets: Vec<(Vec<usize>, Rectangle)>,

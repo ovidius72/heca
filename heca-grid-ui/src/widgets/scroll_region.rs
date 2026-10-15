@@ -407,7 +407,7 @@ impl ScrollRegion {
     }
 
     /// Called when scrolling **settles**: the release that ends a thumb drag or a held track press,
-    /// or [`WHEEL_IDLE_END`] seconds after the last wheel movement.
+    /// or `WHEEL_IDLE_END` seconds after the last wheel movement.
     ///
     /// A wheel gesture has no release — the browsers' `scrollend` waits for a pause for the same
     /// reason — so this one is a timer, and the region keeps asking for frames until it fires.
@@ -1275,46 +1275,9 @@ impl Component for ScrollRegion {
         } else {
             cx.paint_base(&self.base);
         }
-        // Reserve a gutter for each visible scrollbar so content is never drawn
-        // *under* the thumb: clip the content short of the lane on the right (when
-        // the vertical bar shows) and/or the bottom (horizontal bar). The thumbs are
-        // then painted below in the full viewport rect, sitting in the clear gutter.
-        let mut content_clip = vp;
-        if self.v_overflow() {
-            content_clip.size.w = (content_clip.size.w - SCROLLBAR_GUTTER).max(0.0);
+        for child in &self.base.children {
+            paint_child(child.as_ref(), cx);
         }
-        if self.h_overflow() {
-            content_clip.size.h = (content_clip.size.h - SCROLLBAR_GUTTER).max(0.0);
-        }
-        // Widen the clip on an axis the region does NOT scroll, so a child's GLOW
-        // (which paints outside its own bounds — every bordered surface carries a
-        // rest halo) isn't scissored flat against the edge, which reads as the row
-        // being "cut off". Only the scrolling axis needs a tight clip — that is the
-        // one where content genuinely moves through the viewport and must be cut at
-        // the boundary. A non-scrolling axis has nothing to hide, so the few px of
-        // bleed is free.
-        //
-        // Safe to widen on both sides now that `reserve_scrollbar_gutters` keeps content out of the
-        // lane by LAYOUT: the clip is no longer the only thing standing between a card and the
-        // scrollbar, so letting a halo bleed a few px costs nothing. It was not always so — when
-        // the gutter existed only as a clip, this widening handed it straight back and content was
-        // drawn under the bar.
-        if !self.axes.is_horizontal() {
-            content_clip.loc.x -= GLOW_BLEED;
-            content_clip.size.w += 2.0 * GLOW_BLEED;
-        }
-        if !self.axes.is_vertical() {
-            content_clip.loc.y -= GLOW_BLEED;
-            content_clip.size.h += 2.0 * GLOW_BLEED;
-        }
-        // Keep the baked shift current (paint takes `&self`, so sync via the
-        // signal value; the shift was already applied by the last `event`/layout
-        // reset — `applied_offset` matches `scroll_offset` here in steady state).
-        cx.with_clip(content_clip, |cx| {
-            for child in &self.base.children {
-                paint_child(child.as_ref(), cx);
-            }
-        });
         // Scrollbar thumb on top, in viewport space (not scrolled with content).
         // Theme-driven hover affordance (mirrors MarkerGroup's grip bar): the
         // thumb is a dim accent at rest, brightens when its grab lane is hovered,
@@ -1348,6 +1311,47 @@ impl Component for ScrollRegion {
     /// declares it.
     fn clips_children(&self) -> bool {
         true
+    }
+
+    /// **What the content is cut to**: the viewport short of each scrollbar's lane, widened on an
+    /// axis that does not scroll. The framework cuts every child to it as it draws it.
+    fn children_clip(&self, _theme: &crate::theme::Theme) -> Option<crate::scene::Rounded> {
+        // Reserve a gutter for each visible scrollbar so content is never drawn
+        // *under* the thumb: clip the content short of the lane on the right (when
+        // the vertical bar shows) and/or the bottom (horizontal bar). The thumbs are
+        // then painted below in the full viewport rect, sitting in the clear gutter.
+        let mut content_clip = self.base.bounds;
+        if self.v_overflow() {
+            content_clip.size.w = (content_clip.size.w - SCROLLBAR_GUTTER).max(0.0);
+        }
+        if self.h_overflow() {
+            content_clip.size.h = (content_clip.size.h - SCROLLBAR_GUTTER).max(0.0);
+        }
+        // Widen the clip on an axis the region does NOT scroll, so a child's GLOW
+        // (which paints outside its own bounds — every bordered surface carries a
+        // rest halo) isn't scissored flat against the edge, which reads as the row
+        // being "cut off". Only the scrolling axis needs a tight clip — that is the
+        // one where content genuinely moves through the viewport and must be cut at
+        // the boundary. A non-scrolling axis has nothing to hide, so the few px of
+        // bleed is free.
+        //
+        // Safe to widen on both sides now that `reserve_scrollbar_gutters` keeps content out of the
+        // lane by LAYOUT: the clip is no longer the only thing standing between a card and the
+        // scrollbar, so letting a halo bleed a few px costs nothing. It was not always so — when
+        // the gutter existed only as a clip, this widening handed it straight back and content was
+        // drawn under the bar.
+        if !self.axes.is_horizontal() {
+            content_clip.loc.x -= GLOW_BLEED;
+            content_clip.size.w += 2.0 * GLOW_BLEED;
+        }
+        if !self.axes.is_vertical() {
+            content_clip.loc.y -= GLOW_BLEED;
+            content_clip.size.h += 2.0 * GLOW_BLEED;
+        }
+        Some(crate::scene::Rounded {
+            rect: content_clip,
+            radius: 0.0,
+        })
     }
 
     /// Before the children: the offset has to be baked into bounds so everything below hit-tests
@@ -1426,8 +1430,8 @@ impl Component for ScrollRegion {
         }
     }
     /// Children first (the default recursion), then the held-track-press repeat:
-    /// after [`TRACK_REPEAT_DELAY`] a held press in a scrollbar track keeps paging
-    /// toward the cursor every [`TRACK_REPEAT_INTERVAL`] until released. Returns
+    /// after `TRACK_REPEAT_DELAY` a held press in a scrollbar track keeps paging
+    /// toward the cursor every `TRACK_REPEAT_INTERVAL` until released. Returns
     /// `true` while a press is held so the host keeps ticking.
     fn tick(&mut self, dt: f32) -> bool {
         let mut animating = false;
@@ -1754,6 +1758,41 @@ mod tests {
         assert!(
             min < 0.0 && max > r.max_offset(),
             "a viewport of cushion each way: {min}..{max}"
+        );
+    }
+
+    /// **The content is cut short of the scrollbar's lane and tight on the scrolling axis**, by
+    /// the framework, from the shape the region declares: what it holds is drawn inside that clip.
+    #[test]
+    fn content_is_cut_short_of_the_lane_and_tight_where_it_scrolls() {
+        use crate::builders::{LayoutExt, Parent, StyleExt};
+        use crate::scene::{DrawCommand, Scene};
+        let child = || {
+            crate::widgets::Surface::row()
+                .height(80.0)
+                .background(crate::color::Color::rgb(9, 9, 9))
+        };
+        let mut root = crate::widgets::Flex::column().child(
+            ScrollRegion::new()
+                .width(200.0)
+                .height(100.0)
+                .child(child())
+                .child(child()),
+        );
+        crate::LayoutEngine::new().compute(&mut root, Size::new(400.0, 400.0));
+        let theme = crate::theme::Theme::default();
+        let mut scene = Scene::new();
+        paint_child(&root, &mut PaintCx::new(&mut scene, &theme));
+        let want = Size::new(200.0 - SCROLLBAR_GUTTER + 2.0 * GLOW_BLEED, 100.0);
+        let clip = scene
+            .iter()
+            .position(|c| matches!(c, DrawCommand::PushClip(r) if r.size == want));
+        let row = scene.iter().position(
+            |c| matches!(c, DrawCommand::Rect(r) if r.fill == crate::color::Color::rgb(9, 9, 9)),
+        );
+        assert!(
+            matches!((clip, row), (Some(c), Some(r)) if c < r),
+            "the rows are drawn inside a clip of {want:?}: clip at {clip:?}, row at {row:?}"
         );
     }
 

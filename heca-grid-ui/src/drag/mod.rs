@@ -12,7 +12,7 @@
 //! - **No GPU code.** This crate emits state; the renderer rasterizes it.
 //! - **No app-specific types.** What a drop *means* is the host's; [`Dropped`] carries the two
 //!   names and lets the host say.
-//! - **Identity, never position.** [`resolve`] returns the node it found, path included, so a
+//! - **Identity, never position.** `resolve` returns the node it found, path included, so a
 //!   caller never has to search for it again by name — two seatings of one container give their
 //!   rows the same name.
 

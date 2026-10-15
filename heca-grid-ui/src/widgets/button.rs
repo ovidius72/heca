@@ -123,13 +123,14 @@ fn alpha(p: f32) -> u8 {
 ///
 /// The convenience forms are **sugar that builds those same children at construction time** —
 /// there is no separate "simple mode": one child vector, one layout, one paint path. This is what
-/// makes the button [`ViewNode`]-realizable (the host mapper attaches the node's children here) and
-/// extensible by composition rather than by adding hand-drawn extras.
+/// makes the button [`ViewNode`](heca_view::ViewNode)-realizable (the host mapper attaches the
+/// node's children here) and extensible by composition rather than by adding hand-drawn extras.
 ///
 /// # Size and color come from the tree, not from arithmetic
 /// - **Size**: the button does not compute its width. It hugs its content (`Auto` + padding), so
 ///   taffy measures whatever it holds — at any depth. The [size variant](LayoutExt::size) cascades
-///   to the content automatically (see [`Style::size_explicit`](crate::style::Style::size_explicit)).
+///   to the content automatically (see
+///   [`Layout::size_explicit`](crate::style::Layout::size_explicit)).
 /// - **Color**: the button publishes one state-derived color per frame via
 ///   [`PaintCx::with_content_color`], and unstyled children ([`Label`], [`Icon`]) pick it up. That
 ///   is how composed content animates with the hover sweep and fades when disabled, while a child
@@ -141,7 +142,7 @@ fn alpha(p: f32) -> u8 {
 /// contains. An interactive child would render but never receive its own clicks or focus.
 ///
 /// **Disabled look.** When `disabled`, the chrome drops to the theme `muted` tone and the content
-/// color fades to `muted` at [`DISABLED_CONTENT_ALPHA`], which reads on every variant — including
+/// color fades to `muted` at `DISABLED_CONTENT_ALPHA`, which reads on every variant — including
 /// the transparent Ghost/Link, where a background scrim would be invisible.
 pub struct Button {
     base: Base,
@@ -178,7 +179,7 @@ pub struct Button {
 #[heca_grid_ui_macros::props]
 impl Button {
     /// An **empty** primary button — no content. Compose it with [`child`](Parent::child) /
-    /// [`icon`](Self::icon) / [`content`](Self::content).
+    /// [`icon`](Self::icon).
     ///
     /// [`new`](Self::new) is the common case (a single label); this is the entry point when the
     /// content is a tree.
@@ -304,13 +305,14 @@ impl Button {
     /// **The hue this button reads in**, overriding what its variant would use — its content, its
     /// hover wash and its held-on frame.
     ///
-    /// The same builder [`IconButton::tone`](super::IconButton::tone) has, and for the same reason:
-    /// a button can be *about* something dangerous without being drawn as a boxed destructive
-    /// control. In a row of quiet ghost buttons, a `Destructive` variant is the odd one out — it
-    /// carries a border the others do not — where a ghost button in the danger hue reads as a cue.
+    /// The same builder [`IconButton::accent`](super::IconButton::accent) has, and for the same
+    /// reason: a button can be *about* something dangerous without being drawn as a boxed
+    /// destructive control. In a row of quiet ghost buttons, a `Destructive` variant is the odd one
+    /// out — it carries a border the others do not — where a ghost button in the danger hue reads
+    /// as a cue.
     #[heca_grid_ui_macros::prop]
     pub fn accent(self, c: Color) -> Self {
-        crate::builders::ComponentExt::accent(self, c)
+        crate::builders::ToneExt::accent(self, c)
     }
 
     /// **Show only the icon, keeping the words.** The label is not drawn and takes no space, and
@@ -842,7 +844,7 @@ impl Component for Button {
     /// it turns into is delivered to whoever took that press — this control — which is what makes
     /// "one control, one click target" a framework rule rather than something each control
     /// arranges by swallowing events. Bubble, not capture, so an
-    /// [`ComponentExt`](crate::builders::ComponentExt) handler registered on this widget gets first
+    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
     /// refusal and can take the click with `stop_propagation`.
     fn on_event(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {

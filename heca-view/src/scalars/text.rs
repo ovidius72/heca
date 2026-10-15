@@ -13,8 +13,8 @@ value_set! {
 value_set! {
     /// How text sits in its box — mirrors grid-ui `TextAlign` (`Label`).
     ///
-    /// Distinct from [`ViewAlign`], which is where a *widget* sits in its parent. The two read alike
-    /// and mean different things, which is why both names say what they align.
+    /// Distinct from [`ViewAlign`](crate::ViewAlign), which is where a *widget* sits in its parent.
+    /// The two read alike and mean different things, which is why both names say what they align.
     pub enum ViewTextAlign {
         Start => "start",
         Center => "center",

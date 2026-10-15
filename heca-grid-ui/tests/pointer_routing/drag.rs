@@ -48,7 +48,11 @@ fn a_gated_source_starts_with_its_key_and_the_key_coming_up_does_not_cancel_it()
     hold(root.as_mut(), true);
     press_at(root.as_mut(), LEFT, PointerButton::Left);
     mv(root.as_mut(), far());
-    assert!(kinds(&seen).contains(&"DragStart".to_string()), "{:?}", kinds(&seen));
+    assert!(
+        kinds(&seen).contains(&"DragStart".to_string()),
+        "{:?}",
+        kinds(&seen)
+    );
     hold(root.as_mut(), false);
     mv(root.as_mut(), Point::new(95.0, 45.0));
     release_at(root.as_mut(), Point::new(95.0, 45.0), PointerButton::Left);
@@ -90,28 +94,46 @@ fn a_drop_target_that_accepts_the_kind_hears_the_drag_begin_and_end() {
 
     press_at(root.as_mut(), LEFT, PointerButton::Left);
     mv(root.as_mut(), Point::new(60.0, 40.0));
-    let heard = |s: &Seen| kinds(s).into_iter().filter(|k| k.starts_with("DragInFlight") || k.starts_with("DragSettled")).collect::<Vec<_>>();
+    let heard = |s: &Seen| {
+        kinds(s)
+            .into_iter()
+            .filter(|k| k.starts_with("DragInFlight") || k.starts_with("DragSettled"))
+            .collect::<Vec<_>>()
+    };
     assert_eq!(heard(&takes_seen), ["DragInFlight"]);
-    assert_eq!(heard(&hidden_seen), ["DragInFlight"], "hidden targets are told too");
+    assert_eq!(
+        heard(&hidden_seen),
+        ["DragInFlight"],
+        "hidden targets are told too"
+    );
     assert!(heard(&refuses_seen).is_empty(), "it does not accept a pane");
-    assert!(heard(&source_seen).is_empty(), "the source has its own events");
+    assert!(
+        heard(&source_seen).is_empty(),
+        "the source has its own events"
+    );
 
     release_at(root.as_mut(), Point::new(60.0, 40.0), PointerButton::Left);
     assert_eq!(heard(&takes_seen), ["DragInFlight", "DragSettled"]);
     assert_eq!(heard(&hidden_seen), ["DragInFlight", "DragSettled"]);
 }
 
-/// **Where the carried widget sits** is its own box, not the pointer's — and nothing once the drag
-/// is over.
+/// **What is carried is told by the word its source declared**, wherever it was picked up — so a
+/// place that takes a pane can open for a pane carried from anywhere — and nothing once the drag is
+/// over.
 #[test]
-fn the_carried_widget_reports_where_it_sits_and_nothing_after() {
-    let (mut root, _seen) = gated();
-    assert_eq!(heca_grid_ui::dragged_bounds(root.as_ref()), None);
-    hold(root.as_mut(), true);
-    press_at(root.as_mut(), LEFT, PointerButton::Left);
-    mv(root.as_mut(), Point::new(90.0, 40.0));
-    let at = heca_grid_ui::dragged_bounds(root.as_ref()).expect("one is being carried");
-    assert_eq!((at.loc.x, at.loc.y, at.size.w, at.size.h), (0.0, 0.0, 100.0, 50.0));
-    release_at(root.as_mut(), Point::new(90.0, 40.0), PointerButton::Left);
-    assert_eq!(heca_grid_ui::dragged_bounds(root.as_ref()), None);
+fn the_kind_of_what_is_carried_is_the_word_its_source_declared() {
+    let mut root = Flex::row().width(300.0).height(100.0).child(
+        heca_grid_ui::widgets::Surface::row()
+            .width(100.0)
+            .height(50.0)
+            .key("row")
+            .draggable_as("pane"),
+    );
+    LayoutEngine::new().compute(&mut root, Size::new(300.0, 100.0));
+    assert_eq!(heca_grid_ui::dragged_kind(&root), None);
+    press_at(&mut root, Point::new(10.0, 10.0), PointerButton::Left);
+    mv(&mut root, Point::new(200.0, 60.0));
+    assert_eq!(heca_grid_ui::dragged_kind(&root).as_deref(), Some("pane"));
+    release_at(&mut root, Point::new(200.0, 60.0), PointerButton::Left);
+    assert_eq!(heca_grid_ui::dragged_kind(&root), None);
 }

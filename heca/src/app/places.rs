@@ -1,25 +1,16 @@
-//! **Whether the places a pane can be put are shown** — while a pane is carried out of the content
-//! area, or a column pick is open. A fact about this window's view, so it lives here and not in the
-//! layout, which only reports where each place is.
+//! **Whether the places a pane can be put are shown** — while a pane is carried, or a column pick
+//! is open. A fact about this window's view, so it lives here and not in the layout, which only
+//! reports where each place is.
 
 use crate::app_state::{AppState, InputMode};
-use heca_core::layout::types::Point;
 use heca_core::layout::Place;
+use heca_core::layout::types::Point;
 
-/// Whether the places should be shown this frame: a pane is being carried out of the content area,
-/// or a column pick is open.
+/// Whether the places should be shown this frame: a pane is being carried — from a column, a
+/// sidebar or anywhere else that offers one, as the drag says — or a column pick is open.
 pub(crate) fn wanted(state: &AppState) -> bool {
-    let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
-    // Once on it stays on for as long as the drag lasts, so it does not decide again from where
-    // the carried pane happens to sit.
-    let carried = heca_grid_ui::dragging(&state.window_root)
-        && (state.places_open
-            || heca_grid_ui::dragged_bounds(&state.window_root).is_some_and(|b| {
-                pane_area.contains(Point::new(
-                    b.loc.x + b.size.w / 2.0,
-                    b.loc.y + b.size.h / 2.0,
-                ))
-            }));
+    let carried = heca_grid_ui::dragged_kind(&state.window_root).as_deref()
+        == Some(crate::chrome::PANE_DRAG_KIND);
     carried || matches!(state.input_mode, InputMode::ColumnPick { .. })
 }
 

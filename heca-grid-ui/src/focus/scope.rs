@@ -1,7 +1,7 @@
 //! **Focusing a named region** — the host's way to say "the keyboard goes to that dock" — and the
 //! reads that go with it.
 //!
-//! A region names itself with [`scope_key`](crate::builders::ComponentExt::scope_key). These calls
+//! A region names itself with [`scope_key`](crate::builders::IdentityExt::scope_key). These calls
 //! find it by that name and move the keyboard through the same door everything else uses, so the
 //! tree stays the only record of where the keyboard is: there is no host flag to keep in step.
 //!
@@ -90,6 +90,42 @@ pub fn release_scope(root: &mut dyn Component, name: &str) -> bool {
 /// ring, so what is outlined is what receives the keys.
 pub fn contains_keyboard(node: &dyn Component) -> bool {
     holder_path(node).is_some()
+}
+
+/// **The named area the keyboard is in**, nearest first: the surface or the region around whatever
+/// holds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KeyboardArea {
+    /// A surface above the page — a popup, a dialog, a menu — by the slot its host seated it in.
+    Surface(String),
+    /// A region of the page — a dock — by the name it gave itself
+    /// ([`scope_key`](crate::builders::IdentityExt::scope_key)).
+    Region(String),
+}
+
+/// **Where the keys go, in named terms**: the nearest surface or region around the widget holding
+/// the keyboard. `None` when nothing holds it, or what holds it sits outside every named area.
+///
+/// The question a key, a right-click menu or an action asks — *who answers this?* — so it never
+/// looks through a surface to the region that opened it: a list in a popup holds the keyboard, and
+/// its keys are the popup's, not the dock's behind it. Where the keyboard **goes back to** when the
+/// popup closes is [`page_scope`].
+pub fn keyboard_area(root: &dyn Component) -> Option<KeyboardArea> {
+    let path = holder_path(root)?;
+    let area_of = |node: &dyn Component| {
+        let base = node.base();
+        base.scope_key
+            .clone()
+            .map(KeyboardArea::Region)
+            .or_else(|| base.surface_slot.clone().map(KeyboardArea::Surface))
+    };
+    let mut area = area_of(root);
+    let mut node = root;
+    for &i in &path {
+        node = node.base().children[i].as_ref();
+        area = area_of(node).or(area);
+    }
+    area
 }
 
 /// **The named region the keyboard is in on the page** — looking through a surface above the page

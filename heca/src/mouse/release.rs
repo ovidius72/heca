@@ -8,7 +8,7 @@ use crate::input::WmAction;
 use heca_grid_ui::drag::DropSide;
 
 /// **What dropping a column means** — told what it landed on, rather than hunting for it under the
-/// pointer at the moment of release (F003/P097/T496). The rules are unchanged: onto another column
+/// pointer at the moment of release. The rules are unchanged: onto another column
 /// it inserts before or after (or swaps, on Shift); onto a workspace it moves to the end of that
 /// workspace, where a swap is meaningless.
 pub(crate) fn column_drop(
@@ -50,12 +50,12 @@ pub(crate) fn column_drop(
             }
         }
         // Drop on a workspace → move the column to the end of that workspace
-        // (usize::MAX clamps to the end inside the handler). Swap is meaningless here.
+        // (`END`: past the last). Swap is meaningless here.
         ChromeDragItem::Workspace { ws: dst_ws } => WmAction::MoveColumn {
             src_ws,
             src_col,
             dst_ws,
-            dst_idx: usize::MAX,
+            dst_idx: heca_core::layout::END,
             focus: true,
         },
         // The source-aware filter never yields a pane target for a column drag.

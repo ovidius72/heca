@@ -1,4 +1,5 @@
-//! **Where a widget's act goes** — the host-installed sink every [`EventCx::dispatch`] posts to.
+//! **Where a widget's act goes** — the host-installed sink every
+//! [`EventCx::dispatch`](crate::event::EventCx::dispatch) posts to.
 //!
 //! The twin of the menu sink beside it, and for the same reason: a widget can say *what* it wants
 //! done, but only the host can do it — it owns the action registry, the permission rules and the

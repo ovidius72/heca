@@ -10,7 +10,7 @@
 use std::rc::Rc;
 
 use heca_grid_ui::Component;
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
+use heca_grid_ui::builders::{LayoutExt, Parent, TooltipExt};
 use heca_grid_ui::reactive::{create_effect, signal};
 use heca_grid_ui::style::{Length, Spacing, WidgetSize};
 use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, TooltipSide, Visibility};

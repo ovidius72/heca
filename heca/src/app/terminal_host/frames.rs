@@ -14,7 +14,8 @@ use heca_core::layout::PaneId;
 /// workspace's offset. The one place that shift is worked out, for columns, panes and places alike.
 pub(crate) fn layout_origin(state: &AppState) -> (f64, f64) {
     let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
-    let offset = state.layout()
+    let offset = state
+        .layout()
         .workspace_geometries()
         .first()
         .map_or((0.0, 0.0), |(_, rect)| (rect.loc.x, rect.loc.y));
@@ -53,7 +54,8 @@ pub(crate) fn column_frames(state: &AppState) -> Vec<heca_core::layout::LaidOutC
 /// `state.compositor`). Returns `(pane_id, x, y, w, h)` in logical px.
 pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32, f32)> {
     let pane_area = crate::chrome::ChromeConfig::of(state).content_rect();
-    let ws_offset = state.layout()
+    let ws_offset = state
+        .layout()
         .workspace_geometries()
         .first()
         .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))

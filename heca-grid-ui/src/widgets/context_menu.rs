@@ -155,7 +155,7 @@ const KEYCAP_FONT_SCALE: f32 = 0.72;
 ///     .on_click(|| {});
 /// ```
 ///
-/// [`child`](MenuItem::child) takes a **builder**, not a widget — see the [module docs](self#the-two-forms-of-a-row-and-why-child-takes-a-closure)
+/// [`child`](MenuItem::child) takes a **builder**, not a widget — see the module docs
 /// for why. Everything else on the row ([`key`](MenuItem::key), [`shortcut`](MenuItem::shortcut),
 /// [`danger`](MenuItem::danger), [`enabled`](MenuItem::enabled)) applies to both forms.
 #[derive(Clone)]
@@ -212,7 +212,7 @@ impl MenuItem {
     /// **Compose the row out of widgets** instead of a label and an icon. Replaces the sugar.
     ///
     /// Takes a builder rather than a widget because a menu can be shown more than once and a
-    /// subtree is owned — see the [module docs](self#the-two-forms-of-a-row-and-why-child-takes-a-closure).
+    /// subtree is owned — see the module docs.
     /// The subtree becomes a real child of the panel, so the layout engine sizes it exactly as it
     /// would anywhere else.
     #[heca_grid_ui_macros::host_only(
@@ -857,7 +857,7 @@ impl Component for ContextMenu {
     }
 
     /// Layout just placed the panel wherever its parent put it; move it to the anchor the trigger
-    /// chose (idempotent — see [`place_panel`](ContextMenu::place_panel)).
+    /// chose (idempotent — see `place_panel`).
     fn on_layout(&mut self) {
         self.place_panel();
     }

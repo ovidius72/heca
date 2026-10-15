@@ -276,3 +276,35 @@ fn a_dock_is_consulted_at_its_placement_then_its_kind() {
         "an unknown mount still resolves through the provider's kind",
     );
 }
+
+/// **The keys go to the nearest named area around what holds the keyboard.** A popup is a layer by
+/// its own name — never the dock that opened it — a dock is itself, and a widget outside every
+/// area answers its own keys rather than the keys falling through to a terminal's program.
+#[test]
+fn the_keys_go_to_the_nearest_named_area() {
+    use super::surface::surface_of_area;
+    use heca_grid_ui::KeyboardArea;
+    let named = |slot: &str| (slot == "surface:7").then(|| "docker.panel".to_string());
+    let kind = |mount: &str| (mount == "left").then(|| "workspaces".to_string());
+
+    assert_eq!(
+        surface_of_area(Some(KeyboardArea::Surface("surface:7".into())), named, kind),
+        FocusedSurface::Layer {
+            name: Some("docker.panel".into())
+        },
+        "a popup holding the keyboard is the popup, whoever opened it"
+    );
+    assert_eq!(
+        surface_of_area(Some(KeyboardArea::Region("left".into())), named, kind),
+        FocusedSurface::Dock {
+            mount: "left".into(),
+            kind: Some("workspaces".into())
+        }
+    );
+    let widget = surface_of_area(None, named, kind);
+    assert_eq!(widget, FocusedSurface::Widget);
+    assert!(
+        widget.delivers_to_tree(),
+        "a widget outside every area gets its keys"
+    );
+}

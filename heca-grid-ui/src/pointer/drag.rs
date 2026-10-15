@@ -7,7 +7,8 @@ use super::*;
 /// the source and whatever it is over informed.
 pub(super) fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPointer) -> Handled {
     // A drag already in flight is followed whatever the pick-up rule says now; only a new one asks.
-    let carried = dragging_path(root).and_then(|path| drag_identity(root, &path).map(|id| (path, id)));
+    let carried =
+        dragging_path(root).and_then(|path| drag_identity(root, &path).map(|id| (path, id)));
     let Some((source_path, item)) = carried.or_else(|| drag_source_on(root, press)) else {
         return Handled::No;
     };
@@ -29,7 +30,11 @@ pub(super) fn drive_drag(root: &mut dyn Component, press: &[usize], raw: &RawPoi
             .dragging
             .set(true);
         if let Some((at, _)) = origin {
-            node_at(root, &source_path).base().pointer.drag_origin.set(at);
+            node_at(root, &source_path)
+                .base()
+                .pointer
+                .drag_origin
+                .set(at);
         }
         let ev = Event::DragStart(drag_event(&item, raw, DropSide::Onto));
         let _ = deliver_path(root, &source_path, &ev);
@@ -115,7 +120,13 @@ pub(super) fn finish_drag(root: &mut dyn Component, raw: &RawPointer) -> Handled
 /// itself is not told: it has its own events.
 pub(super) fn announce(root: &mut dyn Component, source: &[usize], ev: &Event) {
     let kind = node_at(root, source).base().drag_kind.clone();
-    fn tell(node: &mut dyn Component, kind: Option<&str>, ev: &Event, here: &mut Path, source: &[usize]) {
+    fn tell(
+        node: &mut dyn Component,
+        kind: Option<&str>,
+        ev: &Event,
+        here: &mut Path,
+        source: &[usize],
+    ) {
         if node.is_drop_target() && node.accepts_drag(kind) && here.as_slice() != source {
             let _ = node.base_mut().run_handlers(ev);
             let _ = node.on_event(ev);
@@ -191,11 +202,14 @@ pub fn dragging(root: &dyn Component) -> bool {
     dragging_path(root).is_some()
 }
 
-/// **Where the widget being carried sits** — its own laid-out bounds, not the pointer's — or `None`
-/// when nothing is being dragged. What lets a host tell a drag that began in one region from one
-/// that began in another without keeping a list of what can be dragged.
-pub fn dragged_bounds(root: &dyn Component) -> Option<heca_core::layout::Rectangle> {
-    dragging_path(root).map(|path| bounds_at(root, &path))
+/// **What is being carried, by the word its source declared** — the
+/// [`draggable_as`](crate::builders::DragExt::draggable_as) kind — or `None` when nothing is
+/// being dragged or the source said nothing about itself.
+///
+/// What a host asks to know whether a drag concerns it: places that take a pane open while a pane
+/// is carried, whichever widget it was picked up from — a pane in a column or a row in a sidebar.
+pub fn dragged_kind(root: &dyn Component) -> Option<String> {
+    dragging_path(root).and_then(|path| node_at(root, &path).base().drag_kind.clone())
 }
 
 /// The path to the widget currently dragging, if any.

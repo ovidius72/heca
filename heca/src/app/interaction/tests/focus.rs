@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 // ── Focus-target helper tests ──
 
 /// `active_focus_domain` returns Tiled for default workspace.
@@ -12,7 +11,6 @@ fn active_focus_domain_default_is_tiled() {
     assert_eq!(active_focus_domain(session.l()), FocusDomain::Tiled);
 }
 
-
 /// `active_focus_domain` returns Floating after setting.
 #[test]
 fn active_focus_domain_floating_after_set() {
@@ -20,7 +18,6 @@ fn active_focus_domain_floating_after_set() {
     session.ws().focus_domain = FocusDomain::Floating;
     assert_eq!(active_focus_domain(session.l()), FocusDomain::Floating);
 }
-
 
 /// `can_focus_pane` allows any pane when in tiled domain.
 #[test]
@@ -42,7 +39,6 @@ fn can_focus_pane_allows_any_in_tiled_domain() {
         PaneId(1)
     ));
 }
-
 
 /// `can_focus_pane` blocks non-floating pane when in floating domain.
 #[test]
@@ -67,7 +63,6 @@ fn can_focus_pane_blocks_non_floating_when_floating() {
         PaneId(1)
     ));
 }
-
 
 /// Sidebar navigation intent is blocked when floating.
 /// Sidebar navigation intent is allowed when tiled.
@@ -106,14 +101,12 @@ fn can_focus_pane_allows_active_floating_pane() {
     ));
 }
 
-
 /// is_floating_domain returns false for default (Tiled) workspace.
 #[test]
 fn is_floating_domain_default_is_tiled() {
     let session = test_session();
     assert!(!is_floating_domain(session.l()));
 }
-
 
 /// Setting focus_domain to Floating is detected by helpers.
 #[test]

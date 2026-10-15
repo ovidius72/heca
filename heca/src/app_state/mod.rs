@@ -20,21 +20,22 @@ use winit::event_loop::EventLoopProxy;
 use winit::keyboard::ModifiersState;
 use winit::window::Window;
 
-
 mod input_mode;
+mod keyboard_terminal;
 mod layout_door;
 mod metrics;
 mod mouse_state;
 pub(crate) mod reaction;
-mod search;
+mod settings;
 mod state;
 mod terminal_layers;
 
 pub use input_mode::*;
 pub use mouse_state::*;
+pub(crate) use reaction::show_workspace;
+pub use settings::WindowSettings;
 pub use state::*;
 pub use terminal_layers::*;
-pub(crate) use reaction::show_workspace;
 
 #[cfg(test)]
 mod tests;

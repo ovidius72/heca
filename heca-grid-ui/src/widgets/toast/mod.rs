@@ -343,8 +343,8 @@ impl Toast {
     }
 
     /// **The open-state signal a host binds.** Flipping it is the same act as calling
-    /// [`open`](Toast::open) / [`hide`](Toast::hide) — the arrival or the exit plays either way —
-    /// so a host that keeps its state in signals drives the card without holding it.
+    /// [`show`](Component::show) / [`close`](Toast::close) — the arrival or the exit plays either
+    /// way — so a host that keeps its state in signals drives the card without holding it.
     pub fn open_signal(&self) -> Signal<bool> {
         self.base.open
     }

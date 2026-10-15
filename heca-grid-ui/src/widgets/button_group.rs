@@ -20,7 +20,7 @@
 //! every way of pressing a button already goes through. Not a copy of the handler, and not a second
 //! handler on the group: the same one, so the visible button and the menu row cannot drift.
 
-use crate::builders::{ComponentExt, LayoutExt, StyleExt};
+use crate::builders::{EventExt, LayoutExt, StyleExt, TooltipExt};
 use crate::component::{Base, Component, PaintCx, paint_child};
 use crate::reactive::SignalGet;
 use crate::style::{Align, Direction, Justify};
@@ -514,7 +514,7 @@ impl ButtonGroup {
         );
         // **The anchor comes out of the gesture, never chosen by an author** — the event carries
         // where it happened, and the menu reads it from there.
-        let trigger = ComponentExt::on_click(trigger, {
+        let trigger = EventExt::on_click(trigger, {
             let menu = menu.clone();
             move |ev: &mut crate::event::EventCx<'_>| menu.borrow().show(ev.event())
         });

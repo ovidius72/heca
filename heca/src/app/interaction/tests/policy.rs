@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 /// What these actions are allowed to do. Every variant being classified is the compiler's job:
 /// `action_policy`'s match has no catch-all arm, so an unclassified variant does not build.
 #[test]
@@ -39,22 +38,22 @@ fn action_policy_classifies_these_as_documented() {
         ActionPolicy::FocusedPaneLocal
     );
     // Surface-agnostic: it asks whatever owns the screen for its menu, and bubbling decides
-    // whose that is (F003/P082/T416).
+    // whose that is.
     assert_eq!(
         action_policy(&WmAction::OpenContextMenu),
         ActionPolicy::Global
     );
     assert_eq!(
         action_policy(&WmAction::ScrollbackPageUp),
-        ActionPolicy::FocusedPaneLocal
+        ActionPolicy::KeyboardTerminal
     );
     assert_eq!(
         action_policy(&WmAction::ScrollbackToBottom),
-        ActionPolicy::FocusedPaneLocal
+        ActionPolicy::KeyboardTerminal
     );
     assert_eq!(
         action_policy(&WmAction::ExitScrollback),
-        ActionPolicy::FocusedPaneLocal
+        ActionPolicy::KeyboardTerminal
     );
     for terminal_action in [
         WmAction::TerminalRun {
@@ -75,7 +74,7 @@ fn action_policy_classifies_these_as_documented() {
     }
     assert_eq!(
         action_policy(&WmAction::ScrollToOffset { rows: 0 }),
-        ActionPolicy::FocusedPaneLocal
+        ActionPolicy::KeyboardTerminal
     );
     assert_eq!(
         action_policy(&WmAction::CommandPalette {
@@ -88,7 +87,7 @@ fn action_policy_classifies_these_as_documented() {
     // **Taking** chrome focus is tiled-only; **releasing** it is always allowed. A focused
     // container's own `activate`/`hint` move pane focus and are reached through the first, so it
     // must not open while a float owns the domain — but a way out that can be blocked is not a
-    // way out (F003/P085/T356).
+    // way out.
     assert_eq!(
         action_policy(&WmAction::FocusDock { dock: None }),
         ActionPolicy::TiledOnly

@@ -63,16 +63,13 @@ fn a_panes_frame_is_over_its_children_and_under_the_next_widget() {
         .width(300.0)
         .height(300.0)
         .child(
-            Pane::new()
-                .width(100.0)
-                .height(100.0)
-                .child(
-                    Pane::new()
-                        .frameless()
-                        .width(50.0)
-                        .height(50.0)
-                        .background(child_fill),
-                ),
+            Pane::new().width(100.0).height(100.0).child(
+                Pane::new()
+                    .frameless()
+                    .width(50.0)
+                    .height(50.0)
+                    .background(child_fill),
+            ),
         )
         .child(
             Pane::new()

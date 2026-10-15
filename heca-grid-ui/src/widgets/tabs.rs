@@ -48,7 +48,7 @@ const GLOW_INTENSITY: f32 = 0.12;
 ///
 /// ```ignore
 /// // Sugar — plain text tabs (each becomes a `Choice::labeled(text, text)`).
-/// Tabs::new(["FILES", "SEARCH"]).selected(1).on_change(|a| …)
+/// Tabs::new(["FILES", "SEARCH"]).selected(1).on_change(|a| { /* … */ })
 ///
 /// // Composed — a tab is a value plus any content.
 /// Tabs::empty()

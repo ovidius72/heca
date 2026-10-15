@@ -35,11 +35,12 @@ pub(crate) fn sync_retained_terminal_layers(
             continue;
         };
 
-        // A terminal's own font zoom: start from the shared style and override the font size for
-        // this terminal. The render key already folds in `font_size`, so a zoom change on one
+        // A terminal's own font zoom and opacity: start from the shared style and override them
+        // for this terminal. The render key already folds in `font_size`, so a zoom change on one
         // terminal repaints only its retained layer.
         let mut pane_style = terminal_style;
         pane_style.font_size = state.terminal_font_size(pane.id);
+        pane_style.surface_alpha = pane.opacity;
         let render_key = terminal_layer_render_key(&pane_style);
 
         let physical_size = retained_terminal_texture_size(mount.content_rect, state.scale_factor);
@@ -120,10 +121,7 @@ pub(crate) fn sync_retained_terminal_layers(
         );
     }
 
-    // OR (never assign): this runs once for tiled panes and once for floating
-    // panes per frame, so assigning would let the second call clobber the first.
-    // `render_frame` resets the flag to false before the tiled call each frame.
-    state.has_animated_images |= any_animated;
+    state.has_animated_images = any_animated;
 
     // Drop image textures not referenced for a while (panes scrolled past the
     // image or closed). Generous grace so re-scrolling to a recent image does not

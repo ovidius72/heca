@@ -51,6 +51,9 @@ pub(crate) enum FocusedSurface {
     /// A chrome container holds the keyboard: its mount id, and the `kind()` of the provider
     /// mounted there.
     Dock { mount: String, kind: Option<String> },
+    /// A widget outside every named area holds it — a control a plugin placed in a sidebar, say.
+    /// Its keys go to it and bubble up like any key; no surface's bindings apply.
+    Widget,
     /// Nothing is in front of the panes.
     Panes,
 }
@@ -107,27 +110,57 @@ pub(crate) fn way_out_action(
                 )
             })
         }
-        FocusedSurface::Layer { .. } | FocusedSurface::Panes => None,
+        FocusedSurface::Layer { .. } | FocusedSurface::Widget | FocusedSurface::Panes => None,
     }
 }
 
 /// Which surface holds the keyboard, read off the session — the whole of [`AppState`] this rule
 /// needs, so [`surface_action`] can stay a pure function of plain data.
+///
+/// **The nearest named area around whatever holds the keyboard**, wherever it sits: a popup's keys
+/// are the popup's even when a dock opened it, and a widget outside every area answers its own.
+/// The panes are in front when the keyboard is with a pane's terminal, or with nothing.
 pub(crate) fn focused_surface(state: &AppState) -> FocusedSurface {
     if let Some(id) = state.layers.top_modal_id(&state.window_root) {
         return FocusedSurface::Layer {
             name: state.layers.name_of(id),
         };
     }
-    match crate::app::tree_focus::focused_dock(state) {
-        Some(mount) => {
-            let kind = state
+    let with_panes = heca_grid_ui::keyboard_holder(&state.window_root).is_none()
+        || state
+            .window_keyboard_terminal()
+            .is_some_and(|id| state.server.backends.pane_of(id).is_some());
+    if with_panes {
+        return FocusedSurface::Panes;
+    }
+    surface_of_area(
+        heca_grid_ui::keyboard_area(&state.window_root),
+        |slot| state.layers.name_of_slot(slot),
+        |mount| {
+            state
                 .chrome_host
-                .provider(&mount)
-                .map(|p| p.kind().to_string());
+                .provider(mount)
+                .map(|p| p.kind().to_string())
+        },
+    )
+}
+
+/// The surface a named area is, once the keyboard is known to be away from the panes: a surface is
+/// a layer, by its name; a region is a dock, by its mount and kind; no area is the widget itself.
+pub(crate) fn surface_of_area(
+    area: Option<heca_grid_ui::KeyboardArea>,
+    layer_named: impl Fn(&str) -> Option<String>,
+    kind_of: impl Fn(&str) -> Option<String>,
+) -> FocusedSurface {
+    match area {
+        Some(heca_grid_ui::KeyboardArea::Surface(slot)) => FocusedSurface::Layer {
+            name: layer_named(&slot),
+        },
+        Some(heca_grid_ui::KeyboardArea::Region(mount)) => {
+            let kind = kind_of(&mount);
             FocusedSurface::Dock { mount, kind }
         }
-        None => FocusedSurface::Panes,
+        None => FocusedSurface::Widget,
     }
 }
 
@@ -165,6 +198,7 @@ pub(crate) fn surface_action(
         ),
         // The panes declare nothing by default, and have no floor: a key nothing claims belongs to
         // the program running in the pane.
+        FocusedSurface::Widget => (Vec::new(), None),
         FocusedSurface::Panes => (vec![PANES_SURFACE], None),
     };
     names

@@ -14,7 +14,6 @@ pub type PendingMenu = (
     Option<String>,
 );
 
-
 /// Central application runtime state.
 ///
 /// Holds the winit window, GPU resources, session layout, backends,
@@ -71,22 +70,15 @@ pub struct AppState {
     pub theme: Theme,
     /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.
     pub appearance: AppearanceConfig,
-    /// How roomy the command palette is (`[settings] command_palette_size`). Re-read on reload, so
-    /// changing it and pressing reload resizes the next palette.
-    pub command_palette_size: heca_config::settings::PaletteSize,
+    /// The settings this window works by, read from the configuration in one place.
+    pub settings: super::settings::WindowSettings,
     /// What the user has searched for and chosen — the command palette's memory, ranked into its
     /// order and recalled by its history keys.
     ///
     /// **Host-owned**, because the palette is rebuilt from scratch every time it opens (see
     /// `chrome::palette::open_command_palette`) and a memory that died with the widget would
-    /// remember nothing. In-memory for now; F004/P092/T386 gives it a file.
+    /// remember nothing.
     pub search_store: std::rc::Rc<std::cell::RefCell<heca_grid_ui::search::SearchStore>>,
-    /// How a search query's case is treated (`[settings] search_case`). Re-read on reload.
-    pub search_case: heca_config::settings::SearchCase,
-    /// Whether the search memory is written to disk at all (`[settings] search_history`). Turned
-    /// off, the store is neither read nor written — a shared or recorded machine is a real reason,
-    /// and a user who turns it off expects the existing file to stop being consulted too.
-    pub search_history: bool,
     /// The store revision last written to disk, so a save happens exactly when something new was
     /// recorded — see [`crate::search_state::persist_if_changed`].
     pub search_saved_revision: u64,
@@ -256,8 +248,7 @@ pub struct AppState {
     /// Only consulted while the map is **already up**. Opening it fresh still starts at the
     /// workspace you are standing in, which is what the memory above is for.
     pub expose_cursor_ws: Option<usize>,
-    /// **Which targets the host currently has a keycap on**, by the identity they declare
-    /// (F003/P082/T427).
+    /// **Which targets the host currently has a keycap on**, by the identity they declare.
     ///
     /// The whole of the letter-ownership rule: `chrome::hint` withdraws exactly what it offered and
     /// never clears a label somebody else set, so the universal picker, a surface's own
@@ -265,8 +256,7 @@ pub struct AppState {
     /// per-widget signal lists projected every frame, which wrote `None` over every offered letter
     /// and needed a host-mode check to stop — a check a plugin could never add itself to.
     pub offered_letters: std::cell::RefCell<crate::chrome::hint::OfferedLetters>,
-    /// **Which letter each pick target wore last time** — so it wears the same one again
-    /// (F003/P082/T445).
+    /// **Which letter each pick target wore last time** — so it wears the same one again.
     ///
     /// Keyed by the target's identity rather than its path, because a path lives one frame. Rebuilt
     /// on every pick from what is actually on screen, so a target that has gone releases its letter
@@ -276,42 +266,6 @@ pub struct AppState {
     /// letter was the target's **index**, so anything appearing earlier in the tree
     /// shifted every letter after it.
     pub remembered_letters: std::collections::HashMap<String, char>,
-    /// Whether mouse interactions are enabled.
-    pub mouse_enabled: bool,
-    /// Whether auto edge scroll is enabled.
-    pub auto_scroll_edge: bool,
-    /// `[settings] edge_scroll_distance`: how close (px) a dragged pane must come to the content
-    /// edge for the view to scroll.
-    pub edge_scroll_distance: f32,
-    /// Append the process/program name (small, dimmed) next to a renamed pane's custom name
-    /// (`[settings] pane_renamed_add_process_name`). Threaded here so `sync_pane_headers` reads
-    /// it each frame and a reload rebuilds the headers.
-    pub pane_renamed_add_process_name: bool,
-    /// Show each pane's working directory as its own row in the sidebar pane card
-    /// (`[appearance.expose] show_cwd`). Projected into the chrome store each sync so the card
-    /// reads it via `ws_state`; a reload updates it live.
-    pub expose_show_cwd: bool,
-    /// Terminal-only mouse support for host scrollback wheel routing.
-    /// When true, wheel scrolls the host scrollback viewport unless the terminal
-    /// app has grabbed the mouse. Does not affect `mouse_enabled` (chrome).
-    pub terminal_mouse_enabled: bool,
-    /// Number of scrollback rows per wheel notch.
-    pub terminal_wheel_scroll_lines: usize,
-    /// Points added/removed per terminal font-zoom step, from
-    /// `[settings] terminal_font_zoom_step`. Threaded here so the zoom handlers
-    /// don't reach back into config each dispatch.
-    pub terminal_font_zoom_step: f32,
-    /// Whether `Ctrl`/`Meta`+wheel changes the font size, from
-    /// `[settings] mouse_wheel_change_font_size`. When false the wheel gesture is
-    /// skipped and the modified wheel is forwarded normally.
-    pub mouse_wheel_change_font_size: bool,
-    /// The `[confirm]` table — per-action confirmation toggles (keyed by confirm name:
-    /// `delete_pane` / `delete_column` / `delete_workspace`, or any plugin action). Read by the central
-    /// confirm gate via [`ConfirmConfig::enabled`](heca_config::confirm::ConfirmConfig::enabled),
-    /// which falls back to the action's `ConfirmSpec::default_enabled` when unset.
-    pub confirm: heca_config::confirm::ConfirmConfig,
-    /// Modifier key for interactive pane drag.
-    pub interactive_move_modifier: heca_config::theme::ModifierKey,
     /// Whether the places a pane can be put are shown in this window right now — see
     /// [`crate::app::places`].
     pub places_open: bool,
@@ -328,7 +282,7 @@ pub struct AppState {
     /// only while such a widget/overlay is focused (never hijacks normal input). Rebuilt on config
     /// reload alongside the keymap.
     pub widget_keymap: heca_grid_ui::Keymap,
-    /// **Menus a widget declared and asked for**, waiting to become layers (F004/P084/T395).
+    /// **Menus a widget declared and asked for**, waiting to become layers.
     ///
     /// A widget builds its own menu and the framework picks the anchor, but only the host can put
     /// one *above everything* — so `install_menu_sink` drops it here and the event loop drains it.
@@ -336,7 +290,7 @@ pub struct AppState {
     /// startup, and inserting a layer needs `&mut AppState`; and rather than an `AppEvent` because
     /// a menu carries closures and a winit user event must be `Send`.
     pub pending_menus: std::rc::Rc<std::cell::RefCell<Vec<PendingMenu>>>,
-    /// **Drops no widget took**, waiting to become moves (F003/P097/T496).
+    /// **Drops no widget took**, waiting to become moves.
     ///
     /// The twin of [`pending_menus`](Self::pending_menus), for the same reason: a row owns the
     /// gesture and the framework resolves what landed on what, but moving a pane between
@@ -371,11 +325,9 @@ pub struct AppState {
     /// `ToastStack` when it builds each card.
     pub notification_max_lines: heca_grid_ui::reactive::Signal<usize>,
     /// Whether the scoped `notification.pick` picker is open. `KeyHintGroup::open_when` on the
-    /// toast surface reads this directly — F009/T492. In addition to global `prefix+/`, not
-    /// instead.
+    /// toast surface reads this directly. In addition to global `prefix+/`, not instead.
     pub notification_pick_open: heca_grid_ui::reactive::Signal<bool>,
 }
-
 
 impl AppState {
     pub fn mark_full_redraw(&mut self) {
@@ -383,7 +335,7 @@ impl AppState {
     }
 
     /// Whether a container's cursor should be shown — **its keyboard focus**, which an overlay
-    /// does not take away (context-menu-3, F003/P086/T365).
+    /// does not take away.
     ///
     /// The row stays highlighted for the duration of a menu opened on it, instead of losing the
     /// highlight the moment the overlay appears. It used to ask whether the app was in a mode; a

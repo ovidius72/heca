@@ -1,10 +1,11 @@
 //! **Navigation keys** — a row's own identity, declared once and read by everything that has to
 //! name a row.
 //!
-//! A list-shaped component labels its rows with [`ComponentExt::key`]; the keyboard cursor, the
-//! right-click target and the drag identity are all read off that **one** declaration. Three
-//! readers, one thing said — instead of a closed enum of row kinds that only the app can extend,
-//! which is what made a plugin row impossible to point at.
+//! A list-shaped component labels its rows with
+//! [`IdentityExt::key`](crate::builders::IdentityExt::key); the keyboard cursor, the right-click
+//! target and the drag identity are all read off that **one** declaration. Three readers, one thing
+//! said — instead of a closed enum of row kinds that only the app can extend, which is what made a
+//! plugin row impossible to point at.
 //!
 //! # Why a string, and not a token from a registry
 //!
@@ -87,7 +88,7 @@ pub fn key_at(root: &dyn Component, point: Point) -> Option<String> {
 /// **What to call the widget at `path`, whether or not anyone named it** (F003/P082/T444).
 ///
 /// Something has to recognise a widget between one frame and the next — a hint letter that stays
-/// with its target, a cursor that survives a rebuild. A [`key`](crate::builders::ComponentExt::key)
+/// with its target, a cursor that survives a rebuild. A [`key`](crate::builders::IdentityExt::key)
 /// is the good answer and the caller writes it on items in a collection. This is the answer for
 /// everything else, so a plain button is still recognisable with nothing written on it.
 ///
@@ -347,7 +348,7 @@ pub struct Ambiguity {
 /// Every place in `root` where a container holds **two or more unkeyed children deriving the same
 /// name** — a collection whose items were never keyed.
 ///
-/// This is the [`key`](crate::builders::ComponentExt::key) rule's warning half, and the condition is
+/// This is the [`key`](crate::builders::IdentityExt::key) rule's warning half, and the condition is
 /// **ambiguity, not iteration**: nothing here asks whether the author was writing a loop. A
 /// `Choice` of `[Icon, Label("HIGH")]` never trips it — an `Icon` deliberately supplies no
 /// [`text_summary`](Component::text_summary), so exactly one child is named. Three rows built from
@@ -479,7 +480,7 @@ fn walk_ambiguities(node: &dyn Component, scope: &str, out: &mut Vec<Ambiguity>)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::{ComponentExt, Parent};
+    use crate::builders::{IdentityExt, Parent};
     use crate::reactive::SignalUpdate;
     use crate::widgets::{Flex, Surface};
     use heca_core::layout::Size;
@@ -566,7 +567,7 @@ mod tests {
 #[cfg(test)]
 mod identity_tests {
     use super::*;
-    use crate::builders::{ComponentExt, Parent};
+    use crate::builders::{IdentityExt, Parent};
     use crate::reactive::SignalUpdate;
     use crate::widgets::{Flex, Glyph, Icon, KeyHint, Label, Row};
 

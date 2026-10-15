@@ -101,11 +101,11 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     state
         .chrome_state
         .workspaces
-        .set_pane_renamed_add_process_name(state.pane_renamed_add_process_name);
+        .set_pane_renamed_add_process_name(state.settings.pane_renamed_add_process_name);
     state
         .chrome_state
         .workspaces
-        .set_expose_show_cwd(state.expose_show_cwd);
+        .set_expose_show_cwd(state.settings.expose_show_cwd);
     // Which lines show under a pane's name, by name — the user's list, plus what other crates added
     // while it is still the default.
     state

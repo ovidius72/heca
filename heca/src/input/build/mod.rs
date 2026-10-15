@@ -15,13 +15,19 @@ mod tests;
 pub(super) fn get_u64(args: &std::collections::HashMap<String, String>, key: &str) -> Option<u64> {
     args.get(key)?.parse().ok()
 }
-pub(super) fn get_usize(args: &std::collections::HashMap<String, String>, key: &str) -> Option<usize> {
+pub(super) fn get_usize(
+    args: &std::collections::HashMap<String, String>,
+    key: &str,
+) -> Option<usize> {
     args.get(key)?.parse().ok()
 }
 pub(super) fn get_f64(args: &std::collections::HashMap<String, String>, key: &str) -> Option<f64> {
     args.get(key)?.parse().ok()
 }
-pub(super) fn get_string(args: &std::collections::HashMap<String, String>, key: &str) -> Option<String> {
+pub(super) fn get_string(
+    args: &std::collections::HashMap<String, String>,
+    key: &str,
+) -> Option<String> {
     args.get(key).cloned()
 }
 pub(super) fn get_enum<T: std::str::FromStr>(

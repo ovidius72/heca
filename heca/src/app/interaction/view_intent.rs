@@ -1,14 +1,13 @@
 //! **Dispatching a described tree's intents** — a name-keyed intent is judged by the same rules as a built-in action.
 
+use super::dispatch::dispatch_action;
+use super::domain::domain_for;
+use super::route::{policy_allows, route_interaction};
+use super::types::{InteractionIntent, InteractionSource, RouteDecision};
 use crate::actions::ActionRegistry;
 use crate::app_state::AppState;
 use crate::chrome::Intent as ViewIntent;
 use crate::input::WmAction;
-use super::types::{InteractionIntent, InteractionSource, RouteDecision};
-use super::domain::domain_for;
-use super::route::{policy_allows, route_interaction};
-use super::dispatch::dispatch_action;
-
 
 /// Resolve and dispatch a declarative [`ViewNode`](crate::chrome::ViewNode) intent.
 ///
@@ -65,7 +64,7 @@ pub(crate) fn dispatch_view_intent(
     // point: without this it fell through to the name-keyed branch below, where the catalog does
     // hold its metadata, no dynamic handler exists, and the answer came back `NotRunnable` —
     // "component not mounted?" about one of the app's own compiled-in actions. `heca action
-    // add_pane_to_column` said that; the palette listing it said nothing at all (F003/P085/T358).
+    // add_pane_to_column` said that; the palette listing it said nothing at all.
     if state.action_catalog.is_builtin(&intent.action) {
         #[cfg(debug_assertions)]
         eprintln!(
@@ -75,7 +74,7 @@ pub(crate) fn dispatch_view_intent(
         return IntentOutcome::MissingArgs;
     }
 
-    // 2. **A widget on screen declares it** (F003/P082/T427). Between the built-ins and the
+    // 2. **A widget on screen declares it**. Between the built-ins and the
     //    provider catalog, because a surface's own verb is the more specific thing the name means
     //    while that surface is up — the same nearest-declaration rule keys and menus follow.
     //
@@ -105,7 +104,7 @@ pub(crate) fn dispatch_view_intent(
     };
 
     // The same gate the built-in path takes through `route_action` — a component's or plugin's
-    // action is judged by identical rules, on the same domain (F003/P086/T371). The `top_modal`
+    // action is judged by identical rules, on the same domain. The `top_modal`
     // check that used to sit here is gone: a modal covers the tiled area, which `Domain::Overlay`
     // already refuses.
     if !policy_allows(
@@ -145,12 +144,15 @@ pub(crate) fn dispatch_view_intent(
 /// Extracted so that *running* an intent and *judging* one resolve it the same way. Two copies of
 /// this line would be two answers to "what does this name mean", and the one nobody exercises is
 /// the one that drifts.
-pub(super) fn builtin_of(name: &str, args: &std::collections::HashMap<String, String>) -> Option<WmAction> {
+pub(super) fn builtin_of(
+    name: &str,
+    args: &std::collections::HashMap<String, String>,
+) -> Option<WmAction> {
     crate::input::resolve_action(name, args)
 }
 
 /// **Would this intent be allowed to run right now?** — asked *before* a picker spends a letter on
-/// it (F003/P082/T432).
+/// it.
 ///
 /// A picker that offers letters which do nothing is a broken picker. With a floating pane active,
 /// `prefix+/` lettered every pane and every sidebar row naming one, and pressing a letter did
@@ -193,7 +195,7 @@ pub(crate) fn view_intent_allowed(
     }
 }
 
-/// What became of a dispatched intent — the answer a **scripted** caller needs (F003/P086/T372).
+/// What became of a dispatched intent — the answer a **scripted** caller needs.
 ///
 /// A click can afford to fail silently; a script cannot be told "ok" when nothing happened. The
 /// three failures are genuinely different: a name nothing knows, a name the domain refuses right
@@ -209,7 +211,7 @@ pub(crate) enum IntentOutcome {
     /// A **built-in whose required arguments were not supplied** — `close_pane_by_id` with no
     /// `pane_id`, `add_pane_to_column` with no column. Its own answer, because the caller's mistake
     /// is fixable and none of the other three say what is wrong: the name is real, the domain has
-    /// no opinion, and the action is perfectly runnable with arguments (F003/P085/T358).
+    /// no opinion, and the action is perfectly runnable with arguments.
     MissingArgs,
     /// Declared, but nothing here can run it: its component is not mounted, or it is a plugin's to
     /// run across a boundary that does not exist yet.
@@ -242,7 +244,9 @@ pub(super) fn report_arg_problems(
 /// Flatten an [`Intent`](crate::chrome::Intent)'s typed args into the `name -> string` map
 /// [`resolve_action`](crate::input::resolve_action) parses, so a declarative intent and a `config.toml`
 /// binding construct a parameterized built-in through **one** code path.
-pub(super) fn intent_args_as_strings(intent: &ViewIntent) -> std::collections::HashMap<String, String> {
+pub(super) fn intent_args_as_strings(
+    intent: &ViewIntent,
+) -> std::collections::HashMap<String, String> {
     use crate::chrome::PropValue;
     intent
         .args

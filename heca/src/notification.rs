@@ -3051,10 +3051,7 @@ mod tests {
 
         // Retry's `dismiss_after`.
         runtime.dismiss_one(fail_id, now);
-        assert!(
-            runtime.visible_toasts().is_empty(),
-            "Retry cleared it"
-        );
+        assert!(runtime.visible_toasts().is_empty(), "Retry cleared it");
 
         // The reload succeeded — success with the same dedup key.
         let ok = Notification::success("Configuration reloaded")

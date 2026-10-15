@@ -73,6 +73,20 @@ pub struct HostCmd {
     /// is not where the thing *is*, so whoever asks "where was this drawn" must not count it. Set
     /// by [`PaintCx::with_echo`](crate::PaintCx::with_echo).
     pub echo: bool,
+    /// The round corners of the nearest container that clips it — see [`Rounded`]. `None` when
+    /// nothing round clips it.
+    pub rounded: Option<Rounded>,
+}
+
+/// **A box with round corners that cuts what is inside it** — a container that clips its children
+/// and has a corner radius (CSS `overflow: hidden` with `border-radius`), already placed in the
+/// scene. The square part of the cut is in the clip stack; this is what a host adds so content it
+/// draws itself — a terminal, an image — follows the corners too.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Rounded {
+    pub rect: Rectangle,
+    /// The corner radius, in logical pixels.
+    pub radius: f32,
 }
 
 /// A filled/rounded rectangle.

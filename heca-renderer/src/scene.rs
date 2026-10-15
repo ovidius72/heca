@@ -346,6 +346,7 @@ mod tests {
             rect,
             alpha: 1.0,
             echo: false,
+            rounded: None,
         })
     }
 
@@ -391,6 +392,7 @@ mod tests {
             rect: rect(0.0, 0.0, 10.0, 10.0),
             alpha: 1.0,
             echo: false,
+            rounded: None,
         }));
         scene.push(host(rect(0.0, 0.0, 10.0, 10.0)));
 

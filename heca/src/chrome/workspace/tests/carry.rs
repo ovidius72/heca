@@ -38,7 +38,11 @@ fn an_open_pick_marks_the_workspace_and_the_marks_leave_with_it() {
     // The place is where the layout put it; the outline is the column's own box.
     assert_eq!(bounds(mark("pick:gap:1")), (318.0, 30.0, 54.0, 500.0));
     assert_eq!(bounds(mark("pick:col:2")), (350.0, 30.0, 300.0, 500.0));
-    assert_eq!(bounds(mark("pick:row:0:1")), (40.0, 270.0, 300.0, 0.0), "a border is a line of no thickness; the slot widens its own zone");
+    assert_eq!(
+        bounds(mark("pick:row:0:1")),
+        (40.0, 270.0, 300.0, 0.0),
+        "a border is a line of no thickness; the slot widens its own zone"
+    );
     assert!(mark("pick:gap:1").base().pointer_transparent);
     let letters: Vec<String> = painted(ws.as_ref())
         .iter()
@@ -60,7 +64,14 @@ fn an_open_pick_marks_the_workspace_and_the_marks_leave_with_it() {
     assert!(ws.set_props(&two_columns()));
     assert_eq!(
         keys(ws.as_ref()),
-        ["col:1", "col:2", "split:colstart:0", "split:col:0", "split:col:1", "split:pane:0:0"],
+        [
+            "col:1",
+            "col:2",
+            "split:colstart:0",
+            "split:col:0",
+            "split:col:1",
+            "split:pane:0:0"
+        ],
         "the marks left with the pick, and nothing else was rebuilt"
     );
 }
@@ -123,7 +134,11 @@ fn a_pane_carried_with_the_window_key_lands_on_a_place_the_layout_opened() {
 
     let (mut closed, dropped) = carrying_window();
     drag(&mut closed, from, gap, true);
-    assert!(dropped.borrow().is_empty(), "no place is open: {:?}", dropped.borrow());
+    assert!(
+        dropped.borrow().is_empty(),
+        "no place is open: {:?}",
+        dropped.borrow()
+    );
 
     let mut model = two_columns();
     model.places = open_places();
@@ -133,8 +148,16 @@ fn a_pane_carried_with_the_window_key_lands_on_a_place_the_layout_opened() {
     // A pointer a little off the border still counts as on it — the zone is wider than the line.
     drag(&mut window, from, Point::new(200.0, 272.5), true);
     assert_eq!(
-        dropped.borrow().iter().map(|d| (d.0.as_str(), d.1.as_str())).collect::<Vec<_>>(),
-        [("pane:10", "slot:1"), ("pane:10", "row:0:1"), ("pane:10", "row:0:1")]
+        dropped
+            .borrow()
+            .iter()
+            .map(|d| (d.0.as_str(), d.1.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("pane:10", "slot:1"),
+            ("pane:10", "row:0:1"),
+            ("pane:10", "row:0:1")
+        ]
     );
 }
 
@@ -142,7 +165,12 @@ fn a_pane_carried_with_the_window_key_lands_on_a_place_the_layout_opened() {
 #[test]
 fn a_drag_without_the_window_key_picks_nothing_up() {
     let (mut window, dropped) = carrying_window();
-    drag(&mut window, Point::new(100.0, 100.0), Point::new(345.0, 100.0), false);
+    drag(
+        &mut window,
+        Point::new(100.0, 100.0),
+        Point::new(345.0, 100.0),
+        false,
+    );
     assert!(dropped.borrow().is_empty(), "{:?}", dropped.borrow());
 }
 
@@ -151,7 +179,12 @@ fn a_drag_without_the_window_key_picks_nothing_up() {
 #[test]
 fn a_pane_carried_onto_another_names_it_and_the_half_it_landed_in() {
     let (mut window, dropped) = carrying_window();
-    drag(&mut window, Point::new(100.0, 100.0), Point::new(400.0, 400.0), true);
+    drag(
+        &mut window,
+        Point::new(100.0, 100.0),
+        Point::new(400.0, 400.0),
+        true,
+    );
     let landed = dropped.borrow().clone();
     assert_eq!(landed.len(), 1, "{landed:?}");
     assert_eq!(
@@ -166,8 +199,14 @@ fn a_place_is_seated_at_the_box_the_layout_gave_it() {
     let mut model = two_columns();
     model.places = open_places();
     let (_window, ws) = laid_out(&model);
-    assert_eq!(bounds(named(ws.as_ref(), "slot:1")), (318.0, 30.0, 54.0, 500.0));
-    assert_eq!(bounds(named(ws.as_ref(), "row:0:1")), (40.0, 270.0, 300.0, 0.0));
+    assert_eq!(
+        bounds(named(ws.as_ref(), "slot:1")),
+        (318.0, 30.0, 54.0, 500.0)
+    );
+    assert_eq!(
+        bounds(named(ws.as_ref(), "row:0:1")),
+        (40.0, 270.0, 300.0, 0.0)
+    );
 }
 
 /// **A place whose drop area is bigger than its line is seated over the whole area** — the empty
@@ -179,7 +218,10 @@ fn a_place_is_seated_over_the_area_a_drop_on_it_counts_in() {
     places[0].zone = Rectangle::new(Point::new(318.0, 30.0), Size::new(300.0, 500.0));
     model.places = places;
     let (_window, ws) = laid_out(&model);
-    assert_eq!(bounds(named(ws.as_ref(), "slot:1")), (318.0, 30.0, 300.0, 500.0));
+    assert_eq!(
+        bounds(named(ws.as_ref(), "slot:1")),
+        (318.0, 30.0, 300.0, 500.0)
+    );
 }
 
 /// **One key, two meanings, told apart by how far the pointer travels**: on a pane showing a link,
@@ -229,16 +271,30 @@ fn the_window_key_opens_a_link_on_a_click_and_carries_the_pane_on_a_drag() {
         ..heca_grid_ui::Modifiers::default()
     };
     dispatch(&mut window, &Event::ModifiersChanged(cmd));
-    dispatch(&mut window, &Event::pointer_pressed(at, PointerButton::Left));
-    dispatch(&mut window, &Event::pointer_released(at, PointerButton::Left));
+    dispatch(
+        &mut window,
+        &Event::pointer_pressed(at, PointerButton::Left),
+    );
+    dispatch(
+        &mut window,
+        &Event::pointer_released(at, PointerButton::Left),
+    );
     assert_eq!(*opened.borrow(), ["open_link"], "a click opens the link");
     assert!(dropped.borrow().is_empty(), "and carries nothing");
 
     opened.borrow_mut().clear();
     drag(&mut window, at, Point::new(345.0, 100.0), true);
-    assert!(opened.borrow().is_empty(), "a drag opens nothing: {:?}", opened.borrow());
+    assert!(
+        opened.borrow().is_empty(),
+        "a drag opens nothing: {:?}",
+        opened.borrow()
+    );
     assert_eq!(
-        dropped.borrow().iter().map(|d| (d.0.as_str(), d.1.as_str())).collect::<Vec<_>>(),
+        dropped
+            .borrow()
+            .iter()
+            .map(|d| (d.0.as_str(), d.1.as_str()))
+            .collect::<Vec<_>>(),
         [("pane:10", "slot:1")],
         "it carries the pane to the place"
     );
@@ -251,7 +307,13 @@ fn a_border_has_a_reacting_zone_after_the_first_layout() {
     let mut model = two_columns();
     model.places = open_places();
     let (_window, ws) = laid_out(&model);
-    let zone = named(ws.as_ref(), "row:0:1").hit_bounds().expect("it reacts");
+    let zone = named(ws.as_ref(), "row:0:1")
+        .hit_bounds()
+        .expect("it reacts");
     assert!(zone.size.h > 0.0, "{zone:?}");
-    assert_eq!(zone.loc.y + zone.size.h / 2.0, 270.0, "centred on the border");
+    assert_eq!(
+        zone.loc.y + zone.size.h / 2.0,
+        270.0,
+        "centred on the border"
+    );
 }

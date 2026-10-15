@@ -77,7 +77,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         return;
     };
     frame.clear_and_background(state);
-    frame.write_mask(state, terminals.tiled.iter().chain(&terminals.floating));
     frame.flush_window(state, &scene, &terminals);
     frame.finish(state, &terminals);
 }

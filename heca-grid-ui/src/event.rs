@@ -359,7 +359,7 @@ impl PointerEvent {
 /// half of the target it landed on.
 ///
 /// The **item** is the dragged widget's own name — what it declared with
-/// [`ComponentExt::key`](crate::builders::ComponentExt::key), the same identity the keyboard cursor
+/// [`IdentityExt::key`](crate::builders::IdentityExt::key), the same identity the keyboard cursor
 /// and the right-click target read. The library moves it around and hands it back; only the host
 /// knows what it means.
 #[derive(Debug, Clone, PartialEq)]
@@ -386,7 +386,7 @@ pub struct DragEvent {
 /// [`Event::target_bounds`](Event::target_bounds) answers for a pointer event.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HintEvent {
-    /// The picked widget's [`key`](crate::builders::ComponentExt::key), when it declares one.
+    /// The picked widget's [`key`](crate::builders::IdentityExt::key), when it declares one.
     ///
     /// `None` is ordinary — most widgets need no key (an ordinary button, an icon), and one is
     /// required only for an item in a collection. A delegating container that iterates a collection
@@ -442,7 +442,7 @@ pub enum Event {
     /// chain, the target, then back up, with `stop_propagation` ending it. There is no second
     /// dispatch path for picks.
     ///
-    /// **The widget's own [`on_hint`](crate::builders::ComponentExt::on_hint) fires in the target
+    /// **The widget's own [`on_hint`](crate::builders::HintExt::on_hint) fires in the target
     /// phase only** — a pane that is pickable *and* holds pickable rows must not answer for a row.
     /// What bubbles is this event, which is the **delegation** seam: an ancestor listening with
     /// `.on(EventKind::Hint, …)` sees which widget was picked and may take the pick from it. That
@@ -500,7 +500,7 @@ pub enum Event {
 
     // ───────────────────────────── drag and drop ─────────────────────────────
     /// A drag began on this widget: it declared a
-    /// [`drag_source`](crate::component::Base::drag_source) and the pointer moved past the
+    /// [`draggable`](crate::component::Base::draggable) and the pointer moved past the
     /// threshold while held.
     DragStart(DragEvent),
     /// The drag moved — delivered to the **source**, once per pointer move.
@@ -519,7 +519,7 @@ pub enum Event {
     /// The drag was released over this drop target.
     Drop(DragEvent),
     /// **A drag this drop target accepts is now in flight** — told once, when it starts, to every
-    /// drop target whose [`accepts`](crate::builders::ComponentExt::accepts) takes what is being
+    /// drop target whose [`accepts`](crate::builders::DragExt::accepts) takes what is being
     /// carried, wherever it sits and whether or not it is shown. A target that only exists for the
     /// length of a drag (a landing place) appears on this and goes on [`DragSettled`](Self::DragSettled).
     DragInFlight(DragEvent),
@@ -534,9 +534,10 @@ pub enum Event {
     Blur,
     /// This widget entered a live tree: sent once, on the first layout pass that sees it.
     Mount,
-    /// This widget is being dropped. Sent from [`Base`]'s destructor, so it fires when a rebuilt
-    /// tree throws the old one away — the moment to release whatever the widget registered with
-    /// the host. Only [`Base`] handlers see it; the widget itself is already coming apart.
+    /// This widget is being dropped. Sent from [`Base`](crate::component::Base)'s destructor, so it
+    /// fires when a rebuilt tree throws the old one away — the moment to release whatever the
+    /// widget registered with the host. Only [`Base`](crate::component::Base) handlers see it; the
+    /// widget itself is already coming apart.
     Unmount,
 }
 
@@ -694,7 +695,7 @@ impl Event {
         }
     }
 
-    /// This event's kind — the key a [`Base`] handler is registered under.
+    /// This event's kind — the key a [`Base`](crate::component::Base) handler is registered under.
     pub fn kind(&self) -> EventKind {
         match self {
             Self::Raw(r) => match r.kind {
@@ -800,7 +801,8 @@ impl RawPointer {
     }
 }
 
-/// The **name** of an event, with none of its payload — what a [`Base`] handler is keyed by.
+/// The **name** of an event, with none of its payload — what a [`Base`](crate::component::Base)
+/// handler is keyed by.
 ///
 /// One kind per [`Event`] variant, except that the raw pointer stream maps onto the resolved kind
 /// it produces: a handler is registered for `Click`, never for "a raw press".
@@ -938,7 +940,8 @@ pub struct HandlerOutcome {
     pub default_prevented: bool,
 }
 
-/// What a [`Base`] handler is given: the event, and the one lever it has over the walk.
+/// What a [`Base`](crate::component::Base) handler is given: the event, and the one lever it has
+/// over the walk.
 ///
 /// A handler is not asked to return anything. Most of them do their work and let the event carry
 /// on; the ones that own it say so, once, by name — which is the difference between "I did
@@ -1028,7 +1031,8 @@ impl<'a> EventCx<'a> {
 
     /// **Do not do the thing the framework would have done.** The browser's `preventDefault`.
     ///
-    /// The only default that exists today is opening the [`context_menu`] a widget declared, on a
+    /// The only default that exists today is opening the
+    /// [`context_menu`](crate::builders::MenuExt::context_menu) a widget declared, on a
     /// right-click. So a widget that wants to answer a right-click *and* show its own menu instead
     /// of the declared one says this, and one that just wants to react says nothing.
     ///

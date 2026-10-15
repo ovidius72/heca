@@ -19,7 +19,7 @@ use std::rc::Rc;
 
 use heca_grid_ui::reactive::{SignalGet, SignalUpdate, create_effect};
 use heca_grid_ui::widgets::{ContextMenu, Menu, MenuAnchor};
-use heca_grid_ui::{Button, ButtonVariant, Component, ComponentExt as _, Dialog, Point};
+use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, HintExt as _, Point};
 
 use super::{ChromeIntentEmitter, FormBindings, LayerId, LayerKind};
 use crate::actions::ActionRegistry;
@@ -738,7 +738,7 @@ mod tests {
 
     /// **A modal's action button is one pick target, not two** (docs/hint-architecture.md § 5a).
     ///
-    /// `on_hint` is on `ComponentExt`, so the `Button` already answers for itself — wrapping it in
+    /// `on_hint` is on `HintExt`, so the `Button` already answers for itself — wrapping it in
     /// a `KeyHint` used to add a second pick target on top of the button's own actionability, the
     /// same bug the exposé's pane card had until 2026-09-15. This pins `build_modal_root` to the
     /// fix: one action button, one target — and that the target IS the button, not a wrapper

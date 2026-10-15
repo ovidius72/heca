@@ -192,14 +192,9 @@ pub(crate) fn find_pane_location(
 mod tests {
     use super::{
         PANE_CANDIDATE_LIMIT, candidate_letter, collect_all_pane_candidates,
-        collect_column_candidates, column_of_pane,
-        has_pane_candidate_overflow,
+        collect_column_candidates, column_of_pane, has_pane_candidate_overflow,
     };
-    use heca_core::layout::{
-        Pane as LayoutPane, PaneId, Session,
-        testing::Windowed,
-        types::Size,
-    };
+    use heca_core::layout::{Pane as LayoutPane, PaneId, Session, testing::Windowed, types::Size};
 
     fn make_session_with_panes(count: usize) -> Session {
         let mut window = Windowed::new(Size::new(1280.0, 800.0), 2.0);

@@ -56,7 +56,9 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     let prev_ws = state.layout().active_workspace_idx();
 
     // Update focused_pane from session state.
-    state.focused_pane = state.layout().active_workspace()
+    state.focused_pane = state
+        .layout()
+        .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
     // Project canonical WM focus onto the chrome's derived selection (write-via-action).
@@ -103,6 +105,9 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         }
     }
     notify_focus_changed(state, prev_focused, state.focused_pane);
+    if prev_focused != state.focused_pane {
+        crate::app::tree_focus::give_focused_pane_the_keyboard(state);
+    }
 
     let focus_changed = prev_focused != state.focused_pane;
     let current_ws = state.layout().active_workspace_idx();

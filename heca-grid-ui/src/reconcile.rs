@@ -54,8 +54,8 @@ pub fn reconcile_children(
 }
 
 /// [`reconcile_children`] for a widget that has only its own [`Base`] — a props handler places its
-/// own children from what it is handed (see [`props`](crate::props)) — and for children that are
-/// rebuilt when **what they were built from** changes.
+/// own children from what it is handed (see [`props`](mod@crate::props)) — and for children that
+/// are rebuilt when **what they were built from** changes.
 ///
 /// Each wanted child is a `(name, version)`: a child that answers to the name and was built from
 /// the same version is kept as it is; one built from another version is dropped and built afresh.
@@ -136,7 +136,7 @@ fn reconcile_named(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::{ComponentExt, Parent};
+    use crate::builders::{IdentityExt, Parent};
     use crate::widgets::Flex;
 
     fn build(key: &str) -> Box<dyn Component> {

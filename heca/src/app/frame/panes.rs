@@ -73,49 +73,26 @@ pub(in crate::app) fn paint_window(state: &mut AppState, v: &FrameValues) -> Gui
 }
 
 /// **Every terminal this frame draws**: the tiled panes', the floating panes', and those no pane
-/// owns — a dock's, an overlay's — each with its snapshot.
+/// owns — a dock's, an overlay's — each with its snapshot and how see-through it is. Where each is
+/// drawn and what cuts it come from the scene, so nothing here says where it is.
 pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> FrameTerminals {
-    let pane_positions = state.layout()
-        .active_workspace()
-        .map(|ws| ws.scroll().panes_with_positions())
-        .unwrap_or_default();
-    let tiled = pane_positions
-        .iter()
-        .map(|(pane_id, rect)| {
-            let px = v.pane_area.loc.x as f32 + v.ws_offset.0 + rect.loc.x as f32;
-            let py = v.pane_area.loc.y as f32 + v.ws_offset.1 + rect.loc.y as f32;
-            let id = state.server.backends.id_for(*pane_id);
-            TerminalRenderState::collect(
-                state,
-                id,
-                Some(*pane_id),
-                (px, py, rect.size.w as f32, rect.size.h as f32),
-            )
-        })
-        .collect();
-    let float_boxes: Vec<(PaneId, (f32, f32, f32, f32))> = state.layout()
+    let (tiled, floating): (Vec<PaneId>, Vec<PaneId>) = state
+        .layout()
         .active_workspace()
         .map(|ws| {
-            ws.floating_panes
-                .iter()
-                .map(|float| {
-                    let x = float.position.x as f32 + v.pane_area.loc.x as f32 + v.ws_offset.0;
-                    let y = float.position.y as f32 + v.pane_area.loc.y as f32 + v.ws_offset.1;
-                    (
-                        float.pane.id,
-                        (x, y, float.size.w as f32, float.size.h as f32),
-                    )
-                })
-                .collect()
+            (
+                ws.scroll()
+                    .panes_with_positions()
+                    .into_iter()
+                    .map(|(pane, _)| pane)
+                    .collect(),
+                ws.floating_panes
+                    .iter()
+                    .map(|float| float.pane.id)
+                    .collect(),
+            )
         })
         .unwrap_or_default();
-    let floating = float_boxes
-        .into_iter()
-        .map(|(pane_id, at)| {
-            let id = state.server.backends.id_for(pane_id);
-            TerminalRenderState::collect(state, id, Some(pane_id), at)
-        })
-        .collect();
     // The terminals no pane owns, in a stable order: the oldest id first.
     let mut unowned: Vec<TerminalId> = state
         .terminals
@@ -124,15 +101,25 @@ pub(in crate::app) fn collect_panes(state: &mut AppState, v: &FrameValues) -> Fr
         .filter(|id| state.server.backends.pane_of(*id).is_none())
         .collect();
     unowned.sort_by_key(|id| id.0);
-    let docked = unowned
-        .into_iter()
-        .map(|id| TerminalRenderState::collect(state, id, None, (0.0, 0.0, 0.0, 0.0)))
-        .collect();
-    FrameTerminals {
-        tiled,
-        floating,
-        docked,
+    let mut terminals = Vec::new();
+    let panes = tiled.into_iter().map(|pane| (pane, v.surface_alpha)).chain(
+        floating
+            .into_iter()
+            .map(|pane| (pane, v.floating_surface_alpha)),
+    );
+    for (pane, opacity) in panes {
+        let id = state.server.backends.id_for(pane);
+        terminals.push(TerminalRenderState::collect(state, id, Some(pane), opacity));
     }
+    for id in unowned {
+        terminals.push(TerminalRenderState::collect(
+            state,
+            id,
+            None,
+            v.surface_alpha,
+        ));
+    }
+    FrameTerminals(terminals)
 }
 
 /// **Bring every terminal's retained texture up to date**, and show each its viewport.
@@ -165,36 +152,13 @@ pub(in crate::app) fn sync_terminal_layers(
         .unwrap_or(state.theme.accent)
         .to_f32x4();
     let ligatures = state.appearance.terminal.ligatures;
-    let style = |surface_alpha: f32| TerminalStyle {
+    let style = TerminalStyle {
         font_size: app_font_size,
         families: terminal_font_families_from(&font_config.family),
-        surface_alpha,
+        surface_alpha: v.surface_alpha,
         ligatures,
         hyperlink_style,
         hyperlink_color,
     };
-    // Recomputed each frame by the two calls below (tiled + floating), which OR into it. Reset once
-    // here first.
-    state.has_animated_images = false;
-    sync_retained_terminal_layers(
-        state,
-        &terminals.tiled,
-        style(v.surface_alpha),
-        (v.w, v.h),
-        v.phys_size,
-    );
-    sync_retained_terminal_layers(
-        state,
-        &terminals.floating,
-        style(v.floating_surface_alpha),
-        (v.w, v.h),
-        v.phys_size,
-    );
-    sync_retained_terminal_layers(
-        state,
-        &terminals.docked,
-        style(v.surface_alpha),
-        (v.w, v.h),
-        v.phys_size,
-    );
+    sync_retained_terminal_layers(state, &terminals.0, style, (v.w, v.h), v.phys_size);
 }

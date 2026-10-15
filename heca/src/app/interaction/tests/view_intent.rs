@@ -2,8 +2,7 @@
 
 use super::*;
 
-
-/// **The chain a `prefix+/` candidate is judged by, end to end** (F003/P082/T432).
+/// **The chain a `prefix+/` candidate is judged by, end to end**.
 ///
 /// With a floating pane active, `prefix+/` lettered every pane and
 /// every sidebar row naming one, and pressing a letter did **nothing**. This is why — and now
@@ -42,7 +41,6 @@ fn a_pick_that_would_be_refused_resolves_to_a_refused_action() {
     );
 }
 
-
 /// The args of a declarative `Intent` construct a parameterized built-in through the SAME
 /// `build_action` a `config.toml` binding uses — so a menu item, an RPC call and a keybinding
 /// all produce one identical `WmAction`. Before this, `dispatch_view_intent` dropped the args.
@@ -63,7 +61,6 @@ fn intent_args_build_the_same_parameterized_action_as_a_config_binding() {
     assert_eq!(from_intent, from_config);
     assert_eq!(from_intent, Some(WmAction::ScrollToOffset { rows: 12 }));
 }
-
 
 /// A unit built-in with no args still resolves by name (the `action_from_name` fallback), so the
 /// existing name-dispatch behaviour is unchanged.

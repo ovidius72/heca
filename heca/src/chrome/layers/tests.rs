@@ -1130,10 +1130,10 @@ fn a_layer_seated_as_a_surface_still_fills_the_window() {
 #[test]
 fn a_surface_that_draws_nothing_does_not_take_the_pointer_from_the_chrome() {
     use heca_core::layout::{Point, Size};
+    use heca_grid_ui::builders::{EventExt, Parent};
     use heca_grid_ui::reactive::signal;
     use heca_grid_ui::style::Length;
     use heca_grid_ui::widgets::{KeyHintGroup, ToastStack};
-    use heca_grid_ui::builders::{ComponentExt, Parent};
     use heca_grid_ui::{LayoutEngine, LayoutExt};
 
     let viewport = Size::new(1280.0, 800.0);

@@ -1,6 +1,6 @@
 use super::*;
 use crate::Size;
-use crate::builders::{ComponentExt, LayoutExt, Parent};
+use crate::builders::{DragExt, IdentityExt, LayoutExt, Parent, PresenceExt};
 use crate::layout::LayoutEngine;
 use crate::widgets::Flex;
 

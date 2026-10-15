@@ -8,10 +8,10 @@
 
 use heca_core::layout::{Point, Rectangle, Size};
 
-/// Where an [`Overlay`] places its panel.
+/// Where an [`Overlay`](crate::widgets::Overlay) places its panel.
 ///
 /// - [`Center`](OverlayPosition::Center) — the default: fill the viewport and
-///   center the panel with real taffy layout (a modal [`Dialog`](super::Dialog)).
+///   center the panel with real taffy layout (a modal [`Dialog`](crate::widgets::Dialog)).
 /// - [`Anchored`](OverlayPosition::Anchored) — dropdown/popover placement: the
 ///   panel is put **below** an anchor rect (a trigger), flipped **above** when
 ///   there is no room below, aligned to the anchor's left edge, and clamped into

@@ -11,7 +11,10 @@ fn swapped(arranged: Option<Arranged>) -> Vec<Change> {
 }
 
 /// Move the active column one place along; the window keeps it on screen.
-fn move_active_column(cx: &mut ServerCx<'_>, to: impl FnOnce(usize, usize) -> Option<usize>) -> Vec<Change> {
+fn move_active_column(
+    cx: &mut ServerCx<'_>,
+    to: impl FnOnce(usize, usize) -> Option<usize>,
+) -> Vec<Change> {
     cx.change_asker_columns(|space, asker| {
         let count = space.columns.len();
         to(asker.column, count)
@@ -33,15 +36,22 @@ pub(super) fn swap_right(cx: &mut ServerCx<'_>, _action: &WmAction) -> Vec<Chang
 
 /// Swap the active pane of the asker's column with the one `step` names, given its row and the
 /// number of panes.
-fn swap_active_pane(cx: &mut ServerCx<'_>, step: impl FnOnce(usize, usize) -> Option<usize>) -> Vec<Change> {
+fn swap_active_pane(
+    cx: &mut ServerCx<'_>,
+    step: impl FnOnce(usize, usize) -> Option<usize>,
+) -> Vec<Change> {
     let (workspace, col) = (cx.asker.workspace, cx.asker.column);
     let swapped = cx.arrange(workspace, |space, _| {
         let column = space.columns.get(col)?;
         let row = column.active_pane_idx;
         let other = step(row, column.panes.len())?;
-        space.swap_panes_in_column(col, row, other).map(|effect| vec![SpaceEffect::Pane(effect)])
+        space
+            .swap_panes_in_column(col, row, other)
+            .map(|effect| vec![SpaceEffect::Pane(effect)])
     });
-    swapped.map_or_else(Vec::new, |effects| vec![Change::Arranged { workspace, effects }])
+    swapped.map_or_else(Vec::new, |effects| {
+        vec![Change::Arranged { workspace, effects }]
+    })
 }
 
 /// Swap the active pane with the one above it.

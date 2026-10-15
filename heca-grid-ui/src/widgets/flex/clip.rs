@@ -1,6 +1,6 @@
 //! What a widget that clips its children does.
 use super::Flex;
-use crate::builders::{ComponentExt, LayoutExt, Parent};
+use crate::builders::{EventExt, LayoutExt, Parent, PresenceExt};
 use crate::component::Component as _;
 use crate::component::{PaintCx, paint_child};
 use crate::scene::{DrawCommand, Scene};
@@ -55,5 +55,87 @@ fn a_widget_that_clips_hides_and_ignores_what_hangs_past_its_edge() {
         !painted(&open)
             .iter()
             .any(|c| matches!(c, DrawCommand::PushClip(_)))
+    );
+}
+
+/// **The cut holds however a widget draws its children** — here one that draws them itself, under
+/// a colour of its own, as a button or a row does. It writes nothing about clipping; the framework
+/// cuts each child it draws to the widget's box and round corners.
+#[test]
+fn a_widget_that_draws_its_own_children_is_still_cut() {
+    use crate::component::{Base, Component};
+    use crate::scene::{HostCmd, HostDraw, Rounded};
+
+    struct Own {
+        base: Base,
+    }
+    impl Component for Own {
+        fn base(&self) -> &Base {
+            &self.base
+        }
+        fn base_mut(&mut self) -> &mut Base {
+            &mut self.base
+        }
+        fn paint(&self, cx: &mut PaintCx) {
+            cx.with_content_color(crate::color::Color::rgb(1, 2, 3), |cx| {
+                for child in &self.base.children {
+                    paint_child(child.as_ref(), cx);
+                }
+            });
+        }
+    }
+    struct Screen {
+        base: Base,
+    }
+    impl Component for Screen {
+        fn base(&self) -> &Base {
+            &self.base
+        }
+        fn base_mut(&mut self) -> &mut Base {
+            &mut self.base
+        }
+        fn paint(&self, cx: &mut PaintCx) {
+            cx.surface(self.base.bounds, 9);
+        }
+    }
+    let mut own = Own { base: Base::new() };
+    own.base.style.layout.width = crate::Length::Px(100.0);
+    own.base.style.layout.height = crate::Length::Px(100.0);
+    own.base.style.visual.radius = 6.0;
+    own.base.clip_children = true;
+    let mut screen = Screen { base: Base::new() };
+    screen.base.style.layout.width = crate::Length::Px(300.0);
+    screen.base.style.layout.height = crate::Length::Px(300.0);
+    own.base.children.push(Box::new(screen));
+    let mut root = Flex::column().child(own);
+    LayoutEngine::new().compute(&mut root, Size::new(400.0, 400.0));
+
+    let scene = painted(&root);
+    let at = |c: &DrawCommand| scene.iter().position(|d| d == c);
+    let clip = scene
+        .iter()
+        .find(|c| matches!(c, DrawCommand::PushClip(r) if r.size.w == 100.0 && r.size.h == 100.0))
+        .cloned();
+    let surface = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Host(
+                h @ HostCmd {
+                    draw: HostDraw::Surface { id: 9 },
+                    ..
+                },
+            ) => Some(*h),
+            _ => None,
+        })
+        .expect("the child drew its surface");
+    let clip = clip.expect("the child is drawn inside a clip of the widget's box");
+    assert!(
+        at(&clip) < at(&DrawCommand::Host(surface)),
+        "the clip is open when the child draws"
+    );
+    assert_eq!(
+        surface.rounded.map(|r: Rounded| r.radius),
+        Some(6.0),
+        "and under the widget's round corners"
     );
 }

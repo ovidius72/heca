@@ -1,21 +1,26 @@
 //! Keyboard focus for a component tree: who holds it, how it moves, and the one door it goes through.
 //!
 //! **There is one meaning of `focused`**, the browser's: the widget the keyboard is aimed at, and at
-//! most one per tree. It is written in exactly one place ([`door`]) and made single by [`settle`].
+//! most one per tree. It is written in exactly one place (`door`) and made single by `settle`.
 //! Everything that moves focus goes through them: Tab ([`FocusManager::advance`]), a press
-//! ([`focus_on_press`], run by the pointer router for every tree), a surface opening
-//! ([`Base::follow_focus`]) and a host asking for a named control ([`FocusManager::focus_named`]).
+//! (`focus_on_press`, run by the pointer router for every tree), a surface opening
+//! (`FocusDoor::follow_focus`) and a host asking for a named control
+//! ([`FocusManager::focus_named`]).
 //!
 //! A widget does not ask for a press to be wired: put a focusable widget anywhere and clicking it
 //! focuses it, the way clicking an `<input>` does. Each component's focus state lives in
 //! `Base.focused`, so widgets can render a focus ring reactively.
 
 mod door;
+mod identity;
 mod scope;
 mod settle;
 
 pub(crate) use door::FocusDoor;
-pub use scope::{contains_keyboard, focus_scope, page_scope, release_scope};
+pub use identity::{focus_widget_by_id, keyboard_holder};
+pub use scope::{
+    KeyboardArea, contains_keyboard, focus_scope, keyboard_area, page_scope, release_scope,
+};
 pub(crate) use settle::{focus_on_press, holder_path, settle};
 
 /// **Make a tree's keyboard owner single, now.** Run by the router before it delivers a key or a
@@ -31,8 +36,9 @@ pub fn settle_focus(root: &mut dyn Component) {
 pub struct KeyboardOwner {
     /// The path to the widget that holds it.
     pub path: Vec<usize>,
-    /// The nearest enclosing region that named itself with [`scope_key`](crate::builders::ComponentExt::scope_key)
-    /// — a dock, say — or `None` when the owner is in no named region.
+    /// The nearest enclosing region that named itself with
+    /// [`scope_key`](crate::builders::IdentityExt::scope_key) — a dock, say — or `None` when the
+    /// owner is in no named region.
     pub scope: Option<String>,
     /// Whether the owner is inside a surface placed in the window root (a dialog, a menu, the
     /// exposé) rather than in the page itself.
@@ -124,8 +130,8 @@ fn for_each_focusable(
 /// Moves keyboard focus across a component tree.
 ///
 /// It keeps **no position of its own**: where focus is, is read off the tree every time (the
-/// widget holding [`Base::focused`]), so a click, a surface opening and Tab can never disagree about
-/// where the keyboard is.
+/// widget holding [`Base::focused`](crate::component::Base::focused)), so a click, a surface
+/// opening and Tab can never disagree about where the keyboard is.
 #[derive(Default)]
 pub struct FocusManager;
 
@@ -134,7 +140,7 @@ impl FocusManager {
         Self
     }
 
-    /// The visit index (as used by [`apply`](Self::apply)) of the focusable that holds the keyboard
+    /// The visit index (as used by `apply`) of the focusable that holds the keyboard
     /// in `root`, if any.
     pub fn focused(&self, root: &mut dyn Component) -> Option<usize> {
         settle(root);
@@ -201,7 +207,7 @@ impl FocusManager {
 
     /// Deliver an arbitrary event to the focused component only. Returns whether it
     /// consumed it. Used for field-first delivery of semantic events (e.g. a
-    /// [`Event::Widget`](crate::component::Event::Widget) intent forwarded to the
+    /// [`Event::Widget`] intent forwarded to the
     /// focused text field inside a `Dialog`).
     pub fn deliver_event(&mut self, root: &mut dyn Component, ev: &Event) -> Handled {
         // **One router.** This used to find the focused widget by *visit index* and dispatch to it
@@ -318,12 +324,12 @@ impl FocusManager {
 
     /// Route a **pointer/scroll** event through the tree with overlay-first dibs, returning whether
     /// it was consumed so the host can fall back (e.g. page-scroll on an unconsumed
-    /// [`Event::Scroll`](crate::component::Event::Scroll)).
+    /// [`Event::Scroll`]).
     ///
     /// - An open overlay gets first dibs (see [`offer_to_overlay`](Self::offer_to_overlay));
     ///   if it consumes, routing stops and returns `Handled::Yes`.
     /// - Everything else is delivered to the tree as-is. A press focuses what it landed on in the
-    ///   router itself ([`focus_on_press`]), so every tree does it, not only the ones a manager
+    ///   router itself (`focus_on_press`), so every tree does it, not only the ones a manager
     ///   was asked to route.
     ///
     /// Key events are intentionally **not** routed here: the host owns key meaning

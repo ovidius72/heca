@@ -302,7 +302,7 @@ pub struct LaidOutColumn {
     pub id: ColumnId,
     /// Its position in the strip, for the actions that still address a column positionally.
     pub idx: usize,
-    /// The box it occupies, in the same space [`ScrollingSpace::panes_with_positions`] reports.
+    /// The box it occupies, in the same space [`ScrollingRef::panes_with_positions`] reports.
     pub rect: Rectangle,
     /// Its panes, top to bottom.
     pub panes: Vec<LaidOutPane>,

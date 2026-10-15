@@ -66,13 +66,17 @@ pub use animation::{
     Animate, Animation, AnimationFrame, Fade, Presence, Sequence, Slide, SlideFrom, Zoom, ZoomFade,
     smoothstep,
 };
-pub use builders::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
+pub use builders::{
+    DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, PlaceExt, PresenceExt,
+    StyleExt, ToneExt, TooltipExt,
+};
 pub use color::Color;
 pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, area, area_slot,
     collect_damage, deliver, dispatch, frame_served, holds_keyboard, install_frame_request,
     needs_layout, overlay_occluded_at, paint_child, request_frame, shift_subtree,
 };
+pub use cursor::{Cursor, cursor_at};
 pub use drag::{DropAction, DropHit, DropSide, resolve_at, source_at};
 pub use effects::{Attention, Eased, Flash};
 pub use event::typed_text;
@@ -81,8 +85,8 @@ pub use event::{
     RawPointerKind,
 };
 pub use focus::{
-    FocusManager, KeyboardOwner, contains_keyboard, focus_scope, keyboard_owner, page_scope,
-    release_scope, settle_focus,
+    FocusManager, KeyboardArea, KeyboardOwner, contains_keyboard, focus_scope, focus_widget_by_id,
+    keyboard_area, keyboard_holder, keyboard_owner, page_scope, release_scope, settle_focus,
 };
 pub use hint::{
     DeclaredAction, Hint, SurfaceHints, clear_hints, collect_actions, collect_hints,
@@ -93,8 +97,7 @@ pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use layout::LayoutEngine;
 pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use nav::{child_name, collect_keys, identity_of, key_at, node_with_key, node_with_key_mut};
-pub use cursor::{Cursor, cursor_at};
-pub use pointer::{PointerState, clear_hover, dragged_bounds, dragging, hit_test};
+pub use pointer::{PointerState, clear_hover, dragged_kind, dragging, hit_test};
 pub use scene::{
     BackdropAt, BaseRun, DrawCommand, Escape, FontRole, HostWork, Scene, SurfaceAt, TextStyle,
 };
@@ -112,11 +115,11 @@ pub use widgets::{
     Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame,
     DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid, HintPlacement, Icon, IconButton,
     Input, Item, ItemGroup, KeyCap, KeyHint, KeyHintGroup, KeycapVariant, Label, LabelSide,
-    LandingSlot, MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel, ProgressBar,
-    RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion,
-    Select, Separator, Spinner, Splitter, StatusDot, Surface, Tabs, Tag, Tile, Toast, ToastAction,
-    ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
-    container, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
+    LandingSlot, MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, Panel,
+    ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo,
+    ScrollRegion, Select, Separator, Spinner, Splitter, StatusDot, Surface, Tabs, Tag, Tile, Toast,
+    ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide,
+    Visibility, container, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
 };
 
 /// Common imports for building UIs.
@@ -125,7 +128,10 @@ pub mod prelude {
     pub use crate::animation::{
         Animate, Animation, AnimationFrame, Fade, Sequence, Slide, SlideFrom, Zoom, ZoomFade,
     };
-    pub use crate::builders::{ComponentExt, LayoutExt, Parent, PlaceExt, StyleExt};
+    pub use crate::builders::{
+        DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, PlaceExt, PresenceExt,
+        StyleExt, ToneExt, TooltipExt,
+    };
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers, WidgetIntent};
     pub use crate::event::{DragEvent, EventCx, EventKind, PointerButton, PointerEvent};
@@ -148,10 +154,10 @@ pub mod prelude {
         ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container,
         ContextMenu, Dialog, DockFrame, DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph, Grid,
         HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, KeyHintGroup, Label,
-        LabelSide, LandingSlot, MarkerGroup, MenuEntry, MenuItem, NfGlyph, NfIcon, Orientation, Pane,
-        ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo,
-        ScrollRegion, Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Tile, Toast,
-        ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip,
+        LabelSide, LandingSlot, MarkerGroup, MenuEntry, MenuItem, NfGlyph, NfIcon, Orientation,
+        Pane, ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar,
+        ScrollInfo, ScrollRegion, Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Tile,
+        Toast, ToastAction, ToastPosition, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip,
         TooltipSide, Visibility, container,
     };
 }

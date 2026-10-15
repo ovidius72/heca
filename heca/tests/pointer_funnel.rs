@@ -228,7 +228,7 @@ fn the_key_funnel_delivers_releases_and_not_only_presses() {
     assert!(
         body.contains("deliver_release"),
         "the key branch delivers a key PRESS and never a RELEASE.\n\
-         `ComponentExt::on_key_up` then exists but can never fire, so a widget that declares one \
+         `EventExt::on_key_up` then exists but can never fire, so a widget that declares one \
          is silently dead in the real app.\n\
          This is not caught by any behaviour test: they dispatch both halves themselves.",
     );

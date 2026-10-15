@@ -1894,7 +1894,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 let i = pane_states.borrow().len();
                 pane_states.borrow_mut().push(row.state());
                 let pane_states = pane_states.clone();
-                // DnD framework (universal `ComponentExt`): each card is a drag source, and what
+                // DnD framework (universal `DragExt`): each card is a drag source, and what
                 // it drags is the name it declares about itself. The app resolves a drop via
                 // `drag::source_at`/`resolve_at` over the laid-out tree and paints
                 // `PaintCx::drag_ghost`/`drop_indicator` — see docs/widgets.md §Drag.
@@ -1998,7 +1998,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             // PANES: Phase 7 sidebar-style pane cards. Row 1 is a centered inline
             // `status dot + icon + name`; row 2 is a flat git metadata line that
             // hides outside repos.
-            // The dock is a DnD drop target (universal `ComponentExt`) — its cards drop here.
+            // The dock is a DnD drop target (universal `DragExt`) — its cards drop here.
             let panes = DockFrame::new("PANES")
                 .key("dock:panes")
                 .drop_target()
@@ -2036,7 +2036,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 ));
             // MarkerGroup: a column-style grouping fronted by a left marker bar
             // that lights to the accent when the group is active (here: the first).
-            // Each group is also a DnD drag source + drop target (universal `ComponentExt`)
+            // Each group is also a DnD drag source + drop target (universal `DragExt`)
             // grabbed by its left grip gutter — this is how the app drags whole
             // *columns* (F4.5). A column drag accepts only column/workspace targets via
             // `drag::resolve_at_filtered`, so nested pane rows fall through to the group.

@@ -39,6 +39,26 @@ pub(crate) fn focus_dock(state: &mut AppState, mount: &str) {
 pub(crate) fn release_dock(state: &mut AppState, mount: &str) {
     state.chrome_state.clear_dock_focus_request();
     heca_grid_ui::release_scope(&mut state.window_root, mount);
+    give_focused_pane_the_keyboard(state);
+}
+
+/// **The focused pane's terminal takes the window's keyboard** — when the focused pane changes, and
+/// when a dock gives the keyboard back — so the window's focus is the one record of where the
+/// keyboard is, panes included. A dock or an overlay holding the keyboard keeps it: picking a pane
+/// from the sidebar does not take the keyboard out of the sidebar.
+pub(crate) fn give_focused_pane_the_keyboard(state: &mut AppState) {
+    if crate::app::tree_keys::window_holds_keyboard(state) {
+        return;
+    }
+    let Some(id) = state
+        .focused_pane
+        .and_then(|pane| state.server.backends.identity_of(pane))
+    else {
+        return;
+    };
+    if let Some(terminal) = state.terminals.get(&id) {
+        terminal.take_keyboard(&mut state.window_root);
+    }
 }
 
 /// Make the window tree's keyboard single, land any dock request the tree was not ready for, and

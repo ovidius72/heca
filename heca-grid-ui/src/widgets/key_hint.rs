@@ -364,7 +364,7 @@ pub struct KeyHint {
 #[heca_grid_ui_macros::props]
 impl KeyHint {
     // `on_hint` is **not here any more** (F003/P082/T432). It is
-    // [`ComponentExt::on_hint`](crate::builders::ComponentExt::on_hint), on every widget — so a
+    // [`HintExt::on_hint`](crate::builders::HintExt::on_hint), on every widget — so a
     // `KeyHint::new(row).on_hint(…)` call still reads exactly the same, and a widget that can carry
     // the declaration itself no longer has to be wrapped to say what a pick does to it.
     //
@@ -416,10 +416,10 @@ impl KeyHint {
     // ── The four cap knobs ────────────────────────────────────────────────────────────────
     //
     // These are the **wrapper's spelling** of capabilities that live on every widget
-    // (`ComponentExt::hint_placement` and friends): the slot they write, `Base::hint_style`, has
+    // (`HintExt::hint_placement` and friends): the slot they write, `Base::hint_style`, has
     // always been universal, and since F003/P097/T501 so has the way to set it. They delegate
     // rather than repeat the assignment, so there is one writer per field and the two spellings
-    // cannot drift — the same arrangement `Tooltip` has with `ComponentExt::tooltip`.
+    // cannot drift — the same arrangement `Tooltip` has with `TooltipExt::tooltip`.
     //
     // Kept because the wrapper itself is kept: for a region that is not a widget you can put a
     // builder on.
@@ -427,19 +427,19 @@ impl KeyHint {
     /// Where the keycap sits over the target (default [`HintPlacement::TopCenter`]).
     #[heca_grid_ui_macros::prop]
     pub fn placement(self, placement: HintPlacement) -> Self {
-        crate::builders::ComponentExt::hint_placement(self, placement)
+        crate::builders::HintExt::hint_placement(self, placement)
     }
 
     /// Explicit keycap font size in logical px (overrides the font-derived size).
     #[heca_grid_ui_macros::prop]
     pub fn size(self, px: f32) -> Self {
-        crate::builders::ComponentExt::hint_size(self, px)
+        crate::builders::HintExt::hint_size(self, px)
     }
 
     /// Override the keycap color (default: theme `accent`). The glow follows it too.
     #[heca_grid_ui_macros::prop]
     pub fn color(self, c: Color) -> Self {
-        crate::builders::ComponentExt::hint_color(self, c)
+        crate::builders::HintExt::hint_color(self, c)
     }
 
     /// Nudge the keycap down by `px` logical pixels after placement (positive = down).
@@ -447,7 +447,7 @@ impl KeyHint {
     /// row (e.g. align with a workspace dock's title).
     #[heca_grid_ui_macros::prop]
     pub fn offset_y(self, px: f64) -> Self {
-        crate::builders::ComponentExt::hint_offset_y(self, px)
+        crate::builders::HintExt::hint_offset_y(self, px)
     }
 }
 
@@ -864,7 +864,7 @@ mod tests {
 mod keycap_tint {
     use super::*;
     use crate::Tone;
-    use crate::builders::ComponentExt as _;
+    use crate::builders::HintExt as _;
     use crate::widgets::Surface;
 
     fn style_of(w: impl Component) -> HintStyle {

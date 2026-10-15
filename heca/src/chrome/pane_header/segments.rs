@@ -73,7 +73,7 @@ pub(crate) fn build_pane_info_bar(
         let key = segment_text_key(&name);
         tag = Some(match tag.take() {
             None => {
-                use heca_grid_ui::builders::ComponentExt as _;
+                use heca_grid_ui::builders::IdentityExt as _;
                 Tag::new(text).leading(leading).key(key)
             }
             Some(existing) => {

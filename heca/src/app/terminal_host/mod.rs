@@ -64,7 +64,7 @@ pub(crate) fn prepare_terminal_mount(
 /// one door a terminal action uses to reach a terminal placed anywhere before falling back to the
 /// focused pane's.
 pub(crate) fn tree_answers(state: &mut AppState, intent: heca_grid_ui::WidgetIntent) -> bool {
-    crate::app::input::focused_surface(state).delivers_to_tree()
+    crate::app::tree_keys::window_holds_keyboard(state)
         && crate::chrome::deliver(state, &heca_grid_ui::Event::Widget(intent))
 }
 

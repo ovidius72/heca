@@ -24,7 +24,9 @@ use crate::chrome::{
     ChromeDragItem, PaneFacts, RepaintWatch, alpha_u8, pane_info_view, runtime_snapshot,
 };
 use heca_core::runtime::ProcessStatus;
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{
+    DragExt, EventExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent, StyleExt,
+};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, create_effect};
 use heca_grid_ui::style::Spacing;
 use heca_grid_ui::widgets::{Glyph, HintPlacement, Icon, Label, Row, StatusDot, Tile, Visibility};

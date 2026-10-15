@@ -12,3 +12,6 @@ serde = { version = "1", features = ["derive"] }
 # Tests only: the round-trip guards assert the wire spelling of every kind and prop.
 [dev-dependencies]
 serde_json = "1"
+
+[lints]
+workspace = true

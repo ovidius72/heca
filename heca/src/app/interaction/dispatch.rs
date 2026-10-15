@@ -1,14 +1,13 @@
 //! **Dispatch** — the chokepoint every user-initiated action goes through: overlay control, the focus-then-act composite, and `dispatch_action`.
 
+use super::route::route_interaction;
+use super::types::{InteractionIntent, InteractionSource, RouteDecision};
+use super::view_intent::{IntentOutcome, dispatch_view_intent};
 use crate::actions::ActionRegistry;
 use crate::app_state::AppState;
 use crate::chrome::Intent as ViewIntent;
 use crate::input::WmAction;
 use crate::keymap::ActionRef;
-use super::types::{InteractionIntent, InteractionSource, RouteDecision};
-use super::route::route_interaction;
-use super::view_intent::{IntentOutcome, dispatch_view_intent};
-
 
 /// The single public entry point for user-initiated WM actions.
 ///
@@ -34,7 +33,11 @@ pub(super) fn target_overlay(
 }
 
 /// Resolve an overlay-control action ([`WmAction::is_overlay_control`]) — the only place they run.
-pub(super) fn resolve_overlay_control(state: &mut AppState, registry: &ActionRegistry, action: &WmAction) {
+pub(super) fn resolve_overlay_control(
+    state: &mut AppState,
+    registry: &ActionRegistry,
+    action: &WmAction,
+) {
     let (named, result) = match action {
         WmAction::SubmitOverlay { overlay, action } => (*overlay, Some(action.clone())),
         WmAction::CloseOverlay { overlay } => (*overlay, None),
@@ -148,8 +151,7 @@ pub(crate) fn dispatch_intent(
         RouteDecision::Block => {
             // **Say WHAT was refused, not only who asked.** The source alone cannot be acted on: a
             // single click can send more than one intent, so identical lines may be different
-            // refusals — and one of them being correct says nothing about the others
-            //.
+            // refusals — and one of them being correct says nothing about the others.
             #[cfg(debug_assertions)]
             eprintln!("[heca] interaction: blocked {refused:?} from {source:?}");
         }
@@ -157,12 +159,11 @@ pub(crate) fn dispatch_intent(
 }
 
 /// Focus `container`, then dispatch `action` at it — the one implementation behind
-/// [`InteractionIntent::FocusContainerThenAction`], shared by the palette and RPC
-/// (F003/P085/T358).
+/// [`InteractionIntent::FocusContainerThenAction`], shared by the palette and RPC.
 ///
 /// **The focus half is skipped when that container already holds the keyboard**, and this is not an
 /// optimization: `focus_dock` aimed at the focused dock is deliberately a *toggle* (it is the way
-/// back out, F003/P085/T352), so focusing unconditionally would release the keyboard and leave the
+/// back out), so focusing unconditionally would release the keyboard and leave the
 /// action to be refused by the very policy this exists to satisfy.
 ///
 /// Returns what became of the **action** — the focus half is a means, not the answer a caller asked

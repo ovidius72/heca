@@ -196,6 +196,7 @@ impl BackendStore {
         self.get_mut_by_id(id)
     }
 
+    #[cfg(test)]
     /// Get an immutable reference to a pane's backend.
     pub fn get(&self, pane: PaneId) -> Option<&dyn PaneBackend> {
         let id = *self.by_owner.get(&TerminalOwner::Pane(pane))?;

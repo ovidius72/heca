@@ -242,7 +242,7 @@ fn builtin_policy_is_derived_from_the_exhaustive_match() {
     // Spot-check the two parameterized names that have no bare-name variant.
     assert_eq!(
         catalog.find("scroll_to_offset").unwrap().policy,
-        ActionPolicy::FocusedPaneLocal
+        ActionPolicy::KeyboardTerminal
     );
     assert_eq!(
         catalog.find("open_link").unwrap().policy,

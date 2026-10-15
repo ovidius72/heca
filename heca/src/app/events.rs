@@ -108,7 +108,7 @@ pub(crate) fn handle_window_event(
         WindowEvent::KeyboardInput { event, .. } => {
             // **A release is half a keystroke, and it is delivered.** Returning here meant
             // `Event::Key { pressed: false }` never existed in this app, so
-            // `ComponentExt::on_key_up` was a builder nothing could ever fire — the exposé's
+            // `EventExt::on_key_up` was a builder nothing could ever fire — the exposé's
             // delete keys did nothing while a headless test that dispatched both halves passed
             // The same shape as the right-click that never opened a menu because the funnel
             // delivered only presses.
@@ -177,9 +177,12 @@ pub(crate) fn handle_window_event(
                 // Use the already-normalized `event_combo` (which carries the macOS
                 // physical-key fallback for `Ctrl+letter`, unlike the raw logical key) so vim
                 // `Ctrl+h/j/k/l` resolve to the right chord.
-                if let Some(handled) =
-                    crate::app::tree_keys::deliver_press_to_tree(state, &event_combo, &key_text)
-                {
+                if let Some(handled) = crate::app::tree_keys::deliver_press_to_tree(
+                    state,
+                    &keymaps.flat,
+                    &event_combo,
+                    &key_text,
+                ) {
                     // **One call: the surface does not write the order.** Committed text, then the
                     // key, then the intents it resolves to — all inside `deliver_press`, so this
                     // surface and every other one feed a widget identically. Writing the sequence
@@ -461,7 +464,7 @@ fn handle_wheel_font_zoom(
     registry: &ActionRegistry,
     delta: MouseScrollDelta,
 ) {
-    if !state.mouse_wheel_change_font_size {
+    if !state.settings.mouse_wheel_change_font_size {
         return;
     }
     let mods = state.modifiers;

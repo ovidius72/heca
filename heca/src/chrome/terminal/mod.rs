@@ -19,7 +19,7 @@ mod viewport;
 
 pub use component::Terminal;
 use input::TerminalCommand;
-pub(crate) use input::{Cell, Grid, Search, TerminalInput};
+pub(crate) use input::{Cell, Grid, Page, Search, TerminalInput};
 pub(crate) use model::TerminalId;
 pub(crate) use viewport::Viewport;
 
@@ -226,7 +226,7 @@ pub(crate) fn show_viewports<'a>(
             match_alpha: appearance.search_match_alpha,
             current_match_alpha: appearance.search_current_match_alpha,
             nominal_cell: state.terminal_base_cell_size(id),
-            open_link_modifier: state.interactive_move_modifier,
+            open_link_modifier: state.settings.interactive_move_modifier,
         });
         terminal.show_links(&snapshot.hyperlinks);
     }
@@ -245,6 +245,7 @@ mod drawn_tests {
             alpha: 1.0,
             clip: None,
             echo,
+            rounded: None,
         }
     }
 

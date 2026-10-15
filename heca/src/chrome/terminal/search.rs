@@ -12,7 +12,7 @@ use std::rc::Rc;
 use heca_core::backend::SearchMatch;
 use heca_core::layout::{Point, Rectangle, Size};
 use heca_grid_ui::SignalData;
-use heca_grid_ui::builders::{ComponentExt, LayoutExt};
+use heca_grid_ui::builders::{EventExt, LayoutExt};
 use heca_grid_ui::component::{Base, Component, PaintCx};
 use heca_grid_ui::event::EventKind;
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};

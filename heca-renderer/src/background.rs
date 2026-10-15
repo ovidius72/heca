@@ -1,7 +1,7 @@
 //! z=0 background layer — heca-owned frosted-glass background.
 //!
 //! [`BackgroundLayer`] owns the z=0 layer: it renders a 2-color vertical gradient
-//! into an offscreen target, blurs it once (via the **shared** [`Blur`](crate::blur::Blur)),
+//! into an offscreen target, blurs it once (via the **shared** [`Blur`]),
 //! and caches the blurred result. Panes then composite translucently over the
 //! cached view, so the frost is heca-owned and identical cross-platform (no
 //! OS-vibrancy dependency — see `compositor-blur-refactor-plan.md`).
@@ -197,7 +197,7 @@ impl BackgroundLayer {
     }
 
     /// Pure helper: whether the given params differ from the cached ones. Factored
-    /// out (delegates to the free [`params_differ`]) so the dirty-flag decision is
+    /// out (delegates to the free `params_differ`) so the dirty-flag decision is
     /// unit-testable without a GPU device.
     pub fn params_changed(&self, top: [f32; 4], bottom: [f32; 4], blur_radius: f32) -> bool {
         params_differ(

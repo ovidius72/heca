@@ -24,7 +24,7 @@ impl Component for Overlay {
 
     /// Layout just reset the panel to its taffy-computed position; in
     /// [`Anchored`](OverlayPosition::Anchored) mode, re-place it against the
-    /// trigger rect (idempotent — see [`place_panel`](Overlay::place_panel)).
+    /// trigger rect (idempotent — see `place_panel`).
     /// [`Center`](OverlayPosition::Center) mode keeps taffy's centering untouched.
     fn on_layout(&mut self) {
         self.place_panel();
@@ -73,7 +73,7 @@ impl Component for Overlay {
 
     /// Advance the arrival or exit, then the subtree.
     ///
-    /// Runs [`settle`](Overlay::settle) because a **composing** widget drives the same surface
+    /// Runs `settle` because a **composing** widget drives the same surface
     /// through [`open_signal`](Overlay::open_signal) — one flip of that signal is an arrival or a
     /// dismissal exactly as a host's call is, and neither may be the only way an animation starts,
     /// or the only way the keyboard is placed.

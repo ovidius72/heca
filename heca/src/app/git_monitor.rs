@@ -124,9 +124,7 @@ struct GitSyncContext<'a, P> {
 }
 
 pub(crate) fn sync_pane_git_from_cwds(state: &mut AppState) {
-    state
-        .server
-        .refresh_git(&mut state.session, Instant::now());
+    state.server.refresh_git(&mut state.session, Instant::now());
 }
 
 /// The cache and the real git provider bound together, for [`ServerState::refresh_git`]: the
@@ -304,9 +302,7 @@ fn sync_one_pane_git<P: GitProvider>(
 #[cfg(test)]
 mod tests {
     use super::{GitInfo, GitProvider, GitRuntimeCache, GitSnapshot, sync_pane_git_from_cwds_impl};
-    use heca_core::layout::{
-        Pane, PaneId, Point, Rectangle, Session, Size, testing::Windowed,
-    };
+    use heca_core::layout::{Pane, PaneId, Point, Rectangle, Session, Size, testing::Windowed};
     use std::cell::Cell;
     use std::collections::HashMap;
     use std::fs;
@@ -380,7 +376,6 @@ mod tests {
         let repo = PathBuf::from("/repo/project");
         let mut session = session_with_tiled_pane(pane_id);
         session
-            
             .workspaces
             .first_mut()
             .expect("workspace")
@@ -416,7 +411,6 @@ mod tests {
         );
 
         let runtime = session
-            
             .workspaces
             .first()
             .and_then(|ws| ws.find_pane(pane_id))
@@ -434,10 +428,7 @@ mod tests {
         let root = PathBuf::from("/repo");
         let mut session = session_with_tiled_pane(PaneId(10));
         {
-            let ws = session
-            .workspaces
-            .first_mut()
-            .expect("workspace");
+            let ws = session.workspaces.first_mut().expect("workspace");
             ws.find_pane_mut(PaneId(10)).expect("pane").runtime.cwd = Some(repo_a.clone());
             ws.add_floating_pane(
                 {
@@ -499,7 +490,6 @@ mod tests {
         let root = PathBuf::from("/repo");
         let mut session = session_with_tiled_pane(PaneId(10));
         session
-            
             .workspaces
             .first_mut()
             .expect("workspace")

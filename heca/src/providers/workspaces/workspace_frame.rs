@@ -15,7 +15,7 @@ use super::{
     row_hint, workspace_key, workspace_row_items,
 };
 use heca_grid_ui::Tone;
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
+use heca_grid_ui::builders::{DragExt, HintExt, IdentityExt, LayoutExt, MenuExt, Parent};
 use heca_grid_ui::style::Spacing;
 use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement};
 

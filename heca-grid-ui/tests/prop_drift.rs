@@ -229,13 +229,8 @@ fn nothing_sets_hidden_without_asking_for_the_layout_it_needs() {
             if path.extension().is_none_or(|e| e != "rs") {
                 continue;
             }
-            // `style.rs` defines the field; `component.rs` holds the one setter allowed to write it.
-            let name = path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
-            if name == "style.rs" || name == "component.rs" {
+            // `style.rs` defines the field; `Base`'s methods hold the one setter that may write it.
+            if path.ends_with("style.rs") || path.ends_with("component/base/methods.rs") {
                 continue;
             }
             let src = std::fs::read_to_string(&path).expect("utf-8");

@@ -10,7 +10,7 @@ use super::input::{Search, TerminalInput};
 use super::search::{SearchBar, SearchSlot};
 use super::shared::Shared;
 use super::viewport::{Controls, IntentSlot};
-use heca_grid_ui::builders::{ComponentExt, LayoutExt};
+use heca_grid_ui::builders::{EventExt, LayoutExt};
 use heca_grid_ui::component::{Base, Component, GridKey, PaintCx, WidgetIntent};
 use heca_grid_ui::event::EventKind;
 use heca_grid_ui::style::Length;
@@ -48,6 +48,8 @@ impl Terminal {
             links: RefCell::default(),
             view: Cell::new((0, 0)),
             link_modifier: Cell::new(heca_config::theme::ModifierKey::default()),
+            node: Cell::new(0),
+            wants_keyboard: Cell::new(false),
         }))
     }
 
@@ -122,7 +124,6 @@ impl Terminal {
         // the start of a drag by how far the pointer travelled, so the same key serves both.
         .on(EventKind::Click, move |cx| me.open_link(cx))
     }
-
 }
 
 impl Terminal {
@@ -161,6 +162,14 @@ impl Component for Terminal {
     /// it, in the same walk, so they are on top.
     fn paint(&self, cx: &mut PaintCx) {
         self.shared.bounds.set(self.base.bounds);
+        // Which node is on screen, so the window can be asked whether it holds the keyboard, or
+        // be told to give it the keyboard. Nothing about the keyboard is kept here: the window's
+        // own focus is the one record of it.
+        self.shared.node.set(self.base.focus_id());
+        // Asked for the keyboard before it was on screen: take it now, like an `autofocus`.
+        if self.shared.wants_keyboard.replace(false) {
+            self.base.focus(false);
+        }
         if let Some(id) = self.shared.id.get() {
             cx.surface(self.base.bounds, id.0);
         }
@@ -220,9 +229,17 @@ impl Component for Terminal {
             }
             Event::Widget(WidgetIntent::FindNext) => self.shared.step(true),
             Event::Widget(WidgetIntent::FindPrevious) => self.shared.step(false),
-            // **Its own font size**: the terminal the keyboard is on answers, wherever it is placed.
-            Event::Widget(intent) => crate::input::FontZoomStep::of_intent(*intent)
-                .is_some_and(|step| self.shared.emit(TerminalInput::FontZoom(step))),
+            // **Its own font size and its own history**: the terminal the keyboard is on answers,
+            // wherever it is placed — the paging keys scroll it as they scroll any scroll area.
+            Event::Widget(intent) => {
+                if let Some(step) = crate::input::FontZoomStep::of_intent(*intent) {
+                    self.shared.emit(TerminalInput::FontZoom(step))
+                } else if let Some(page) = super::Page::of_intent(*intent) {
+                    self.shared.emit(TerminalInput::Page(page))
+                } else {
+                    false
+                }
+            }
             Event::TextInput(text) => self.shared.emit(TerminalInput::Text(text.clone())),
             Event::Key { key, pressed: true } => self.shared.emit(TerminalInput::Key {
                 key: *key,

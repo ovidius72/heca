@@ -1,24 +1,19 @@
 //! **What the host does between two runs of the window's scene**: draw a terminal where the scene
 //! put it, or blur what the runs before it drew.
 //!
-//! The scene decides where and when; this only performs it. A terminal is told apart by the list it
-//! is in — tiled, floating or docked — because each is masked and scissored differently.
-
-use heca_core::layout::Rectangle;
+//! The scene decides where, when and what cuts it; this only performs it. Every terminal is drawn
+//! by the same rule — in its scene box, cut by the clip in force there and by the round corners of
+//! what holds it — so a terminal in a column, a float, a dock, an overlay or a picture carried
+//! under the pointer is drawn right without this knowing which.
 
 use super::FrameTerminals;
-use crate::app::terminal_render::{TerminalTarget, draw_surface, pane_scissor_rect};
+use crate::app::terminal_render::{TerminalTarget, draw_surface};
 use crate::app_state::AppState;
 
-/// What the work is drawn into, and how each kind of terminal is masked.
+/// What the work is drawn into.
 pub(super) struct HostTargets<'a> {
     pub(super) view: &'a wgpu::TextureView,
     pub(super) stencil: &'a wgpu::TextureView,
-    /// The content area's scissor, which a tiled terminal is cut to.
-    pub(super) tiled_scissor: Option<(u32, u32, u32, u32)>,
-    pub(super) surface_alpha: f32,
-    pub(super) floating_surface_alpha: f32,
-    pub(super) content_clip: Rectangle,
     pub(super) phys_size: winit::dpi::PhysicalSize<u32>,
 }
 
@@ -32,54 +27,7 @@ impl<'a> HostTargets<'a> {
         Self {
             view,
             stencil,
-            tiled_scissor: v.content_scissor,
-            surface_alpha: v.surface_alpha,
-            floating_surface_alpha: v.floating_surface_alpha,
-            content_clip: v.pane_area,
             phys_size: v.phys_size,
-        }
-    }
-
-    /// A tiled terminal: rounded to its pane by the mask, cut to the content area.
-    fn tiled(&self) -> TerminalTarget<'a> {
-        TerminalTarget {
-            view: self.view,
-            stencil: Some(self.stencil),
-            scissor: self.tiled_scissor,
-            surface_alpha: self.surface_alpha,
-            content_clip: self.content_clip,
-            follow_scene_clip: false,
-        }
-    }
-
-    /// A floating terminal: rounded to its pane by the mask, cut to its own pane.
-    fn floating(&self, state: &AppState, pane: (f32, f32, f32, f32)) -> TerminalTarget<'a> {
-        TerminalTarget {
-            view: self.view,
-            stencil: Some(self.stencil),
-            scissor: pane_scissor_rect(
-                pane.0,
-                pane.1,
-                pane.2,
-                pane.3,
-                state.scale_factor,
-                self.phys_size,
-            ),
-            surface_alpha: self.floating_surface_alpha,
-            content_clip: self.content_clip,
-            follow_scene_clip: false,
-        }
-    }
-
-    /// A terminal no pane owns: no mask, clipped by what clips it in its scene.
-    fn docked(&self) -> TerminalTarget<'a> {
-        TerminalTarget {
-            view: self.view,
-            stencil: None,
-            scissor: None,
-            surface_alpha: self.surface_alpha,
-            content_clip: self.content_clip,
-            follow_scene_clip: true,
         }
     }
 }
@@ -94,24 +42,48 @@ pub(super) fn do_host_work(
 ) {
     match work {
         heca_grid_ui::HostWork::Surface(at) => {
-            let id = at.id;
-            let find = |list: &'_ [crate::app::terminal_render::TerminalRenderState]| {
-                list.iter().position(|t| t.id.0 == id)
+            let stencil = at.rounded.map(|rounded| {
+                cut_round_corners(state, targets.stencil, rounded, encoder);
+                targets.stencil
+            });
+            let target = TerminalTarget {
+                view: targets.view,
+                stencil,
             };
-            if let Some(i) = find(&terminals.tiled) {
-                let target = targets.tiled();
-                draw_surface(state, &terminals.tiled[i..=i], at, &target, encoder);
-            } else if let Some(i) = find(&terminals.floating) {
-                let t = &terminals.floating[i];
-                let target = targets.floating(state, (t.x, t.y, t.w, t.h));
-                draw_surface(state, &terminals.floating[i..=i], at, &target, encoder);
-            } else if let Some(i) = find(&terminals.docked) {
-                let target = targets.docked();
-                draw_surface(state, &terminals.docked[i..=i], at, &target, encoder);
-            }
+            draw_surface(state, &terminals.0, at, &target, encoder);
         }
         heca_grid_ui::HostWork::Backdrop(at) => blur_backdrop(state, targets, at, encoder),
     }
+}
+
+/// **Write `rounded` into the stencil**, alone, so the terminal drawn next is cut to those corners
+/// and to nothing else's.
+fn cut_round_corners(
+    state: &mut AppState,
+    stencil: &wgpu::TextureView,
+    rounded: heca_grid_ui::scene::Rounded,
+    encoder: &mut wgpu::CommandEncoder,
+) {
+    state.grid_renderer.draw(heca_renderer::grid::GlowRect {
+        x: rounded.rect.loc.x as f32,
+        y: rounded.rect.loc.y as f32,
+        w: rounded.rect.size.w as f32,
+        h: rounded.rect.size.h as f32,
+        fill: [0.0; 4],
+        border: [0.0; 4],
+        border_width: 0.0,
+        radius: rounded.radius,
+        glow: [0.0; 4],
+        glow_radius: 0.0,
+        glow_intensity: 0.0,
+        glow_alpha_scale: 0.0,
+        shadow: [0.0; 4],
+        shadow_radius: 0.0,
+        shadow_offset: [0.0, 0.0],
+    });
+    state
+        .grid_renderer
+        .render_stencil(&state.queue, stencil, encoder);
 }
 
 /// **Blur what the scene has drawn so far behind `at`, and stamp it back** within its box, cut to

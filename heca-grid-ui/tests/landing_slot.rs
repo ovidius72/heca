@@ -56,7 +56,11 @@ fn a_slot_appears_while_a_pane_is_carried_and_goes_when_it_ends() {
     let mut root = window("pane");
     assert!(drawn_letters(&root).is_empty(), "hidden before the drag");
     pick_up(&mut root);
-    assert_eq!(drawn_letters(&root), ["b"], "its letter, while a pane is carried");
+    assert_eq!(
+        drawn_letters(&root),
+        ["b"],
+        "its letter, while a pane is carried"
+    );
     release_at(&mut root, Point::new(60.0, 40.0), PointerButton::Left);
     assert!(drawn_letters(&root).is_empty(), "gone when it ends");
 }
@@ -84,7 +88,10 @@ fn a_drop_on_the_slot_names_it() {
     let on_slot = Point::new(220.0, 20.0);
     move_to(&mut root, on_slot);
     release_at(&mut root, on_slot, PointerButton::Left);
-    assert_eq!(*dropped.borrow(), [("src".to_string(), "slot:1".to_string())]);
+    assert_eq!(
+        *dropped.borrow(),
+        [("src".to_string(), "slot:1".to_string())]
+    );
 }
 
 /// An edge is a **line**, not a place: faint while a carry is on, bright and thicker while a drag is
@@ -116,7 +123,9 @@ fn an_edge_is_faint_at_rest_and_takes_the_insertion_colour_under_a_drag() {
         paint_via_child(root, &theme)
             .iter()
             .filter_map(|c| match c {
-                DrawCommand::Rect(r) if r.rect.size.w == 150.0 => Some((r.rect.size.h, r.fill.a, r.fill)),
+                DrawCommand::Rect(r) if r.rect.size.w == 150.0 => {
+                    Some((r.rect.size.h, r.fill.a, r.fill))
+                }
                 _ => None,
             })
             .collect()
@@ -152,7 +161,12 @@ fn an_edge_over_an_area_takes_a_drop_anywhere_in_it_and_draws_its_line_at_its_si
     let mut root = Flex::row()
         .width(400.0)
         .height(100.0)
-        .child(Flex::row().at_rect(0.0, 0.0, 50.0, 50.0).key("src").draggable_as("pane"))
+        .child(
+            Flex::row()
+                .at_rect(0.0, 0.0, 50.0, 50.0)
+                .key("src")
+                .draggable_as("pane"),
+        )
         .child(
             LandingSlot::new()
                 .edge(true)
@@ -168,13 +182,23 @@ fn an_edge_over_an_area_takes_a_drop_anywhere_in_it_and_draws_its_line_at_its_si
     let line_x: Vec<f64> = paint_via_child(&root, &theme)
         .iter()
         .filter_map(|c| match c {
-            DrawCommand::Rect(r) if r.rect.size.h == 100.0 => Some(r.rect.loc.x + r.rect.size.w / 2.0),
+            DrawCommand::Rect(r) if r.rect.size.h == 100.0 => {
+                Some(r.rect.loc.x + r.rect.size.w / 2.0)
+            }
             _ => None,
         })
         .collect();
-    assert_eq!(line_x, [100.0], "the line runs along the left side of the area");
+    assert_eq!(
+        line_x,
+        [100.0],
+        "the line runs along the left side of the area"
+    );
     let far = Point::new(380.0, 70.0);
     move_to(&mut root, far);
     release_at(&mut root, far, PointerButton::Left);
-    assert_eq!(*dropped.borrow(), ["slot:end".to_string()], "a drop far from the line still lands");
+    assert_eq!(
+        *dropped.borrow(),
+        ["slot:end".to_string()],
+        "a drop far from the line still lands"
+    );
 }

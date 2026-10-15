@@ -266,6 +266,13 @@ pub(crate) fn on_terminal_input(
         // What it says about its own search: the matches are the host's to find.
         TerminalInput::Search(search) => super::search::on_search(state, terminal, search),
         // Its own font size: the same action a key and RPC run, naming this terminal.
+        // Its history paged from the keyboard: the same step the scroll keys give a pane.
+        TerminalInput::Page(page) => {
+            if let Some(backend) = state.server.backends.get_mut_by_id(terminal) {
+                crate::handlers::page_terminal(backend, page);
+                state.needs_redraw = true;
+            }
+        }
         TerminalInput::FontZoom(step) => dispatch_action(
             state,
             registry,

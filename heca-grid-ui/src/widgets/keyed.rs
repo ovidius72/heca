@@ -44,7 +44,7 @@ struct State {
     texts_dirty: Cell<bool>,
 }
 
-/// A child rebuilt only when its key changes. See the [module docs](self).
+/// A child rebuilt only when its key changes. See the module docs.
 pub struct Keyed {
     base: Base,
     state: Rc<State>,

@@ -36,7 +36,7 @@
 //! viewport and centers the panel by taffy), so every descendant gets true bounds (which the
 //! hint picker and pointer hit-testing need).
 
-use crate::builders::{ComponentExt as _, LayoutExt, Parent};
+use crate::builders::{LayoutExt, Parent, PresenceExt as _};
 use crate::component::{Base, Component, Event, GridKey, Handled, WidgetIntent};
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
 use crate::style::{Length, Spacing};
@@ -170,7 +170,7 @@ impl Dialog {
     /// **A destructive question**: the body says its consequence in the theme's danger colour.
     ///
     /// The dialog's own rule, so no caller colours a message by hand: the body gets
-    /// [`content_tone(Tone::Danger)`](crate::builders::LayoutExt::content_tone), and every text
+    /// [`content_tone(Tone::Danger)`](crate::builders::ToneExt::content_tone), and every text
     /// inside it without a colour of its own follows. The title and the buttons keep theirs — a
     /// destructive button already says so through its own variant.
     ///
@@ -470,9 +470,10 @@ impl Component for Dialog {
     /// A dialog used to forward every key, every intent and all typed text to its focused field by
     /// hand — an overlay-aware focus scan running beside the framework's own. It no longer needs
     /// to. Keyboard events are delivered to the focus owner and bubble, and the focus owner inside
-    /// an open dialog *is* the field or button this widget's own [`FocusManager`] focused, so the
-    /// field gets its text first and the dialog hears what the field declined on the way back up
-    /// (in [`on_event`](Component::on_event)). A nested open overlay — a `Select` in the body — is
+    /// an open dialog *is* the field or button this widget's own
+    /// [`FocusManager`](crate::focus::FocusManager) focused, so the field gets its text first and
+    /// the dialog hears what the field declined on the way back up (in
+    /// [`on_event`](Component::on_event)). A nested open overlay — a `Select` in the body — is
     /// focused for the same reason, so it answers `Dismiss` before the dialog does, with nothing
     /// declared.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {

@@ -292,8 +292,8 @@ mod commands;
 mod runs;
 
 pub use commands::{
-    Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, RectCmd, ScanlineCmd,
-    Shadow, TextAlign, TextCmd, TextStyle,
+    Border, BracketCmd, DrawCommand, FontRole, Glow, HostCmd, HostDraw, RectCmd, Rounded,
+    ScanlineCmd, Shadow, TextAlign, TextCmd, TextStyle,
 };
 pub use runs::{BackdropAt, BaseRun, Escape, HostWork, SurfaceAt};
 

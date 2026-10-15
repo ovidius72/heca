@@ -32,7 +32,7 @@ pub struct Fade {
 }
 
 impl Fade {
-    /// A dissolve both ways, over [`DEFAULT_DURATION`].
+    /// A dissolve both ways, over `DEFAULT_DURATION`.
     pub fn new() -> Self {
         Self {
             left: None,

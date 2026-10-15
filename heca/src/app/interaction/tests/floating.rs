@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 /// In Floating domain, TiledOnly actions are blocked.
 #[test]
 fn floating_domain_blocks_tiled_only() {
@@ -48,7 +47,6 @@ fn floating_domain_blocks_tiled_only() {
     }
 }
 
-
 /// In Floating domain, FocusedPaneLocal actions are allowed.
 #[test]
 fn floating_domain_allows_focused_pane_local() {
@@ -76,7 +74,6 @@ fn floating_domain_allows_focused_pane_local() {
         );
     }
 }
-
 
 /// Intent variants are blocked when floating.
 #[test]
@@ -108,7 +105,6 @@ fn floating_domain_blocks_intent_variants() {
     }
 }
 
-
 /// MouseContent FocusPane is blocked when floating.
 #[test]
 fn floating_blocks_mouse_content_focus_pane() {
@@ -131,7 +127,6 @@ fn floating_blocks_mouse_content_focus_pane() {
         decision,
     );
 }
-
 
 /// MouseLeftSidebar actions are blocked when floating (via the guard in mouse.rs,
 /// tested here as part of the router's policy).
@@ -159,7 +154,6 @@ fn floating_blocks_mouse_left_sidebar_actions() {
     }
 }
 
-
 // ═══════════════════════════════════════════════════════════════════════
 // Phase E — Regression tests
 // ═══════════════════════════════════════════════════════════════════════
@@ -171,7 +165,9 @@ fn floating_blocks_mouse_left_sidebar_actions() {
 #[test]
 fn floating_focus_allows_active_floating_pane_via_keyboard() {
     let mut session = test_session();
-    session.m().add_pane(Pane::new(PaneId(99), "float-99"), None, true);
+    session
+        .m()
+        .add_pane(Pane::new(PaneId(99), "float-99"), None, true);
     let mut ws = session.ws();
     ws.add_floating_pane(
         Pane::new(PaneId(99), "float-99"),
@@ -196,7 +192,6 @@ fn floating_focus_allows_active_floating_pane_via_keyboard() {
     );
 }
 
-
 /// When floating, keyboard FocusPane targeting a tiled pane is blocked.
 #[test]
 fn floating_focus_blocks_tiled_pane_via_keyboard() {
@@ -217,7 +212,6 @@ fn floating_focus_blocks_tiled_pane_via_keyboard() {
     );
 }
 
-
 /// When floating, FocusPane intent from MouseContent is blocked.
 #[test]
 fn floating_focus_pane_intent_blocked_via_mouse_content() {
@@ -236,7 +230,6 @@ fn floating_focus_pane_intent_blocked_via_mouse_content() {
         decision,
     );
 }
-
 
 /// When floating, AlwaysAllowed actions (CommandPalette, SpawnCommand) are
 /// blocked from current UI sources. ReloadConfig is NOT in this group — it
@@ -276,7 +269,6 @@ fn floating_blocks_always_allowed_from_keyboard() {
     }
 }
 
-
 /// ReloadConfig is a `Global` action — allowed in every focus domain,
 /// including Floating (it reloads config from disk with no layout impact).
 /// Regression test for the bug where hot-reload silently failed whenever a
@@ -301,7 +293,6 @@ fn floating_allows_global_reload() {
         decision,
     );
 }
-
 
 /// When floating, FocusedPaneLocal actions (Float, ClosePane, RenamePane,
 /// scrollback, selection actions) are still allowed.
@@ -352,7 +343,6 @@ fn floating_allows_focused_pane_local_via_keyboard() {
         );
     }
 }
-
 
 /// When floating, FocusedPaneLocal actions are allowed from all sources.
 #[test]

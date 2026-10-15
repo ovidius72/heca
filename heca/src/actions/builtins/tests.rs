@@ -4,55 +4,55 @@ use crate::actions::Side;
 /// The actions that run on the server, by name. A change here is a decision about which side of
 /// the split an action is on, so it is written out — not derived from the descriptors it checks.
 const SERVER_SIDE: &[&str] = &[
-        "add_column_to_workspace",
-        "add_pane_to_column",
-        "close",
-        "close_pane_by_id",
-        "create_workspace",
-        "delete_column",
-        "delete_workspace",
-        "float",
-        "float_at",
-        "move",
-        "move_column",
-        "move_column_down",
-        "move_column_to_workspace",
-        "move_column_up",
-        "move_pane_left",
-        "move_pane_right",
-        "move_pane_to_column",
-        "move_pane_to_new_column",
-        "move_pane_to_workspace",
-        "pane_height_decrease",
-        "pane_height_increase",
-        "place_pane",
-        "reset_pane_name",
-        "reset_pane_name_by_id",
-        "reset_workspace_name",
-        "reset_workspace_name_by_idx",
-        "resize",
-        "resize_column_by",
-        "resize_decrease",
-        "resize_increase",
-        "resize_pane_height_by",
-        "resize_to",
-        "rename_column_to",
-        "rename_target",
-        "rename_workspace_to",
-        "spawn_command",
-        "split_horizontal",
-        "split_vertical",
-        "swap",
-        "swap_columns",
-        "swap_down",
-        "swap_left",
-        "swap_right",
-        "swap_up",
-        "take_pane",
-        "terminal_kill",
-        "terminal_run",
-        "zoom_column",
-        "zoom_column_at_index",
+    "add_column_to_workspace",
+    "add_pane_to_column",
+    "close",
+    "close_pane_by_id",
+    "create_workspace",
+    "delete_column",
+    "delete_workspace",
+    "float",
+    "float_at",
+    "move",
+    "move_column",
+    "move_column_down",
+    "move_column_to_workspace",
+    "move_column_up",
+    "move_pane_left",
+    "move_pane_right",
+    "move_pane_to_column",
+    "move_pane_to_new_column",
+    "move_pane_to_workspace",
+    "pane_height_decrease",
+    "pane_height_increase",
+    "place_pane",
+    "reset_pane_name",
+    "reset_pane_name_by_id",
+    "reset_workspace_name",
+    "reset_workspace_name_by_idx",
+    "resize",
+    "resize_column_by",
+    "resize_decrease",
+    "resize_increase",
+    "resize_pane_height_by",
+    "resize_to",
+    "rename_column_to",
+    "rename_target",
+    "rename_workspace_to",
+    "spawn_command",
+    "split_horizontal",
+    "split_vertical",
+    "swap",
+    "swap_columns",
+    "swap_down",
+    "swap_left",
+    "swap_right",
+    "swap_up",
+    "take_pane",
+    "terminal_kill",
+    "terminal_run",
+    "zoom_column",
+    "zoom_column_at_index",
 ];
 
 /// **Every action says which side it is on.** The field has no default, so the compiler already
@@ -71,7 +71,10 @@ fn every_builtin_descriptor_declares_its_side() {
     ] {
         let named = src.matches("name: \"").count();
         let sided = src.matches("side: Side::").count();
-        assert!(named > 0, "{file}: no descriptors found — the reader no longer understands it");
+        assert!(
+            named > 0,
+            "{file}: no descriptors found — the reader no longer understands it"
+        );
         assert_eq!(named, sided, "{file}: {named} actions but {sided} sides");
     }
 }
@@ -128,5 +131,8 @@ fn a_name_keyed_action_has_no_side_of_its_own() {
     let info = catalog.describe("pro.start").expect("it was added");
     assert_eq!(info.side, None);
     assert_eq!(crate::actions::catalog::builtin_side("pro.start"), None);
-    assert_eq!(crate::actions::catalog::builtin_side("close"), Some(Side::Server));
+    assert_eq!(
+        crate::actions::catalog::builtin_side("close"),
+        Some(Side::Server)
+    );
 }
