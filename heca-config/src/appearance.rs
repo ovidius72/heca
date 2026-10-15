@@ -430,7 +430,9 @@ pub struct SidebarAppearance {
     /// Border width (logical px). `None` → global `border_width` → theme. Clamped `[0, 10]`.
     #[serde(default)]
     pub border_width: Option<f32>,
-    /// Border color (the `bordered` frame). `None` → global `border_color` → `theme.border`.
+    /// Frame color, for every `border_style`: the line of `bordered`, the brackets of
+    /// `bracketed`. `None` → `bordered` takes global `border_color` → `theme.border`; `bracketed`
+    /// takes the theme accent.
     #[serde(default)]
     pub border_color: Option<Color>,
     /// Corner radius (logical px). `None` → global `border_radius` → theme. Clamped `[0, 40]`.
@@ -946,15 +948,6 @@ impl AppearanceConfig {
             .border_width
             .unwrap_or_else(|| self.effective_border_width(theme))
             .clamp(0.0, 10.0)
-    }
-
-    /// Effective sidebar-shell border color: `[appearance.sidebar] border_color` →
-    /// global `border_color` → theme `border`. Used by the `bordered` sidebar frame.
-    pub fn effective_sidebar_border_color(&self, theme: &Theme) -> Color {
-        self.sidebar
-            .border_color
-            .or(self.border_color)
-            .unwrap_or(theme.border)
     }
 
     /// Effective sidebar-shell background color: `[appearance.sidebar]

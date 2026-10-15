@@ -1,6 +1,19 @@
 //! A sidebar shell and the docks seated in it: what they host, how they are outlined and lettered.
 
 use super::*;
+use heca_config::appearance::BorderStyle;
+
+/// A sidebar look for a test shell: 8px gap, 12px corners, the frame's default colour.
+fn shell_look(border_style: BorderStyle, border_width: f32, background: Color) -> SidebarLook {
+    SidebarLook {
+        background,
+        gap: 8.0,
+        border_style,
+        border_width,
+        border_radius: 12.0,
+        border_color: None,
+    }
+}
 
 #[test]
 fn sidebar_shell_hosts_the_provider_mounted_container() {
@@ -29,11 +42,7 @@ fn sidebar_shell_hosts_the_provider_mounted_container() {
     let shell = super::build_sidebar_shell(
         280.0,
         600.0,
-        theme.colors.background,
-        8.0,
-        heca_config::appearance::BorderStyle::Bracketed,
-        1.0,
-        12.0,
+        &shell_look(BorderStyle::Bracketed, 1.0, theme.colors.background),
         content,
     );
     assert_eq!(
@@ -87,11 +96,7 @@ fn bordered_sidebar_paints_border_color_at_configured_width() {
     let mut shell = super::build_sidebar_shell(
         280.0,
         600.0,
-        theme.colors.background,
-        8.0,
-        heca_config::appearance::BorderStyle::Bordered,
-        border_w,
-        12.0,
+        &shell_look(BorderStyle::Bordered, border_w, theme.colors.background),
         content,
     );
 
@@ -133,11 +138,7 @@ fn the_focused_dock_is_outlined_and_follows_the_store() {
     let mut shell = super::build_sidebar_shell(
         280.0,
         600.0,
-        theme.colors.background,
-        8.0,
-        heca_config::appearance::BorderStyle::Bracketed,
-        1.0,
-        12.0,
+        &shell_look(BorderStyle::Bracketed, 1.0, theme.colors.background),
         content,
     );
 
@@ -192,11 +193,7 @@ fn a_mounted_dock_is_not_a_target_of_the_ordinary_picker() {
     let shell = super::build_sidebar_shell(
         280.0,
         600.0,
-        theme.colors.background,
-        8.0,
-        heca_config::appearance::BorderStyle::Bracketed,
-        1.0,
-        12.0,
+        &shell_look(BorderStyle::Bracketed, 1.0, theme.colors.background),
         content,
     );
 
@@ -235,11 +232,7 @@ fn a_docks_pick_letter_is_stamped_over_it() {
     let mut shell = super::build_sidebar_shell(
         280.0,
         600.0,
-        theme.colors.background,
-        8.0,
-        heca_config::appearance::BorderStyle::Bracketed,
-        1.0,
-        12.0,
+        &shell_look(BorderStyle::Bracketed, 1.0, theme.colors.background),
         content,
     );
 
@@ -289,4 +282,39 @@ fn drag_registry_captures_pane_column_and_workspace() {
     assert!(items.contains(&super::ChromeDragItem::Pane(heca_core::layout::PaneId(7))));
     assert!(items.contains(&super::ChromeDragItem::Column { ws: 0, col: 0 }));
     assert!(items.contains(&super::ChromeDragItem::Workspace { ws: 0 }));
+}
+
+/// **`[appearance.sidebar] border_color` colours the sidebar frame**, brackets included. Unset, the
+/// brackets keep the accent.
+#[test]
+fn the_sidebar_border_colour_from_config_reaches_the_frame() {
+    use heca_grid_ui::DrawCommand;
+
+    let red = Color::new(255, 0, 0, 255);
+    let theme = GuiTheme::default();
+    let frame_colours = |border_color: Option<Color>| {
+        let mut appearance = heca_config::appearance::AppearanceConfig::default();
+        appearance.sidebar.border_style = Some(BorderStyle::Bracketed);
+        appearance.sidebar.border_color = border_color;
+        let look = SidebarLook::from_config(
+            &appearance,
+            &heca_config::theme::Theme::default(),
+            theme.colors.background,
+        );
+        let mut shell = super::build_sidebar_shell(280.0, 600.0, &look, None);
+        super::paint_chrome_root(&mut shell, 280.0, 600.0, &theme)
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) => r.border.map(|b| b.color.with_alpha(255)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let set = frame_colours(Some(red));
+    assert!(!set.is_empty() && set.iter().all(|c| *c == red), "the brackets are red");
+
+    let accent = theme.colors.accent.with_alpha(255);
+    let unset = frame_colours(None);
+    assert!(!unset.is_empty() && unset.iter().all(|c| *c == accent), "unset, the accent");
 }

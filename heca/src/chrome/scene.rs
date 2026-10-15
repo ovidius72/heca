@@ -225,26 +225,25 @@ pub(super) fn build_region_content(
 pub(super) fn build_sidebar_shell(
     region_w: f32,
     sidebar_h: f32,
-    shell_bg: Color,
-    sidebar_gap: f32,
-    border_style: heca_config::appearance::BorderStyle,
-    border_width: f32,
-    border_radius: f32,
+    look: &SidebarLook,
     content: Option<WidgetModel>,
 ) -> Flex {
-    let inner_w = (region_w - sidebar_gap * 2.0).max(0.0);
-    let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
+    let inner_w = (region_w - look.gap * 2.0).max(0.0);
+    let inner_h = (sidebar_h - look.gap * 2.0).max(0.0);
     // The collapse toggle lives in the always-visible top bar (sidebar-fu-14), so the
     // shell has no header row — the mounted content (if any) fills the body.
     let mut body = Pane::new()
-        .border_style(border_style.into())
-        .border_width(border_width)
-        .radius(border_radius)
+        .border_style(look.border_style.into())
+        .border_width(look.border_width)
+        .radius(look.border_radius)
         .width(inner_w)
         .height(inner_h)
         .padding(Spacing::Md)
         .gap(Spacing::Sm)
-        .background(shell_bg);
+        .background(look.background);
+    if let Some(color) = look.border_color {
+        body = body.border_color(color);
+    }
     if let Some(content) = content {
         // Mounted directly: **the shell does not scroll** (F003/P011/T021).
         //
@@ -263,8 +262,8 @@ pub(super) fn build_sidebar_shell(
         Surface::column()
             .width(region_w)
             .height(sidebar_h)
-            .background(shell_bg)
-            .padding(sidebar_gap)
+            .background(look.background)
+            .padding(look.gap)
             .child(body),
     )
 }
@@ -543,14 +542,6 @@ pub(crate) fn build_chrome_root(
     // Left and right are two instances of the SAME `build_sidebar_shell` (one
     // component), differing only by width and mounted content: the left hosts the
     // `WorkspacesContainer`, the right is an empty placeholder until it gains a Provider.
-    let sidebar_gap = state.appearance.effective_sidebar_gap(&state.theme);
-    let border_style = state.appearance.effective_sidebar_border_style();
-    let border_width = state
-        .appearance
-        .effective_sidebar_border_width(&state.theme);
-    let border_radius = state
-        .appearance
-        .effective_sidebar_border_radius(&state.theme);
     let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
 
     // The region body is whatever the `ChromeHost` has seated in that region — the app
@@ -577,16 +568,7 @@ pub(crate) fn build_chrome_root(
             &mut signals,
             &mut drag_items,
         );
-        build_sidebar_shell(
-            left_w,
-            sidebar_h,
-            left_sidebar_shell_background_color(state),
-            sidebar_gap,
-            border_style,
-            border_width,
-            border_radius,
-            content,
-        )
+        build_sidebar_shell(left_w, sidebar_h, &SidebarLook::left(state), content)
     });
     let right_w = chrome.right_sidebar_width;
     let right_sidebar = (right_w > 0.0).then(|| {
@@ -597,16 +579,7 @@ pub(crate) fn build_chrome_root(
             &mut signals,
             &mut drag_items,
         );
-        build_sidebar_shell(
-            right_w,
-            sidebar_h,
-            right_sidebar_shell_background_color(state),
-            sidebar_gap,
-            border_style,
-            border_width,
-            border_radius,
-            content,
-        )
+        build_sidebar_shell(right_w, sidebar_h, &SidebarLook::right(state), content)
     });
 
     // Top-bar sidebar toggles: always on screen — a hidden sidebar is brought back by the same

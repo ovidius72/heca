@@ -74,13 +74,55 @@ pub(crate) fn chrome_bar_color(state: &crate::app_state::AppState) -> Color {
     chrome_bar_color_for(&state.theme, &state.appearance)
 }
 
-pub(crate) fn left_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
+/// **How a sidebar looks**, read from `[appearance.sidebar]` (falling back to the global
+/// `[appearance]` border and then the theme) in this one place. The shell is built from it whole,
+/// so a setting added here reaches the frame with nothing else to wire.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SidebarLook {
+    pub(crate) background: Color,
+    pub(crate) gap: f32,
+    pub(crate) border_style: heca_config::appearance::BorderStyle,
+    pub(crate) border_width: f32,
+    pub(crate) border_radius: f32,
+    /// The sidebar's own `border_color`. Unset, the frame keeps its default: the global border
+    /// color for a border, the accent for brackets.
+    pub(crate) border_color: Option<Color>,
+}
+
+impl SidebarLook {
+    pub(crate) fn left(state: &crate::app_state::AppState) -> Self {
+        let background = left_sidebar_shell_background_color(state);
+        Self::from_config(&state.appearance, &state.theme, background)
+    }
+
+    pub(crate) fn right(state: &crate::app_state::AppState) -> Self {
+        let background = right_sidebar_shell_background_color(state);
+        Self::from_config(&state.appearance, &state.theme, background)
+    }
+
+    pub(crate) fn from_config(
+        appearance: &heca_config::appearance::AppearanceConfig,
+        theme: &heca_config::theme::Theme,
+        background: Color,
+    ) -> Self {
+        Self {
+            background,
+            gap: appearance.effective_sidebar_gap(theme),
+            border_style: appearance.effective_sidebar_border_style(),
+            border_width: appearance.effective_sidebar_border_width(theme),
+            border_radius: appearance.effective_sidebar_border_radius(theme),
+            border_color: appearance.sidebar.border_color,
+        }
+    }
+}
+
+fn left_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
     let base = state.theme.effective_left_sidebar_background();
     let resolved = state.appearance.effective_sidebar_background_color(base);
     sidebar_shell_background_color_for(resolved, &state.appearance)
 }
 
-pub(crate) fn right_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
+fn right_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
     let base = state.theme.effective_right_sidebar_background();
     let resolved = state.appearance.effective_sidebar_background_color(base);
     sidebar_shell_background_color_for(resolved, &state.appearance)

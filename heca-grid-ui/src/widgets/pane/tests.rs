@@ -91,3 +91,35 @@ fn a_panes_frame_is_over_its_children_and_under_the_next_widget() {
     assert!(child < frame, "the frame is over the pane's own child");
     assert!(frame < next, "and under the widget painted after the pane");
 }
+
+/// **A pane's frame colour colours its frame in every style** — the line of a bordered pane and
+/// the brackets of a bracketed one. Unset, brackets keep the theme accent.
+#[test]
+fn a_panes_frame_colour_reaches_borders_and_brackets() {
+    use crate::color::Color;
+    let red = Color::new(255, 0, 0, 255);
+    let theme = Theme::default();
+    let frame_colours = |pane: Pane| {
+        let mut pane = pane.width(100.0).height(100.0).border_width(2.0);
+        LayoutEngine::new().compute(&mut pane, Size::new(300.0, 300.0));
+        let mut scene = Scene::new();
+        paint_child(&pane, &mut PaintCx::new(&mut scene, &theme));
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) => r.border.map(|b| b.color.with_alpha(255)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let bordered = frame_colours(Pane::new().bordered().border_color(red));
+    assert!(!bordered.is_empty() && bordered.iter().all(|c| *c == red), "the line is red");
+
+    let bracketed = frame_colours(Pane::new().bracketed().border_color(red));
+    assert!(!bracketed.is_empty() && bracketed.iter().all(|c| *c == red), "the brackets are red");
+
+    let accent = theme.colors.accent.with_alpha(255);
+    let unset = frame_colours(Pane::new().bracketed());
+    assert!(unset.iter().all(|c| *c == accent), "unset, brackets keep the accent");
+}

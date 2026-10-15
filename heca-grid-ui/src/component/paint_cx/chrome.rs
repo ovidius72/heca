@@ -195,15 +195,21 @@ impl<'a> PaintCx<'a> {
             self.theme.colors.border_radius,
             self.theme.colors.border_width,
         );
-        self.bracket_frame_with(rect, border_width, radius);
+        let accent = self.accent();
+        self.bracket_frame_with(rect, accent, border_width, radius);
     }
 
-    /// [`bracket_frame`](Self::bracket_frame) with an explicit `border_width` and
-    /// corner `radius`, independent of the theme — so one surface can size its own
-    /// reticle (the per-widget `Pane::border_width`/radius overrides). The accent
-    /// color still comes from the theme. `border_width <= 0.0` ⇒ no frame.
-    pub fn bracket_frame_with(&mut self, rect: Rectangle, border_width: f32, radius: f32) {
-        let accent = self.accent();
+    /// [`bracket_frame`](Self::bracket_frame) with an explicit `color`, `border_width` and
+    /// corner `radius`, independent of the theme — so one surface can color and size its own
+    /// reticle (the per-widget `Pane::border_color`/`border_width`/radius overrides).
+    /// `border_width <= 0.0` ⇒ no frame.
+    pub fn bracket_frame_with(
+        &mut self,
+        rect: Rectangle,
+        color: Color,
+        border_width: f32,
+        radius: f32,
+    ) {
         // Borders off (`border_width == 0`) ⇒ no frame at all, like every other
         // widget. A container that needs definition without a border should carry
         // a fill, not a forced hairline.
@@ -212,20 +218,20 @@ impl<'a> PaintCx<'a> {
         }
         let b = rect;
 
-        // Subtle continuous accent line tracing the whole rounded perimeter — the
+        // Subtle continuous line tracing the whole rounded perimeter — the
         // dimmed "midsection" that the bright corners sit on top of.
         self.rect(
             b,
             Color::TRANSPARENT,
             Some(Border {
-                color: accent.with_alpha(BRACKET_DIM_ALPHA),
+                color: color.with_alpha(BRACKET_DIM_ALPHA),
                 width: border_width,
             }),
             radius,
             None,
         );
 
-        // Bright thick corner brackets. The renderer draws the accent border as a
+        // Bright thick corner brackets. The renderer draws the border as a
         // band just OUTSIDE the rect edge, carrying the theme corner radius — so
         // redrawing that same border clipped to a corner-sized box yields a bright
         // *rounded* corner plus a short straight arm along each edge, without
@@ -237,7 +243,7 @@ impl<'a> PaintCx<'a> {
         let m = f64::from(bracket_width);
         let (x, y, w, h) = (b.loc.x, b.loc.y, b.size.w, b.size.h);
         let bright = Border {
-            color: accent,
+            color,
             width: bracket_width,
         };
 

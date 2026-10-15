@@ -1620,6 +1620,17 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .border(theme.colors.accent, 0.0)
                         .child(Label::new("Border 3px").font_size(12.0).color(theme.colors.accent)),
                 )
+                .child(
+                    // Bracketed in its own colour: `.border_color(c)` colours the frame in
+                    // every style (the sidebar's `[appearance.sidebar] border_color`).
+                    Pane::new()
+                        .bracketed()
+                        .border_color(theme.colors.danger)
+                        .width(100.0)
+                        .height(80.0)
+                        .background(theme.colors.surface)
+                        .child(Label::new("Own colour").font_size(12.0).color(theme.colors.danger)),
+                )
         })
         // In-pane info bar: a `Tag` chip composed *inside* the pane top (the app's
         // pane-info header). The `Pane` carries no built-in title — the bar is a

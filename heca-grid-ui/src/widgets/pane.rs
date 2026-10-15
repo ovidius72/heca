@@ -43,6 +43,9 @@ pub struct Pane {
     /// BORDER control still drives every pane). `Some(w)` lets one pane carry its
     /// own frame width independent of the theme (e.g. a self-themed sidebar shell).
     border_width: Option<f32>,
+    /// The frame's color, for every frame style. `None` → a `.border(color, _)` color for
+    /// [`FrameStyle::Bordered`], else the theme: `border` for a border, `accent` for brackets.
+    border_color: Option<Color>,
     /// Blur what is drawn behind the pane, by this many logical px, before it draws.
     frost: Option<f32>,
 }
@@ -59,6 +62,7 @@ impl Pane {
             base,
             frame: FrameStyle::Bordered,
             border_width: None,
+            border_color: None,
             frost: None,
         }
     }
@@ -127,6 +131,15 @@ impl Pane {
     #[heca_grid_ui_macros::prop]
     pub fn frosted(mut self, radius: f32) -> Self {
         self.frost = (radius > 0.0).then_some(radius);
+        self
+    }
+
+    /// **The frame's color**, whatever its style: the border of [`FrameStyle::Bordered`] and the
+    /// brackets of [`FrameStyle::Bracketed`]. Unset, a border takes the theme `border` color and
+    /// brackets the theme `accent`.
+    #[heca_grid_ui_macros::prop]
+    pub fn border_color(mut self, color: Color) -> Self {
+        self.border_color = Some(color);
         self
     }
 
@@ -210,11 +223,9 @@ impl Component for Pane {
                     (t.colors.border, t.colors.border_width)
                 };
                 let color = self
-                    .base
-                    .style
-                    .visual
-                    .border
-                    .map_or(tb_color, |bd| bd.color);
+                    .border_color
+                    .or(self.base.style.visual.border.map(|bd| bd.color))
+                    .unwrap_or(tb_color);
                 // Width: per-widget override (`.border_width(w)`) when set, else the
                 // live theme width (so the global BORDER control still drives panes
                 // that don't opt out).
@@ -236,7 +247,8 @@ impl Component for Pane {
                     cx.rect(b, Color::TRANSPARENT, None, radius, glow);
                 }
                 let width = self.border_width.unwrap_or(cx.theme().colors.border_width);
-                cx.bracket_frame_with(b, width, radius);
+                let color = self.border_color.unwrap_or_else(|| cx.accent());
+                cx.bracket_frame_with(b, color, width, radius);
             }
         });
 

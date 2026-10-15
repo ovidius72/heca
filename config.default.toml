@@ -328,8 +328,9 @@ hint_font_size = 12.0
 # border_width  : decorative border width, px. The app-wide BORDER control. The
 #                 chrome + every surface inherit it. 0 removes borders everywhere.
 # border_color  : the `bordered` frame color (chrome + surfaces). Set to e.g. the
-#                 accent for a bright, visible border. (The `bracketed` reticle
-#                 always uses the theme accent.)
+#                 accent for a bright, visible border. A `bracketed` reticle keeps
+#                 the theme accent unless its own surface sets border_color
+#                 (e.g. [appearance.sidebar] border_color).
 # border_radius : corner radius, px, inherited by surfaces.
 # border_width  = 1.0
 # border_color  = "#40e0ff"
@@ -445,10 +446,11 @@ search_current_match_alpha = 150
 # Border fields unset → global [appearance] default → theme.
 # border_style    : none | bordered | bracketed. Default "bracketed".
 #                   - "bordered"  → a clean frame in border_color at border_width.
-#                   - "bracketed" → the accent corner-reticle (sized by
+#                   - "bracketed" → the corner-reticle in border_color (sized by
 #                                   border_width + border_radius too).
 # border_width    : frame width, px. 0 removes the border. Clamped [0, 10].
-# border_color    : the `bordered` frame color.
+# border_color    : the frame color, for both styles. Unset → "bordered" takes the
+#                   global border_color, "bracketed" the theme accent.
 # border_radius   : corner radius, px. Clamped [0, 40].
 # background_color: shell fill (unset → theme sidebar surface). Transparency still
 #                   applies on top.

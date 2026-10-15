@@ -2001,10 +2001,13 @@ A generic container for sidebars/panels with three **border styles**
 - **`Bordered`** (default) — a clean continuous border. Width comes from
   `theme.border_width` (read at paint, so the global border control governs it)
   **unless** an explicit `.border_width(w)` override is set on the pane; color
-  from an explicit `.border(color, _)` or else `theme.border`.
+  from `.border_color(c)`, else an explicit `.border(color, _)`, else `theme.border`.
 - **`Bracketed`** — the self-contained corner-bracket reticle (`PaintCx::bracket_frame`):
-  bright rounded `theme.accent` corners over a dimmed continuous line, sharing the
-  theme corner radius. It does **not** also draw `style.border`.
+  bright rounded corners over a dimmed continuous line, sharing the theme corner radius, in
+  `theme.accent` unless the pane sets `.border_color(c)`. It does **not** also draw `style.border`.
+
+`.border_color(c)` colours the frame in every style — the line of `Bordered`, the brackets of
+`Bracketed`. Unset, a border takes the theme `border` colour and brackets the accent.
 
 Border width follows `theme.border_width` (`0` ⇒ no frame) unless overridden per
 pane with `.border_width(w)` — used to let one surface (e.g. a self-themed sidebar
@@ -2013,13 +2016,16 @@ shell) carry its own thickness independent of the global control. Reads
 app the frame mode + width + radius are configurable per surface under the nested
 appearance tables (`[appearance.pane]` / `[appearance.sidebar]`, each with
 `border_style` / `border_width` / `border_color` / `border_radius`), and a
-bracketed surface sizes its reticle from the same per-surface width/radius via
-`bracket_frame_with`.
+bracketed surface sizes and colours its reticle from the same per-surface
+width/radius/colour via `bracket_frame_with`.
 
 - **The frame is painted over the children.** The fill goes under what the pane holds; the border,
   glow and brackets are drawn through [`PaintCx::outline`](#scene--drawcommand--paintcx-for-building-widgets), so a pane that holds a
   `Terminal` is not covered by it. Nothing for the author to do.
 - **Construct**: `Pane::new()` (column) / `Pane::row()`.
+- **Frame**: `.border_style(FrameStyle)` (or `.bordered()` / `.bracketed()` / `.frameless()`),
+  `.border_width(w)`, `.border_color(c)`, `.radius(r)`. Each unset one follows the theme, so the
+  global controls still drive every pane that does not set its own.
 - **Frosted**: `.frosted(radius)` blurs what is drawn behind the pane by `radius` logical px, in scene
   order — it blurs what lies under it and nothing of what comes after, its own content included. A
   floating pane that should show what is under it says this instead of filling itself.
@@ -2032,6 +2038,9 @@ bracketed surface sizes its reticle from the same per-surface width/radius via
 - **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
 
 ```rust
+// A sidebar-style shell: its own bracket width, corners and colour.
+Pane::new().bracketed().border_width(2.0).radius(7.0).border_color(theme.danger)
+
 Pane::new().width(Length::Px(320.0)).gap(2.0).background(theme.surface)
     .child(Item::new("DASHBOARD").marker(ActiveMarker::Bar).active(true))
     .child(Item::new("SETTINGS").marker(ActiveMarker::Bar));

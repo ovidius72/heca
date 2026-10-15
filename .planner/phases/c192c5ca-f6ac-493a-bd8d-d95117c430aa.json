@@ -351,11 +351,28 @@
       "priority": 9,
       "shortName": "appearance-sidebar-border-colo",
       "title": "[appearance.sidebar] border_color is honoured — for every border style, bracketed included",
-      "status": "planned",
-      "description": "Found 2026-10-01 while checking T523 (per-project settings): `[appearance.sidebar] border_color` is documented and loaded but read by nothing. `AppearanceConfig::effective_sidebar_border_color` (heca-config/src/appearance.rs:856) has zero callers; the sidebar shell (`build_sidebar_shell`, heca/src/chrome/scene.rs ~226) passes style, width, radius and background to a `Pane`, and `Pane` (heca-grid-ui/src/widgets/pane.rs) has no border-colour builder: it paints from the inherited theme (accent for `bracketed`, `colors.border` for `bordered`). The only colour test (chrome/mod.rs ~1775) sets `theme.colors.border` directly, so it never caught this. History: global border_color came in 27f1c9c6, the nested key in bb9c4fa2; the reader was lost along the way.\n\nAntonio's decision: it is a bug, and `bracketed` uses the colour too.\n\nFix at the source: `Pane::border_color(Color)` in heca-grid-ui (showcase entry + docs/widgets.md), used by every border style including the bracketed reticle; default unchanged (theme) when unset. `build_sidebar_shell` reads `effective_sidebar_border_color`; include it in the chrome rebuild signature so a reload applies it. Check whether `[appearance.pane] border_color` / global `border_color` have the same gap and fix them in the same place. Test: a configured colour reaches the painted frame for bordered and bracketed (break-checked); reload changes it.\n\nWaits on P094(F011)/T449 (Terminal as a component), which reshapes the pane widget/shell — start after it merges.",
-      "descriptionUpdatedAt": "2026-10-01T08:15:17.839Z",
-      "notes": "",
-      "statusLog": [],
+      "status": "done",
+      "description": "Found 2026-10-01 while checking T523 (per-project settings): `[appearance.sidebar] border_color` is documented and loaded but read by nothing. `AppearanceConfig::effective_sidebar_border_color` (heca-config/src/appearance.rs:856) has zero callers; the sidebar shell (`build_sidebar_shell`, heca/src/chrome/scene.rs ~226) passes style, width, radius and background to a `Pane`, and `Pane` (heca-grid-ui/src/widgets/pane.rs) has no border-colour builder: it paints from the inherited theme (accent for `bracketed`, `colors.border` for `bordered`). The only colour test (chrome/mod.rs ~1775) sets `theme.colors.border` directly, so it never caught this. History: global border_color came in 27f1c9c6, the nested key in bb9c4fa2; the reader was lost along the way.\n\nAntonio's decision: it is a bug, and `bracketed` uses the colour too.\n\nFix at the source: `Pane::border_color(Color)` in heca-grid-ui (showcase entry + docs/widgets.md), used by every border style including the bracketed reticle; default unchanged (theme) when unset. `build_sidebar_shell` reads `effective_sidebar_border_color`; include it in the chrome rebuild signature so a reload applies it. Check whether `[appearance.pane] border_color` / global `border_color` have the same gap and fix them in the same place. Test: a configured colour reaches the painted frame for bordered and bracketed (break-checked); reload changes it.\n\nWaits on P094(F011)/T449 (Terminal as a component), which reshapes the pane widget/shell — start after it merges.\n\n---\n**Completion summary:**\nDone 2026-10-15 on refactor/split-chrome-mod (uncommitted on top of fa482cb5). [appearance.sidebar] border_color now colours the sidebar frame in every style, brackets included; unset keeps the old look (global border colour for a line, accent for brackets). Library: Pane::border_color(Color); PaintCx::bracket_frame_with takes a colour. App: SidebarLook in chrome/theme.rs reads the sidebar's whole look from config in one place; build_sidebar_shell takes it whole. Removed unused AppearanceConfig::effective_sidebar_border_color. Docs: config.default.toml, docs/widgets.md, heca-config field doc, showcase example. Tests: a_panes_frame_colour_reaches_borders_and_brackets, the_sidebar_border_colour_from_config_reaches_the_frame (both break-checked); workspace 2365 passed, clippy and cargo doc clean. Antonio checked by eye: colour applies on reload, unset returns the accent. Files: heca-grid-ui/src/widgets/pane.rs, pane/tests.rs, component/paint_cx/chrome.rs, tests/paint/brackets.rs, heca/src/chrome/{theme.rs,scene.rs,mod.rs,scene/tests/docks.rs}, heca-config/src/appearance.rs, heca-renderer/examples/showcase.rs, config.default.toml, docs/widgets.md.",
+      "descriptionUpdatedAt": "2026-10-15T12:38:45.966Z",
+      "notes": "Progress 2026-10-15, branch refactor/split-chrome-mod in ~/projects/heca, uncommitted on top of fa482cb5 (Antonio: commit first, revert if it misbehaves).\n- Library: Pane::border_color(Color) colours the frame in every style; brackets take it through PaintCx::bracket_frame_with(rect, color, width, radius); unset keeps the theme (border for a line, accent for brackets). Kept apart from StyleExt::border, which also makes a widget answer the pointer.\n- App: SidebarLook (chrome/theme.rs) reads the sidebar's whole look from config in one place (background, gap, style, width, radius, own border_color); build_sidebar_shell takes it whole. Only the sidebar's own border_color is passed, so an unset one keeps today's look exactly.\n- Not added to the rebuild signature: a reload drops the chrome tree, so it is rebuilt anyway.\n- Removed AppearanceConfig::effective_sidebar_border_color (no callers; its fallback disagreed with what is drawn).\n- Pane border colours ([appearance.pane]) were already read; no gap there. Global border_color still never colours brackets (documented).\n- Docs: config.default.toml (sidebar + global border_color), docs/widgets.md (Pane frame builders, Bracketed colour), heca-config field doc; showcase has an own-colour bracketed pane.\n- Tests: a_panes_frame_colour_reaches_borders_and_brackets (grid-ui), the_sidebar_border_colour_from_config_reaches_the_frame (heca); both break-checked. Workspace 2365 passed, clippy and cargo doc clean.\n- Waiting: Antonio's eye check (red brackets after reload).",
+      "statusLog": [
+        {
+          "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-001-planned-in-progress",
+          "date": "2026-10-15T10:53:16.301Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Split the files that are doing several jobs — the ones found while building T432."
+        },
+        {
+          "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-002-in-progress-done",
+          "date": "2026-10-15T12:38:45.964Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Done 2026-10-15 on refactor/split-chrome-mod (uncommitted on top of fa482cb5). [appearance.sidebar] border_color now colours the sidebar frame in every style, brackets included; unset keeps the old look (global border colour for a line, accent for brackets). Library: Pane::border_color(Color); PaintCx::bracket_frame_with takes a colour. App: SidebarLook in chrome/theme.rs reads the sidebar's whole look from config in one place; build_sidebar_shell takes it whole. Removed unused AppearanceConfig::effective_sidebar_border_color. Docs: config.default.toml, docs/widgets.md, heca-config field doc, showcase example. Tests: a_panes_frame_colour_reaches_borders_and_brackets, the_sidebar_border_colour_from_config_reaches_the_frame (both break-checked); workspace 2365 passed, clippy and cargo doc clean. Antonio checked by eye: colour applies on reload, unset returns the accent. Files: heca-grid-ui/src/widgets/pane.rs, pane/tests.rs, component/paint_cx/chrome.rs, tests/paint/brackets.rs, heca/src/chrome/{theme.rs,scene.rs,mod.rs,scene/tests/docks.rs}, heca-config/src/appearance.rs, heca-renderer/examples/showcase.rs, config.default.toml, docs/widgets.md."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -363,31 +380,31 @@
           "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-001-pane-border-color-color-for-every-style-incl-bracketed-showcase-docs",
           "number": 1,
           "title": "Pane::border_color(Color) for every style incl. bracketed; showcase + docs",
-          "checked": false
+          "checked": true
         },
         {
           "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-002-sidebar-shell-reads-effective-sidebar-border-color-in-the-rebuild-signature",
           "number": 2,
           "title": "Sidebar shell reads effective_sidebar_border_color; in the rebuild signature",
-          "checked": false
+          "checked": true
         },
         {
           "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-003-same-gap-for-appearance-pane-global-border-color-fix-in-the-same-place",
           "number": 3,
           "title": "Same gap for [appearance.pane] / global border_color? fix in the same place",
-          "checked": false
+          "checked": true
         },
         {
           "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-004-tests-colour-reaches-the-frame-bordered-bracketed-reload-applies-it-break-checked",
           "number": 4,
           "title": "Tests: colour reaches the frame (bordered + bracketed), reload applies it; break-checked",
-          "checked": false
+          "checked": true
         },
         {
           "id": "250975ab-4f70-411e-91f4-ae13749a51b5-check-005-antonio-checks-by-eye",
           "number": 5,
           "title": "Antonio checks by eye",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -396,11 +413,16 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-10-15T10:53:16.301Z",
+      "completedAt": "2026-10-15T12:38:45.964Z",
       "createdAt": "2026-10-01T08:15:17.777Z",
-      "updatedAt": "2026-10-01T08:15:23.105Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-10-15T12:38:45.964Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
+          "createdAt": "2026-10-15T10:53:16.238Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -588,7 +610,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-10-02T13:24:40.197Z",
+  "updatedAt": "2026-10-15T12:38:45.964Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-07-27T13:37:24.584Z",
   "handoffAudit": null,
@@ -605,6 +627,10 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
+      "createdAt": "2026-10-15T10:53:16.238Z"
+    },
     {
       "sessionId": "mcp-process:bb9fab49-43bf-4887-b079-82f940d77ef1",
       "createdAt": "2026-10-01T19:55:22.732Z"
