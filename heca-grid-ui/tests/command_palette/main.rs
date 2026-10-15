@@ -25,4 +25,5 @@ mod editing;
 mod filtering;
 mod history;
 mod modes;
+mod mode_declarations;
 mod sizing;
