@@ -102,7 +102,7 @@
       "priority": 2,
       "shortName": "the-palette-s-modes-are-declar",
       "title": "The palette's modes are declared once — one table read by both the sigil lookup and the palette",
-      "status": "done",
+      "status": "in-progress",
       "description": "T526: declare palette modes once (sigil, search scope and row source). Replace the duplicated sigil_for match and .mode calls in heca/src/chrome/palette.rs. Preserve mode= for action/RPC, query prefill, unknown-mode fallback and command/pane/workspace search history names. T522 owns real sessions.\n\nPre-flight 2026-10-15: reuse CommandPalette, Command, Input and SearchModel; app entries/pane_entries/workspace_entries, ActionCatalog, dispatch_intent. Searched docs/widgets.md, heca/src/components and chrome. No new widgets/tasks. Antonio confirmed no conflict with the other agent on these two files; split app palette (883 lines) and widget palette (1394) by responsibility in heca-f012 on feat/t526-palette-modes from origin/main. T468 remains with the other agent.\n\nPlan: one app declaration per sigil/scope/rows source. Widget owns mode command assignment and named query prefill using its existing sigil table (no extra live mode state). Add a custom-mode regression, prefill/fallback/history checks; run scoped check, tests, Clippy and showcase. Baseline scoped cargo check passes.\n\nExisting widget spacing constants and manual Input forwarding remain separate refactor scope; preserve these during the agreed file split.\n\n---\n**Completion summary:**\nImplemented in /Users/antonio/projects/heca-f012 on feat/t526-palette-modes, based on origin/main e104bcc1. Changes are uncommitted and ready for Antonio's review.\n\nApp: heca/src/chrome/palette/modes.rs::MODES declares each sigil, durable search scope and pure row source once. populate registers that source through CommandPalette::mode_with_commands; the duplicated app sigil_for and row mode annotations are removed. heca/src/chrome/palette/mod.rs::open_command_palette uses the widget's query_in helper. The helper derives the prefix from the registered modes and sets the same query field that typed sigils use. Named prefill works before or after a mode declaration; direct edits, query replacement and closing clear builder input. Unknown names preserve the supplied query.\n\nSplit both oversized palette source files into component folders by responsibility. All 14 resulting source files are below 400 lines; largest is the 370-line app tests file. Public Command/CommandPalette import paths stay unchanged. Runtime rendering and the existing action policy/overlay dispatch remain in place.\n\nVerified: 28 widget palette tests; 10 app palette tests including real RPC parse/catalog/action argument resolution and a custom row-source declaration; 3 native Rustdoc examples. Strict cargo clippy --workspace --all-targets --all-features -- -D warnings passes, as do scoped cargo check, cargo doc -p heca-grid-ui -p heca --no-deps and git diff --check. Removing the shared sigil lookup deliberately makes the custom-mode regression fail; restored code passes.\n\nDocumentation: docs/widgets.md CommandPalette catalog, full builder tables, native and declarative examples, mode extension recipe; public Rustdoc in heca-grid-ui/src/widgets/command_palette/{mod,modes,command}.rs.\n\nVerification limit: the compiled showcase launched, but Cua could not access its window (cgWindowNotFound), including through a temporary test bundle. Visual interaction remains unverified; both of our test processes were stopped. No real session mode was added; that remains T522. Existing spacing constants/manual off-tree Input handling remain the separately identified refactor scope. No new policy decisions. T468 and the other agent's source checkout were not edited. Review, commit and push await Antonio's instruction.",
       "descriptionUpdatedAt": "2026-10-15T11:10:17.314Z",
       "notes": "",
@@ -122,6 +122,14 @@
           "toStatus": "done",
           "title": "in-progress → done",
           "description": "Implemented in /Users/antonio/projects/heca-f012 on feat/t526-palette-modes, based on origin/main e104bcc1. Changes are uncommitted and ready for Antonio's review.\n\nApp: heca/src/chrome/palette/modes.rs::MODES declares each sigil, durable search scope and pure row source once. populate registers that source through CommandPalette::mode_with_commands; the duplicated app sigil_for and row mode annotations are removed. heca/src/chrome/palette/mod.rs::open_command_palette uses the widget's query_in helper. The helper derives the prefix from the registered modes and sets the same query field that typed sigils use. Named prefill works before or after a mode declaration; direct edits, query replacement and closing clear builder input. Unknown names preserve the supplied query.\n\nSplit both oversized palette source files into component folders by responsibility. All 14 resulting source files are below 400 lines; largest is the 370-line app tests file. Public Command/CommandPalette import paths stay unchanged. Runtime rendering and the existing action policy/overlay dispatch remain in place.\n\nVerified: 28 widget palette tests; 10 app palette tests including real RPC parse/catalog/action argument resolution and a custom row-source declaration; 3 native Rustdoc examples. Strict cargo clippy --workspace --all-targets --all-features -- -D warnings passes, as do scoped cargo check, cargo doc -p heca-grid-ui -p heca --no-deps and git diff --check. Removing the shared sigil lookup deliberately makes the custom-mode regression fail; restored code passes.\n\nDocumentation: docs/widgets.md CommandPalette catalog, full builder tables, native and declarative examples, mode extension recipe; public Rustdoc in heca-grid-ui/src/widgets/command_palette/{mod,modes,command}.rs.\n\nVerification limit: the compiled showcase launched, but Cua could not access its window (cgWindowNotFound), including through a temporary test bundle. Visual interaction remains unverified; both of our test processes were stopped. No real session mode was added; that remains T522. Existing spacing constants/manual off-tree Input handling remain the separately identified refactor scope. No new policy decisions. T468 and the other agent's source checkout were not edited. Review, commit and push await Antonio's instruction."
+        },
+        {
+          "id": "b80acf90-6d4a-48ea-a41a-27640003c0d5",
+          "date": "2026-10-15T13:18:12.775Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "done → in-progress (reopened)",
+          "description": "Reopened through the confirmed lifecycle operation; prior completion evidence is retained."
         }
       ],
       "decisions": [],
@@ -163,16 +171,16 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-10-15T10:52:59.689Z",
-      "completedAt": "2026-10-15T11:10:17.313Z",
+      "completedAt": "",
       "createdAt": "2026-09-29T21:32:38.517Z",
-      "updatedAt": "2026-10-15T11:10:17.313Z",
+      "updatedAt": "2026-10-15T13:18:12.775Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:aa08112c-db67-4798-94bb-18f6cfc4c82b",
-          "createdAt": "2026-10-15T10:52:59.605Z"
+          "createdAt": "2026-10-15T13:18:24.221Z"
         }
       ],
-      "activeOwnerSession": ""
+      "activeOwnerSession": "mcp-process:aa08112c-db67-4798-94bb-18f6cfc4c82b"
     }
   ],
   "createdAt": "2026-09-29T19:21:28.041Z",
@@ -203,7 +211,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:aa08112c-db67-4798-94bb-18f6cfc4c82b",
-      "createdAt": "2026-10-15T10:52:59.605Z"
+      "createdAt": "2026-10-15T13:18:24.221Z"
     }
   ]
 }

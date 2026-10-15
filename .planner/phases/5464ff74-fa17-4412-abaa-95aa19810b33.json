@@ -1569,7 +1569,7 @@
       "priority": 8,
       "shortName": "split-the-files-that-are-doing",
       "title": "Split the files that are doing several jobs — the ones found while building T432",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Split the files that are doing several jobs. AGENTS § 0 rule 4: aim under 400 lines, **above 600 stop and agree a split** — the line count is the smoke alarm, not the rule: **the defect is always the second job**.\n\n⚠️ FULL DESCRIPTION: `.planner/docs/t468-oversized-files.md`. It holds what used to be inline here, unchanged: the 2026-08-21 table of files found while building T432 with the jobs inside each, the order to do them in and why, and the rules for the work (a move never a rewrite; agree each split first; the doc-comment and shared-helper traps hit while splitting the two hint files). Moved out because `descriptionRef` refuses every path spelling and a description this size is silently dropped.\n\n⚠️ CENSUS REFRESHED 2026-09-04: `.planner/docs/oversized-files-2026-09-04.md` — a full sweep, not just the files T432 happened to touch. **65 files are over 600 lines, twelve of them over 2000.** Read it rather than re-measuring.\n\nSIX OF THE TWELVE LARGEST HAVE NO TASK AT ALL, which is the gap the census exists to close: `heca/src/handlers.rs` (3430), `heca/src/actions.rs` (3282), `heca/src/notification.rs` (3147), `heca-core/src/backend/terminal/engine.rs` (2249), `heca/src/input.rs` (2126), `heca-grid-ui/tests/phase_a.rs` (6654). The census carries a proposed split for the first three. **They are proposals — filing is Antonio's call (AGENTS § 0), never something to create while passing through.**\n\nAlready filed elsewhere: `app/registry.rs` is T466, `showcase.rs` T470, `scroll_region.rs` T471, `heca-view/src/lib.rs` T472.\n\nRaised because P097/T497 touched nineteen files that were already over the limit; AGENTS § 0 says to say so rather than quietly reorganise (Antonio, 2026-09-04: *\"do we have a task already in the planner that aims to rewrite large files? If so add those large files to the task description\"*).\n\n⚠️ MUST NOT be interleaved with P097 — these files are the same ones P097 is changing.",
       "descriptionUpdatedAt": "2026-09-04T13:59:25.864Z",
       "notes": "Progress 2026-10-15 (2), branch refactor/split-chrome-mod in ~/projects/heca (uncommitted). Moves first, test count equal; then review fixes.\n\nDONE\n- chrome/mod.rs (2296) -> mod.rs (module list and exports only), division.rs (how the window is shared), emitter.rs (intent sink, fires/picks), names.rs (pane/column/slot/row names, pick scopes), retained.rs (kept chrome tree and its rebuild check), window_root.rs (seating chrome and surfaces); pane_drop_row joined drag.rs; tests moved beside their code (scene/tests/{mod,regions,docks}, theme, signals, pane_header/tests, division, names).\n- providers/workspaces/mod.rs (1797) -> mod.rs (provider), actions.rs, verbs.rs, keys.rs, menus.rs; build_body joined dock_view.rs; tests/{mod,cursor,build}.rs.\n- heca-grid-ui style.rs (1726) -> style/{mod,flow,space,length,grid,visual,layout}.rs.\n- Review fixes: (1) the chrome rebuild check no longer lists style settings by hand: theme and appearance change only on reload, which drops the tree, so a new setting needs nothing added; (2) RepaintWatch deleted: every user threw away its repaint signal, so it was an empty wrapper box (sidebar pane rows, column groups, status bar); (3) prefix key and its timeout are one PrefixKey taken from [keys] in one step: a config reload used to update the key but not the timeout (test the_prefix_key_carries_its_own_timeout, break-checked); FRAME_INTERVAL moved to app/lifecycle.rs; (4) runtime_snapshot wrapper deleted; (5) planner ids and history stripped from comments, stale allow(unused_imports) and unused re-exports removed, broken private doc links fixed; workspaces actions use the ActionMeta builder. AGENTS.md and docs/widgets.md paths updated.\n- Gates: workspace tests 2363 passed, clippy clean, cargo doc clean.\n\nFOUND, NOT FIXED (needs a decision)\n- The workspaces component keeps its cursor twice: a row key per mount and a typed nav_selection in the store; every writer must set both (app/focus.rs says so). T356 is done, so the second copy has no reason left.\n- Other hand-built ActionMeta literals: providers/mod.rs, notification.rs, chrome/palette.rs.\n\nNEXT: the rest of the census. Chrome files still over 600: state.rs 1450, layers/tests.rs 1228, palette.rs 883, context_menu.rs 869, expose/mod.rs 860, host.rs 850, overlay.rs 787, layers/mod.rs 717, expose/pane_card.rs 714, scene.rs 673. scroll_region.rs is T471, notification.rs is T512.\n\nProgress 2026-10-15, branch fix/surface-clip-follows-scene in ~/projects/heca-f012 (merged as #290). A move, never a rewrite.\n\nDONE\n- heca-grid-ui/src/component.rs (3187) -> component/ folder: mod.rs (frame requests, re-exports), tree.rs (tree queries, shift_subtree, wrap_transparently), base/mod.rs (Base struct), base/methods.rs (impl Base), behavior.rs (Component trait), dispatch.rs (event walk), paint_walk.rs (paint_child and the framework's draws over a widget), paint_cx/{mod,transform,layers,draw,chrome}.rs, tests.rs. PaintCx fields and its private helpers became pub(super) so the sibling files can reach them.\n- heca-grid-ui/src/builders.rs (1887) -> builders/ folder: place.rs, layout.rs, style.rs, children.rs (IntoComponent, IntoChildren, Parent, IntoContextMenu), tests/.\n- ComponentExt (842 lines, one trait) split by subject into eight traits, each blanket-implemented for every Component: EventExt, DragExt, MenuExt, TooltipExt, HintExt, IdentityExt, PresenceExt, ToneExt. The prelude exports them all; imports that named ComponentExt (about 80 files) now name the traits they use. docs/widgets.md has a table of them.\n- Tests that read source files by path were updated: prop_drift (Base's setter is now in component/base/methods.rs) and heca-view-realize every_universal_capability_is_reachable_from_the_sdk (now reads every builders/*.rs trait that has a blanket impl for all components).\n\nALSO ON THAT BRANCH (fixes found while splitting)\n- Keyboard area fix: keys, the menu key and actions go to the nearest named area (surface or region) around whatever holds the keyboard. Library: heca_grid_ui::keyboard_area. App: FocusedSurface::Widget in app/input/surface.rs. \"Which dock the keyboard returns to\" still uses page_scope. Checked by Antonio 2026-10-15.\n- Terminal drawing follows the scene; a parent's clip applies to every child (Component::children_clip).\n- Every drag shows a picture by default (.drag_chip() opts out); drop places open for a pane carried from anywhere; edge scroll only while a pane is carried.\n- About 150 broken doc links fixed; cargo doc denies broken and private links (workspace lints).\n\nSTILL OVER 400 (single definitions, not cut further)\n- component/base/mod.rs 488 (the Base struct), component/behavior.rs 544 (the Component trait).\n\nLEFT AS IS\n- focus_navigable_dock (handlers/docks.rs) is temporary until P086.\n\nTRAPS HIT\n- Do not run cargo fmt in this repo (AGENTS.md); many files already differ from rustfmt, so format moved import lines by hand.\n- A split breaks intra-doc links that relied on names in scope; run cargo doc --workspace --no-deps (and --document-private-items for the files you moved) after every split.\n- zsh does not split $var in a for loop; use while-read.",
@@ -1605,6 +1605,14 @@
           "toStatus": "planned",
           "title": "in-progress → planned (checkpoint saved)",
           "description": "Reason: Antonio's sidebar-colour check found [appearance.sidebar] border_color has no effect; he asked to fix it now (T449, which it waited on, is done).\nWhat was being done: T468 file splits committed as fa482cb5 on refactor/split-chrome-mod; Antonio checked sidebar rows, status bar and prefix timeout reload.\nResume location: Next oversized chrome file: chrome/state.rs (1450), then layers/tests.rs, palette.rs (another agent may be splitting palette/command_palette), context_menu.rs, expose/mod.rs, host.rs, overlay.rs, layers/mod.rs, expose/pane_card.rs, scene.rs.\nHow to resume: Move first with an equal test count, then review fixes; then resume T525 for heca-pro as Antonio asked."
+        },
+        {
+          "id": "fedee597-cd8a-46bf-9e30-e1f3a876b882",
+          "date": "2026-10-15T12:39:33.374Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from Next oversized chrome file: chrome/state.rs (1450), then layers/tests.rs, palette.rs (another agent may be splitting palette/command_palette), context_menu.rs, expose/mod.rs, host.rs, overlay.rs, layers/mod.rs, expose/pane_card.rs, scene.rs.. Move first with an equal test count, then review fixes; then resume T525 for heca-pro as Antonio asked."
         }
       ],
       "decisions": [],
@@ -1657,20 +1665,29 @@
           "number": 8,
           "title": "style.rs: split and review",
           "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-009-chrome-state-rs-move-into-state-shell-workspaces-pane-runtime-tests-by-subject-22-before-and-after",
+          "number": 9,
+          "title": "chrome/state.rs: move into state/{shell,workspaces,pane_runtime} + tests/ by subject (22 before and after)",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-010-state-fix-one-write-path-for-pane-runtime-six-test-only-setters-deleted-one-entry-helper-no-expect",
+          "number": 10,
+          "title": "state fix: one write path for pane runtime (six test-only setters deleted), one entry helper, no expect",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-011-state-fix-one-resize-helper-for-both-sidebars-new-test-config-defaults-read-from-config-not-copied-planner-ids-and-stale-doc-refs-stripped",
+          "number": 11,
+          "title": "state fix: one resize helper for both sidebars (new test); config defaults read from config, not copied; planner ids and stale doc refs stripped",
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "pauseSnapshot": {
-        "id": "a90c3a96-b543-4b6c-84d6-a69754811f26",
-        "reason": "Antonio's sidebar-colour check found [appearance.sidebar] border_color has no effect; he asked to fix it now (T449, which it waited on, is done).",
-        "whatWasBeingDone": "T468 file splits committed as fa482cb5 on refactor/split-chrome-mod; Antonio checked sidebar rows, status bar and prefix timeout reload.",
-        "resumeLocation": "Next oversized chrome file: chrome/state.rs (1450), then layers/tests.rs, palette.rs (another agent may be splitting palette/command_palette), context_menu.rs, expose/mod.rs, host.rs, overlay.rs, layers/mod.rs, expose/pane_card.rs, scene.rs.",
-        "howToResume": "Move first with an equal test count, then review fixes; then resume T525 for heca-pro as Antonio asked.",
-        "relatedTaskId": "250975ab-4f70-411e-91f4-ae13749a51b5",
-        "pausedAt": "2026-10-15T10:53:16.301Z",
-        "pausedBy": ""
-      },
+      "pauseSnapshot": null,
       "pauseHistory": [
         {
           "id": "a90c3a96-b543-4b6c-84d6-a69754811f26",
@@ -1686,14 +1703,14 @@
       "startedAt": "2026-10-15T09:11:19.538Z",
       "completedAt": "",
       "createdAt": "2026-08-21T13:58:02.209Z",
-      "updatedAt": "2026-10-15T10:53:16.301Z",
+      "updatedAt": "2026-10-15T12:45:26.308Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
-          "createdAt": "2026-10-15T09:11:19.304Z"
+          "createdAt": "2026-10-15T12:39:33.249Z"
         }
       ],
-      "activeOwnerSession": ""
+      "activeOwnerSession": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b"
     },
     {
       "id": "2d174619-b5c0-4040-9c32-133096cb4251",
@@ -3507,7 +3524,7 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-10-15T09:39:29.279Z",
+  "updatedAt": "2026-10-15T12:45:26.308Z",
   "handoff": "# T466, T509–T511 and T514 are done, pushed, PR #265 open — every open P082 task is deferred\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-29T18:17:53.766Z\nReason: Antonio asked for a handoff after T514 was committed, pushed and the PR opened. The phase has no ready task left, so the next session needs to know what shipped, what was changed for users, and what the remaining deferred splits wait on.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Task: none in progress. T466, T509, T510, T511 and T514 are done. Every open task in the phase is deferred (T468, T470, T471, T472, T512, T513).\n- Exact resume point: PR #265 (https://github.com/ovidius72/heca/pull/265, branch `feat/t518-a-region-holds-a-list` → main) is open and waiting for Antonio. Ask him what is next; do not pick a deferred split on your own.\n\n## Current and partial state\n- Branch pushed; last commits: `de39045a` (handlers/actions/input split + behaviour), `d38a8eba` (planner), `52949929` (grid-ui tests split), `1a261841` (planner, T514 done). The PR also carries T518 and T466.\n- Shipped, all checked by Antonio in the app:\n  - `heca/src/handlers/`, `heca/src/actions/` (registry, catalog, confirm, `builtins/` per category), `heca/src/args.rs`, `heca/src/input/` (action, names, build, vocabulary). `WmAction` derives `WmActionKind` (strum); handlers registered by kind; one `crate::input::resolve_action` for name + arguments.\n  - Breaking: 12 region actions → `set_region_visible {region, visible}`; documented in `docs/keybindings.md` (\"Changed actions\") and `keybindings.default.toml`.\n  - Modes: one handler (`mode_key` in `heca/src/app/input.rs`); unbound keys fall through to normal bindings; keys read as pressed (Cmd/Alt kept); selection mode `p` = paste.\n  - Mouse: Shift+drag and the wheel do not enter selection mode; copy clears the highlight; scrolled-back cursor stays on its prompt (heca-core snapshot).\n  - `heca-grid-ui/tests/`: `phase_a.rs` gone; one file per subject; files over 600 lines are folder targets; `tests/common` has click and paint helpers. 797 grid-ui tests.\n- T519 filed in P045(F006): app-wide text system (`heca-text` crate, per-language files, user overrides merged by key) — decision 8c9081d1 on T519; two design questions still open there.\n- Left uncommitted on purpose (not this phase's work, from another session): `docs/agents-communication-plan.md`, a one-line change in `notification-system-plane.md`, and `.DS_Store`.\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first. Answer a question and WAIT — never start coding on a question (\"is it like this?\" is not a go). Fix in the library; nothing hardcoded; one path per rule. Never commit unasked; write the handoff before committing planner files.\n- Every split here is also a review: move first (same test count, same bodies), then fixes, each a checklist item with a test seen red.\n- Delegation that worked for T514: a cheaper model does the batch, this session verifies independently (count, names, bodies, assertion count, gates) before ticking.\n\n## Supporting documents\n- None needed: each task's completion note in the planner holds its files, checks and decisions.\n\n## Blockers and risks\n- No ready task in P082. The deferred splits wait on P094(F011)/T449 and T457, which still reshape their files (T513 also: `heca-core/src/backend/terminal/engine.rs` is 2374 lines).\n- Some test files are between 400 and 600 lines (label, input, display, pointer_delivery) — under the split limit, noted only.\n\n## How to resume\n1. Ask Antonio: merge PR #265? what next — the planner recommendation, T519's open questions, or a P094 task?\n2. For any new task: `planner-task-show … full=true`, then `planner-task-start`, then agree the shape before code.\n3. Gates: `./scripts/lint-changed.sh`, `… test`, `… fmt` (scoped, one cargo run at a time).",
   "handoffUpdatedAt": "2026-09-29T18:17:53.766Z",
   "handoffAudit": {
@@ -3832,7 +3849,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
-      "createdAt": "2026-10-15T09:11:19.304Z"
+      "createdAt": "2026-10-15T12:39:33.249Z"
     },
     {
       "sessionId": "mcp-process:b43fa447-5b3b-41cb-8bf5-106199ef0287",

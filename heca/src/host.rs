@@ -254,9 +254,11 @@ mod tests {
 
         // Seed the pane runtime, then change its status via the store write path.
         let pane = PaneId(3);
-        app.state
-            .workspaces
-            .set_pane_status(pane, ProcessStatus::Running);
+        let running = heca_core::runtime::PaneRuntime {
+            status: ProcessStatus::Running,
+            ..Default::default()
+        };
+        app.state.workspaces.set_pane_runtime(pane, &running, None);
 
         assert_eq!(
             observed.borrow().as_slice(),
