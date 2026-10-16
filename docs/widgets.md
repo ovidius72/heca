@@ -5804,57 +5804,99 @@ like a native one. (A first-class typed builder — `VStack::new().gap(8).child(
 
 ### CommandPalette
 
-A fuzzy **command launcher** overlay (same input-capturing contract as `Dialog`): a query line
-over a scrollable list of commands. The query line is a real [`Input`](#input), so full editing
-comes for free — selection, multi-click, and char/word/line delete (Ctrl/Alt/⌘ + Backspace/Delete).
-Typing filters with a **fuzzy subsequence** match, **smart-case** (case-insensitive unless the
-query has an uppercase letter), ranked, with matched characters highlighted in the accent.
-Selecting a command fires its callback and closes.
+A fuzzy command launcher. Its query is an `Input`; result titles and descriptions are `Label`
+children. `SearchModel` owns matching, ranking and history. Choosing a row runs its callback and
+closes the palette. Each mode has its own search scope; a leading sigil selects that mode and is
+removed before matching or recording a search.
 
-- **Construct**: `CommandPalette::new()`; add commands with `.command(Command::new(label, on_run)
-  .description(text)?.icon(Glyph)?.keys([KeyCap…])*)`; `.placeholder(text)`, `.open(bool)`.
-- **Bindings**: `.keys([KeyCap])` adds **one binding**, drawn as a row of keycap chips
-  (`[λ] [⇧] [e]`) through the shared `paint_keycap` primitive — never hand-drawn. Call it once per
-  binding: a second call **stacks** a second row under the first, so an action bound three times
-  shows three rows and the row grows to fit (one height for the whole list, as above). Every row
-  reserves the **same** width for chips — the widest chord in the list — so they form a column
-  instead of tracking each label's length, and the label box stops short of it.
-- **`KeyCap`**: `Nf(NfGlyph)` for a key with a picture (shift, control, option, command, escape,
-  tab, space, backspace, the arrows), `Text(String)` for anything else (a letter, `]`, `F5`, the
-  `λ` prefix). Two cases because the two are drawn in **different faces** — see
-  [`NfIcon`](#nficon). The app builds them from a binding in one place
-  (`heca/src/shortcut.rs::chord_caps`).
-- **Description**: an optional muted **second line** under the label. As soon as **any** command has
-  one, every row in the list is two lines high — one row height for the whole list, because
-  `row_rect` is what the paint, the hover-select and the click hit-test all share, and per-row
-  heights would make that a running sum in three places. Filtering still matches the **label** only:
-  a description explains a command the user has already found, and ranking on it would surface a
-  command whose label the query never mentioned.
-- **Accessor**: `.open_signal() -> Signal<bool>` — bind a chord (e.g. Ctrl+K) to open it.
-- **Occlusion**: while open, `overlay_occludes(pos)` is `true` for **every** point (it grabs the
-  viewport: typing, nav, outside-click dismiss), so a host must not synthesize page-level actions
-  (e.g. right-click → context menu) anywhere under it (see [`Component` trait](#component-trait)).
-- **Nav (host-driven, configurable)**: the palette carries **no hardcoded nav keys**. As a vertical
-  list it responds to the semantic `Event::Widget(WidgetIntent::{MenuUp,MenuDown,Activate,Dismiss})`;
-  the **host** resolves the configurable `menu_up` / `menu_down` / `activate` / `dismiss`
-  `[keys.widgets]` bindings into these (defaults: ↑/Ctrl+k, ↓/Ctrl+j, Enter, Esc). Raw `Event::Key`
-  goes to the query field (typing / editing). App wiring: `build_widget_keymap` → `Keymap::dispatch`.
+#### Palette API
+
+| Builder or method | Behaviour and default |
+|---|---|
+| `CommandPalette::new()` | Empty, closed palette; private search memory in scope `command`. |
+| `.command(Command)` | Append one row. A row with no explicit mode belongs to the default mode. |
+| `.mode(sigil, scope)` | Declare a sigil and its search scope. The first declaration is the default. Without declarations the search model's scope is the only mode, and leading punctuation is ordinary query text. |
+| `.mode_with_commands(sigil, scope, commands)` | Declare the mode and append its rows together. Assigns the scope to every supplied command, replacing any previous row mode. No separate row annotation or sigil lookup is needed. |
+| `.query(text)` | Set the full query, including any sigil. Default empty. Replaces an earlier named prefill. |
+| `.query_in(Some(scope), text)` | Prefix the declared mode's sigil, then use the same query path. `None` or an unknown scope keeps the text unchanged. Sigils already in the text remain unchanged. Works before or after the mode is declared. |
+| `.placeholder(text)` | Empty-query hint. Default `Type a command…`. |
+| `.default_open(bool)` | Initial open state; default `false`. |
+| `.panel_size(WidgetSize)` | `Small`, `Normal` (default), or `Large`: maximum width and row count. `Caption` uses Small and `Header` uses Large. Font size stays unchanged; the viewport caps the panel. |
+| `.search(SearchModel)` | Supply shared search memory and matching options. Each declared mode uses its named scope in that same store. |
+| `.open_signal()` | Read or write the open-state signal. Closing also releases modal focus. |
+| `.label_signals()` | Title text signals in insertion order. Updating one changes both the displayed label and matching without rebuilding the palette. |
+| `.select_next()` / `.select_prev()` | Move the selection and keep it visible. |
+| `.run_selected()` | Run the selected callback, record its effective query and optional rank id in the active scope, then close. Dismissal records nothing. |
+
+#### Command API
+
+| Builder | Behaviour and default |
+|---|---|
+| `Command::new(label, callback)` | Required label and callback. |
+| `.description(text)` | Optional muted second line; default absent. The selected description wraps; other descriptions truncate. Descriptions do not participate in matching. |
+| `.icon(Glyph)` | Optional leading icon; default absent. The icon column stays aligned for rows without one. |
+| `.keys([KeyCap, …])` | Add one binding as a row of keycaps. Repeat for several bindings; default none. The active mode reserves one shared shortcut column. |
+| `.id(text)` | Optional stable identity for ranking by past choices. Without one the row still matches and sorts, with no usage boost. |
+| `.group(u16)` | Default `0`. Lower groups lead while the effective query is empty. Typing hands ordering to the matcher. |
+| `.mode(scope)` | Assign one row to an existing mode. Default unset, meaning the default mode. Prefer `mode_with_commands` when declaring a whole list. |
+| `.current(bool)` | Mark where the user already is, using the accent; default `false`. |
+| `.preselect(bool)` | Start the empty-query selection here; default `false`. First matching claim wins. Typing selects the best match instead. |
+
+`KeyCap::Nf(NfGlyph)` draws a picture in the icon face; `KeyCap::Text(String)` draws text.
+Rows grow to fit their own bindings and measured description. The widget owns selection,
+mode filtering, search, history, panel drawing and dismissal; the caller supplies rows, callbacks,
+words and optional shared memory.
+
+#### Native composition
 
 ```rust
+use heca_grid_ui::{Command, CommandPalette};
+
 let palette = CommandPalette::new()
-    .command(
-        Command::new("Split pane", || wm.split())
-            .description("New column to the right of the active pane.")
-            .icon(Glyph::Sidebar)
-            .key("⌥⌘S"),
-    )
-    .command(Command::new("Close pane", || wm.close()).key("⌘W"));
+    .mode_with_commands(':', "command", [Command::new("Close", || {})])
+    .mode_with_commands('!', "reports", [
+        Command::new("Build report", || {})
+            .description("Read the latest build results.")
+            .id("build-report"),
+    ])
+    .query_in(Some("reports"), "build")
+    .default_open(true);
 let open = palette.open_signal();
-// host: on Ctrl+K → open.set(true); add `palette` to the tree
+// Place `palette` in the retained tree. The normal event router delivers its input.
 ```
 
-> Needs the same host wiring as `Dialog` (route keys to the overlay). Because it tracks `Ctrl` for
-> Ctrl+J/K, the host must also broadcast `Event::ModifiersChanged` to the tree (most hosts do).
+Adding `! / reports` above declares its sigil, scope and rows once. Both typing `!build` and
+`query_in(Some("reports"), "build")` reach those rows. To add a built-in Heca mode, add one `Mode`
+entry to `heca/src/chrome/surfaces/palette/modes.rs::MODES`, with its sigil, durable search-scope name and
+row-source function. `populate` builds that source once and gives it to `mode_with_commands`.
+Keep existing scope names unchanged so saved searches still belong to the same lists.
+
+#### Declarative hosts
+
+There is no `WidgetKind::CommandPalette`: command callbacks and the app's live row sources belong
+to the native host. A described node opens Heca's palette through the existing action:
+
+```rust
+use heca_view::{Intent, PropValue, ViewNode, WidgetKind};
+
+let button = ViewNode::new(WidgetKind::Button)
+    .text("Find a pane")
+    .on_press(Intent::new("command_palette")
+        .arg("mode", PropValue::Text("pane".into()))
+        .arg("query", PropValue::Text("nvim".into())));
+```
+
+The matching action/RPC line is `command_palette mode=pane query=nvim`. `mode` and `query` are
+optional. An unknown mode adds no sigil, preserving the default-query behaviour. Both routes use
+the same palette declarations and dispatch selected rows through the action policy and confirm gate.
+
+#### Input and focus
+
+An open palette holds modal focus and occludes the viewport. The normal widget keymap resolves
+configurable `menu_up`, `menu_down`, `activate`, `dismiss`, `menu_history_up` and
+`menu_history_down` bindings to semantic `WidgetIntent`s. Raw text and editing intents reach its
+query `Input`. No palette navigation keys are hardcoded. `open_signal` is the host's dismissal
+notification; the caller does not handle individual row navigation or filtering.
 
 ### Menus — `MenuItem`, `Menu`, `ContextMenu`
 

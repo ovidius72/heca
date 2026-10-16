@@ -520,7 +520,7 @@ buttons and pushes a `Modal`-band layer; its buttons dispatch overlay-control ac
 ### 2.7.3 The command palette is a view of the catalog — decided 2026-07-30 (F003/P085/T358)
 
 `prefix+p` opens `heca-grid-ui`'s `CommandPalette` as an `Overlay`-band layer
-(`chrome/surfaces/palette.rs`), built exactly like `open_dropdown`: the chosen entry comes back as a
+(`chrome/surfaces/palette/`), built exactly like `open_dropdown`: the chosen entry comes back as a
 `SubmitOverlay`, resolved by the overlay host, and dispatched through the one door.
 
 - **It lists everything registered** — the app's built-ins and every mounted component's actions.
