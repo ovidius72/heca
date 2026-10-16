@@ -120,7 +120,13 @@ impl PaneShell<'_> {
         // openings of the picker.
         // **One pane, seen in several places.** The sidebar row and the exposé card show this
         // same pane and declare the same key, so the three of them wear one letter between them.
-        let mut pane = pane.key(crate::chrome::pane_key(pane_id));
+        //
+        // **Pressing the pane — or picking its letter — types into what runs in it**, whatever that
+        // is: the pane hands its keyboard to its content part. So that content needs no letter of
+        // its own, and has none; a terminal placed in a dock, handed nothing, keeps its own.
+        let mut pane = pane
+            .key(crate::chrome::pane_key(pane_id))
+            .keyboard_to(PANE_CONTENT_AREA);
         // **A tiled pane is carried by the window's key and lands beside another** — the framework
         // runs the drag and paints what follows the pointer; a float is neither picked up nor
         // dropped on, since it is over everything and moves where it was put.

@@ -103,7 +103,11 @@ impl ColumnShell<'_> {
         // `success` so a column target is distinct from a pane's; this is the same target, so it
         // takes the same tint rather than the picker's default.
         // **Its letter sits in the middle** of the outline a column pick draws round it.
+        // **And it is a destination, as it is there**: its letter means "move the pane here", so it
+        // answers that pick and not `prefix+/`, where it was a second letter for its first pane.
+        // Asked for by key it is lettered as before — a key names it outright.
         let column = column
+            .hint_scope([crate::chrome::COLUMN_PICK_SCOPE])
             .hint_color(self.cb.tint)
             .hint_placement(heca_grid_ui::widgets::HintPlacement::Center);
 

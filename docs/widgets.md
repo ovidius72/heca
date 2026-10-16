@@ -5018,6 +5018,14 @@ focused region** and whatever inside owns the capability (a `ScrollRegion`) answ
 sends one semantic intent (say `WidgetIntent::ScrollPageDown`) and only the dock the keyboard is in
 hears it.
 
+**A frame can hand its keyboard to a part of itself** — HTML's `<label for>`, on any widget:
+`.keyboard_to("content")` (`PresenceExt`). A press or a pick anywhere on the frame that lands on
+nothing taking the keyboard gives it to the first thing in the part placed in that area, whatever
+the part holds and however deep it sits. That thing wears **no pick letter of its own** — the frame's
+reaches it — unless it declared a pick itself. heca's pane hands its keyboard to its content, so a
+pane wears one letter and picking it types into the terminal (or editor, or plugin tree) inside; a
+terminal placed in a dock is handed nothing and keeps its own letter.
+
 **The pointer is never gated.** Click, drag, hover and wheel reach an unfocused scope exactly as
 before: the mouse carries its own target, so it needs no focus to say where it meant — and a click on
 an unfocused dock is how you focus it. (`tests/pointer_delivery.rs` holds this to the whole pointer

@@ -223,7 +223,7 @@ pub fn collect_hints_scoped(
     scope: Option<&str>,
 ) -> Vec<(Vec<usize>, Rectangle)> {
     let mut out = Vec::new();
-    hints_into(root, &mut Vec::new(), None, None, scope, &mut out);
+    hints_into(root, &mut Vec::new(), None, None, scope, &mut Vec::new(), &mut out);
     out.into_iter().flatten().collect()
 }
 
@@ -394,6 +394,8 @@ fn hints_into(
     wrapping: Option<(usize, bool)>,
     clip: Option<Rectangle>,
     scope: Option<&str>,
+    // `handed`: the widgets an ancestor hands its keyboard to, by path from the root.
+    handed: &mut Vec<Vec<usize>>,
     out: &mut Vec<Option<(Vec<usize>, Rectangle)>>,
 ) {
     if skip(node) {
@@ -408,7 +410,8 @@ fn hints_into(
     // does not spend one of the 52 either. Hidden by an ancestor's clip, or squeezed to nothing of
     // its own: one question, asked once (see [`unseen`]).
     let mut here = wrapping;
-    if is_target_of(node, scope) && !unseen(node, clip) {
+    if is_target_of(node, scope) && !unseen(node, clip) && !reached_through_ancestor(node, path, handed)
+    {
         let declares = node.base().hint.is_some();
         // **Among layers of one thing, a declaration outranks mere actionability.** Saying what a
         // pick does is precisely saying it is *not* the click — a sidebar row is activated and left
@@ -441,9 +444,25 @@ fn hints_into(
     // Judged per node rather than by pruning the subtree: a transparent wrapper can carry bounds
     // its child does not, and pruning on one would silently take every letter beneath it.
     let clip = narrowed(clip, node);
+    let hands = crate::focus::handed_to(node);
+    if let Some(to) = &hands {
+        handed.push(path.iter().chain(to).copied().collect());
+    }
     for (i, child) in node.base().children.iter().enumerate() {
         path.push(i);
-        hints_into(child.as_ref(), path, pass, clip, scope, out);
+        hints_into(child.as_ref(), path, pass, clip, scope, handed, out);
         path.pop();
     }
+    if hands.is_some() {
+        handed.pop();
+    }
+}
+
+/// **Is this widget's letter one an ancestor already wears?** An ancestor that
+/// [hands its keyboard](crate::builders::PresenceExt::keyboard_to) to this widget reaches it with
+/// its own letter, so a second letter here is two letters for one place — a pane's and its
+/// terminal's. Only a pick this widget declared itself keeps one: that is its author saying a pick
+/// here means something else.
+fn reached_through_ancestor(node: &dyn Component, path: &[usize], handed: &[Vec<usize>]) -> bool {
+    handed.iter().any(|to| to == path) && node.base().hint.is_none()
 }

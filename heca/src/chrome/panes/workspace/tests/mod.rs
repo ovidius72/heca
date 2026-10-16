@@ -107,8 +107,13 @@ fn two_columns_and_a_float() -> WorkspaceModel {
 
 /// The workspace as the window holds it: placed by its own props in a window-sized box, laid out.
 fn laid_out(model: &WorkspaceModel) -> (Flex, Box<dyn Component>) {
+    laid_out_with(model, seams())
+}
+
+/// The same, with the app's edges a test chooses — to see what a gesture asked the app for.
+fn laid_out_with(model: &WorkspaceModel, seams: WorkspaceSeams) -> (Flex, Box<dyn Component>) {
     let mut window = Flex::column().width(800.0).height(600.0);
-    let mut ws: Box<dyn Component> = Box::new(workspace(seams()));
+    let mut ws: Box<dyn Component> = Box::new(workspace(seams));
     assert!(ws.set_props(model), "the workspace takes its model");
     window.base_mut().children.push(ws);
     LayoutEngine::new().compute(&mut window, heca_grid_ui::Size::new(800.0, 600.0));
@@ -140,6 +145,7 @@ fn named<'a>(parent: &'a dyn Component, key: &str) -> &'a dyn Component {
 }
 
 mod carry;
+mod picking;
 mod placing;
 mod pointer;
 mod settle;

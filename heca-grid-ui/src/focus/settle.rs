@@ -252,7 +252,9 @@ pub(crate) fn holder_path(node: &dyn Component) -> Option<Vec<usize>> {
 ///
 /// - the target is the deepest widget on `hit` that is [`focusable`](Component::focusable); a
 ///   `Button` that composes an icon and a label is the target when the label is what was hit;
-/// - a press on **nothing focusable changes nothing**: the keyboard stays where it was;
+/// - a press on **nothing focusable changes nothing**: the keyboard stays where it was — unless
+///   a widget on the way up [hands its keyboard to a part of
+///   itself](crate::builders::PresenceExt::keyboard_to), which then takes it;
 /// - a press inside a region that [keeps the keyboard](crate::component::Base::keeps_keyboard)
 ///   gives it to that region, not to the control inside;
 /// - a press **inside the widget that already holds the keyboard** (or on it) changes nothing;
@@ -263,13 +265,21 @@ pub(crate) fn holder_path(node: &dyn Component) -> Option<Vec<usize>> {
 /// widget that holds the keyboard afterwards.
 pub(crate) fn focus_on_press(root: &mut dyn Component, hit: &[usize]) {
     settle(root);
-    let Some(target) = (0..=hit.len())
-        .rev()
-        .map(|depth| &hit[..depth])
-        .find(|path| at(root, path).focusable())
-    else {
+    // The deepest widget on the way up that takes the keyboard, or that hands it to a part of
+    // itself — whichever comes first.
+    let Some(target) = (0..=hit.len()).rev().find_map(|depth| {
+        let path = &hit[..depth];
+        let node = at(root, path);
+        if node.focusable() {
+            return Some(path.to_vec());
+        }
+        let mut handed = super::handed_to(node)?;
+        handed.splice(0..0, path.iter().copied());
+        Some(handed)
+    }) else {
         return;
     };
+    let target = target.as_slice();
     // A region that keeps the keyboard takes it in place of the control inside it.
     let target = (0..target.len())
         .rev()

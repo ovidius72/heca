@@ -199,3 +199,38 @@ fn a_tiled_pane_is_carried_as_a_picture_and_a_float_is_not_carried() {
     let float = build(&float);
     assert!(!float.base().draggable);
 }
+
+/// **Whatever the pane holds, however deep its typing area sits**, the pane wears the one letter
+/// and picking it types there — a browser or an editor composes its view, so what takes the
+/// keyboard is rarely the content's outermost part.
+#[test]
+fn a_pane_types_into_what_it_holds_however_deep() {
+    use heca_grid_ui::builders::Parent;
+    let (cb, picked) = recording_callbacks();
+    let held = crate::chrome::panes::terminal::Terminal::new();
+    let mut pane = PaneShell {
+        model: &model(5),
+        cb: &cb,
+        header: None,
+        content: Some(Box::new(
+            heca_grid_ui::widgets::Flex::column()
+                .child(heca_grid_ui::widgets::Flex::row().child(held)),
+        )),
+    }
+    .build();
+    let lettered: Vec<Vec<usize>> = heca_grid_ui::collect_hints(&pane)
+        .into_iter()
+        .map(|(path, _)| path)
+        .collect();
+    assert_eq!(lettered, vec![Vec::<usize>::new()], "one letter, the pane's");
+
+    assert!(heca_grid_ui::fire_hint(&mut pane, &[]));
+    assert_eq!(*picked.borrow(), vec![heca_core::layout::PaneId(5)]);
+    let deep = heca_grid_ui::area(&pane, PANE_CONTENT_AREA)
+        .and_then(|part| part.base().children.first())
+        .and_then(|row| row.base().children.first())
+        .expect("the typing area")
+        .base()
+        .focus_id();
+    assert_eq!(heca_grid_ui::keyboard_holder(&pane), Some(deep));
+}

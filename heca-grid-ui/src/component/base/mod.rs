@@ -277,6 +277,12 @@ pub struct Base {
     /// (the control still gets its click), and taking the keyboard into it never hands it on to a
     /// control inside. Set with [`FocusScope::keeps_keyboard`](crate::widgets::FocusScope::keeps_keyboard).
     pub keeps_keyboard: bool,
+    /// **Pressing this widget gives the keyboard to its part named this** — what HTML's
+    /// `<label for>` does for a field. The first thing in that part that takes the keyboard gets
+    /// it, whatever the part holds, and wears no pick letter of its own: this widget's letter
+    /// already reaches it. Set with
+    /// [`PresenceExt::keyboard_to`](crate::builders::PresenceExt::keyboard_to).
+    pub keyboard_to: Option<String>,
     /// Resolved font size in logical px, written by the layout pass: the widget's
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
