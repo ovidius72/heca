@@ -14,21 +14,15 @@ for any of them. A worked, runnable example: `heca/examples/extend_heca.rs`
 
 ```rust
 fn main() {
-    // A dock. It carries its own name (its `kind()`), so it needs no extension.
-    heca::regions("sidebar.right").append(Notes::new("notes"));
-
-    // Who this program is — once. Everything below is named `<name>.<short>`.
     let demo = heca::extension("demo");
-
-    demo.action("start").label("Start").icon(Glyph::Play).run(|cx, _| { /* … */ Handled::Yes });
-    demo.layer("planner").view(|cx| Overlay::new().panel(planner(cx)).default_open(false));
-    demo.pane_button("start");                       // a button in every pane's header
-    demo.pane_chip("status", |facts| Some(PaneChip::new(Glyph::Terminal, facts.app_name.clone())));
-    demo.pane_line("folder", |facts| Some(PaneLine::new(Glyph::Folder, "…")));
-
+    // Add actions, layers and pane decorations through `demo`.
     heca::run();
 }
 ```
+
+A dock is contributed separately through `heca::regions(..)` and a `Provider`; its `id()` names
+the placement and its `kind()` names the provider type. The complete compiling example shows both
+APIs: [`heca/examples/extend_heca.rs`](../heca/examples/extend_heca.rs).
 
 ## The rules
 
@@ -57,9 +51,9 @@ fn main() {
 | a pane header chip | `demo.pane_chip("s", f)` | client | `f(&PaneFacts) -> Option<PaneChip>`; re-run when the pane's facts change |
 | a sidebar row line | `demo.pane_line("s", f)` | client | `f(&PaneFacts) -> Option<PaneLine>` |
 
-`PaneFacts` is plain data about one pane (`#[non_exhaustive]`: fields are added, so read them by
-name). *Server* and *client* is the line the server/client split (F012/P104) will route along: an
-action changes state, so it runs where the state is; everything drawn lives in a window.
+`PaneFacts` is plain data about one pane (`#[non_exhaustive]`: fields may be added, so read them by
+name). An action changes shared state; a dock, layer or pane decoration is drawn by a window.
+The server/client boundary carries those responsibilities without changing these extension calls.
 
 ## Where the code lives
 
