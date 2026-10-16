@@ -67,10 +67,11 @@ reinventing something, and it will be rejected.
 **And two rules that hold whatever those answers were:**
 
 1. **One file, one thing — and the line count is the smoke alarm, not the rule.** A file is what
-   someone has to hold in their head to change it safely. **Aim under 400 lines; above 600, stop
-   and agree a split** before adding to it. Those numbers come from this codebase, not from taste:
+   someone has to hold in their head to change it safely. **Aim under 400 lines; stay under 800 —
+   above 800, stop and agree a split** before adding to it. Those numbers come from this codebase,
+   not from taste:
    components written to § 0b-bis land at 150–450 on their own (`chrome/surfaces/expose/` is 149 / 282 /
-   327 / 374 / 433, `chrome/panes/pane/` is 39 / 60 / 152 / 200), and every file above 600 here is a file
+   327 / 374 / 433, `chrome/panes/pane/` is 39 / 60 / 152 / 200), and every file above 800 here is a file
    doing several jobs — `terminal_render.rs` (1700) interleaves the pane shell with the GPU passes,
    and a chrome file holding host logic and UI composition together is the same defect. Length is
    what makes you look; **the defect is always the second job**, and no line limit catches a

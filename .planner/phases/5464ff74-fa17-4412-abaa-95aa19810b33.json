@@ -1616,7 +1616,16 @@
         }
       ],
       "decisions": [],
-      "acceptedDecisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "0470d5da-bfa2-4cae-a11e-debd217d3294",
+          "title": "Census splits only for files of 800 lines or more",
+          "decision": "The census part of T468 splits only files of 800+ lines (16 files, 813–1741). The 17 files between 601 and 743 lines are not split in this task.",
+          "rationale": "Antonio, 2026-10-16: too many files; do not do those under 800 lines.",
+          "implementationNotes": "Dropped (2026-10-16 measure): overlay/tests.rs 743, layers/mod.rs 713, expose/pane_card.rs 713, providers/mod.rs 695, drag/resolve.rs 693, widgets/label.rs 670, widgets/input.rs 666, app/startup.rs 656, window/scene/mod.rs 653, input/action.rs 643, key_hint_group.rs 636, workspaces/model_tests.rs 626, widgets/overlay/mod.rs 616, tests/label.rs 611, workspaces/model.rs 609, toast/mod.rs 605, overlay/place.rs 601. Kept as steps C42–C57.",
+          "acceptedAt": "2026-10-16T15:14:43.843Z"
+        }
+      ],
       "checklist": [
         {
           "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-001-chrome-mod-rs-move-into-division-emitter-names-retained-window-root-tests-beside-their-code-970-before-and-after",
@@ -1863,6 +1872,132 @@
           "number": 41,
           "title": "Plugin kit: setters for placing a child in a grid — the named area, and column/row with spans — under the same names as the native placement builders; realize already reads them. A guard test that every native placement builder has a kit setter, seen red first; docs both forms.",
           "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-042-census-1-33-heca-renderer-src-text-rs-1741-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 42,
+          "title": "Census 1/33 — heca-renderer/src/text.rs (1741): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-043-census-2-33-heca-core-src-backend-terminal-mod-rs-1722-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 43,
+          "title": "Census 2/33 — heca-core/src/backend/terminal/mod.rs (1722): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-044-census-3-33-heca-config-src-appearance-rs-1688-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 44,
+          "title": "Census 3/33 — heca-config/src/appearance.rs (1688): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-045-census-4-33-heca-grid-ui-src-hint-tests-rs-1449-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 45,
+          "title": "Census 4/33 — heca-grid-ui/src/hint/tests.rs (1449): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-046-census-5-33-heca-src-app-selection-model-rs-1424-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 46,
+          "title": "Census 5/33 — heca/src/app/selection_model.rs (1424): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-047-census-6-33-heca-src-chrome-surfaces-layers-tests-rs-1226-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 47,
+          "title": "Census 6/33 — heca/src/chrome/surfaces/layers/tests.rs (1226): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-048-census-7-33-heca-grid-ui-src-widgets-context-menu-rs-1152-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 48,
+          "title": "Census 7/33 — heca-grid-ui/src/widgets/context_menu.rs (1152): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-049-census-8-33-heca-renderer-src-terminal-rs-1137-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 49,
+          "title": "Census 8/33 — heca-renderer/src/terminal.rs (1137): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-050-census-9-33-heca-theme-src-theme-rs-1086-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 50,
+          "title": "Census 9/33 — heca-theme/src/theme.rs (1086): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-051-census-10-33-heca-grid-ui-src-search-rs-988-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 51,
+          "title": "Census 10/33 — heca-grid-ui/src/search.rs (988): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-052-census-11-33-heca-grid-ui-src-widgets-button-rs-973-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 52,
+          "title": "Census 11/33 — heca-grid-ui/src/widgets/button.rs (973): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-053-census-12-33-heca-grid-ui-src-widgets-select-rs-970-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 53,
+          "title": "Census 12/33 — heca-grid-ui/src/widgets/select.rs (970): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-054-census-13-33-heca-grid-ui-src-widgets-dialog-rs-955-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 54,
+          "title": "Census 13/33 — heca-grid-ui/src/widgets/dialog.rs (955): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-055-census-14-33-heca-grid-ui-src-widgets-key-hint-rs-910-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 55,
+          "title": "Census 14/33 — heca-grid-ui/src/widgets/key_hint.rs (910): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-056-census-15-33-heca-grid-ui-src-nav-rs-865-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 56,
+          "title": "Census 15/33 — heca-grid-ui/src/nav.rs (865): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-057-census-16-33-heca-grid-ui-src-pointer-mod-rs-813-propose-split-ok-move-same-tests-gates-review-each-fix-its-own-step",
+          "number": 57,
+          "title": "Census 16/33 — heca-grid-ui/src/pointer/mod.rs (813): propose split → OK → move (same tests, gates) → review; each fix its own step.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-058-text-fix-1-the-gpu-setup-270-lines-builds-the-plain-and-the-stencil-pipeline-from-one-helper-and-the-embedded-fonts-are-loaded-by-the-font-code-not-the-gpu-setup",
+          "number": 58,
+          "title": "Text fix 1: the GPU setup (270 lines) builds the plain and the stencil pipeline from one helper, and the embedded fonts are loaded by the font code, not the GPU setup.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-059-text-fix-2-text-shaping-setup-metrics-buffer-family-weight-style-written-three-times-labels-terminal-runs-cell-measure-becomes-one-helper",
+          "number": 59,
+          "title": "Text fix 2: text shaping setup (metrics, buffer, family/weight/style) written three times — labels, terminal runs, cell measure — becomes one helper.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-060-text-fix-3-a-glyph-s-quad-and-the-faux-italic-slant-written-twice-labels-runs-one-quad-helper-and-one-slant-rule",
+          "number": 60,
+          "title": "Text fix 3: a glyph's quad and the faux-italic slant written twice (labels, runs) — one quad helper and one slant rule.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-061-text-fix-4-name-the-hardcoded-numbers-once-line-height-1-2-italic-slant-0-14-vertex-index-buffer-sizes-the-unbounded-shaping-box",
+          "number": 61,
+          "title": "Text fix 4: name the hardcoded numbers once — line height 1.2×, italic slant 0.14, vertex/index buffer sizes, the unbounded shaping box.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-062-text-fix-5-the-four-queue-functions-each-fill-the-18-command-fields-by-hand-one-starting-command-they-change-from",
+          "number": 62,
+          "title": "Text fix 5: the four queue functions each fill the 18 command fields by hand — one starting command they change from.",
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -1883,7 +2018,7 @@
       "startedAt": "2026-10-15T09:11:19.538Z",
       "completedAt": "",
       "createdAt": "2026-08-21T13:58:02.209Z",
-      "updatedAt": "2026-10-16T14:49:03.938Z",
+      "updatedAt": "2026-10-16T15:20:20.815Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
@@ -3712,7 +3847,7 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-10-16T14:49:03.938Z",
+  "updatedAt": "2026-10-16T15:20:20.815Z",
   "handoff": "# T466, T509–T511 and T514 are done, pushed, PR #265 open — every open P082 task is deferred\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-29T18:17:53.766Z\nReason: Antonio asked for a handoff after T514 was committed, pushed and the PR opened. The phase has no ready task left, so the next session needs to know what shipped, what was changed for users, and what the remaining deferred splits wait on.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Task: none in progress. T466, T509, T510, T511 and T514 are done. Every open task in the phase is deferred (T468, T470, T471, T472, T512, T513).\n- Exact resume point: PR #265 (https://github.com/ovidius72/heca/pull/265, branch `feat/t518-a-region-holds-a-list` → main) is open and waiting for Antonio. Ask him what is next; do not pick a deferred split on your own.\n\n## Current and partial state\n- Branch pushed; last commits: `de39045a` (handlers/actions/input split + behaviour), `d38a8eba` (planner), `52949929` (grid-ui tests split), `1a261841` (planner, T514 done). The PR also carries T518 and T466.\n- Shipped, all checked by Antonio in the app:\n  - `heca/src/handlers/`, `heca/src/actions/` (registry, catalog, confirm, `builtins/` per category), `heca/src/args.rs`, `heca/src/input/` (action, names, build, vocabulary). `WmAction` derives `WmActionKind` (strum); handlers registered by kind; one `crate::input::resolve_action` for name + arguments.\n  - Breaking: 12 region actions → `set_region_visible {region, visible}`; documented in `docs/keybindings.md` (\"Changed actions\") and `keybindings.default.toml`.\n  - Modes: one handler (`mode_key` in `heca/src/app/input.rs`); unbound keys fall through to normal bindings; keys read as pressed (Cmd/Alt kept); selection mode `p` = paste.\n  - Mouse: Shift+drag and the wheel do not enter selection mode; copy clears the highlight; scrolled-back cursor stays on its prompt (heca-core snapshot).\n  - `heca-grid-ui/tests/`: `phase_a.rs` gone; one file per subject; files over 600 lines are folder targets; `tests/common` has click and paint helpers. 797 grid-ui tests.\n- T519 filed in P045(F006): app-wide text system (`heca-text` crate, per-language files, user overrides merged by key) — decision 8c9081d1 on T519; two design questions still open there.\n- Left uncommitted on purpose (not this phase's work, from another session): `docs/agents-communication-plan.md`, a one-line change in `notification-system-plane.md`, and `.DS_Store`.\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first. Answer a question and WAIT — never start coding on a question (\"is it like this?\" is not a go). Fix in the library; nothing hardcoded; one path per rule. Never commit unasked; write the handoff before committing planner files.\n- Every split here is also a review: move first (same test count, same bodies), then fixes, each a checklist item with a test seen red.\n- Delegation that worked for T514: a cheaper model does the batch, this session verifies independently (count, names, bodies, assertion count, gates) before ticking.\n\n## Supporting documents\n- None needed: each task's completion note in the planner holds its files, checks and decisions.\n\n## Blockers and risks\n- No ready task in P082. The deferred splits wait on P094(F011)/T449 and T457, which still reshape their files (T513 also: `heca-core/src/backend/terminal/engine.rs` is 2374 lines).\n- Some test files are between 400 and 600 lines (label, input, display, pointer_delivery) — under the split limit, noted only.\n\n## How to resume\n1. Ask Antonio: merge PR #265? what next — the planner recommendation, T519's open questions, or a P094 task?\n2. For any new task: `planner-task-show … full=true`, then `planner-task-start`, then agree the shape before code.\n3. Gates: `./scripts/lint-changed.sh`, `… test`, `… fmt` (scoped, one cargo run at a time).",
   "handoffUpdatedAt": "2026-09-29T18:17:53.766Z",
   "handoffAudit": {
