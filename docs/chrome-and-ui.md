@@ -416,7 +416,7 @@ button decision. **Two gaps** this contract closes:
    closures) — a provider cannot `await` "which button was pressed".
 
 **Decision — a host-owned `OverlayHost`.** A new app-side overlay stack
-(`heca/src/chrome/surfaces/overlay.rs`, built in `plugin-02`/Phase 8) owns an explicit
+(`heca/src/chrome/surfaces/overlay/`, built in `plugin-02`/Phase 8) owns an explicit
 z-ordered `Vec` of active overlays. It renders each entry through the *existing*
 grid-ui widget bound to host-owned signals — providers/plugins **never** build
 overlay widgets across the boundary (§2.6); they submit a **spec** and receive a

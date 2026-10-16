@@ -1724,7 +1724,7 @@
           "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-018-sync-with-origin-main-pr-291-split-palette-rs-command-palette-rs-reapply-the-palette-pane-row-fixes-to-the-new-files",
           "number": 18,
           "title": "Sync with origin/main (PR #291 split palette.rs / command_palette.rs — reapply the palette pane-row fixes to the new files)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-019-expose-mod-rs-split-into-wiring-tests-show-cwd-setting-moves-to-app-settings-hand-made-share-helper-replaced-by-the-library-s-flex",
@@ -1767,6 +1767,36 @@
           "number": 25,
           "title": "Review with Antonio: dead-code deletions REVERTED (described-layer path, notification store functions, dock action retire, file-wide allows); duplicate sidebar active/visited field deleted (the live highlights read the one record); Intent::args documented in widgets.md (plus two wrong JSON examples fixed); realize split uses named imports; the three source-reading guards find code by what it is (shared helper), and the size guard no longer skips code after a test-file line; historical docs restored; comment rewordings reviewed",
           "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-026-overlay-host-chrome-surfaces-overlay-rs-787-overlay-spec-host-modal-tests-the-menu-and-dropdown-part-moves-to-the-context-menu-surface-agreed-with-antonio-2026-10-16-move-only-test-count-equal",
+          "number": 26,
+          "title": "Overlay host (chrome/surfaces/overlay.rs, 787) → overlay/{spec, host, modal, tests}; the menu and dropdown part moves to the context-menu surface (agreed with Antonio 2026-10-16). Move only, test count equal.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-027-overlay-host-review-the-module-description-cites-an-old-plan-section-2-7-1-2-7-2-describe-the-behaviour-instead-check-the-moved-code-against-the-phase-s-review-rules-and-report-findings",
+          "number": 27,
+          "title": "Overlay host review: the module description cites an old plan section (§2.7.1 / §2.7.2) — describe the behaviour instead; check the moved code against the phase's review rules and report findings.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-028-review-fix-a-model-intent-is-sent-through-the-chrome-emitter-s-own-door-fire-intent-intent-sink-not-wrapped-by-hand-at-7-sites-guard-heca-tests-one-place-rs-seen-red-first",
+          "number": 28,
+          "title": "Review fix: a model intent is sent through the chrome emitter's own door (fire_intent / intent_sink), not wrapped by hand at 7 sites. Guard heca/tests/one_place.rs seen red first.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-029-review-fix-an-overlay-is-closed-and-answered-through-its-id-overlayid-closer-submitter-not-spelled-out-at-the-dialog-both-menus-and-the-palette-guard-seen-red-first-unit-test-break-checked",
+          "number": 29,
+          "title": "Review fix: an overlay is closed and answered through its id (OverlayId::closer / submitter), not spelled out at the dialog, both menus and the palette. Guard seen red first; unit test break-checked.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-030-review-fix-the-message-dialog-s-body-uses-the-typed-label-builder-not-a-raw-node-guard-forbids-raw-nodes-in-app-code-the-shared-source-scan-helpers-moved-into-heca-tests-common-and-the-app-code-reader-no-longer-stops-at-a-single-test-only-item",
+          "number": 30,
+          "title": "Review fix: the message dialog's body uses the typed Label builder, not a raw node; guard forbids raw nodes in app code. The shared source-scan helpers moved into heca/tests/common, and the app-code reader no longer stops at a single test-only item.",
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -1787,7 +1817,7 @@
       "startedAt": "2026-10-15T09:11:19.538Z",
       "completedAt": "",
       "createdAt": "2026-08-21T13:58:02.209Z",
-      "updatedAt": "2026-10-16T08:07:10.224Z",
+      "updatedAt": "2026-10-16T11:08:06.028Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
@@ -1804,7 +1834,7 @@
       "priority": 11,
       "shortName": "split-heca-renderer-examples-s",
       "title": "Split heca-renderer/examples/showcase.rs (3254) — the catalog is one file doing every surface",
-      "status": "deferred",
+      "status": "canceled",
       "description": "Found while adding the layout sweeps (F003/P082/T438, 2026-08-24) and reported to Antonio, who asked for it to be filed. AGENTS § 0 rule 4: aim under 400 lines, above 600 agree a split first. This task is the list and the proposal, NOT a licence — agree the shape with Antonio before moving anything.\n\nCURRENT: heca-renderer/examples/showcase.rs, 3254 lines. Not in T468's list, which predates it being measured.\n\nWHY IT MATTERS MORE THAN ITS LINE COUNT\nIt is the only place every widget appears in a REAL composition, so it is where framework-wide changes are seen first: T438's sweep over it found 54 escapes at three window widths, five of them at 900px, which the synthetic per-kind samples never reached. It is also the second host for CommandPalette (:319) and the one that exposed P087(F011)/T469 — a widget rendering differently in two hosts. A 3254-line example is a bad place for that evidence to live.\n\nTHE JOBS IN IT\n- `build_ui` (:304) — the whole page: sidebar, docks, every widget gallery section, overlays.\n- `ThemeCtl` (:167) + the live theme controls (glow / radius / border / font / intensity / overlay frame / size / zoom / theme index).\n- `build_scene` (:2154) — per-frame paint + the winit event loop, input mapping (`GridKey`), the separate overlay layout pass (:2737-2741).\n- `apply_size` (:184) and other tree-walking helpers.\n- The T438 sweep test (`mod sweeps`, end of file).\n\nPROPOSED SPLIT — an example may be a DIRECTORY with a main.rs, so the shape is the same one the library uses:\n  heca-renderer/examples/showcase/\n  ├── main.rs        the event loop, the window, build_scene, input mapping\n  ├── controls.rs    ThemeCtl + the live theme controls\n  ├── gallery.rs     the widget catalog sections (one section per fn, grouped)\n  ├── overlays.rs    dialog / palette / context menu / toasts + their own layout pass\n  ├── sidebar.rs     the docks, rail and region-mode demo\n  └── tests.rs       the sweep (and anything else headless)\n\nRULES\n- A move, never a rewrite: no behaviour change in the same commit, and the example must still run (`cargo run -p heca-renderer --example showcase`).\n- Watch the trap from the two hint splits: a doc comment at the end of a segment belongs to the NEXT file's first item, and a helper used by two new modules needs one owner rather than a copy.\n- Gate per split: `cargo test -p heca-renderer --all-targets` and `./scripts/lint-changed.sh`.",
       "descriptionUpdatedAt": "2026-08-24T13:57:46.456Z",
       "notes": "Antonio, 2026-09-24: the showcase as a whole is behind what the app now has, and is better REWRITTEN once components and widgets are stable — not just split. When this is picked up, treat it as a rewrite onto the current widgets (e.g. `Tile`, `.flex`, `.order`, `regions(..)`), done after the widget set settles; splitting the current file first would carve up code that is going to be replaced.",
@@ -1816,6 +1846,14 @@
           "toStatus": "deferred",
           "title": "Parked 2026-08-28 with the other file splits (see T468). The showcase is the second host of every widget, so P097's dispatch change and P094's Terminal component both land in it — splitting it first means splitting a file about to be reshaped. It is also where T502's acceptance test (rebuild one real overlay through the described path) will land. Resume after that. No user-visible behaviour waits on it.",
           "description": "Parked 2026-08-28 with the other file splits (see T468). The showcase is the second host of every widget, so P097's dispatch change and P094's Terminal component both land in it — splitting it first means splitting a file about to be reshaped. It is also where T502's acceptance test (rebuild one real overlay through the described path) will land. Resume after that. No user-visible behaviour waits on it."
+        },
+        {
+          "id": "2d174619-b5c0-4040-9c32-133096cb4251-check-002-deferred-canceled",
+          "date": "2026-10-16T10:58:31.830Z",
+          "fromStatus": "deferred",
+          "toStatus": "canceled",
+          "title": "Antonio decided on 2026-10-16 to leave the showcase example as it is: it is not split. The other splits in this phase go ahead without it.",
+          "description": "Antonio decided on 2026-10-16 to leave the showcase example as it is: it is not split. The other splits in this phase go ahead without it."
         }
       ],
       "decisions": [],
@@ -1828,7 +1866,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-24T13:57:46.417Z",
-      "updatedAt": "2026-09-25T10:32:21.695Z",
+      "updatedAt": "2026-10-16T10:58:31.830Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -3608,7 +3646,7 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-10-16T08:07:10.224Z",
+  "updatedAt": "2026-10-16T11:08:06.028Z",
   "handoff": "# T466, T509–T511 and T514 are done, pushed, PR #265 open — every open P082 task is deferred\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-29T18:17:53.766Z\nReason: Antonio asked for a handoff after T514 was committed, pushed and the PR opened. The phase has no ready task left, so the next session needs to know what shipped, what was changed for users, and what the remaining deferred splits wait on.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Task: none in progress. T466, T509, T510, T511 and T514 are done. Every open task in the phase is deferred (T468, T470, T471, T472, T512, T513).\n- Exact resume point: PR #265 (https://github.com/ovidius72/heca/pull/265, branch `feat/t518-a-region-holds-a-list` → main) is open and waiting for Antonio. Ask him what is next; do not pick a deferred split on your own.\n\n## Current and partial state\n- Branch pushed; last commits: `de39045a` (handlers/actions/input split + behaviour), `d38a8eba` (planner), `52949929` (grid-ui tests split), `1a261841` (planner, T514 done). The PR also carries T518 and T466.\n- Shipped, all checked by Antonio in the app:\n  - `heca/src/handlers/`, `heca/src/actions/` (registry, catalog, confirm, `builtins/` per category), `heca/src/args.rs`, `heca/src/input/` (action, names, build, vocabulary). `WmAction` derives `WmActionKind` (strum); handlers registered by kind; one `crate::input::resolve_action` for name + arguments.\n  - Breaking: 12 region actions → `set_region_visible {region, visible}`; documented in `docs/keybindings.md` (\"Changed actions\") and `keybindings.default.toml`.\n  - Modes: one handler (`mode_key` in `heca/src/app/input.rs`); unbound keys fall through to normal bindings; keys read as pressed (Cmd/Alt kept); selection mode `p` = paste.\n  - Mouse: Shift+drag and the wheel do not enter selection mode; copy clears the highlight; scrolled-back cursor stays on its prompt (heca-core snapshot).\n  - `heca-grid-ui/tests/`: `phase_a.rs` gone; one file per subject; files over 600 lines are folder targets; `tests/common` has click and paint helpers. 797 grid-ui tests.\n- T519 filed in P045(F006): app-wide text system (`heca-text` crate, per-language files, user overrides merged by key) — decision 8c9081d1 on T519; two design questions still open there.\n- Left uncommitted on purpose (not this phase's work, from another session): `docs/agents-communication-plan.md`, a one-line change in `notification-system-plane.md`, and `.DS_Store`.\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first. Answer a question and WAIT — never start coding on a question (\"is it like this?\" is not a go). Fix in the library; nothing hardcoded; one path per rule. Never commit unasked; write the handoff before committing planner files.\n- Every split here is also a review: move first (same test count, same bodies), then fixes, each a checklist item with a test seen red.\n- Delegation that worked for T514: a cheaper model does the batch, this session verifies independently (count, names, bodies, assertion count, gates) before ticking.\n\n## Supporting documents\n- None needed: each task's completion note in the planner holds its files, checks and decisions.\n\n## Blockers and risks\n- No ready task in P082. The deferred splits wait on P094(F011)/T449 and T457, which still reshape their files (T513 also: `heca-core/src/backend/terminal/engine.rs` is 2374 lines).\n- Some test files are between 400 and 600 lines (label, input, display, pointer_delivery) — under the split limit, noted only.\n\n## How to resume\n1. Ask Antonio: merge PR #265? what next — the planner recommendation, T519's open questions, or a P094 task?\n2. For any new task: `planner-task-show … full=true`, then `planner-task-start`, then agree the shape before code.\n3. Gates: `./scripts/lint-changed.sh`, `… test`, `… fmt` (scoped, one cargo run at a time).",
   "handoffUpdatedAt": "2026-09-29T18:17:53.766Z",
   "handoffAudit": {

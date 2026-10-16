@@ -18,10 +18,12 @@
 //! | [`open`](mod@open) | opening a menu, and turning a declarer's identity into a target |
 //! | [`entries`](mod@entries) | the vocabulary every menu writes its entries with |
 //! | [`pane_menu`](mod@pane_menu) | the content pane's own menu — the app's domain |
+//! | [`present`](mod@present) | putting a menu on screen as a layer, with contributed rows merged in |
 
 mod entries;
 mod open;
 mod pane_menu;
+mod present;
 mod registry;
 
 #[cfg(test)]
@@ -31,6 +33,7 @@ use heca_core::layout::PaneId;
 
 pub(crate) use entries::{item_running, menu_from_items};
 pub(crate) use open::{open_context_menu_for, resolve_active_context, target_from_subject};
+pub(crate) use present::{DropdownItem, DropdownSpec, open_dropdown, present_menu};
 pub use registry::MenuBuild;
 pub(crate) use registry::{ContextMenuRegistry, plugin_providers_for};
 

@@ -15,7 +15,7 @@
 //! requires — the precedent being `FocusPaneThenAction`, which pane-header buttons have used for the
 //! same problem all along.
 //!
-//! It is built like [`open_dropdown`](super::overlay::open_dropdown), the app's other list overlay:
+//! It is built like [`open_dropdown`](crate::chrome::open_dropdown), the app's other list overlay:
 //! a widget pushed as an `Overlay`-band layer whose chosen entry comes back as a `SubmitOverlay`
 //! resolved by the overlay host, so the entry's intent is policy-routed and confirm-gated like any
 //! other dispatch.
@@ -118,12 +118,7 @@ pub(crate) fn open_command_palette(
         last_visited: state.last_visited_ws_idx,
     };
     let (palette, rows) = modes::populate(palette, modes::MODES, &sources, |row| {
-        let carrier = InteractionIntent::ActivateAction(WmAction::SubmitOverlay {
-            overlay: Some(id),
-            action: row.id.clone(),
-        });
-        let emit_run = emit.clone();
-        let mut command = Command::new(row.label.clone(), move || emit_run.fire(carrier.clone()))
+        let mut command = Command::new(row.label.clone(), id.submitter(row.id.clone(), &emit))
             .group(group_of(row, &owners))
             .current(row.current)
             .preselect(row.preselect)
@@ -188,11 +183,10 @@ pub(crate) fn open_command_palette(
     // popped from it rather than from three separate callbacks. `resolve` is double-resolve safe, so
     // the close that follows a chosen command is a no-op after the `SubmitOverlay` already popped it.
     let open = palette.open_signal();
-    let emit_close = emit.clone();
-    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
+    let close = id.closer(&emit);
     create_effect(move |_| {
         if !open.get() {
-            emit_close.fire(close.clone());
+            close();
         }
     });
 

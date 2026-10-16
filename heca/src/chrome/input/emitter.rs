@@ -65,6 +65,20 @@ impl ChromeIntentEmitter {
     pub(crate) fn fire(&self, intent: crate::app::interaction::InteractionIntent) {
         (self.sink)(self.source, intent)
     }
+
+    /// Post a **model intent** — an action name and its arguments, the form a description, a menu
+    /// entry and a plugin all speak. How the app carries one is this sink's to know, so no caller
+    /// wraps it.
+    pub(crate) fn fire_intent(&self, intent: Intent) {
+        self.fire(crate::app::interaction::InteractionIntent::View(intent))
+    }
+
+    /// The same door as the sink [`realize`](crate::chrome::realize) takes: a described tree's
+    /// gestures come out of it as model intents, posted through [`fire_intent`](Self::fire_intent).
+    pub(crate) fn intent_sink(&self) -> crate::chrome::IntentEmitter {
+        let emit = self.clone();
+        Rc::new(move |intent| emit.fire_intent(intent))
+    }
 }
 
 /// **The intent sink for one layer's own retained tree** — the exposé's cards, a modal's buttons, a
@@ -124,11 +138,7 @@ pub(crate) fn layer_emitter(
 pub fn fires(mount: &str, intent: Intent, emit: &ChromeIntentEmitter) -> impl Fn() + 'static {
     let seated = seated(mount, intent);
     let emit = emit.clone();
-    move || {
-        emit.fire(crate::app::interaction::InteractionIntent::View(
-            seated.clone(),
-        ))
-    }
+    move || emit.fire_intent(seated.clone())
 }
 
 /// **What a `prefix+/` pick does** — [`fires`], plus the declaration of *what it is*.
@@ -145,11 +155,7 @@ pub fn picks(mount: &str, intent: Intent, emit: &ChromeIntentEmitter) -> heca_gr
     let seated = seated(mount, intent);
     let run = seated.clone();
     let emit = emit.clone();
-    heca_grid_ui::Hint::of(seated, move || {
-        emit.fire(crate::app::interaction::InteractionIntent::View(
-            run.clone(),
-        ))
-    })
+    heca_grid_ui::Hint::of(seated, move || emit.fire_intent(run.clone()))
 }
 
 /// Stamp the seating onto an intent — **which element this is**, so the same container seated twice

@@ -10,7 +10,9 @@
 //! This is what fails. Same shape as `surface_drift.rs`: a rule that lives only in AGENTS.md is
 //! found out after it has been broken a dozen times.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use common::{all_sources, app_lines, is_test_file};
 
 /// The UI code the rule covers: whatever draws, lays out or styles. (`app/` and `handlers/` move
 /// state and carry no look.)
@@ -48,58 +50,18 @@ const BUILDERS: &[&str] = &[
     "Space::Px(",
 ];
 
+/// The source under [`UI_DIRS`], labelled the way [`all_sources`] labels it.
 fn ui_sources() -> Vec<(String, String)> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut out = Vec::new();
-    let mut stack: Vec<PathBuf> = UI_DIRS.iter().map(|d| root.join(d)).collect();
-    while let Some(dir) = stack.pop() {
-        for entry in std::fs::read_dir(&dir).expect("readable") {
-            let path = entry.expect("entry").path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if path.extension().is_some_and(|e| e == "rs") {
-                let label = path
-                    .strip_prefix(&root)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                out.push((label, std::fs::read_to_string(&path).expect("readable")));
-            }
-        }
-    }
-    out
-}
-
-/// Is this file test code? Tests lay out fixtures in pixels on purpose: they have no theme.
-fn is_test_file(label: &str) -> bool {
-    let name = label.rsplit('/').next().unwrap_or(label);
-    name.contains("test") || label.contains("/tests/")
+    all_sources()
+        .into_iter()
+        .filter(|(label, _)| UI_DIRS.iter().any(|dir| label.starts_with(&format!("{dir}/"))))
+        .collect()
 }
 
 /// Does `after` (the text right after a builder's opening parenthesis) start with a number?
 fn starts_with_number(after: &str) -> bool {
     let after = after.trim_start().trim_start_matches('-');
     after.chars().next().is_some_and(|c| c.is_ascii_digit())
-}
-
-/// The lines of `src` that are the app's code, numbered from 0: everything before its inline test
-/// module.
-///
-/// A `#[cfg(test)]` that opens an inline `mod tests { … }` ends the app's code. One that only names
-/// a separate test file (`#[cfg(test)] mod tests;`) does not — the code below it is still the app's,
-/// and stopping there left everything after it unchecked.
-fn app_lines(src: &str) -> impl Iterator<Item = (usize, &str)> {
-    let lines: Vec<&str> = src.lines().collect();
-    let end = (0..lines.len())
-        .find(|&i| {
-            lines[i].trim_start().starts_with("#[cfg(test)]")
-                && !lines.get(i + 1).is_some_and(|next| {
-                    let next = next.trim();
-                    next.starts_with("mod ") && next.ends_with(';')
-                })
-        })
-        .unwrap_or(lines.len());
-    lines.into_iter().take(end).enumerate()
 }
 
 /// Every `file:line` that passes a number to a size builder.

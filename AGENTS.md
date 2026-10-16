@@ -1822,7 +1822,8 @@ cargo test -p heca-core
 cargo test -p heca-renderer
 
 # Lint (before committing) -- SCOPED to the crates you actually touched.
-# `--workspace` here costs 20+ minutes. Use this instead.
+# `--workspace` here costs 20+ minutes. Use this instead. `.claude/hooks/cargo-scope.sh` refuses
+# clippy/test/doc/build/check on the whole workspace (`--workspace`, or no `-p` at the root).
 ./scripts/lint-changed.sh              # clippy the changed crates
 ./scripts/lint-changed.sh test         # test the changed crates
 ./scripts/lint-changed.sh clippy main  # diff against a different base

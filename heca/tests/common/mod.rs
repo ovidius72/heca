@@ -91,3 +91,49 @@ fn collect_rs(dir: &Path, out: &mut Vec<PathBuf>) {
         }
     }
 }
+
+/// Is this file test code — a `tests.rs`, a `*_tests.rs`, or anything under a `tests/` folder?
+pub fn is_test_file(label: &str) -> bool {
+    let name = label.rsplit('/').next().unwrap_or(label);
+    name.contains("test") || label.contains("/tests/")
+}
+
+/// The lines of `src` that are the app's code, numbered from 0: everything before its inline test
+/// module.
+///
+/// Only a `#[cfg(test)]` that **opens** an inline module (`mod tests {`) ends the app's code. One
+/// that names a separate test file (`#[cfg(test)] mod tests;`) or marks a single test-only item
+/// does not — the code below it is still the app's, and stopping there left it unchecked.
+pub fn app_lines(src: &str) -> impl Iterator<Item = (usize, &str)> {
+    let lines: Vec<&str> = src.lines().collect();
+    let end = (0..lines.len())
+        .find(|&i| {
+            lines[i].trim_start().starts_with("#[cfg(test)]")
+                && lines.get(i + 1).is_some_and(|next| {
+                    let next = next.trim();
+                    next.ends_with('{')
+                        && (next.starts_with("mod ") || next.starts_with("pub(crate) mod ")
+                            || next.starts_with("pub(super) mod "))
+                })
+        })
+        .unwrap_or(lines.len());
+    lines.into_iter().take(end).enumerate()
+}
+
+/// Every app line under `heca/src` — test files and inline test modules left out, comments too —
+/// as `(file, line number from 1, line)`.
+pub fn app_code() -> Vec<(String, usize, String)> {
+    let mut out = Vec::new();
+    for (file, src) in all_sources() {
+        if is_test_file(&file) {
+            continue;
+        }
+        for (i, line) in app_lines(&src) {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            out.push((file.clone(), i + 1, line.to_string()));
+        }
+    }
+    out
+}

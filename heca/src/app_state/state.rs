@@ -217,7 +217,8 @@ pub struct AppState {
     /// never a per-widget timer the host would have to keep in step.
     pub widget_frame_due: Option<std::time::Instant>,
     // (The right-click context menu + the destructive-confirm prompt are now host-owned overlay
-    // layers in `chrome::surfaces::overlay` — `open_dropdown` / `open_modal` — not bespoke fields here.)
+    // layers opened by `open_modal` (`chrome::surfaces::overlay`) and `open_dropdown`
+    // (`chrome::surfaces::context_menu`) — not bespoke fields here.)
     /// Most recently focused pane (for "go back" behavior).
     pub last_focused: Option<PaneId>,
     /// The last visited workspace index (for dim highlight in sidebar).

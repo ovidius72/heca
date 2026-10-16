@@ -5730,7 +5730,7 @@ let dialog = Dialog::new("Delete pane?")
 
 App/agent code and plugins don't build the `Dialog` widget by hand — they **describe** a modal as
 data and let the host own it. Both submit a `ModalSpec { title, body: ViewNode, actions }` to
-`OverlayHost::open_modal` (`heca/src/chrome/surfaces/overlay.rs`); the host `realize`s the `ViewNode` body,
+`OverlayHost::open_modal` (`heca/src/chrome/surfaces/overlay/`); the host `realize`s the `ViewNode` body,
 injects the action buttons + KeyHint targets, shows it as a `Modal`-band layer, and returns the
 outcome as `ModalResult::Action { id, data }` (or `Dismissed`).
 

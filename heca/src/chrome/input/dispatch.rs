@@ -126,7 +126,7 @@ pub(crate) fn open_declared_menu_for_focus(state: &mut crate::app_state::AppStat
 pub(crate) fn drain_pending_menus(state: &mut crate::app_state::AppState) {
     let queued: Vec<_> = state.pending_menus.borrow_mut().drain(..).collect();
     for (menu, anchor, subject) in queued {
-        crate::chrome::surfaces::overlay::present_menu(state, menu, anchor, subject);
+        crate::chrome::surfaces::context_menu::present_menu(state, menu, anchor, subject);
     }
 }
 

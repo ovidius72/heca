@@ -75,7 +75,7 @@ pub(crate) fn mount_notification_stack(state: &mut AppState) {
             move |toast_id| {
                 let intent = Intent::new("notification_dismiss_one")
                     .arg("id", PropValue::Int(toast_id as i64));
-                emit.fire(crate::app::interaction::InteractionIntent::View(intent));
+                emit.fire_intent(intent);
             }
         })
         .on_action({
@@ -89,7 +89,7 @@ pub(crate) fn mount_notification_stack(state: &mut AppState) {
                 let intent = Intent::new("notification_action_relay")
                     .arg("id", PropValue::Int(toast_id as i64))
                     .arg("key", PropValue::Text(key.to_string()));
-                emit.fire(crate::app::interaction::InteractionIntent::View(intent));
+                emit.fire_intent(intent);
             }
         });
 

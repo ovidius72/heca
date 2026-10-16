@@ -30,7 +30,7 @@ pub(super) fn callbacks(
                 args.iter()
                     .map(|(k, v)| (*k, heca_view::PropValue::Int(*v))),
             );
-            emit.fire(crate::app::interaction::InteractionIntent::View(intent));
+            emit.fire_intent(intent);
         })
     };
     // Moving the map's highlight is its own intent — the same one `CardGrid::on_move` sends when

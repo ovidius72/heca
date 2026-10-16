@@ -8,7 +8,18 @@
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/preflight.sh\"",
             "timeout": 10,
-            "statusMessage": "AGENTS.md § 0 pre-flight"
+            "statusMessage": "AGENTS.md \u00a7 0 pre-flight"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/cargo-scope.sh\"",
+            "timeout": 10,
+            "statusMessage": "AGENTS.md cargo scope"
           }
         ]
       }

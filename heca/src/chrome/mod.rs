@@ -60,7 +60,8 @@ pub use state::{PaneRuntimeStore, SharedChromeState, WorkspacesContainerState};
 // ── surfaces ──
 pub use surfaces::context_menu::MenuBuild;
 pub(crate) use surfaces::context_menu::{
-    ContextMenuRegistry, ContextPath, open_context_menu_for, resolve_active_context,
+    ContextMenuRegistry, ContextPath, DropdownItem, DropdownSpec, open_context_menu_for,
+    open_dropdown, resolve_active_context,
 };
 pub(crate) use surfaces::expose::{record_expose_cursor, register as register_expose};
 pub(crate) use surfaces::glue::{rebuild_named_layer, register_named_layer};
@@ -71,9 +72,8 @@ pub(crate) use surfaces::notifications::{
 // The overlay stack. `OverlayId` is public because `WmAction` carries it.
 pub use surfaces::overlay::OverlayId;
 pub(crate) use surfaces::overlay::{
-    DropdownItem, DropdownSpec, ModalAction, ModalResult, ModalSpec, OverlayHost,
-    collect_form as collect_overlay_form, content_covered, open_dropdown, open_modal,
-    resolve as resolve_overlay, top_modal,
+    ModalAction, ModalResult, ModalSpec, OverlayHost, collect_form as collect_overlay_form,
+    content_covered, open_modal, resolve as resolve_overlay, top_modal,
 };
 pub(crate) use surfaces::palette::open_command_palette;
 

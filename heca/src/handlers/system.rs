@@ -134,7 +134,7 @@ pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction)
         &state.event_proxy,
         crate::chrome::notification_surface_key(),
     );
-    emit.fire(crate::app::interaction::InteractionIntent::View(intent));
+    emit.fire_intent(intent);
     if dismiss_after {
         state.ask_server(crate::server::ServerAction::DismissOne(id));
     }
