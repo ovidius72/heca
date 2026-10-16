@@ -156,9 +156,8 @@ fn heca_theme_to_grid_ui(ht: &heca_theme::Theme) -> Theme {
         colors: ht.clone(),
         font_family: font_config.family.ui_normal().to_string(),
         font_size: font_config.size.ui,
-        // TODO: map from config `focus_border_width` once added to heca-theme;
-        // for now the affordance outlines keep their visible default.
-        focus_border_width: 1.5,
+        // Config's own default focus-outline width.
+        focus_border_width: heca_config::appearance::DEFAULT_FOCUS_BORDER_WIDTH,
         // The picker's own size and colour — one of each, whatever a letter sits on.
         hint_font_size: heca_config::appearance::AppearanceConfig::default().hint_font_size,
         hint_color: ht.accent,

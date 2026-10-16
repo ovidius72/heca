@@ -31,9 +31,9 @@ pub(crate) fn app_theme_to_gui_theme(
         colors: theme.clone(),
         font_family: font_config.family.ui_normal().to_string(),
         font_size: font_config.size.ui,
-        // TODO: map from config `focus_border_width` once added to heca-theme; for
-        // now the affordance outlines (focus ring + selection) keep a visible default.
-        focus_border_width: 1.5,
+        // Overwritten at the chokepoint below from `[appearance] focus_border_width`; this is what a
+        // theme built outside it (tests, the showcase) gets — config's own default.
+        focus_border_width: heca_config::appearance::DEFAULT_FOCUS_BORDER_WIDTH,
         // Overwritten at the chokepoint below from `[appearance] hint_font_size` and the app's own
         // accent; these are what a theme built outside it (tests, the showcase) gets.
         hint_font_size: 12.0,

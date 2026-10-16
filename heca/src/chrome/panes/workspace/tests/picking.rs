@@ -162,3 +162,12 @@ fn a_pane_asked_for_by_name_wears_the_letter() {
         Some("q".into())
     );
 }
+
+/// **A terminal is named "terminal", not after the button drawn over it** — its derived name is
+/// what a letter is remembered by, and its scroll button's text ("12 lines above") changes as you
+/// scroll, which moved the terminal's letter with it.
+#[test]
+fn a_terminal_is_named_for_what_it_is() {
+    use heca_grid_ui::Component as _;
+    assert_eq!(Terminal::new().text_summary().as_deref(), Some("terminal"));
+}

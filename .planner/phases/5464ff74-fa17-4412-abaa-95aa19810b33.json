@@ -2039,6 +2039,18 @@
           "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-069-prefix-q-picking-a-pane-also-releases-the-dock-holding-the-keyboard-so-the-picked-pane-s-terminal-takes-it-from-anywhere-sidebar-notes-no-end-to-end-test-harness-for-the-pick-checked-by-eye",
           "number": 69,
           "title": "prefix+q: picking a pane also releases the dock holding the keyboard, so the picked pane's terminal takes it from anywhere (sidebar, notes). No end-to-end test harness for the pick; checked by eye.",
+          "checked": true
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-070-terminal-s-derived-name-is-terminal-not-its-scroll-button-s-text-0-lines-above-so-its-pick-letter-stays-put-while-scrolling-test-seen-red-first",
+          "number": 70,
+          "title": "Terminal's derived name is \"terminal\", not its scroll button's text (\"0 lines above\"), so its pick letter stays put while scrolling. Test seen red first.",
+          "checked": false
+        },
+        {
+          "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258-check-071-appearance-review-fixes-stale-focus-border-todo-removed-and-its-1-5-read-from-config-s-default-app-showcase-one-opacity-and-one-blur-conversion-helper-were-7-copies-named-limits-and-defaults-border-width-pane-sidebar-radius-pane-padding-pane-sidebar-gap-chrome-opacity-share-existing-tests-guard-them-pure-tidy-ups",
+          "number": 71,
+          "title": "Appearance review fixes: stale focus-border TODO removed and its 1.5 read from config's default (app + showcase); one opacity and one blur conversion helper (were 7 copies); named limits and defaults (border width, pane/sidebar radius, pane padding, pane/sidebar gap, chrome opacity share). Existing tests guard them (pure tidy-ups).",
           "checked": false
         }
       ],
@@ -2060,7 +2072,7 @@
       "startedAt": "2026-10-15T09:11:19.538Z",
       "completedAt": "",
       "createdAt": "2026-08-21T13:58:02.209Z",
-      "updatedAt": "2026-10-16T18:00:46.624Z",
+      "updatedAt": "2026-10-16T19:08:06.742Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:601f74d8-05ad-40ae-95ce-75cfbfa9939b",
@@ -3889,7 +3901,7 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-10-16T18:00:46.625Z",
+  "updatedAt": "2026-10-16T19:08:06.742Z",
   "handoff": "# T466, T509–T511 and T514 are done, pushed, PR #265 open — every open P082 task is deferred\n\nCreated at: 2026-09-24T16:53:15.724Z\nUpdated at: 2026-09-29T18:17:53.766Z\nReason: Antonio asked for a handoff after T514 was committed, pushed and the PR opened. The phase has no ready task left, so the next session needs to know what shipped, what was changed for users, and what the remaining deferred splits wait on.\n- Feature: F003 — Pluggable Chrome Architecture\n- Phase: P082(F003)\n- Task: none in progress. T466, T509, T510, T511 and T514 are done. Every open task in the phase is deferred (T468, T470, T471, T472, T512, T513).\n- Exact resume point: PR #265 (https://github.com/ovidius72/heca/pull/265, branch `feat/t518-a-region-holds-a-list` → main) is open and waiting for Antonio. Ask him what is next; do not pick a deferred split on your own.\n\n## Current and partial state\n- Branch pushed; last commits: `de39045a` (handlers/actions/input split + behaviour), `d38a8eba` (planner), `52949929` (grid-ui tests split), `1a261841` (planner, T514 done). The PR also carries T518 and T466.\n- Shipped, all checked by Antonio in the app:\n  - `heca/src/handlers/`, `heca/src/actions/` (registry, catalog, confirm, `builtins/` per category), `heca/src/args.rs`, `heca/src/input/` (action, names, build, vocabulary). `WmAction` derives `WmActionKind` (strum); handlers registered by kind; one `crate::input::resolve_action` for name + arguments.\n  - Breaking: 12 region actions → `set_region_visible {region, visible}`; documented in `docs/keybindings.md` (\"Changed actions\") and `keybindings.default.toml`.\n  - Modes: one handler (`mode_key` in `heca/src/app/input.rs`); unbound keys fall through to normal bindings; keys read as pressed (Cmd/Alt kept); selection mode `p` = paste.\n  - Mouse: Shift+drag and the wheel do not enter selection mode; copy clears the highlight; scrolled-back cursor stays on its prompt (heca-core snapshot).\n  - `heca-grid-ui/tests/`: `phase_a.rs` gone; one file per subject; files over 600 lines are folder targets; `tests/common` has click and paint helpers. 797 grid-ui tests.\n- T519 filed in P045(F006): app-wide text system (`heca-text` crate, per-language files, user overrides merged by key) — decision 8c9081d1 on T519; two design questions still open there.\n- Left uncommitted on purpose (not this phase's work, from another session): `docs/agents-communication-plan.md`, a one-line change in `notification-system-plane.md`, and `.DS_Store`.\n\n## Preservation constraints\n- Antonio's rules: plain English, short, answer first. Answer a question and WAIT — never start coding on a question (\"is it like this?\" is not a go). Fix in the library; nothing hardcoded; one path per rule. Never commit unasked; write the handoff before committing planner files.\n- Every split here is also a review: move first (same test count, same bodies), then fixes, each a checklist item with a test seen red.\n- Delegation that worked for T514: a cheaper model does the batch, this session verifies independently (count, names, bodies, assertion count, gates) before ticking.\n\n## Supporting documents\n- None needed: each task's completion note in the planner holds its files, checks and decisions.\n\n## Blockers and risks\n- No ready task in P082. The deferred splits wait on P094(F011)/T449 and T457, which still reshape their files (T513 also: `heca-core/src/backend/terminal/engine.rs` is 2374 lines).\n- Some test files are between 400 and 600 lines (label, input, display, pointer_delivery) — under the split limit, noted only.\n\n## How to resume\n1. Ask Antonio: merge PR #265? what next — the planner recommendation, T519's open questions, or a P094 task?\n2. For any new task: `planner-task-show … full=true`, then `planner-task-start`, then agree the shape before code.\n3. Gates: `./scripts/lint-changed.sh`, `… test`, `… fmt` (scoped, one cargo run at a time).",
   "handoffUpdatedAt": "2026-09-29T18:17:53.766Z",
   "handoffAudit": {

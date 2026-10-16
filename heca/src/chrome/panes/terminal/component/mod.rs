@@ -149,6 +149,13 @@ impl Component for Terminal {
         &mut self.base
     }
 
+    /// **A terminal is called "terminal"** — what it is, never the text of a control drawn over it.
+    /// The derived name is what its pick letter is remembered by, and the scroll button's count
+    /// ("12 lines above") changes as you scroll, which moved the letter with it.
+    fn text_summary(&self) -> Option<String> {
+        Some("terminal".to_string())
+    }
+
     /// **A hand over a link while the window's key is held** — the moment a click would open it.
     fn cursor_over(&self, point: Point) -> Option<heca_grid_ui::Cursor> {
         (self.shared.reserved(heca_grid_ui::event::modifiers())
