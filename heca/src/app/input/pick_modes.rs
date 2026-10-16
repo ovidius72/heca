@@ -30,6 +30,15 @@ pub(super) fn handle_pane_select_mode(
                 pane_id: *target_id,
             },
         );
+        // **Picking a pane is going there** — so a dock holding the keyboard lets it go, and the
+        // picked pane's terminal takes it, wherever the pick started. The same two acts a sidebar
+        // row's click sends; focusing a pane alone deliberately leaves a dock's keyboard alone.
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
+            &WmAction::UnfocusDock,
+        );
     }
     state.input_mode = InputMode::Normal;
 }
